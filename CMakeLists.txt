@@ -129,6 +129,25 @@ if(BUILD_TESTING)
 
     add_test(NAME ShelliumCoreTests COMMAND ShelliumCoreTests)
 
+    # 持久化层独立成一个测试可执行文件：QTEST_MAIN 会展开出 main，同一目标里放两个测试类
+    # 必然重复定义 main。该目标只依赖 Core/Sql/Test，不需要 GUI、libssh 与 libvterm。
+    qt_add_executable(ShelliumStorageTests
+        tests/ApplicationDatabaseTest.cpp
+        src/core/ConnectionTarget.cpp
+        src/core/ConnectionTarget.h
+        src/core/HostRecord.h
+        src/storage/ApplicationDatabase.cpp
+        src/storage/ApplicationDatabase.h
+    )
+    target_include_directories(ShelliumStorageTests PRIVATE src)
+    target_link_libraries(ShelliumStorageTests PRIVATE
+        Qt6::Core
+        Qt6::Sql
+        Qt6::Test
+    )
+
+    add_test(NAME ShelliumStorageTests COMMAND ShelliumStorageTests)
+
     # 针对真实服务器的连接路径回归。非阻塞握手状态机的价值就在于与真实 libssh 和真实
     # 服务器的时序交互，无法用桩替身覆盖；缺少 SHELLIUM_IT_* 环境变量时测试自行跳过。
     qt_add_executable(ShelliumSshIntegrationTests
