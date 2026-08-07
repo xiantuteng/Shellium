@@ -14,6 +14,68 @@
 #include <utility>
 
 /**
+ * @brief 空闲连接保活的判定策略。
+ *
+ * libssh 没有 OpenSSH 的 ServerAliveInterval，保活报文必须由调用方按自己的节奏发出。
+ * 这里把"该不该发"抽成无副作用的纯函数：工作线程每轮都要调用它，必须零成本；同时它是
+ * 整个特性里唯一有分支的逻辑，独立出来才能在没有真实服务器的情况下被单元测试覆盖。
+ */
+namespace SshKeepAlive {
+
+/**
+ * @brief 默认保活间隔。
+ *
+ * 家用路由器与运营商 NAT 常见的 TCP 空闲表项寿命在 60 秒到数分钟之间，取 30 秒可以在
+ * 最短的那一档被回收之前刷新一次。再短并不会更安全，只会在移动网络上白白唤醒无线电。
+ */
+inline constexpr qint64 kIdleIntervalMs = 30000;
+
+/**
+ * @brief 判断某一层此刻是否应当发送保活探测。
+ * @param sessionReady 该层是否已完成认证；建立阶段有独立的握手超时兜底，不需要保活。
+ * @param idleMs 距最近一次数据往来的毫秒数；计时尚未开始时传负数。
+ * @param intervalMs 保活间隔；<= 0 表示关闭保活。
+ */
+[[nodiscard]] constexpr bool shouldSend(const bool sessionReady,
+                                        const qint64 idleMs,
+                                        const qint64 intervalMs) noexcept
+{
+    if (!sessionReady || intervalMs <= 0 || idleMs < 0) {
+        return false;
+    }
+    return idleMs >= intervalMs;
+}
+
+/** @brief 一层在判定时刻的状态快照。 */
+struct LayerIdleState {
+    bool ready = false;
+    qint64 idleMs = -1;
+};
+
+/**
+ * @brief 逐层判定本轮需要发送保活的层，返回它们在层栈中的下标。
+ * @param layers 从外层到内层的状态快照。
+ * @param intervalMs 保活间隔。
+ *
+ * 必须逐层判定而不能只看栈顶：内层会话的传输架在外层的转发通道之上，外层被中间设备
+ * 掐断会让内层一起完蛋。而用户长时间只在内层敲命令时，恰恰是外层最先超时——内层的
+ * 数据虽然确实过境外层，但那是同一条 TCP 上的载荷，外层自身空闲与否要单独判断。
+ */
+[[nodiscard]] inline QList<int> layersNeedingKeepAlive(const QList<LayerIdleState> &layers,
+                                                       const qint64 intervalMs)
+{
+    QList<int> indices;
+    for (int index = 0; index < layers.size(); ++index) {
+        if (shouldSend(layers.at(index).ready, layers.at(index).idleMs, intervalMs)) {
+            indices.append(index);
+        }
+    }
+    return indices;
+}
+
+} // namespace SshKeepAlive
+
+/**
  * @brief 连接链中的一层：一个 libssh 会话及其交互式 Shell 与 direct-tcpip 转发通道。
  *
  * 本类刻意不继承 QObject 也不持有线程：所有方法都必须由拥有它的 SshSessionStack 工作线程
@@ -163,6 +225,29 @@ public:
      * @return 读到的字节数；无数据时返回 0。
      */
     int readFromShell(char *buffer, int size, bool stderrStream);
+
+    /**
+     * @brief 记录一次数据往来，重置本层的空闲计时。
+     *
+     * Shell 的收发与转发通道的搬运都算活跃：只要这条 TCP 上刚刚有过密文，链路上的状态
+     * 表项就是新鲜的，此时再补一个 SSH_MSG_IGNORE 毫无意义。
+     */
+    void noteActivity();
+
+    /** @brief 距最近一次数据往来的毫秒数；尚未开始计时返回 -1。 */
+    [[nodiscard]] qint64 idleMs() const;
+
+    /** @brief 本层用于保活判定的状态快照。 */
+    [[nodiscard]] SshKeepAlive::LayerIdleState keepAliveState() const;
+
+    /**
+     * @brief 立即发出一次 SSH_MSG_IGNORE 保活报文。
+     * @return 成功送出返回 true；本轮写不出去返回 false。
+     *
+     * 失败不代表会话故障，调用方不应据此中断连接：非阻塞会话上发送队列可能暂时满。
+     * 失败时不重置空闲计时，下一轮泵送会自然重试。
+     */
+    bool sendKeepAlive();
 
     /** @brief Shell 通道是否仍处于打开且未收到 EOF 的可交互状态。 */
     [[nodiscard]] bool isShellAlive() const;
@@ -368,4 +453,7 @@ private:
 
     /** @brief 建立过程的整体超时计时；非阻塞模式下 libssh 自身不再提供握手超时保护。 */
     QElapsedTimer m_establishTimer;
+
+    /** @brief 距最近一次数据往来的计时，保活判定的唯一依据；未就绪前不启动。 */
+    QElapsedTimer m_idleTimer;
 };

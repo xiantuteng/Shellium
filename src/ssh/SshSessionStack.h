@@ -199,6 +199,14 @@ private:
      */
     void pumpAllForwards();
 
+    /**
+     * @brief 逐层检查空闲时长，为需要的层各发一次保活探测。
+     *
+     * 长时间只看不敲的会话会被中间的 NAT 与状态防火墙静默回收表项，用户下一次按键才发现
+     * 连接早已死掉且没有任何提示。SSH 协议层的 SSH_MSG_IGNORE 由本方法定期补上。
+     */
+    void serviceKeepAlive();
+
     /** @brief 把一条转发建立结果交给它的发起方——建层流程或 SFTP 请求。 */
     void handleForwardOutcome(const SshSessionNode::ForwardOutcome &outcome);
 

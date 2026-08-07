@@ -94,6 +94,7 @@ if(BUILD_TESTING)
 
     qt_add_executable(ShelliumCoreTests
         tests/SshCommandParserTest.cpp
+        tests/KeepAliveTest.cpp
         src/core/ConnectionTarget.cpp
         src/core/ConnectionTarget.h
         src/security/Vault.cpp
