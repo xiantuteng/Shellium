@@ -11,6 +11,15 @@
  * password 只存在于当前进程内存中，当前版本不会将其写入磁盘或日志。
  */
 struct ConnectionTarget {
+    /**
+     * @brief 该目标在连接链中的可信程度。
+     *
+     * Confirmed 表示这一层由本程序亲自建立并完成认证，层的存在与身份是确定事实。
+     * Inferred 表示它仅由解析终端命令推测得出，可能与远端真实状态不一致——界面必须把
+     * 这种不确定性显式呈现给用户，因为在错误的服务器上执行删除是不可撤销的。
+     */
+    enum class Confidence { Confirmed, Inferred };
+
     QString id;
     QString displayName;
     QString host;
@@ -28,6 +37,14 @@ struct ConnectionTarget {
      * 终端里的密码重试，避免在用户第一次输错密码后又弹出第二个 SFTP 密码输入框。
      */
     bool interactiveAuthenticationPending = false;
+
+    /**
+     * @brief 本层来源的可信度，默认按推测处理。
+     *
+     * 默认值刻意取 Inferred：新增代码路径若忘记标注来源，应当落到需要用户确认的保守分支，
+     * 而不是被当作已验证事实。
+     */
+    Confidence confidence = Confidence::Inferred;
 
     /**
      * @brief 进程内 direct-tcpip 路由标识；非空时 SFTP 复用已认证外层会话。

@@ -1,9 +1,9 @@
 #include "ssh/SshSessionNode.h"
 
 #include <QFile>
-#include <QThread>
 #include <QtEndian>
 
+#include <algorithm>
 #include <utility>
 
 #include <cerrno>
@@ -108,13 +108,30 @@ SshSessionNode::StepResult failure(QString message)
     return result;
 }
 
-/** @brief 构造一个成功结果。 */
+/** @brief 构造一个成功且已完成的结果。 */
 SshSessionNode::StepResult success()
 {
     SshSessionNode::StepResult result;
     result.ok = true;
     return result;
 }
+
+/** @brief 构造一个“尚未得出结论，请再次推进”的结果。 */
+SshSessionNode::StepResult pending()
+{
+    SshSessionNode::StepResult result;
+    result.ok = true;
+    result.pending = true;
+    return result;
+}
+
+/**
+ * @brief 建立过程的整体超时。
+ *
+ * 非阻塞模式下 libssh 不再依据 SSH_OPTIONS_TIMEOUT 中断握手，必须由调用方自行限时，
+ * 否则无响应的服务器会让该层永远停留在推进循环中。
+ */
+constexpr qint64 kEstablishTimeoutMs = 30000;
 
 } // namespace
 
@@ -130,6 +147,14 @@ SshSessionNode::~SshSessionNode()
     }
     m_forwards.clear();
 
+    for (PendingForward &pending : m_pendingForwards) {
+        // 同样只 free 不 close：这些通道从未打开成功。
+        ssh_channel_free(pending.channel);
+        ::close(pending.workerFd);
+        ::close(pending.callerFd);
+    }
+    m_pendingForwards.clear();
+
     if (m_shell != nullptr) {
         ssh_channel_send_eof(m_shell);
         ssh_channel_close(m_shell);
@@ -143,13 +168,21 @@ SshSessionNode::~SshSessionNode()
     }
     // 该层持有的密码副本随对象一同消失前先覆盖，缩短明文在进程内的驻留时间。
     m_target.password.fill(QChar::Null);
+    m_secret.fill('\0');
 }
 
-SshSessionNode::StepResult SshSessionNode::connectTransport(const int transportFd,
-                                                            const long timeoutSeconds)
+SshSessionNode::StepResult SshSessionNode::beginEstablish(const int transportFd,
+                                                          const int columns,
+                                                          const int rows)
 {
+    m_columns = std::max(columns, 1);
+    m_rows = std::max(rows, 1);
+    m_terminalModes = interactiveTerminalModes();
+    m_secret = m_target.password.toUtf8();
+
     m_session = ssh_new();
     if (m_session == nullptr) {
+        m_stage = Stage::Failed;
         return failure(tr("无法创建 libssh 会话。"));
     }
 
@@ -168,6 +201,9 @@ SshSessionNode::StepResult SshSessionNode::connectTransport(const int transportF
         int fd = transportFd;
         ssh_options_set(m_session, SSH_OPTIONS_FD, &fd);
     } else {
+        // 该超时只保护 libssh 内部仍然同步执行的部分（例如 DNS 解析）。握手本身在非阻塞
+        // 模式下由 advanceEstablish 的整体计时器限时。
+        const long timeoutSeconds = 15;
         ssh_options_set(m_session, SSH_OPTIONS_TIMEOUT, &timeoutSeconds);
     }
 
@@ -180,8 +216,8 @@ SshSessionNode::StepResult SshSessionNode::connectTransport(const int transportF
         // 内层服务器重新跳一次，因此只在直连模式下应用跳板链。
         const QByteArray jumps = m_target.proxyJumps.join(QLatin1Char(',')).toUtf8();
         if (ssh_options_set(m_session, SSH_OPTIONS_PROXYJUMP, jumps.constData()) != SSH_OK) {
-            return failure(tr("无法配置 SSH 跳板链：%1")
-                               .arg(QString::fromUtf8(ssh_get_error(m_session))));
+            m_stage = Stage::Failed;
+            return failure(tr("无法配置 SSH 跳板链：%1").arg(lastError()));
         }
     }
 
@@ -193,102 +229,250 @@ SshSessionNode::StepResult SshSessionNode::connectTransport(const int transportF
         ssh_options_set(m_session, SSH_OPTIONS_HMAC_S_C, legacyHmac);
     }
 
-    if (ssh_connect(m_session) != SSH_OK) {
-        const QString error = QString::fromUtf8(ssh_get_error(m_session));
+    // 必须在 ssh_connect 之前切换：非阻塞模式是嵌套层不死锁的前提，握手期间工作线程要能
+    // 回去泵送承载本层传输的外层转发通道。
+    ssh_set_blocking(m_session, 0);
+
+    m_stage = Stage::Connecting;
+    m_establishTimer.start();
+    return pending();
+}
+
+SshSessionNode::StepResult SshSessionNode::advanceEstablish()
+{
+    if (m_stage == Stage::Ready) {
+        return success();
+    }
+    if (m_stage == Stage::Failed || m_stage == Stage::Idle) {
+        return failure(tr("该层尚未开始建立或已经失败。"));
+    }
+    if (m_establishTimer.isValid() && m_establishTimer.elapsed() > kEstablishTimeoutMs) {
+        m_stage = Stage::Failed;
+        return failure(tr("连接 %1 超时。").arg(m_target.connectionSpecifier(true)));
+    }
+
+    switch (m_stage) {
+    case Stage::Connecting:
+        return advanceConnecting();
+
+    case Stage::AwaitingHostKeyDecision: {
+        if (!m_hostKeyDecided) {
+            return pending();
+        }
+        if (!m_hostKeyTrusted) {
+            m_stage = Stage::Failed;
+            return failure(tr("用户拒绝了未知服务器主机密钥。"));
+        }
+        if (ssh_session_update_known_hosts(m_session) != SSH_OK) {
+            m_stage = Stage::Failed;
+            return failure(tr("写入 known_hosts 失败：%1").arg(lastError()));
+        }
+        m_stage = Stage::Authenticating;
+        m_authPhase = AuthPhase::None;
+        return pending();
+    }
+
+    case Stage::Authenticating:
+        return advanceAuthenticating();
+
+    case Stage::OpeningChannel: {
+        if (m_shell == nullptr) {
+            m_shell = ssh_channel_new(m_session);
+            if (m_shell == nullptr) {
+                m_stage = Stage::Failed;
+                return failure(tr("无法创建 SSH Shell 通道：%1").arg(lastError()));
+            }
+        }
+        const int result = ssh_channel_open_session(m_shell);
+        if (result == SSH_AGAIN) {
+            return pending();
+        }
+        if (result != SSH_OK) {
+            m_stage = Stage::Failed;
+            return failure(tr("无法创建 SSH Shell 通道：%1").arg(lastError()));
+        }
+        m_stage = Stage::RequestingPty;
+        return pending();
+    }
+
+    case Stage::RequestingPty: {
+        const int result = ssh_channel_request_pty_size_modes(
+            m_shell,
+            "xterm-256color",
+            m_columns,
+            m_rows,
+            reinterpret_cast<const unsigned char *>(m_terminalModes.constData()),
+            static_cast<size_t>(m_terminalModes.size()));
+        if (result == SSH_AGAIN) {
+            return pending();
+        }
+        if (result != SSH_OK) {
+            m_stage = Stage::Failed;
+            return failure(tr("服务器拒绝分配交互式 PTY：%1").arg(lastError()));
+        }
+        m_ptyApplied = true;
+        m_stage = Stage::RequestingShell;
+        return pending();
+    }
+
+    case Stage::RequestingShell: {
+        const int result = ssh_channel_request_shell(m_shell);
+        if (result == SSH_AGAIN) {
+            return pending();
+        }
+        if (result != SSH_OK) {
+            m_stage = Stage::Failed;
+            return failure(tr("服务器拒绝启动交互式 Shell：%1").arg(lastError()));
+        }
+        m_stage = Stage::Ready;
+        m_establishTimer.invalidate();
+        return success();
+    }
+
+    case Stage::Idle:
+    case Stage::Ready:
+    case Stage::Failed:
+        break;
+    }
+    m_stage = Stage::Failed;
+    return failure(tr("连接状态机进入了未定义状态。"));
+}
+
+SshSessionNode::StepResult SshSessionNode::advanceConnecting()
+{
+    const int result = ssh_connect(m_session);
+    if (result == SSH_AGAIN) {
+        return pending();
+    }
+    if (result != SSH_OK) {
+        const QString error = lastError();
+        m_stage = Stage::Failed;
         // libssh 没有为“算法无交集”提供独立错误码，只能对其稳定错误文本做精确分类。
         // 同时要求出现 MAC 协商语义和 hmac-sha1，避免对普通 kex/网络错误错误降级。
         if (!m_target.allowLegacyHmacSha1
             && error.contains(QStringLiteral("no match for method mac algo"), Qt::CaseInsensitive)
             && error.contains(QStringLiteral("hmac-sha1"), Qt::CaseInsensitive)) {
-            StepResult result = failure(error);
-            result.legacyHmacRequired = true;
-            return result;
+            StepResult legacy = failure(error);
+            legacy.legacyHmacRequired = true;
+            return legacy;
         }
         return failure(tr("SSH 连接失败：%1").arg(error));
     }
-    return success();
+    return evaluateHostKey();
 }
 
-SshSessionNode::StepResult SshSessionNode::verifyHostKey()
+SshSessionNode::StepResult SshSessionNode::evaluateHostKey()
 {
     const ssh_known_hosts_e knownState = ssh_session_is_known_server(m_session);
     if (knownState == SSH_KNOWN_HOSTS_CHANGED || knownState == SSH_KNOWN_HOSTS_OTHER) {
+        m_stage = Stage::Failed;
         return failure(tr("服务器主机密钥与 known_hosts 不一致，连接已终止。"));
     }
     if (knownState == SSH_KNOWN_HOSTS_ERROR) {
-        return failure(tr("读取 known_hosts 失败：%1")
-                           .arg(QString::fromUtf8(ssh_get_error(m_session))));
+        m_stage = Stage::Failed;
+        return failure(tr("读取 known_hosts 失败：%1").arg(lastError()));
     }
     if (knownState == SSH_KNOWN_HOSTS_UNKNOWN || knownState == SSH_KNOWN_HOSTS_NOT_FOUND) {
+        m_stage = Stage::AwaitingHostKeyDecision;
+        m_hostKeyDecided = false;
+        m_hostKeyTrusted = false;
+        // 等待用户核验期间不能让整体超时把连接掐断，人核对指纹远比握手慢。
+        m_establishTimer.invalidate();
+
         StepResult result;
+        result.ok = true;
+        result.pending = true;
         result.hostKeyUnknown = true;
         result.fingerprint = serverFingerprint(m_session);
         return result;
     }
-    return success();
+    m_stage = Stage::Authenticating;
+    m_authPhase = AuthPhase::None;
+    return pending();
 }
 
-SshSessionNode::StepResult SshSessionNode::acceptHostKey()
+SshSessionNode::StepResult SshSessionNode::advanceAuthenticating()
 {
-    if (ssh_session_update_known_hosts(m_session) != SSH_OK) {
-        return failure(tr("写入 known_hosts 失败：%1")
-                           .arg(QString::fromUtf8(ssh_get_error(m_session))));
+    // libssh 在非阻塞模式下要求收到 SSH_AUTH_AGAIN 后用完全相同的参数重试，因此这里始终
+    // 使用缓存的 m_secret，而不是每轮从 QString 重新生成临时缓冲。
+    const char *secret = m_secret.isEmpty() ? nullptr : m_secret.constData();
+
+    int result = SSH_AUTH_DENIED;
+    switch (m_authPhase) {
+    case AuthPhase::None:
+        result = ssh_userauth_none(m_session, nullptr);
+        if (result == SSH_AUTH_AGAIN) {
+            return pending();
+        }
+        if (result == SSH_AUTH_SUCCESS) {
+            m_stage = Stage::OpeningChannel;
+            return pending();
+        }
+        // publickey_auto 会尝试 SSH Agent、默认密钥以及通过 SSH_OPTIONS_IDENTITY 指定的
+        // 密钥。当用户输入的密码实际是私钥口令时，也允许 libssh 用它解密私钥。
+        m_authPhase = AuthPhase::PublicKey;
+        return pending();
+
+    case AuthPhase::PublicKey:
+        result = ssh_userauth_publickey_auto(m_session, nullptr, secret);
+        if (result == SSH_AUTH_AGAIN) {
+            return pending();
+        }
+        if (result == SSH_AUTH_SUCCESS) {
+            m_stage = Stage::OpeningChannel;
+            return pending();
+        }
+        if (m_secret.isEmpty()) {
+            m_stage = Stage::Failed;
+            return failure(tr("SSH 认证失败：%1。请检查密码、私钥或 SSH Agent。")
+                               .arg(lastError()));
+        }
+        m_authPhase = AuthPhase::Password;
+        return pending();
+
+    case AuthPhase::Password:
+        result = ssh_userauth_password(m_session, nullptr, m_secret.constData());
+        if (result == SSH_AUTH_AGAIN) {
+            return pending();
+        }
+        if (result == SSH_AUTH_SUCCESS) {
+            m_stage = Stage::OpeningChannel;
+            return pending();
+        }
+        m_stage = Stage::Failed;
+        return failure(tr("SSH 认证失败：%1。请检查密码、私钥或 SSH Agent。").arg(lastError()));
     }
-    return success();
+
+    m_stage = Stage::Failed;
+    return failure(tr("认证状态机进入了未定义状态。"));
 }
 
-SshSessionNode::StepResult SshSessionNode::authenticate()
+void SshSessionNode::provideHostKeyDecision(const bool trusted)
 {
-    const QByteArray secret = m_target.password.toUtf8();
-    int authentication = ssh_userauth_none(m_session, nullptr);
-    if (authentication != SSH_AUTH_SUCCESS) {
-        // publickey_auto 会尝试 SSH Agent、默认密钥以及通过 SSH_OPTIONS_IDENTITY 指定的密钥。
-        // 当用户输入的密码实际是私钥口令时，也允许 libssh 用它解密私钥。
-        authentication = ssh_userauth_publickey_auto(
-            m_session, nullptr, secret.isEmpty() ? nullptr : secret.constData());
+    if (m_stage != Stage::AwaitingHostKeyDecision) {
+        return;
     }
-    if (authentication != SSH_AUTH_SUCCESS && !secret.isEmpty()) {
-        authentication = ssh_userauth_password(m_session, nullptr, secret.constData());
-    }
-    if (authentication != SSH_AUTH_SUCCESS) {
-        return failure(tr("SSH 认证失败：%1。请检查密码、私钥或 SSH Agent。")
-                           .arg(QString::fromUtf8(ssh_get_error(m_session))));
-    }
-    return success();
+    m_hostKeyDecided = true;
+    m_hostKeyTrusted = trusted;
+    // 用户已作答，重新开始计时以便后续认证阶段仍受整体超时保护。
+    m_establishTimer.start();
 }
 
-SshSessionNode::StepResult SshSessionNode::openShell(const int columns, const int rows)
+bool SshSessionNode::isReady() const
 {
-    m_shell = ssh_channel_new(m_session);
-    if (m_shell == nullptr || ssh_channel_open_session(m_shell) != SSH_OK) {
-        return failure(tr("无法创建 SSH Shell 通道：%1")
-                           .arg(QString::fromUtf8(ssh_get_error(m_session))));
-    }
-
-    const QByteArray terminalModes = interactiveTerminalModes();
-    if (ssh_channel_request_pty_size_modes(
-            m_shell,
-            "xterm-256color",
-            columns,
-            rows,
-            reinterpret_cast<const unsigned char *>(terminalModes.constData()),
-            static_cast<size_t>(terminalModes.size())) != SSH_OK
-        || ssh_channel_request_shell(m_shell) != SSH_OK) {
-        return failure(tr("服务器拒绝分配交互式 PTY：%1")
-                           .arg(QString::fromUtf8(ssh_get_error(m_session))));
-    }
-
-    // Shell 建立后整个会话切换为非阻塞，交互读写和转发泵送才能在同一轮询循环中共存。
-    ssh_set_blocking(m_session, 0);
-    return success();
+    return m_stage == Stage::Ready;
 }
 
 void SshSessionNode::resizePty(const int columns, const int rows)
 {
-    if (m_shell == nullptr) {
+    m_columns = std::max(columns, 1);
+    m_rows = std::max(rows, 1);
+    if (m_shell == nullptr || !m_ptyApplied) {
+        // 建立过程尚未走到 PTY 请求时只记录尺寸；RequestingPty 阶段会用最新值发起请求，
+        // 因此窗口在连接期间被拖动也不会让远端拿到过时的行列数。
         return;
     }
-    ssh_channel_change_pty_size(m_shell, columns, rows);
+    ssh_channel_change_pty_size(m_shell, m_columns, m_rows);
 }
 
 int SshSessionNode::writeToShell(const char *data, const int size)
@@ -344,17 +528,17 @@ void SshSessionNode::closeShell()
     ssh_channel_close(m_shell);
 }
 
-bool SshSessionNode::openForward(const QString &host,
-                                 const quint16 port,
-                                 int *callerFd,
-                                 const std::function<bool()> &shouldAbort,
-                                 QString *error)
+quint64 SshSessionNode::beginForward(const QString &host,
+                                     const quint16 port,
+                                     const bool nonBlockingCaller,
+                                     const int timeoutMs,
+                                     QString *error)
 {
-    const auto reportError = [error](const QString &message) {
+    const auto reportError = [error](const QString &message) -> quint64 {
         if (error != nullptr) {
             *error = message;
         }
-        return false;
+        return 0;
     };
 
     if (m_session == nullptr) {
@@ -367,43 +551,95 @@ bool SshSessionNode::openForward(const QString &host,
                                .arg(QString::fromLocal8Bit(std::strerror(errno))));
     }
 
-    ssh_channel forwardChannel = ssh_channel_new(m_session);
-    const QByteArray targetHost = host.toUtf8();
-    int openResult = forwardChannel == nullptr ? SSH_ERROR : SSH_AGAIN;
-    while (openResult == SSH_AGAIN && !shouldAbort()) {
-        openResult = ssh_channel_open_forward(
-            forwardChannel, targetHost.constData(), port, "127.0.0.1", 0);
-        if (openResult == SSH_AGAIN) {
-            QThread::msleep(5);
-        }
-    }
-
-    if (openResult != SSH_OK) {
-        const QString message = tr("服务器 %1 无法转发到 %2:%3：%4")
-                                    .arg(m_target.connectionSpecifier(true), host)
-                                    .arg(port)
-                                    .arg(QString::fromUtf8(ssh_get_error(m_session)));
-        if (forwardChannel != nullptr) {
-            ssh_channel_close(forwardChannel);
-            ssh_channel_free(forwardChannel);
-        }
+    ssh_channel channel = ssh_channel_new(m_session);
+    if (channel == nullptr) {
         ::close(socketPair[0]);
         ::close(socketPair[1]);
-        return reportError(message);
+        return reportError(tr("无法在 %1 上分配转发通道：%2")
+                               .arg(m_target.connectionSpecifier(true), lastError()));
     }
 
-    // 工作线程一侧必须非阻塞，否则轮询循环会被没有数据的隧道读操作卡住；调用方一端保持
-    // 默认阻塞语义，可直接交给 libssh 的 SSH_OPTIONS_FD 等同步消费者。
+    // 工作线程一侧必须非阻塞，否则轮询循环会被没有数据的隧道读操作卡住。
     fcntl(socketPair[0], F_SETFL, fcntl(socketPair[0], F_GETFL, 0) | O_NONBLOCK);
-    m_forwards.append({socketPair[0], forwardChannel, {}, {}});
-    if (callerFd != nullptr) {
-        *callerFd = socketPair[1];
+    if (nonBlockingCaller) {
+        // 嵌套层的 libssh 会话工作在非阻塞模式，其传输 fd 必须同样非阻塞，否则握手读取会
+        // 阻塞工作线程并再次饿死承载它的外层通道。SFTP 的同步会话则需要保留阻塞语义。
+        fcntl(socketPair[1], F_SETFL, fcntl(socketPair[1], F_GETFL, 0) | O_NONBLOCK);
     }
-    return true;
+
+    PendingForward pending;
+    pending.id = m_nextForwardId++;
+    pending.channel = channel;
+    pending.workerFd = socketPair[0];
+    pending.callerFd = socketPair[1];
+    pending.host = host.toUtf8();
+    pending.port = port;
+    pending.timeoutMs = timeoutMs;
+    pending.timer.start();
+    m_pendingForwards.append(std::move(pending));
+    return m_pendingForwards.constLast().id;
 }
 
-void SshSessionNode::pumpForwards()
+QList<SshSessionNode::ForwardOutcome> SshSessionNode::advancePendingForwards()
 {
+    QList<ForwardOutcome> outcomes;
+    for (qsizetype index = m_pendingForwards.size() - 1; index >= 0; --index) {
+        PendingForward &pending = m_pendingForwards[index];
+
+        const int result = ssh_channel_open_forward(
+            pending.channel, pending.host.constData(), pending.port, "127.0.0.1", 0);
+
+        if (result == SSH_AGAIN) {
+            if (pending.timer.elapsed() <= pending.timeoutMs) {
+                continue;
+            }
+            // 远端向不可路由地址转发时会一直没有响应。没有时限，这条请求就会永远悬挂，
+            // 发起方（建层或 SFTP）也就永远等不到结论。
+            ForwardOutcome outcome;
+            outcome.id = pending.id;
+            outcome.error = tr("服务器 %1 转发到 %2:%3 超时（%4 秒）")
+                                .arg(m_target.connectionSpecifier(true),
+                                     QString::fromUtf8(pending.host))
+                                .arg(pending.port)
+                                .arg(pending.timeoutMs / 1000);
+            outcomes.append(outcome);
+            // 只 free 不 close：通道从未真正打开，远端没有对应的 channel id；在非阻塞会话上
+            // ssh_channel_close 会返回 SSH_AGAIN 并留下半写的 CHANNEL_CLOSE 包，之后整条
+            // SSH 流失步，连带把本层的交互式 Shell 一起废掉。
+            ssh_channel_free(pending.channel);
+            ::close(pending.workerFd);
+            ::close(pending.callerFd);
+            m_pendingForwards.removeAt(index);
+            continue;
+        }
+
+        ForwardOutcome outcome;
+        outcome.id = pending.id;
+        if (result == SSH_OK) {
+            outcome.ok = true;
+            outcome.callerFd = pending.callerFd;
+            m_forwards.append({pending.workerFd, pending.channel, {}, {}});
+        } else {
+            outcome.error = tr("服务器 %1 无法转发到 %2:%3：%4")
+                                .arg(m_target.connectionSpecifier(true),
+                                     QString::fromUtf8(pending.host))
+                                .arg(pending.port)
+                                .arg(lastError());
+            ssh_channel_free(pending.channel);
+            ::close(pending.workerFd);
+            ::close(pending.callerFd);
+        }
+        outcomes.append(outcome);
+        m_pendingForwards.removeAt(index);
+    }
+    return outcomes;
+}
+
+QList<SshSessionNode::ForwardOutcome> SshSessionNode::pumpForwards()
+{
+    // 先推进待建立请求：新建成的通道本轮就能开始搬运数据，少一轮往返延迟。
+    QList<ForwardOutcome> outcomes = advancePendingForwards();
+
     char tunnelBuffer[64 * 1024];
     for (qsizetype index = m_forwards.size() - 1; index >= 0; --index) {
         ActiveForward &forward = m_forwards[index];
@@ -456,6 +692,7 @@ void SshSessionNode::pumpForwards()
             m_forwards.removeAt(index);
         }
     }
+    return outcomes;
 }
 
 void SshSessionNode::releaseForward(ActiveForward &forward)
@@ -465,7 +702,8 @@ void SshSessionNode::releaseForward(ActiveForward &forward)
         forward.socketFd = -1;
     }
     if (forward.channel != nullptr) {
-        ssh_channel_close(forward.channel);
+        // 同上：ssh_channel_free 会在需要时自行关闭，并且正确处理非阻塞会话上尚未完成的
+        // 关闭握手；显式先 close 反而可能留下半写包并破坏整条 SSH 流。
         ssh_channel_free(forward.channel);
         forward.channel = nullptr;
     }

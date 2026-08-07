@@ -1,9 +1,11 @@
 #pragma once
 
 #include "core/ConnectionTarget.h"
+#include "ssh/SshSessionNode.h"
 
 #include <QByteArray>
 #include <QList>
+#include <QHash>
 #include <QMutex>
 #include <QSharedPointer>
 #include <QThread>
@@ -11,8 +13,6 @@
 
 #include <memory>
 #include <vector>
-
-class SshSessionNode;
 
 /**
  * @brief 在专用线程中维护一个分屏的 SSH 连接层栈。
@@ -59,6 +59,23 @@ public:
     void confirmUnknownHost(bool trusted);
 
     /**
+     * @brief 请求在当前栈顶之上建立新一层，终端 PTY 随后切换到该层。
+     * @param target 内层服务器；其 host/port 由栈顶服务器的视角解析。
+     *
+     * 新层的传输经栈顶会话的 direct-tcpip 通道建立，因此不需要内层服务器从本机可达，
+     * 也不会把中间跳板的凭据暴露给内层。结果通过 layersChanged 或 layerFailed 返回。
+     */
+    void requestPushLayer(const ConnectionTarget &target);
+
+    /**
+     * @brief 请求关闭栈顶层并把终端交还外层；栈内只剩一层时忽略。
+     *
+     * 用户在内层执行 exit 时无需调用本方法：该层的 Shell 通道会自行 EOF，栈会据此
+     * 确定性地弹出，这正是自持会话相对于解析终端输出的根本优势。
+     */
+    void requestPopLayer();
+
+    /**
      * @brief 通过栈顶层已认证会话打开到内网目标的 direct-tcpip 通道。
      * @param host 从栈顶服务器视角可访问的内层主机。
      * @param port 内层 SSH 端口。
@@ -92,11 +109,25 @@ signals:
     void hostKeyVerificationRequired(const ConnectionTarget &target,
                                      const QString &fingerprint);
 
+    /**
+     * @brief 层栈发生变化，携带从外层到内层的完整快照。
+     *
+     * 快照中的每一层都是本程序亲自建立并完成认证的会话，因此 confidence 均为 Confirmed；
+     * 文件管理器可以直接信任这份列表，无需再对终端输出做任何推测。
+     */
+    void layersChanged(const QList<ConnectionTarget> &layers);
+
+    /** @brief 嵌套层建立失败；栈已回退到失败前的状态，外层会话不受影响。 */
+    void layerFailed(const ConnectionTarget &target, const QString &message);
+
 protected:
     /** @brief 建立栈底层并执行统一的输入、输出与转发泵送循环。 */
     void run() override;
 
 private:
+    /** @brief GUI 线程对未知主机指纹的作答，由工作线程在下一轮推进时消费。 */
+    enum class HostKeyDecision { None, Trusted, Rejected };
+
     /** @brief 一个跨线程等待 direct-tcpip 通道创建结果的请求。 */
     struct ForwardRequest {
         QString host;
@@ -110,24 +141,45 @@ private:
     };
 
     /**
-     * @brief 完成一层的连接、指纹确认、认证与 PTY 创建。
-     * @param node 待建立的层。
-     * @param transportFd 复用的外层隧道 socket；-1 表示由本层自行发起 TCP 连接。
-     * @return 成功返回 true；失败时已发出对应的错误或降级信号。
-     */
-    bool establishLayer(SshSessionNode &node, int transportFd);
-
-    /**
-     * @brief 主循环：搬运终端输入输出、服务转发请求并泵送所有层的隧道。
-     * @return 因远端 Shell 正常结束而退出返回 true；因写入失败等异常中止返回 false。
+     * @brief 主循环：推进建立中的层、搬运终端输入输出并泵送所有层的隧道。
+     * @return 因远端 Shell 正常结束而退出返回 true；因连接失败或写入错误中止返回 false。
      */
     bool pumpLoop();
 
-    /** @brief 处理 GUI/SFTP 线程排队的 direct-tcpip 请求。 */
+    /**
+     * @brief 把栈顶尚未就绪的层向前推进一步，绝不阻塞。
+     * @return 栈仍然可用返回 true；栈底建立失败、整个会话不可继续时返回 false。
+     *
+     * 嵌套层建立失败只弹出该层并发出 layerFailed，外层会话保持可用；只有栈底失败才是
+     * 致命的。
+     */
+    bool advanceEstablishingLayers();
+
+    /** @brief 处理 GUI 排队的建层与退层请求。 */
+    void servicePendingLayerRequests();
+
+    /** @brief 关闭并弹出栈顶层，返回被弹出层的目标描述。 */
+    ConnectionTarget popTopLayer();
+
+    /** @brief 当前层栈从外层到内层的目标快照。 */
+    [[nodiscard]] QList<ConnectionTarget> layerTargets() const;
+
+    /**
+     * @brief 泵送所有层的转发通道并派发本轮得出结论的建立结果。
+     *
+     * 内层传输依赖外层通道，必须整栈一起搬运。结果统一在遍历结束后派发：派发过程可能
+     * 压入新层，而 std::vector 的 push_back 会让正在使用的迭代器失效。
+     */
+    void pumpAllForwards();
+
+    /** @brief 把一条转发建立结果交给它的发起方——建层流程或 SFTP 请求。 */
+    void handleForwardOutcome(const SshSessionNode::ForwardOutcome &outcome);
+
+    /** @brief 把 GUI/SFTP 线程排队的 direct-tcpip 请求转成异步建立，不等待结果。 */
     void serviceForwardRequests();
 
-    /** @brief 栈顶层，即终端 PTY 当前绑定的那一层。 */
-    [[nodiscard]] SshSessionNode &activeLayer();
+    /** @brief 以给定原因终结所有在途的转发与建层请求，用于弹层和停止。 */
+    void abortInFlightForwards(const QString &reason);
 
     /** @brief 判断停止标志；内部统一加锁以避免数据竞争。 */
     [[nodiscard]] bool shouldStop() const;
@@ -142,12 +194,31 @@ private:
      */
     std::vector<std::unique_ptr<SshSessionNode>> m_layers;
 
+    /** @brief 栈底就绪信号是否已发出，保证 shellConnected 在一次运行中只发一次。 */
+    bool m_rootAnnounced = false;
+
     mutable QMutex m_mutex;
-    QWaitCondition m_hostKeyCondition;
     QByteArray m_pendingInput;
     bool m_stopRequested = false;
-    bool m_waitingForHostKey = false;
-    bool m_hostKeyTrusted = false;
+    HostKeyDecision m_hostKeyDecision = HostKeyDecision::None;
+
+    /** @brief GUI 排队的建层请求，按提交顺序在工作线程中逐个处理。 */
+    QList<ConnectionTarget> m_pendingPushes;
+
+    /**
+     * @brief 正在等待隧道就绪的建层请求；同一时刻至多一个。
+     *
+     * 新层必须先建成才能承载下一层，因此建层天然串行；forwardId 为 0 表示当前没有在途请求。
+     */
+    ConnectionTarget m_layerPushTarget;
+    quint64 m_layerPushForwardId = 0;
+
+    /** @brief 已发起但尚未得出结论的 SFTP 隧道请求，按转发编号索引。 */
+    QHash<quint64, QSharedPointer<ForwardRequest>> m_forwardsInFlight;
+
+    /** @brief GUI 排队的退层次数。 */
+    int m_pendingPops = 0;
+
     int m_columns = 80;
     int m_rows = 24;
     bool m_sizeDirty = true;

@@ -4,6 +4,7 @@
 
 #include <QByteArray>
 #include <QCoreApplication>
+#include <QElapsedTimer>
 #include <QList>
 #include <QString>
 
@@ -15,25 +16,26 @@
  * @brief 连接链中的一层：一个 libssh 会话及其交互式 Shell 与 direct-tcpip 转发通道。
  *
  * 本类刻意不继承 QObject 也不持有线程：所有方法都必须由拥有它的 SshSessionStack 工作线程
- * 调用，因为同一个 ssh_session 上的 libssh 调用不是线程安全的。连接过程被拆成若干独立步骤
- * 并返回结构化结果，使“未知主机指纹”“仅支持 hmac-sha1”这类需要用户决策的状态可以交回
- * GUI，而不必把 QMessageBox 塞进网络代码。
+ * 调用，因为同一个 ssh_session 上的 libssh 调用不是线程安全的。
  *
- * 每层可以经由 SSH_OPTIONS_FD 复用外层会话提供的隧道 socket，从而在不暴露中间跳板凭据的
- * 前提下把嵌套服务器变成本程序亲自持有的会话。
+ * 建立过程被实现为**非阻塞状态机**，这是嵌套层能够工作的前提：第 N+1 层的传输架在第 N 层
+ * 的转发通道之上，而该通道的数据搬运同样由工作线程完成。如果建立过程阻塞等待网络，第 N 层
+ * 就得不到泵送，第 N+1 层的握手字节永远送不出去，必然死锁。因此调用方应当反复调用
+ * advanceEstablish()，并在每轮之间泵送所有层的转发通道。
  */
 class SshSessionNode final {
     Q_DECLARE_TR_FUNCTIONS(SshSessionNode)
 
 public:
     /**
-     * @brief 一个连接步骤的结构化结果。
+     * @brief 一次状态推进的结构化结果。
      *
-     * 除 ok 之外的标志用于区分“失败”和“需要用户决策”：hostKeyUnknown 与 legacyHmacRequired
-     * 都不是错误，而是必须由人确认后才能继续的分支。
+     * pending 为 true 表示本轮没有产生结论，调用方稍后应再次推进。hostKeyUnknown 与
+     * legacyHmacRequired 都不是错误，而是必须由人确认后才能继续的分支。
      */
     struct StepResult {
         bool ok = false;
+        bool pending = false;
         bool hostKeyUnknown = false;
         bool legacyHmacRequired = false;
         QString message;
@@ -53,32 +55,34 @@ public:
     SshSessionNode &operator=(SshSessionNode &&) = delete;
 
     /**
-     * @brief 建立 SSH 传输层。
+     * @brief 创建会话、应用选项并切换为非阻塞模式；不进行任何网络往返。
      * @param transportFd 已连接的 socket；>= 0 时复用外层隧道，libssh 不再自行发起 TCP 连接。
-     * @param timeoutSeconds 直连模式下的握手超时。
-     * @return legacyHmacRequired 为 true 时表示服务器仅提供 hmac-sha1，需要用户知情确认。
+     * @param columns 初始 PTY 列数。
+     * @param rows 初始 PTY 行数。
+     * @return 选项配置失败时返回失败结果，否则返回 pending 并等待 advanceEstablish 推进。
      *
      * 复用隧道时不会设置 SSH_OPTIONS_PROXYJUMP：外层路径已经由隧道本身表达，重复配置会让
      * libssh 试图从内层服务器再跳一次。
      */
-    StepResult connectTransport(int transportFd, long timeoutSeconds);
+    StepResult beginEstablish(int transportFd, int columns, int rows);
 
     /**
-     * @brief 对照 known_hosts 校验服务器公钥。
-     * @return hostKeyUnknown 为 true 时 fingerprint 字段携带待用户核验的 SHA-256 指纹。
+     * @brief 向前推进一步握手、认证或通道创建，绝不阻塞等待网络。
+     * @return ok 且非 pending 表示 Shell 已就绪；pending 表示需要再次调用；
+     *         hostKeyUnknown 表示必须先调用 provideHostKeyDecision。
      */
-    StepResult verifyHostKey();
+    StepResult advanceEstablish();
 
-    /** @brief 用户核验指纹后写入 known_hosts；仅应在 verifyHostKey 报告未知主机后调用。 */
-    StepResult acceptHostKey();
+    /**
+     * @brief 提交用户对未知主机指纹的核验结论。
+     * @param trusted true 表示允许写入 known_hosts 并继续，false 表示中止本层。
+     */
+    void provideHostKeyDecision(bool trusted);
 
-    /** @brief 依次尝试 none、公钥/Agent、密码认证。 */
-    StepResult authenticate();
+    /** @brief Shell 是否已经就绪并可以收发终端数据。 */
+    [[nodiscard]] bool isReady() const;
 
-    /** @brief 申请交互式 PTY 并启动远端登录 Shell。 */
-    StepResult openShell(int columns, int rows);
-
-    /** @brief 通知远端 PTY 尺寸变化；Shell 尚未建立时静默忽略。 */
+    /** @brief 通知远端 PTY 尺寸变化；Shell 尚未建立时只记录，待建立后应用。 */
     void resizePty(int columns, int rows);
 
     /**
@@ -100,26 +104,42 @@ public:
     /** @brief 读取远端 Shell 退出码；服务器未提供时返回 -1。 */
     [[nodiscard]] int shellExitStatus() const;
 
+    /** @brief 一次 direct-tcpip 建立请求的最终结果。 */
+    struct ForwardOutcome {
+        quint64 id = 0;
+        bool ok = false;
+        int callerFd = -1;
+        QString error;
+    };
+
     /**
-     * @brief 在本层会话上打开一条到内网目标的 direct-tcpip 通道。
+     * @brief 发起一条到内网目标的 direct-tcpip 通道，立即返回，绝不等待远端应答。
      * @param host 从本层服务器视角可达的主机。
      * @param port 目标端口。
-     * @param callerFd 成功时输出 socketpair 的调用方一端，调用方取得所有权。
-     * @param shouldAbort 轮询 SSH_AGAIN 期间的中止判定，用于让关闭请求立即生效。
-     * @param error 失败原因输出。
-     * @return 是否成功建立通道。
+     * @param nonBlockingCaller 调用方一端是否也设置为非阻塞；嵌套层的 libssh 需要，
+     *        SFTP 的同步会话不需要。
+     * @param timeoutMs 建立时限。远端向不可路由地址转发时会长时间无响应，没有时限就会
+     *        让该请求永远悬挂。
+     * @param error 立即失败（socketpair 或 channel 分配失败）时的原因输出。
+     * @return 用于匹配后续结果的请求编号；立即失败返回 0。
      *
-     * 工作线程一侧的 socket 被设置为非阻塞并交由 pumpForwards 泵送；调用方一端保持阻塞
-     * 语义，可直接交给 libssh 的 SSH_OPTIONS_FD 或其他同步消费者。
+     * 结果由 pumpForwards() 在后续轮次中产出。这样拆分是必须的：同步等待远端应答会把
+     * 工作线程钉住，既冻结本层终端，也饿死承载内层会话的外层通道。
      */
-    bool openForward(const QString &host,
-                     quint16 port,
-                     int *callerFd,
-                     const std::function<bool()> &shouldAbort,
-                     QString *error);
+    quint64 beginForward(const QString &host,
+                         quint16 port,
+                         bool nonBlockingCaller,
+                         int timeoutMs,
+                         QString *error);
 
-    /** @brief 在本层所有转发通道与其本地 socket 之间搬运数据，并回收已结束的通道。 */
-    void pumpForwards();
+    /**
+     * @brief 推进待建立的转发，并在已建立的通道与其本地 socket 之间搬运数据。
+     * @return 本轮得出结论的建立结果；没有则为空。
+     */
+    QList<ForwardOutcome> pumpForwards();
+
+    /** @brief 是否还有尚未得出结论的转发建立请求。 */
+    [[nodiscard]] bool hasPendingForwards() const { return !m_pendingForwards.isEmpty(); }
 
     /** @brief 主动关闭 Shell 通道，用于上层请求退出该层。 */
     void closeShell();
@@ -134,6 +154,22 @@ public:
     [[nodiscard]] ssh_session rawSession() const { return m_session; }
 
 private:
+    /** @brief 建立过程所处的阶段。 */
+    enum class Stage {
+        Idle,
+        Connecting,
+        AwaitingHostKeyDecision,
+        Authenticating,
+        OpeningChannel,
+        RequestingPty,
+        RequestingShell,
+        Ready,
+        Failed
+    };
+
+    /** @brief 认证阶段内部依次尝试的方法。 */
+    enum class AuthPhase { None, PublicKey, Password };
+
     /** @brief 一条本地 socket ↔ SSH direct-tcpip 通道的双向桥及其缓冲。 */
     struct ActiveForward {
         int socketFd = -1;
@@ -142,11 +178,63 @@ private:
         QByteArray channelToSocket;
     };
 
+    /** @brief 一条已发起但远端尚未应答的 direct-tcpip 建立请求。 */
+    struct PendingForward {
+        quint64 id = 0;
+        ssh_channel channel = nullptr;
+        int workerFd = -1;
+        int callerFd = -1;
+        QByteArray host;
+        quint16 port = 22;
+        int timeoutMs = 20000;
+        QElapsedTimer timer;
+    };
+
+    /** @brief 推进 TCP/SSH 握手并在成功后立即校验主机密钥。 */
+    StepResult advanceConnecting();
+
+    /** @brief 依次尝试 none、公钥/Agent、密码认证；每次调用最多推进一个方法一步。 */
+    StepResult advanceAuthenticating();
+
+    /** @brief 对照 known_hosts 校验服务器公钥，决定进入认证还是等待用户核验。 */
+    StepResult evaluateHostKey();
+
     /** @brief 关闭并释放一条转发通道及其本地 socket。 */
     static void releaseForward(ActiveForward &forward);
+
+    /** @brief 推进所有待建立的转发，产出本轮得出结论的结果。 */
+    QList<ForwardOutcome> advancePendingForwards();
 
     ConnectionTarget m_target;
     ssh_session m_session = nullptr;
     ssh_channel m_shell = nullptr;
     QList<ActiveForward> m_forwards;
+    QList<PendingForward> m_pendingForwards;
+
+    /** @brief 本层内单调递增的转发请求编号，用于把结果匹配回发起方。 */
+    quint64 m_nextForwardId = 1;
+
+    Stage m_stage = Stage::Idle;
+    AuthPhase m_authPhase = AuthPhase::None;
+
+    /**
+     * @brief 认证密钥/密码的稳定副本。
+     *
+     * libssh 在非阻塞模式下要求 SSH_AUTH_AGAIN 之后用**完全相同的参数**重试，因此不能每轮
+     * 重新从 QString 生成临时 QByteArray。
+     */
+    QByteArray m_secret;
+
+    /** @brief PTY 模式字节串，出于同样的重试稳定性要求而缓存。 */
+    QByteArray m_terminalModes;
+
+    int m_columns = 80;
+    int m_rows = 24;
+    bool m_ptyApplied = false;
+
+    bool m_hostKeyDecided = false;
+    bool m_hostKeyTrusted = false;
+
+    /** @brief 建立过程的整体超时计时；非阻塞模式下 libssh 自身不再提供握手超时保护。 */
+    QElapsedTimer m_establishTimer;
 };

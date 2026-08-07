@@ -9,6 +9,7 @@
 #include <QInputDialog>
 #include <QLineEdit>
 #include <QMenu>
+#include <QMessageBox>
 #include <QMenuBar>
 #include <QStatusBar>
 #include <QTabWidget>
@@ -29,6 +30,11 @@ MainWindow::MainWindow(QWidget *parent)
     auto *connectAction = new QAction(tr("连接服务器"), this);
     connectAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+N")));
     connectAction->setToolTip(tr("在当前终端面板中连接 SSH 服务器"));
+
+    auto *nestedConnectAction = new QAction(tr("嵌套连接到…"), this);
+    nestedConnectAction->setToolTip(
+        tr("经当前服务器建立到内网主机的连接。层级由本程序自己维护，"
+           "文件管理器可以准确地在各层之间切换。"));
 
     auto *localShellAction = new QAction(tr("本地 zsh"), this);
     localShellAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+L")));
@@ -63,6 +69,7 @@ MainWindow::MainWindow(QWidget *parent)
     toolbar->setObjectName(QStringLiteral("MainToolBar"));
     toolbar->setMovable(false);
     toolbar->addAction(connectAction);
+    toolbar->addAction(nestedConnectAction);
     toolbar->addAction(localShellAction);
     toolbar->addAction(newTabAction);
     toolbar->addSeparator();
@@ -74,6 +81,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     QMenu *connectionMenu = menuBar()->addMenu(tr("连接"));
     connectionMenu->addAction(connectAction);
+    connectionMenu->addAction(nestedConnectAction);
     connectionMenu->addAction(localShellAction);
     connectionMenu->addAction(newTabAction);
     connectionMenu->addAction(closeTabAction);
@@ -89,6 +97,8 @@ MainWindow::MainWindow(QWidget *parent)
     statusBar()->showMessage(tr("就绪"));
 
     connect(connectAction, &QAction::triggered, this, &MainWindow::connectCurrentPane);
+    connect(nestedConnectAction, &QAction::triggered,
+            this, &MainWindow::connectNestedFromCurrentPane);
     connect(localShellAction, &QAction::triggered, this, [this]() {
         TerminalWorkspace *workspace = activeWorkspace();
         TerminalPane *pane = workspace == nullptr ? nullptr : workspace->activePane();
@@ -186,6 +196,31 @@ void MainWindow::connectCurrentPane()
     }
 
     pane->connectToHost(dialog.target());
+}
+
+void MainWindow::connectNestedFromCurrentPane()
+{
+    TerminalWorkspace *workspace = activeWorkspace();
+    TerminalPane *pane = workspace == nullptr ? nullptr : workspace->activePane();
+    if (pane == nullptr) {
+        return;
+    }
+    if (!pane->canPushNestedLayer()) {
+        QMessageBox::information(
+            this,
+            tr("无法建立嵌套连接"),
+            tr("当前分屏尚未连接到远程服务器。请先连接一台服务器，再从它继续连接内网主机。"));
+        return;
+    }
+
+    ConnectionDialog dialog(this);
+    // 内层地址由当前服务器的视角解析，因此不预填当前主机名——那几乎肯定不是用户想去的
+    // 下一跳，预填反而容易被误当成默认值直接确认。
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+
+    pane->connectNestedHost(dialog.target());
 }
 
 void MainWindow::splitCurrentPane(const Qt::Orientation orientation)

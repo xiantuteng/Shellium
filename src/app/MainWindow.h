@@ -22,6 +22,14 @@ private:
     /** @brief 打开连接对话框，并在当前空面板中启动 SSH。 */
     void connectCurrentPane();
 
+    /**
+     * @brief 经当前分屏已连接的服务器，由本程序亲自建立下一层嵌套连接。
+     *
+     * 与用户在终端里手打 ssh 的区别在于：这样建立的层是确定事实，退出时机同样确定，
+     * 文件管理器无需对终端输出做任何猜测。
+     */
+    void connectNestedFromCurrentPane();
+
     /** @brief 询问新目标后，在当前面板右侧或下方创建分屏。 */
     void splitCurrentPane(Qt::Orientation orientation);
 

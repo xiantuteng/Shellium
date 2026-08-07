@@ -120,4 +120,24 @@ if(BUILD_TESTING)
     endif()
 
     add_test(NAME ShelliumCoreTests COMMAND ShelliumCoreTests)
+
+    # 针对真实服务器的连接路径回归。非阻塞握手状态机的价值就在于与真实 libssh 和真实
+    # 服务器的时序交互，无法用桩替身覆盖；缺少 SHELLIUM_IT_* 环境变量时测试自行跳过。
+    qt_add_executable(ShelliumSshIntegrationTests
+        tests/SshSessionStackIntegrationTest.cpp
+        src/core/ConnectionTarget.cpp
+        src/core/ConnectionTarget.h
+        src/ssh/SshSessionNode.cpp
+        src/ssh/SshSessionNode.h
+        src/ssh/SshSessionStack.cpp
+        src/ssh/SshSessionStack.h
+    )
+    target_include_directories(ShelliumSshIntegrationTests PRIVATE src)
+    target_link_libraries(ShelliumSshIntegrationTests PRIVATE
+        Qt6::Core
+        Qt6::Test
+        PkgConfig::LIBSSH
+    )
+
+    add_test(NAME ShelliumSshIntegrationTests COMMAND ShelliumSshIntegrationTests)
 endif()

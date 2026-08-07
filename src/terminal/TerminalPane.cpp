@@ -63,8 +63,8 @@ TerminalPane::TerminalPane(QWidget *parent)
                 }
 
                 qsizetype failedTargetIndex = -1;
-                for (qsizetype index = 1; index < m_targetChain.size(); ++index) {
-                    if (m_targetChain.at(index).id == m_pendingNestedCredentialTargetId) {
+                for (qsizetype index = 0; index < m_inferredTargets.size(); ++index) {
+                    if (m_inferredTargets.at(index).id == m_pendingNestedCredentialTargetId) {
                         failedTargetIndex = index;
                         break;
                     }
@@ -78,22 +78,22 @@ TerminalPane::TerminalPane(QWidget *parent)
                 // 最终 Permission denied 表示 OpenSSH 已退出并回到上一层 Shell。必须删除从
                 // 失败目标开始的全部候选层级，否则用户再次执行相同 ssh 时会被错误解析为
                 // “失败目标的下一层”，导致文件管理器始终无法得到真实第 2 层连接链。
-                while (m_targetChain.size() > failedTargetIndex) {
-                    ConnectionTarget &failedTarget = m_targetChain.last();
+                while (m_inferredTargets.size() > failedTargetIndex) {
+                    ConnectionTarget &failedTarget = m_inferredTargets.last();
                     if (!failedTarget.tunnelRouteId.isEmpty()) {
                         SshTunnelBroker::instance().unregisterRoute(
                             failedTarget.tunnelRouteId);
                         m_tunnelRouteIds.removeAll(failedTarget.tunnelRouteId);
                     }
                     failedTarget.password.fill(QChar::Null);
-                    m_targetChain.removeLast();
+                    m_inferredTargets.removeLast();
                 }
                 m_pendingNestedCredentialTargetId.clear();
                 m_captureNextLineAsCredential = false;
-                m_headerLabel->setText(m_targetChain.constLast().connectionSpecifier());
+                refreshHeaderLabel();
                 emit targetsChanged(this);
                 emit statusMessage(tr("内层 SSH 认证失败，已退回 %1；可重新执行 ssh 重试")
-                                       .arg(m_targetChain.constLast().connectionSpecifier()));
+                                       .arg(activeTarget().connectionSpecifier()));
             });
     connect(m_terminalView,
             &TerminalView::shellPromptDetected,
@@ -107,7 +107,7 @@ TerminalPane::TerminalPane(QWidget *parent)
                 }
 
                 bool credentialWasSubmitted = false;
-                for (ConnectionTarget &target : m_targetChain) {
+                for (ConnectionTarget &target : m_inferredTargets) {
                     if (target.id == m_pendingNestedCredentialTargetId) {
                         credentialWasSubmitted = !target.password.isEmpty();
                         if (!credentialWasSubmitted) {
@@ -137,7 +137,8 @@ void TerminalPane::openLocalShell(const QString &shellPath)
     // 自动回退，从而不会重复创建本地 zsh。
     const quint64 sessionGeneration = ++m_sessionGeneration;
     stopWorker();
-    m_targetChain.clear();
+    m_ownedTargets.clear();
+    m_inferredTargets.clear();
     m_shellReady = false;
     // 切换成本地 Shell 后当前分屏不再具备远程目标，立即通知所属标签页清空自己的文件
     // 管理器，不能等 zsh 启动完成后继续短暂显示上一条 SSH 会话的目录。
@@ -218,7 +219,8 @@ void TerminalPane::connectToHost(const ConnectionTarget &target)
     stopWorker();
 
     m_shellReady = false;
-    m_targetChain = {target};
+    m_ownedTargets.clear();
+    m_inferredTargets.clear();
     // 新 SSH 尚未完成主机校验和认证，此时先让所属标签页清空旧 SFTP 内容；shellConnected
     // 会在认证成功后再次发出 targetsChanged 并开放该目标。
     emit targetsChanged(this);
@@ -246,8 +248,39 @@ void TerminalPane::connectToHost(const ConnectionTarget &target)
         m_remoteSessionEstablished = true;
         m_headerLabel->setText(target.connectionSpecifier());
         emit statusMessage(tr("已连接 %1").arg(target.connectionSpecifier()));
-        // 只有终端已完成主机校验和认证后才开放文件管理，避免 SSH 与 SFTP 并发弹出重复提示。
+        // 这里刻意不发 targetsChanged：此刻 m_ownedTargets 仍为空，发出去会让文件管理器
+        // 先清空再被紧随其后的 layersChanged 重新填充，用户能看到一次闪烁。栈保证
+        // layersChanged 紧跟在 shellConnected 之后到达，由它统一通知即可。
+    });
+    connect(m_sessionStack,
+            &SshSessionStack::layersChanged,
+            this,
+            [this, sessionGeneration](const QList<ConnectionTarget> &layers) {
+        if (sessionGeneration != m_sessionGeneration) {
+            return;
+        }
+        // 自持层是权威事实，直接替换。底座一变，叠在上面的推测层就失去了依据——它们描述的
+        // 是"从旧的栈顶又 ssh 到了哪里"，而栈顶已经不是原来那个了。
+        m_ownedTargets = QVector<ConnectionTarget>(layers.cbegin(), layers.cend());
+        m_inferredTargets.clear();
+        m_pendingNestedCredentialTargetId.clear();
+        m_captureNextLineAsCredential = false;
+        refreshHeaderLabel();
         emit targetsChanged(this);
+    });
+    connect(m_sessionStack,
+            &SshSessionStack::layerFailed,
+            this,
+            [this, sessionGeneration](const ConnectionTarget &target, const QString &message) {
+        if (sessionGeneration != m_sessionGeneration) {
+            return;
+        }
+        // 内层失败不影响外层：这里只报告，不改变任何连接状态。
+        m_terminalView->appendTerminalOutput(
+            tr("\r\n无法建立到 %1 的嵌套连接：%2\r\n")
+                .arg(target.connectionSpecifier(), message)
+                .toUtf8());
+        emit statusMessage(tr("嵌套连接失败：%1").arg(message));
     });
     connect(m_sessionStack,
             &SshSessionStack::connectionError,
@@ -356,12 +389,49 @@ void TerminalPane::connectToHost(const ConnectionTarget &target)
 
 QList<ConnectionTarget> TerminalPane::targets() const
 {
-    return m_targetChain.toList();
+    // 自持层在下、推测层在上：这正是用户看到的外层→内层顺序，也保证文件管理器"跟随最内层"
+    // 时选中的是当前终端实际所在的那一层。
+    QList<ConnectionTarget> combined = m_ownedTargets.toList();
+    combined.append(m_inferredTargets.toList());
+    return combined;
 }
 
 ConnectionTarget TerminalPane::activeTarget() const
 {
-    return m_targetChain.isEmpty() ? ConnectionTarget{} : m_targetChain.constLast();
+    if (!m_inferredTargets.isEmpty()) {
+        return m_inferredTargets.constLast();
+    }
+    return m_ownedTargets.isEmpty() ? ConnectionTarget{} : m_ownedTargets.constLast();
+}
+
+void TerminalPane::connectNestedHost(const ConnectionTarget &target)
+{
+    if (!canPushNestedLayer() || !target.isValid()) {
+        return;
+    }
+    // 推测层是对"终端当前在哪台机器"的猜测；一旦由本程序亲自建层，这些猜测的依据就没了。
+    m_inferredTargets.clear();
+    m_sessionStack->requestPushLayer(target);
+    emit statusMessage(tr("正在经当前服务器建立到 %1 的嵌套连接…")
+                           .arg(target.connectionSpecifier()));
+}
+
+bool TerminalPane::canPushNestedLayer() const
+{
+    return m_sessionStack != nullptr && m_sessionStack->isRunning() && m_shellReady
+        && !m_ownedTargets.isEmpty();
+}
+
+void TerminalPane::refreshHeaderLabel()
+{
+    const ConnectionTarget target = activeTarget();
+    if (!target.isValid()) {
+        return;
+    }
+    const bool inferred = target.confidence == ConnectionTarget::Confidence::Inferred;
+    m_headerLabel->setText(inferred
+                               ? tr("%1（推测）").arg(target.connectionSpecifier())
+                               : target.connectionSpecifier());
 }
 
 bool TerminalPane::isConnected() const
@@ -376,12 +446,12 @@ void TerminalPane::focusTerminal()
 
 void TerminalPane::inspectSubmittedCommand(const QString &command)
 {
-    if (m_targetChain.isEmpty()) {
+    if (m_ownedTargets.isEmpty()) {
         return;
     }
 
     if (m_captureNextLineAsCredential && !m_pendingNestedCredentialTargetId.isEmpty()) {
-        for (ConnectionTarget &target : m_targetChain) {
+        for (ConnectionTarget &target : m_inferredTargets) {
             if (target.id == m_pendingNestedCredentialTargetId) {
                 // 密码原本就必须从本机键盘发送到内层 ssh；这里只在进程内复用同一份输入，
                 // 不写入终端文档、数据库或日志。远端 PTY 已关闭 ECHO，因此界面也不会显示。
@@ -415,7 +485,7 @@ void TerminalPane::inspectSubmittedCommand(const QString &command)
     if (!m_pendingNestedCredentialTargetId.isEmpty()) {
         // 密码提交后出现下一条普通命令，说明交互式 ssh 已经进入远端 Shell；此时结束认证
         // 重试窗口，避免后续 sudo 等无关密码提示覆盖当前服务器的 SFTP 凭据。
-        for (ConnectionTarget &target : m_targetChain) {
+        for (ConnectionTarget &target : m_inferredTargets) {
             if (target.id == m_pendingNestedCredentialTargetId) {
                 target.interactiveAuthenticationPending = false;
                 finalizedPendingAuthentication = true;
@@ -426,7 +496,7 @@ void TerminalPane::inspectSubmittedCommand(const QString &command)
     }
 
     const SshCommandParser::Result parsed =
-        SshCommandParser::parse(command, m_targetChain.constLast());
+        SshCommandParser::parse(command, activeTarget());
     if (parsed.action == SshCommandParser::Action::EnterServer && parsed.target.isValid()) {
         // 这里记录“候选已进入”状态。若命令连接失败，用户可通过 exit 或目标选择器回到外层；
         // 后续 Shell Integration 会用远端 preexec/precmd 事件进一步确认实际状态。
@@ -440,7 +510,7 @@ void TerminalPane::inspectSubmittedCommand(const QString &command)
             m_tunnelRouteIds.append(nestedTarget.tunnelRouteId);
         }
         nestedTarget.interactiveAuthenticationPending = true;
-        m_targetChain.append(nestedTarget);
+        m_inferredTargets.append(nestedTarget);
         m_pendingNestedCredentialTargetId = nestedTarget.id;
         m_headerLabel->setText(tr("%1（嵌套目标）").arg(nestedTarget.connectionSpecifier()));
         emit statusMessage(tr("已识别嵌套 SSH 目标：%1").arg(nestedTarget.connectionSpecifier()));
@@ -453,7 +523,7 @@ void TerminalPane::inspectSubmittedCommand(const QString &command)
             if (m_pendingNestedCredentialTargetId == targetId
                 && !m_captureNextLineAsCredential) {
                 bool credentialWasSubmitted = false;
-                for (ConnectionTarget &target : m_targetChain) {
+                for (ConnectionTarget &target : m_inferredTargets) {
                     if (target.id == targetId) {
                         credentialWasSubmitted = !target.password.isEmpty();
                         if (!credentialWasSubmitted) {
@@ -471,17 +541,20 @@ void TerminalPane::inspectSubmittedCommand(const QString &command)
                 emit targetsChanged(this);
             }
         });
-    } else if (parsed.action == SshCommandParser::Action::LeaveServer && m_targetChain.size() > 1) {
-        const QString routeId = m_targetChain.constLast().tunnelRouteId;
+    } else if (parsed.action == SshCommandParser::Action::LeaveServer
+               && !m_inferredTargets.isEmpty()) {
+        // 只弹推测层。自持层的退出由 SshSessionStack 依据 Shell 通道 EOF 确定性地处理，
+        // 绝不能让这里的命令解析去猜——猜错会让文件管理器指向错误的服务器。
+        const QString routeId = m_inferredTargets.constLast().tunnelRouteId;
         if (!routeId.isEmpty()) {
             SshTunnelBroker::instance().unregisterRoute(routeId);
             m_tunnelRouteIds.removeAll(routeId);
         }
-        m_targetChain.removeLast();
-        m_headerLabel->setText(m_targetChain.constLast().connectionSpecifier());
+        m_inferredTargets.removeLast();
+        refreshHeaderLabel();
         emit targetsChanged(this);
         emit statusMessage(tr("已返回服务器：%1")
-                               .arg(m_targetChain.constLast().connectionSpecifier()));
+                               .arg(activeTarget().connectionSpecifier()));
     } else if (finalizedPendingAuthentication) {
         // 普通命令确认内层 Shell 已可用后，把“认证完成”状态同步给文件管理器。
         emit targetsChanged(this);

@@ -231,11 +231,14 @@ void RemoteFileManagerWidget::setAvailableTargets(const QList<ConnectionTarget> 
     for (qsizetype index = 0; index < m_targets.size(); ++index) {
         const ConnectionTarget &target = m_targets.at(index);
         // 使用缩进和层级编号表达 A → B → C，不依赖服务器别名是否重复。
-        m_targetCombo->addItem(tr("第 %1 层 · %2")
-                                   .arg(index + 1)
-                                   .arg(target.displayName.isEmpty()
-                                            ? target.connectionSpecifier()
-                                            : target.displayName));
+        const QString label = target.displayName.isEmpty() ? target.connectionSpecifier()
+                                                           : target.displayName;
+        // 推测层必须一眼可辨：它可能与远端真实状态不一致，而在错误的服务器上删除文件
+        // 是不可撤销的。
+        m_targetCombo->addItem(
+            target.confidence == ConnectionTarget::Confidence::Inferred
+                ? tr("第 %1 层 · ⚠ 推测 · %2").arg(index + 1).arg(label)
+                : tr("第 %1 层 · %2").arg(index + 1).arg(label));
     }
 
     int selectedIndex = -1;
@@ -361,18 +364,28 @@ void RemoteFileManagerWidget::deleteSelectedPath()
         QMessageBox::information(this, tr("请选择条目"), tr("请选择要删除的文件或空目录。"));
         return;
     }
+    const ConnectionTarget target = selectedTarget();
+    // 确认框必须写明服务器：删除是不可撤销的，而用户很可能同时开着多层、多分屏，
+    // 只显示路径不足以让人确认自己在哪台机器上操作。
+    QString message = tr("即将在服务器 %1 上永久删除%2：\n\n%3\n\n此操作无法撤销。")
+                          .arg(target.connectionSpecifier(true),
+                               entry->isDirectory ? tr("目录") : tr("文件"),
+                               entry->path);
+    if (target.confidence == ConnectionTarget::Confidence::Inferred) {
+        message += tr("\n\n⚠ 该服务器是由解析终端命令推测得出的，可能并非你以为的那一台。"
+                      "请先在终端执行 hostname 核对后再继续。");
+    }
     const QMessageBox::StandardButton answer = QMessageBox::warning(
         this,
         tr("确认删除"),
-        tr("确定永久删除远程%1“%2”吗？此操作无法撤销。")
-            .arg(entry->isDirectory ? tr("目录") : tr("文件"), entry->path),
+        message,
         QMessageBox::Yes | QMessageBox::No,
         QMessageBox::No);
     if (answer != QMessageBox::Yes) {
         return;
     }
     setBusy(true, tr("正在删除 %1…").arg(entry->name));
-    m_service->removePath(selectedTarget(), entry->path, entry->isDirectory);
+    m_service->removePath(target, entry->path, entry->isDirectory);
 }
 
 void RemoteFileManagerWidget::navigateUp()

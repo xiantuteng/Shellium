@@ -28,6 +28,18 @@ public:
     /** @brief 使用目标配置启动新的 SSH 工作线程；已有会话会先被安全终止。 */
     void connectToHost(const ConnectionTarget &target);
 
+    /**
+     * @brief 在当前连接之上由本程序亲自建立一层嵌套会话，终端随后切换到该层。
+     * @param target 内层服务器；host/port 由当前栈顶服务器的视角解析。
+     *
+     * 与用户在终端里手打 ssh 不同，这条路径建立的层是确定事实：层数、身份、退出时机
+     * 都由本程序掌握，不依赖对终端输出的任何解析。
+     */
+    void connectNestedHost(const ConnectionTarget &target);
+
+    /** @brief 是否已有可用于承载嵌套连接的已就绪远程会话。 */
+    [[nodiscard]] bool canPushNestedLayer() const;
+
     /** @brief 在当前面板中启动本地登录式 zsh，用于本地运维和终端功能测试。 */
     void openLocalShell(const QString &shellPath = QStringLiteral("/bin/zsh"));
 
@@ -61,11 +73,29 @@ private:
     /** @brief 停止并销毁旧工作线程，供重连和析构共用。 */
     void stopWorker();
 
+    /** @brief 按当前所在层刷新标题，并把推测层显式标注出来。 */
+    void refreshHeaderLabel();
+
     QLabel *m_headerLabel = nullptr;
     TerminalView *m_terminalView = nullptr;
     SshSessionStack *m_sessionStack = nullptr;
     LocalShellWorker *m_localWorker = nullptr;
-    QVector<ConnectionTarget> m_targetChain;
+    /**
+     * @brief 由本程序亲自建立并认证的会话层，从外层到内层排列。
+     *
+     * 内容完全由 SshSessionStack::layersChanged 驱动，是连接链的权威部分：层数与身份都是
+     * 确定事实，confidence 恒为 Confirmed。
+     */
+    QVector<ConnectionTarget> m_ownedTargets;
+
+    /**
+     * @brief 由解析终端命令推测出的附加层，叠在自持层之上。
+     *
+     * 这是降级路径：用户绕过嵌套连接入口、直接在终端里手打 ssh 时才会产生。它可能与远端
+     * 真实状态不一致，因此 confidence 恒为 Inferred，界面必须把这种不确定性显式呈现。
+     * 自持层一旦变化就整体作废——底座变了，叠在上面的推测不再有任何依据。
+     */
+    QVector<ConnectionTarget> m_inferredTargets;
     bool m_shellReady = false;
 
     /**
