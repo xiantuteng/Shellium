@@ -137,7 +137,6 @@ ConnectionTarget ShellShim::resolveTarget(const QStringList &arguments,
     };
 
     QString username;
-    QString identityFile;
     QString host;
     quint16 port = 22;
     qsizetype index = 0;
@@ -165,6 +164,11 @@ ConnectionTarget ShellShim::resolveTarget(const QStringList &arguments,
             // 强行接管会连到与用户预期不同的路径上。
             return decline(tr("该 ssh 调用使用了 Shellium 无法忠实复现的连接路径"));
         }
+        if (token == QStringLiteral("-i")) {
+            // -i 的路径指的是**远端**文件系统，而接管后的认证由本机的 libssh 完成。
+            // 照搬这个路径要么找不到文件，要么更糟——撞上本机一个同名的无关私钥。
+            return decline(tr("该 ssh 调用指定了远端私钥文件"));
+        }
         if (token == QStringLiteral("-p") && index < arguments.size()) {
             bool ok = false;
             const uint parsed = arguments.at(index++).toUInt(&ok);
@@ -175,10 +179,6 @@ ConnectionTarget ShellShim::resolveTarget(const QStringList &arguments,
         }
         if (token == QStringLiteral("-l") && index < arguments.size()) {
             username = arguments.at(index++);
-            continue;
-        }
-        if (token == QStringLiteral("-i") && index < arguments.size()) {
-            identityFile = arguments.at(index++);
             continue;
         }
         if (token == QStringLiteral("-o") && index < arguments.size()) {
@@ -194,7 +194,8 @@ ConnectionTarget ShellShim::resolveTarget(const QStringList &arguments,
                     port = static_cast<quint16>(parsed);
                 }
             } else if (key == QStringLiteral("identityfile")) {
-                identityFile = value;
+                // 同 -i：路径属于远端文件系统，本机无法忠实使用。
+                return decline(tr("该 ssh 调用指定了远端私钥文件"));
             } else if (key == QStringLiteral("proxyjump")
                        || key == QStringLiteral("proxycommand")) {
                 return decline(tr("该 ssh 调用使用了 Shellium 无法忠实复现的连接路径"));
@@ -244,7 +245,6 @@ ConnectionTarget ShellShim::resolveTarget(const QStringList &arguments,
     target.host = host;
     target.username = username.isEmpty() ? currentTarget.username : username;
     target.port = port;
-    target.identityFile = identityFile;
     target.displayName = target.connectionSpecifier();
     // 由 Shellium 亲自建立，其存在与身份都是确定事实。
     target.confidence = ConnectionTarget::Confidence::Confirmed;

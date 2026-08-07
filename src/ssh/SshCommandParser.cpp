@@ -23,7 +23,7 @@ bool isSshExecutable(const QString &token)
 void applyOpenSshOption(const QString &option,
                         QString &username,
                         quint16 &port,
-                        QString &identityFile,
+                        QString &discardedIdentityFile,
                         QStringList &explicitJumps)
 {
     const qsizetype separator = option.indexOf(QLatin1Char('='));
@@ -42,7 +42,7 @@ void applyOpenSshOption(const QString &option,
             port = static_cast<quint16>(parsedPort);
         }
     } else if (key == QStringLiteral("identityfile")) {
-        identityFile = value;
+        discardedIdentityFile = value;
     } else if (key == QStringLiteral("proxyjump")) {
         explicitJumps = value.split(QLatin1Char(','), Qt::SkipEmptyParts);
     }
@@ -82,7 +82,8 @@ SshCommandParser::Result SshCommandParser::parse(const QString &commandLine,
     ++index;
 
     QString username;
-    QString identityFile;
+    // 仍需解析出来，否则它的取值会被误当作目标主机名；但只用于消费，不会传给本机。
+    QString discardedIdentityFile;
     QString host;
     quint16 port = 22;
     QStringList explicitJumps;
@@ -131,7 +132,7 @@ SshCommandParser::Result SshCommandParser::parse(const QString &commandLine,
             continue;
         }
         if (token == QStringLiteral("-i") && index < tokens.size()) {
-            identityFile = tokens.at(index++);
+            discardedIdentityFile = tokens.at(index++);
             continue;
         }
         if (token == QStringLiteral("-J") && index < tokens.size()) {
@@ -139,7 +140,8 @@ SshCommandParser::Result SshCommandParser::parse(const QString &commandLine,
             continue;
         }
         if (token == QStringLiteral("-o") && index < tokens.size()) {
-            applyOpenSshOption(tokens.at(index++), username, port, identityFile, explicitJumps);
+            applyOpenSshOption(tokens.at(index++), username, port, discardedIdentityFile,
+                               explicitJumps);
             continue;
         }
         if (optionsWithValue.contains(token) && index < tokens.size()) {
@@ -188,7 +190,9 @@ SshCommandParser::Result SshCommandParser::parse(const QString &commandLine,
     nested.host = host;
     nested.username = username.isEmpty() ? currentTarget.username : username;
     nested.port = port;
-    nested.identityFile = identityFile;
+    // 刻意不传 identityFile：-i 与 -o IdentityFile= 的路径属于**远端**文件系统，而 SFTP
+    // 由本机的 libssh 发起。照搬这个路径要么找不到文件，要么更糟——撞上本机一个同名的
+    // 无关私钥。留空即可，本机会退回 Agent、默认密钥或询问密码。
     nested.parentId = currentTarget.id;
     nested.displayName = nested.connectionSpecifier();
     // 文件管理器会从本机重新建立“外层 → 内层”的独立 SFTP 连接。旧跳板机若需要

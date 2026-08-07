@@ -94,6 +94,9 @@ private slots:
     /** @brief 无法忠实复现的 ssh 用法必须拒绝接管，交还给原生 ssh。 */
     void shellShimDeclinesUnsupportedInvocations();
 
+    /** @brief -i 指向远端私钥，绝不能被本机 libssh 当作本地路径使用。 */
+    void neverUsesRemoteIdentityFileLocally();
+
     void terminalViewDetectsFinalAuthenticationFailure();
 
     /** @brief 解析失败、连接被拒、超时等非认证失败同样必须触发回滚。 */
@@ -385,6 +388,38 @@ void SshCommandParserTest::treatsExitWithStatusAsLeave()
         const SshCommandParser::Result parsed = SshCommandParser::parse(command, current);
         QVERIFY2(parsed.action == SshCommandParser::Action::None, qPrintable(command));
     }
+}
+
+void SshCommandParserTest::neverUsesRemoteIdentityFileLocally()
+{
+    ConnectionTarget current;
+    current.id = QStringLiteral("layer-1");
+    current.host = QStringLiteral("10.0.0.1");
+    current.username = QStringLiteral("root");
+
+    // -i 的路径属于远端文件系统，而接管后的认证由本机 libssh 完成。照搬这个路径要么
+    // 找不到文件，要么更糟——撞上本机一个同名的无关私钥，用错误的身份去认证。
+    for (const QStringList &arguments :
+         {QStringList{QStringLiteral("-i"), QStringLiteral("/root/.ssh/inner_key"),
+                      QStringLiteral("10.0.0.2")},
+          QStringList{QStringLiteral("-o"), QStringLiteral("IdentityFile=/root/.ssh/k"),
+                      QStringLiteral("10.0.0.2")}}) {
+        QString reason;
+        const ConnectionTarget target =
+            ShellShim::resolveTarget(arguments, current, &reason);
+        QVERIFY2(!target.isValid(), qPrintable(arguments.join(QLatin1Char(' '))));
+        QVERIFY2(!reason.isEmpty(), "拒绝接管必须给出原因");
+    }
+
+    // 降级路径无法拒绝（用户已经连过去了），但同样不得把远端路径交给本机；仍要正确消费
+    // 该参数，否则它的取值会被误当成目标主机名。
+    const SshCommandParser::Result parsed = SshCommandParser::parse(
+        QStringLiteral("ssh -i /root/.ssh/inner_key root@10.0.0.2"), current);
+    QCOMPARE(parsed.action, SshCommandParser::Action::EnterServer);
+    QCOMPARE(parsed.target.host, QStringLiteral("10.0.0.2"));
+    QVERIFY2(parsed.target.identityFile.isEmpty(),
+             qPrintable(QStringLiteral("远端私钥路径被传给了本机：%1")
+                            .arg(parsed.target.identityFile)));
 }
 
 void SshCommandParserTest::terminalViewCapturesLocalLine()
