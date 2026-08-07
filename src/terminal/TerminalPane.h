@@ -3,6 +3,7 @@
 #include "core/ConnectionTarget.h"
 #include "terminal/TerminalEchoFilter.h"
 
+#include <QSet>
 #include <QVector>
 #include <QStringList>
 #include <QWidget>
@@ -81,6 +82,18 @@ private:
      */
     void handleShellIntegrationEvent(const QByteArray &payload);
 
+    /** @brief 为第 2 层起的自持层注册隧道路由，供文件管理器经外层抵达。 */
+    void registerOwnedLayerRoutes();
+
+    /**
+     * @brief 接管失败时把用户原本的 ssh 命令交还给远端执行。
+     * @param reason 供终端提示的简短原因。
+     *
+     * 不这样做，用户敲下的命令就凭空消失了：shim 收到 take 便直接返回，而我们又没能建成
+     * 连接。他重试多少次都一样，因为每次都会走同一条失败路径。
+     */
+    void runTakeoverFallback(const QString &reason);
+
     /**
      * @brief 撤销尚未确认的嵌套推测层，用于 ssh 失败或被用户取消。
      * @param reason 供状态栏展示的简短原因。
@@ -130,6 +143,9 @@ private:
 
     QStringList m_tunnelRouteIds;
 
+    /** @brief 为自持层注册的隧道路由，随层栈变化整体重建。 */
+    QStringList m_ownedRouteIds;
+
     /**
      * @brief 正在等待认证结果的内层目标 ID。
      *
@@ -167,4 +183,21 @@ private:
      * 注入行与 take/pass 回执都是本程序发出的，用户不该在屏幕上看到它们。
      */
     TerminalEchoFilter m_echoFilter;
+
+    /** @brief 当前在途接管对应的内层目标 id；空表示没有接管在进行。 */
+    QString m_takeoverTargetId;
+
+    /** @brief 该次接管拦下的原始 ssh 参数，失败时用于原样补发。 */
+    QStringList m_takeoverArguments;
+
+    /** @brief 发起该次接管的外层服务器键，用于记录其转发策略。 */
+    QString m_takeoverOuterKey;
+
+    /**
+     * @brief 已知禁用 TCP 转发的服务器。
+     *
+     * 自持层依赖 direct-tcpip；服务器设了 AllowTcpForwarding no 就无法建立。记下来之后
+     * 直接放行原生 ssh，不再让用户反复撞同一堵墙。
+     */
+    QSet<QString> m_forwardingProhibitedHosts;
 };

@@ -245,7 +245,19 @@ private:
         QByteArray channelToSocket;
     };
 
-    /** @brief 一条已发起但远端尚未应答的 direct-tcpip 建立请求。 */
+    /**
+     * @brief 建立字节通道的两种传输方式。
+     *
+     * DirectTcpIp 是首选；服务器设了 AllowTcpForwarding no 时它会被按策略拒绝，此时自动
+     * 改用 ExecRelay——在远端执行一条中继命令，用它的标准输入输出当字节管道。后者只用到
+     * session 通道，不受转发策略管辖。
+     */
+    enum class ForwardTransport { DirectTcpIp, ExecRelay };
+
+    /** @brief ExecRelay 的推进阶段。 */
+    enum class RelayStage { OpeningSession, RequestingExec };
+
+    /** @brief 一条已发起但远端尚未应答的通道建立请求。 */
     struct PendingForward {
         quint64 id = 0;
         ssh_channel channel = nullptr;
@@ -255,6 +267,8 @@ private:
         quint16 port = 22;
         int timeoutMs = 20000;
         QElapsedTimer timer;
+        ForwardTransport transport = ForwardTransport::DirectTcpIp;
+        RelayStage relayStage = RelayStage::OpeningSession;
     };
 
     /** @brief 推进 TCP/SSH 握手并在成功后立即校验主机密钥。 */
@@ -272,6 +286,18 @@ private:
     /** @brief 推进所有待建立的转发，产出本轮得出结论的结果。 */
     QList<ForwardOutcome> advancePendingForwards();
 
+    /** @brief 推进一条 direct-tcpip 请求；返回 true 表示本轮已得出结论。 */
+    bool advanceDirectForward(PendingForward &pending, QList<ForwardOutcome> &outcomes);
+
+    /** @brief 推进一条 exec 中继请求；返回 true 表示本轮已得出结论。 */
+    bool advanceRelayForward(PendingForward &pending, QList<ForwardOutcome> &outcomes);
+
+    /** @brief 把一条被策略拒绝的 direct-tcpip 请求就地改造成 exec 中继。 */
+    bool convertToRelay(PendingForward &pending);
+
+    /** @brief 释放该请求持有的通道与两端 socket。 */
+    static void discardPending(PendingForward &pending);
+
     ConnectionTarget m_target;
     ssh_session m_session = nullptr;
     ssh_channel m_shell = nullptr;
@@ -280,6 +306,14 @@ private:
 
     /** @brief 本层内单调递增的转发请求编号，用于把结果匹配回发起方。 */
     quint64 m_nextForwardId = 1;
+
+    /**
+     * @brief 本层服务器是否已确认禁用 TCP 转发。
+     *
+     * 一旦收到 SSH_OPEN_ADMINISTRATIVELY_PROHIBITED，后续请求直接走 ExecRelay，不必每次
+     * 都先撞一次墙再重试。
+     */
+    bool m_forwardingProhibited = false;
 
     Stage m_stage = Stage::Idle;
     AuthPhase m_authPhase = AuthPhase::None;

@@ -100,6 +100,33 @@ QString serverFingerprint(ssh_session session)
     return result;
 }
 
+/**
+ * @brief 生成在远端执行的中继命令，用它的标准输入输出充当到内网目标的字节管道。
+ *
+ * 服务器设了 AllowTcpForwarding no 时 direct-tcpip 会被按策略拒绝，但 session 通道不受
+ * 该策略管辖。这正是 OpenSSH 早年文档里 `ProxyCommand "ssh gateway nc %h %p"` 的做法。
+ *
+ * 三种实现依次尝试，覆盖绝大多数 Linux 环境：
+ *   1. bash 的 /dev/tcp——无需任何外部程序，最可预期；
+ *   2. nc；
+ *   3. socat。
+ *
+ * 用 `{ ...; } 3<>...` 复合重定向而不是 `exec 3<>...`：后者在非交互 Shell 中重定向失败会
+ * 直接终止整个 Shell，后面的回退链就没机会执行了。trap 保证通道关闭时后台的 cat 一并退出，
+ * 不在服务器上留下游荡进程。
+ */
+QByteArray buildRelayCommand(const QByteArray &host, const quint16 port)
+{
+    const QByteArray target = host + " " + QByteArray::number(port);
+    const QByteArray devTcp = "/dev/tcp/" + host + "/" + QByteArray::number(port);
+    return "{ cat <&3 & p=$!; trap \"kill $p 2>/dev/null\" EXIT; cat >&3; } 3<>" + devTcp
+        + " 2>/dev/null && exit 0; "
+          "command -v nc >/dev/null 2>&1 && exec nc " + target + "; "
+          "command -v socat >/dev/null 2>&1 && exec socat - TCP:" + host + ":"
+        + QByteArray::number(port) + "; "
+          "echo shellium: no relay tool available >&2; exit 1";
+}
+
 /** @brief 构造一个失败结果。 */
 SshSessionNode::StepResult failure(QString message)
 {
@@ -759,6 +786,9 @@ quint64 SshSessionNode::beginForward(const QString &host,
 
     PendingForward pending;
     pending.id = m_nextForwardId++;
+    // 已知该服务器禁用转发时直接走中继，不必每次先撞一次墙。
+    pending.transport = m_forwardingProhibited ? ForwardTransport::ExecRelay
+                                               : ForwardTransport::DirectTcpIp;
     pending.channel = channel;
     pending.workerFd = socketPair[0];
     pending.callerFd = socketPair[1];
@@ -770,57 +800,169 @@ quint64 SshSessionNode::beginForward(const QString &host,
     return m_pendingForwards.constLast().id;
 }
 
+void SshSessionNode::discardPending(PendingForward &pending)
+{
+    if (pending.channel != nullptr) {
+        // 只 free 不 close：通道可能从未真正打开，远端没有对应的 channel id；在非阻塞会话上
+        // ssh_channel_close 会返回 SSH_AGAIN 并留下半写的 CHANNEL_CLOSE 包，之后整条 SSH 流
+        // 失步，连带把本层的交互式 Shell 一起废掉。
+        ssh_channel_free(pending.channel);
+        pending.channel = nullptr;
+    }
+    if (pending.workerFd >= 0) {
+        ::close(pending.workerFd);
+        pending.workerFd = -1;
+    }
+    if (pending.callerFd >= 0) {
+        ::close(pending.callerFd);
+        pending.callerFd = -1;
+    }
+}
+
+bool SshSessionNode::convertToRelay(PendingForward &pending)
+{
+    // 被拒的那条通道已经不可用，必须换一条新的；socketpair 两端仍然有效，继续沿用。
+    if (pending.channel != nullptr) {
+        ssh_channel_free(pending.channel);
+    }
+    pending.channel = ssh_channel_new(m_session);
+    if (pending.channel == nullptr) {
+        return false;
+    }
+    pending.transport = ForwardTransport::ExecRelay;
+    pending.relayStage = RelayStage::OpeningSession;
+    pending.timer.start();
+    return true;
+}
+
+bool SshSessionNode::advanceDirectForward(PendingForward &pending,
+                                          QList<ForwardOutcome> &outcomes)
+{
+    const int result = ssh_channel_open_forward(
+        pending.channel, pending.host.constData(), pending.port, "127.0.0.1", 0);
+
+    if (result == SSH_AGAIN) {
+        if (pending.timer.elapsed() <= pending.timeoutMs) {
+            return false;
+        }
+        ForwardOutcome outcome;
+        outcome.id = pending.id;
+        // 远端向不可路由地址转发时会一直没有响应。没有时限，这条请求就会永远悬挂，
+        // 发起方（建层或 SFTP）也就永远等不到结论。
+        outcome.error = tr("服务器 %1 转发到 %2:%3 超时（%4 秒）")
+                            .arg(m_target.connectionSpecifier(true),
+                                 QString::fromUtf8(pending.host))
+                            .arg(pending.port)
+                            .arg(pending.timeoutMs / 1000);
+        outcomes.append(outcome);
+        discardPending(pending);
+        return true;
+    }
+
+    if (result == SSH_OK) {
+        ForwardOutcome outcome;
+        outcome.id = pending.id;
+        outcome.ok = true;
+        outcome.callerFd = pending.callerFd;
+        m_forwards.append({pending.workerFd, pending.channel, {}, {}});
+        pending.channel = nullptr;
+        pending.workerFd = -1;
+        pending.callerFd = -1;
+        outcomes.append(outcome);
+        return true;
+    }
+
+    // RFC 4254 的 SSH_OPEN_ADMINISTRATIVELY_PROHIBITED：服务端按策略拒绝转发
+    // （AllowTcpForwarding no），而不是目标不可达。改用只需 session 通道的中继，
+    // 该策略管不到它。
+    const QString error = lastError();
+    if (error.contains(QStringLiteral("error (1)"))) {
+        m_forwardingProhibited = true;
+        if (convertToRelay(pending)) {
+            return false;
+        }
+    }
+
+    ForwardOutcome outcome;
+    outcome.id = pending.id;
+    outcome.error = tr("服务器 %1 无法转发到 %2:%3：%4")
+                        .arg(m_target.connectionSpecifier(true),
+                             QString::fromUtf8(pending.host))
+                        .arg(pending.port)
+                        .arg(error);
+    outcomes.append(outcome);
+    discardPending(pending);
+    return true;
+}
+
+bool SshSessionNode::advanceRelayForward(PendingForward &pending,
+                                         QList<ForwardOutcome> &outcomes)
+{
+    const auto fail = [&](const QString &reason) {
+        ForwardOutcome outcome;
+        outcome.id = pending.id;
+        outcome.error = tr("服务器 %1 无法中继到 %2:%3：%4")
+                            .arg(m_target.connectionSpecifier(true),
+                                 QString::fromUtf8(pending.host))
+                            .arg(pending.port)
+                            .arg(reason);
+        outcomes.append(outcome);
+        discardPending(pending);
+        return true;
+    };
+
+    if (pending.timer.elapsed() > pending.timeoutMs) {
+        return fail(tr("等待 %1 秒后仍未建立").arg(pending.timeoutMs / 1000));
+    }
+
+    switch (pending.relayStage) {
+    case RelayStage::OpeningSession: {
+        const int result = ssh_channel_open_session(pending.channel);
+        if (result == SSH_AGAIN) {
+            return false;
+        }
+        if (result != SSH_OK) {
+            return fail(lastError());
+        }
+        pending.relayStage = RelayStage::RequestingExec;
+        return false;
+    }
+    case RelayStage::RequestingExec: {
+        const QByteArray command = buildRelayCommand(pending.host, pending.port);
+        const int result = ssh_channel_request_exec(pending.channel, command.constData());
+        if (result == SSH_AGAIN) {
+            return false;
+        }
+        if (result != SSH_OK) {
+            return fail(lastError());
+        }
+        // 中继已经在跑：它的标准输入输出就是到目标的字节管道，后续搬运与转发通道完全一致。
+        ForwardOutcome outcome;
+        outcome.id = pending.id;
+        outcome.ok = true;
+        outcome.callerFd = pending.callerFd;
+        m_forwards.append({pending.workerFd, pending.channel, {}, {}});
+        pending.channel = nullptr;
+        pending.workerFd = -1;
+        pending.callerFd = -1;
+        outcomes.append(outcome);
+        return true;
+    }
+    }
+    return fail(tr("中继状态机进入了未定义状态"));
+}
+
 QList<SshSessionNode::ForwardOutcome> SshSessionNode::advancePendingForwards()
 {
     QList<ForwardOutcome> outcomes;
     for (qsizetype index = m_pendingForwards.size() - 1; index >= 0; --index) {
         PendingForward &pending = m_pendingForwards[index];
-
-        const int result = ssh_channel_open_forward(
-            pending.channel, pending.host.constData(), pending.port, "127.0.0.1", 0);
-
-        if (result == SSH_AGAIN) {
-            if (pending.timer.elapsed() <= pending.timeoutMs) {
-                continue;
-            }
-            // 远端向不可路由地址转发时会一直没有响应。没有时限，这条请求就会永远悬挂，
-            // 发起方（建层或 SFTP）也就永远等不到结论。
-            ForwardOutcome outcome;
-            outcome.id = pending.id;
-            outcome.error = tr("服务器 %1 转发到 %2:%3 超时（%4 秒）")
-                                .arg(m_target.connectionSpecifier(true),
-                                     QString::fromUtf8(pending.host))
-                                .arg(pending.port)
-                                .arg(pending.timeoutMs / 1000);
-            outcomes.append(outcome);
-            // 只 free 不 close：通道从未真正打开，远端没有对应的 channel id；在非阻塞会话上
-            // ssh_channel_close 会返回 SSH_AGAIN 并留下半写的 CHANNEL_CLOSE 包，之后整条
-            // SSH 流失步，连带把本层的交互式 Shell 一起废掉。
-            ssh_channel_free(pending.channel);
-            ::close(pending.workerFd);
-            ::close(pending.callerFd);
+        const bool settled = pending.transport == ForwardTransport::DirectTcpIp
+            ? advanceDirectForward(pending, outcomes)
+            : advanceRelayForward(pending, outcomes);
+        if (settled) {
             m_pendingForwards.removeAt(index);
-            continue;
         }
-
-        ForwardOutcome outcome;
-        outcome.id = pending.id;
-        if (result == SSH_OK) {
-            outcome.ok = true;
-            outcome.callerFd = pending.callerFd;
-            m_forwards.append({pending.workerFd, pending.channel, {}, {}});
-        } else {
-            outcome.error = tr("服务器 %1 无法转发到 %2:%3：%4")
-                                .arg(m_target.connectionSpecifier(true),
-                                     QString::fromUtf8(pending.host))
-                                .arg(pending.port)
-                                .arg(lastError());
-            ssh_channel_free(pending.channel);
-            ::close(pending.workerFd);
-            ::close(pending.callerFd);
-        }
-        outcomes.append(outcome);
-        m_pendingForwards.removeAt(index);
     }
     return outcomes;
 }
@@ -858,6 +1000,7 @@ QList<SshSessionNode::ForwardOutcome> SshSessionNode::pumpForwards()
             }
             forward.socketToChannel.remove(0, written);
         }
+        // 中继命令的诊断信息走 stderr，不能混进数据流；只搬运标准输出。
         while (true) {
             const int count = ssh_channel_read_nonblocking(
                 forward.channel, tunnelBuffer, sizeof(tunnelBuffer), 0);

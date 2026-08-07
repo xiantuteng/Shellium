@@ -12,6 +12,7 @@ SshTunnelBroker &SshTunnelBroker::instance()
 
 void SshTunnelBroker::registerRoute(const QString &routeId,
                                     SshSessionStack *stack,
+                                    const QString &layerId,
                                     const QString &targetHost,
                                     const quint16 targetPort)
 {
@@ -19,7 +20,7 @@ void SshTunnelBroker::registerRoute(const QString &routeId,
         return;
     }
     QMutexLocker locker(&m_mutex);
-    m_routes.insert(routeId, {stack, targetHost, targetPort});
+    m_routes.insert(routeId, {stack, layerId, targetHost, targetPort});
 }
 
 void SshTunnelBroker::unregisterRoute(const QString &routeId)
@@ -43,5 +44,6 @@ int SshTunnelBroker::openSocket(const QString &routeId, QString *errorMessage)
         route = *iterator;
     }
     // 不在持有 Broker 锁时等待工作线程，否则标签页关闭时 unregisterRoute 会形成锁反转。
-    return route.stack->openForwardSocket(route.targetHost, route.targetPort, errorMessage);
+    return route.stack->openForwardSocket(route.layerId, route.targetHost, route.targetPort,
+                                          errorMessage);
 }

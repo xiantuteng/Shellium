@@ -10,6 +10,9 @@
 #include <QSignalSpy>
 #include <QTest>
 
+#include <algorithm>
+#include <limits>
+
 #include <unistd.h>
 
 /**
@@ -51,6 +54,17 @@ private slots:
 
     /** @brief 注入远端的 shim 必须能在真实 Shell 中定义成功并上报可解析的事件。 */
     void shellShimReportsSshInvocationFromRealShell();
+
+    /**
+     * @brief 服务器禁用 TCP 转发时，必须自动改用 exec 中继并照常建立内层会话。
+     *
+     * 只有真实的 AllowTcpForwarding no 服务器才能验证这条路径：桩替身无法复现
+     * SSH_OPEN_ADMINISTRATIVELY_PROHIBITED 的时序与错误码。
+     */
+    void fallsBackToExecRelayWhenForwardingProhibited();
+
+    /** @brief 第 2 层的 SFTP 必须经外层隧道抵达，而不是从本机直连内网地址。 */
+    void routesNestedSftpThroughOuterLayer();
 
     /** @brief 空路径必须由服务端解析成该账号的主目录，而不是写死根目录。 */
     void resolvesHomeDirectoryForEmptyPath();
@@ -263,7 +277,7 @@ void SshSessionStackIntegrationTest::opensForwardSocketThroughRootLayer()
     QString tunnelError;
     bool done = false;
     auto *probe = QThread::create([&]() {
-        tunnelFd = stack.openForwardSocket(m_secondLayerHost, 22, &tunnelError);
+        tunnelFd = stack.openForwardSocket(QString(), m_secondLayerHost, 22, &tunnelError);
         done = true;
     });
     probe->start();
@@ -521,24 +535,25 @@ void SshSessionStackIntegrationTest::reusesPooledSftpConnectionAcrossRequests()
 
     // 后续请求应当直接复用同一条已认证连接。这里断言的是行为而非绝对耗时：只要没有重做
     // 握手，热请求必然显著快于冷请求。
-    qint64 warmTotalMs = 0;
-    for (int round = 0; round < 3; ++round) {
+    // 取最小值而不是平均值：要断言的是"没有重做握手"这一事实，最小值最能代表无握手时的
+    // 开销。平均值会被网络抖动的单次尖峰拉高，让用例在链路不稳时假失败。
+    qint64 warmBestMs = std::numeric_limits<qint64>::max();
+    for (int round = 0; round < 5; ++round) {
         const int before = listed.count();
         QElapsedTimer warmTimer;
         warmTimer.start();
         service.listDirectory(target, QStringLiteral("/"));
         QVERIFY(waitFor([&]() { return listed.count() > before || failed.count() > 0; }, 30000));
         QVERIFY2(failed.isEmpty(), "复用池化连接时不应失败");
-        warmTotalMs += warmTimer.elapsed();
+        warmBestMs = std::min(warmBestMs, warmTimer.elapsed());
     }
-    const qint64 warmAverageMs = warmTotalMs / 3;
 
-    qInfo("SFTP 目录读取：冷 %lldms，热平均 %lldms", coldMs, warmAverageMs);
+    qInfo("SFTP 目录读取：冷 %lldms，热最快 %lldms", coldMs, warmBestMs);
     // 阈值取一半而非某个绝对毫秒数：网络快慢因环境而异，但"省掉一整套握手"这个事实不变。
-    QVERIFY2(warmAverageMs * 2 < coldMs,
-             qPrintable(QStringLiteral("热请求未显著快于冷请求（冷 %1ms，热平均 %2ms），"
+    QVERIFY2(warmBestMs * 2 < coldMs,
+             qPrintable(QStringLiteral("热请求未显著快于冷请求（冷 %1ms，热最快 %2ms），"
                                        "连接池可能没有生效")
-                            .arg(coldMs).arg(warmAverageMs)));
+                            .arg(coldMs).arg(warmBestMs)));
 }
 
 void SshSessionStackIntegrationTest::requestsCredentialForNestedLayerWithoutPassword()
@@ -803,6 +818,107 @@ void SshSessionStackIntegrationTest::resolvesHomeDirectoryForEmptyPath()
     QVERIFY(waitFor([&]() { return listed.count() > before || failed.count() > 0; }, 30000));
     QVERIFY(failed.isEmpty());
     QCOMPARE(listed.at(before).at(2).toString(), QStringLiteral("/"));
+}
+
+void SshSessionStackIntegrationTest::fallsBackToExecRelayWhenForwardingProhibited()
+{
+    const QByteArray host = qgetenv("SHELLIUM_IT_NOFWD_HOST");
+    const QByteArray inner = qgetenv("SHELLIUM_IT_NOFWD_INNER");
+    if (host.isEmpty() || inner.isEmpty()) {
+        QSKIP("未设置 SHELLIUM_IT_NOFWD_*，跳过禁用转发服务器的中继测试");
+    }
+
+    ConnectionTarget outer;
+    outer.id = QStringLiteral("integration-nofwd-outer");
+    outer.host = QString::fromUtf8(host);
+    outer.username = QString::fromUtf8(qgetenv("SHELLIUM_IT_NOFWD_USER"));
+    outer.password = QString::fromUtf8(qgetenv("SHELLIUM_IT_NOFWD_PASSWORD"));
+    const uint outerPort = qgetenv("SHELLIUM_IT_NOFWD_PORT").toUInt();
+    outer.port = outerPort == 0 ? 22 : static_cast<quint16>(outerPort);
+
+    SshSessionStack stack(outer);
+    QSignalSpy connected(&stack, &SshSessionStack::shellConnected);
+    QSignalSpy failed(&stack, &SshSessionStack::connectionError);
+    stack.start();
+    QVERIFY(waitFor([&]() { return connected.count() > 0 || failed.count() > 0; }, 40000));
+    QVERIFY2(failed.isEmpty(), "外层连接失败");
+
+    // 该服务器的 direct-tcpip 会被按策略拒绝；实现应当自动改用 exec 中继，调用方无感。
+    const uint innerPort = qgetenv("SHELLIUM_IT_NOFWD_INNER_PORT").toUInt();
+    int tunnelFd = -1;
+    QString tunnelError;
+    bool done = false;
+    auto *probe = QThread::create([&]() {
+        tunnelFd = stack.openForwardSocket(QString(),
+                                           QString::fromUtf8(inner),
+                                           innerPort == 0 ? 22
+                                                          : static_cast<quint16>(innerPort),
+                                           &tunnelError);
+        done = true;
+    });
+    probe->start();
+    QVERIFY2(waitFor([&]() { return done; }, 40000), "中继请求未返回");
+    probe->wait();
+    delete probe;
+
+    QVERIFY2(tunnelFd >= 0,
+             qPrintable(QStringLiteral("中继建立失败：%1").arg(tunnelError)));
+
+    // 读到内层 sshd 的版本横幅，才说明字节确实穿过了中继抵达目标——仅仅建成 socketpair
+    // 什么也证明不了。
+    QByteArray banner;
+    QVERIFY2(waitFor([&]() {
+                 char buffer[256];
+                 const ssize_t count = ::read(tunnelFd, buffer, sizeof(buffer));
+                 if (count > 0) {
+                     banner.append(buffer, count);
+                 }
+                 return banner.contains("SSH-");
+             }, 30000),
+             qPrintable(QStringLiteral("未从中继另一端读到 SSH 横幅，收到：%1")
+                            .arg(QString::fromUtf8(banner.left(200)))));
+    qInfo("经 exec 中继读到内层横幅：%s", banner.trimmed().left(60).constData());
+
+    ::close(tunnelFd);
+    stack.requestStop();
+    QVERIFY(stack.wait(10000));
+}
+
+void SshSessionStackIntegrationTest::routesNestedSftpThroughOuterLayer()
+{
+    if (m_secondLayerHost.isEmpty() || qgetenv("SHELLIUM_IT_PASSWORD2").isEmpty()) {
+        QSKIP("未设置第二层服务器信息，跳过内层 SFTP 路由测试");
+    }
+
+    TerminalPane pane;
+    pane.resize(900, 500);
+    pane.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&pane));
+
+    pane.connectToHost(firstLayerTarget());
+    QVERIFY2(waitFor([&]() { return pane.isConnected(); }, 40000), "第一层连接失败");
+    QVERIFY(waitFor([&]() { return pane.targets().size() == 1; }, 20000));
+
+    pane.connectNestedHost(secondLayerTarget());
+    QVERIFY2(waitFor([&]() { return pane.targets().size() == 2; }, 40000), "第二层未建成");
+
+    const ConnectionTarget nested = pane.targets().at(1);
+    // 没有 tunnelRouteId，SFTP 就会拿着内网地址从本机直连——而本机很可能就在同一个私有
+    // 网段上，于是连到局域网里另一台碰巧同 IP 的机器，在错误的服务器上列目录甚至删文件。
+    QVERIFY2(!nested.tunnelRouteId.isEmpty(),
+             "自持的第 2 层未登记隧道路由，SFTP 会绕过外层直连内网地址");
+
+    // 真正走一次 SFTP：能列出目录才说明隧道确实通到了第 2 层。
+    SftpService service;
+    QSignalSpy listed(&service, &SftpService::directoryListed);
+    QSignalSpy failed(&service, &SftpService::operationFailed);
+    service.listDirectory(nested, QString());
+    QVERIFY2(waitFor([&]() { return listed.count() > 0 || failed.count() > 0; }, 40000),
+             "内层 SFTP 请求未返回");
+    QVERIFY2(failed.isEmpty(),
+             qPrintable(QStringLiteral("内层 SFTP 失败：%1")
+                            .arg(failed.value(0).value(3).toString())));
+    qInfo("第 2 层主目录解析为：%s", qPrintable(listed.at(0).at(2).toString()));
 }
 
 QTEST_MAIN(SshSessionStackIntegrationTest)

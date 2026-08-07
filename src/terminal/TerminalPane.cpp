@@ -267,6 +267,7 @@ void TerminalPane::connectToHost(const ConnectionTarget &target)
         // 是"从旧的栈顶又 ssh 到了哪里"，而栈顶已经不是原来那个了。
         const bool grew = layers.size() > m_ownedTargets.size();
         m_ownedTargets = QVector<ConnectionTarget>(layers.cbegin(), layers.cend());
+        registerOwnedLayerRoutes();
         m_inferredTargets.clear();
         m_pendingNestedCredentialTargetId.clear();
         m_captureNextLineAsCredential = false;
@@ -315,12 +316,30 @@ void TerminalPane::connectToHost(const ConnectionTarget &target)
         if (sessionGeneration != m_sessionGeneration) {
             return;
         }
-        // 内层失败不影响外层：这里只报告，不改变任何连接状态。
-        m_terminalView->appendTerminalOutput(
-            tr("\r\n无法建立到 %1 的嵌套连接：%2\r\n")
-                .arg(target.connectionSpecifier(), message)
-                .toUtf8());
-        emit statusMessage(tr("嵌套连接失败：%1").arg(message));
+        if (target.id != m_takeoverTargetId) {
+            // 内层失败不影响外层：这里只报告，不改变任何连接状态。
+            m_terminalView->appendTerminalOutput(
+                tr("\r\n无法建立到 %1 的嵌套连接：%2\r\n")
+                    .arg(target.connectionSpecifier(), message)
+                    .toUtf8());
+            emit statusMessage(tr("嵌套连接失败：%1").arg(message));
+            return;
+        }
+
+        // 这次失败源于我们接管了用户手打的 ssh。外层服务器若禁用了 TCP 转发
+        // （AllowTcpForwarding no），本程序就无法为它建立内层会话——记下来，之后不再
+        // 对这台服务器尝试接管，用户不必反复经历同一个失败。
+        QString reason = message;
+        if (message.contains(QStringLiteral("error (1)"))) {
+            // RFC 4254 的 SSH_OPEN_ADMINISTRATIVELY_PROHIBITED：服务端按策略拒绝，
+            // 而非目标不可达。
+            reason = tr("该服务器禁用了 TCP 转发");
+            if (!m_takeoverOuterKey.isEmpty()) {
+                m_forwardingProhibitedHosts.insert(m_takeoverOuterKey);
+            }
+        }
+        emit statusMessage(tr("嵌套连接未接管：%1").arg(reason));
+        runTakeoverFallback(reason);
     });
     connect(m_sessionStack,
             &SshSessionStack::connectionError,
@@ -543,8 +562,10 @@ void TerminalPane::inspectSubmittedCommand(const QString &command)
         ConnectionTarget nestedTarget = parsed.target;
         if (m_sessionStack != nullptr && m_sessionStack->isRunning()) {
             nestedTarget.tunnelRouteId = nestedTarget.id;
+            // 推测层不在栈内，没有对应的层 id，沿用"从栈顶发起"的旧语义。
             SshTunnelBroker::instance().registerRoute(nestedTarget.tunnelRouteId,
                                                        m_sessionStack,
+                                                       QString(),
                                                        nestedTarget.host,
                                                        nestedTarget.port);
             m_tunnelRouteIds.append(nestedTarget.tunnelRouteId);
@@ -619,6 +640,14 @@ void TerminalPane::handleShellIntegrationEvent(const QByteArray &payload)
         m_sessionStack->enqueueInput(response);
     };
 
+    const QString outerKey = activeTarget().stableKey();
+    if (m_forwardingProhibitedHosts.contains(outerKey)) {
+        // 这台服务器此前已经明确拒绝过转发（AllowTcpForwarding no）。不必再让用户经历一次
+        // 失败：直接交还给原生 ssh，连接照常建立，只是这一层退回推测识别。
+        respond(ShellShim::declineResponse());
+        return;
+    }
+
     QString declineReason;
     const ConnectionTarget target =
         ShellShim::resolveTarget(event.arguments, activeTarget(), &declineReason);
@@ -632,8 +661,65 @@ void TerminalPane::handleShellIntegrationEvent(const QByteArray &payload)
         return;
     }
 
+    // 记住这次接管对应的原始命令：一旦接管失败，必须把用户的命令原样交还给远端执行，
+    // 否则他敲下的 ssh 就凭空消失了——重试多少次都一样，因为每次都会走同一条失败路径。
+    m_takeoverTargetId = target.id;
+    m_takeoverArguments = event.arguments;
+    m_takeoverOuterKey = outerKey;
+
     respond(ShellShim::acceptResponse());
     connectNestedHost(target);
+}
+
+void TerminalPane::registerOwnedLayerRoutes()
+{
+    for (const QString &routeId : std::as_const(m_ownedRouteIds)) {
+        SshTunnelBroker::instance().unregisterRoute(routeId);
+    }
+    m_ownedRouteIds.clear();
+    if (m_sessionStack == nullptr) {
+        return;
+    }
+
+    // 栈底由本机直连，不需要隧道；第 2 层起必须经外层转发抵达。不注册的话 SFTP 会拿着一个
+    // 内网地址从本机直连——而本机很可能就在同一个私有网段上，于是连到局域网里另一台碰巧
+    // 同 IP 的机器，在错误的服务器上列目录甚至删文件。
+    for (qsizetype index = 1; index < m_ownedTargets.size(); ++index) {
+        ConnectionTarget &target = m_ownedTargets[index];
+        target.tunnelRouteId = target.id;
+        SshTunnelBroker::instance().registerRoute(target.tunnelRouteId,
+                                                   m_sessionStack,
+                                                   target.id,
+                                                   target.host,
+                                                   target.port);
+        m_ownedRouteIds.append(target.tunnelRouteId);
+    }
+}
+
+void TerminalPane::runTakeoverFallback(const QString &reason)
+{
+    if (m_takeoverArguments.isEmpty() || m_sessionStack == nullptr
+        || !m_sessionStack->isRunning()) {
+        return;
+    }
+
+    // 逐个参数用单引号包裹：主机名、路径或密码里的空格与元字符都不能被远端 Shell 再解释。
+    QByteArray command = "command ssh";
+    for (const QString &argument : std::as_const(m_takeoverArguments)) {
+        QString quoted = argument;
+        quoted.replace(QStringLiteral("'"), QStringLiteral("'\\''"));
+        command += " '" + quoted.toUtf8() + "'";
+    }
+    m_takeoverArguments.clear();
+    m_takeoverTargetId.clear();
+
+    m_terminalView->appendTerminalOutput(
+        tr("Shellium 未能接管本次连接（%1），正在交由远端 ssh 直接执行。\r\n")
+            .arg(reason)
+            .toUtf8());
+    // 登记回显：这条命令是本程序补发的，用户已经敲过一次，不该在屏幕上看到第二遍。
+    m_echoFilter.expect(command);
+    m_sessionStack->enqueueInput(command + "\n");
 }
 
 void TerminalPane::rollBackPendingNestedTarget(const QString &reason)
@@ -684,6 +770,10 @@ void TerminalPane::stopWorker()
         SshTunnelBroker::instance().unregisterRoute(routeId);
     }
     m_tunnelRouteIds.clear();
+    for (const QString &routeId : std::as_const(m_ownedRouteIds)) {
+        SshTunnelBroker::instance().unregisterRoute(routeId);
+    }
+    m_ownedRouteIds.clear();
     if (m_localWorker != nullptr) {
         m_localWorker->requestStop();
         if (!m_localWorker->wait(3000)) {

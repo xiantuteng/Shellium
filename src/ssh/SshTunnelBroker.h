@@ -18,9 +18,16 @@ public:
     /** @brief 返回进程内唯一 Broker。 */
     static SshTunnelBroker &instance();
 
-    /** @brief 注册一个从现有 SSH 会话到内层主机的路由。 */
+    /**
+     * @brief 注册一条通往某一层服务器的路由。
+     * @param layerId 要抵达的那一层的目标 id；空表示沿用栈顶（旧的命令解析路径）。
+     *
+     * 记录的是"目的地"而不是"从哪出发"：转发必须由目标层的**下一层外层**发起，而层的
+     * 序号会随压栈退栈变化，交给栈自己解析比在界面侧记账可靠。
+     */
     void registerRoute(const QString &routeId,
                        SshSessionStack *stack,
+                       const QString &layerId,
                        const QString &targetHost,
                        quint16 targetPort);
 
@@ -36,6 +43,7 @@ public:
 private:
     struct Route {
         QPointer<SshSessionStack> stack;
+        QString layerId;
         QString targetHost;
         quint16 targetPort = 22;
     };

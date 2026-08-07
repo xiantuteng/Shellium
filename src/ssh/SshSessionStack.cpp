@@ -89,7 +89,8 @@ void SshSessionStack::requestPopLayer()
     ++m_pendingPops;
 }
 
-int SshSessionStack::openForwardSocket(const QString &host,
+int SshSessionStack::openForwardSocket(const QString &layerId,
+                                       const QString &host,
                                        const quint16 port,
                                        QString *errorMessage)
 {
@@ -101,6 +102,7 @@ int SshSessionStack::openForwardSocket(const QString &host,
     }
 
     auto request = QSharedPointer<ForwardRequest>::create();
+    request->layerId = layerId;
     request->host = host;
     request->port = port;
     {
@@ -377,6 +379,24 @@ bool SshSessionStack::advanceEstablishingLayers()
     return false;
 }
 
+SshSessionNode *SshSessionStack::originLayerFor(const QString &layerId)
+{
+    if (m_layers.empty()) {
+        return nullptr;
+    }
+    if (layerId.isEmpty()) {
+        return m_layers.back().get();
+    }
+    for (std::size_t index = 0; index < m_layers.size(); ++index) {
+        if (m_layers[index]->target().id != layerId) {
+            continue;
+        }
+        // 栈底由本机直连即可，不需要经任何一层转发。
+        return index == 0 ? nullptr : m_layers[index - 1].get();
+    }
+    return nullptr;
+}
+
 void SshSessionStack::servicePendingLayerRequests()
 {
     int pops = 0;
@@ -544,13 +564,14 @@ void SshSessionStack::serviceForwardRequests()
     for (const QSharedPointer<ForwardRequest> &request : requests) {
         QString error;
         quint64 forwardId = 0;
-        if (!m_layers.empty() && m_layers.back()->isReady()) {
+        SshSessionNode *origin = originLayerFor(request->layerId);
+        if (origin != nullptr && origin->isReady()) {
             // SFTP 侧调用方自身有 15 秒等待上限，这里略短以便先返回结构化错误而非超时。
             constexpr int kSftpForwardTimeoutMs = 12000;
-            forwardId = m_layers.back()->beginForward(
+            forwardId = origin->beginForward(
                 request->host, request->port, false, kSftpForwardTimeoutMs, &error);
         } else {
-            error = tr("当前没有可用的 SSH 会话层");
+            error = tr("承载该目标的外层 SSH 会话不可用");
         }
 
         if (forwardId != 0) {

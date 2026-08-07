@@ -90,7 +90,10 @@ public:
      *
      * 此方法由 SFTP 后台线程调用，通过请求队列让所有 libssh API 仍只在本工作线程执行。
      */
-    int openForwardSocket(const QString &host, quint16 port, QString *errorMessage);
+    int openForwardSocket(const QString &layerId,
+                          const QString &host,
+                          quint16 port,
+                          QString *errorMessage);
 
 signals:
     /** @brief 栈顶层的远端 PTY 产生了新的原始输出。 */
@@ -153,6 +156,7 @@ private:
 
     /** @brief 一个跨线程等待 direct-tcpip 通道创建结果的请求。 */
     struct ForwardRequest {
+        QString layerId;
         QString host;
         quint16 port = 22;
         QMutex mutex;
@@ -200,6 +204,15 @@ private:
 
     /** @brief 把 GUI/SFTP 线程排队的 direct-tcpip 请求转成异步建立，不等待结果。 */
     void serviceForwardRequests();
+
+    /**
+     * @brief 找出应当由谁发起通往 layerId 的转发。
+     * @return 目标层的下一层外层；layerId 为空时返回栈顶；无法解析时返回 nullptr。
+     *
+     * 要抵达第 N 层必须从第 N-1 层发起。用栈顶去连自己既绕远，在禁用转发的服务器上还会
+     * 平白多失败一次。
+     */
+    [[nodiscard]] SshSessionNode *originLayerFor(const QString &layerId);
 
     /** @brief 该层 Shell 集成脚本的远端临时路径。 */
     [[nodiscard]] static QByteArray shimPathFor(const SshSessionNode &node);
