@@ -152,7 +152,7 @@ public:
     /**
      * @brief 连接是否仍可用于下一次操作。
      *
-     * 池化连接可能因服务器空闲超时、网络中断或承载它的隧道随分屏关闭而失效。复用前必须
+     * 池化连接可能因服务器空闲超时、网络中断或承载它的隧道随标签页关闭而失效。复用前必须
      * 核对，否则用户会看到一次莫名其妙的失败，而不是自动重连。
      */
     [[nodiscard]] bool isAlive() const
@@ -358,7 +358,7 @@ SftpConnection *ensureConnected(PooledConnection *entry,
         return entry->connection.get();
     }
 
-    // 连接可能因服务器空闲超时、网络中断或承载它的隧道随分屏关闭而失效；此处透明重连，
+    // 连接可能因服务器空闲超时、网络中断或承载它的隧道随标签页关闭而失效；此处透明重连，
     // 用户不该为了一次后台超时而看到失败。
     entry->connection = std::make_unique<SftpConnection>();
     const ConnectResult opened = entry->connection->open(target, allowUnknownHost);

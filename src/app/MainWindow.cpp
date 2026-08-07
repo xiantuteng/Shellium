@@ -48,17 +48,6 @@ MainWindow::MainWindow(QWidget *parent)
 
     auto *renameTabAction = new QAction(tr("重命名标签页"), this);
 
-    auto *horizontalSplitAction = new QAction(tr("左右分屏"), this);
-    horizontalSplitAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+D")));
-    horizontalSplitAction->setToolTip(tr("在当前终端右侧创建独立 SSH 终端"));
-
-    auto *verticalSplitAction = new QAction(tr("上下分屏"), this);
-    verticalSplitAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+E")));
-    verticalSplitAction->setToolTip(tr("在当前终端下方创建独立 SSH 终端"));
-
-    auto *closeSplitAction = new QAction(tr("关闭当前分屏"), this);
-    closeSplitAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+W")));
-
     auto *toggleFilesAction = new QAction(tr("显示远程文件管理"), this);
     toggleFilesAction->setCheckable(true);
     toggleFilesAction->setChecked(true);
@@ -73,10 +62,6 @@ MainWindow::MainWindow(QWidget *parent)
     toolbar->addAction(localShellAction);
     toolbar->addAction(newTabAction);
     toolbar->addSeparator();
-    toolbar->addAction(horizontalSplitAction);
-    toolbar->addAction(verticalSplitAction);
-    toolbar->addAction(closeSplitAction);
-    toolbar->addSeparator();
     toolbar->addAction(toggleFilesAction);
 
     QMenu *connectionMenu = menuBar()->addMenu(tr("连接"));
@@ -86,10 +71,6 @@ MainWindow::MainWindow(QWidget *parent)
     connectionMenu->addAction(newTabAction);
     connectionMenu->addAction(closeTabAction);
     connectionMenu->addAction(renameTabAction);
-    connectionMenu->addSeparator();
-    connectionMenu->addAction(horizontalSplitAction);
-    connectionMenu->addAction(verticalSplitAction);
-    connectionMenu->addAction(closeSplitAction);
 
     QMenu *viewMenu = menuBar()->addMenu(tr("视图"));
     viewMenu->addAction(toggleFilesAction);
@@ -156,21 +137,6 @@ MainWindow::MainWindow(QWidget *parent)
                                       && m_workspace->isFileManagerVisible());
         toggleFilesAction->blockSignals(false);
     });
-    connect(horizontalSplitAction, &QAction::triggered, this, [this]() {
-        // Qt::Horizontal 的 QSplitter 把子控件左右排列，对应产品语义“左右分屏”。
-        splitCurrentPane(Qt::Horizontal);
-    });
-    connect(verticalSplitAction, &QAction::triggered, this, [this]() {
-        // Qt::Vertical 的 QSplitter 把子控件上下排列，对应产品语义“上下分屏”。
-        splitCurrentPane(Qt::Vertical);
-    });
-    connect(closeSplitAction, &QAction::triggered, this, [this]() {
-        // 动作属于主窗口，但关闭目标必须在触发时解析，不能永久绑定构造阶段的第一个标签页。
-        TerminalWorkspace *workspace = activeWorkspace();
-        if (workspace != nullptr) {
-            workspace->closeActivePane();
-        }
-    });
     connect(toggleFilesAction, &QAction::toggled, this, [this](const bool visible) {
         TerminalWorkspace *workspace = activeWorkspace();
         if (workspace != nullptr) {
@@ -209,7 +175,7 @@ void MainWindow::connectNestedFromCurrentPane()
         QMessageBox::information(
             this,
             tr("无法建立嵌套连接"),
-            tr("当前分屏尚未连接到远程服务器。请先连接一台服务器，再从它继续连接内网主机。"));
+            tr("当前标签页尚未连接到远程服务器。请先连接一台服务器，再从它继续连接内网主机。"));
         return;
     }
 
@@ -221,26 +187,6 @@ void MainWindow::connectNestedFromCurrentPane()
     }
 
     pane->connectNestedHost(dialog.target());
-}
-
-void MainWindow::splitCurrentPane(const Qt::Orientation orientation)
-{
-    TerminalWorkspace *workspace = activeWorkspace();
-    TerminalPane *pane = workspace == nullptr ? nullptr : workspace->activePane();
-    if (pane == nullptr) {
-        return;
-    }
-
-    ConnectionDialog dialog(this);
-    if (pane->activeTarget().isValid()) {
-        // 分屏的最常见场景是同服务器并行操作，因此预填当前服务器；用户仍可改为其他服务器。
-        dialog.setInitialTarget(pane->activeTarget());
-    }
-    if (dialog.exec() != QDialog::Accepted) {
-        return;
-    }
-
-    workspace->splitActive(orientation, dialog.target());
 }
 
 TerminalWorkspace *MainWindow::createWorkspaceTab(const QString &title)

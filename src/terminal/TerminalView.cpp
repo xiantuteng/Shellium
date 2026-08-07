@@ -270,12 +270,6 @@ void TerminalView::keyPressEvent(QKeyEvent *event)
     event->accept();
 }
 
-void TerminalView::focusInEvent(QFocusEvent *event)
-{
-    QPlainTextEdit::focusInEvent(event);
-    emit activated();
-}
-
 void TerminalView::resizeEvent(QResizeEvent *event)
 {
     QPlainTextEdit::resizeEvent(event);

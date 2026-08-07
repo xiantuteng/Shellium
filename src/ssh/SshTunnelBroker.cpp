@@ -42,6 +42,6 @@ int SshTunnelBroker::openSocket(const QString &routeId, QString *errorMessage)
         }
         route = *iterator;
     }
-    // 不在持有 Broker 锁时等待工作线程，否则分屏关闭时 unregisterRoute 会形成锁反转。
+    // 不在持有 Broker 锁时等待工作线程，否则标签页关闭时 unregisterRoute 会形成锁反转。
     return route.stack->openForwardSocket(route.targetHost, route.targetPort, errorMessage);
 }

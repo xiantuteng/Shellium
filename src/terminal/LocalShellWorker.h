@@ -9,7 +9,7 @@
  *
  * 普通 QProcess 使用管道而非终端，zsh 会关闭提示符、行编辑和颜色，因此不能用于验证 SSH
  * 终端行为。本类通过 forkpty 创建与远端 SSH PTY 等价的本地会话，既提供“本地终端”功能，
- * 也为终端输入、尺寸协商、分屏和命令历史提供无需服务器的自动化测试环境。
+ * 也为终端输入、尺寸协商和命令历史提供无需服务器的自动化测试环境。
  */
 class LocalShellWorker final : public QThread {
     Q_OBJECT

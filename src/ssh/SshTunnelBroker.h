@@ -11,7 +11,7 @@ class SshSessionStack;
  * @brief 连接嵌套目标与已认证外层 SSH 会话的进程内路由表。
  *
  * SFTP 后台任务只持有不可解引用的 routeId；Broker 使用 QPointer 验证终端会话栈工作线程仍存活，
- * 从而避免在分屏关闭后访问悬挂指针。
+ * 从而避免在标签页关闭后访问悬挂指针。
  */
 class SshTunnelBroker final {
 public:

@@ -19,7 +19,7 @@ class ConnectionDialog final : public QDialog {
 public:
     explicit ConnectionDialog(QWidget *parent = nullptr);
 
-    /** @brief 使用当前终端目标预填表单，方便分屏连接同一服务器。 */
+    /** @brief 使用当前终端目标预填表单，方便重连同一服务器。 */
     void setInitialTarget(const ConnectionTarget &target);
 
     /** @brief 返回用户确认后的连接配置；调用前应确保对话框已接受。 */

@@ -81,7 +81,7 @@ void ConnectionDialog::setInitialTarget(const ConnectionTarget &target)
 ConnectionTarget ConnectionDialog::target() const
 {
     ConnectionTarget result = m_baseTarget;
-    // 每次由对话框创建的连接都分配新 ID，避免两个分屏共享身份后混淆嵌套父子关系。
+    // 每次由对话框创建的连接都分配新 ID，避免两个标签页共享身份后混淆嵌套父子关系。
     result.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
     result.displayName = m_displayNameEdit->text().trimmed();
     result.host = m_hostEdit->text().trimmed();

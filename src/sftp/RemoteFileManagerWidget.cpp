@@ -365,7 +365,7 @@ void RemoteFileManagerWidget::deleteSelectedPath()
         return;
     }
     const ConnectionTarget target = selectedTarget();
-    // 确认框必须写明服务器：删除是不可撤销的，而用户很可能同时开着多层、多分屏，
+    // 确认框必须写明服务器：删除是不可撤销的，而用户很可能同时开着多层、多标签页，
     // 只显示路径不足以让人确认自己在哪台机器上操作。
     QString message = tr("即将在服务器 %1 上永久删除%2：\n\n%3\n\n此操作无法撤销。")
                           .arg(target.connectionSpecifier(true),

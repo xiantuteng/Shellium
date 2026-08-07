@@ -33,7 +33,7 @@ Q_DECLARE_METATYPE(QList<RemoteFileInfo>)
 /**
  * @brief 在后台线程中执行 libssh SFTP 操作，并把结果安全送回主线程。
  *
- * 每个请求建立独立 SSH/SFTP 会话，因此不同终端分屏、不同嵌套服务器可以并行传输，
+ * 连接按目标池化：同一服务器的操作复用一条已认证连接，不同目标仍并行，
  * 且某个服务器断线不会污染其他请求。服务不会持久化密码，日志和错误消息中也不会包含密码。
  */
 struct SftpConnectionPool;

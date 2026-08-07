@@ -12,11 +12,10 @@ class SshSessionStack;
 class TerminalView;
 
 /**
- * @brief 一个可独立连接、关闭并被分屏管理的终端面板。
+ * @brief 一个标签页内的终端面板，可独立连接和关闭。
  *
  * 面板通过 libssh 工作线程建立交互式 PTY，支持密码、私钥、Agent、known_hosts 和跳板链。
- * 它同时观察用户提交的 ssh/exit 命令，维护当前面板内的服务器连接链，供远程文件管理器
- * 自由选择外层或内层服务器。
+ * 它维护本标签页内的服务器连接链，供远程文件管理器自由选择外层或内层服务器。
  */
 class TerminalPane final : public QWidget {
     Q_OBJECT
@@ -56,9 +55,6 @@ public:
     void focusTerminal();
 
 signals:
-    /** @brief 用户在当前分屏中激活了该面板。 */
-    void activated(TerminalPane *pane);
-
     /** @brief 嵌套 SSH 进入或退出导致可选服务器链发生变化。 */
     void targetsChanged(TerminalPane *pane);
 
@@ -127,7 +123,7 @@ private:
     bool m_remoteSessionEstablished = false;
 
     /**
-     * @brief 当前分屏的会话代次，用于丢弃旧工作线程延迟到达的断开回调。
+     * @brief 当前终端的会话代次，用于丢弃旧工作线程延迟到达的断开回调。
      *
      * 每次主动连接 SSH 或打开本地 zsh 都递增。自动回退任务执行前必须核对代次，防止
      * 用户已经开始新连接后，旧 SSH 的排队信号又把界面切回本地终端。

@@ -293,7 +293,7 @@ bool SshSessionStack::advanceEstablishingLayers()
         return true;
     }
 
-    // 嵌套层失败只影响它自己：外层会话已经认证完毕且仍在正常工作，把整个分屏断开会让
+    // 嵌套层失败只影响它自己：外层会话已经认证完毕且仍在正常工作，把整个终端断开会让
     // 用户白白丢掉外层的工作现场。只有栈底失败才是致命的。
     if (m_layers.size() > 1) {
         const ConnectionTarget failedTarget = node.target();

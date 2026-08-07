@@ -41,9 +41,6 @@ TerminalPane::TerminalPane(QWidget *parent)
             &TerminalView::commandSubmitted,
             this,
             &TerminalPane::inspectSubmittedCommand);
-    connect(m_terminalView, &TerminalView::activated, this, [this]() {
-        emit activated(this);
-    });
     connect(m_terminalView,
             &TerminalView::authenticationPromptDetected,
             this,
@@ -118,7 +115,7 @@ void TerminalPane::openLocalShell(const QString &shellPath)
     m_ownedTargets.clear();
     m_inferredTargets.clear();
     m_shellReady = false;
-    // 切换成本地 Shell 后当前分屏不再具备远程目标，立即通知所属标签页清空自己的文件
+    // 切换成本地 Shell 后当前终端不再具备远程目标，立即通知所属标签页清空自己的文件
     // 管理器，不能等 zsh 启动完成后继续短暂显示上一条 SSH 会话的目录。
     emit targetsChanged(this);
     m_headerLabel->setText(tr("正在启动本地 zsh…"));

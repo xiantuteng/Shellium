@@ -9,7 +9,7 @@ class VtermBridge;
  * @brief 负责显示远端输出并把键盘事件转换为终端字节流的轻量终端视图。
  *
  * 当前实现把 OpenSSH 分配的远端 PTY 接入 Qt 文本视图，支持普通输入、控制键和常用方向键。
- * 该类刻意隔离输入协议，后续替换为 libvterm 渲染时，TerminalPane 和分屏/SFTP 架构无需改动。
+ * 该类刻意隔离输入协议，后续替换为 libvterm 渲染时，TerminalPane 和 SFTP 架构无需改动。
  */
 class TerminalView final : public QPlainTextEdit {
     Q_OBJECT
@@ -30,10 +30,7 @@ signals:
     /** @brief 用户按下回车后，发送一份完整命令用于嵌套 SSH 识别。 */
     void commandSubmitted(const QString &command);
 
-    /** @brief 视图获得键盘焦点，用于确定当前分屏。 */
-    void activated();
-
-    /**
+        /**
      * @brief 终端输出出现明确的 SSH 密码提示。
      *
      * 信号不携带输入内容，只用于让 TerminalPane 将下一次提交行视为会话凭据；普通输出中
@@ -79,10 +76,7 @@ protected:
     /** @brief 将 Qt 键盘事件编码为常见的 xterm/VT 控制序列。 */
     void keyPressEvent(QKeyEvent *event) override;
 
-    /** @brief 在分屏焦点变化时通知上层工作区。 */
-    void focusInEvent(QFocusEvent *event) override;
-
-    /** @brief 根据当前等宽字体度量计算 PTY 尺寸并通知 SSH 通道。 */
+        /** @brief 根据当前等宽字体度量计算 PTY 尺寸并通知 SSH 通道。 */
     void resizeEvent(QResizeEvent *event) override;
 
     /**
