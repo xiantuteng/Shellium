@@ -15,6 +15,14 @@ bool initializeSodium()
     return initialized;
 }
 
+/**
+ * @brief 校验块的明文内容。
+ *
+ * 取固定常量即可：它不含任何机密，作用只是给出一段"用正确密钥才能解开"的密文。
+ * 带上格式版本，将来若更换 KDF 参数或密文布局，可以据此识别旧数据并平滑迁移。
+ */
+constexpr char kVerifierPlainText[] = "shellium-vault-v1";
+
 } // namespace
 
 Vault::Vault()
@@ -92,6 +100,31 @@ bool Vault::isUnlocked() const
 QByteArray Vault::salt() const
 {
     return m_salt;
+}
+
+QByteArray Vault::createVerifier(QString *errorMessage) const
+{
+    return encrypt(QByteArray(kVerifierPlainText), errorMessage);
+}
+
+bool Vault::verifyPassword(const QByteArray &verifier) const
+{
+    if (verifier.isEmpty()) {
+        // 空校验块代表保险库尚未初始化。此处返回 false 而不是"通过"，避免调用方把损坏或
+        // 缺失的数据当成新保险库，进而用一把新密钥覆盖掉用户已有的凭据。
+        return false;
+    }
+    // sodium_memcmp 是常数时间比较：普通的 == 会随不匹配位置提前返回，泄漏可用于逐字节
+    // 猜测的时序信息。这里比较的虽是公开常量，但保持一致的写法可以避免以后被照搬到真正
+    // 敏感的比较上。
+    const QByteArray plainText = decrypt(verifier);
+    const QByteArray expected(kVerifierPlainText);
+    if (plainText.size() != expected.size()) {
+        return false;
+    }
+    return sodium_memcmp(plainText.constData(),
+                         expected.constData(),
+                         static_cast<size_t>(expected.size())) == 0;
 }
 
 QByteArray Vault::encrypt(const QByteArray &plainText, QString *errorMessage) const
