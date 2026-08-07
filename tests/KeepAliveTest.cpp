@@ -87,16 +87,6 @@ void KeepAliveTest::defaultIntervalStaysBelowCommonNatTimeout()
     QVERIFY(SshKeepAlive::kIdleIntervalMs <= 30000);
 }
 
-/**
- * @brief 供本测试目标唯一的 main 调用。
- *
- * 一个可执行文件里只能有一个 QTEST_MAIN 展开出的 main，因此本文件只导出运行入口，
- * 由 SshCommandParserTest.cpp 中的统一 main 驱动。
- */
-int runKeepAliveTests(int argc, char *argv[])
-{
-    KeepAliveTest test;
-    return QTest::qExec(&test, argc, argv);
-}
+QTEST_APPLESS_MAIN(KeepAliveTest)
 
 #include "KeepAliveTest.moc"

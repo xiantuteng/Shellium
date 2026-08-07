@@ -94,7 +94,6 @@ if(BUILD_TESTING)
 
     qt_add_executable(ShelliumCoreTests
         tests/SshCommandParserTest.cpp
-        tests/KeepAliveTest.cpp
         src/core/ConnectionTarget.cpp
         src/core/ConnectionTarget.h
         src/security/Vault.cpp
@@ -148,6 +147,14 @@ if(BUILD_TESTING)
     )
 
     add_test(NAME ShelliumStorageTests COMMAND ShelliumStorageTests)
+
+    # 保活判定同样是内联纯逻辑，不需要 libssh 会话即可覆盖。独立成目标而不是并进
+    # ShelliumCoreTests：一个可执行文件只能有一个 main，共用 main 还会让按名过滤测试时
+    # 另一套报 "Unknown test function" 并返回非零，破坏单独复现某个用例的工作流。
+    qt_add_executable(ShelliumKeepAliveTests tests/KeepAliveTest.cpp)
+    target_include_directories(ShelliumKeepAliveTests PRIVATE src)
+    target_link_libraries(ShelliumKeepAliveTests PRIVATE Qt6::Core Qt6::Test PkgConfig::LIBSSH)
+    add_test(NAME ShelliumKeepAliveTests COMMAND ShelliumKeepAliveTests)
 
     # SFTP 递归传输的纯逻辑（路径越界防护、遍历顺序、跳过判定、失败聚合、进度计算）全部以
     # 内联形式放在 SftpService.h，因此这里不需要 libssh 会话、隧道或 SFTP 服务器就能覆盖。
