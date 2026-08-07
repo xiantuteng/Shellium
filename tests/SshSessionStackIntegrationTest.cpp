@@ -52,6 +52,9 @@ private slots:
     /** @brief 注入远端的 shim 必须能在真实 Shell 中定义成功并上报可解析的事件。 */
     void shellShimReportsSshInvocationFromRealShell();
 
+    /** @brief 空路径必须由服务端解析成该账号的主目录，而不是写死根目录。 */
+    void resolvesHomeDirectoryForEmptyPath();
+
     /** @brief SFTP 连接池必须让后续操作免去重复握手，而不只是"看起来能用"。 */
     void reusesPooledSftpConnectionAcrossRequests();
 
@@ -771,6 +774,35 @@ void SshSessionStackIntegrationTest::suppressesOwnEchoInTerminal()
     // 真正的远端输出必须完好——过滤不能把用户内容一起吞掉。
     QVERIFY2(screen.contains(QStringLiteral("ssh root@") + m_secondLayerHost),
              "用户自己敲的命令被过滤掉了");
+}
+
+void SshSessionStackIntegrationTest::resolvesHomeDirectoryForEmptyPath()
+{
+    SftpService service;
+    QSignalSpy listed(&service, &SftpService::directoryListed);
+    QSignalSpy failed(&service, &SftpService::operationFailed);
+
+    // 传空路径：服务端应当把 "." 规范化成该账号的主目录绝对路径。首次进入一台服务器时
+    // 无从得知它的主目录，写死 / 既不符合直觉，也常常没有列目录权限。
+    service.listDirectory(firstLayerTarget(), QString());
+    QVERIFY2(waitFor([&]() { return listed.count() > 0 || failed.count() > 0; }, 30000),
+             "主目录读取未返回");
+    QVERIFY2(failed.isEmpty(),
+             qPrintable(QStringLiteral("读取失败：%1").arg(failed.value(0).value(3).toString())));
+
+    const QString resolved = listed.at(0).at(2).toString();
+    QVERIFY2(resolved.startsWith(QLatin1Char('/')),
+             qPrintable(QStringLiteral("返回的路径不是绝对路径：%1").arg(resolved)));
+    // 必须回传解析结果，界面据此更新路径框；否则用户看不到自己在哪。
+    QVERIFY2(!resolved.isEmpty(), "未回传解析后的主目录");
+    qInfo("主目录解析为：%s", qPrintable(resolved));
+
+    // 显式绝对路径仍按原样使用。
+    const int before = listed.count();
+    service.listDirectory(firstLayerTarget(), QStringLiteral("/"));
+    QVERIFY(waitFor([&]() { return listed.count() > before || failed.count() > 0; }, 30000));
+    QVERIFY(failed.isEmpty());
+    QCOMPARE(listed.at(before).at(2).toString(), QStringLiteral("/"));
 }
 
 QTEST_MAIN(SshSessionStackIntegrationTest)

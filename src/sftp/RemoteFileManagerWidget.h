@@ -63,6 +63,9 @@ private slots:
     void navigateUp();
 
 private:
+    /** @brief 把路径框恢复成当前服务器自己的位置；未记录过则留空以进入主目录。 */
+    void restorePathForSelectedTarget();
+
     /** @brief 返回服务器选择器当前对应的完整连接配置。 */
     [[nodiscard]] ConnectionTarget selectedTarget() const;
 
@@ -98,6 +101,15 @@ private:
      */
     bool m_credentialDialogOpen = false;
     QHash<QString, int> m_directoryDisconnectRetries;
+
+    /**
+     * @brief 每台服务器各自的当前目录，键为 ConnectionTarget::stableKey()。
+     *
+     * 路径是服务器专属的：切层时沿用上一台的路径几乎必然落空（第 1 层的 /app/software
+     * 在第 2 层通常不存在），用户会看到一个莫名其妙的"目录不存在"。尚未记录的服务器
+     * 传空路径，由服务端解析出该账号的主目录。
+     */
+    QHash<QString, QString> m_pathByTarget;
 
     /**
      * @brief 当前应用会话内的 SFTP 凭据缓存，键包含完整跳板链。

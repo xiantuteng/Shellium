@@ -59,7 +59,13 @@ public:
     /** @brief 关闭全部池化连接；必须在 .cpp 中定义，连接池是不完整类型。 */
     ~SftpService() override;
 
-    /** @brief 异步列出远程目录，不阻塞 Qt 界面线程。 */
+    /**
+     * @brief 异步列出远程目录，不阻塞 Qt 界面线程。
+     * @param path 远端绝对路径；**传空字符串表示该账号的默认主目录**，由服务端解析。
+     *
+     * 首次进入一台服务器时无从得知它的主目录，写死 `/` 既不符合直觉，也常常没有权限。
+     * 解析结果通过 directoryListed 的 path 参数返回，调用方据此更新路径框。
+     */
     quint64 listDirectory(const ConnectionTarget &target, const QString &path);
 
     /** @brief 异步上传单个本地文件到指定远端完整路径。 */

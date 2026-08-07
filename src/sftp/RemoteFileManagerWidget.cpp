@@ -109,6 +109,8 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     connect(m_pathEdit, &QLineEdit::returnPressed, this, &RemoteFileManagerWidget::refreshDirectory);
     connect(m_targetCombo, &QComboBox::currentIndexChanged, this, [this](const int) {
         if (m_targetCombo->currentIndex() >= 0) {
+            m_fileTree->clear();
+            restorePathForSelectedTarget();
             refreshDirectory();
         }
     });
@@ -146,6 +148,8 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
                     item->setData(0, Qt::UserRole + 2, QVariant::fromValue(entry.size));
                 }
                 m_pathEdit->setText(path);
+                // 记住这台服务器的当前位置：下次切回来时应当回到这里，而不是沿用别处的路径。
+                m_pathByTarget.insert(target.stableKey(), path);
                 m_directoryDisconnectRetries.remove(target.stableKey());
                 setBusy(false, tr("%1 个条目").arg(entries.size()));
             });
@@ -259,6 +263,7 @@ void RemoteFileManagerWidget::setAvailableTargets(const QList<ConnectionTarget> 
         if (m_targets.at(selectedIndex).stableKey() != previousKey) {
             // 切换层级后立即清空旧服务器列表，避免隧道尚未建立时把第一层缓存误认为第二层内容。
             m_fileTree->clear();
+            restorePathForSelectedTarget();
         }
         refreshDirectory();
     } else {
@@ -267,22 +272,30 @@ void RemoteFileManagerWidget::setAvailableTargets(const QList<ConnectionTarget> 
     }
 }
 
+void RemoteFileManagerWidget::restorePathForSelectedTarget()
+{
+    const ConnectionTarget target = selectedTarget();
+    if (!target.isValid()) {
+        return;
+    }
+    // 没有记录过的服务器留空，由服务端解析出主目录；不能沿用上一台的路径。
+    m_pathEdit->setText(m_pathByTarget.value(target.stableKey()));
+}
+
 void RemoteFileManagerWidget::refreshDirectory()
 {
     const ConnectionTarget target = selectedTarget();
     if (!target.isValid()) {
         return;
     }
-    QString path = m_pathEdit->text().trimmed();
-    if (path.isEmpty()) {
-        path = QStringLiteral("/");
-    }
-    if (!path.startsWith(QLatin1Char('/'))) {
+    const QString path = m_pathEdit->text().trimmed();
+    if (!path.isEmpty() && !path.startsWith(QLatin1Char('/'))) {
         QMessageBox::warning(this, tr("路径无效"), tr("请输入以 / 开头的远程绝对路径。"));
         return;
     }
 
-    setBusy(true, tr("正在读取 %1…").arg(path));
+    // 空路径交给服务端解析成该账号的主目录；解析结果会由 directoryListed 带回来。
+    setBusy(true, path.isEmpty() ? tr("正在读取主目录…") : tr("正在读取 %1…").arg(path));
     m_latestListRequest = m_service->listDirectory(target, path);
 }
 
@@ -474,6 +487,19 @@ void RemoteFileManagerWidget::handleOperationFailure(const quint64 requestId,
             });
             return;
         }
+    }
+
+    if (requestId == m_latestListRequest
+        && kind == SftpService::ErrorKind::RemoteOperation
+        && target.stableKey() == selectedTarget().stableKey()
+        && !m_pathEdit->text().trimmed().isEmpty()) {
+        // 记录的目录可能已经被删除或改名，也可能是用户手输了错误路径。退回主目录，
+        // 否则用户会被卡在一个打不开的位置，只能自己猜一个存在的路径。
+        m_pathByTarget.remove(target.stableKey());
+        m_pathEdit->clear();
+        emit statusMessage(tr("%1；已返回主目录").arg(message));
+        refreshDirectory();
+        return;
     }
 
     if (kind == SftpService::ErrorKind::Authentication

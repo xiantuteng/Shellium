@@ -404,13 +404,26 @@ quint64 SftpService::listDirectory(const ConnectionTarget &target, const QString
             return;
         }
 
-        const QByteArray encodedPath = path.toUtf8();
+        // 空路径表示"该账号的默认主目录"：让服务端把 "." 规范化成绝对路径。首次进入一台
+        // 服务器时无从得知它的主目录，写死 / 既不符合直觉，也常常没有列目录权限。
+        QString resolvedPath = path;
+        if (resolvedPath.isEmpty()) {
+            char *home = sftp_canonicalize_path(connection->handle(), ".");
+            if (home != nullptr) {
+                resolvedPath = QString::fromUtf8(home);
+                ssh_string_free_char(home);
+            } else {
+                resolvedPath = QStringLiteral("/");
+            }
+        }
+
+        const QByteArray encodedPath = resolvedPath.toUtf8();
         sftp_dir directory = sftp_opendir(connection->handle(), encodedPath.constData());
         if (directory == nullptr) {
             const ConnectResult error{false,
                                       ErrorKind::RemoteOperation,
                                       QObject::tr("无法打开远程目录 %1：%2")
-                                          .arg(path, connection->lastError())};
+                                          .arg(resolvedPath, connection->lastError())};
             deliverConnectionFailure(service, requestId, target, error);
             return;
         }
@@ -423,7 +436,7 @@ quint64 SftpService::listDirectory(const ConnectionTarget &target, const QString
             if (name != QStringLiteral(".") && name != QStringLiteral("..")) {
                 RemoteFileInfo entry;
                 entry.name = name;
-                entry.path = joinRemotePath(path, name);
+                entry.path = joinRemotePath(resolvedPath, name);
                 entry.size = attributes->size;
                 entry.permissions = attributes->permissions;
                 entry.owner = attributes->owner == nullptr
@@ -448,7 +461,7 @@ quint64 SftpService::listDirectory(const ConnectionTarget &target, const QString
         if (directoryReadFailed) {
             const ConnectResult error{false, ErrorKind::RemoteOperation,
                                       QObject::tr("读取远程目录 %1 时连接中断：%2")
-                                          .arg(path, connection->lastError())};
+                                          .arg(resolvedPath, connection->lastError())};
             deliverConnectionFailure(service, requestId, target, error);
             return;
         }
@@ -462,9 +475,9 @@ quint64 SftpService::listDirectory(const ConnectionTarget &target, const QString
         });
 
         if (service != nullptr) {
-            QMetaObject::invokeMethod(service, [service, requestId, target, path, entries]() {
+            QMetaObject::invokeMethod(service, [service, requestId, target, resolvedPath, entries]() {
                 if (service != nullptr) {
-                    emit service->directoryListed(requestId, target, path, entries);
+                    emit service->directoryListed(requestId, target, resolvedPath, entries);
                 }
             }, Qt::QueuedConnection);
         }
