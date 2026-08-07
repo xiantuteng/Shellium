@@ -2,6 +2,7 @@
 
 #include <QCheckBox>
 #include <QComboBox>
+#include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QHBoxLayout>
@@ -38,13 +39,7 @@ QString formatSize(const quint64 bytes)
         : QStringLiteral("%1 %2").arg(value, 0, 'f', 1).arg(units.at(unitIndex));
 }
 
-/** @brief 按 POSIX 规则拼接文件管理器中的远端路径。 */
-QString joinRemotePath(const QString &directory, const QString &name)
-{
-    return directory == QStringLiteral("/")
-        ? directory + name
-        : directory + (directory.endsWith(QLatin1Char('/')) ? QString() : QStringLiteral("/")) + name;
-}
+using SftpRecursive::joinRemotePath;
 
 } // namespace
 
@@ -88,15 +83,20 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     mainLayout->addWidget(m_fileTree, 1);
 
     auto *operationRow = new QHBoxLayout;
-    auto *uploadButton = new QPushButton(tr("上传"), this);
+    auto *uploadButton = new QPushButton(tr("上传文件"), this);
+    auto *uploadDirectoryButton = new QPushButton(tr("上传目录"), this);
     auto *downloadButton = new QPushButton(tr("下载"), this);
     auto *renameButton = new QPushButton(tr("重命名"), this);
     auto *deleteButton = new QPushButton(tr("删除"), this);
+    m_cancelButton = new QPushButton(tr("取消传输"), this);
+    m_cancelButton->setEnabled(false);
     operationRow->addWidget(uploadButton);
+    operationRow->addWidget(uploadDirectoryButton);
     operationRow->addWidget(downloadButton);
     operationRow->addWidget(renameButton);
     operationRow->addWidget(deleteButton);
     operationRow->addStretch(1);
+    operationRow->addWidget(m_cancelButton);
     mainLayout->addLayout(operationRow);
 
     m_progressBar->setVisible(false);
@@ -119,6 +119,14 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
             this,
             &RemoteFileManagerWidget::activateItem);
     connect(uploadButton, &QPushButton::clicked, this, &RemoteFileManagerWidget::uploadSelectedFile);
+    connect(uploadDirectoryButton,
+            &QPushButton::clicked,
+            this,
+            &RemoteFileManagerWidget::uploadSelectedDirectory);
+    connect(m_cancelButton,
+            &QPushButton::clicked,
+            this,
+            &RemoteFileManagerWidget::cancelActiveTransfer);
     connect(downloadButton, &QPushButton::clicked, this, &RemoteFileManagerWidget::downloadSelectedFile);
     connect(renameButton, &QPushButton::clicked, this, &RemoteFileManagerWidget::renameSelectedPath);
     connect(deleteButton, &QPushButton::clicked, this, &RemoteFileManagerWidget::deleteSelectedPath);
@@ -188,13 +196,36 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
             this,
             [this](const quint64, const quint64 completed, const quint64 total) {
                 m_progressBar->setVisible(true);
-                if (total == 0) {
+                const int percent = SftpRecursive::progressPercent(completed, total);
+                if (percent < 0) {
                     m_progressBar->setRange(0, 0);
                 } else {
                     m_progressBar->setRange(0, 100);
-                    m_progressBar->setValue(static_cast<int>((completed * 100) / total));
+                    m_progressBar->setValue(percent);
                 }
             });
+    connect(m_service,
+            &SftpService::recursiveTransferProgress,
+            this,
+            [this](const quint64 requestId,
+                   const quint64 filesCompleted,
+                   const quint64 filesTotal,
+                   const QString &currentItem) {
+                if (requestId != m_activeTransferRequest) {
+                    return;
+                }
+                // 字节进度条无法区分"一个大文件"和"几千个小文件"，条目计数补上这层信息。
+                const QString message = tr("正在传输 %1/%2：%3")
+                                            .arg(filesCompleted + 1)
+                                            .arg(filesTotal)
+                                            .arg(currentItem);
+                m_statusLabel->setText(message);
+                emit statusMessage(message);
+            });
+    connect(m_service,
+            &SftpService::recursiveTransferFinished,
+            this,
+            &RemoteFileManagerWidget::handleRecursiveTransferFinished);
 }
 
 RemoteFileManagerWidget::~RemoteFileManagerWidget()
@@ -329,11 +360,50 @@ void RemoteFileManagerWidget::uploadSelectedFile()
     m_service->uploadFile(target, localPath, remotePath);
 }
 
+void RemoteFileManagerWidget::uploadSelectedDirectory()
+{
+    const ConnectionTarget target = selectedTarget();
+    if (!target.isValid()) {
+        return;
+    }
+    if (m_activeTransferRequest != 0) {
+        QMessageBox::information(this, tr("传输进行中"), tr("请先等待或取消当前的目录传输。"));
+        return;
+    }
+    const QString localDirectory = QFileDialog::getExistingDirectory(
+        this, tr("选择要上传的目录"));
+    if (localDirectory.isEmpty()) {
+        return;
+    }
+    const QString remoteParent = m_pathEdit->text().trimmed();
+    if (remoteParent.isEmpty()) {
+        QMessageBox::warning(this, tr("路径未知"),
+                             tr("请先进入一个远程目录，再上传本地目录。"));
+        return;
+    }
+    setBusy(true, tr("正在遍历并上传 %1…").arg(QDir(localDirectory).dirName()));
+    setActiveTransfer(m_service->uploadDirectory(target, localDirectory, remoteParent));
+}
+
 void RemoteFileManagerWidget::downloadSelectedFile()
 {
     const std::optional<RemoteFileInfo> entry = selectedFile();
-    if (!entry.has_value() || entry->isDirectory) {
-        QMessageBox::information(this, tr("请选择文件"), tr("请选择一个要下载的远程文件。"));
+    if (!entry.has_value()) {
+        QMessageBox::information(this, tr("请选择条目"), tr("请选择一个要下载的远程文件或目录。"));
+        return;
+    }
+    if (entry->isDirectory) {
+        if (m_activeTransferRequest != 0) {
+            QMessageBox::information(this, tr("传输进行中"), tr("请先等待或取消当前的目录传输。"));
+            return;
+        }
+        const QString localParent = QFileDialog::getExistingDirectory(
+            this, tr("选择保存目录的位置"));
+        if (localParent.isEmpty()) {
+            return;
+        }
+        setBusy(true, tr("正在遍历并下载 %1…").arg(entry->name));
+        setActiveTransfer(m_service->downloadDirectory(selectedTarget(), entry->path, localParent));
         return;
     }
     const QString localPath = QFileDialog::getSaveFileName(this, tr("保存远程文件"), entry->name);
@@ -342,6 +412,19 @@ void RemoteFileManagerWidget::downloadSelectedFile()
     }
     setBusy(true, tr("正在下载 %1…").arg(entry->name));
     m_service->downloadFile(selectedTarget(), entry->path, localPath);
+}
+
+void RemoteFileManagerWidget::cancelActiveTransfer()
+{
+    if (m_activeTransferRequest == 0) {
+        return;
+    }
+    m_service->cancelRequest(m_activeTransferRequest);
+    // 后台任务要跑到下一个分块边界才会停，先把按钮禁掉避免用户反复点击并以为没生效。
+    m_cancelButton->setEnabled(false);
+    const QString message = tr("已请求取消传输，正在收尾…");
+    m_statusLabel->setText(message);
+    emit statusMessage(message);
 }
 
 void RemoteFileManagerWidget::renameSelectedPath()
@@ -451,6 +534,32 @@ void RemoteFileManagerWidget::setBusy(const bool busy, const QString &message)
     }
 }
 
+void RemoteFileManagerWidget::setActiveTransfer(const quint64 requestId)
+{
+    m_activeTransferRequest = requestId;
+    m_cancelButton->setEnabled(requestId != 0);
+}
+
+void RemoteFileManagerWidget::handleRecursiveTransferFinished(
+    const quint64 requestId,
+    const SftpRecursive::TransferSummary &summary)
+{
+    if (requestId != m_activeTransferRequest) {
+        return;
+    }
+    setActiveTransfer(0);
+    const QString summaryText = summary.toMessage();
+    setBusy(false, summaryText.section(QLatin1Char('\n'), 0, 0));
+
+    // 跳过和失败必须主动弹给用户：把"有 37 个文件没传成功"埋进一行状态栏文字里，等同于
+    // 让用户以为整个目录都传完了。
+    if (summary.hasWarnings()) {
+        QMessageBox::warning(this, tr("目录传输已结束（存在未完成项）"), summaryText);
+    }
+    emit statusMessage(summaryText.section(QLatin1Char('\n'), 0, 0));
+    refreshDirectory();
+}
+
 void RemoteFileManagerWidget::handleOperationSuccess(const quint64 requestId,
                                                      const QString &description)
 {
@@ -464,8 +573,13 @@ void RemoteFileManagerWidget::handleOperationFailure(const quint64 requestId,
                                                      const SftpService::ErrorKind kind,
                                                      const QString &message)
 {
-    Q_UNUSED(requestId)
     setBusy(false, message);
+
+    // 递归传输在连接阶段或根目录创建阶段失败时走的是 operationFailed，而不是汇总信号；
+    // 这里必须一并解除活动状态，否则取消按钮会永远亮着且挡住下一次传输。
+    if (requestId == m_activeTransferRequest) {
+        setActiveTransfer(0);
+    }
 
     if (requestId == m_latestListRequest
         && kind == SftpService::ErrorKind::Connection

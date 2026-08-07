@@ -2,6 +2,8 @@
 
 #include "ssh/SshTunnelBroker.h"
 
+#include <QDir>
+#include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
 #include <QPointer>
@@ -10,6 +12,7 @@
 #include <QMutexLocker>
 #include <QtConcurrentRun>
 
+#include <functional>
 #include <memory>
 
 #include <libssh/libssh.h>
@@ -232,16 +235,7 @@ private:
     sftp_session m_sftp = nullptr;
 };
 
-/** @brief 按 POSIX 规则拼接远端路径，不使用本机平台相关的 QDir 分隔符。 */
-QString joinRemotePath(const QString &directory, const QString &name)
-{
-    if (directory == QStringLiteral("/")) {
-        return directory + name;
-    }
-    return directory.endsWith(QLatin1Char('/'))
-        ? directory + name
-        : directory + QLatin1Char('/') + name;
-}
+using SftpRecursive::joinRemotePath;
 
 /** @brief 把连接阶段错误异步投递回 SftpService 所在的 GUI 线程。 */
 void deliverConnectionFailure(const QPointer<SftpService> &service,
@@ -260,6 +254,54 @@ void deliverConnectionFailure(const QPointer<SftpService> &service,
             emit service->hostKeyVerificationRequired(target, result.fingerprint);
         }
         emit service->operationFailed(requestId, target, result.kind, result.message);
+    }, Qt::QueuedConnection);
+}
+
+/** @brief 把字节级进度投递回 GUI 线程；服务已销毁时静默丢弃。 */
+void postTransferProgress(const QPointer<SftpService> &service,
+                          const quint64 requestId,
+                          const quint64 completed,
+                          const quint64 total)
+{
+    if (service == nullptr) {
+        return;
+    }
+    QMetaObject::invokeMethod(service, [service, requestId, completed, total]() {
+        if (service != nullptr) {
+            emit service->transferProgress(requestId, completed, total);
+        }
+    }, Qt::QueuedConnection);
+}
+
+/** @brief 把递归传输的条目级进度投递回 GUI 线程。 */
+void postRecursiveProgress(const QPointer<SftpService> &service,
+                           const quint64 requestId,
+                           const quint64 filesCompleted,
+                           const quint64 filesTotal,
+                           const QString &currentItem)
+{
+    if (service == nullptr) {
+        return;
+    }
+    QMetaObject::invokeMethod(service, [service, requestId, filesCompleted, filesTotal, currentItem]() {
+        if (service != nullptr) {
+            emit service->recursiveTransferProgress(requestId, filesCompleted, filesTotal, currentItem);
+        }
+    }, Qt::QueuedConnection);
+}
+
+/** @brief 把递归传输汇总投递回 GUI 线程。 */
+void postRecursiveFinished(const QPointer<SftpService> &service,
+                           const quint64 requestId,
+                           const SftpRecursive::TransferSummary &summary)
+{
+    if (service == nullptr) {
+        return;
+    }
+    QMetaObject::invokeMethod(service, [service, requestId, summary]() {
+        if (service != nullptr) {
+            emit service->recursiveTransferFinished(requestId, summary);
+        }
     }, Qt::QueuedConnection);
 }
 
@@ -313,6 +355,32 @@ struct SftpConnectionPool {
         entries.clear();
     }
 
+    /**
+     * @brief 标记某个请求为已取消。
+     *
+     * 取消标志放在池里而不是 SftpService 里：后台任务只持有池的 shared_ptr，服务本身可能在
+     * 传输结束前就被销毁（用户关掉了标签页），那正是最需要让循环停下来的时刻。
+     */
+    void requestCancel(const quint64 requestId)
+    {
+        QMutexLocker locker(&cancelMutex);
+        cancelledRequests.insert(requestId);
+    }
+
+    /** @brief 查询请求是否已被取消，供传输循环在分块边界轮询。 */
+    [[nodiscard]] bool isCancelled(const quint64 requestId) const
+    {
+        QMutexLocker locker(&cancelMutex);
+        return cancelledRequests.contains(requestId);
+    }
+
+    /** @brief 请求结束后清除标志，避免取消集合随会话时长无限增长。 */
+    void clearCancel(const quint64 requestId)
+    {
+        QMutexLocker locker(&cancelMutex);
+        cancelledRequests.remove(requestId);
+    }
+
 private:
     /** @brief 移除空闲过久的条目；调用方必须已持有 mutex。 */
     void evictIdleLocked()
@@ -336,6 +404,9 @@ private:
 
     QMutex mutex;
     QHash<QString, QSharedPointer<PooledConnection>> entries;
+
+    mutable QMutex cancelMutex;
+    QSet<quint64> cancelledRequests;
 };
 
 namespace {
@@ -372,6 +443,271 @@ SftpConnection *ensureConnected(PooledConnection *entry,
     return entry->connection.get();
 }
 
+/** @brief 单个文件传输的结局；取消必须与失败区分，否则会被当成错误弹窗。 */
+enum class TransferOutcome { Ok, Failed, Cancelled };
+
+/** @brief 每传输一段就上报的进度回调，参数是本次新增的字节数。 */
+using ProgressReporter = std::function<void(quint64 deltaBytes)>;
+
+/** @brief 分块边界上的取消轮询；返回 true 表示应尽快停止。 */
+using CancelProbe = std::function<bool()>;
+
+constexpr qint64 kTransferChunkBytes = 64 * 1024;
+
+/**
+ * @brief 把一个本地文件写到远端路径。
+ *
+ * 递归上传与单文件上传共用同一实现：两条路径若各写一份，超时、部分写和取消这些边界条件
+ * 迟早会只在其中一条上被修好。
+ */
+TransferOutcome writeRemoteFile(SftpConnection *connection,
+                                const QString &localPath,
+                                const QString &remotePath,
+                                const ProgressReporter &onProgress,
+                                const CancelProbe &isCancelled,
+                                QString *errorMessage)
+{
+    QFile localFile(localPath);
+    if (!localFile.open(QIODevice::ReadOnly)) {
+        *errorMessage = QObject::tr("无法读取本地文件：%1").arg(localFile.errorString());
+        return TransferOutcome::Failed;
+    }
+
+    const QByteArray encodedRemotePath = remotePath.toUtf8();
+    sftp_file remoteFile = sftp_open(connection->handle(),
+                                     encodedRemotePath.constData(),
+                                     O_WRONLY | O_CREAT | O_TRUNC,
+                                     0644);
+    if (remoteFile == nullptr) {
+        *errorMessage = QObject::tr("无法创建远程文件 %1：%2")
+                            .arg(remotePath, connection->lastError());
+        return TransferOutcome::Failed;
+    }
+
+    TransferOutcome outcome = TransferOutcome::Ok;
+    while (!localFile.atEnd()) {
+        if (isCancelled && isCancelled()) {
+            outcome = TransferOutcome::Cancelled;
+            break;
+        }
+        const QByteArray chunk = localFile.read(kTransferChunkBytes);
+        qsizetype offset = 0;
+        while (offset < chunk.size()) {
+            const ssize_t written = sftp_write(remoteFile,
+                                               chunk.constData() + offset,
+                                               static_cast<size_t>(chunk.size() - offset));
+            if (written < 0) {
+                *errorMessage = QObject::tr("上传 %1 失败：%2")
+                                    .arg(remotePath, connection->lastError());
+                outcome = TransferOutcome::Failed;
+                break;
+            }
+            offset += written;
+            if (onProgress) {
+                onProgress(static_cast<quint64>(written));
+            }
+        }
+        if (outcome != TransferOutcome::Ok) {
+            break;
+        }
+    }
+    sftp_close(remoteFile);
+    return outcome;
+}
+
+/**
+ * @brief 把一个远端文件读到本地路径。
+ *
+ * 使用 QSaveFile：网络中断、磁盘写满或取消时，目标位置不会留下看似完整的半成品。
+ */
+TransferOutcome readRemoteFile(SftpConnection *connection,
+                               const QString &remotePath,
+                               const QString &localPath,
+                               const ProgressReporter &onProgress,
+                               const CancelProbe &isCancelled,
+                               QString *errorMessage,
+                               quint64 *remoteSize = nullptr)
+{
+    const QByteArray encodedRemotePath = remotePath.toUtf8();
+    sftp_file remoteFile = sftp_open(connection->handle(),
+                                     encodedRemotePath.constData(),
+                                     O_RDONLY,
+                                     0);
+    if (remoteFile == nullptr) {
+        *errorMessage = QObject::tr("无法读取远程文件 %1：%2")
+                            .arg(remotePath, connection->lastError());
+        return TransferOutcome::Failed;
+    }
+    if (remoteSize != nullptr) {
+        *remoteSize = 0;
+        if (sftp_attributes attributes = sftp_fstat(remoteFile)) {
+            *remoteSize = attributes->size;
+            sftp_attributes_free(attributes);
+        }
+    }
+
+    QSaveFile localFile(localPath);
+    if (!localFile.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        sftp_close(remoteFile);
+        *errorMessage = QObject::tr("无法写入本地文件 %1：%2")
+                            .arg(localPath, localFile.errorString());
+        return TransferOutcome::Failed;
+    }
+
+    QByteArray buffer(kTransferChunkBytes, Qt::Uninitialized);
+    TransferOutcome outcome = TransferOutcome::Ok;
+    while (true) {
+        if (isCancelled && isCancelled()) {
+            outcome = TransferOutcome::Cancelled;
+            break;
+        }
+        const ssize_t bytesRead = sftp_read(remoteFile, buffer.data(), buffer.size());
+        if (bytesRead == 0) {
+            break;
+        }
+        if (bytesRead < 0 || localFile.write(buffer.constData(), bytesRead) != bytesRead) {
+            *errorMessage = QObject::tr("下载或保存 %1 失败：%2")
+                                .arg(localPath, connection->lastError());
+            outcome = TransferOutcome::Failed;
+            break;
+        }
+        if (onProgress) {
+            onProgress(static_cast<quint64>(bytesRead));
+        }
+    }
+    sftp_close(remoteFile);
+
+    if (outcome != TransferOutcome::Ok || !localFile.commit()) {
+        localFile.cancelWriting();
+        if (outcome == TransferOutcome::Ok) {
+            *errorMessage = QObject::tr("保存 %1 失败：%2").arg(localPath, localFile.errorString());
+            outcome = TransferOutcome::Failed;
+        }
+        return outcome;
+    }
+    return TransferOutcome::Ok;
+}
+
+/**
+ * @brief 在远端创建目录；目录已存在不视为错误。
+ *
+ * 递归上传必然会碰到部分目录已存在（续传、目标端已有同名结构）。把 FILE_ALREADY_EXISTS
+ * 当失败会让整棵树都传不动，而这恰恰是最常见的正常情况。
+ */
+bool ensureRemoteDirectory(SftpConnection *connection,
+                           const QString &remotePath,
+                           QString *errorMessage)
+{
+    const QByteArray encoded = remotePath.toUtf8();
+    if (sftp_mkdir(connection->handle(), encoded.constData(), 0755) == SSH_OK) {
+        return true;
+    }
+    if (sftp_get_error(connection->handle()) == SSH_FX_FILE_ALREADY_EXISTS) {
+        return true;
+    }
+    // 有些服务器对已存在目录返回 PERMISSION_DENIED 或 FAILURE，需要再 stat 一次才能确定。
+    if (sftp_attributes attributes = sftp_stat(connection->handle(), encoded.constData())) {
+        const bool isDirectory = attributes->type == SSH_FILEXFER_TYPE_DIRECTORY;
+        sftp_attributes_free(attributes);
+        if (isDirectory) {
+            return true;
+        }
+    }
+    *errorMessage = QObject::tr("无法创建远程目录 %1：%2")
+                        .arg(remotePath, connection->lastError());
+    return false;
+}
+
+/**
+ * @brief 广度优先遍历远端目录树，收集相对根目录的条目。
+ *
+ * 刻意用显式队列而不是函数递归：远端目录深度由服务器决定，深层结构不应该把客户端的调用栈
+ * 打爆。符号链接只记录不展开，因此环形链接不会导致无限遍历。
+ */
+QList<SftpRecursive::SourceEntry> collectRemoteTree(SftpConnection *connection,
+                                                    const QString &remoteRoot,
+                                                    const CancelProbe &isCancelled,
+                                                    QList<SftpRecursive::FailedEntry> *failures,
+                                                    bool *cancelled)
+{
+    QList<SftpRecursive::SourceEntry> collected;
+    QStringList pending{QString{}};
+
+    while (!pending.isEmpty()) {
+        if (isCancelled && isCancelled()) {
+            *cancelled = true;
+            break;
+        }
+        const QString relativeDirectory = pending.takeFirst();
+        const QString absoluteDirectory = joinRemotePath(remoteRoot, relativeDirectory);
+        const QByteArray encoded = absoluteDirectory.toUtf8();
+        sftp_dir directory = sftp_opendir(connection->handle(), encoded.constData());
+        if (directory == nullptr) {
+            // 单个子目录不可读（常见于权限不足）不应中断整棵树的传输，记录后继续。
+            failures->append({absoluteDirectory,
+                              QObject::tr("无法打开远程目录：%1").arg(connection->lastError())});
+            continue;
+        }
+
+        while (sftp_attributes attributes = sftp_readdir(connection->handle(), directory)) {
+            const QString name = QString::fromUtf8(
+                attributes->name == nullptr ? "" : attributes->name);
+            const bool isDirectory = attributes->type == SSH_FILEXFER_TYPE_DIRECTORY;
+            const bool isSymbolicLink = attributes->type == SSH_FILEXFER_TYPE_SYMLINK;
+            const quint64 size = attributes->size;
+            sftp_attributes_free(attributes);
+
+            if (name.isEmpty() || name == QStringLiteral(".") || name == QStringLiteral("..")) {
+                continue;
+            }
+            if (name.contains(QLatin1Char('/'))) {
+                // 合法 SFTP 服务器不会在单个条目名里返回分隔符；出现即视为恶意，直接丢弃。
+                failures->append({joinRemotePath(absoluteDirectory, name),
+                                  QObject::tr("远端返回了包含路径分隔符的条目名，已忽略")});
+                continue;
+            }
+
+            SftpRecursive::SourceEntry entry;
+            entry.relativePath = joinRemotePath(relativeDirectory, name);
+            entry.size = size;
+            entry.isDirectory = isDirectory;
+            entry.isSymbolicLink = isSymbolicLink;
+            collected.append(entry);
+
+            // 符号链接即使指向目录也不展开：跟随会在环形链接上无限递归，也可能把下载引到
+            // 用户选定目录之外的位置。
+            if (isDirectory && !isSymbolicLink) {
+                pending.append(entry.relativePath);
+            }
+        }
+        sftp_closedir(directory);
+    }
+    return collected;
+}
+
+/** @brief 遍历本地目录树，收集相对根目录的条目；符号链接只记录不展开。 */
+QList<SftpRecursive::SourceEntry> collectLocalTree(const QString &localRoot)
+{
+    QList<SftpRecursive::SourceEntry> collected;
+    const QDir rootDirectory(localRoot);
+    // NoIteratorFlags 表示不跟随符号链接进入子树；隐藏文件必须包含，否则 .git、.env 之类
+    // 会被静默漏传，而用户以为整个目录都上传了。
+    QDirIterator iterator(localRoot,
+                          QDir::AllEntries | QDir::Hidden | QDir::System | QDir::NoDotAndDotDot,
+                          QDirIterator::Subdirectories);
+    while (iterator.hasNext()) {
+        iterator.next();
+        const QFileInfo info = iterator.fileInfo();
+        SftpRecursive::SourceEntry entry;
+        entry.relativePath = rootDirectory.relativeFilePath(info.absoluteFilePath());
+        entry.isSymbolicLink = info.isSymLink();
+        entry.isDirectory = !entry.isSymbolicLink && info.isDir();
+        entry.size = entry.isDirectory ? 0 : static_cast<quint64>(info.size());
+        collected.append(entry);
+    }
+    return collected;
+}
+
 } // namespace
 
 SftpService::SftpService(QObject *parent)
@@ -381,6 +717,7 @@ SftpService::SftpService(QObject *parent)
     qRegisterMetaType<ConnectionTarget>();
     qRegisterMetaType<QList<RemoteFileInfo>>();
     qRegisterMetaType<SftpService::ErrorKind>();
+    qRegisterMetaType<SftpRecursive::TransferSummary>();
 }
 
 SftpService::~SftpService()
@@ -494,14 +831,7 @@ quint64 SftpService::uploadFile(const ConnectionTarget &target,
     const QPointer<SftpService> service(this);
 
     (void)QtConcurrent::run([service, pool = m_pool, requestId, target, localPath, remotePath, allowUnknown]() {
-        QFile localFile(localPath);
-        if (!localFile.open(QIODevice::ReadOnly)) {
-            const ConnectResult error{false, ErrorKind::LocalIo,
-                                      QObject::tr("无法读取本地文件：%1").arg(localFile.errorString())};
-            deliverConnectionFailure(service, requestId, target, error);
-            return;
-        }
-
+        const quint64 total = static_cast<quint64>(QFileInfo(localPath).size());
         const QSharedPointer<PooledConnection> entry = pool->acquire(target.stableKey());
         QMutexLocker locker(&entry->mutex);
         SftpConnection *connection = ensureConnected(
@@ -510,53 +840,28 @@ quint64 SftpService::uploadFile(const ConnectionTarget &target,
             return;
         }
 
-        const QByteArray encodedRemotePath = remotePath.toUtf8();
-        sftp_file remoteFile = sftp_open(connection->handle(),
-                                         encodedRemotePath.constData(),
-                                         O_WRONLY | O_CREAT | O_TRUNC,
-                                         0644);
-        if (remoteFile == nullptr) {
-            const ConnectResult error{false, ErrorKind::RemoteOperation,
-                                      QObject::tr("无法创建远程文件 %1：%2")
-                                          .arg(remotePath, connection->lastError())};
-            deliverConnectionFailure(service, requestId, target, error);
-            return;
-        }
-
         quint64 completed = 0;
-        const quint64 total = static_cast<quint64>(localFile.size());
-        bool writeFailed = false;
-        while (!localFile.atEnd()) {
-            const QByteArray chunk = localFile.read(64 * 1024);
-            qsizetype offset = 0;
-            while (offset < chunk.size()) {
-                const ssize_t written = sftp_write(remoteFile,
-                                                   chunk.constData() + offset,
-                                                   static_cast<size_t>(chunk.size() - offset));
-                if (written < 0) {
-                    writeFailed = true;
-                    break;
-                }
-                offset += written;
-                completed += static_cast<quint64>(written);
-                if (service != nullptr) {
-                    QMetaObject::invokeMethod(service, [service, requestId, completed, total]() {
-                        if (service != nullptr) {
-                            emit service->transferProgress(requestId, completed, total);
-                        }
-                    }, Qt::QueuedConnection);
-                }
-            }
-            if (writeFailed) {
-                break;
-            }
-        }
-        sftp_close(remoteFile);
+        QString errorMessage;
+        const TransferOutcome outcome = writeRemoteFile(
+            connection,
+            localPath,
+            remotePath,
+            [&completed, service, requestId, total](const quint64 delta) {
+                completed += delta;
+                postTransferProgress(service, requestId, completed, total);
+            },
+            [pool, requestId]() { return pool->isCancelled(requestId); },
+            &errorMessage);
+        pool->clearCancel(requestId);
 
-        if (writeFailed) {
-            const ConnectResult error{false, ErrorKind::RemoteOperation,
-                                      QObject::tr("上传 %1 失败：%2")
-                                          .arg(remotePath, connection->lastError())};
+        if (outcome != TransferOutcome::Ok) {
+            const ConnectResult error{false,
+                                      outcome == TransferOutcome::Cancelled
+                                          ? ErrorKind::LocalIo
+                                          : ErrorKind::RemoteOperation,
+                                      outcome == TransferOutcome::Cancelled
+                                          ? QObject::tr("上传 %1 已取消").arg(remotePath)
+                                          : errorMessage};
             deliverConnectionFailure(service, requestId, target, error);
             return;
         }
@@ -589,61 +894,27 @@ quint64 SftpService::downloadFile(const ConnectionTarget &target,
             return;
         }
 
-        const QByteArray encodedRemotePath = remotePath.toUtf8();
-        sftp_file remoteFile = sftp_open(connection->handle(), encodedRemotePath.constData(), O_RDONLY, 0);
-        if (remoteFile == nullptr) {
-            const ConnectResult error{false, ErrorKind::RemoteOperation,
-                                      QObject::tr("无法读取远程文件 %1：%2")
-                                          .arg(remotePath, connection->lastError())};
-            deliverConnectionFailure(service, requestId, target, error);
-            return;
-        }
-
         quint64 total = 0;
-        if (sftp_attributes attributes = sftp_fstat(remoteFile)) {
-            total = attributes->size;
-            sftp_attributes_free(attributes);
-        }
-
-        // QSaveFile 在目标目录创建临时文件，commit 时再原子替换正式文件；网络中断、磁盘写满
-        // 或应用退出时，原文件保持不变，也不会留下看似完整的半成品。
-        QSaveFile localFile(localPath);
-        if (!localFile.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-            sftp_close(remoteFile);
-            const ConnectResult error{false, ErrorKind::LocalIo,
-                                      QObject::tr("无法写入本地文件：%1").arg(localFile.errorString())};
-            deliverConnectionFailure(service, requestId, target, error);
-            return;
-        }
-
-        QByteArray buffer(64 * 1024, Qt::Uninitialized);
         quint64 completed = 0;
-        bool failed = false;
-        while (true) {
-            const ssize_t bytesRead = sftp_read(remoteFile, buffer.data(), buffer.size());
-            if (bytesRead == 0) {
-                break;
-            }
-            if (bytesRead < 0 || localFile.write(buffer.constData(), bytesRead) != bytesRead) {
-                failed = true;
-                break;
-            }
-            completed += static_cast<quint64>(bytesRead);
-            if (service != nullptr) {
-                QMetaObject::invokeMethod(service, [service, requestId, completed, total]() {
-                    if (service != nullptr) {
-                        emit service->transferProgress(requestId, completed, total);
-                    }
-                }, Qt::QueuedConnection);
-            }
-        }
-        sftp_close(remoteFile);
+        QString errorMessage;
+        const TransferOutcome outcome = readRemoteFile(
+            connection,
+            remotePath,
+            localPath,
+            [&completed, &total, service, requestId](const quint64 delta) {
+                completed += delta;
+                postTransferProgress(service, requestId, completed, total);
+            },
+            [pool, requestId]() { return pool->isCancelled(requestId); },
+            &errorMessage,
+            &total);
+        pool->clearCancel(requestId);
 
-        if (failed || !localFile.commit()) {
-            localFile.cancelWriting();
+        if (outcome != TransferOutcome::Ok) {
             const ConnectResult error{false, ErrorKind::LocalIo,
-                                      QObject::tr("下载或保存 %1 失败：%2")
-                                          .arg(localPath, connection->lastError())};
+                                      outcome == TransferOutcome::Cancelled
+                                          ? QObject::tr("下载 %1 已取消").arg(remotePath)
+                                          : errorMessage};
             deliverConnectionFailure(service, requestId, target, error);
             return;
         }
@@ -657,6 +928,203 @@ quint64 SftpService::downloadFile(const ConnectionTarget &target,
         }
     });
     return requestId;
+}
+
+quint64 SftpService::uploadDirectory(const ConnectionTarget &target,
+                                     const QString &localDirectory,
+                                     const QString &remoteParentDirectory)
+{
+    const quint64 requestId = nextRequestId();
+    const bool allowUnknown = isTemporarilyTrusted(target);
+    const QPointer<SftpService> service(this);
+
+    (void)QtConcurrent::run([service, pool = m_pool, requestId, target, localDirectory,
+                             remoteParentDirectory, allowUnknown]() {
+        const QString rootName = QDir(localDirectory).dirName();
+        const QString remoteRoot = joinRemotePath(remoteParentDirectory, rootName);
+        SftpRecursive::TransferSummary summary;
+        summary.rootDescription = remoteRoot;
+
+        // 先完整遍历本地目录再开始传输：这样能在第一个字节发出前就知道总量，进度条从一开始
+        // 就有意义。代价是超大目录树的遍历延迟，但本地遍历远快于网络传输，这笔账划算。
+        const SftpRecursive::TransferPlan plan = SftpRecursive::buildTransferPlan(
+            localDirectory, remoteRoot, collectLocalTree(localDirectory));
+        summary.skipped = plan.skipped;
+        summary.fileTotal = plan.fileCount;
+
+        // 整棵树的传输全程持有同一条池化连接的 mutex：libssh 会话不是线程安全的，而在一条
+        // 会话上交错多个传输只会让所有操作都变慢。代价是同服务器的目录浏览要等传输结束，
+        // 因此取消标志刻意不走这把锁，随时都能生效。
+        const QSharedPointer<PooledConnection> entry = pool->acquire(target.stableKey());
+        QMutexLocker locker(&entry->mutex);
+        SftpConnection *connection = ensureConnected(
+            entry.data(), target, allowUnknown, service, requestId, pool.get());
+        if (connection == nullptr) {
+            pool->clearCancel(requestId);
+            return;
+        }
+
+        const auto isCancelled = [pool, requestId]() { return pool->isCancelled(requestId); };
+        quint64 completedBytes = 0;
+        quint64 completedFiles = 0;
+
+        QString rootError;
+        if (!ensureRemoteDirectory(connection, remoteRoot, &rootError)) {
+            // 连根目录都建不出来时没有任何可传内容，按整体失败处理而不是逐项失败刷屏。
+            pool->clearCancel(requestId);
+            deliverConnectionFailure(service, requestId, target,
+                                     {false, ErrorKind::RemoteOperation, rootError});
+            return;
+        }
+
+        for (const SftpRecursive::TransferItem &item : plan.items) {
+            if (isCancelled()) {
+                summary.cancelled = true;
+                break;
+            }
+            postRecursiveProgress(service, requestId, completedFiles, plan.fileCount,
+                                  item.destinationPath);
+            QString itemError;
+            if (item.isDirectory) {
+                if (!ensureRemoteDirectory(connection, item.destinationPath, &itemError)) {
+                    summary.failed.append({item.destinationPath, itemError});
+                }
+                continue;
+            }
+            const TransferOutcome outcome = writeRemoteFile(
+                connection,
+                item.sourcePath,
+                item.destinationPath,
+                [&completedBytes, service, requestId, total = plan.totalBytes](const quint64 delta) {
+                    completedBytes += delta;
+                    postTransferProgress(service, requestId, completedBytes, total);
+                },
+                isCancelled,
+                &itemError);
+            if (outcome == TransferOutcome::Cancelled) {
+                summary.cancelled = true;
+                break;
+            }
+            if (outcome == TransferOutcome::Failed) {
+                // 单个文件失败不中断整棵树：用户宁愿拿到 99% 的目录加一份失败清单，也不愿
+                // 因为一个没有读权限的文件而整个传输白跑。
+                summary.failed.append({item.destinationPath, itemError});
+                continue;
+            }
+            ++completedFiles;
+        }
+
+        summary.filesTransferred = completedFiles;
+        summary.bytesTransferred = completedBytes;
+        pool->clearCancel(requestId);
+        postRecursiveFinished(service, requestId, summary);
+    });
+    return requestId;
+}
+
+quint64 SftpService::downloadDirectory(const ConnectionTarget &target,
+                                       const QString &remoteDirectory,
+                                       const QString &localParentDirectory)
+{
+    const quint64 requestId = nextRequestId();
+    const bool allowUnknown = isTemporarilyTrusted(target);
+    const QPointer<SftpService> service(this);
+
+    (void)QtConcurrent::run([service, pool = m_pool, requestId, target, remoteDirectory,
+                             localParentDirectory, allowUnknown]() {
+        const QString normalizedRemote = SftpRecursive::normalizePosixPath(remoteDirectory);
+        const QString rootName = normalizedRemote.section(QLatin1Char('/'), -1);
+        const QString localRoot = QDir::cleanPath(
+            localParentDirectory + QLatin1Char('/') + rootName);
+        SftpRecursive::TransferSummary summary;
+        summary.rootDescription = localRoot;
+
+        const QSharedPointer<PooledConnection> entry = pool->acquire(target.stableKey());
+        QMutexLocker locker(&entry->mutex);
+        SftpConnection *connection = ensureConnected(
+            entry.data(), target, allowUnknown, service, requestId, pool.get());
+        if (connection == nullptr) {
+            pool->clearCancel(requestId);
+            return;
+        }
+
+        const auto isCancelled = [pool, requestId]() { return pool->isCancelled(requestId); };
+
+        // 先整棵遍历再传输：readdir 已经带回每个文件的大小，因此这一趟不额外产生 stat 往返，
+        // 却能换来一个从头到尾都准确的总字节数。
+        bool cancelledWhileScanning = false;
+        const QList<SftpRecursive::SourceEntry> remoteEntries = collectRemoteTree(
+            connection, normalizedRemote, isCancelled, &summary.failed, &cancelledWhileScanning);
+        if (cancelledWhileScanning) {
+            summary.cancelled = true;
+            pool->clearCancel(requestId);
+            postRecursiveFinished(service, requestId, summary);
+            return;
+        }
+
+        const SftpRecursive::TransferPlan plan = SftpRecursive::buildTransferPlan(
+            normalizedRemote, localRoot, remoteEntries);
+        summary.skipped += plan.skipped;
+        summary.fileTotal = plan.fileCount;
+
+        if (!QDir().mkpath(localRoot)) {
+            pool->clearCancel(requestId);
+            deliverConnectionFailure(
+                service, requestId, target,
+                {false, ErrorKind::LocalIo,
+                 QObject::tr("无法创建本地目录 %1").arg(localRoot)});
+            return;
+        }
+
+        quint64 completedBytes = 0;
+        quint64 completedFiles = 0;
+        for (const SftpRecursive::TransferItem &item : plan.items) {
+            if (isCancelled()) {
+                summary.cancelled = true;
+                break;
+            }
+            postRecursiveProgress(service, requestId, completedFiles, plan.fileCount,
+                                  item.destinationPath);
+            QString itemError;
+            if (item.isDirectory) {
+                if (!QDir().mkpath(item.destinationPath)) {
+                    summary.failed.append({item.destinationPath,
+                                           QObject::tr("无法创建本地目录")});
+                }
+                continue;
+            }
+            const TransferOutcome outcome = readRemoteFile(
+                connection,
+                item.sourcePath,
+                item.destinationPath,
+                [&completedBytes, service, requestId, total = plan.totalBytes](const quint64 delta) {
+                    completedBytes += delta;
+                    postTransferProgress(service, requestId, completedBytes, total);
+                },
+                isCancelled,
+                &itemError);
+            if (outcome == TransferOutcome::Cancelled) {
+                summary.cancelled = true;
+                break;
+            }
+            if (outcome == TransferOutcome::Failed) {
+                summary.failed.append({item.sourcePath, itemError});
+                continue;
+            }
+            ++completedFiles;
+        }
+
+        summary.filesTransferred = completedFiles;
+        summary.bytesTransferred = completedBytes;
+        pool->clearCancel(requestId);
+        postRecursiveFinished(service, requestId, summary);
+    });
+    return requestId;
+}
+
+void SftpService::cancelRequest(const quint64 requestId)
+{
+    m_pool->requestCancel(requestId);
 }
 
 quint64 SftpService::renamePath(const ConnectionTarget &target,
