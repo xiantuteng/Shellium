@@ -245,6 +245,11 @@ SshSessionNode::StepResult SshSessionNode::beginEstablish(const int transportFd,
     }
     ssh_options_set(m_session, SSH_OPTIONS_PORT, &port);
 
+    // 交互式终端的每次击键都是一个极小的包，Nagle 算法会把它压到上一个 ACK 回来之后再
+    // 发；在高延迟链路上这表现为回显一顿一顿的。禁用后按键立刻上路。
+    const int noDelay = 1;
+    ssh_options_set(m_session, SSH_OPTIONS_NODELAY, &noDelay);
+
     if (transportFd >= 0) {
         // SSH_OPTIONS_FD 让 libssh 在已连接 socket 上直接握手，同时 HOST 仍保持真实内层
         // 地址，known_hosts 校验不会错误绑定到隧道本地端。
@@ -393,6 +398,8 @@ SshSessionNode::StepResult SshSessionNode::advanceEstablish()
         }
         m_stage = Stage::Ready;
         m_establishTimer.invalidate();
+        // 握手刚刚结束，这一刻就是本层最近一次数据往来；从此开始计空闲。
+        noteActivity();
         return success();
     }
 
@@ -697,7 +704,11 @@ int SshSessionNode::writeToShell(const char *data, const int size)
     if (m_shell == nullptr) {
         return SSH_ERROR;
     }
-    return ssh_channel_write(m_shell, data, static_cast<uint32_t>(size));
+    const int written = ssh_channel_write(m_shell, data, static_cast<uint32_t>(size));
+    if (written > 0) {
+        noteActivity();
+    }
+    return written;
 }
 
 int SshSessionNode::readFromShell(char *buffer, const int size, const bool stderrStream)
@@ -707,7 +718,43 @@ int SshSessionNode::readFromShell(char *buffer, const int size, const bool stder
     }
     const int count = ssh_channel_read_nonblocking(
         m_shell, buffer, static_cast<uint32_t>(size), stderrStream ? 1 : 0);
+    if (count > 0) {
+        noteActivity();
+    }
     return count > 0 ? count : 0;
+}
+
+void SshSessionNode::noteActivity()
+{
+    // QElapsedTimer::start() 对已在计时的实例等同于重启，无需先判 isValid。
+    m_idleTimer.start();
+}
+
+qint64 SshSessionNode::idleMs() const
+{
+    return m_idleTimer.isValid() ? m_idleTimer.elapsed() : -1;
+}
+
+SshKeepAlive::LayerIdleState SshSessionNode::keepAliveState() const
+{
+    return {isReady(), idleMs()};
+}
+
+bool SshSessionNode::sendKeepAlive()
+{
+    if (m_session == nullptr) {
+        return false;
+    }
+    // 空载荷足矣：RFC 4253 规定 SSH_MSG_IGNORE 的接收方解析后直接丢弃，而链路上的 NAT 与
+    // 状态防火墙只看得到一个真实的加密报文，空闲表项就此刷新。
+    if (ssh_send_ignore(m_session, "") != SSH_OK) {
+        // 非阻塞会话上发送缓冲可能暂时写不下。这不是会话故障，绝不能据此断开，也绝不能
+        // 在这里等待——工作线程一旦被钉住，整栈的数据搬运都会停摆。不重置计时，让下一轮
+        // 泵送自然重试。
+        return false;
+    }
+    noteActivity();
+    return true;
 }
 
 bool SshSessionNode::isShellAlive() const
@@ -998,6 +1045,9 @@ QList<SshSessionNode::ForwardOutcome> SshSessionNode::pumpForwards()
                 ssh_channel_close(forward.channel);
                 break;
             }
+            // 转发通道上的密文同样承载在本层这条 TCP 上，因此也算本层活跃：内层会话正在
+            // 忙碌时不必再为外层补发保活。
+            noteActivity();
             forward.socketToChannel.remove(0, written);
         }
         // 中继命令的诊断信息走 stderr，不能混进数据流；只搬运标准输出。
@@ -1005,6 +1055,7 @@ QList<SshSessionNode::ForwardOutcome> SshSessionNode::pumpForwards()
             const int count = ssh_channel_read_nonblocking(
                 forward.channel, tunnelBuffer, sizeof(tunnelBuffer), 0);
             if (count > 0) {
+                noteActivity();
                 forward.channelToSocket.append(tunnelBuffer, count);
             } else {
                 break;

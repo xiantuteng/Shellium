@@ -180,6 +180,10 @@ bool SshSessionStack::pumpLoop()
         // 会让内层连接失去承载，这也是建立阶段不能阻塞的根本原因。
         pumpAllForwards();
 
+        // 保活要放在栈顶就绪判断之前：栈顶还在握手时，下面已经就绪的外层照样会空闲到被
+        // 掐断，而外层一断，正在其上建立的内层也就白建了。
+        serviceKeepAlive();
+
         for (const std::unique_ptr<SshSessionNode> &layer : m_layers) {
             layer->pumpExec();
             bool installed = false;
@@ -547,6 +551,22 @@ void SshSessionStack::pumpAllForwards()
     // 会让上面正在使用的迭代器失效。
     for (const SshSessionNode::ForwardOutcome &outcome : outcomes) {
         handleForwardOutcome(outcome);
+    }
+}
+
+void SshSessionStack::serviceKeepAlive()
+{
+    QList<SshKeepAlive::LayerIdleState> states;
+    states.reserve(static_cast<qsizetype>(m_layers.size()));
+    for (const std::unique_ptr<SshSessionNode> &layer : m_layers) {
+        states.append(layer->keepAliveState());
+    }
+
+    for (const int index : SshKeepAlive::layersNeedingKeepAlive(states,
+                                                                SshKeepAlive::kIdleIntervalMs)) {
+        // 返回值刻意忽略：本轮写不出去只说明发送缓冲暂时满，下一轮再试即可。把它当成
+        // 错误去断开会话，反而会亲手制造保活本应避免的那种断线。
+        m_layers[static_cast<size_t>(index)]->sendKeepAlive();
     }
 }
 

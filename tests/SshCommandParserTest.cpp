@@ -7,6 +7,7 @@
 #include "security/Vault.h"
 #include "storage/ApplicationDatabase.h"
 
+#include <QApplication>
 #include <QClipboard>
 #include <QGuiApplication>
 #include <QSignalSpy>
@@ -902,5 +903,22 @@ void SshCommandParserTest::vaultEncryptsAndAuthenticatesCredentials()
     QVERIFY(!vault.isUnlocked());
 }
 
-QTEST_MAIN(SshCommandParserTest)
+/** @brief 由 tests/KeepAliveTest.cpp 提供的保活判定测试入口。 */
+extern int runKeepAliveTests(int argc, char *argv[]);
+
+// 一个可执行文件只能有一个 main，而 QTEST_MAIN 会自己展开一个；本目标里的测试类不止一个，
+// 因此改为手写 main 顺序驱动。退出码取各套件失败数之和，任何一套失败都能传递给 CTest。
+int main(int argc, char *argv[])
+{
+    QApplication app(argc, argv);
+    app.setAttribute(Qt::AA_Use96Dpi, true);
+    QTEST_SET_MAIN_SOURCE_PATH
+
+    int failures = 0;
+    SshCommandParserTest commandParserTest;
+    failures += QTest::qExec(&commandParserTest, argc, argv);
+    failures += runKeepAliveTests(argc, argv);
+    return failures;
+}
+
 #include "SshCommandParserTest.moc"
