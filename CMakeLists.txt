@@ -149,6 +149,15 @@ if(BUILD_TESTING)
 
     add_test(NAME ShelliumStorageTests COMMAND ShelliumStorageTests)
 
+    # SFTP 递归传输的纯逻辑（路径越界防护、遍历顺序、跳过判定、失败聚合、进度计算）全部以
+    # 内联形式放在 SftpService.h，因此这里不需要 libssh 会话、隧道或 SFTP 服务器就能覆盖。
+    # 单独成一个目标是因为 ShelliumCoreTests 已经有一个 QTEST_MAIN，同一个可执行文件里不能
+    # 再有第二个 main。
+    qt_add_executable(ShelliumSftpRecursiveTests tests/SftpRecursiveTest.cpp)
+    target_include_directories(ShelliumSftpRecursiveTests PRIVATE src)
+    target_link_libraries(ShelliumSftpRecursiveTests PRIVATE Qt6::Core Qt6::Test)
+    add_test(NAME ShelliumSftpRecursiveTests COMMAND ShelliumSftpRecursiveTests)
+
     # 针对真实服务器的连接路径回归。非阻塞握手状态机的价值就在于与真实 libssh 和真实
     # 服务器的时序交互，无法用桩替身覆盖；缺少 SHELLIUM_IT_* 环境变量时测试自行跳过。
     qt_add_executable(ShelliumSshIntegrationTests

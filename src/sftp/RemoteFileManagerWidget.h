@@ -12,6 +12,7 @@ class QComboBox;
 class QLabel;
 class QLineEdit;
 class QProgressBar;
+class QPushButton;
 class QTreeWidget;
 class QTreeWidgetItem;
 
@@ -50,8 +51,18 @@ private slots:
     /** @brief 打开本地文件选择器并上传到当前目录。 */
     void uploadSelectedFile();
 
-    /** @brief 下载当前选中的远程文件。 */
+    /** @brief 打开本地目录选择器并递归上传整个目录到当前目录。 */
+    void uploadSelectedDirectory();
+
+    /** @brief 下载当前选中的远程条目；目录走递归下载。 */
     void downloadSelectedFile();
+
+    /**
+     * @brief 请求取消正在进行的递归传输。
+     *
+     * 大目录传输可能持续很久，用户必须有一条比"杀进程"更温和的退出路径。
+     */
+    void cancelActiveTransfer();
 
     /** @brief 修改当前选中远程条目的名称。 */
     void renameSelectedPath();
@@ -84,15 +95,31 @@ private:
                                 SftpService::ErrorKind kind,
                                 const QString &message);
 
+    /** @brief 递归传输结束后展示汇总；有跳过或失败时用对话框而不是一行状态文字。 */
+    void handleRecursiveTransferFinished(quint64 requestId,
+                                         const SftpRecursive::TransferSummary &summary);
+
+    /** @brief 记录当前递归传输的请求编号，并同步取消按钮可用状态。 */
+    void setActiveTransfer(quint64 requestId);
+
     QComboBox *m_targetCombo = nullptr;
     QLineEdit *m_pathEdit = nullptr;
     QTreeWidget *m_fileTree = nullptr;
     QLabel *m_statusLabel = nullptr;
     QProgressBar *m_progressBar = nullptr;
+    QPushButton *m_cancelButton = nullptr;
     SftpService *m_service = nullptr;
     QList<ConnectionTarget> m_targets;
     quint64 m_latestListRequest = 0;
     bool m_hostKeyDialogOpen = false;
+
+    /**
+     * @brief 正在进行的递归传输请求编号，0 表示没有。
+     *
+     * 只跟踪一个：界面同一时刻只允许发起一次递归传输，否则同一条池化连接上的多个大传输会
+     * 互相排队，用户看到的进度条却分不清是哪一个。
+     */
+    quint64 m_activeTransferRequest = 0;
 
     /**
      * @brief 是否已有凭据对话框在显示。
