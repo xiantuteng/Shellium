@@ -76,6 +76,12 @@ public:
     void requestPopLayer();
 
     /**
+     * @brief 提交用户在终端里为正在建立的层输入的密码。
+     * @param secret 密码或私钥口令；空字符串表示放弃该层。
+     */
+    void provideLayerCredential(const QString &secret);
+
+    /**
      * @brief 通过栈顶层已认证会话打开到内网目标的 direct-tcpip 通道。
      * @param host 从栈顶服务器视角可访问的内层主机。
      * @param port 内层 SSH 端口。
@@ -119,6 +125,16 @@ signals:
 
     /** @brief 嵌套层建立失败；栈已回退到失败前的状态，外层会话不受影响。 */
     void layerFailed(const ConnectionTarget &target, const QString &message);
+
+    /**
+     * @brief 正在建立的层需要密码。
+     * @param target 待认证的服务器。
+     * @param retry 是否为上一次密码被拒后的重试。
+     *
+     * 上层必须在终端内联提示并通过 provideLayerCredential 回传。弹对话框会破坏"手打 ssh"
+     * 的原生体验——用户预期的是终端里的 password 提示，不是一个窗口。
+     */
+    void layerCredentialRequired(const ConnectionTarget &target, bool retry);
 
 protected:
     /** @brief 建立栈底层并执行统一的输入、输出与转发泵送循环。 */
@@ -178,6 +194,9 @@ private:
     /** @brief 把 GUI/SFTP 线程排队的 direct-tcpip 请求转成异步建立，不等待结果。 */
     void serviceForwardRequests();
 
+    /** @brief 丢弃尚未被消费的层凭据；新建层、层失败与退层时都必须调用。 */
+    void discardPendingCredential();
+
     /** @brief 以给定原因终结所有在途的转发与建层请求，用于弹层和停止。 */
     void abortInFlightForwards(const QString &reason);
 
@@ -197,10 +216,15 @@ private:
     /** @brief 栈底就绪信号是否已发出，保证 shellConnected 在一次运行中只发一次。 */
     bool m_rootAnnounced = false;
 
+
     mutable QMutex m_mutex;
     QByteArray m_pendingInput;
     bool m_stopRequested = false;
     HostKeyDecision m_hostKeyDecision = HostKeyDecision::None;
+
+    /** @brief GUI 提交但工作线程尚未消费的层凭据。 */
+    QString m_pendingCredential;
+    bool m_hasPendingCredential = false;
 
     /** @brief GUI 排队的建层请求，按提交顺序在工作线程中逐个处理。 */
     QList<ConnectionTarget> m_pendingPushes;

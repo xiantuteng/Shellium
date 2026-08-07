@@ -23,12 +23,33 @@ public:
      */
     void appendTerminalOutput(const QByteArray &bytes);
 
+    /**
+     * @brief 进入本地行捕获：按键不再发往远端，也不回显。
+     *
+     * 用于 Shellium 自己接管认证时在终端里索要密码。必须走本地捕获而不是让远端回显：
+     * 此时根本没有远端可言——那一层的 SSH 会话还没认证完成。
+     */
+    void beginLocalLineCapture();
+
+    /** @brief 是否正处于本地行捕获状态。 */
+    [[nodiscard]] bool isCapturingLocalLine() const { return m_localCapture; }
+
 signals:
     /** @brief 用户输入了需要立即发送给远端 PTY 的字节。 */
     void inputBytes(const QByteArray &bytes);
 
     /** @brief 用户按下回车后，发送一份完整命令用于嵌套 SSH 识别。 */
     void commandSubmitted(const QString &command);
+
+    /**
+     * @brief 本地行捕获结束，交出用户输入的整行内容。
+     * @param line 用户输入的整行。
+     * @param cancelled 用户是否按 Ctrl+C 主动放弃。
+     *
+     * 空行与"放弃"必须区分：在密码提示处直接回车，OpenSSH 的行为是重新提示而不是中止。
+     * 把两者混为一谈会让任何一次输入丢失都升级成不可恢复的连接失败。
+     */
+    void localLineSubmitted(const QString &line, bool cancelled);
 
         /**
      * @brief 终端输出出现明确的 SSH 密码提示。
@@ -103,6 +124,12 @@ private:
 
     /** @brief 负责 VT 状态机、屏幕渲染和终端协议应答的桥接对象。 */
     VtermBridge *m_vtermBridge = nullptr;
+
+    /** @brief 是否正在本地捕获整行输入（例如 Shellium 自己索要的密码）。 */
+    bool m_localCapture = false;
+
+    /** @brief 本地捕获期间累积的输入；不写入终端文档，也不发往任何远端。 */
+    QString m_localLine;
 
     /** @brief 最近的终端输出尾部，用于跨网络数据块识别 SSH 密码提示。 */
     QByteArray m_authenticationPromptBuffer;

@@ -155,4 +155,11 @@ private:
      * 关闭后嵌套识别退回命令解析的降级路径，推测层会被显式标注为不确定。
      */
     bool m_shellIntegrationEnabled = true;
+
+    /**
+     * @brief 当前层的密码提示语；非空表示正在等待用户输入密码。
+     *
+     * 用户在提示处直接回车时据此原样再问一遍，与 OpenSSH 行为一致。
+     */
+    QString m_pendingCredentialPrompt;
 };

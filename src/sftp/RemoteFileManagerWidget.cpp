@@ -488,6 +488,12 @@ void RemoteFileManagerWidget::handleOperationFailure(const quint64 requestId,
             return;
         }
 
+        if (m_credentialDialogOpen) {
+            // 多个请求可能同时失败（例如切换目录时前一个请求尚未返回）。只保留一个对话框，
+            // 否则用户会看到密码框层层叠加，且后面几个填了也没用。
+            return;
+        }
+        m_credentialDialogOpen = true;
         bool accepted = false;
         const QString password = QInputDialog::getText(
             this,
@@ -497,6 +503,7 @@ void RemoteFileManagerWidget::handleOperationFailure(const quint64 requestId,
             QLineEdit::Password,
             {},
             &accepted);
+        m_credentialDialogOpen = false;
         if (accepted && !password.isEmpty()) {
             const int selectedIndex = m_targetCombo->currentIndex();
             if (selectedIndex >= 0 && selectedIndex < m_targets.size()) {

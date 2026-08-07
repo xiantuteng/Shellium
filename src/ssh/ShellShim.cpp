@@ -33,6 +33,11 @@ QByteArray ShellShim::injectionCommand()
     //   * base64 不可用时直接执行原生 ssh，绝不发出无人应答的 OSC——那会让 shim 永远
     //     阻塞在 read 上，把用户的终端挂死。
     //   * read 从 /dev/tty 读取回执，因此即使 stdout 被重定向也能收到 Shellium 的答复。
+    //     回执文本 take/pass 会被 PTY 回显到屏幕上，这是已知的外观瑕疵。两种消除办法都
+    //     被否决了：`read -s` 并非 POSIX，不支持时返回非零，再用 `||` 回退就会吃掉用户
+    //     的下一行输入；`stty -echo` 多数实现走 TCSAFLUSH，会丢弃已在缓冲区里的输入，
+    //     回执若先于 stty 抵达就被吞掉，shim 将永久阻塞。宁可留下一行噪音，也不能冒
+    //     丢输入或死锁的风险。
     return QByteArrayLiteral(
         " if [ -n \"$BASH_VERSION$ZSH_VERSION\" ]; then"
         " export HISTCONTROL=ignorespace;"

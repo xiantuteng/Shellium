@@ -126,6 +126,23 @@ SshSessionNode::StepResult pending()
 }
 
 /**
+ * @brief 构造一个“需要用户提供密码”的结果。
+ * @param retry 上一次密码是否已被服务器拒绝。
+ */
+SshSessionNode::StepResult credentialRequired(const bool retry)
+{
+    SshSessionNode::StepResult result;
+    result.ok = true;
+    result.pending = true;
+    result.credentialRequired = true;
+    result.credentialRetry = retry;
+    return result;
+}
+
+/** @brief 允许的密码尝试次数，与 OpenSSH 默认一致。 */
+constexpr int kMaxPasswordAttempts = 3;
+
+/**
  * @brief 建立过程的整体超时。
  *
  * 非阻塞模式下 libssh 不再依据 SSH_OPTIONS_TIMEOUT 中断握手，必须由调用方自行限时，
@@ -275,6 +292,23 @@ SshSessionNode::StepResult SshSessionNode::advanceEstablish()
     case Stage::Authenticating:
         return advanceAuthenticating();
 
+    case Stage::AwaitingCredential: {
+        if (!m_credentialProvided) {
+            return pending();
+        }
+        m_credentialProvided = false;
+        if (m_secret.isEmpty()) {
+            m_stage = Stage::Failed;
+            return failure(tr("用户取消了 %1 的认证。")
+                               .arg(m_target.connectionSpecifier(true)));
+        }
+        m_stage = Stage::Authenticating;
+        m_authPhase = AuthPhase::Password;
+        // 用户思考和输入密码的时间不该计入建立超时。
+        m_establishTimer.start();
+        return pending();
+    }
+
     case Stage::OpeningChannel: {
         if (m_shell == nullptr) {
             m_shell = ssh_channel_new(m_session);
@@ -423,9 +457,11 @@ SshSessionNode::StepResult SshSessionNode::advanceAuthenticating()
             return pending();
         }
         if (m_secret.isEmpty()) {
-            m_stage = Stage::Failed;
-            return failure(tr("SSH 认证失败：%1。请检查密码、私钥或 SSH Agent。")
-                               .arg(lastError()));
+            // 公钥与 Agent 都不被接受，且命令行没有携带密码——接管用户手打的 ssh 时这是
+            // 常态。向上层索要密码，而不是直接判定失败。
+            m_stage = Stage::AwaitingCredential;
+            m_establishTimer.invalidate();
+            return credentialRequired(m_passwordRejected);
         }
         m_authPhase = AuthPhase::Password;
         return pending();
@@ -439,12 +475,39 @@ SshSessionNode::StepResult SshSessionNode::advanceAuthenticating()
             m_stage = Stage::OpeningChannel;
             return pending();
         }
+        // 与 OpenSSH 一致地允许重试：输错一次不该让整层连接失败，否则用户必须从头再敲
+        // 一遍 ssh 命令。
+        m_secret.fill('\0');
+        m_secret.clear();
+        m_target.password.fill(QChar::Null);
+        m_target.password.clear();
+        m_passwordRejected = true;
+        if (m_passwordAttempts < kMaxPasswordAttempts) {
+            m_stage = Stage::AwaitingCredential;
+            m_establishTimer.invalidate();
+            return credentialRequired(true);
+        }
         m_stage = Stage::Failed;
         return failure(tr("SSH 认证失败：%1。请检查密码、私钥或 SSH Agent。").arg(lastError()));
     }
 
     m_stage = Stage::Failed;
     return failure(tr("认证状态机进入了未定义状态。"));
+}
+
+void SshSessionNode::provideCredential(const QString &secret)
+{
+    if (m_stage != Stage::AwaitingCredential) {
+        return;
+    }
+    m_secret = secret.toUtf8();
+    // 同一份凭据写回目标，使随后的 SFTP 能直接复用而不必再次询问用户——这正是原先弹出
+    // 第二个密码框的根源。
+    m_target.password = secret;
+    m_credentialProvided = true;
+    if (!secret.isEmpty()) {
+        ++m_passwordAttempts;
+    }
 }
 
 void SshSessionNode::provideHostKeyDecision(const bool trusted)
@@ -461,6 +524,11 @@ void SshSessionNode::provideHostKeyDecision(const bool trusted)
 bool SshSessionNode::isReady() const
 {
     return m_stage == Stage::Ready;
+}
+
+bool SshSessionNode::isAwaitingCredential() const
+{
+    return m_stage == Stage::AwaitingCredential && !m_credentialProvided;
 }
 
 void SshSessionNode::resizePty(const int columns, const int rows)

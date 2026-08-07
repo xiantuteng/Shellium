@@ -6,6 +6,8 @@
 #include "security/Vault.h"
 #include "storage/ApplicationDatabase.h"
 
+#include <QClipboard>
+#include <QGuiApplication>
 #include <QSignalSpy>
 #include <QInputMethodEvent>
 #include <QSqlQuery>
@@ -63,6 +65,18 @@ private slots:
 
     /** @brief 带退出码的 exit 同样是退出。 */
     void treatsExitWithStatusAsLeave();
+
+    /** @brief 本地行捕获必须收齐字符、不发往远端、且只提交一次。 */
+    void terminalViewCapturesLocalLine();
+
+    /** @brief 自动重复的回车不得提交本地行，否则会在提示刚出现时提交空密码。 */
+    void terminalViewIgnoresAutoRepeatDuringCapture();
+
+    /** @brief 空行提交与 Ctrl+C 放弃必须能被区分。 */
+    void terminalViewDistinguishesEmptyLineFromCancel();
+
+    /** @brief 密码常从密码管理器粘贴，捕获期间必须接受粘贴而不是把按键吞掉。 */
+    void terminalViewAcceptsPasteDuringCapture();
 
     /** @brief VtermBridge 必须把私有 OSC 交出来，而不是渲染成屏幕乱码。 */
     void terminalViewDeliversShellIntegrationEvent();
@@ -364,6 +378,105 @@ void SshCommandParserTest::treatsExitWithStatusAsLeave()
         const SshCommandParser::Result parsed = SshCommandParser::parse(command, current);
         QVERIFY2(parsed.action == SshCommandParser::Action::None, qPrintable(command));
     }
+}
+
+void SshCommandParserTest::terminalViewCapturesLocalLine()
+{
+    TerminalView view;
+    QSignalSpy lineSpy(&view, &TerminalView::localLineSubmitted);
+    QSignalSpy inputSpy(&view, &TerminalView::inputBytes);
+    QSignalSpy commandSpy(&view, &TerminalView::commandSubmitted);
+
+    view.beginLocalLineCapture();
+    QVERIFY(view.isCapturingLocalLine());
+
+    QTest::keyClicks(&view, QStringLiteral("hunter2"));
+    // 密码绝不能发往远端：这一层的 SSH 会话尚未认证完成，远端还不存在。
+    QCOMPARE(inputSpy.size(), 0);
+
+    QTest::keyClick(&view, Qt::Key_Return);
+    QCOMPARE(lineSpy.size(), 1);
+    QCOMPARE(lineSpy.at(0).at(0).toString(), QStringLiteral("hunter2"));
+    QCOMPARE(lineSpy.at(0).at(1).toBool(), false);
+    QVERIFY(!view.isCapturingLocalLine());
+    // 回车不得同时走普通路径，否则密码会以命令的形式再发一遍。
+    QCOMPARE(inputSpy.size(), 0);
+    QCOMPARE(commandSpy.size(), 0);
+}
+
+void SshCommandParserTest::terminalViewIgnoresAutoRepeatDuringCapture()
+{
+    TerminalView view;
+    QSignalSpy lineSpy(&view, &TerminalView::localLineSubmitted);
+    view.beginLocalLineCapture();
+
+    // 用户敲完 ssh 命令后按住回车稍久，重复事件会恰好落在密码捕获刚开启的瞬间。若不忽略
+    // 就会提交一个空行，现象是"密码提示一出现就立刻失败"。
+    QKeyEvent repeated(QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier,
+                       QStringLiteral("\r"), true);
+    QCoreApplication::sendEvent(&view, &repeated);
+    QCOMPARE(lineSpy.size(), 0);
+    QVERIFY(view.isCapturingLocalLine());
+
+    // 真实按下的回车仍必须提交。
+    QTest::keyClicks(&view, QStringLiteral("pw"));
+    QTest::keyClick(&view, Qt::Key_Return);
+    QCOMPARE(lineSpy.size(), 1);
+    QCOMPARE(lineSpy.at(0).at(0).toString(), QStringLiteral("pw"));
+}
+
+void SshCommandParserTest::terminalViewDistinguishesEmptyLineFromCancel()
+{
+    TerminalView view;
+    QSignalSpy lineSpy(&view, &TerminalView::localLineSubmitted);
+
+    // 直接回车：空行但不是放弃，上层应当重新提示（与 OpenSSH 一致）。
+    view.beginLocalLineCapture();
+    QTest::keyClick(&view, Qt::Key_Return);
+    QCOMPARE(lineSpy.size(), 1);
+    QVERIFY(lineSpy.at(0).at(0).toString().isEmpty());
+    QCOMPARE(lineSpy.at(0).at(1).toBool(), false);
+
+    // Ctrl+C：明确放弃。
+    view.beginLocalLineCapture();
+#if defined(Q_OS_MACOS)
+    QTest::keyClick(&view, Qt::Key_C, Qt::MetaModifier);
+#else
+    QTest::keyClick(&view, Qt::Key_C, Qt::ControlModifier);
+#endif
+    QCOMPARE(lineSpy.size(), 2);
+    QCOMPARE(lineSpy.at(1).at(1).toBool(), true);
+}
+
+void SshCommandParserTest::terminalViewAcceptsPasteDuringCapture()
+{
+    // 尾随换行是密码管理器的常态；控制字符对密码没有意义，必须剔除后再进入缓冲。
+    QGuiApplication::clipboard()->setText(QStringLiteral("8QyKZBrJ\n"));
+
+    TerminalView view;
+    QSignalSpy lineSpy(&view, &TerminalView::localLineSubmitted);
+    QSignalSpy inputSpy(&view, &TerminalView::inputBytes);
+    view.beginLocalLineCapture();
+
+    // macOS 上 Cmd+V 携带 Qt::ControlModifier。若不显式处理粘贴，它会被"追加普通字符"
+    // 分支排除并整个吞掉，用户随后按回车就提交了空密码——手打正常、粘贴永远连不上。
+    QTest::keySequence(&view, QKeySequence(QKeySequence::Paste));
+    QCOMPARE(inputSpy.size(), 0);
+    QVERIFY(view.isCapturingLocalLine());
+
+    QTest::keyClick(&view, Qt::Key_Return);
+    QCOMPARE(lineSpy.size(), 1);
+    QCOMPARE(lineSpy.at(0).at(0).toString(), QStringLiteral("8QyKZBrJ"));
+    QCOMPARE(lineSpy.at(0).at(1).toBool(), false);
+
+    // 粘贴之后继续手打也必须能接上。
+    QGuiApplication::clipboard()->setText(QStringLiteral("abc"));
+    view.beginLocalLineCapture();
+    QTest::keySequence(&view, QKeySequence(QKeySequence::Paste));
+    QTest::keyClicks(&view, QStringLiteral("123"));
+    QTest::keyClick(&view, Qt::Key_Return);
+    QCOMPARE(lineSpy.size(), 2);
+    QCOMPARE(lineSpy.at(1).at(0).toString(), QStringLiteral("abc123"));
 }
 
 void SshCommandParserTest::terminalViewDeliversShellIntegrationEvent()

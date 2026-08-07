@@ -141,14 +141,30 @@ if(BUILD_TESTING)
         src/ssh/SshSessionStack.h
         src/ssh/SshTunnelBroker.cpp
         src/ssh/SshTunnelBroker.h
+        src/ssh/SshCommandParser.cpp
+        src/ssh/SshCommandParser.h
+        src/terminal/TerminalPane.cpp
+        src/terminal/TerminalPane.h
+        src/terminal/TerminalView.cpp
+        src/terminal/TerminalView.h
+        src/terminal/VtermBridge.cpp
+        src/terminal/VtermBridge.h
+        src/terminal/LocalShellWorker.cpp
+        src/terminal/LocalShellWorker.h
     )
     target_include_directories(ShelliumSshIntegrationTests PRIVATE src)
     target_link_libraries(ShelliumSshIntegrationTests PRIVATE
         Qt6::Core
         Qt6::Concurrent
+        Qt6::Gui
+        Qt6::Widgets
         Qt6::Test
         PkgConfig::LIBSSH
+        PkgConfig::LIBVTERM
     )
+    if(UNIX AND NOT APPLE)
+        target_link_libraries(ShelliumSshIntegrationTests PRIVATE util)
+    endif()
 
     add_test(NAME ShelliumSshIntegrationTests COMMAND ShelliumSshIntegrationTests)
 endif()

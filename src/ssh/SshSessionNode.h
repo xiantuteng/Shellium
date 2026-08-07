@@ -38,6 +38,15 @@ public:
         bool pending = false;
         bool hostKeyUnknown = false;
         bool legacyHmacRequired = false;
+        /**
+         * @brief 服务器要求密码，但本层还没有可用凭据。
+         *
+         * 接管用户手打的 ssh 时必然出现：命令行里没有密码，而用户本来预期在终端里输入。
+         * 上层应当在终端内联提示并回传，绝不能弹对话框——那和原生 ssh 的体验完全不同。
+         */
+        bool credentialRequired = false;
+        /** @brief 该次索要是否源于上一次密码被服务器拒绝，用于区分首次提示与重试提示。 */
+        bool credentialRetry = false;
         QString message;
         QString fingerprint;
     };
@@ -79,8 +88,24 @@ public:
      */
     void provideHostKeyDecision(bool trusted);
 
+    /**
+     * @brief 提交用户在终端里输入的密码，继续认证。
+     * @param secret 密码或私钥口令；空字符串表示用户放弃，本层将失败。
+     *
+     * 密码同时写入本层目标，使随后的 SFTP 能复用同一份凭据而不必再次询问用户。
+     */
+    void provideCredential(const QString &secret);
+
     /** @brief Shell 是否已经就绪并可以收发终端数据。 */
     [[nodiscard]] bool isReady() const;
+
+    /**
+     * @brief 本层是否正在等待用户提供密码。
+     *
+     * 调用方必须据此判断再投递凭据：过早投递会被丢弃（用户抢先输入的密码就此丢失），
+     * 而把上一层遗留的凭据投给新层则会让新层直接按"用户取消"失败。
+     */
+    [[nodiscard]] bool isAwaitingCredential() const;
 
     /** @brief 通知远端 PTY 尺寸变化；Shell 尚未建立时只记录，待建立后应用。 */
     void resizePty(int columns, int rows);
@@ -160,6 +185,7 @@ private:
         Connecting,
         AwaitingHostKeyDecision,
         Authenticating,
+        AwaitingCredential,
         OpeningChannel,
         RequestingPty,
         RequestingShell,
@@ -234,6 +260,20 @@ private:
 
     bool m_hostKeyDecided = false;
     bool m_hostKeyTrusted = false;
+
+    /** @brief 用户已提交凭据、等待下一轮推进消费。 */
+    bool m_credentialProvided = false;
+
+    /** @brief 是否已经有一份密码被服务器拒绝过；决定提示语用首次还是重试措辞。 */
+    bool m_passwordRejected = false;
+
+    /**
+     * @brief 已经尝试过的密码次数。
+     *
+     * 与 OpenSSH 一致地允许重试：输错一次不该让整层连接失败，否则用户必须从头再敲一遍
+     * ssh 命令。达到上限后才判定失败。
+     */
+    int m_passwordAttempts = 0;
 
     /** @brief 建立过程的整体超时计时；非阻塞模式下 libssh 自身不再提供握手超时保护。 */
     QElapsedTimer m_establishTimer;

@@ -90,6 +90,13 @@ private:
     QList<ConnectionTarget> m_targets;
     quint64 m_latestListRequest = 0;
     bool m_hostKeyDialogOpen = false;
+
+    /**
+     * @brief 是否已有凭据对话框在显示。
+     *
+     * 同一目标的多个请求可能接连失败，逐个弹框会让密码窗口层层叠加。
+     */
+    bool m_credentialDialogOpen = false;
     QHash<QString, int> m_directoryDisconnectRetries;
 
     /**

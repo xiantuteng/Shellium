@@ -2,6 +2,7 @@
 
 #include "ssh/SshSessionNode.h"
 
+#include <QLoggingCategory>
 #include <QMutexLocker>
 
 #include <libssh/libssh.h>
@@ -9,6 +10,11 @@
 #include <algorithm>
 
 #include <unistd.h>
+
+namespace {
+/** @brief 与 TerminalView 共用的认证诊断通道；见该文件中的说明。 */
+Q_LOGGING_CATEGORY(authLog, "shellium.auth", QtWarningMsg)
+} // namespace
 
 SshSessionStack::SshSessionStack(const ConnectionTarget &rootTarget, QObject *parent)
     : QThread(parent)
@@ -55,6 +61,16 @@ void SshSessionStack::confirmUnknownHost(const bool trusted)
     QMutexLocker locker(&m_mutex);
     // 决定只是记录下来，由工作线程在下一轮推进时读取；GUI 线程绝不直接触碰 libssh 会话。
     m_hostKeyDecision = trusted ? HostKeyDecision::Trusted : HostKeyDecision::Rejected;
+}
+
+void SshSessionStack::provideLayerCredential(const QString &secret)
+{
+    qCDebug(authLog, "provideLayerCredential len=%lld",
+            static_cast<long long>(secret.size()));
+    QMutexLocker locker(&m_mutex);
+    // 只做记录，由工作线程在下一轮推进时消费；GUI 线程绝不直接触碰 libssh 会话。
+    m_pendingCredential = secret;
+    m_hasPendingCredential = true;
 }
 
 void SshSessionStack::requestPushLayer(const ConnectionTarget &target)
@@ -179,6 +195,7 @@ bool SshSessionStack::pumpLoop()
                 // 也不应该去解析终端输出。弹栈后终端自动回到外层，这正是自持会话相对于
                 // 观察式识别的根本优势：出栈与入栈同样可靠。
                 popTopLayer();
+                discardPendingCredential();
                 abortInFlightForwards(tr("承载该请求的 SSH 会话层已经关闭"));
                 emit layersChanged(layerTargets());
                 continue;
@@ -276,7 +293,35 @@ bool SshSessionStack::advanceEstablishingLayers()
         }
     }
 
+    if (node.isAwaitingCredential()) {
+        // 必须先确认节点确实在等：过早投递会被 provideCredential 静默丢弃，用户抢先输入的
+        // 密码就此消失，界面上表现为"输了密码却毫无反应"。
+        QString secret;
+        bool hasSecret = false;
+        {
+            QMutexLocker locker(&m_mutex);
+            if (m_hasPendingCredential) {
+                secret = m_pendingCredential;
+                m_pendingCredential.clear();
+                m_hasPendingCredential = false;
+                hasSecret = true;
+            }
+        }
+        if (hasSecret) {
+            qCDebug(authLog, "consume credential len=%lld -> %s",
+                    static_cast<long long>(secret.size()),
+                    qPrintable(node.target().connectionSpecifier(true)));
+            node.provideCredential(secret);
+        }
+    }
+
     const SshSessionNode::StepResult step = node.advanceEstablish();
+    if (step.credentialRequired) {
+        // retry 由节点判定：只有确实提交过一份密码并被服务器拒绝才算重试。提示语必须
+        // 区分开，否则用户看到一模一样的提示会以为是自己没按回车。
+        emit layerCredentialRequired(node.target(), step.credentialRetry);
+        return true;
+    }
     if (step.hostKeyUnknown) {
         emit hostKeyVerificationRequired(node.target(), step.fingerprint);
         return true;
@@ -298,6 +343,7 @@ bool SshSessionStack::advanceEstablishingLayers()
     if (m_layers.size() > 1) {
         const ConnectionTarget failedTarget = node.target();
         m_layers.pop_back();
+        discardPendingCredential();
         emit layerFailed(failedTarget, step.message);
         emit layersChanged(layerTargets());
         return true;
@@ -348,8 +394,9 @@ void SshSessionStack::servicePendingLayerRequests()
         return;
     }
 
-    // 建层的转发时限刻意短于 SFTP：用户正盯着终端等待结果，20 秒内必须给出反馈。
-    constexpr int kNestedForwardTimeoutMs = 20000;
+    // 建层的转发时限刻意短：用户正盯着终端等待结果。主机名打错时远端解析可能一直不返回，
+    // 十秒已经足够区分"慢"和"不通"。
+    constexpr int kNestedForwardTimeoutMs = 10000;
     QString error;
     const quint64 forwardId = m_layers.back()->beginForward(
         push.host, push.port, true, kNestedForwardTimeoutMs, &error);
@@ -391,6 +438,8 @@ void SshSessionStack::handleForwardOutcome(const SshSessionNode::ForwardOutcome 
             rows = m_rows;
         }
 
+        // 新层从干净状态开始：任何为上一层输入、却没来得及被消费的凭据都必须作废。
+        discardPendingCredential();
         auto node = std::make_unique<SshSessionNode>(target);
         const SshSessionNode::StepResult start =
             node->beginEstablish(outcome.callerFd, columns, rows);
@@ -400,8 +449,10 @@ void SshSessionStack::handleForwardOutcome(const SshSessionNode::ForwardOutcome 
             emit layerFailed(target, start.message);
             return;
         }
+        // 这里**绝不能**发 layersChanged：此刻该层只完成了选项配置，握手、指纹校验和认证
+        // 都还没开始。提前公布会让文件管理器立刻对一个尚未认证的层发起 SFTP，进而弹出
+        // 本不该出现的密码对话框。层就绪的通知由 advanceEstablishingLayers 统一发出。
         m_layers.push_back(std::move(node));
-        emit layersChanged(layerTargets());
         return;
     }
 
@@ -477,6 +528,17 @@ void SshSessionStack::serviceForwardRequests()
         request->completed = true;
         request->condition.wakeAll();
     }
+}
+
+void SshSessionStack::discardPendingCredential()
+{
+    qCDebug(authLog, "discardPendingCredential (had=%d)", int(m_hasPendingCredential));
+    // 凭据只对提交时正在等待的那一层有意义。不清除的话，上一层被 Ctrl+C 取消时提交的空串
+    // 会一直排在队列里，把下一次新建的层在刚进入等待状态时立刻判成"用户取消"——用户看到
+    // 的现象是从此再也连不上任何内层服务器。
+    QMutexLocker locker(&m_mutex);
+    m_pendingCredential.clear();
+    m_hasPendingCredential = false;
 }
 
 void SshSessionStack::abortInFlightForwards(const QString &reason)

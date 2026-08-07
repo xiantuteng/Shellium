@@ -8,7 +8,10 @@
 #include <QInputMethodEvent>
 #include <QKeyEvent>
 #include <QResizeEvent>
+#include <QLoggingCategory>
 #include <QRegularExpression>
+
+#include <utility>
 #include <QScrollBar>
 #include <QClipboard>
 #include <QFontMetrics>
@@ -18,6 +21,15 @@
 #include <algorithm>
 
 namespace {
+
+/**
+ * @brief 认证接线的按需诊断通道。
+ *
+ * 默认关闭。真实 macOS 键盘与输入法的行为无法用 QTest 合成按键覆盖，出问题时只能靠
+ * 用户环境里的实测数据定位；因此保留一条可用环境变量打开的通道，而不是靠反复猜测。
+ * 打开方式：QT_LOGGING_RULES="shellium.auth.debug=true"
+ */
+Q_LOGGING_CATEGORY(authLog, "shellium.auth", QtWarningMsg)
 
 /**
  * @brief 判断按键是否包含“终端意义上的物理 Control 键”。
@@ -171,10 +183,70 @@ void TerminalView::appendTerminalOutput(const QByteArray &bytes)
     }
 }
 
+void TerminalView::beginLocalLineCapture()
+{
+    qCDebug(authLog, "beginLocalLineCapture (previous bufLen=%lld)",
+            static_cast<long long>(m_localLine.size()));
+    m_localCapture = true;
+    m_localLine.clear();
+}
+
 void TerminalView::keyPressEvent(QKeyEvent *event)
 {
     QByteArray encoded;
     const bool terminalControl = hasTerminalControlModifier(event);
+
+    if (m_localCapture) {
+        // 本地捕获期间不向远端发送任何字节，也不回显：这一层的 SSH 会话尚未认证完成，
+        // 远端还不存在；而密码本来就不该出现在屏幕上。
+        // 只记录长度和键码，绝不记录字符内容——诊断日志不能成为密码泄漏渠道。
+        qCDebug(authLog, "capture key=0x%x mods=0x%x textLen=%lld bufLen=%lld",
+                event->key(), static_cast<unsigned>(event->modifiers()),
+                static_cast<long long>(event->text().size()),
+                static_cast<long long>(m_localLine.size()));
+        if (event->isAutoRepeat()) {
+            // 自动重复事件必须整体忽略。用户敲 ssh 命令时按住回车稍久，重复的回车会恰好
+            // 落在密码捕获刚开启的瞬间，提交一个空行——现象是"提示一出现就立刻失败"。
+            // QTest 不产生自动重复，因此这条路径无法用合成按键覆盖。
+            event->accept();
+            return;
+        }
+        if (event->matches(QKeySequence::Paste)) {
+            // 密码通常是从密码管理器粘贴进来的，必须在这里显式处理：macOS 上 Cmd+V 携带
+            // Qt::ControlModifier，会被下面的"追加普通字符"分支排除，进而被整个吞掉；
+            // 用户随后按回车就提交了空密码。现象是"粘贴密码永远连不上，手打就正常"。
+            QString pasted = QGuiApplication::clipboard()->text();
+            // 剔除换行和其他控制字符：密码管理器常带尾随换行，而控制字符对密码没有意义。
+            // 刻意不把换行当作提交——尾随换行不该在用户还想继续输入时静默提交。
+            QString sanitized;
+            sanitized.reserve(pasted.size());
+            for (const QChar character : std::as_const(pasted)) {
+                if (character >= QChar(0x20) && character != QChar(0x7f)) {
+                    sanitized.append(character);
+                }
+            }
+            m_localLine.append(sanitized);
+        } else if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) {
+            const QString line = m_localLine;
+            m_localLine.clear();
+            m_localCapture = false;
+            appendTerminalOutput(QByteArrayLiteral("\r\n"));
+            emit localLineSubmitted(line, false);
+        } else if (event->key() == Qt::Key_Backspace) {
+            m_localLine.chop(1);
+        } else if (terminalControl && event->key() == Qt::Key_C) {
+            m_localLine.clear();
+            m_localCapture = false;
+            appendTerminalOutput(QByteArrayLiteral("\r\n"));
+            emit localLineSubmitted(QString(), true);
+        } else if (!event->text().isEmpty()
+                   && !event->modifiers().testFlag(Qt::ControlModifier)
+                   && !event->modifiers().testFlag(Qt::MetaModifier)) {
+            m_localLine.append(event->text());
+        }
+        event->accept();
+        return;
+    }
 
     if (event->matches(QKeySequence::Paste)) {
         // 只发送纯文本并移除 NUL。NUL 在交互式 Shell 中没有可见意义，却可能让下游程序
@@ -295,6 +367,26 @@ bool TerminalView::focusNextPrevChild(const bool next)
 void TerminalView::inputMethodEvent(QInputMethodEvent *event)
 {
     const QString committedText = event->commitString();
+    qCDebug(authLog, "ime commitLen=%lld preeditLen=%lld capture=%d",
+            static_cast<long long>(committedText.size()),
+            static_cast<long long>(event->preeditString().size()),
+            int(m_localCapture));
+    if (m_localCapture) {
+        // 输入法提交的字符同样只进本地缓冲；密码可能包含通过输入法输入的字符。
+        for (const QChar character : committedText) {
+            if (character == QLatin1Char('\r') || character == QLatin1Char('\n')) {
+                const QString line = m_localLine;
+                m_localLine.clear();
+                m_localCapture = false;
+                appendTerminalOutput(QByteArrayLiteral("\r\n"));
+                emit localLineSubmitted(line, false);
+                break;
+            }
+            m_localLine.append(character);
+        }
+        event->accept();
+        return;
+    }
     if (!committedText.isEmpty()) {
         emit inputBytes(committedText.toUtf8());
         // 输入法一次可能提交多个字符，因此按字符维护命令缓冲；换行代表提交当前命令。

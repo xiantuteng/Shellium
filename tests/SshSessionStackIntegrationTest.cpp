@@ -1,5 +1,7 @@
 #include "core/ConnectionTarget.h"
 #include "sftp/SftpService.h"
+#include "terminal/TerminalPane.h"
+#include "terminal/TerminalView.h"
 #include "ssh/ShellShim.h"
 #include "ssh/SshSessionStack.h"
 
@@ -29,7 +31,7 @@ private slots:
     /** @brief 完整走通连接、认证、PTY 建立，并确认远端 Shell 真的在执行命令。 */
     void establishesRootLayerAndRunsCommand();
 
-    /** @brief 错误密码必须报认证失败，且不得挂起到超时。 */
+    /** @brief 错误密码必须内联索要重试，用户放弃后才报失败，且不得挂起到超时。 */
     void reportsAuthenticationFailurePromptly();
 
     /** @brief 不存在的主机必须快速失败，不得静默卡死。 */
@@ -52,6 +54,28 @@ private slots:
 
     /** @brief SFTP 连接池必须让后续操作免去重复握手，而不只是"看起来能用"。 */
     void reusesPooledSftpConnectionAcrossRequests();
+
+    /** @brief 无密码的嵌套目标必须索要凭据而非直接失败，且凭据要能传给 SFTP。 */
+    void requestsCredentialForNestedLayerWithoutPassword();
+
+    /** @brief 取消一次认证后，下一次建层必须重新索要凭据而不是沿用遗留的空串。 */
+    void doesNotReuseStaleCredentialAfterCancel();
+
+    /**
+     * @brief 端到端驱动真实 TerminalPane：内联提示 → 键盘输入密码 → 第二层建成。
+     *
+     * 这条路径此前只被拆成"栈"和"视图"两半分别验证过，中间的接线从未被端到端覆盖，
+     * 而用户遇到的正是接线问题。
+     */
+    void terminalPaneCompletesNestedLoginFromKeyboard();
+
+    /**
+     * @brief 用户在终端里手打 ssh 的完整真实路径：shim 上报 → 接管 → 内联密码 → 建层。
+     *
+     * 这是用户实际操作的形态，也是唯一同时经过命令解析、shim 回执、接管与凭据接线的
+     * 路径；分段验证全绿并不能保证它通。
+     */
+    void terminalPaneHandlesTypedSshEndToEnd();
 
 private:
     /** @brief 从环境变量装配第一层目标。 */
@@ -168,12 +192,26 @@ void SshSessionStackIntegrationTest::reportsAuthenticationFailurePromptly()
     timer.start();
     stack.start();
 
-    QVERIFY2(waitFor([&]() { return failed.count() > 0 || connected.count() > 0; }),
-             "错误密码既未报错也未成功，认证重试路径可能卡在 SSH_AUTH_AGAIN");
+    QSignalSpy credentialAsked(&stack, &SshSessionStack::layerCredentialRequired);
+
+    // 密码错误不再直接断开：与 OpenSSH 一致地在终端内联重试。输错一次就得从头重连是很差
+    // 的体验，而且用户根本没机会更正。
+    QVERIFY2(waitFor([&]() {
+                 return credentialAsked.count() > 0 || failed.count() > 0
+                     || connected.count() > 0;
+             }),
+             "错误密码既未索要重试也未报错，认证路径可能卡在 SSH_AUTH_AGAIN");
     QVERIFY2(connected.isEmpty(), "错误密码不应建立 Shell");
-    QCOMPARE(failed.count(), 1);
-    // 认证失败必须在建立超时（30 秒）之前返回，否则说明状态机没有正确识别 DENIED。
-    QVERIFY2(timer.elapsed() < 28000, "认证失败耗时过长，疑似退化为等待整体超时");
+    QCOMPARE(credentialAsked.count(), 1);
+    QVERIFY2(credentialAsked.at(0).at(1).toBool(),
+             "首次提示应标记为重试：用户提供过密码且被拒绝了");
+    QVERIFY2(timer.elapsed() < 28000, "索要重试耗时过长，疑似退化为等待整体超时");
+
+    // 提交空串代表用户放弃，此时才应判定该层失败。
+    stack.provideLayerCredential(QString());
+    QVERIFY2(waitFor([&]() { return failed.count() > 0; }, 20000),
+             "用户放弃后未报告连接失败");
+    QVERIFY(connected.isEmpty());
 
     stack.requestStop();
     QVERIFY(stack.wait(10000));
@@ -495,6 +533,193 @@ void SshSessionStackIntegrationTest::reusesPooledSftpConnectionAcrossRequests()
              qPrintable(QStringLiteral("热请求未显著快于冷请求（冷 %1ms，热平均 %2ms），"
                                        "连接池可能没有生效")
                             .arg(coldMs).arg(warmAverageMs)));
+}
+
+void SshSessionStackIntegrationTest::requestsCredentialForNestedLayerWithoutPassword()
+{
+    if (m_secondLayerHost.isEmpty() || qgetenv("SHELLIUM_IT_PASSWORD2").isEmpty()) {
+        QSKIP("未设置第二层服务器信息，跳过凭据流程测试");
+    }
+
+    SshSessionStack stack(firstLayerTarget());
+    QSignalSpy connected(&stack, &SshSessionStack::shellConnected);
+    QSignalSpy failed(&stack, &SshSessionStack::connectionError);
+    QSignalSpy layerFailed(&stack, &SshSessionStack::layerFailed);
+    QSignalSpy credentialAsked(&stack, &SshSessionStack::layerCredentialRequired);
+
+    QList<ConnectionTarget> layers;
+    connect(&stack, &SshSessionStack::layersChanged, this,
+            [&layers](const QList<ConnectionTarget> &snapshot) { layers = snapshot; });
+
+    stack.start();
+    QVERIFY(waitFor([&]() { return connected.count() > 0 || failed.count() > 0; }));
+    QVERIFY2(failed.isEmpty(), "第一层连接失败");
+
+    // 这正是 shim 接管时的形态：ShellShim::resolveTarget 只能从命令行还原出主机和用户名，
+    // 拿不到密码。此前这里会直接判定认证失败，并连带让文件管理器弹出密码对话框。
+    ConnectionTarget passwordless = secondLayerTarget();
+    passwordless.password.clear();
+    stack.requestPushLayer(passwordless);
+
+    QVERIFY2(waitFor([&]() {
+                 return credentialAsked.count() > 0 || layerFailed.count() > 0
+                     || layers.size() == 2;
+             }, 40000),
+             "压栈既未索要凭据也未得出结论");
+    QVERIFY2(layerFailed.isEmpty(),
+             qPrintable(QStringLiteral("不应直接失败，应当索要密码：%1")
+                            .arg(layerFailed.value(0).value(1).toString())));
+    QCOMPARE(credentialAsked.count(), 1);
+    // 首次索要不得标记为重试，否则终端里会出现莫名其妙的 "Permission denied"。
+    QCOMPARE(credentialAsked.at(0).at(1).toBool(), false);
+
+    stack.provideLayerCredential(QString::fromUtf8(qgetenv("SHELLIUM_IT_PASSWORD2")));
+    QVERIFY2(waitFor([&]() { return layers.size() == 2 || layerFailed.count() > 0; }, 40000),
+             "提交密码后未能建立第二层");
+    QVERIFY2(layerFailed.isEmpty(), "提交正确密码后不应失败");
+    QCOMPARE(layers.size(), 2);
+
+    // 凭据必须随快照交给文件管理器，否则 SFTP 会再弹一次密码框——这正是用户看到两个
+    // 对话框叠在一起的根因。
+    QVERIFY2(!layers.at(1).password.isEmpty(),
+             "第二层快照未携带用户刚输入的密码，SFTP 将被迫重新询问");
+
+    stack.requestStop();
+    QVERIFY(stack.wait(10000));
+}
+
+void SshSessionStackIntegrationTest::doesNotReuseStaleCredentialAfterCancel()
+{
+    if (m_secondLayerHost.isEmpty() || qgetenv("SHELLIUM_IT_PASSWORD2").isEmpty()) {
+        QSKIP("未设置第二层服务器信息，跳过陈旧凭据测试");
+    }
+
+    SshSessionStack stack(firstLayerTarget());
+    QSignalSpy connected(&stack, &SshSessionStack::shellConnected);
+    QSignalSpy failed(&stack, &SshSessionStack::connectionError);
+    QSignalSpy layerFailed(&stack, &SshSessionStack::layerFailed);
+    QSignalSpy credentialAsked(&stack, &SshSessionStack::layerCredentialRequired);
+
+    QList<ConnectionTarget> layers;
+    connect(&stack, &SshSessionStack::layersChanged, this,
+            [&layers](const QList<ConnectionTarget> &snapshot) { layers = snapshot; });
+
+    stack.start();
+    QVERIFY(waitFor([&]() { return connected.count() > 0 || failed.count() > 0; }));
+    QVERIFY2(failed.isEmpty(), "第一层连接失败");
+
+    ConnectionTarget passwordless = secondLayerTarget();
+    passwordless.password.clear();
+
+    // 第一次：索要凭据后用空串取消，模拟用户在密码提示处按 Ctrl+C。
+    stack.requestPushLayer(passwordless);
+    QVERIFY(waitFor([&]() { return credentialAsked.count() > 0; }, 40000));
+    stack.provideLayerCredential(QString());
+    QVERIFY2(waitFor([&]() { return layerFailed.count() > 0; }, 30000),
+             "取消认证后未报告该层失败");
+
+    // 第二次：必须重新索要凭据。此前遗留的空串会被新层立刻消费，表现为"再也连不上"——
+    // 用户每敲一次 ssh 就立刻收到一次"用户取消了认证"，且无从察觉原因。
+    stack.requestPushLayer(passwordless);
+    QVERIFY2(waitFor([&]() {
+                 return credentialAsked.count() > 1 || layerFailed.count() > 1;
+             }, 40000),
+             "第二次建层既未索要凭据也未失败");
+    QVERIFY2(layerFailed.count() == 1,
+             qPrintable(QStringLiteral("第二次建层不应直接失败，应重新索要密码：%1")
+                            .arg(layerFailed.value(1).value(1).toString())));
+    QCOMPARE(credentialAsked.count(), 2);
+
+    // 这次给出正确密码，必须能真正建成。
+    stack.provideLayerCredential(QString::fromUtf8(qgetenv("SHELLIUM_IT_PASSWORD2")));
+    QVERIFY2(waitFor([&]() { return layers.size() == 2 || layerFailed.count() > 1; }, 40000),
+             "提交正确密码后未能建立第二层");
+    QCOMPARE(layers.size(), 2);
+
+    stack.requestStop();
+    QVERIFY(stack.wait(10000));
+}
+
+void SshSessionStackIntegrationTest::terminalPaneCompletesNestedLoginFromKeyboard()
+{
+    if (m_secondLayerHost.isEmpty() || qgetenv("SHELLIUM_IT_PASSWORD2").isEmpty()) {
+        QSKIP("未设置第二层服务器信息，跳过端到端键盘测试");
+    }
+
+    TerminalPane pane;
+    pane.resize(900, 500);
+    pane.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&pane));
+
+    auto *view = pane.findChild<TerminalView *>();
+    QVERIFY2(view != nullptr, "未能取得面板内的终端视图");
+    view->setFocus(Qt::OtherFocusReason);
+
+    QSignalSpy targetsSpy(&pane, &TerminalPane::targetsChanged);
+    pane.connectToHost(firstLayerTarget());
+    QVERIFY2(waitFor([&]() { return pane.isConnected(); }, 40000), "第一层连接失败");
+    QVERIFY(waitFor([&]() { return pane.targets().size() == 1; }, 20000));
+
+    // 模拟 shim 接管：目标不带密码，正如从命令行还原出来的那样。
+    ConnectionTarget passwordless = secondLayerTarget();
+    passwordless.password.clear();
+    pane.connectNestedHost(passwordless);
+
+    // 面板应当进入本地行捕获，等待用户在终端里输入密码。
+    QVERIFY2(waitFor([&]() { return view->isCapturingLocalLine(); }, 40000),
+             "未进入本地密码捕获：内联提示流程没有接通");
+
+    const QString password = QString::fromUtf8(qgetenv("SHELLIUM_IT_PASSWORD2"));
+    QTest::keyClicks(view, password);
+    QTest::keyClick(view, Qt::Key_Return);
+
+    QVERIFY2(waitFor([&]() { return pane.targets().size() == 2; }, 40000),
+             "键盘输入密码后第二层仍未建成");
+    const QList<ConnectionTarget> chain = pane.targets();
+    QCOMPARE(chain.size(), 2);
+    QCOMPARE(chain.at(1).host, m_secondLayerHost);
+    QCOMPARE(chain.at(1).confidence, ConnectionTarget::Confidence::Confirmed);
+    QVERIFY2(!chain.at(1).password.isEmpty(),
+             "第二层未携带刚输入的密码，SFTP 会被迫再问一次");
+}
+
+void SshSessionStackIntegrationTest::terminalPaneHandlesTypedSshEndToEnd()
+{
+    if (m_secondLayerHost.isEmpty() || qgetenv("SHELLIUM_IT_PASSWORD2").isEmpty()) {
+        QSKIP("未设置第二层服务器信息，跳过手打 ssh 端到端测试");
+    }
+
+    TerminalPane pane;
+    pane.resize(900, 500);
+    pane.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&pane));
+
+    auto *view = pane.findChild<TerminalView *>();
+    QVERIFY(view != nullptr);
+    view->setFocus(Qt::OtherFocusReason);
+
+    pane.connectToHost(firstLayerTarget());
+    QVERIFY2(waitFor([&]() { return pane.isConnected(); }, 40000), "第一层连接失败");
+    QVERIFY(waitFor([&]() { return pane.targets().size() == 1; }, 20000));
+
+    // shim 在层就绪 300ms 后注入；再留出一轮往返让远端 Shell 真正定义好函数。
+    QTest::qWait(2500);
+
+    // 完全按用户的操作来：在终端里逐字敲出 ssh 命令并回车。
+    QTest::keyClicks(view, QStringLiteral("ssh root@") + m_secondLayerHost);
+    QTest::keyClick(view, Qt::Key_Return);
+
+    QVERIFY2(waitFor([&]() { return view->isCapturingLocalLine(); }, 40000),
+             "手打 ssh 后未进入本地密码捕获：shim 接管或凭据接线断了");
+
+    QTest::keyClicks(view, QString::fromUtf8(qgetenv("SHELLIUM_IT_PASSWORD2")));
+    QTest::keyClick(view, Qt::Key_Return);
+
+    QVERIFY2(waitFor([&]() { return pane.targets().size() == 2; }, 40000),
+             "输入密码后第二层仍未建成");
+    const QList<ConnectionTarget> chain = pane.targets();
+    QCOMPARE(chain.at(1).host, m_secondLayerHost);
+    QCOMPARE(chain.at(1).confidence, ConnectionTarget::Confidence::Confirmed);
 }
 
 QTEST_MAIN(SshSessionStackIntegrationTest)

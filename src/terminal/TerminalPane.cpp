@@ -8,12 +8,18 @@
 #include "terminal/TerminalView.h"
 
 #include <QHBoxLayout>
+#include <QLoggingCategory>
 #include <QLabel>
 #include <QMessageBox>
 #include <QTimer>
 #include <QVBoxLayout>
 
 #include <utility>
+
+namespace {
+/** @brief 与 TerminalView 共用的认证诊断通道；见该文件中的说明。 */
+Q_LOGGING_CATEGORY(authLog, "shellium.auth", QtWarningMsg)
+} // namespace
 
 TerminalPane::TerminalPane(QWidget *parent)
     : QWidget(parent)
@@ -51,6 +57,26 @@ TerminalPane::TerminalPane(QWidget *parent)
                     m_captureNextLineAsCredential = true;
                     emit statusMessage(tr("等待内层 SSH 密码；本次输入将同时用于 SFTP 会话"));
                 }
+            });
+    connect(m_terminalView,
+            &TerminalView::localLineSubmitted,
+            this,
+            [this](const QString &line, const bool cancelled) {
+                qCDebug(authLog, "localLineSubmitted len=%lld cancelled=%d stackRunning=%d",
+                        static_cast<long long>(line.size()), int(cancelled),
+                        int(m_sessionStack != nullptr && m_sessionStack->isRunning()));
+                if (m_sessionStack == nullptr || !m_sessionStack->isRunning()) {
+                    return;
+                }
+                if (!cancelled && line.isEmpty() && !m_pendingCredentialPrompt.isEmpty()) {
+                    // 在密码提示处直接回车，OpenSSH 的行为是重新提示而不是中止。这样任何
+                    // 一次输入丢失都只是多提示一遍，而不会升级成不可恢复的连接失败。
+                    m_terminalView->appendTerminalOutput(m_pendingCredentialPrompt.toUtf8());
+                    m_terminalView->beginLocalLineCapture();
+                    return;
+                }
+                m_pendingCredentialPrompt.clear();
+                m_sessionStack->provideLayerCredential(line);
             });
     connect(m_terminalView,
             &TerminalView::shellIntegrationEvent,
@@ -249,6 +275,28 @@ void TerminalPane::connectToHost(const ConnectionTarget &target)
         if (grew && m_shellIntegrationEnabled) {
             injectShellIntegration();
         }
+    });
+    connect(m_sessionStack,
+            &SshSessionStack::layerCredentialRequired,
+            this,
+            [this, sessionGeneration](const ConnectionTarget &credentialTarget,
+                                      const bool retry) {
+        if (sessionGeneration != m_sessionGeneration) {
+            return;
+        }
+        // 在终端里内联提示，形式与 OpenSSH 一致。绝不弹对话框：用户刚敲完 ssh，预期的是
+        // 终端里的 password 提示，一个窗口会彻底打断这个心智模型。
+        const QString prompt = retry
+            ? tr("Permission denied, please try again.\r\n%1's password: ")
+                  .arg(credentialTarget.connectionSpecifier())
+            : tr("%1's password: ").arg(credentialTarget.connectionSpecifier());
+        qCDebug(authLog, "layerCredentialRequired host=%s retry=%d",
+                qPrintable(credentialTarget.connectionSpecifier(true)), int(retry));
+        // 记住提示语：用户直接回车时要原样再问一遍，而不是把空行当成放弃。
+        m_pendingCredentialPrompt = tr("%1's password: ")
+                                        .arg(credentialTarget.connectionSpecifier());
+        m_terminalView->appendTerminalOutput(prompt.toUtf8());
+        m_terminalView->beginLocalLineCapture();
     });
     connect(m_sessionStack,
             &SshSessionStack::layerFailed,
