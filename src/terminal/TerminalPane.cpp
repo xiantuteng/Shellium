@@ -140,6 +140,7 @@ void TerminalPane::openLocalShell(const QString &shellPath)
     stopWorker();
     m_ownedTargets.clear();
     m_inferredTargets.clear();
+    m_echoFilter.reset();
     m_shellReady = false;
     // 切换成本地 Shell 后当前终端不再具备远程目标，立即通知所属标签页清空自己的文件
     // 管理器，不能等 zsh 启动完成后继续短暂显示上一条 SSH 会话的目录。
@@ -222,6 +223,8 @@ void TerminalPane::connectToHost(const ConnectionTarget &target)
     m_shellReady = false;
     m_ownedTargets.clear();
     m_inferredTargets.clear();
+    // 旧会话登记的期望串永远不会再出现；继续持有只会让新会话的第一段输出被误扣。
+    m_echoFilter.reset();
     // 新 SSH 尚未完成主机校验和认证，此时先让所属标签页清空旧 SFTP 内容；shellConnected
     // 会在认证成功后再次发出 targetsChanged 并开放该目标。
     emit targetsChanged(this);
@@ -235,7 +238,7 @@ void TerminalPane::connectToHost(const ConnectionTarget &target)
             this,
             [this, sessionGeneration](const QByteArray &bytes) {
                 if (sessionGeneration == m_sessionGeneration) {
-                    m_terminalView->appendTerminalOutput(bytes);
+                    m_terminalView->appendTerminalOutput(m_echoFilter.filter(bytes));
                 }
             });
     connect(m_sessionStack,
@@ -270,11 +273,18 @@ void TerminalPane::connectToHost(const ConnectionTarget &target)
         refreshHeaderLabel();
         emit targetsChanged(this);
 
-        // 每建成一层就给它注入同一个 shim——这正是闭环所在：用户只需在第一层被注入一次，
-        // 之后每一层都由本程序建立并自动注入，整条链无需在任何服务器上改 rc 文件。
-        if (grew && m_shellIntegrationEnabled) {
-            injectShellIntegration();
+
+    });
+    connect(m_sessionStack,
+            &SshSessionStack::shellIntegrationPathReady,
+            this,
+            [this, sessionGeneration](const QByteArray &path) {
+        if (sessionGeneration != m_sessionGeneration) {
+            return;
         }
+        // 脚本正文走独立 exec 通道，不经过终端；交互式 Shell 里只会出现这条极短的 source
+        // 命令，登记后由过滤器扣掉，用户什么也看不到。
+        m_echoFilter.expect(ShellShim::sourceCommand(path));
     });
     connect(m_sessionStack,
             &SshSessionStack::layerCredentialRequired,
@@ -591,22 +601,6 @@ void TerminalPane::inspectSubmittedCommand(const QString &command)
     }
 }
 
-void TerminalPane::injectShellIntegration()
-{
-    if (m_sessionStack == nullptr || !m_sessionStack->isRunning()) {
-        return;
-    }
-    // 远端 Shell 刚绘制完提示符时注入最不打扰：此刻用户还没开始输入，注入行不会打断
-    // 正在编辑的命令。延迟一拍是为了让登录脚本的输出先落定。
-    QTimer::singleShot(300, this, [this, generation = m_sessionGeneration]() {
-        if (generation != m_sessionGeneration || m_sessionStack == nullptr
-            || !m_sessionStack->isRunning()) {
-            return;
-        }
-        m_sessionStack->enqueueInput(ShellShim::injectionCommand() + "\n");
-    });
-}
-
 void TerminalPane::handleShellIntegrationEvent(const QByteArray &payload)
 {
     const ShellShim::Event event = ShellShim::parseEvent(payload);
@@ -619,6 +613,9 @@ void TerminalPane::handleShellIntegrationEvent(const QByteArray &payload)
 
     // shim 正阻塞在 read 上等回执，任何分支都必须给出答复，否则用户的终端会挂住。
     const auto respond = [this](const QByteArray &response) {
+        // 回执由远端的 read 消费，但 PTY 会先把它原样回显出来。登记后由过滤器扣掉，
+        // 用户不该在屏幕上看到 take/pass 这种内部协议文本。
+        m_echoFilter.expect(response.trimmed());
         m_sessionStack->enqueueInput(response);
     };
 

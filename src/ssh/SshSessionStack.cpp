@@ -1,5 +1,6 @@
 #include "ssh/SshSessionStack.h"
 
+#include "ssh/ShellShim.h"
 #include "ssh/SshSessionNode.h"
 
 #include <QLoggingCategory>
@@ -177,6 +178,16 @@ bool SshSessionStack::pumpLoop()
         // 会让内层连接失去承载，这也是建立阶段不能阻塞的根本原因。
         pumpAllForwards();
 
+        for (const std::unique_ptr<SshSessionNode> &layer : m_layers) {
+            layer->pumpExec();
+            bool installed = false;
+            if (layer->takeExecResult(&installed) && installed) {
+                // 脚本已经落盘，现在才把那条极短的 source 命令写进交互式终端。
+                layer->queueOutgoing(
+                    ShellShim::sourceCommand(shimPathFor(*layer)) + "\n");
+            }
+        }
+
         if (!m_layers.back()->isReady()) {
             // 握手期间没有终端数据可搬运；短暂让出 CPU 后继续推进状态机。
             QThread::msleep(5);
@@ -229,6 +240,13 @@ bool SshSessionStack::pumpLoop()
 
         if (resizeRequired) {
             top.resizePty(columns, rows);
+        }
+
+        // 内部排队的注入必须先写完再写用户输入，否则两者会交错，回显也就无法精确扣掉。
+        if (!top.flushOutgoing()) {
+            QMutexLocker locker(&m_mutex);
+            m_pendingInput.prepend(pendingInput);
+            continue;
         }
 
         qsizetype writeOffset = 0;
@@ -330,6 +348,7 @@ bool SshSessionStack::advanceEstablishingLayers()
         return true;
     }
     if (step.ok) {
+        beginShellIntegrationInstall(node);
         // 该层刚刚就绪。栈底的通知留给 pumpLoop，以便 shellConnected 先于 layersChanged
         // 到达界面，避免文件管理器先收到一份“尚未连接”的空列表再被立刻覆盖。
         if (m_layers.size() > 1) {
@@ -479,6 +498,23 @@ void SshSessionStack::handleForwardOutcome(const SshSessionNode::ForwardOutcome 
     }
     request->completed = true;
     request->condition.wakeAll();
+}
+
+QByteArray SshSessionStack::shimPathFor(const SshSessionNode &node)
+{
+    // 每层一个独立文件名，避免同一台主机上的多个会话互相覆盖。取 UUID 前 8 位即可，
+    // 路径要尽量短——终端里那条 source 命令越短越不会折行，也就越容易被精确扣掉。
+    return "/tmp/.shm-" + node.target().id.left(8).toUtf8();
+}
+
+void SshSessionStack::beginShellIntegrationInstall(SshSessionNode &node)
+{
+    const QByteArray path = shimPathFor(node);
+    if (!node.beginDetachedExec(ShellShim::installCommand(path))) {
+        // 发起失败不影响会话本身，只是这一层退回命令解析的降级路径。
+        return;
+    }
+    emit shellIntegrationPathReady(path);
 }
 
 void SshSessionStack::pumpAllForwards()

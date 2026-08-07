@@ -77,6 +77,9 @@ private slots:
      */
     void terminalPaneHandlesTypedSshEndToEnd();
 
+    /** @brief Shellium 自己写给远端的字节不得出现在用户屏幕上。 */
+    void suppressesOwnEchoInTerminal();
+
 private:
     /** @brief 从环境变量装配第一层目标。 */
     [[nodiscard]] static ConnectionTarget firstLayerTarget();
@@ -452,7 +455,7 @@ void SshSessionStackIntegrationTest::shellShimReportsSshInvocationFromRealShell(
 
     // 注入 shim。这一步在真实 Shell 里跑：语法错误、base64 缺失、引号转义问题都只有
     // 在这里才会暴露，桩替身完全测不出来。
-    stack.enqueueInput(ShellShim::injectionCommand() + "\n");
+    stack.enqueueInput(ShellShim::scriptBody() + "\n");
     output.clear();
     stack.enqueueInput("type ssh | head -1\n");
     QVERIFY2(waitFor([&]() { return output.contains("function"); }, 15000),
@@ -720,6 +723,54 @@ void SshSessionStackIntegrationTest::terminalPaneHandlesTypedSshEndToEnd()
     const QList<ConnectionTarget> chain = pane.targets();
     QCOMPARE(chain.at(1).host, m_secondLayerHost);
     QCOMPARE(chain.at(1).confidence, ConnectionTarget::Confidence::Confirmed);
+}
+
+void SshSessionStackIntegrationTest::suppressesOwnEchoInTerminal()
+{
+    if (m_secondLayerHost.isEmpty() || qgetenv("SHELLIUM_IT_PASSWORD2").isEmpty()) {
+        QSKIP("未设置第二层服务器信息，跳过回显抑制测试");
+    }
+
+    TerminalPane pane;
+    pane.resize(1100, 600);
+    pane.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&pane));
+
+    auto *view = pane.findChild<TerminalView *>();
+    QVERIFY(view != nullptr);
+    view->setFocus(Qt::OtherFocusReason);
+
+    pane.connectToHost(firstLayerTarget());
+    QVERIFY2(waitFor([&]() { return pane.isConnected(); }, 40000), "第一层连接失败");
+    QVERIFY(waitFor([&]() { return pane.targets().size() == 1; }, 20000));
+    QTest::qWait(2500);
+
+    QTest::keyClicks(view, QStringLiteral("ssh root@") + m_secondLayerHost);
+    QTest::keyClick(view, Qt::Key_Return);
+    QVERIFY2(waitFor([&]() { return view->isCapturingLocalLine(); }, 40000),
+             "未进入密码捕获");
+    QTest::keyClicks(view, QString::fromUtf8(qgetenv("SHELLIUM_IT_PASSWORD2")));
+    QTest::keyClick(view, Qt::Key_Return);
+    QVERIFY2(waitFor([&]() { return pane.targets().size() == 2; }, 40000), "第二层未建成");
+    QTest::qWait(2500);
+
+    const QString screen = view->toPlainText();
+
+    // take/pass 是 Shellium 与 shim 之间的内部协议文本，用户不该看到。
+    QVERIFY2(!screen.contains(QStringLiteral("take")),
+             "终端里出现了发给 shim 的 take 回执");
+
+    // 注入行是本程序写入的 Shell 代码，同样不该出现在屏幕上。抽取几段特征串检查。
+    for (const QString &fragment : {QStringLiteral("_shellium_"),
+                                    QStringLiteral("HISTCONTROL=ignorespace"),
+                                    QStringLiteral("BASH_VERSION")}) {
+        QVERIFY2(!screen.contains(fragment),
+                 qPrintable(QStringLiteral("终端里出现了注入行片段：%1").arg(fragment)));
+    }
+
+    // 真正的远端输出必须完好——过滤不能把用户内容一起吞掉。
+    QVERIFY2(screen.contains(QStringLiteral("ssh root@") + m_secondLayerHost),
+             "用户自己敲的命令被过滤掉了");
 }
 
 QTEST_MAIN(SshSessionStackIntegrationTest)

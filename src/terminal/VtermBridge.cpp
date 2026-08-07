@@ -215,6 +215,17 @@ void VtermBridge::render(QTextDocument *document) const
 VtermBridge::Cell VtermBridge::convertCell(const VTermScreenCell &cell) const
 {
     Cell converted;
+
+    // 双宽字符（中日韩、全角标点、部分表情）占两个终端格。libvterm 把右半格标记为
+    // 0xFFFFFFFF 而不是 0，因此不能只靠“chars[0] 为 0”判空：那个哨兵值不是合法码位，
+    // QString::fromUcs4 会把它转成 U+FFFD，于是每个汉字后面都跟出一个 � 占位符。
+    constexpr uint32_t kWideCharContinuation = 0xffffffffU;
+    if (cell.chars[0] == kWideCharContinuation) {
+        // 宽度置 0，渲染循环据此跳过该格；右半格的内容已经由左半格一并绘制。
+        converted.width = 0;
+        return converted;
+    }
+
     qsizetype characterCount = 0;
     while (characterCount < VTERM_MAX_CHARS_PER_CELL && cell.chars[characterCount] != 0) {
         ++characterCount;

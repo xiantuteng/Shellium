@@ -47,6 +47,8 @@ qt_add_executable(Shellium
     src/ssh/SshTunnelBroker.h
     src/terminal/LocalShellWorker.cpp
     src/terminal/LocalShellWorker.h
+    src/terminal/TerminalEchoFilter.cpp
+    src/terminal/TerminalEchoFilter.h
     src/terminal/TerminalPane.cpp
     src/terminal/TerminalPane.h
     src/terminal/TerminalView.cpp
@@ -102,6 +104,8 @@ if(BUILD_TESTING)
         src/ssh/ShellShim.h
         src/ssh/SshCommandParser.cpp
         src/ssh/SshCommandParser.h
+        src/terminal/TerminalEchoFilter.cpp
+        src/terminal/TerminalEchoFilter.h
         src/terminal/TerminalView.cpp
         src/terminal/TerminalView.h
         src/terminal/VtermBridge.cpp
@@ -143,6 +147,8 @@ if(BUILD_TESTING)
         src/ssh/SshTunnelBroker.h
         src/ssh/SshCommandParser.cpp
         src/ssh/SshCommandParser.h
+        src/terminal/TerminalEchoFilter.cpp
+        src/terminal/TerminalEchoFilter.h
         src/terminal/TerminalPane.cpp
         src/terminal/TerminalPane.h
         src/terminal/TerminalView.cpp

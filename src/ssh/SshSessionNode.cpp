@@ -152,8 +152,9 @@ constexpr qint64 kEstablishTimeoutMs = 30000;
 
 } // namespace
 
-SshSessionNode::SshSessionNode(ConnectionTarget target)
+SshSessionNode::SshSessionNode(ConnectionTarget target, QByteArray shellIntegrationScript)
     : m_target(std::move(target))
+    , m_shellIntegrationScript(std::move(shellIntegrationScript))
 {
 }
 
@@ -163,6 +164,11 @@ SshSessionNode::~SshSessionNode()
         releaseForward(forward);
     }
     m_forwards.clear();
+
+    if (m_execChannel != nullptr) {
+        ssh_channel_free(m_execChannel);
+        m_execChannel = nullptr;
+    }
 
     for (PendingForward &pending : m_pendingForwards) {
         // 同样只 free 不 close：这些通道从未打开成功。
@@ -541,6 +547,122 @@ void SshSessionNode::resizePty(const int columns, const int rows)
         return;
     }
     ssh_channel_change_pty_size(m_shell, m_columns, m_rows);
+}
+
+bool SshSessionNode::beginDetachedExec(const QByteArray &command)
+{
+    if (m_session == nullptr || m_execChannel != nullptr) {
+        return false;
+    }
+    m_execChannel = ssh_channel_new(m_session);
+    if (m_execChannel == nullptr) {
+        return false;
+    }
+    m_execCommand = command;
+    m_execStage = ExecStage::Opening;
+    m_execTimer.start();
+    return true;
+}
+
+void SshSessionNode::pumpExec()
+{
+    if (m_execChannel == nullptr) {
+        return;
+    }
+
+    const auto finish = [this](const bool succeeded) {
+        // 只 free 不 close：非阻塞会话上 ssh_channel_close 会返回 SSH_AGAIN 并留下半写包，
+        // 之后整条 SSH 流失步，连交互式 Shell 也会一起废掉。
+        ssh_channel_free(m_execChannel);
+        m_execChannel = nullptr;
+        m_execStage = ExecStage::Finished;
+        m_execHasResult = true;
+        m_execSucceeded = succeeded;
+    };
+
+    // 安装脚本只是写个小文件；超时说明远端异常，此时放弃即可，交互式会话不受影响。
+    constexpr qint64 kExecTimeoutMs = 15000;
+    if (m_execTimer.isValid() && m_execTimer.elapsed() > kExecTimeoutMs) {
+        finish(false);
+        return;
+    }
+
+    switch (m_execStage) {
+    case ExecStage::Opening: {
+        const int result = ssh_channel_open_session(m_execChannel);
+        if (result == SSH_AGAIN) {
+            return;
+        }
+        if (result != SSH_OK) {
+            finish(false);
+            return;
+        }
+        m_execStage = ExecStage::Requesting;
+        return;
+    }
+    case ExecStage::Requesting: {
+        const int result = ssh_channel_request_exec(m_execChannel, m_execCommand.constData());
+        if (result == SSH_AGAIN) {
+            return;
+        }
+        if (result != SSH_OK) {
+            finish(false);
+            return;
+        }
+        m_execStage = ExecStage::Draining;
+        return;
+    }
+    case ExecStage::Draining: {
+        char buffer[1024];
+        for (const int stderrStream : {0, 1}) {
+            while (ssh_channel_read_nonblocking(
+                       m_execChannel, buffer, sizeof(buffer), stderrStream) > 0) {
+            }
+        }
+        if (ssh_channel_is_eof(m_execChannel) != 0) {
+            finish(true);
+        }
+        return;
+    }
+    case ExecStage::Idle:
+    case ExecStage::Finished:
+        return;
+    }
+}
+
+bool SshSessionNode::takeExecResult(bool *succeeded)
+{
+    if (!m_execHasResult) {
+        return false;
+    }
+    m_execHasResult = false;
+    if (succeeded != nullptr) {
+        *succeeded = m_execSucceeded;
+    }
+    return true;
+}
+
+void SshSessionNode::queueOutgoing(const QByteArray &bytes)
+{
+    m_outgoing += bytes;
+}
+
+bool SshSessionNode::flushOutgoing()
+{
+    while (!m_outgoing.isEmpty()) {
+        const int written = writeToShell(m_outgoing.constData(),
+                                         static_cast<int>(m_outgoing.size()));
+        if (written == SSH_AGAIN || written == 0) {
+            return false;
+        }
+        if (written < 0) {
+            // 写失败交由后续的交互式写入路径统一报错；这里只放弃注入，不影响会话可用性。
+            m_outgoing.clear();
+            return true;
+        }
+        m_outgoing.remove(0, written);
+    }
+    return true;
 }
 
 int SshSessionNode::writeToShell(const char *data, const int size)

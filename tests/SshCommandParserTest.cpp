@@ -1,5 +1,6 @@
 #include "core/ConnectionTarget.h"
 #include "ssh/ShellShim.h"
+#include "terminal/TerminalEchoFilter.h"
 #include "ssh/SshCommandParser.h"
 #include "terminal/TerminalView.h"
 #include "terminal/LocalShellWorker.h"
@@ -77,6 +78,12 @@ private slots:
 
     /** @brief 密码常从密码管理器粘贴，捕获期间必须接受粘贴而不是把按键吞掉。 */
     void terminalViewAcceptsPasteDuringCapture();
+
+    /** @brief 回显过滤器要能扣掉整段、跨块的期望串，并在匹配不上时如数放行。 */
+    void echoFilterRemovesExpectedEcho();
+
+    /** @brief 双宽字符（中日韩）不得在每个字后面多渲染一个占位字符。 */
+    void terminalViewRendersWideCharacters();
 
     /** @brief VtermBridge 必须把私有 OSC 交出来，而不是渲染成屏幕乱码。 */
     void terminalViewDeliversShellIntegrationEvent();
@@ -477,6 +484,77 @@ void SshCommandParserTest::terminalViewAcceptsPasteDuringCapture()
     QTest::keyClick(&view, Qt::Key_Return);
     QCOMPARE(lineSpy.size(), 2);
     QCOMPARE(lineSpy.at(1).at(0).toString(), QStringLiteral("abc123"));
+}
+
+void SshCommandParserTest::echoFilterRemovesExpectedEcho()
+{
+    // 无登记时原样放行，且不应产生额外拷贝路径上的差异。
+    {
+        TerminalEchoFilter filter;
+        QCOMPARE(filter.filter(QByteArrayLiteral("hello")), QByteArrayLiteral("hello"));
+    }
+
+    // 整段一次到达：期望串被扣掉，前后内容保留。
+    {
+        TerminalEchoFilter filter;
+        filter.expect(QByteArrayLiteral("take"));
+        QCOMPARE(filter.filter(QByteArrayLiteral("abc take def")),
+                 QByteArrayLiteral("abc  def"));
+    }
+
+    // 跨数据块：期望串被网络拆成两半，尾部必须扣留到下一块到达后再判定。
+    {
+        TerminalEchoFilter filter;
+        filter.expect(QByteArrayLiteral("take"));
+        QCOMPARE(filter.filter(QByteArrayLiteral("xx ta")), QByteArrayLiteral("xx "));
+        QCOMPARE(filter.filter(QByteArrayLiteral("ke yy")), QByteArrayLiteral(" yy"));
+    }
+
+    // 部分匹配最终没有兑现：扣留的字节必须原样吐出来，不能被吞掉。
+    {
+        TerminalEchoFilter filter;
+        filter.expect(QByteArrayLiteral("take"));
+        QCOMPARE(filter.filter(QByteArrayLiteral("ta")), QByteArray());
+        QCOMPARE(filter.filter(QByteArrayLiteral("lk")), QByteArrayLiteral("talk"));
+    }
+
+    // 多段按登记顺序依次匹配。
+    {
+        TerminalEchoFilter filter;
+        filter.expect(QByteArrayLiteral("one"));
+        filter.expect(QByteArrayLiteral("two"));
+        QCOMPARE(filter.filter(QByteArrayLiteral("[one][two][one]")),
+                 QByteArrayLiteral("[][][one]"));
+    }
+
+    // 预算耗尽：远端把回显改写过时必须放弃匹配，绝不能无限期扣住用户的输出。
+    {
+        TerminalEchoFilter filter;
+        filter.expect(QByteArrayLiteral("never-appears"));
+        QByteArray produced;
+        for (int round = 0; round < 12; ++round) {
+            produced += filter.filter(QByteArray(1024, 'x'));
+        }
+        QCOMPARE(produced.size(), 12 * 1024);
+    }
+
+    // reset 必须交出扣留的字节：会话切换后旧期望串永远不会再出现。
+    {
+        TerminalEchoFilter filter;
+        filter.expect(QByteArrayLiteral("take"));
+        QCOMPARE(filter.filter(QByteArrayLiteral("ta")), QByteArray());
+        QCOMPARE(filter.reset(), QByteArrayLiteral("ta"));
+        QCOMPARE(filter.filter(QByteArrayLiteral("take")), QByteArrayLiteral("take"));
+    }
+}
+
+void SshCommandParserTest::terminalViewRendersWideCharacters()
+{
+    TerminalView view;
+    view.appendTerminalOutput(QStringLiteral("正在连接 ok").toUtf8());
+    const QString rendered = view.toPlainText().trimmed();
+    QVERIFY2(rendered == QStringLiteral("正在连接 ok"),
+             qPrintable(QStringLiteral("实际渲染为：[%1]").arg(rendered)));
 }
 
 void SshCommandParserTest::terminalViewDeliversShellIntegrationEvent()

@@ -127,6 +127,13 @@ signals:
     void layerFailed(const ConnectionTarget &target, const QString &message);
 
     /**
+     * @brief 某一层即将加载 Shell 集成脚本，携带其远端路径。
+     *
+     * 界面据此登记那条 source 命令的期望回显，把它从用户屏幕上扣掉。
+     */
+    void shellIntegrationPathReady(const QByteArray &path);
+
+    /**
      * @brief 正在建立的层需要密码。
      * @param target 待认证的服务器。
      * @param retry 是否为上一次密码被拒后的重试。
@@ -193,6 +200,12 @@ private:
 
     /** @brief 把 GUI/SFTP 线程排队的 direct-tcpip 请求转成异步建立，不等待结果。 */
     void serviceForwardRequests();
+
+    /** @brief 该层 Shell 集成脚本的远端临时路径。 */
+    [[nodiscard]] static QByteArray shimPathFor(const SshSessionNode &node);
+
+    /** @brief 经独立 exec 通道把 Shell 集成脚本写入远端临时文件。 */
+    void beginShellIntegrationInstall(SshSessionNode &node);
 
     /** @brief 丢弃尚未被消费的层凭据；新建层、层失败与退层时都必须调用。 */
     void discardPendingCredential();

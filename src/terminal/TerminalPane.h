@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/ConnectionTarget.h"
+#include "terminal/TerminalEchoFilter.h"
 
 #include <QVector>
 #include <QStringList>
@@ -71,9 +72,6 @@ private:
 
     /** @brief 按当前所在层刷新标题，并把推测层显式标注出来。 */
     void refreshHeaderLabel();
-
-    /** @brief 向当前栈顶的远端 Shell 注入 ssh 接管函数。 */
-    void injectShellIntegration();
 
     /**
      * @brief 处理远端 shim 上报的事件，决定是否接管这次 ssh。
@@ -162,4 +160,11 @@ private:
      * 用户在提示处直接回车时据此原样再问一遍，与 OpenSSH 行为一致。
      */
     QString m_pendingCredentialPrompt;
+
+    /**
+     * @brief 扣除 Shellium 自己写入远端后被回显回来的字节。
+     *
+     * 注入行与 take/pass 回执都是本程序发出的，用户不该在屏幕上看到它们。
+     */
+    TerminalEchoFilter m_echoFilter;
 };

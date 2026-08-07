@@ -36,12 +36,30 @@ public:
     };
 
     /**
-     * @brief 返回注入远端 Shell 的一行命令（不含结尾回车）。
+     * @brief 返回 shim 的脚本正文，供写入远端临时文件。
      *
-     * 命令以空格开头，配合 bash 的 HISTCONTROL 与 zsh 的 hist_ignore_space 可以不进历史；
-     * 并且自我限定在 bash/zsh 交互式 Shell 内，其他 Shell 下不会定义任何东西。
+     * 自我限定在 bash/zsh 交互式 Shell 内，其他 Shell 下不会定义任何东西。
      */
-    [[nodiscard]] static QByteArray injectionCommand();
+    [[nodiscard]] static QByteArray scriptBody();
+
+    /**
+     * @brief 生成把脚本写入远端临时文件的命令，交给独立的 exec 通道执行。
+     * @param path 远端临时文件路径。
+     *
+     * 脚本正文经此通道传输，**绝不经过交互式终端**：远端 Shell 一旦接管，readline 会按
+     * 自己的方式重绘超宽行，回显不再与发出的字节一一对应，本地过滤器就无论如何都扣不
+     * 干净。用 here-doc 而非 base64 是为了不依赖远端是否有 base64 及其 -d/-D 差异。
+     */
+    [[nodiscard]] static QByteArray installCommand(const QByteArray &path);
+
+    /**
+     * @brief 返回在交互式 Shell 中加载该脚本的命令（不含结尾回车）。
+     * @param path 远端临时文件路径。
+     *
+     * 刻意保持极短：短行 readline 会逐字回显，本地过滤器因此可以精确扣掉，用户看不到它。
+     * 以空格开头，配合 HISTCONTROL=ignorespace 不进历史。脚本会在加载后自删。
+     */
+    [[nodiscard]] static QByteArray sourceCommand(const QByteArray &path);
 
     /**
      * @brief 解析一条 OSC 载荷。

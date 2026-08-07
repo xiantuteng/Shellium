@@ -11,6 +11,7 @@
 #include <libssh/libssh.h>
 
 #include <functional>
+#include <utility>
 
 /**
  * @brief 连接链中的一层：一个 libssh 会话及其交互式 Shell 与 direct-tcpip 转发通道。
@@ -55,7 +56,15 @@ public:
      * @brief 构造一层，但不发起任何网络操作。
      * @param target 该层的服务器配置；password 只在本对象生命周期内驻留内存。
      */
-    explicit SshSessionNode(ConnectionTarget target);
+    /**
+     * @brief 构造一层，但不发起任何网络操作。
+     * @param target 该层的服务器配置；password 只在本对象生命周期内驻留内存。
+     * @param shellIntegrationScript Shell 起来前抢先写入的注入脚本；空则不注入。
+     */
+    SshSessionNode(ConnectionTarget target, QByteArray shellIntegrationScript);
+
+    explicit SshSessionNode(ConnectionTarget target)
+        : SshSessionNode(std::move(target), {}) {}
     ~SshSessionNode();
 
     SshSessionNode(const SshSessionNode &) = delete;
@@ -106,6 +115,38 @@ public:
      * 而把上一层遗留的凭据投给新层则会让新层直接按"用户取消"失败。
      */
     [[nodiscard]] bool isAwaitingCredential() const;
+
+    /**
+     * @brief 在本层会话上非阻塞地执行一条命令，不关心其输出。
+     * @param command 交给远端 Shell 执行的完整命令。
+     * @return 是否成功发起；已有执行在途或会话未建立时返回 false。
+     *
+     * 用于把 Shell 集成脚本写入远端临时文件：正文经此通道传输，绝不经过交互式终端。
+     */
+    bool beginDetachedExec(const QByteArray &command);
+
+    /** @brief 推进在途的 exec；结束时把结果交给 execFinished 消费。 */
+    void pumpExec();
+
+    /**
+     * @brief 取走一次 exec 完成事件。
+     * @param succeeded 输出执行是否成功。
+     * @return 有完成事件返回 true；否则返回 false。
+     */
+    bool takeExecResult(bool *succeeded);
+
+    /**
+     * @brief 写出内部排队的字节（目前只有 Shell 集成注入）。
+     * @return 队列已清空返回 true；仍有剩余返回 false，调用方本轮不应再写用户输入。
+     *
+     * 必须先于用户输入写出：注入要抢在远端 Shell 接管终端之前送达，那时 tty 还处于规范
+     * 模式，内核会逐字回显，本地过滤器才能精确扣掉。等 Shell 起来后再发就落进 readline，
+     * 超宽行会被它按自己的方式重绘，回显不再与发出的字节一一对应。
+     */
+    bool flushOutgoing();
+
+    /** @brief 追加一段由本程序发出、需优先写给远端的字节。 */
+    void queueOutgoing(const QByteArray &bytes);
 
     /** @brief 通知远端 PTY 尺寸变化；Shell 尚未建立时只记录，待建立后应用。 */
     void resizePty(int columns, int rows);
@@ -253,6 +294,22 @@ private:
 
     /** @brief PTY 模式字节串，出于同样的重试稳定性要求而缓存。 */
     QByteArray m_terminalModes;
+
+    /** @brief Shell 通道就绪后抢先写出的注入脚本。 */
+    QByteArray m_shellIntegrationScript;
+
+    /** @brief 尚未写完的内部字节。 */
+    QByteArray m_outgoing;
+
+    /** @brief 后台 exec 的推进阶段。 */
+    enum class ExecStage { Idle, Opening, Requesting, Draining, Finished };
+
+    ExecStage m_execStage = ExecStage::Idle;
+    ssh_channel m_execChannel = nullptr;
+    QByteArray m_execCommand;
+    QElapsedTimer m_execTimer;
+    bool m_execHasResult = false;
+    bool m_execSucceeded = false;
 
     int m_columns = 80;
     int m_rows = 24;
