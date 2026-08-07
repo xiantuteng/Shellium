@@ -5,12 +5,12 @@
 #include <QPointer>
 #include <QString>
 
-class SshTerminalWorker;
+class SshSessionStack;
 
 /**
  * @brief 连接嵌套目标与已认证外层 SSH 会话的进程内路由表。
  *
- * SFTP 后台任务只持有不可解引用的 routeId；Broker 使用 QPointer 验证终端工作线程仍存活，
+ * SFTP 后台任务只持有不可解引用的 routeId；Broker 使用 QPointer 验证终端会话栈工作线程仍存活，
  * 从而避免在分屏关闭后访问悬挂指针。
  */
 class SshTunnelBroker final {
@@ -20,7 +20,7 @@ public:
 
     /** @brief 注册一个从现有 SSH 会话到内层主机的路由。 */
     void registerRoute(const QString &routeId,
-                       SshTerminalWorker *worker,
+                       SshSessionStack *stack,
                        const QString &targetHost,
                        quint16 targetPort);
 
@@ -35,7 +35,7 @@ public:
 
 private:
     struct Route {
-        QPointer<SshTerminalWorker> worker;
+        QPointer<SshSessionStack> stack;
         QString targetHost;
         quint16 targetPort = 22;
     };

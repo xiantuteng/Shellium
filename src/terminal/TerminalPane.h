@@ -8,7 +8,7 @@
 
 class QLabel;
 class LocalShellWorker;
-class SshTerminalWorker;
+class SshSessionStack;
 class TerminalView;
 
 /**
@@ -63,7 +63,7 @@ private:
 
     QLabel *m_headerLabel = nullptr;
     TerminalView *m_terminalView = nullptr;
-    SshTerminalWorker *m_worker = nullptr;
+    SshSessionStack *m_sessionStack = nullptr;
     LocalShellWorker *m_localWorker = nullptr;
     QVector<ConnectionTarget> m_targetChain;
     bool m_shellReady = false;

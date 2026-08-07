@@ -1,7 +1,7 @@
 #include "terminal/TerminalPane.h"
 
 #include "ssh/SshCommandParser.h"
-#include "ssh/SshTerminalWorker.h"
+#include "ssh/SshSessionStack.h"
 #include "ssh/SshTunnelBroker.h"
 #include "terminal/LocalShellWorker.h"
 #include "terminal/TerminalView.h"
@@ -30,8 +30,8 @@ TerminalPane::TerminalPane(QWidget *parent)
     layout->addWidget(m_terminalView, 1);
 
     connect(m_terminalView, &TerminalView::inputBytes, this, [this](const QByteArray &bytes) {
-        if (m_worker != nullptr && m_worker->isRunning()) {
-            m_worker->enqueueInput(bytes);
+        if (m_sessionStack != nullptr && m_sessionStack->isRunning()) {
+            m_sessionStack->enqueueInput(bytes);
         } else if (m_localWorker != nullptr && m_localWorker->isRunning()) {
             m_localWorker->enqueueInput(bytes);
         }
@@ -226,17 +226,17 @@ void TerminalPane::connectToHost(const ConnectionTarget &target)
     m_terminalView->appendTerminalOutput(
         tr("正在连接 %1…\n").arg(target.connectionSpecifier()).toUtf8());
 
-    m_worker = new SshTerminalWorker(target, this);
-    connect(m_worker,
-            &SshTerminalWorker::outputReady,
+    m_sessionStack = new SshSessionStack(target, this);
+    connect(m_sessionStack,
+            &SshSessionStack::outputReady,
             this,
             [this, sessionGeneration](const QByteArray &bytes) {
                 if (sessionGeneration == m_sessionGeneration) {
                     m_terminalView->appendTerminalOutput(bytes);
                 }
             });
-    connect(m_worker,
-            &SshTerminalWorker::shellConnected,
+    connect(m_sessionStack,
+            &SshSessionStack::shellConnected,
             this,
             [this, target, sessionGeneration]() {
         if (sessionGeneration != m_sessionGeneration) {
@@ -249,8 +249,8 @@ void TerminalPane::connectToHost(const ConnectionTarget &target)
         // 只有终端已完成主机校验和认证后才开放文件管理，避免 SSH 与 SFTP 并发弹出重复提示。
         emit targetsChanged(this);
     });
-    connect(m_worker,
-            &SshTerminalWorker::connectionError,
+    connect(m_sessionStack,
+            &SshSessionStack::connectionError,
             this,
             [this, sessionGeneration](const QString &message) {
         if (sessionGeneration != m_sessionGeneration) {
@@ -263,8 +263,8 @@ void TerminalPane::connectToHost(const ConnectionTarget &target)
                                               + QLatin1Char('\n')).toUtf8());
         emit statusMessage(message);
     });
-    connect(m_worker,
-            &SshTerminalWorker::legacyHmacRequired,
+    connect(m_sessionStack,
+            &SshSessionStack::legacyHmacRequired,
             this,
             [this, target, sessionGeneration](const QString &error) {
         if (sessionGeneration != m_sessionGeneration) {
@@ -296,8 +296,8 @@ void TerminalPane::connectToHost(const ConnectionTarget &target)
             emit statusMessage(message);
         }
     });
-    connect(m_worker,
-            &SshTerminalWorker::shellDisconnected,
+    connect(m_sessionStack,
+            &SshSessionStack::shellDisconnected,
             this,
             [this, sessionGeneration](const int exitStatus) {
         if (sessionGeneration != m_sessionGeneration || !m_remoteSessionEstablished) {
@@ -325,8 +325,8 @@ void TerminalPane::connectToHost(const ConnectionTarget &target)
             }
         });
     });
-    connect(m_worker,
-            &SshTerminalWorker::hostKeyVerificationRequired,
+    connect(m_sessionStack,
+            &SshSessionStack::hostKeyVerificationRequired,
             this,
             [this, sessionGeneration](const ConnectionTarget &verificationTarget,
                                       const QString &fingerprint) {
@@ -341,15 +341,15 @@ void TerminalPane::connectToHost(const ConnectionTarget &target)
                         .arg(verificationTarget.connectionSpecifier(true), fingerprint),
                     QMessageBox::Yes | QMessageBox::No,
                     QMessageBox::No);
-                if (m_worker != nullptr) {
-                    m_worker->confirmUnknownHost(answer == QMessageBox::Yes);
+                if (m_sessionStack != nullptr) {
+                    m_sessionStack->confirmUnknownHost(answer == QMessageBox::Yes);
                 }
             });
     connect(m_terminalView,
             &TerminalView::terminalSizeChanged,
-            m_worker,
-            &SshTerminalWorker::updateTerminalSize);
-    m_worker->start();
+            m_sessionStack,
+            &SshSessionStack::updateTerminalSize);
+    m_sessionStack->start();
     emit statusMessage(tr("正在连接 %1").arg(target.connectionSpecifier()));
     focusTerminal();
 }
@@ -431,10 +431,10 @@ void TerminalPane::inspectSubmittedCommand(const QString &command)
         // 这里记录“候选已进入”状态。若命令连接失败，用户可通过 exit 或目标选择器回到外层；
         // 后续 Shell Integration 会用远端 preexec/precmd 事件进一步确认实际状态。
         ConnectionTarget nestedTarget = parsed.target;
-        if (m_worker != nullptr && m_worker->isRunning()) {
+        if (m_sessionStack != nullptr && m_sessionStack->isRunning()) {
             nestedTarget.tunnelRouteId = nestedTarget.id;
             SshTunnelBroker::instance().registerRoute(nestedTarget.tunnelRouteId,
-                                                       m_worker,
+                                                       m_sessionStack,
                                                        nestedTarget.host,
                                                        nestedTarget.port);
             m_tunnelRouteIds.append(nestedTarget.tunnelRouteId);
@@ -510,18 +510,18 @@ void TerminalPane::stopWorker()
         }
         m_localWorker = nullptr;
     }
-    if (m_worker == nullptr) {
+    if (m_sessionStack == nullptr) {
         return;
     }
-    m_worker->requestStop();
-    if (!m_worker->wait(3000)) {
+    m_sessionStack->requestStop();
+    if (!m_sessionStack->wait(3000)) {
         // libssh 连接阶段受 15 秒超时保护。这里不调用 QThread::terminate，因为异步终止可能
         // 让 libssh 在持锁状态下泄漏；工作线程会在网络调用返回后自行退出并被 deleteLater。
-        m_worker->setParent(nullptr);
-        connect(m_worker, &QThread::finished, m_worker, &QObject::deleteLater);
-        m_worker = nullptr;
+        m_sessionStack->setParent(nullptr);
+        connect(m_sessionStack, &QThread::finished, m_sessionStack, &QObject::deleteLater);
+        m_sessionStack = nullptr;
         return;
     }
-    delete m_worker;
-    m_worker = nullptr;
+    delete m_sessionStack;
+    m_sessionStack = nullptr;
 }

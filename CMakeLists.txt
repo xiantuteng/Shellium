@@ -37,8 +37,10 @@ qt_add_executable(Shellium
     src/sftp/SftpService.h
     src/ssh/SshCommandParser.cpp
     src/ssh/SshCommandParser.h
-    src/ssh/SshTerminalWorker.cpp
-    src/ssh/SshTerminalWorker.h
+    src/ssh/SshSessionNode.cpp
+    src/ssh/SshSessionNode.h
+    src/ssh/SshSessionStack.cpp
+    src/ssh/SshSessionStack.h
     src/ssh/SshTunnelBroker.cpp
     src/ssh/SshTunnelBroker.h
     src/terminal/LocalShellWorker.cpp
