@@ -43,6 +43,19 @@ VtermBridge::VtermBridge(QObject *parent)
         &VtermBridge::clearScrollbackCallback
     };
     vterm_screen_set_callbacks(m_screen, &callbacks, this);
+
+    // libvterm 自己只认识 OSC 0/1/2（窗口标题）。Shell 集成使用一个私有编号，因此必须
+    // 注册未识别序列的兜底回调，否则整条序列会被当作普通文本打印到用户屏幕上。
+    static const VTermStateFallbacks fallbacks = {
+        nullptr,                    // control
+        nullptr,                    // csi
+        &VtermBridge::oscCallback,  // osc
+        nullptr,                    // dcs
+        nullptr,                    // apc
+        nullptr,                    // pm
+        nullptr                     // sos
+    };
+    vterm_screen_set_unrecognised_fallbacks(m_screen, &fallbacks, this);
     vterm_screen_set_damage_merge(m_screen, VTERM_DAMAGE_SCROLL);
     vterm_screen_enable_altscreen(m_screen, 1);
     vterm_screen_enable_reflow(m_screen, true);
@@ -53,6 +66,33 @@ VtermBridge::VtermBridge(QObject *parent)
     vterm_color_rgb(&background, 17, 19, 24);
     vterm_screen_set_default_colors(m_screen, &foreground, &background);
     vterm_screen_reset(m_screen, 1);
+}
+
+int VtermBridge::oscCallback(const int command, const VTermStringFragment fragment, void *user)
+{
+    auto *bridge = static_cast<VtermBridge *>(user);
+    // 只处理 Shellium 私有编号，其余未识别 OSC 一律静默丢弃：把它们渲染出来只会在用户
+    // 屏幕上留下乱码。
+    constexpr int kShelliumOsc = 6773;
+    if (command != kShelliumOsc) {
+        return 1;
+    }
+
+    if (fragment.initial) {
+        bridge->m_oscBuffer.clear();
+    }
+    bridge->m_oscBuffer.append(fragment.str, static_cast<qsizetype>(fragment.len));
+    // 单条事件最长也就一行命令；超长载荷只可能来自异常或恶意输出，直接丢弃以免无限增长。
+    if (bridge->m_oscBuffer.size() > 8192) {
+        bridge->m_oscBuffer.clear();
+        return 1;
+    }
+    if (fragment.final) {
+        const QByteArray payload = bridge->m_oscBuffer;
+        bridge->m_oscBuffer.clear();
+        emit bridge->shellIntegrationEvent(payload);
+    }
+    return 1;
 }
 
 VtermBridge::~VtermBridge()

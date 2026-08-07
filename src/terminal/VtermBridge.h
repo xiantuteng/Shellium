@@ -56,6 +56,15 @@ signals:
     /** @brief 收到 BEL 控制字符，供界面实现视觉或声音铃声。 */
     void bell();
 
+    /**
+     * @brief 远端 Shell 集成脚本上报了一条事件。
+     * @param payload OSC 载荷，形如 `connect;<以 0x1e 分隔的 argv>`。
+     *
+     * 这是把“用户想连哪台机器”从猜测变成事实的关键通路：载荷里的参数是远端 Shell 自己
+     * 展开好的真实 argv，alias、变量、历史记录调用、输入法都不会再造成偏差。
+     */
+    void shellIntegrationEvent(const QByteArray &payload);
+
 private:
     /** @brief 与 VTermScreenCell 解耦的滚动历史单元格。 */
     struct Cell {
@@ -91,8 +100,22 @@ private:
     static int popScrollbackCallback(int columns, VTermScreenCell *cells, void *user);
     static int clearScrollbackCallback(void *user);
 
+    /**
+     * @brief libvterm 未识别 OSC 的回调；Shell 集成事件由此进入。
+     * @return 恒返回 1 表示已消费，避免序列被当作可打印文本渲染到屏幕上。
+     */
+    static int oscCallback(int command, VTermStringFragment fragment, void *user);
+
     VTerm *m_vterm = nullptr;
     VTermScreen *m_screen = nullptr;
+
+    /**
+     * @brief 跨分片累积的 OSC 载荷。
+     *
+     * libvterm 会把一条 OSC 按网络分包切成多个 fragment 逐次回调，必须等到 final 标志
+     * 才能解析；否则被拆开的命令行会被解析成半截主机名。
+     */
+    QByteArray m_oscBuffer;
     QVector<Line> m_scrollback;
     int m_rows = 24;
     int m_columns = 80;

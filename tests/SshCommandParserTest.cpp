@@ -1,4 +1,5 @@
 #include "core/ConnectionTarget.h"
+#include "ssh/ShellShim.h"
 #include "ssh/SshCommandParser.h"
 #include "terminal/TerminalView.h"
 #include "terminal/LocalShellWorker.h"
@@ -57,7 +58,31 @@ private slots:
     void terminalViewDetectsSplitAuthenticationPrompt();
 
     /** @brief 最终 Permission denied 必须与仍可重试的密码错误提示区分。 */
+    /** @brief 不进入交互式 Shell 的 ssh 用法不得压栈。 */
+    void ignoresNonInteractiveSshInvocations();
+
+    /** @brief 带退出码的 exit 同样是退出。 */
+    void treatsExitWithStatusAsLeave();
+
+    /** @brief VtermBridge 必须把私有 OSC 交出来，而不是渲染成屏幕乱码。 */
+    void terminalViewDeliversShellIntegrationEvent();
+
+    /** @brief shim 上报的 argv 要能还原成可直接建立的目标。 */
+    void shellShimResolvesInteractiveTarget();
+
+    /** @brief 无法忠实复现的 ssh 用法必须拒绝接管，交还给原生 ssh。 */
+    void shellShimDeclinesUnsupportedInvocations();
+
     void terminalViewDetectsFinalAuthenticationFailure();
+
+    /** @brief 解析失败、连接被拒、超时等非认证失败同样必须触发回滚。 */
+    void terminalViewDetectsNonAuthenticationSshFailures();
+
+    /** @brief Ctrl+C 需要如实上报，供 TerminalPane 撤销未确认的嵌套目标。 */
+    void terminalViewReportsCtrlCAsNestedSshAbort();
+
+    /** @brief 行中的 Ctrl-D 不是 EOF，不得被当作退出服务器。 */
+    void terminalViewIgnoresCtrlDInsideCommandLine();
 
     /** @brief 本地键盘缓冲缺失时必须能从 PTY 当前光标行恢复嵌套 ssh 命令。 */
     void terminalViewRecoversSshCommandFromCursorLine();
@@ -289,10 +314,145 @@ void SshCommandParserTest::terminalViewDetectsSplitAuthenticationPrompt()
     QCOMPARE(promptSpy.size(), 2);
 }
 
+void SshCommandParserTest::ignoresNonInteractiveSshInvocations()
+{
+    ConnectionTarget current;
+    current.id = QStringLiteral("layer-1");
+    current.host = QStringLiteral("10.0.0.1");
+    current.username = QStringLiteral("root");
+
+    // 这些调用执行完就返回外层 Shell，用户从未"身处"目标机器，也永远不会为它敲 exit。
+    // 压栈会制造不可撤销的幽灵层，之后文件管理器就会指向一台错误的服务器。
+    const QStringList nonInteractive = {
+        QStringLiteral("ssh web01 uptime"),
+        QStringLiteral("ssh root@web01 'systemctl restart nginx'"),
+        QStringLiteral("ssh -N -L 8080:localhost:80 jump01"),
+        QStringLiteral("ssh -f -N jump01"),
+        QStringLiteral("ssh -T git@github.com"),
+        QStringLiteral("ssh -W inner:22 jump01"),
+    };
+    for (const QString &command : nonInteractive) {
+        const SshCommandParser::Result parsed = SshCommandParser::parse(command, current);
+        QVERIFY2(parsed.action == SshCommandParser::Action::None, qPrintable(command));
+    }
+
+    // 真正的交互式登录仍必须被识别，否则降级路径就完全失效了。
+    const SshCommandParser::Result interactive =
+        SshCommandParser::parse(QStringLiteral("ssh root@10.0.0.2"), current);
+    QCOMPARE(interactive.action, SshCommandParser::Action::EnterServer);
+    QCOMPARE(interactive.target.host, QStringLiteral("10.0.0.2"));
+}
+
+void SshCommandParserTest::treatsExitWithStatusAsLeave()
+{
+    ConnectionTarget current;
+    current.id = QStringLiteral("layer-2");
+    current.host = QStringLiteral("10.0.0.2");
+
+    // 只认裸 exit 会让链只增不减，长会话必然偏离真实状态。
+    for (const QString &command : {QStringLiteral("exit"),
+                                   QStringLiteral("exit 0"),
+                                   QStringLiteral("exit 130"),
+                                   QStringLiteral("logout")}) {
+        const SshCommandParser::Result parsed = SshCommandParser::parse(command, current);
+        QVERIFY2(parsed.action == SshCommandParser::Action::LeaveServer, qPrintable(command));
+    }
+
+    // 形似但并非退出的命令不得触发弹栈。
+    for (const QString &command : {QStringLiteral("exit_handler"),
+                                   QStringLiteral("echo exit")}) {
+        const SshCommandParser::Result parsed = SshCommandParser::parse(command, current);
+        QVERIFY2(parsed.action == SshCommandParser::Action::None, qPrintable(command));
+    }
+}
+
+void SshCommandParserTest::terminalViewDeliversShellIntegrationEvent()
+{
+    TerminalView view;
+    QSignalSpy eventSpy(&view, &TerminalView::shellIntegrationEvent);
+
+    // 私有 OSC 编号 libvterm 自己不认识，必须靠未识别序列兜底回调交出来；漏接的话整条
+    // 序列会被当作普通文本打印到用户屏幕上。
+    // argv 以 base64 传输：0x1E 是 C0 控制字符，直接放进 OSC 会被 libvterm 当作字符串
+    // 终止符，只能收到第一个参数——这个坑正是本用例存在的理由。
+    view.appendTerminalOutput(QByteArrayLiteral(
+        "\033]6773;connect;cm9vdEAxMC4wLjAuMh4=\007"));
+    QCOMPARE(eventSpy.size(), 1);
+
+    const ShellShim::Event event =
+        ShellShim::parseEvent(eventSpy.at(0).at(0).toByteArray());
+    QCOMPARE(event.kind, ShellShim::Event::Kind::Connect);
+    QCOMPARE(event.arguments, QStringList{QStringLiteral("root@10.0.0.2")});
+
+    // 被网络拆成多个分片的载荷必须累积后再解析，否则会得到半截主机名。
+    QSignalSpy splitSpy(&view, &TerminalView::shellIntegrationEvent);
+    view.appendTerminalOutput(QByteArrayLiteral("\033]6773;conn"));
+    view.appendTerminalOutput(QByteArrayLiteral("ect;LXAeMjIyMh53ZWIwMR4=\007"));
+    QCOMPARE(splitSpy.size(), 1);
+    const ShellShim::Event split =
+        ShellShim::parseEvent(splitSpy.at(0).at(0).toByteArray());
+    QCOMPARE(split.arguments,
+             (QStringList{QStringLiteral("-p"), QStringLiteral("2222"),
+                          QStringLiteral("web01")}));
+}
+
+void SshCommandParserTest::shellShimResolvesInteractiveTarget()
+{
+    ConnectionTarget current;
+    current.id = QStringLiteral("layer-1");
+    current.host = QStringLiteral("10.0.0.1");
+    current.username = QStringLiteral("root");
+
+    QString reason;
+    const ConnectionTarget simple = ShellShim::resolveTarget(
+        {QStringLiteral("deploy@10.0.0.2")}, current, &reason);
+    QVERIFY(simple.isValid());
+    QCOMPARE(simple.host, QStringLiteral("10.0.0.2"));
+    QCOMPARE(simple.username, QStringLiteral("deploy"));
+    QCOMPARE(simple.port, quint16(22));
+    // 由 Shellium 亲自建立，身份是确定事实。
+    QCOMPARE(simple.confidence, ConnectionTarget::Confidence::Confirmed);
+
+    // 未写用户名时继承当前层，这与 OpenSSH 的默认行为一致。
+    const ConnectionTarget inherited = ShellShim::resolveTarget(
+        {QStringLiteral("-p"), QStringLiteral("2222"), QStringLiteral("10.0.0.3")},
+        current, &reason);
+    QVERIFY(inherited.isValid());
+    QCOMPARE(inherited.username, QStringLiteral("root"));
+    QCOMPARE(inherited.port, quint16(2222));
+}
+
+void SshCommandParserTest::shellShimDeclinesUnsupportedInvocations()
+{
+    ConnectionTarget current;
+    current.id = QStringLiteral("layer-1");
+    current.host = QStringLiteral("10.0.0.1");
+    current.username = QStringLiteral("root");
+
+    // 宁可退回原生 ssh，也不能用一个错误的目标去建立会话。
+    const QList<QStringList> unsupported = {
+        {QStringLiteral("web01"), QStringLiteral("uptime")},
+        {QStringLiteral("-N"), QStringLiteral("web01")},
+        {QStringLiteral("-J"), QStringLiteral("jump01"), QStringLiteral("web01")},
+        {QStringLiteral("-o"), QStringLiteral("ProxyCommand=nc %h %p"),
+         QStringLiteral("web01")},
+        {QStringLiteral("-F"), QStringLiteral("/tmp/cfg"), QStringLiteral("web01")},
+        {QStringLiteral("-T"), QStringLiteral("git@github.com")},
+    };
+    for (const QStringList &arguments : unsupported) {
+        QString reason;
+        const ConnectionTarget target =
+            ShellShim::resolveTarget(arguments, current, &reason);
+        QVERIFY2(!target.isValid(), qPrintable(arguments.join(QLatin1Char(' '))));
+        // 必须给出原因：远端 shim 正阻塞等待回执，界面也要能解释为什么没接管。
+        QVERIFY2(!reason.isEmpty(), qPrintable(arguments.join(QLatin1Char(' '))));
+    }
+}
+
 void SshCommandParserTest::terminalViewDetectsFinalAuthenticationFailure()
 {
     TerminalView view;
-    QSignalSpy failureSpy(&view, &TerminalView::authenticationFailed);
+    QSignalSpy failureSpy(&view, &TerminalView::nestedSshFailed);
 
     // 含 "please try again" 的输出表示 OpenSSH 仍会继续询问密码，不能撤销候选层级。
     view.appendTerminalOutput(QByteArrayLiteral("Permission denied, please try again.\r\n"));
@@ -300,6 +460,68 @@ void SshCommandParserTest::terminalViewDetectsFinalAuthenticationFailure()
     view.appendTerminalOutput(QByteArrayLiteral(
         "root@10.0.0.2: Permission denied (publickey,password).\r\n"));
     QCOMPARE(failureSpy.size(), 1);
+}
+
+void SshCommandParserTest::terminalViewDetectsNonAuthenticationSshFailures()
+{
+    // 嵌套 ssh 的失败远不止认证被拒。这些输出如果不被识别，失败的尝试就会在连接链上
+    // 留下一个用户从未进入过的幽灵层，而它常常和真实层同名，界面上根本分辨不出来。
+    const QList<QByteArray> failures = {
+        QByteArrayLiteral("ssh: Could not resolve hostname 10194.135.15: "
+                          "Name or service not known\r\n"),
+        QByteArrayLiteral("ssh: connect to host 10.0.0.9 port 22: Connection refused\r\n"),
+        QByteArrayLiteral("ssh: connect to host 10.0.0.9 port 22: No route to host\r\n"),
+        QByteArrayLiteral("ssh: connect to host 10.0.0.9 port 22: Connection timed out\r\n"),
+        QByteArrayLiteral("Host key verification failed.\r\n"),
+        QByteArrayLiteral("Connection closed by 10.0.0.9 port 22\r\n"),
+    };
+
+    for (const QByteArray &output : failures) {
+        TerminalView view;
+        QSignalSpy failureSpy(&view, &TerminalView::nestedSshFailed);
+        view.appendTerminalOutput(output);
+        QVERIFY2(failureSpy.size() == 1, output.constData());
+    }
+}
+
+void SshCommandParserTest::terminalViewReportsCtrlCAsNestedSshAbort()
+{
+    TerminalView view;
+    QSignalSpy abortSpy(&view, &TerminalView::nestedSshAborted);
+
+    // Ctrl+C 会让正在连接的 ssh 直接退出。视图只如实报告按键，是否回滚由 TerminalPane
+    // 依据"当前是否有未确认的嵌套目标"决定。
+#if defined(Q_OS_MACOS)
+    QTest::keyClick(&view, Qt::Key_C, Qt::MetaModifier);
+#else
+    QTest::keyClick(&view, Qt::Key_C, Qt::ControlModifier);
+#endif
+    QCOMPARE(abortSpy.size(), 1);
+}
+
+void SshCommandParserTest::terminalViewIgnoresCtrlDInsideCommandLine()
+{
+    TerminalView view;
+    QSignalSpy commandSpy(&view, &TerminalView::commandSubmitted);
+
+    // 行中的 Ctrl-D 是 delete-char-forward，不是 EOF。把它当作退出会弹掉一层真实存在的
+    // 服务器，让文件管理器少一层。
+    QTest::keyClicks(&view, QStringLiteral("cat"));
+#if defined(Q_OS_MACOS)
+    QTest::keyClick(&view, Qt::Key_D, Qt::MetaModifier);
+#else
+    QTest::keyClick(&view, Qt::Key_D, Qt::ControlModifier);
+#endif
+    QCOMPARE(commandSpy.size(), 0);
+
+    // 空行上的 Ctrl-D 才是真正的 EOF。
+#if defined(Q_OS_MACOS)
+    QTest::keyClick(&view, Qt::Key_D, Qt::MetaModifier);
+#else
+    QTest::keyClick(&view, Qt::Key_D, Qt::ControlModifier);
+#endif
+    QCOMPARE(commandSpy.size(), 1);
+    QCOMPARE(commandSpy.at(0).at(0).toString(), QStringLiteral("Ctrl-D"));
 }
 
 void SshCommandParserTest::terminalViewRecoversSshCommandFromCursorLine()

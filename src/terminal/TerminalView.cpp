@@ -90,6 +90,10 @@ TerminalView::TerminalView(QWidget *parent)
     connect(m_vtermBridge, &VtermBridge::bell, this, []() {
         QApplication::beep();
     });
+    connect(m_vtermBridge,
+            &VtermBridge::shellIntegrationEvent,
+            this,
+            &TerminalView::shellIntegrationEvent);
 }
 
 void TerminalView::appendTerminalOutput(const QByteArray &bytes)
@@ -112,13 +116,37 @@ void TerminalView::appendTerminalOutput(const QByteArray &bytes)
         emit authenticationPromptDetected();
     }
 
-    // OpenSSH 的最终失败使用括号列出已尝试认证方法；带逗号的 "please try again" 仍是
-    // 可重试提示，不能在此撤销嵌套目标。尾缓冲可覆盖错误信息被网络拆包的情况。
-    const bool hasFinalAuthenticationFailure =
-        normalizedPrompt.contains("permission denied (");
-    if (hasFinalAuthenticationFailure && !m_authenticationFailureReported) {
+    // 嵌套 ssh 的失败形式远不止认证被拒：解析不了主机名、连不上、主机密钥不符都会让
+    // OpenSSH 直接退出并回到外层 Shell。只识别 "Permission denied (" 会让这些失败留下
+    // 一个永远不会被撤销的幽灵层，之后文件管理器就会指向一台用户从未真正进入的服务器。
+    //
+    // "permission denied (" 用括号限定是有意的：带逗号的 "please try again" 仍可重试，
+    // 不能据此撤销目标。
+    static const char *const failureMarkers[] = {
+        "permission denied (",
+        "could not resolve hostname",
+        "connection refused",
+        "connection closed by",
+        "connection reset by",
+        "no route to host",
+        "connection timed out",
+        "operation timed out",
+        "network is unreachable",
+        "host key verification failed",
+        "remote host identification has changed",
+        "no matching host key type",
+        "too many authentication failures",
+    };
+    bool hasFailure = false;
+    for (const char *marker : failureMarkers) {
+        if (normalizedPrompt.contains(marker)) {
+            hasFailure = true;
+            break;
+        }
+    }
+    if (hasFailure && !m_authenticationFailureReported) {
         m_authenticationFailureReported = true;
-        emit authenticationFailed();
+        emit nestedSshFailed();
     }
 
     QScrollBar *bar = verticalScrollBar();
@@ -211,7 +239,17 @@ void TerminalView::keyPressEvent(QKeyEvent *event)
         // ASCII 控制字符使用字母序号 1..26；这覆盖 Ctrl+C、Ctrl+D、Ctrl+Z 等 Shell 操作。
         encoded = QByteArray(1, static_cast<char>(event->key() - Qt::Key_A + 1));
         if (event->key() == Qt::Key_D) {
-            emit commandSubmitted(QStringLiteral("Ctrl-D"));
+            // Ctrl-D 只有在当前输入行为空时才是 EOF；行中是 delete-char-forward，而在
+            // cat/python/mysql 里退出的也是那个程序而非 Shell。误判会弹掉一层真实存在的
+            // 服务器，导致文件管理器少一层。
+            if (m_currentCommand.isEmpty()) {
+                emit commandSubmitted(QStringLiteral("Ctrl-D"));
+            }
+            m_currentCommand.clear();
+        } else if (event->key() == Qt::Key_C) {
+            // Ctrl+C 会让正在连接的 ssh 直接退出。TerminalPane 仅在确实有未确认的嵌套
+            // 目标时才据此回滚，普通命令的中断不会影响连接链。
+            emit nestedSshAborted();
             m_currentCommand.clear();
         }
     } else if (!event->text().isEmpty()

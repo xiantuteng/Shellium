@@ -8,6 +8,7 @@
 #include <QSet>
 
 #include <atomic>
+#include <memory>
 
 /**
  * @brief 远程目录中的一个文件或文件夹条目。
@@ -35,6 +36,8 @@ Q_DECLARE_METATYPE(QList<RemoteFileInfo>)
  * 每个请求建立独立 SSH/SFTP 会话，因此不同终端分屏、不同嵌套服务器可以并行传输，
  * 且某个服务器断线不会污染其他请求。服务不会持久化密码，日志和错误消息中也不会包含密码。
  */
+struct SftpConnectionPool;
+
 class SftpService final : public QObject {
     Q_OBJECT
 
@@ -52,6 +55,9 @@ public:
     Q_ENUM(ErrorKind)
 
     explicit SftpService(QObject *parent = nullptr);
+
+    /** @brief 关闭全部池化连接；必须在 .cpp 中定义，连接池是不完整类型。 */
+    ~SftpService() override;
 
     /** @brief 异步列出远程目录，不阻塞 Qt 界面线程。 */
     quint64 listDirectory(const ConnectionTarget &target, const QString &path);
@@ -113,6 +119,14 @@ private:
 
     /** @brief 判断用户是否已在本次运行中确认过未知主机。 */
     bool isTemporarilyTrusted(const ConnectionTarget &target) const;
+
+    /**
+     * @brief 按目标缓存的 SFTP 连接池。
+     *
+     * 用 shared_ptr 是为了让仍在执行的后台任务安全地持有它：请求提交后服务本身可能先被
+     * 销毁，而任务还需要用连接完成收尾。
+     */
+    std::shared_ptr<SftpConnectionPool> m_pool;
 
     mutable QMutex m_trustMutex;
     QSet<QString> m_temporarilyTrustedHosts;

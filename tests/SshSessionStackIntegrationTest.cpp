@@ -1,4 +1,6 @@
 #include "core/ConnectionTarget.h"
+#include "sftp/SftpService.h"
+#include "ssh/ShellShim.h"
 #include "ssh/SshSessionStack.h"
 
 #include <QCoreApplication>
@@ -44,6 +46,12 @@ private slots:
 
     /** @brief 建层隧道尚未就绪时，外层终端必须依然可交互，不得被同步等待冻结。 */
     void keepsTerminalResponsiveWhileNestedLayerConnects();
+
+    /** @brief 注入远端的 shim 必须能在真实 Shell 中定义成功并上报可解析的事件。 */
+    void shellShimReportsSshInvocationFromRealShell();
+
+    /** @brief SFTP 连接池必须让后续操作免去重复握手，而不只是"看起来能用"。 */
+    void reusesPooledSftpConnectionAcrossRequests();
 
 private:
     /** @brief 从环境变量装配第一层目标。 */
@@ -387,6 +395,106 @@ void SshSessionStackIntegrationTest::keepsTerminalResponsiveWhileNestedLayerConn
     stack.requestStop();
     QVERIFY2(stack.wait(10000), "存在在途转发时停止超时");
     QVERIFY2(stopTimer.elapsed() < 9000, "停止耗时过长，疑似在等待在途转发自然超时");
+}
+
+void SshSessionStackIntegrationTest::shellShimReportsSshInvocationFromRealShell()
+{
+    SshSessionStack stack(firstLayerTarget());
+    QSignalSpy connected(&stack, &SshSessionStack::shellConnected);
+    QSignalSpy failed(&stack, &SshSessionStack::connectionError);
+
+    QByteArray output;
+    connect(&stack, &SshSessionStack::outputReady, this,
+            [&output](const QByteArray &bytes) { output.append(bytes); });
+
+    stack.start();
+    QVERIFY(waitFor([&]() { return connected.count() > 0 || failed.count() > 0; }));
+    QVERIFY2(failed.isEmpty(), "第一层连接失败");
+    QVERIFY(waitFor([&]() { return !output.isEmpty(); }, 15000));
+
+    // 注入 shim。这一步在真实 Shell 里跑：语法错误、base64 缺失、引号转义问题都只有
+    // 在这里才会暴露，桩替身完全测不出来。
+    stack.enqueueInput(ShellShim::injectionCommand() + "\n");
+    output.clear();
+    stack.enqueueInput("type ssh | head -1\n");
+    QVERIFY2(waitFor([&]() { return output.contains("function"); }, 15000),
+             "shim 未能在远端 Shell 中定义成 ssh 函数（可能是语法或引号转义问题）");
+
+    // 触发一次 ssh：shim 应当发出 OSC 并阻塞等待回执。这里不接管，直接回 pass，
+    // 从而验证降级路径也能让用户正常拿回原生 ssh。
+    output.clear();
+    stack.enqueueInput("ssh deploy@10.0.0.222\n");
+    QVERIFY2(waitFor([&]() { return output.contains("\033]6773;connect;"); }, 15000),
+             "shim 未上报 OSC 事件");
+
+    // 从原始字节流里取出完整 OSC 载荷并解析，确认 argv 能被还原成真实目标。
+    // 载荷从 OSC 序号之后开始：ESC ] 6 7 7 3 ; 共 7 字节，VtermBridge 交给上层的也正是
+    // 这之后的部分。
+    static const QByteArray oscPrefix = QByteArrayLiteral("\033]6773;");
+    const qsizetype begin = output.indexOf(oscPrefix) + oscPrefix.size();
+    const qsizetype end = output.indexOf('\007', begin);
+    QVERIFY2(end > begin, "OSC 序列没有以 BEL 结束");
+    const ShellShim::Event event = ShellShim::parseEvent(output.mid(begin, end - begin));
+    QCOMPARE(event.kind, ShellShim::Event::Kind::Connect);
+    QCOMPARE(event.arguments, QStringList{QStringLiteral("deploy@10.0.0.222")});
+
+    QString reason;
+    const ConnectionTarget resolved =
+        ShellShim::resolveTarget(event.arguments, firstLayerTarget(), &reason);
+    QVERIFY(resolved.isValid());
+    QCOMPARE(resolved.host, QStringLiteral("10.0.0.222"));
+    QCOMPARE(resolved.username, QStringLiteral("deploy"));
+
+    // 回 pass 让 shim 交还给原生 ssh；随后终端必须恢复可交互，证明 read 确实被解除阻塞。
+    stack.enqueueInput(ShellShim::declineResponse());
+    output.clear();
+    stack.enqueueInput("echo SHIM_RELEASED\n");
+    QVERIFY2(waitFor([&]() { return output.contains("SHIM_RELEASED"); }, 30000),
+             "回执后终端未恢复，shim 可能仍阻塞在 read 上");
+
+    stack.requestStop();
+    QVERIFY(stack.wait(10000));
+}
+
+void SshSessionStackIntegrationTest::reusesPooledSftpConnectionAcrossRequests()
+{
+    SftpService service;
+    const ConnectionTarget target = firstLayerTarget();
+
+    QSignalSpy listed(&service, &SftpService::directoryListed);
+    QSignalSpy failed(&service, &SftpService::operationFailed);
+
+    // 第一次请求包含完整握手：TCP、密钥交换、指纹校验、认证、sftp_init。
+    QElapsedTimer coldTimer;
+    coldTimer.start();
+    service.listDirectory(target, QStringLiteral("/"));
+    QVERIFY2(waitFor([&]() { return listed.count() > 0 || failed.count() > 0; }, 30000),
+             "首次目录读取未返回");
+    QVERIFY2(failed.isEmpty(),
+             qPrintable(QStringLiteral("目录读取失败：%1")
+                            .arg(failed.value(0).value(3).toString())));
+    const qint64 coldMs = coldTimer.elapsed();
+
+    // 后续请求应当直接复用同一条已认证连接。这里断言的是行为而非绝对耗时：只要没有重做
+    // 握手，热请求必然显著快于冷请求。
+    qint64 warmTotalMs = 0;
+    for (int round = 0; round < 3; ++round) {
+        const int before = listed.count();
+        QElapsedTimer warmTimer;
+        warmTimer.start();
+        service.listDirectory(target, QStringLiteral("/"));
+        QVERIFY(waitFor([&]() { return listed.count() > before || failed.count() > 0; }, 30000));
+        QVERIFY2(failed.isEmpty(), "复用池化连接时不应失败");
+        warmTotalMs += warmTimer.elapsed();
+    }
+    const qint64 warmAverageMs = warmTotalMs / 3;
+
+    qInfo("SFTP 目录读取：冷 %lldms，热平均 %lldms", coldMs, warmAverageMs);
+    // 阈值取一半而非某个绝对毫秒数：网络快慢因环境而异，但"省掉一整套握手"这个事实不变。
+    QVERIFY2(warmAverageMs * 2 < coldMs,
+             qPrintable(QStringLiteral("热请求未显著快于冷请求（冷 %1ms，热平均 %2ms），"
+                                       "连接池可能没有生效")
+                            .arg(coldMs).arg(warmAverageMs)));
 }
 
 QTEST_MAIN(SshSessionStackIntegrationTest)

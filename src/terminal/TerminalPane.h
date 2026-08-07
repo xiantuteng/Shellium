@@ -76,6 +76,26 @@ private:
     /** @brief 按当前所在层刷新标题，并把推测层显式标注出来。 */
     void refreshHeaderLabel();
 
+    /** @brief 向当前栈顶的远端 Shell 注入 ssh 接管函数。 */
+    void injectShellIntegration();
+
+    /**
+     * @brief 处理远端 shim 上报的事件，决定是否接管这次 ssh。
+     * @param payload VtermBridge 交出的 OSC 载荷。
+     *
+     * 远端 shim 正阻塞等待回执，因此本方法的每条分支都必须给出答复，否则用户终端会挂住。
+     */
+    void handleShellIntegrationEvent(const QByteArray &payload);
+
+    /**
+     * @brief 撤销尚未确认的嵌套推测层，用于 ssh 失败或被用户取消。
+     * @param reason 供状态栏展示的简短原因。
+     *
+     * 失败的 ssh 如果不回滚，就会在连接链上留下一个用户从未真正进入的幽灵层；文件管理器
+     * 随后会把它当作可操作的服务器，而它往往和真实层同名，界面上根本分辨不出来。
+     */
+    void rollBackPendingNestedTarget(const QString &reason);
+
     QLabel *m_headerLabel = nullptr;
     TerminalView *m_terminalView = nullptr;
     SshSessionStack *m_sessionStack = nullptr;
@@ -131,4 +151,12 @@ private:
      * 只在内存中取得同一份输入，不要求用户再次输入。
      */
     bool m_captureNextLineAsCredential = false;
+
+    /**
+     * @brief 是否向远端 Shell 注入 ssh 接管函数。
+     *
+     * 注入会覆盖用户在该会话中的 ssh 命令，属于对远端环境的可见改动，因此保留开关。
+     * 关闭后嵌套识别退回命令解析的降级路径，推测层会被显式标注为不确定。
+     */
+    bool m_shellIntegrationEnabled = true;
 };

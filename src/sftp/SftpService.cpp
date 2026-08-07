@@ -6,7 +6,11 @@
 #include <QFileInfo>
 #include <QPointer>
 #include <QSaveFile>
+#include <QElapsedTimer>
+#include <QMutexLocker>
 #include <QtConcurrentRun>
+
+#include <memory>
 
 #include <libssh/libssh.h>
 #include <libssh/sftp.h>
@@ -144,6 +148,18 @@ public:
     }
 
     [[nodiscard]] sftp_session handle() const { return m_sftp; }
+
+    /**
+     * @brief 连接是否仍可用于下一次操作。
+     *
+     * 池化连接可能因服务器空闲超时、网络中断或承载它的隧道随分屏关闭而失效。复用前必须
+     * 核对，否则用户会看到一次莫名其妙的失败，而不是自动重连。
+     */
+    [[nodiscard]] bool isAlive() const
+    {
+        return m_session != nullptr && m_sftp != nullptr
+            && ssh_is_connected(m_session) != 0;
+    }
     [[nodiscard]] QString lastError() const
     {
         return m_session == nullptr ? QObject::tr("未知 libssh 错误")
@@ -247,14 +263,130 @@ void deliverConnectionFailure(const QPointer<SftpService> &service,
     }, Qt::QueuedConnection);
 }
 
+/**
+ * @brief 一条按目标缓存、可跨请求复用的 SFTP 连接。
+ *
+ * libssh 会话不是线程安全的，因此同一条连接上的操作由 mutex 串行化；不同目标的请求仍然
+ * 并行。串行化是可接受的代价：用户在一台服务器上的文件操作本来就是顺序发生的。
+ */
+struct PooledConnection {
+    QMutex mutex;
+    std::unique_ptr<SftpConnection> connection;
+    QElapsedTimer idleTimer;
+};
+
+} // namespace
+
+/**
+ * @brief 按目标缓存 SFTP 连接，避免每次文件操作都重做一次完整 SSH 握手。
+ *
+ * 原实现每个请求新建一条连接：握手、指纹校验、认证、sftp_init 全套重来。对嵌套层还要
+ * 额外开一条 direct-tcpip 隧道，于是"点开一个目录"要花掉数次完整登录的时间。
+ */
+struct SftpConnectionPool {
+    /** @brief 空闲超过该时长的连接会被丢弃，避免长期占用 fd 和服务器会话槽。 */
+    static constexpr qint64 kIdleTimeoutMs = 300000;
+
+    /** @brief 取出（必要时创建）目标对应的池条目。 */
+    QSharedPointer<PooledConnection> acquire(const QString &key)
+    {
+        QMutexLocker locker(&mutex);
+        evictIdleLocked();
+        auto iterator = entries.find(key);
+        if (iterator == entries.end()) {
+            iterator = entries.insert(key, QSharedPointer<PooledConnection>::create());
+        }
+        return iterator.value();
+    }
+
+    /** @brief 丢弃某个目标的缓存连接，用于连接级错误后强制重连。 */
+    void invalidate(const QString &key)
+    {
+        QMutexLocker locker(&mutex);
+        entries.remove(key);
+    }
+
+    /** @brief 清空全部缓存，供服务析构时释放所有网络资源。 */
+    void clear()
+    {
+        QMutexLocker locker(&mutex);
+        entries.clear();
+    }
+
+private:
+    /** @brief 移除空闲过久的条目；调用方必须已持有 mutex。 */
+    void evictIdleLocked()
+    {
+        for (auto iterator = entries.begin(); iterator != entries.end();) {
+            const QSharedPointer<PooledConnection> &entry = iterator.value();
+            // 正在被某个请求使用的条目一定拿不到锁，此时跳过即可，下一轮再评估。
+            if (entry->mutex.tryLock()) {
+                const bool expired = entry->connection != nullptr
+                    && entry->idleTimer.isValid()
+                    && entry->idleTimer.elapsed() > kIdleTimeoutMs;
+                entry->mutex.unlock();
+                if (expired) {
+                    iterator = entries.erase(iterator);
+                    continue;
+                }
+            }
+            ++iterator;
+        }
+    }
+
+    QMutex mutex;
+    QHash<QString, QSharedPointer<PooledConnection>> entries;
+};
+
+namespace {
+
+/**
+ * @brief 借出目标对应的池化连接，必要时重新建立。
+ * @return 可用连接；失败时返回 nullptr 并已向界面投递结构化错误。
+ *
+ * 调用方必须已持有该条目的 mutex：libssh 会话不是线程安全的。
+ */
+SftpConnection *ensureConnected(PooledConnection *entry,
+                                const ConnectionTarget &target,
+                                const bool allowUnknownHost,
+                                const QPointer<SftpService> &service,
+                                const quint64 requestId,
+                                SftpConnectionPool *pool)
+{
+    if (entry->connection != nullptr && entry->connection->isAlive()) {
+        entry->idleTimer.restart();
+        return entry->connection.get();
+    }
+
+    // 连接可能因服务器空闲超时、网络中断或承载它的隧道随分屏关闭而失效；此处透明重连，
+    // 用户不该为了一次后台超时而看到失败。
+    entry->connection = std::make_unique<SftpConnection>();
+    const ConnectResult opened = entry->connection->open(target, allowUnknownHost);
+    if (!opened.success) {
+        entry->connection.reset();
+        pool->invalidate(target.stableKey());
+        deliverConnectionFailure(service, requestId, target, opened);
+        return nullptr;
+    }
+    entry->idleTimer.start();
+    return entry->connection.get();
+}
+
 } // namespace
 
 SftpService::SftpService(QObject *parent)
     : QObject(parent)
+    , m_pool(std::make_shared<SftpConnectionPool>())
 {
     qRegisterMetaType<ConnectionTarget>();
     qRegisterMetaType<QList<RemoteFileInfo>>();
     qRegisterMetaType<SftpService::ErrorKind>();
+}
+
+SftpService::~SftpService()
+{
+    // 仍在执行的后台任务各自持有 shared_ptr，池会在最后一个任务结束后才真正释放。
+    m_pool->clear();
 }
 
 quint64 SftpService::listDirectory(const ConnectionTarget &target, const QString &path)
@@ -263,27 +395,28 @@ quint64 SftpService::listDirectory(const ConnectionTarget &target, const QString
     const bool allowUnknown = isTemporarilyTrusted(target);
     const QPointer<SftpService> service(this);
 
-    (void)QtConcurrent::run([service, requestId, target, path, allowUnknown]() {
-        SftpConnection connection;
-        const ConnectResult connected = connection.open(target, allowUnknown);
-        if (!connected.success) {
-            deliverConnectionFailure(service, requestId, target, connected);
+    (void)QtConcurrent::run([service, pool = m_pool, requestId, target, path, allowUnknown]() {
+        const QSharedPointer<PooledConnection> entry = pool->acquire(target.stableKey());
+        QMutexLocker locker(&entry->mutex);
+        SftpConnection *connection = ensureConnected(
+            entry.data(), target, allowUnknown, service, requestId, pool.get());
+        if (connection == nullptr) {
             return;
         }
 
         const QByteArray encodedPath = path.toUtf8();
-        sftp_dir directory = sftp_opendir(connection.handle(), encodedPath.constData());
+        sftp_dir directory = sftp_opendir(connection->handle(), encodedPath.constData());
         if (directory == nullptr) {
             const ConnectResult error{false,
                                       ErrorKind::RemoteOperation,
                                       QObject::tr("无法打开远程目录 %1：%2")
-                                          .arg(path, connection.lastError())};
+                                          .arg(path, connection->lastError())};
             deliverConnectionFailure(service, requestId, target, error);
             return;
         }
 
         QList<RemoteFileInfo> entries;
-        while (sftp_attributes attributes = sftp_readdir(connection.handle(), directory)) {
+        while (sftp_attributes attributes = sftp_readdir(connection->handle(), directory)) {
             const QString name = QString::fromUtf8(attributes->name == nullptr
                                                        ? ""
                                                        : attributes->name);
@@ -315,7 +448,7 @@ quint64 SftpService::listDirectory(const ConnectionTarget &target, const QString
         if (directoryReadFailed) {
             const ConnectResult error{false, ErrorKind::RemoteOperation,
                                       QObject::tr("读取远程目录 %1 时连接中断：%2")
-                                          .arg(path, connection.lastError())};
+                                          .arg(path, connection->lastError())};
             deliverConnectionFailure(service, requestId, target, error);
             return;
         }
@@ -347,7 +480,7 @@ quint64 SftpService::uploadFile(const ConnectionTarget &target,
     const bool allowUnknown = isTemporarilyTrusted(target);
     const QPointer<SftpService> service(this);
 
-    (void)QtConcurrent::run([service, requestId, target, localPath, remotePath, allowUnknown]() {
+    (void)QtConcurrent::run([service, pool = m_pool, requestId, target, localPath, remotePath, allowUnknown]() {
         QFile localFile(localPath);
         if (!localFile.open(QIODevice::ReadOnly)) {
             const ConnectResult error{false, ErrorKind::LocalIo,
@@ -356,22 +489,23 @@ quint64 SftpService::uploadFile(const ConnectionTarget &target,
             return;
         }
 
-        SftpConnection connection;
-        const ConnectResult connected = connection.open(target, allowUnknown);
-        if (!connected.success) {
-            deliverConnectionFailure(service, requestId, target, connected);
+        const QSharedPointer<PooledConnection> entry = pool->acquire(target.stableKey());
+        QMutexLocker locker(&entry->mutex);
+        SftpConnection *connection = ensureConnected(
+            entry.data(), target, allowUnknown, service, requestId, pool.get());
+        if (connection == nullptr) {
             return;
         }
 
         const QByteArray encodedRemotePath = remotePath.toUtf8();
-        sftp_file remoteFile = sftp_open(connection.handle(),
+        sftp_file remoteFile = sftp_open(connection->handle(),
                                          encodedRemotePath.constData(),
                                          O_WRONLY | O_CREAT | O_TRUNC,
                                          0644);
         if (remoteFile == nullptr) {
             const ConnectResult error{false, ErrorKind::RemoteOperation,
                                       QObject::tr("无法创建远程文件 %1：%2")
-                                          .arg(remotePath, connection.lastError())};
+                                          .arg(remotePath, connection->lastError())};
             deliverConnectionFailure(service, requestId, target, error);
             return;
         }
@@ -409,7 +543,7 @@ quint64 SftpService::uploadFile(const ConnectionTarget &target,
         if (writeFailed) {
             const ConnectResult error{false, ErrorKind::RemoteOperation,
                                       QObject::tr("上传 %1 失败：%2")
-                                          .arg(remotePath, connection.lastError())};
+                                          .arg(remotePath, connection->lastError())};
             deliverConnectionFailure(service, requestId, target, error);
             return;
         }
@@ -433,20 +567,21 @@ quint64 SftpService::downloadFile(const ConnectionTarget &target,
     const bool allowUnknown = isTemporarilyTrusted(target);
     const QPointer<SftpService> service(this);
 
-    (void)QtConcurrent::run([service, requestId, target, remotePath, localPath, allowUnknown]() {
-        SftpConnection connection;
-        const ConnectResult connected = connection.open(target, allowUnknown);
-        if (!connected.success) {
-            deliverConnectionFailure(service, requestId, target, connected);
+    (void)QtConcurrent::run([service, pool = m_pool, requestId, target, remotePath, localPath, allowUnknown]() {
+        const QSharedPointer<PooledConnection> entry = pool->acquire(target.stableKey());
+        QMutexLocker locker(&entry->mutex);
+        SftpConnection *connection = ensureConnected(
+            entry.data(), target, allowUnknown, service, requestId, pool.get());
+        if (connection == nullptr) {
             return;
         }
 
         const QByteArray encodedRemotePath = remotePath.toUtf8();
-        sftp_file remoteFile = sftp_open(connection.handle(), encodedRemotePath.constData(), O_RDONLY, 0);
+        sftp_file remoteFile = sftp_open(connection->handle(), encodedRemotePath.constData(), O_RDONLY, 0);
         if (remoteFile == nullptr) {
             const ConnectResult error{false, ErrorKind::RemoteOperation,
                                       QObject::tr("无法读取远程文件 %1：%2")
-                                          .arg(remotePath, connection.lastError())};
+                                          .arg(remotePath, connection->lastError())};
             deliverConnectionFailure(service, requestId, target, error);
             return;
         }
@@ -495,7 +630,7 @@ quint64 SftpService::downloadFile(const ConnectionTarget &target,
             localFile.cancelWriting();
             const ConnectResult error{false, ErrorKind::LocalIo,
                                       QObject::tr("下载或保存 %1 失败：%2")
-                                          .arg(localPath, connection.lastError())};
+                                          .arg(localPath, connection->lastError())};
             deliverConnectionFailure(service, requestId, target, error);
             return;
         }
@@ -518,18 +653,19 @@ quint64 SftpService::renamePath(const ConnectionTarget &target,
     const quint64 requestId = nextRequestId();
     const bool allowUnknown = isTemporarilyTrusted(target);
     const QPointer<SftpService> service(this);
-    (void)QtConcurrent::run([service, requestId, target, oldPath, newPath, allowUnknown]() {
-        SftpConnection connection;
-        const ConnectResult connected = connection.open(target, allowUnknown);
-        if (!connected.success) {
-            deliverConnectionFailure(service, requestId, target, connected);
+    (void)QtConcurrent::run([service, pool = m_pool, requestId, target, oldPath, newPath, allowUnknown]() {
+        const QSharedPointer<PooledConnection> entry = pool->acquire(target.stableKey());
+        QMutexLocker locker(&entry->mutex);
+        SftpConnection *connection = ensureConnected(
+            entry.data(), target, allowUnknown, service, requestId, pool.get());
+        if (connection == nullptr) {
             return;
         }
         const QByteArray oldEncoded = oldPath.toUtf8();
         const QByteArray newEncoded = newPath.toUtf8();
-        if (sftp_rename(connection.handle(), oldEncoded.constData(), newEncoded.constData()) != SSH_OK) {
+        if (sftp_rename(connection->handle(), oldEncoded.constData(), newEncoded.constData()) != SSH_OK) {
             const ConnectResult error{false, ErrorKind::RemoteOperation,
-                                      QObject::tr("重命名失败：%1").arg(connection.lastError())};
+                                      QObject::tr("重命名失败：%1").arg(connection->lastError())};
             deliverConnectionFailure(service, requestId, target, error);
             return;
         }
@@ -552,21 +688,22 @@ quint64 SftpService::removePath(const ConnectionTarget &target,
     const quint64 requestId = nextRequestId();
     const bool allowUnknown = isTemporarilyTrusted(target);
     const QPointer<SftpService> service(this);
-    (void)QtConcurrent::run([service, requestId, target, path, directory, allowUnknown]() {
-        SftpConnection connection;
-        const ConnectResult connected = connection.open(target, allowUnknown);
-        if (!connected.success) {
-            deliverConnectionFailure(service, requestId, target, connected);
+    (void)QtConcurrent::run([service, pool = m_pool, requestId, target, path, directory, allowUnknown]() {
+        const QSharedPointer<PooledConnection> entry = pool->acquire(target.stableKey());
+        QMutexLocker locker(&entry->mutex);
+        SftpConnection *connection = ensureConnected(
+            entry.data(), target, allowUnknown, service, requestId, pool.get());
+        if (connection == nullptr) {
             return;
         }
         const QByteArray encodedPath = path.toUtf8();
         const int result = directory
-            ? sftp_rmdir(connection.handle(), encodedPath.constData())
-            : sftp_unlink(connection.handle(), encodedPath.constData());
+            ? sftp_rmdir(connection->handle(), encodedPath.constData())
+            : sftp_unlink(connection->handle(), encodedPath.constData());
         if (result != SSH_OK) {
             const ConnectResult error{false, ErrorKind::RemoteOperation,
                                       QObject::tr("删除 %1 失败：%2。目录必须为空。")
-                                          .arg(path, connection.lastError())};
+                                          .arg(path, connection->lastError())};
             deliverConnectionFailure(service, requestId, target, error);
             return;
         }

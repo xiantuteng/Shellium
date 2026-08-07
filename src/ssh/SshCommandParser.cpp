@@ -54,8 +54,13 @@ SshCommandParser::Result SshCommandParser::parse(const QString &commandLine,
                                                  const ConnectionTarget &currentTarget)
 {
     const QString trimmed = commandLine.trimmed();
-    if (trimmed == QStringLiteral("exit") || trimmed == QStringLiteral("logout")
-        || trimmed == QStringLiteral("Ctrl-D")) {
+    if (trimmed == QStringLiteral("Ctrl-D")) {
+        return {.action = Action::LeaveServer};
+    }
+    // 退出还有 `exit 0` 这样带状态码的写法。只认裸 exit 会让链只增不减，越用越偏离真实状态。
+    static const QRegularExpression leavePattern(
+        QStringLiteral(R"(^(?:exit|logout)(?:\s+\d+)?$)"));
+    if (leavePattern.match(trimmed).hasMatch()) {
         return {.action = Action::LeaveServer};
     }
 
@@ -92,13 +97,26 @@ SshCommandParser::Result SshCommandParser::parse(const QString &commandLine,
         QStringLiteral("-w")
     };
 
+    // 这些开关意味着 ssh 根本不会进入交互式 Shell，用户也就不会"身处"目标服务器：
+    // -N 不执行远程命令，-f 退到后台，-W 只做 stdio 转发，-T 禁用 PTY，-O/-Q 查询后即退出。
+    // 把它们当作进入服务器会在链上留下永远不会被 exit 弹掉的幽灵层。
+    static const QSet<QString> nonInteractiveFlags = {
+        QStringLiteral("-N"), QStringLiteral("-f"), QStringLiteral("-T"),
+        QStringLiteral("-W"), QStringLiteral("-O"), QStringLiteral("-Q")
+    };
+
+    qsizetype hostTokenIndex = -1;
     while (index < tokens.size()) {
         const QString token = tokens.at(index++);
         if (token == QStringLiteral("--")) {
             if (index < tokens.size()) {
                 host = tokens.at(index);
+                hostTokenIndex = index;
             }
             break;
+        }
+        if (nonInteractiveFlags.contains(token)) {
+            return {};
         }
         if (token == QStringLiteral("-p") && index < tokens.size()) {
             bool ok = false;
@@ -142,10 +160,18 @@ SshCommandParser::Result SshCommandParser::parse(const QString &commandLine,
         }
 
         host = token;
+        hostTokenIndex = index - 1;
         break;
     }
 
     if (host.isEmpty()) {
+        return {};
+    }
+
+    // 主机名之后若还有内容，那是要在远端执行的一次性命令（`ssh web01 uptime`）。它执行完
+    // 就返回外层 Shell，用户从未进入过那台机器，而且永远不会为它敲 exit——压栈就等于
+    // 制造一个不可撤销的幽灵层。宁可少判：用户还能在文件管理器里手动补选。
+    if (hostTokenIndex >= 0 && hostTokenIndex + 1 < tokens.size()) {
         return {};
     }
 

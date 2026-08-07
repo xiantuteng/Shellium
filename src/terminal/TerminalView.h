@@ -42,12 +42,21 @@ signals:
     void authenticationPromptDetected();
 
     /**
-     * @brief OpenSSH 输出最终认证失败信息，当前嵌套连接已经返回外层 Shell。
+     * @brief 终端输出表明一次嵌套 ssh 已经失败并返回了外层 Shell。
      *
-     * 只匹配 `Permission denied (...)` 最终结果，不匹配仍允许重试的
+     * 覆盖认证被拒、主机名解析失败、连接被拒/超时、主机密钥校验失败等全部会让 OpenSSH
+     * 直接退出的情形。只匹配 `Permission denied (...)` 这类最终结果，不匹配仍允许重试的
      * `Permission denied, please try again.`。
      */
-    void authenticationFailed();
+    void nestedSshFailed();
+
+    /**
+     * @brief 用户按下 Ctrl+C，可能中断了一次正在建立的嵌套 ssh。
+     *
+     * 本信号不判断当前是否真的在连接——那是 TerminalPane 的职责；这里只如实报告按键，
+     * 避免视图层持有连接链状态。
+     */
+    void nestedSshAborted();
 
     /**
      * @brief 终端渲染结果的最后一行出现常见交互式 Shell 提示符。
@@ -56,6 +65,12 @@ signals:
      * 普通命令执行期间产生的提示符不会改变服务器连接链。
      */
     void shellPromptDetected();
+
+    /**
+     * @brief 远端 Shell 集成脚本上报了一条事件，原样转发自 VtermBridge。
+     * @param payload OSC 载荷。
+     */
+    void shellIntegrationEvent(const QByteArray &payload);
 
     /** @brief 视图像素尺寸变化后计算出的终端字符列数和行数。 */
     void terminalSizeChanged(int columns, int rows);

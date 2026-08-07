@@ -1,5 +1,6 @@
 #include "terminal/TerminalPane.h"
 
+#include "ssh/ShellShim.h"
 #include "ssh/SshCommandParser.h"
 #include "ssh/SshSessionStack.h"
 #include "ssh/SshTunnelBroker.h"
@@ -55,45 +56,22 @@ TerminalPane::TerminalPane(QWidget *parent)
                 }
             });
     connect(m_terminalView,
-            &TerminalView::authenticationFailed,
+            &TerminalView::shellIntegrationEvent,
+            this,
+            &TerminalPane::handleShellIntegrationEvent);
+    connect(m_terminalView,
+            &TerminalView::nestedSshFailed,
+            this,
+            [this]() { rollBackPendingNestedTarget(tr("内层 SSH 连接失败")); });
+    connect(m_terminalView,
+            &TerminalView::nestedSshAborted,
             this,
             [this]() {
-                if (m_pendingNestedCredentialTargetId.isEmpty()) {
-                    return;
+                // 只有确实存在未确认的嵌套目标时，Ctrl+C 才被理解为"取消这次 ssh"；
+                // 否则它就是普通的命令中断，不该影响连接链。
+                if (!m_pendingNestedCredentialTargetId.isEmpty()) {
+                    rollBackPendingNestedTarget(tr("已取消内层 SSH 连接"));
                 }
-
-                qsizetype failedTargetIndex = -1;
-                for (qsizetype index = 0; index < m_inferredTargets.size(); ++index) {
-                    if (m_inferredTargets.at(index).id == m_pendingNestedCredentialTargetId) {
-                        failedTargetIndex = index;
-                        break;
-                    }
-                }
-                if (failedTargetIndex < 0) {
-                    m_pendingNestedCredentialTargetId.clear();
-                    m_captureNextLineAsCredential = false;
-                    return;
-                }
-
-                // 最终 Permission denied 表示 OpenSSH 已退出并回到上一层 Shell。必须删除从
-                // 失败目标开始的全部候选层级，否则用户再次执行相同 ssh 时会被错误解析为
-                // “失败目标的下一层”，导致文件管理器始终无法得到真实第 2 层连接链。
-                while (m_inferredTargets.size() > failedTargetIndex) {
-                    ConnectionTarget &failedTarget = m_inferredTargets.last();
-                    if (!failedTarget.tunnelRouteId.isEmpty()) {
-                        SshTunnelBroker::instance().unregisterRoute(
-                            failedTarget.tunnelRouteId);
-                        m_tunnelRouteIds.removeAll(failedTarget.tunnelRouteId);
-                    }
-                    failedTarget.password.fill(QChar::Null);
-                    m_inferredTargets.removeLast();
-                }
-                m_pendingNestedCredentialTargetId.clear();
-                m_captureNextLineAsCredential = false;
-                refreshHeaderLabel();
-                emit targetsChanged(this);
-                emit statusMessage(tr("内层 SSH 认证失败，已退回 %1；可重新执行 ssh 重试")
-                                       .arg(activeTarget().connectionSpecifier()));
             });
     connect(m_terminalView,
             &TerminalView::shellPromptDetected,
@@ -261,12 +239,19 @@ void TerminalPane::connectToHost(const ConnectionTarget &target)
         }
         // 自持层是权威事实，直接替换。底座一变，叠在上面的推测层就失去了依据——它们描述的
         // 是"从旧的栈顶又 ssh 到了哪里"，而栈顶已经不是原来那个了。
+        const bool grew = layers.size() > m_ownedTargets.size();
         m_ownedTargets = QVector<ConnectionTarget>(layers.cbegin(), layers.cend());
         m_inferredTargets.clear();
         m_pendingNestedCredentialTargetId.clear();
         m_captureNextLineAsCredential = false;
         refreshHeaderLabel();
         emit targetsChanged(this);
+
+        // 每建成一层就给它注入同一个 shim——这正是闭环所在：用户只需在第一层被注入一次，
+        // 之后每一层都由本程序建立并自动注入，整条链无需在任何服务器上改 rc 文件。
+        if (grew && m_shellIntegrationEnabled) {
+            injectShellIntegration();
+        }
     });
     connect(m_sessionStack,
             &SshSessionStack::layerFailed,
@@ -559,6 +544,92 @@ void TerminalPane::inspectSubmittedCommand(const QString &command)
         // 普通命令确认内层 Shell 已可用后，把“认证完成”状态同步给文件管理器。
         emit targetsChanged(this);
     }
+}
+
+void TerminalPane::injectShellIntegration()
+{
+    if (m_sessionStack == nullptr || !m_sessionStack->isRunning()) {
+        return;
+    }
+    // 远端 Shell 刚绘制完提示符时注入最不打扰：此刻用户还没开始输入，注入行不会打断
+    // 正在编辑的命令。延迟一拍是为了让登录脚本的输出先落定。
+    QTimer::singleShot(300, this, [this, generation = m_sessionGeneration]() {
+        if (generation != m_sessionGeneration || m_sessionStack == nullptr
+            || !m_sessionStack->isRunning()) {
+            return;
+        }
+        m_sessionStack->enqueueInput(ShellShim::injectionCommand() + "\n");
+    });
+}
+
+void TerminalPane::handleShellIntegrationEvent(const QByteArray &payload)
+{
+    const ShellShim::Event event = ShellShim::parseEvent(payload);
+    if (event.kind != ShellShim::Event::Kind::Connect) {
+        return;
+    }
+    if (m_sessionStack == nullptr || !m_sessionStack->isRunning()) {
+        return;
+    }
+
+    // shim 正阻塞在 read 上等回执，任何分支都必须给出答复，否则用户的终端会挂住。
+    const auto respond = [this](const QByteArray &response) {
+        m_sessionStack->enqueueInput(response);
+    };
+
+    QString declineReason;
+    const ConnectionTarget target =
+        ShellShim::resolveTarget(event.arguments, activeTarget(), &declineReason);
+    if (!target.isValid() || !canPushNestedLayer()) {
+        // 无法忠实复现的用法交还给真正的 ssh。此时会落回命令解析的降级路径，推测层仍会
+        // 被标注为不确定——这比用一个错误的目标去建立会话安全得多。
+        respond(ShellShim::declineResponse());
+        if (!declineReason.isEmpty()) {
+            emit statusMessage(tr("未接管本次 ssh（%1），已交由远端自行执行").arg(declineReason));
+        }
+        return;
+    }
+
+    respond(ShellShim::acceptResponse());
+    connectNestedHost(target);
+}
+
+void TerminalPane::rollBackPendingNestedTarget(const QString &reason)
+{
+    if (m_pendingNestedCredentialTargetId.isEmpty()) {
+        return;
+    }
+
+    qsizetype failedTargetIndex = -1;
+    for (qsizetype index = 0; index < m_inferredTargets.size(); ++index) {
+        if (m_inferredTargets.at(index).id == m_pendingNestedCredentialTargetId) {
+            failedTargetIndex = index;
+            break;
+        }
+    }
+    m_pendingNestedCredentialTargetId.clear();
+    m_captureNextLineAsCredential = false;
+    if (failedTargetIndex < 0) {
+        return;
+    }
+
+    // 必须删除从失败层开始的全部推测层，而不只是最后一层：用户可能连续尝试了几次，
+    // 只弹一层会把更外面的幽灵层留在链上，之后再执行相同的 ssh 又会被解析成"幽灵层的
+    // 下一层"，链就再也回不到真实状态。
+    while (m_inferredTargets.size() > failedTargetIndex) {
+        ConnectionTarget &failedTarget = m_inferredTargets.last();
+        if (!failedTarget.tunnelRouteId.isEmpty()) {
+            SshTunnelBroker::instance().unregisterRoute(failedTarget.tunnelRouteId);
+            m_tunnelRouteIds.removeAll(failedTarget.tunnelRouteId);
+        }
+        failedTarget.password.fill(QChar::Null);
+        m_inferredTargets.removeLast();
+    }
+
+    refreshHeaderLabel();
+    emit targetsChanged(this);
+    emit statusMessage(tr("%1，已退回 %2")
+                           .arg(reason, activeTarget().connectionSpecifier()));
 }
 
 void TerminalPane::stopWorker()

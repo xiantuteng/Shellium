@@ -35,6 +35,8 @@ qt_add_executable(Shellium
     src/sftp/RemoteFileManagerWidget.h
     src/sftp/SftpService.cpp
     src/sftp/SftpService.h
+    src/ssh/ShellShim.cpp
+    src/ssh/ShellShim.h
     src/ssh/SshCommandParser.cpp
     src/ssh/SshCommandParser.h
     src/ssh/SshSessionNode.cpp
@@ -96,6 +98,8 @@ if(BUILD_TESTING)
         src/security/Vault.h
         src/storage/ApplicationDatabase.cpp
         src/storage/ApplicationDatabase.h
+        src/ssh/ShellShim.cpp
+        src/ssh/ShellShim.h
         src/ssh/SshCommandParser.cpp
         src/ssh/SshCommandParser.h
         src/terminal/TerminalView.cpp
@@ -127,14 +131,21 @@ if(BUILD_TESTING)
         tests/SshSessionStackIntegrationTest.cpp
         src/core/ConnectionTarget.cpp
         src/core/ConnectionTarget.h
+        src/sftp/SftpService.cpp
+        src/sftp/SftpService.h
+        src/ssh/ShellShim.cpp
+        src/ssh/ShellShim.h
         src/ssh/SshSessionNode.cpp
         src/ssh/SshSessionNode.h
         src/ssh/SshSessionStack.cpp
         src/ssh/SshSessionStack.h
+        src/ssh/SshTunnelBroker.cpp
+        src/ssh/SshTunnelBroker.h
     )
     target_include_directories(ShelliumSshIntegrationTests PRIVATE src)
     target_link_libraries(ShelliumSshIntegrationTests PRIVATE
         Qt6::Core
+        Qt6::Concurrent
         Qt6::Test
         PkgConfig::LIBSSH
     )
