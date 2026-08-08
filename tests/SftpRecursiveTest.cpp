@@ -57,6 +57,9 @@ private slots:
 
     /** @brief 手动选择外层后，连接链的无关刷新不得重新抢回最内层。 */
     void preservesManualServerSelectionAcrossRefresh();
+
+    /** @brief 列头点击必须按 升序→降序→默认 三态循环，换列则重新从升序开始。 */
+    void cyclesColumnSortThroughAscendingDescendingDefault();
 };
 
 namespace {
@@ -362,6 +365,36 @@ void SftpRecursiveTest::preservesManualServerSelectionAcrossRefresh()
                                             false),
              1);
     QCOMPARE(SftpUiState::selectTargetIndex({}, QString(), -1, false), -1);
+}
+
+void SftpRecursiveTest::cyclesColumnSortThroughAscendingDescendingDefault()
+{
+    using SftpUiState::nextSortState;
+    using SftpUiState::SortState;
+
+    // 默认态点击"大小"列（下标 1）：进入升序。
+    const SortState ascending = nextSortState(SortState{}, 1);
+    QCOMPARE(ascending.column, 1);
+    QCOMPARE(ascending.order, Qt::AscendingOrder);
+
+    // 再次点击同一列：转为降序。
+    const SortState descending = nextSortState(ascending, 1);
+    QCOMPARE(descending.column, 1);
+    QCOMPARE(descending.order, Qt::DescendingOrder);
+
+    // 第三次点击必须回到"还原默认"，即不排序、保持服务器返回顺序。用 column < 0 表达，
+    // 不能退化成"按第 0 列升序"——那会把用户的三态循环变成两态。
+    const SortState restored = nextSortState(descending, 1);
+    QCOMPARE(restored.column, -1);
+    QVERIFY(restored == SortState{});
+
+    // 循环必须闭合：从默认态再点同一列应重新进入升序。
+    QVERIFY(nextSortState(restored, 1) == ascending);
+
+    // 中途改点其他列时，新列从升序开始，而不是继承上一列的降序方向。
+    const SortState otherColumn = nextSortState(descending, 2);
+    QCOMPARE(otherColumn.column, 2);
+    QCOMPARE(otherColumn.order, Qt::AscendingOrder);
 }
 
 QTEST_MAIN(SftpRecursiveTest)

@@ -3,6 +3,7 @@
 #include "core/ConnectionTarget.h"
 #include "sftp/SftpService.h"
 
+#include <QElapsedTimer>
 #include <QHash>
 #include <QWidget>
 
@@ -50,9 +51,23 @@ public:
      */
     void requestUploadToCurrentDirectory();
 
+    /**
+     * @brief 退出全屏并恢复终端显示。
+     *
+     * 供 TerminalWorkspace 在整体隐藏文件管理时调用：若不同步复位，终端会因为仍处于
+     * 全屏让位状态而保持隐藏，标签页里两块内容同时消失。
+     */
+    void exitFullScreen();
+
 signals:
     /** @brief 文件操作或连接状态发生变化，供主窗口顶部非阻塞提示区显示。 */
     void statusMessage(const QString &message);
+
+    /**
+     * @brief 用户切换了全屏。
+     * @param fullScreen true 表示文件管理应覆盖整个标签页，终端暂时让出空间。
+     */
+    void fullScreenChanged(bool fullScreen);
 
 private slots:
     /** @brief 使用路径输入框内容读取远端目录。 */
@@ -204,11 +219,19 @@ private:
     void handleRecursiveTransferFinished(quint64 requestId,
                                          const SftpRecursive::TransferSummary &summary);
 
-    /** @brief 当前标签页连接链的服务器层选择器。 */
+    /** @brief 当前标签页连接链的服务器层选择器；始终显示。 */
     QComboBox *m_targetCombo = nullptr;
 
-    /** @brief 服务器选择器所在整行；只有连接链存在两层及以上时才显示。 */
+    /** @brief 服务器选择器所在整行。 */
     QWidget *m_targetRow = nullptr;
+
+    /**
+     * @brief 全屏开关：让文件管理覆盖整个终端会话窗口。
+     *
+     * 全屏是"本地/远程双栏对拷"的唯一入口——并排模式下宽度不足以容纳两棵目录树，
+     * 因此本地面板的显隐直接绑定在该开关上，不再单独提供本地文件按钮。
+     */
+    QToolButton *m_fullScreenButton = nullptr;
 
     /**
      * @brief 当前标签页独立的自动跟随偏好；手选外层后保持关闭直至连接链重建。
@@ -217,10 +240,7 @@ private:
      */
     QCheckBox *m_followInnermostCheck = nullptr;
 
-    /** @brief 是否显示本地文件面板；默认关闭，只展示远程文件。 */
-    QToolButton *m_localPanelToggle = nullptr;
-
-    /** @brief 本地文件面板容器；随 m_localPanelToggle 显隐，默认隐藏。 */
+    /** @brief 本地文件面板容器；仅在全屏时显示，默认隐藏。 */
     QWidget *m_localPanel = nullptr;
 
     /** @brief 本地侧当前绝对目录输入框。 */
@@ -237,6 +257,44 @@ private:
 
     /** @brief 远程目录条目树，同时作为本地文件的上传拖放目标。 */
     QTreeWidget *m_fileTree = nullptr;
+
+    /**
+     * @brief 当前排序列；-1 表示"还原默认"，即保持服务器返回的原始顺序。
+     *
+     * 点击列头在 正序 → 倒序 → 默认 之间循环，因此必须显式区分"未排序"与"按第 0 列
+     * 正序"两种状态，不能只用 Qt 的两态排序指示器表达。
+     */
+    int m_sortColumn = -1;
+
+    /** @brief 当前排序方向，仅在 m_sortColumn >= 0 时有意义。 */
+    Qt::SortOrder m_sortOrder = Qt::AscendingOrder;
+
+    /** @brief 按当前全屏状态刷新按钮图标（进入/退出用两个不同图形）。 */
+    void updateFullScreenIcon();
+
+    /** @brief 按当前 m_sortColumn/m_sortOrder 重排远程条目树。 */
+    void applyRemoteSort();
+
+    /** @brief 处理列头点击，按 正序→倒序→默认 三态推进。 */
+    void cycleRemoteSort(int column);
+
+    /** @brief 计时起点与上一次采样，用于估算传输速度。 */
+    QElapsedTimer m_transferClock;
+    qint64 m_lastSpeedSampleMs = 0;
+    quint64 m_lastSpeedSampleBytes = 0;
+
+    /** @brief 平滑后的速度（字节/秒）；瞬时值抖动过大，不适合直接展示。 */
+    double m_smoothedBytesPerSecond = 0.0;
+
+    /** @brief 复位速度估算状态，每次新传输开始时调用。 */
+    void resetTransferSpeed();
+
+    /**
+     * @brief 依据字节进度刷新进度条文字。
+     * @param completed 已传输字节数。
+     * @param total 总字节数；为 0 表示总量未知。
+     */
+    void updateTransferProgressText(quint64 completed, quint64 total);
     QLabel *m_statusLabel = nullptr;
     QProgressBar *m_progressBar = nullptr;
     QToolButton *m_cancelButton = nullptr;

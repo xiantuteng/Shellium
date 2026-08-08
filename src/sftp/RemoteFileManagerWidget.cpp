@@ -43,6 +43,48 @@
 namespace {
 
 /** @brief 把字节数格式化为适合文件列表展示的 IEC 单位。 */
+/**
+ * @brief 远程条目在服务器返回列表中的原始序号，用于"还原默认排序"。
+ *
+ * Qt::UserRole..UserRole+4 已被路径、是否目录、大小、权限和是否符号链接占用，这里从
+ * UserRole+5 起继续，避免与既有取值冲突。
+ */
+constexpr int kOriginalIndexRole = Qt::UserRole + 5;
+
+/** @brief 条目修改时间的原值，按时间排序时不能用格式化后的文本比较。 */
+constexpr int kModifiedAtRole = Qt::UserRole + 6;
+
+/**
+ * @brief 三路比较，返回负/零/正，供排序比较器统一表达"小于/等于/大于"。
+ *
+ * 直接写 a < b 的比较器在需要"相等则回落到次级条件"时会退化成两次比较，用三路结果
+ * 表达可以让次级条件只写一次。
+ */
+template <typename T>
+int compareValues(const T &left, const T &right)
+{
+    if (left < right) {
+        return -1;
+    }
+    return right < left ? 1 : 0;
+}
+
+/** @brief 把秒数格式化成人类可读的剩余时间。 */
+QString formatDuration(const double seconds)
+{
+    if (!std::isfinite(seconds) || seconds < 0.0) {
+        return QObject::tr("未知");
+    }
+    const qint64 total = qint64(seconds + 0.5);
+    if (total < 60) {
+        return QObject::tr("%1 秒").arg(total);
+    }
+    if (total < 3600) {
+        return QObject::tr("%1 分 %2 秒").arg(total / 60).arg(total % 60);
+    }
+    return QObject::tr("%1 小时 %2 分").arg(total / 3600).arg((total % 3600) / 60);
+}
+
 QString formatSize(const quint64 bytes)
 {
     static const QStringList units = {
@@ -303,7 +345,7 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     : QWidget(parent)
     , m_targetCombo(new QComboBox(this))
     , m_followInnermostCheck(new QCheckBox(tr("自动跟随最内层"), this))
-    , m_localPanelToggle(new QToolButton(this))
+    , m_fullScreenButton(new QToolButton(this))
     , m_localPathEdit(new QLineEdit(QDir::homePath(), this))
     , m_localModel(new QFileSystemModel(this))
     , m_localTree(new LocalDropTree(this))
@@ -321,37 +363,28 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     mainLayout->setContentsMargins(10, 10, 10, 8);
     mainLayout->setSpacing(8);
 
-    // 服务器选择器只在存在嵌套连接链时才有意义：单层会话里它永远只有一项，占着一整行
-    // 却不提供任何选择。整行打包成容器统一显隐，避免只隐藏下拉框留下孤立的标签文字。
     m_targetRow = new QWidget(this);
     auto *targetRowLayout = new QHBoxLayout(m_targetRow);
     targetRowLayout->setContentsMargins(0, 0, 0, 0);
     targetRowLayout->setSpacing(6);
     targetRowLayout->addWidget(new QLabel(tr("服务器："), m_targetRow));
     targetRowLayout->addWidget(m_targetCombo, 1);
-    m_targetRow->setVisible(false);
 
     // 自动跟随最内层是唯一合理的默认行为，不再作为可见选项占用顶部空间；它退化为内部
     // 状态：用户一旦在下拉框里手动选择外层，这里会自动置否，避免后续刷新把人抢回内层。
     m_followInnermostCheck->setChecked(true);
     m_followInnermostCheck->setVisible(false);
 
+    m_fullScreenButton->setCheckable(true);
+    m_fullScreenButton->setChecked(false);
+    m_fullScreenButton->setAutoRaise(true);
+    m_fullScreenButton->setIconSize(QSize(18, 18));
+    m_fullScreenButton->setToolTip(tr("全屏显示文件管理，并展开本地文件用于双栏对拷"));
+    m_fullScreenButton->setAccessibleName(tr("全屏"));
+
     auto *serverRow = new QHBoxLayout;
-    // 默认只展示远程文件，减少初次打开时的信息量；需要在本机和远端之间拖放时再手动
-    // 打开本地面板。
-    m_localPanelToggle->setCheckable(true);
-    m_localPanelToggle->setChecked(false);
-    m_localPanelToggle->setAutoRaise(true);
-    m_localPanelToggle->setIconSize(QSize(18, 18));
-    m_localPanelToggle->setIcon(
-        UiIcons::themed(this, QStringLiteral("user-home"), QStyle::SP_DirHomeIcon));
-    m_localPanelToggle->setToolTip(tr("显示本地文件面板，用于本机与远程之间的拖放传输"));
-    m_localPanelToggle->setAccessibleName(tr("本地文件"));
-    // 本地文件开关固定在最左侧，与它控制的左侧面板同侧；服务器选择器随后填充剩余宽度。
-    // 末尾的弹簧只在选择器隐藏时生效，保证开关不会因为单层会话而漂移到行中间。
-    serverRow->addWidget(m_localPanelToggle);
     serverRow->addWidget(m_targetRow, 1);
-    serverRow->addStretch(0);
+    serverRow->addWidget(m_fullScreenButton);
     mainLayout->addLayout(serverRow);
 
     auto *contentSplitter = new QSplitter(Qt::Horizontal, this);
@@ -422,9 +455,11 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     pathRow->addWidget(refreshButton);
     remoteLayout->addLayout(pathRow);
 
-    m_fileTree->setColumnCount(6);
+    // 目录/链接/普通文件已由名称列的图标区分，独立的"类型"列只是重复信息，删掉它可以
+    // 把宽度让给真正需要横向空间的时间与所有者。
+    m_fileTree->setColumnCount(5);
     m_fileTree->setHeaderLabels(
-        {tr("名称"), tr("大小"), tr("类型"), tr("权限"), tr("所有者"), tr("修改时间")});
+        {tr("名称"), tr("大小"), tr("修改时间"), tr("权限"), tr("所有者")});
     m_fileTree->setRootIsDecorated(false);
     m_fileTree->setAlternatingRowColors(false);
     m_fileTree->setSelectionMode(QAbstractItemView::ExtendedSelection);
@@ -437,10 +472,17 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
         m_fileTree->header()->setSectionResizeMode(column, QHeaderView::Interactive);
     }
     m_fileTree->header()->setMinimumSectionSize(56);
-    const QList<int> defaultColumnWidths = {240, 96, 84, 108, 116, 168};
+    const QList<int> defaultColumnWidths = {240, 96, 168, 92, 116};
     for (int column = 0; column < defaultColumnWidths.size(); ++column) {
         m_fileTree->setColumnWidth(column, defaultColumnWidths.at(column));
     }
+    // 自行处理排序而不是使用 setSortingEnabled：Qt 内置排序只有升/降两态，无法表达
+    // 用户要求的"再点一次回到服务器原始顺序"。
+    m_fileTree->setSortingEnabled(false);
+    m_fileTree->header()->setSectionsClickable(true);
+    m_fileTree->header()->setSortIndicatorShown(false);
+    connect(m_fileTree->header(), &QHeaderView::sectionClicked,
+            this, &RemoteFileManagerWidget::cycleRemoteSort);
     // 宽度不足时显示横向滚动条，而不是隐藏列；按像素滚动可停在任意列中间。
     m_fileTree->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     m_fileTree->setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
@@ -454,8 +496,16 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     contentSplitter->setSizes({420, 520});
     mainLayout->addWidget(contentSplitter, 1);
 
+    // 本地面板只在全屏时出现：并排模式下文件管理只占约三分之一宽度，塞进两棵目录树
+    // 会让两边都窄到无法辨认路径。全屏与"双栏对拷"因此是同一个动作。
     m_localPanel->setVisible(false);
-    connect(m_localPanelToggle, &QToolButton::toggled, m_localPanel, &QWidget::setVisible);
+    connect(m_fullScreenButton, &QToolButton::toggled, this, [this](const bool fullScreen) {
+        m_localPanel->setVisible(fullScreen);
+        m_fullScreenButton->setToolTip(
+            fullScreen ? tr("退出全屏并收起本地文件") : tr("全屏显示文件管理，并展开本地文件用于双栏对拷"));
+        updateFullScreenIcon();
+        emit fullScreenChanged(fullScreen);
+    });
 
     auto *operationRow = new QHBoxLayout;
     operationRow->setSpacing(5);
@@ -765,6 +815,7 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
                     return;
                 }
                 m_fileTree->clear();
+                int originalIndex = 0;
                 for (const RemoteFileInfo &entry : entries) {
                     auto *item = new QTreeWidgetItem(m_fileTree);
                     item->setText(0, entry.name);
@@ -780,17 +831,20 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
                                               entry.isSymbolicLink ? QStyle::SP_FileLinkIcon
                                                                    : QStyle::SP_FileIcon));
                     item->setText(1, entry.isDirectory ? QStringLiteral("—") : formatSize(entry.size));
-                    item->setText(2, entry.isDirectory ? tr("目录")
-                                                       : entry.isSymbolicLink ? tr("链接") : tr("文件"));
+                    item->setText(2, entry.modifiedAt.toString(QStringLiteral("yyyy-MM-dd HH:mm:ss")));
                     item->setText(3, formatPermissions(entry.permissions));
                     item->setText(4, entry.owner);
-                    item->setText(5, entry.modifiedAt.toString(QStringLiteral("yyyy-MM-dd HH:mm:ss")));
                     item->setData(0, Qt::UserRole, entry.path);
                     item->setData(0, Qt::UserRole + 1, entry.isDirectory);
                     item->setData(0, Qt::UserRole + 2, QVariant::fromValue(entry.size));
                     item->setData(0, Qt::UserRole + 3, QVariant::fromValue(entry.permissions));
                     item->setData(0, Qt::UserRole + 4, entry.isSymbolicLink);
+                    // 排序必须比较真实值而不是显示文本：大小按字节排否则 "9 B" 会大于
+                    // "10 MiB"，时间按 QDateTime 排否则跨格式会乱。原始序号用于"还原默认"。
+                    item->setData(0, kOriginalIndexRole, originalIndex++);
+                    item->setData(0, kModifiedAtRole, entry.modifiedAt);
                 }
+                applyRemoteSort();
                 m_pathEdit->setText(path);
                 // 记住这台服务器的当前位置：下次切回来时应当回到这里，而不是沿用别处的路径。
                 m_pathByTarget.insert(target.stableKey(), path);
@@ -842,6 +896,10 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
                     m_progressBar->setRange(0, 100);
                     m_progressBar->setValue(percent);
                 }
+                // 百分比无法回答"还要多久""是不是卡住了"。补上已传/总量和实时速度后，
+                // 用户才能判断一次大文件传输是正常慢还是已经停滞。
+                m_progressBar->setTextVisible(true);
+                updateTransferProgressText(completed, total);
             });
     connect(m_service,
             &SftpService::recursiveTransferProgress,
@@ -928,6 +986,150 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
             });
 
     rebuildTransferQueueView();
+    updateFullScreenIcon();
+}
+
+void RemoteFileManagerWidget::exitFullScreen()
+{
+    // setChecked 会触发 toggled，进而收起本地面板并发出 fullScreenChanged(false)，
+    // 让工作区把终端恢复出来；因此这里不需要再重复做同样的事。
+    m_fullScreenButton->setChecked(false);
+}
+
+void RemoteFileManagerWidget::updateFullScreenIcon()
+{
+    m_fullScreenButton->setIcon(
+        m_fullScreenButton->isChecked()
+            ? UiIcons::themed(this, QStringLiteral("view-restore"), QStyle::SP_TitleBarNormalButton)
+            : UiIcons::themed(this, QStringLiteral("view-fullscreen"), QStyle::SP_TitleBarMaxButton));
+}
+
+void RemoteFileManagerWidget::cycleRemoteSort(const int column)
+{
+    // 三态推进属于纯状态计算，放在 SftpUiState 中由单元测试覆盖；这里只负责把结果
+    // 反映到表头指示器和实际排序上。
+    const SftpUiState::SortState next =
+        SftpUiState::nextSortState({m_sortColumn, m_sortOrder}, column);
+    m_sortColumn = next.column;
+    m_sortOrder = next.order;
+
+    if (m_sortColumn < 0) {
+        m_fileTree->header()->setSortIndicatorShown(false);
+    } else {
+        m_fileTree->header()->setSortIndicatorShown(true);
+        m_fileTree->header()->setSortIndicator(m_sortColumn, m_sortOrder);
+    }
+    applyRemoteSort();
+}
+
+void RemoteFileManagerWidget::applyRemoteSort()
+{
+    if (m_fileTree->topLevelItemCount() == 0) {
+        return;
+    }
+
+    QList<QTreeWidgetItem *> items;
+    items.reserve(m_fileTree->topLevelItemCount());
+    while (m_fileTree->topLevelItemCount() > 0) {
+        items.append(m_fileTree->takeTopLevelItem(0));
+    }
+
+    const int column = m_sortColumn;
+    const bool descending = m_sortOrder == Qt::DescendingOrder;
+    std::stable_sort(items.begin(), items.end(),
+                     [column, descending](const QTreeWidgetItem *left,
+                                          const QTreeWidgetItem *right) {
+        if (column < 0) {
+            // 还原默认：完全按服务器返回顺序，不再做任何分组。
+            return left->data(0, kOriginalIndexRole).toInt()
+                < right->data(0, kOriginalIndexRole).toInt();
+        }
+
+        // 目录恒排在文件之前。文件管理的首要用途是逐层进入目录，若按大小排序把目录
+        // 冲散到列表中间，导航会变得非常费力；这也是各类 SFTP 客户端的一致做法。
+        const bool leftIsDirectory = left->data(0, Qt::UserRole + 1).toBool();
+        const bool rightIsDirectory = right->data(0, Qt::UserRole + 1).toBool();
+        if (leftIsDirectory != rightIsDirectory) {
+            return leftIsDirectory;
+        }
+
+        int comparison = 0;
+        switch (column) {
+        case 1:
+            comparison = compareValues(left->data(0, Qt::UserRole + 2).toULongLong(),
+                                       right->data(0, Qt::UserRole + 2).toULongLong());
+            break;
+        case 2:
+            comparison = compareValues(left->data(0, kModifiedAtRole).toDateTime(),
+                                       right->data(0, kModifiedAtRole).toDateTime());
+            break;
+        case 3:
+            comparison = compareValues(left->data(0, Qt::UserRole + 3).toUInt(),
+                                       right->data(0, Qt::UserRole + 3).toUInt());
+            break;
+        case 4:
+            comparison = QString::compare(left->text(4), right->text(4), Qt::CaseInsensitive);
+            break;
+        case 0:
+        default:
+            comparison = QString::compare(left->text(0), right->text(0), Qt::CaseInsensitive);
+            break;
+        }
+        if (comparison == 0) {
+            // 同值时回落到名称，保证结果稳定可预期，不随刷新前后跳动。
+            comparison = QString::compare(left->text(0), right->text(0), Qt::CaseInsensitive);
+        }
+        return descending ? comparison > 0 : comparison < 0;
+    });
+
+    m_fileTree->addTopLevelItems(items);
+}
+
+void RemoteFileManagerWidget::resetTransferSpeed()
+{
+    m_transferClock.start();
+    m_lastSpeedSampleMs = 0;
+    m_lastSpeedSampleBytes = 0;
+    m_smoothedBytesPerSecond = 0.0;
+}
+
+void RemoteFileManagerWidget::updateTransferProgressText(const quint64 completed,
+                                                          const quint64 total)
+{
+    if (!m_transferClock.isValid()) {
+        m_transferClock.start();
+    }
+    const qint64 nowMs = m_transferClock.elapsed();
+    const qint64 deltaMs = nowMs - m_lastSpeedSampleMs;
+    // 至少间隔 300ms 再采样：SFTP 每个数据块都会回调，间隔过短会让瞬时速度剧烈跳动，
+    // 数字快到看不清。
+    if (deltaMs >= 300 && completed >= m_lastSpeedSampleBytes) {
+        const double instant =
+            double(completed - m_lastSpeedSampleBytes) * 1000.0 / double(deltaMs);
+        // 指数滑动平均进一步抑制网络抖动；首个样本直接采用，避免从 0 缓慢爬升。
+        m_smoothedBytesPerSecond = m_smoothedBytesPerSecond > 0.0
+            ? m_smoothedBytesPerSecond * 0.7 + instant * 0.3
+            : instant;
+        m_lastSpeedSampleMs = nowMs;
+        m_lastSpeedSampleBytes = completed;
+    }
+
+    QString text = total > 0
+        ? tr("%1 / %2").arg(formatSize(completed), formatSize(total))
+        : tr("已传输 %1").arg(formatSize(completed));
+    if (m_smoothedBytesPerSecond > 0.0) {
+        text += tr(" · %1/s").arg(formatSize(quint64(m_smoothedBytesPerSecond)));
+        if (total > completed) {
+            const double remainingSeconds =
+                double(total - completed) / m_smoothedBytesPerSecond;
+            // 剩余时间只在能算得出时给出，避免总量未知时显示一个凭空的数字。
+            text += tr(" · 剩余 %1").arg(formatDuration(remainingSeconds));
+        }
+    }
+    if (total > 0) {
+        text.prepend(QStringLiteral("%p%  "));
+    }
+    m_progressBar->setFormat(text);
 }
 
 RemoteFileManagerWidget::~RemoteFileManagerWidget()
@@ -963,10 +1165,6 @@ void RemoteFileManagerWidget::setAvailableTargets(const QList<ConnectionTarget> 
             m_sessionSecrets.insert(target.stableKey(), target.password);
         }
     }
-
-    // 只有真正存在嵌套连接链时，"第 N 层"才是一个需要用户做的选择；单层会话下拉框永远
-    // 只有一项，显示它只会让顶部多出一行噪声。
-    m_targetRow->setVisible(m_targets.size() > 1);
 
     m_targetCombo->blockSignals(true);
     m_targetCombo->clear();
@@ -1063,6 +1261,8 @@ void RemoteFileManagerWidget::startNextQueuedTransfer()
     m_pauseButton->setIcon(
         UiIcons::themed(this, QStringLiteral("media-playback-pause"), QStyle::SP_MediaPause));
     setBusy(true, tr("正在执行：%1").arg(transfer.description));
+    // 每个传输独立计速：沿用上一次的样本会让新任务开头显示出前一个任务的速度。
+    resetTransferSpeed();
 
     switch (transfer.kind) {
     case QueuedTransferKind::UploadFile:
@@ -1585,6 +1785,8 @@ void RemoteFileManagerWidget::setBusy(const bool busy, const QString &message)
     } else {
         m_progressBar->setVisible(false);
         m_progressBar->setRange(0, 100);
+        // 清掉上一次传输遗留的"已传/总量·速度"文字，否则下次进度条一出现就先闪出旧数据。
+        m_progressBar->setFormat(QStringLiteral("%p%"));
     }
 }
 

@@ -351,6 +351,40 @@ namespace SftpUiState {
     return std::clamp(previousIndex, 0, static_cast<int>(stableKeys.size() - 1));
 }
 
+/**
+ * @brief 远程文件列表的排序状态。
+ *
+ * column 为 -1 表示"还原默认"，即保持服务器返回的原始顺序。必须显式区分它与"按第 0 列
+ * 升序"，否则三态循环走到第三步时无法表达。
+ */
+struct SortState {
+    int column = -1;
+    Qt::SortOrder order = Qt::AscendingOrder;
+
+    [[nodiscard]] bool operator==(const SortState &other) const
+    {
+        // column 为 -1 时 order 无意义，比较它会让两个等价的"默认状态"被判为不等。
+        return column == other.column && (column < 0 || order == other.order);
+    }
+};
+
+/**
+ * @brief 计算点击某个列头之后的新排序状态。
+ * @param current 当前排序状态。
+ * @param clickedColumn 被点击的列。
+ * @return 同一列上按 升序 → 降序 → 默认 循环；点击其他列则从该列升序重新开始。
+ */
+[[nodiscard]] inline SortState nextSortState(const SortState &current, const int clickedColumn)
+{
+    if (current.column != clickedColumn) {
+        return {clickedColumn, Qt::AscendingOrder};
+    }
+    if (current.order == Qt::AscendingOrder) {
+        return {clickedColumn, Qt::DescendingOrder};
+    }
+    return {};
+}
+
 } // namespace SftpUiState
 
 /**

@@ -32,6 +32,12 @@ TerminalWorkspace::TerminalWorkspace(QWidget *parent)
             &RemoteFileManagerWidget::statusMessage,
             this,
             &TerminalWorkspace::statusMessage);
+    // 全屏时让终端整体让出空间，由分隔器把宽度全部交给文件管理；终端进程和滚动缓冲
+    // 都不受影响，退出全屏即原样恢复。
+    connect(m_fileManager,
+            &RemoteFileManagerWidget::fullScreenChanged,
+            this,
+            [this](const bool fullScreen) { m_pane->setVisible(!fullScreen); });
     connect(m_pane, &TerminalPane::targetsChanged, this, [this](TerminalPane *pane) {
         synchronizeFileManager(true);
         emitTerminalStatus();
@@ -76,6 +82,11 @@ TerminalPane *TerminalWorkspace::activePane() const
 
 void TerminalWorkspace::setFileManagerVisible(const bool visible)
 {
+    if (!visible) {
+        // 必须先退出全屏：全屏状态下终端是被显式隐藏的，若此时又把文件管理一并隐藏，
+        // 标签页里两块内容会同时消失，只剩一片空白且没有任何可点的恢复入口。
+        m_fileManager->exitFullScreen();
+    }
     // QWidget::setVisible 在标签页本身不可见时仍会正确维护显隐意图；切回标签页后 Qt 会
     // 根据该 hidden 状态恢复布局，因此每个标签可以拥有不同的文件管理显示设置。
     m_fileManager->setVisible(visible);
