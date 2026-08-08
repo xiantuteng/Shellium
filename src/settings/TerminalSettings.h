@@ -202,7 +202,7 @@ signals:
     /** @brief 当前运行设置发生变化，所有工作区应实时重新应用。 */
     void settingsChanged(const TerminalSettings &settings);
 
-    /** @brief 单项持久化值损坏但已安全回退，供状态栏或日志展示。 */
+    /** @brief 单项持久化值损坏但已安全回退，供顶部提示区或日志展示。 */
     void warningOccurred(const QString &message);
 
 private:

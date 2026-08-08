@@ -51,7 +51,7 @@ public:
     void refresh();
 
 signals:
-    /** @brief 非致命启动、停止、数据库错误，供主窗口状态栏展示。 */
+    /** @brief 非致命启动、停止、数据库错误，供主窗口顶部提示区展示。 */
     void statusMessage(const QString &message);
 
 private:

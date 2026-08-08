@@ -13,6 +13,7 @@ class QLabel;
 class LocalShellWorker;
 class SshSessionStack;
 class TerminalView;
+class QToolButton;
 struct TerminalSettings;
 
 /**
@@ -86,6 +87,15 @@ public:
     /** @brief 返回当前终端的纯文本输出，供主窗口原子导出。 */
     [[nodiscard]] QString terminalPlainText() const;
 
+    /**
+     * @brief 同步会话顶部远程文件按钮的选中状态。
+     * @param visible true 表示本标签的文件管理区正在显示，false 表示已收起。
+     *
+     * 该方法只更新按钮展示，不直接操作分隔器；真正的显隐状态由所属
+     * TerminalWorkspace 持有，从而保证每个标签页互不干扰。
+     */
+    void setFileManagerVisible(bool visible);
+
 public slots:
     /**
      * @brief 向当前 SSH 或本地 PTY 写入原始字节，不产生新的广播源信号。
@@ -106,6 +116,15 @@ public slots:
 
 signals:
     /**
+     * @brief 用户从会话顶部状态栏请求显示或隐藏远程文件管理区。
+     * @param visible true 表示展开，false 表示收起。
+     *
+     * 按钮不直接查找 MainWindow 的“当前标签”，避免菜单或快捷键切换标签时误操作其他
+     * 会话；所属 TerminalWorkspace 会把请求严格路由到自己的文件管理器。
+     */
+    void fileManagerVisibilityRequested(bool visible);
+
+    /**
      * @brief 根 SSH 栈即将停止，端口转发必须在该对象失效前同步结束网络线程。
      * @param sessionStack 已收到 requestStop、但仍然有效的准确栈对象。
      *
@@ -117,7 +136,7 @@ signals:
     /** @brief 嵌套 SSH 进入或退出导致可选服务器链发生变化。 */
     void targetsChanged(TerminalPane *pane);
 
-    /** @brief 连接状态文字发生变化，供状态栏展示。 */
+    /** @brief 连接状态文字发生变化，供主窗口顶部非阻塞提示区展示。 */
     void statusMessage(const QString &message);
 
     /**
@@ -206,7 +225,7 @@ private:
 
     /**
      * @brief 撤销尚未确认的嵌套推测层，用于 ssh 失败或被用户取消。
-     * @param reason 供状态栏展示的简短原因。
+     * @param reason 供顶部非阻塞提示区展示的简短原因。
      *
      * 失败的 ssh 如果不回滚，就会在连接链上留下一个用户从未真正进入的幽灵层；文件管理器
      * 随后会把它当作可操作的服务器，而它往往和真实层同名，界面上根本分辨不出来。
@@ -227,8 +246,18 @@ private:
      */
     bool scheduleAutomaticReconnect(const ConnectionTarget &target,
                                     quint64 sessionGeneration);
+    /** @brief 会话顶部状态栏容器，承载服务器、终端尺寸和文件管理开关。 */
+    QWidget *m_headerBar = nullptr;
 
+    /** @brief 当前会话或连接阶段说明，位于状态栏左侧。 */
     QLabel *m_headerLabel = nullptr;
+
+    /** @brief 当前终端编码和列×行尺寸，随 PTY 尺寸信号实时更新。 */
+    QLabel *m_terminalMetaLabel = nullptr;
+
+    /** @brief 当前标签专属的远程文件管理显隐按钮，位于状态栏最右侧。 */
+    QToolButton *m_fileManagerButton = nullptr;
+
     TerminalView *m_terminalView = nullptr;
     SshSessionStack *m_sessionStack = nullptr;
     LocalShellWorker *m_localWorker = nullptr;

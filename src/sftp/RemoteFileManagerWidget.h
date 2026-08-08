@@ -50,7 +50,7 @@ public:
     void requestUploadToCurrentDirectory();
 
 signals:
-    /** @brief 文件操作或连接状态发生变化，供主窗口状态栏显示。 */
+    /** @brief 文件操作或连接状态发生变化，供主窗口顶部非阻塞提示区显示。 */
     void statusMessage(const QString &message);
 
 private slots:

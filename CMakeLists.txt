@@ -82,6 +82,7 @@ qt_add_executable(Shellium
     src/ui/SettingsDialog.h
     src/ui/SshKeyManagerDialog.cpp
     src/ui/SshKeyManagerDialog.h
+    src/ui/UiIcons.h
     src/ui/VaultDialog.cpp
     src/ui/VaultDialog.h
 )

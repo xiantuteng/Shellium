@@ -38,6 +38,10 @@ TerminalWorkspace::TerminalWorkspace(QWidget *parent)
         emit activeTargetsChanged(pane);
     });
     connect(m_pane, &TerminalPane::statusMessage, this, &TerminalWorkspace::statusMessage);
+    connect(m_pane,
+            &TerminalPane::fileManagerVisibilityRequested,
+            this,
+            &TerminalWorkspace::setFileManagerVisible);
 
     // TerminalPane 对外只暴露业务层连接状态；字符尺寸由其唯一的 TerminalView 产生。
     // 通过 QObject 子树查找可保持 Pane 的网络接口不变，同时把纯展示状态提升到工作区层。
@@ -73,12 +77,15 @@ void TerminalWorkspace::setFileManagerVisible(const bool visible)
     // QWidget::setVisible 在标签页本身不可见时仍会正确维护显隐意图；切回标签页后 Qt 会
     // 根据该 hidden 状态恢复布局，因此每个标签可以拥有不同的文件管理显示设置。
     m_fileManager->setVisible(visible);
+    // 顶部按钮既可能由用户点击，也可能由工作区恢复或快捷键间接改变。所有入口最终都在
+    // 这里汇合并回写按钮，才能保证视觉状态与实际分隔器状态始终一致。
+    m_pane->setFileManagerVisible(visible);
 }
 
 bool TerminalWorkspace::isFileManagerVisible() const
 {
     // 不能使用 isVisible()：非当前标签的所有子控件都会临时返回 false。isHidden() 只反映
-    // 用户是否显式隐藏了该控件，适合在标签切换时恢复工具栏开关状态。
+    // 用户是否显式隐藏了该控件，适合在标签切换和工作区恢复时同步顶部会话按钮状态。
     return !m_fileManager->isHidden();
 }
 

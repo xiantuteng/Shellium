@@ -44,8 +44,9 @@ signals:
      * @param columns 终端可见列数。
      * @param rows 终端可见行数。
      *
-     * 主窗口应监听当前标签页的该信号来绘制持久状态栏，不能从短暂的 statusMessage 文本
-     * 反向解析；每个 TerminalWorkspace 保存自己的尺寸，因此标签切换不会串用其他会话状态。
+     * 该结构化信号保留给自动化、无障碍或未来的会话概览使用，消费者不能从短暂的
+     * statusMessage 文本反向解析。当前界面由 TerminalPane 直接绘制顶部会话状态栏，
+     * 每个 TerminalWorkspace 仍保存自己的尺寸，因此标签切换不会串用其他会话状态。
      */
     void terminalStatusChanged(const QString &server,
                                const QString &encoding,
@@ -59,7 +60,7 @@ private:
      */
     void synchronizeFileManager(bool followInnermost);
 
-    /** @brief 根据当前连接层和最近字符尺寸发出结构化终端状态。 */
+    /** @brief 根据当前连接层和最近字符尺寸发出结构化终端状态，供非视觉消费者复用。 */
     void emitTerminalStatus();
 
     QSplitter *m_pageSplitter = nullptr;

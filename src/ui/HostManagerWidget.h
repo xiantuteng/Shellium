@@ -91,7 +91,7 @@ private:
     [[nodiscard]] QString selectedParentGroupId() const;
 
     /** @brief 把一条主机/分组记录转换为树节点，并保存稳定 id 与类型到 UserRole。 */
-    [[nodiscard]] static QTreeWidgetItem *createTreeItem(const HostRecord &record);
+    [[nodiscard]] QTreeWidgetItem *createTreeItem(const HostRecord &record) const;
 
     /** @brief 按父节点在前的顺序递归收集完整主机树，供安全导出使用。 */
     bool collectRecords(const QString &parentId,

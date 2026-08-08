@@ -63,7 +63,7 @@ signals:
     /** @brief 生命周期或流量统计变化；始终投递到本对象所属线程。 */
     void statisticsChanged(const QString &ruleId, const PortForwardStatistics &statistics);
 
-    /** @brief 可展示在状态栏的启动失败、单连接失败或安全限制说明。 */
+    /** @brief 可展示在顶部非阻塞提示区的启动失败、单连接失败或安全限制说明。 */
     void statusMessage(const QString &message);
 
     /** @brief 工作线程已经停止全部网络活动，可安全销毁运行时。 */

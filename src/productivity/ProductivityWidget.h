@@ -72,7 +72,7 @@ signals:
      */
     void broadcastInputRequested(const QByteArray &bytes, const QStringList &targetIds);
 
-    /** @brief 可展示在主窗口状态栏的非致命结果或错误信息。 */
+    /** @brief 可展示在主窗口顶部非阻塞提示区的非致命结果或错误信息。 */
     void statusMessage(const QString &message);
 
 private:
@@ -134,4 +134,3 @@ private:
     QString m_editingId; ///< 当前编辑记录 id；新记录在 beginNewRecord 时立即生成稳定 UUID。
     SnippetNodeKind m_editingKind = SnippetNodeKind::Snippet;
 };
-

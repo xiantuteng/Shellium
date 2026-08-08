@@ -13,9 +13,12 @@ class PortForwardManagerWidget;
 class ProductivityModel;
 class ProductivityWidget;
 class QAction;
+class QDockWidget;
 class QEvent;
 class QLabel;
 class QObject;
+class QPoint;
+class QTabBar;
 class QTabWidget;
 class QTimer;
 class TerminalPane;
@@ -89,6 +92,42 @@ private:
     /** @brief 创建一个拥有独立终端与文件管理器的新标签页，并统一连接状态信号。 */
     TerminalWorkspace *createWorkspaceTab(const QString &title);
 
+    /**
+     * @brief 关闭指定会话标签并同步标题栏标签模型。
+     * @param index 待关闭标签索引。
+     * @param allowLast true 表示工作区整体替换时允许移除最后一个标签；普通交互必须为 false。
+     *
+     * 标题栏 QTabBar 只是中央 QTabWidget 的视觉镜像，所有删除都必须经过这里，避免两个
+     * 控件的索引错位后把连接、文件管理器或保存工作区操作路由到错误会话。
+     */
+    void closeWorkspaceTab(int index, bool allowLast = false);
+
+    /**
+     * @brief 同时更新中央工作区与标题栏镜像中的标签文字。
+     * @param index 标签索引。
+     * @param title 经过调用方校验的非空显示名称。
+     */
+    void setWorkspaceTabText(int index, const QString &title);
+
+    /**
+     * @brief 显示或隐藏整个左侧停靠区。
+     * @param visible true 表示恢复三个已标签化侧栏，false 表示全部收起。
+     */
+    void setSidebarVisible(bool visible);
+
+    /**
+     * @brief 在标题栏标签的右键位置打开会话菜单。
+     * @param position 相对于标题栏 QTabBar 的局部坐标。
+     */
+    void showSessionTabContextMenu(const QPoint &position);
+
+    /**
+     * @brief 在顶部会话栏展示非阻塞提示，替代已经移除的底部状态栏。
+     * @param message 面向用户的简短说明；空文本会立即隐藏提示区。
+     * @param timeoutMilliseconds 自动清除毫秒数；0 表示保持到下一条提示。
+     */
+    void showTransientMessage(const QString &message, int timeoutMilliseconds = 5000);
+
     /** @brief 返回当前标签页的终端工作区。 */
     [[nodiscard]] TerminalWorkspace *activeWorkspace() const;
 
@@ -139,6 +178,8 @@ private:
 
     TerminalWorkspace *m_workspace = nullptr;
     QTabWidget *m_tabs = nullptr;
+    /** @brief 融入窗口标题栏的可交互会话标签，内容与 m_tabs 严格镜像。 */
+    QTabBar *m_titleTabBar = nullptr;
     ApplicationDatabase *m_database = nullptr;
     CredentialVault *m_credentialVault = nullptr;
     HostManagerWidget *m_hostManager = nullptr;
@@ -147,10 +188,19 @@ private:
     ProductivityWidget *m_productivityWidget = nullptr;
     TerminalSettingsService *m_settingsService = nullptr;
     QTimer *m_vaultIdleTimer = nullptr;
-    QLabel *m_terminalStatusLabel = nullptr;
+    /** @brief 顶部非阻塞消息标签，替代占用垂直空间的窗口底部状态栏。 */
+    QLabel *m_transientMessageLabel = nullptr;
+    /** @brief 到期后清除顶部瞬时消息；持久错误不会启动该定时器。 */
+    QTimer *m_messageClearTimer = nullptr;
+    /** @brief 顶部会话栏尚未创建时暂存的设置加载警告。 */
+    QString m_pendingTransientMessage;
 
-    /** @brief 每个标签最近一次结构化状态文本，切换标签时恢复而不串用其他会话数据。 */
-    QHash<TerminalWorkspace *, QString> m_terminalStatusByWorkspace;
+    /** @brief 需要由标题栏左侧按钮整体展开或收起的全部侧栏。 */
+    QList<QDockWidget *> m_sidebarDocks;
+    /** @brief 标题栏最左侧的侧栏显隐动作。 */
+    QAction *m_sidebarToggleAction = nullptr;
+    /** @brief 批量修改 Dock 可见性时阻止 visibilityChanged 回调反复改写动作状态。 */
+    bool m_updatingSidebarVisibility = false;
 
     /** @brief 正在连接但尚未认证成功的面板与持久化主机 id。 */
     QHash<TerminalPane *, QString> m_pendingHistoryHosts;

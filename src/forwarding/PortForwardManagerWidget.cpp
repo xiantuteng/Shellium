@@ -3,7 +3,9 @@
 #include "forwarding/PortForwardRuntime.h"
 #include "ssh/SshSessionStack.h"
 #include "storage/ApplicationDatabase.h"
+#include "ui/UiIcons.h"
 
+#include <QAction>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDialog>
@@ -14,6 +16,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
+#include <QMenu>
 #include <QPushButton>
 #include <QSpinBox>
 #include <QTableWidget>
@@ -186,6 +189,7 @@ PortForwardManagerWidget::PortForwardManagerWidget(ApplicationDatabase *database
     m_ruleTable->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_ruleTable->setSelectionMode(QAbstractItemView::SingleSelection);
     m_ruleTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    m_ruleTable->setContextMenuPolicy(Qt::CustomContextMenu);
     m_ruleTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
     for (int column = 1; column < m_ruleTable->columnCount(); ++column) {
         m_ruleTable->horizontalHeader()->setSectionResizeMode(column,
@@ -199,6 +203,26 @@ PortForwardManagerWidget::PortForwardManagerWidget(ApplicationDatabase *database
     auto *deleteButton = new QPushButton(tr("删除"), this);
     auto *startButton = new QPushButton(tr("启动"), this);
     auto *stopButton = new QPushButton(tr("停止"), this);
+    UiIcons::decorateButton(
+        addButton,
+        UiIcons::themed(this, QStringLiteral("list-add"), QStyle::SP_FileDialogNewFolder),
+        tr("新建端口转发规则"));
+    UiIcons::decorateButton(
+        editButton,
+        UiIcons::themed(this, QStringLiteral("document-edit"), QStyle::SP_FileDialogDetailedView),
+        tr("编辑当前选中的端口转发规则"));
+    UiIcons::decorateButton(
+        deleteButton,
+        UiIcons::themed(this, QStringLiteral("edit-delete"), QStyle::SP_TrashIcon),
+        tr("停止并删除当前规则"));
+    UiIcons::decorateButton(
+        startButton,
+        UiIcons::themed(this, QStringLiteral("media-playback-start"), QStyle::SP_MediaPlay),
+        tr("在当前主机 SSH 会话上启动规则"));
+    UiIcons::decorateButton(
+        stopButton,
+        UiIcons::themed(this, QStringLiteral("media-playback-stop"), QStyle::SP_MediaStop),
+        tr("停止当前规则并关闭活动转发连接"));
     buttons->addWidget(addButton);
     buttons->addWidget(editButton);
     buttons->addWidget(deleteButton);
@@ -231,6 +255,46 @@ PortForwardManagerWidget::PortForwardManagerWidget(ApplicationDatabase *database
             this, &PortForwardManagerWidget::stopSelectedRule);
     connect(m_ruleTable, &QTableWidget::cellDoubleClicked,
             this, [this](const int, const int) { startSelectedRule(); });
+    connect(m_ruleTable,
+            &QWidget::customContextMenuRequested,
+            this,
+            [this, addButton, editButton, deleteButton, startButton, stopButton](
+                const QPoint &position) {
+                const QModelIndex index = m_ruleTable->indexAt(position);
+                if (index.isValid()) {
+                    m_ruleTable->setCurrentCell(index.row(), 0);
+                }
+
+                QMenu menu(this);
+                QAction *addAction = menu.addAction(
+                    UiIcons::themed(this, QStringLiteral("list-add"),
+                                    QStyle::SP_FileDialogNewFolder),
+                    tr("新建规则"));
+                connect(addAction, &QAction::triggered, addButton, &QPushButton::click);
+                if (index.isValid()) {
+                    menu.addSeparator();
+                    QAction *startAction = menu.addAction(
+                        UiIcons::themed(this, QStringLiteral("media-playback-start"),
+                                        QStyle::SP_MediaPlay),
+                        tr("启动"));
+                    QAction *stopAction = menu.addAction(
+                        UiIcons::themed(this, QStringLiteral("media-playback-stop"),
+                                        QStyle::SP_MediaStop),
+                        tr("停止"));
+                    QAction *editAction = menu.addAction(
+                        UiIcons::themed(this, QStringLiteral("document-edit"),
+                                        QStyle::SP_FileDialogDetailedView),
+                        tr("编辑"));
+                    QAction *deleteAction = menu.addAction(
+                        UiIcons::themed(this, QStringLiteral("edit-delete"), QStyle::SP_TrashIcon),
+                        tr("删除"));
+                    connect(startAction, &QAction::triggered, startButton, &QPushButton::click);
+                    connect(stopAction, &QAction::triggered, stopButton, &QPushButton::click);
+                    connect(editAction, &QAction::triggered, editButton, &QPushButton::click);
+                    connect(deleteAction, &QAction::triggered, deleteButton, &QPushButton::click);
+                }
+                menu.exec(m_ruleTable->viewport()->mapToGlobal(position));
+            });
 
     reloadHosts();
 }

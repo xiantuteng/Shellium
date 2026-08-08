@@ -8,12 +8,15 @@
 #include "storage/ApplicationDatabase.h"
 #include "terminal/LocalShellWorker.h"
 #include "terminal/TerminalView.h"
+#include "ui/UiIcons.h"
 
 #include <QHBoxLayout>
 #include <QLoggingCategory>
 #include <QLabel>
 #include <QMessageBox>
+#include <QSignalBlocker>
 #include <QTimer>
+#include <QToolButton>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -26,18 +29,52 @@ Q_LOGGING_CATEGORY(authLog, "shellium.auth", QtWarningMsg)
 
 TerminalPane::TerminalPane(QWidget *parent)
     : QWidget(parent)
+    , m_headerBar(new QWidget(this))
     , m_headerLabel(new QLabel(tr("未连接"), this))
+    , m_terminalMetaLabel(new QLabel(tr("UTF-8 · 80×24"), this))
+    , m_fileManagerButton(new QToolButton(this))
     , m_terminalView(new TerminalView(this))
 {
     auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(1, 1, 1, 1);
     layout->setSpacing(0);
 
-    m_headerLabel->setContentsMargins(8, 4, 8, 4);
-    m_headerLabel->setStyleSheet(QStringLiteral(
-        "QLabel { background: #252932; color: #d8dee9; font-weight: 600; }"));
-    layout->addWidget(m_headerLabel);
+    // 会话顶部使用单独的状态栏容器：左侧服务器信息可伸缩，编码/尺寸和文件开关始终停靠
+    // 在右侧。这样窗口变窄时只会省略长主机名，不会把关键开关挤出可视区域。
+    m_headerBar->setObjectName(QStringLiteral("terminalSessionStatusBar"));
+    auto *headerLayout = new QHBoxLayout(m_headerBar);
+    headerLayout->setContentsMargins(10, 4, 6, 4);
+    headerLayout->setSpacing(8);
+    m_headerLabel->setObjectName(QStringLiteral("terminalSessionServer"));
+    m_headerLabel->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+    m_terminalMetaLabel->setObjectName(QStringLiteral("terminalSessionMeta"));
+    m_terminalMetaLabel->setToolTip(tr("当前终端编码和列×行尺寸"));
+    m_fileManagerButton->setObjectName(QStringLiteral("terminalFileManagerToggle"));
+    m_fileManagerButton->setCheckable(true);
+    m_fileManagerButton->setChecked(true);
+    m_fileManagerButton->setAutoRaise(true);
+    m_fileManagerButton->setIcon(
+        UiIcons::themed(this, QStringLiteral("folder-remote"), QStyle::SP_DirIcon));
+    m_fileManagerButton->setIconSize(QSize(18, 18));
+    m_fileManagerButton->setToolTip(tr("显示或隐藏当前会话的远程文件管理（Ctrl+Shift+F）"));
+    m_fileManagerButton->setAccessibleName(tr("远程文件管理"));
+    headerLayout->addWidget(m_headerLabel, 1);
+    headerLayout->addWidget(m_terminalMetaLabel);
+    headerLayout->addWidget(m_fileManagerButton);
+    layout->addWidget(m_headerBar);
     layout->addWidget(m_terminalView, 1);
+
+    connect(m_fileManagerButton, &QToolButton::toggled,
+            this, &TerminalPane::fileManagerVisibilityRequested);
+    connect(m_terminalView,
+            &TerminalView::terminalSizeChanged,
+            this,
+            [this](const int columns, const int rows) {
+                // 编码当前固定为 UTF-8；尺寸直接来自 TerminalView 的真实布局结果，避免依赖
+                // 主窗口底部状态栏或在标签切换时串用其他会话的缓存值。
+                m_terminalMetaLabel->setText(
+                    tr("UTF-8 · %1×%2").arg(columns).arg(rows));
+            });
 
     connect(m_terminalView, &TerminalView::inputBytes, this, [this](const QByteArray &bytes) {
         // 先广播源输入，再写本终端；上层把相同字节送给其他面板时调用 sendInputBytes，后者
@@ -614,9 +651,32 @@ void TerminalPane::applyTerminalSettings(const TerminalSettings &settings)
     const QColor headerBackground = normalized.effectiveThemeMode() == ThemeMode::Dark
         ? palette.background.lighter(145)
         : palette.background.darker(108);
-    m_headerLabel->setStyleSheet(
-        QStringLiteral("QLabel { background: %1; color: %2; font-weight: 600; }")
-            .arg(headerBackground.name(), palette.foreground.name()));
+    // 样式施加在整个容器而不是单个服务器标签上，保证尺寸文字和文件按钮属于同一条视觉
+    // 状态栏。按钮悬停仍保留边框反馈，避免纯图标控件看起来不可点击。
+    m_headerBar->setStyleSheet(
+        QStringLiteral(
+            "QWidget#terminalSessionStatusBar { background: %1; color: %2; }"
+            "QLabel#terminalSessionServer { color: %2; font-weight: 600; }"
+            "QLabel#terminalSessionMeta { color: %2; }"
+            "QToolButton#terminalFileManagerToggle { border: 1px solid transparent; "
+            "border-radius: 5px; padding: 3px; }"
+            "QToolButton#terminalFileManagerToggle:hover { border-color: %2; }"
+            "QToolButton#terminalFileManagerToggle:checked { background: %3; }")
+            .arg(headerBackground.name(),
+                 palette.foreground.name(),
+                 palette.selection.name()));
+}
+
+void TerminalPane::setFileManagerVisible(const bool visible)
+{
+    // 工作区调用该方法同步外部状态时必须阻断 toggled，否则会再次请求工作区修改同一个
+    // 状态。虽然 QWidget::setVisible 本身幂等，阻断往返信号仍能避免未来接入动画后重复执行。
+    const QSignalBlocker blocker(m_fileManagerButton);
+    m_fileManagerButton->setChecked(visible);
+    m_fileManagerButton->setToolTip(
+        visible
+            ? tr("隐藏当前会话的远程文件管理（Ctrl+Shift+F）")
+            : tr("显示当前会话的远程文件管理（Ctrl+Shift+F）"));
 }
 
 bool TerminalPane::scheduleAutomaticReconnect(const ConnectionTarget &target,
