@@ -27,8 +27,10 @@
 #include <QPushButton>
 #include <QPixmap>
 #include <QRegularExpression>
+#include <QResizeEvent>
 #include <QSplitter>
 #include <QTimer>
+#include <QToolButton>
 #include <QTreeView>
 #include <QTreeWidget>
 #include <QUrl>
@@ -92,6 +94,31 @@ constexpr char kRemotePathMimeType[] = "application/x-shellium-remote-path";
 
 /** @brief 与远程路径配套的目录标志，避免仅凭扩展名猜测条目类型。 */
 constexpr char kRemoteDirectoryMimeType[] = "application/x-shellium-remote-directory";
+
+/**
+ * @brief 把文件管理高频动作配置为带完整辅助说明的紧凑图标按钮。
+ * @param button 待配置按钮；不得为空。
+ * @param icon 语义图标，已包含跨平台回退资源。
+ * @param accessibleName 完整中文动作名称，同时用于 Tooltip 和无障碍树。
+ *
+ * 文件管理器经常与终端并排，文字工具条会比文件内容占用更多宽度。图标按钮仍通过
+ * Tooltip、AccessibleName 与右键菜单提供完整文字，兼顾窄布局、键鼠发现性和辅助技术。
+ */
+void configureCompactFileButton(QToolButton *button,
+                                const QIcon &icon,
+                                const QString &accessibleName)
+{
+    Q_ASSERT(button != nullptr);
+    button->setText(accessibleName);
+    button->setIcon(icon);
+    button->setIconSize(QSize(17, 17));
+    button->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    button->setAutoRaise(false);
+    button->setFixedSize(34, 34);
+    button->setProperty("compactIconButton", true);
+    button->setToolTip(accessibleName);
+    button->setAccessibleName(accessibleName);
+}
 
 /**
  * @brief 支持把本地文件系统 URL 拖入的远程文件树。
@@ -283,15 +310,15 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     , m_fileTree(new RemoteDropTree(this))
     , m_statusLabel(new QLabel(tr("请选择终端服务器"), this))
     , m_progressBar(new QProgressBar(this))
-    , m_cancelButton(new QPushButton(tr("取消选中"), this))
-    , m_pauseButton(new QPushButton(tr("暂停"), this))
+    , m_cancelButton(new QToolButton(this))
+    , m_pauseButton(new QToolButton(this))
     , m_resumeTransfersCheck(new QCheckBox(tr("优先断点续传"), this))
     , m_transferQueueList(new QListWidget(this))
     , m_service(new SftpService(this))
 {
     auto *mainLayout = new QVBoxLayout(this);
-    mainLayout->setContentsMargins(6, 6, 6, 6);
-    mainLayout->setSpacing(6);
+    mainLayout->setContentsMargins(10, 10, 10, 8);
+    mainLayout->setSpacing(8);
 
     auto *serverRow = new QHBoxLayout;
     serverRow->addWidget(new QLabel(tr("服务器："), this));
@@ -307,15 +334,18 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     auto *localLayout = new QVBoxLayout(localPanel);
     localLayout->setContentsMargins(0, 0, 0, 0);
     localLayout->setSpacing(4);
-    localLayout->addWidget(new QLabel(tr("本地文件"), localPanel));
+    auto *localCaption = new QLabel(tr("本地文件"), localPanel);
+    localCaption->setProperty("sectionCaption", true);
+    localLayout->addWidget(localCaption);
     auto *localPathRow = new QHBoxLayout;
-    auto *localUpButton = new QPushButton(tr("上级"), localPanel);
-    auto *localRefreshButton = new QPushButton(tr("刷新"), localPanel);
-    UiIcons::decorateButton(
+    localPathRow->setSpacing(5);
+    auto *localUpButton = new QToolButton(localPanel);
+    auto *localRefreshButton = new QToolButton(localPanel);
+    configureCompactFileButton(
         localUpButton,
         UiIcons::themed(this, QStringLiteral("go-up"), QStyle::SP_ArrowUp),
         tr("返回本地父目录"));
-    UiIcons::decorateButton(
+    configureCompactFileButton(
         localRefreshButton,
         UiIcons::themed(this, QStringLiteral("view-refresh"), QStyle::SP_BrowserReload),
         tr("刷新本地目录"));
@@ -331,25 +361,33 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     m_localModel->setRootPath(QDir::rootPath());
     m_localTree->setModel(m_localModel);
     m_localTree->setRootIndex(m_localModel->index(QDir::homePath()));
-    m_localTree->setAlternatingRowColors(true);
+    m_localTree->setAlternatingRowColors(false);
     m_localTree->setSelectionMode(QAbstractItemView::SingleSelection);
     m_localTree->setContextMenuPolicy(Qt::CustomContextMenu);
     m_localTree->setColumnWidth(0, 230);
+    // 本地树的大小、类型、时间列在窄双栏中会挤掉最重要的文件名；完整信息仍可通过系统
+    // 文件属性查看，本区域优先承担“选中上传目标”的任务。
+    for (int column = 1; column < m_localModel->columnCount(); ++column) {
+        m_localTree->setColumnHidden(column, true);
+    }
     localLayout->addWidget(m_localTree, 1);
 
     auto *remotePanel = new QWidget(contentSplitter);
     auto *remoteLayout = new QVBoxLayout(remotePanel);
     remoteLayout->setContentsMargins(0, 0, 0, 0);
     remoteLayout->setSpacing(4);
-    remoteLayout->addWidget(new QLabel(tr("远程文件"), remotePanel));
+    auto *remoteCaption = new QLabel(tr("远程文件"), remotePanel);
+    remoteCaption->setProperty("sectionCaption", true);
+    remoteLayout->addWidget(remoteCaption);
     auto *pathRow = new QHBoxLayout;
-    auto *upButton = new QPushButton(tr("上级"), this);
-    auto *refreshButton = new QPushButton(tr("刷新"), this);
-    UiIcons::decorateButton(
+    pathRow->setSpacing(5);
+    auto *upButton = new QToolButton(this);
+    auto *refreshButton = new QToolButton(this);
+    configureCompactFileButton(
         upButton,
         UiIcons::themed(this, QStringLiteral("go-up"), QStyle::SP_ArrowUp),
         tr("返回远程父目录"));
-    UiIcons::decorateButton(
+    configureCompactFileButton(
         refreshButton,
         UiIcons::themed(this, QStringLiteral("view-refresh"), QStyle::SP_BrowserReload),
         tr("刷新当前远程目录"));
@@ -362,7 +400,7 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     m_fileTree->setHeaderLabels(
         {tr("名称"), tr("大小"), tr("类型"), tr("权限"), tr("所有者"), tr("修改时间")});
     m_fileTree->setRootIsDecorated(false);
-    m_fileTree->setAlternatingRowColors(true);
+    m_fileTree->setAlternatingRowColors(false);
     m_fileTree->setSelectionMode(QAbstractItemView::ExtendedSelection);
     m_fileTree->setContextMenuPolicy(Qt::CustomContextMenu);
     m_fileTree->header()->setStretchLastSection(false);
@@ -383,54 +421,58 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     mainLayout->addWidget(contentSplitter, 1);
 
     auto *operationRow = new QHBoxLayout;
-    auto *uploadButton = new QPushButton(tr("上传文件"), this);
-    auto *uploadDirectoryButton = new QPushButton(tr("上传目录"), this);
-    auto *downloadButton = new QPushButton(tr("下载"), this);
-    auto *previewButton = new QPushButton(tr("预览"), this);
-    auto *chmodButton = new QPushButton(tr("权限"), this);
-    auto *renameButton = new QPushButton(tr("重命名"), this);
-    auto *deleteButton = new QPushButton(tr("删除"), this);
-    UiIcons::decorateButton(
+    operationRow->setSpacing(5);
+    auto *uploadButton = new QToolButton(this);
+    auto *uploadDirectoryButton = new QToolButton(this);
+    auto *downloadButton = new QToolButton(this);
+    auto *previewButton = new QToolButton(this);
+    auto *chmodButton = new QToolButton(this);
+    auto *renameButton = new QToolButton(this);
+    auto *deleteButton = new QToolButton(this);
+    configureCompactFileButton(
         uploadButton,
         UiIcons::themed(this, QStringLiteral("document-send"), QStyle::SP_ArrowUp),
         tr("上传文件到当前远程目录"));
-    UiIcons::decorateButton(
+    configureCompactFileButton(
         uploadDirectoryButton,
         UiIcons::themed(this, QStringLiteral("folder-upload"), QStyle::SP_DirOpenIcon),
         tr("递归上传目录到当前远程目录"));
-    UiIcons::decorateButton(
+    configureCompactFileButton(
         downloadButton,
         UiIcons::themed(this, QStringLiteral("document-save"), QStyle::SP_ArrowDown),
         tr("下载选中的远程文件或目录"));
-    UiIcons::decorateButton(
+    configureCompactFileButton(
         previewButton,
         UiIcons::themed(this, QStringLiteral("document-preview"),
                         QStyle::SP_FileDialogContentsView),
         tr("安全预览选中的文本或图片"));
-    UiIcons::decorateButton(
+    configureCompactFileButton(
         chmodButton,
         UiIcons::themed(this, QStringLiteral("document-properties"),
                         QStyle::SP_MessageBoxInformation),
         tr("修改选中远程条目的 POSIX 权限"));
-    UiIcons::decorateButton(
+    configureCompactFileButton(
         renameButton,
         UiIcons::themed(this, QStringLiteral("document-edit"), QStyle::SP_FileDialogDetailedView),
         tr("重命名选中的远程条目"));
-    UiIcons::decorateButton(
+    configureCompactFileButton(
         deleteButton,
         UiIcons::themed(this, QStringLiteral("edit-delete"), QStyle::SP_TrashIcon),
         tr("删除选中的远程文件或空目录"));
-    UiIcons::decorateButton(
+    configureCompactFileButton(
         m_pauseButton,
         UiIcons::themed(this, QStringLiteral("media-playback-pause"), QStyle::SP_MediaPause),
         tr("暂停或恢复当前传输"));
-    UiIcons::decorateButton(
+    configureCompactFileButton(
         m_cancelButton,
         UiIcons::themed(this, QStringLiteral("process-stop"), QStyle::SP_DialogCancelButton),
         tr("取消当前传输或选中的等待任务"));
     m_cancelButton->setEnabled(false);
     m_pauseButton->setEnabled(false);
+    m_cancelButton->setVisible(false);
+    m_pauseButton->setVisible(false);
     m_resumeTransfersCheck->setChecked(true);
+    m_resumeTransfersCheck->setText(tr("断点续传"));
     m_resumeTransfersCheck->setToolTip(
         tr("开启时从已有较小文件继续；关闭时始终截断并覆盖重传。"));
     operationRow->addWidget(uploadButton);
@@ -448,22 +490,23 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
 
     m_progressBar->setVisible(false);
     m_progressBar->setRange(0, 100);
+    m_progressBar->setTextVisible(false);
     mainLayout->addWidget(m_progressBar);
     m_transferQueueList->setMaximumHeight(110);
-    m_transferQueueList->setAlternatingRowColors(true);
+    m_transferQueueList->setAlternatingRowColors(false);
     m_transferQueueList->setContextMenuPolicy(Qt::CustomContextMenu);
     m_transferQueueList->setToolTip(
         tr("传输严格按顺序执行；选择等待项后点击“取消选中”可直接移除。"));
     mainLayout->addWidget(m_transferQueueList);
     mainLayout->addWidget(m_statusLabel);
 
-    connect(refreshButton, &QPushButton::clicked, this, &RemoteFileManagerWidget::refreshDirectory);
-    connect(upButton, &QPushButton::clicked, this, &RemoteFileManagerWidget::navigateUp);
+    connect(refreshButton, &QToolButton::clicked, this, &RemoteFileManagerWidget::refreshDirectory);
+    connect(upButton, &QToolButton::clicked, this, &RemoteFileManagerWidget::navigateUp);
     connect(m_pathEdit, &QLineEdit::returnPressed, this, &RemoteFileManagerWidget::refreshDirectory);
-    connect(localUpButton, &QPushButton::clicked, this, [this]() {
+    connect(localUpButton, &QToolButton::clicked, this, [this]() {
         setLocalDirectory(QFileInfo(m_localPathEdit->text().trimmed()).absolutePath());
     });
-    connect(localRefreshButton, &QPushButton::clicked, this, [this]() {
+    connect(localRefreshButton, &QToolButton::clicked, this, [this]() {
         setLocalDirectory(m_localPathEdit->text().trimmed());
     });
     connect(m_localPathEdit, &QLineEdit::returnPressed, this, [this]() {
@@ -602,24 +645,24 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
                         this, &RemoteFileManagerWidget::refreshDirectory);
                 menu.exec(m_fileTree->viewport()->mapToGlobal(position));
             });
-    connect(uploadButton, &QPushButton::clicked, this, &RemoteFileManagerWidget::uploadSelectedFile);
+    connect(uploadButton, &QToolButton::clicked, this, &RemoteFileManagerWidget::uploadSelectedFile);
     connect(uploadDirectoryButton,
-            &QPushButton::clicked,
+            &QToolButton::clicked,
             this,
             &RemoteFileManagerWidget::uploadSelectedDirectory);
     connect(m_cancelButton,
-            &QPushButton::clicked,
+            &QToolButton::clicked,
             this,
             &RemoteFileManagerWidget::cancelActiveTransfer);
     connect(m_pauseButton,
-            &QPushButton::clicked,
+            &QToolButton::clicked,
             this,
             &RemoteFileManagerWidget::toggleActiveTransferPause);
-    connect(downloadButton, &QPushButton::clicked, this, &RemoteFileManagerWidget::downloadSelectedFile);
-    connect(previewButton, &QPushButton::clicked, this, &RemoteFileManagerWidget::previewSelectedFile);
-    connect(chmodButton, &QPushButton::clicked, this, &RemoteFileManagerWidget::chmodSelectedPath);
-    connect(renameButton, &QPushButton::clicked, this, &RemoteFileManagerWidget::renameSelectedPath);
-    connect(deleteButton, &QPushButton::clicked, this, &RemoteFileManagerWidget::deleteSelectedPath);
+    connect(downloadButton, &QToolButton::clicked, this, &RemoteFileManagerWidget::downloadSelectedFile);
+    connect(previewButton, &QToolButton::clicked, this, &RemoteFileManagerWidget::previewSelectedFile);
+    connect(chmodButton, &QToolButton::clicked, this, &RemoteFileManagerWidget::chmodSelectedPath);
+    connect(renameButton, &QToolButton::clicked, this, &RemoteFileManagerWidget::renameSelectedPath);
+    connect(deleteButton, &QToolButton::clicked, this, &RemoteFileManagerWidget::deleteSelectedPath);
     connect(m_transferQueueList,
             &QWidget::customContextMenuRequested,
             this,
@@ -848,6 +891,8 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
             });
 
     rebuildTransferQueueView();
+    // 构造阶段布局尚未获得最终宽度，延迟到事件循环后用真实视口计算首次响应式列集合。
+    QTimer::singleShot(0, this, &RemoteFileManagerWidget::updateResponsiveColumns);
 }
 
 RemoteFileManagerWidget::~RemoteFileManagerWidget()
@@ -862,6 +907,31 @@ RemoteFileManagerWidget::~RemoteFileManagerWidget()
         target.password.fill(QChar::Null);
         target.password.clear();
     }
+}
+
+void RemoteFileManagerWidget::resizeEvent(QResizeEvent *event)
+{
+    QWidget::resizeEvent(event);
+    updateResponsiveColumns();
+}
+
+void RemoteFileManagerWidget::updateResponsiveColumns()
+{
+    if (m_fileTree == nullptr) {
+        return;
+    }
+
+    const int availableWidth = m_fileTree->viewport()->width();
+    // 名称始终保留且使用 Stretch；其他列按运维价值逐级加入。极窄侧栏只显示名称，稍宽时
+    // 首先展示大小，再展示类型/权限，只有宽屏才加入所有者与长时间戳。
+    const bool showSize = availableWidth >= 300;
+    const bool showTypeAndPermissions = availableWidth >= 520;
+    const bool showOwnerAndTime = availableWidth >= 720;
+    m_fileTree->setColumnHidden(1, !showSize);
+    m_fileTree->setColumnHidden(2, !showTypeAndPermissions);
+    m_fileTree->setColumnHidden(3, !showTypeAndPermissions);
+    m_fileTree->setColumnHidden(4, !showOwnerAndTime);
+    m_fileTree->setColumnHidden(5, !showOwnerAndTime);
 }
 
 void RemoteFileManagerWidget::setAvailableTargets(const QList<ConnectionTarget> &targets,
@@ -974,6 +1044,10 @@ void RemoteFileManagerWidget::startNextQueuedTransfer()
     const QueuedTransfer &transfer = *m_activeQueuedTransfer;
     m_activeTransferPaused = false;
     m_pauseButton->setText(tr("暂停"));
+    m_pauseButton->setToolTip(tr("暂停当前传输"));
+    m_pauseButton->setAccessibleName(tr("暂停当前传输"));
+    m_pauseButton->setIcon(
+        UiIcons::themed(this, QStringLiteral("media-playback-pause"), QStyle::SP_MediaPause));
     setBusy(true, tr("正在执行：%1").arg(transfer.description));
 
     switch (transfer.kind) {
@@ -1014,6 +1088,10 @@ void RemoteFileManagerWidget::finishQueuedTransfer(const quint64 requestId)
     m_activeQueuedTransfer.reset();
     m_activeTransferPaused = false;
     m_pauseButton->setText(tr("暂停"));
+    m_pauseButton->setToolTip(tr("暂停当前传输"));
+    m_pauseButton->setAccessibleName(tr("暂停当前传输"));
+    m_pauseButton->setIcon(
+        UiIcons::themed(this, QStringLiteral("media-playback-pause"), QStyle::SP_MediaPause));
     rebuildTransferQueueView();
 
     // 信号处理函数可能仍在展示失败或汇总对话框；把下一项放到事件循环末尾启动，避免前一项
@@ -1057,9 +1135,14 @@ void RemoteFileManagerWidget::rebuildTransferQueueView()
     }
 
     const bool hasActive = m_activeQueuedTransfer.has_value();
+    const bool hasAnyTransfer = hasActive || !m_pendingTransfers.isEmpty();
     m_pauseButton->setEnabled(hasActive);
-    m_cancelButton->setEnabled(hasActive || !m_pendingTransfers.isEmpty());
-    m_transferQueueList->setVisible(hasActive || !m_pendingTransfers.isEmpty());
+    m_cancelButton->setEnabled(hasAnyTransfer);
+    // 空闲状态隐藏传输控制，比保留两个禁用按钮更能把空间留给文件名；任务出现时再以稳定
+    // 顺序显示，不会影响文件操作按钮的位置。
+    m_pauseButton->setVisible(hasActive);
+    m_cancelButton->setVisible(hasAnyTransfer);
+    m_transferQueueList->setVisible(hasAnyTransfer);
 }
 
 void RemoteFileManagerWidget::uploadLocalPaths(const QStringList &localPaths,
@@ -1293,10 +1376,22 @@ void RemoteFileManagerWidget::toggleActiveTransferPause()
     if (m_activeTransferPaused) {
         m_service->pauseRequest(m_activeTransferRequest);
         m_pauseButton->setText(tr("恢复"));
+        m_pauseButton->setToolTip(tr("恢复当前传输"));
+        m_pauseButton->setAccessibleName(tr("恢复当前传输"));
+        m_pauseButton->setIcon(
+            UiIcons::themed(this,
+                            QStringLiteral("media-playback-start"),
+                            QStyle::SP_MediaPlay));
         emit statusMessage(tr("传输将在下一个 64 KiB 分块边界暂停"));
     } else {
         m_service->resumeRequest(m_activeTransferRequest);
         m_pauseButton->setText(tr("暂停"));
+        m_pauseButton->setToolTip(tr("暂停当前传输"));
+        m_pauseButton->setAccessibleName(tr("暂停当前传输"));
+        m_pauseButton->setIcon(
+            UiIcons::themed(this,
+                            QStringLiteral("media-playback-pause"),
+                            QStyle::SP_MediaPause));
         emit statusMessage(tr("传输已恢复"));
     }
     rebuildTransferQueueView();

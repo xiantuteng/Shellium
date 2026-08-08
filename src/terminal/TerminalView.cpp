@@ -93,6 +93,9 @@ TerminalView::TerminalView(QWidget *parent)
     , m_completionModel(new QStringListModel(this))
     , m_cursorBlinkTimer(new QTimer(this))
 {
+    // 主窗口会统一装饰表单中的 QPlainTextEdit。终端必须有稳定对象名供 QSS 排除通用表单
+    // 背景，否则父级卡片色会覆盖本控件按终端主题设置的 QPalette::Base。
+    setObjectName(QStringLiteral("TerminalView"));
     setReadOnly(true);
     // macOS 会根据该属性决定是否把字符交给输入法。只读文本控件默认关闭此属性，但终端
     // 虽然不直接编辑 QTextDocument，仍然必须接收普通英文和中文输入法的提交事件。

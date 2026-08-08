@@ -140,6 +140,17 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     }
     m_productivityModel = new ProductivityModel(m_database, this);
 
+    // Qt 6.9 起 ExpandedClientAreaHint 会在平台窗口创建前通知 Cocoa：客户区需要覆盖标题栏，
+    // NoTitleBarBackgroundHint 同时移除系统白色背景。只调用 AppKit 的 FullSizeContentView 太晚，
+    // QMainWindow 已按旧安全区完成布局，正是此前截图中仍残留一条白色标题栏的根因。
+#if defined(Q_OS_MACOS) && QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
+    setWindowFlag(Qt::ExpandedClientAreaHint, true);
+    setWindowFlag(Qt::NoTitleBarBackgroundHint, true);
+    // 默认 QWidget 布局会主动避让 QWindow::safeAreaMargins()。标题区已经在布局内部为交通灯
+    // 留出 76 像素横向空间，因此必须关闭自动避让，才能让第一行真正从窗口 y=0 开始绘制。
+    setAttribute(Qt::WA_ContentsMarginsRespectsSafeArea, false);
+#endif
+
     setWindowTitle(tr("Shellium"));
     resize(1380, 860);
     setMinimumSize(980, 620);
@@ -157,6 +168,9 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     // 的连续色块、固定对齐和可预测收缩行为。
     auto *root = new QWidget(this);
     root->setObjectName(QStringLiteral("ShelliumRoot"));
+#if defined(Q_OS_MACOS) && QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
+    root->setAttribute(Qt::WA_ContentsMarginsRespectsSafeArea, false);
+#endif
     auto *rootLayout = new QVBoxLayout(root);
     rootLayout->setContentsMargins(0, 0, 0, 0);
     rootLayout->setSpacing(0);
@@ -211,12 +225,30 @@ MainWindow::MainWindow(ApplicationDatabase *database,
         navigationGroup->addButton(button, pageIndex);
         railLayout->addWidget(button, 0, Qt::AlignHCenter);
         m_navigationButtons.append(button);
+        connect(button,
+                &QToolButton::toggled,
+                this,
+                [this, pageIndex](const bool checked) {
+                    if (checked) {
+                        // macOS Accessibility 可能直接设置 checked 而不派发 clicked；监听
+                        // 状态变化可让鼠标、键盘和辅助技术共享同一页面路由。
+                        showSidebarPage(pageIndex);
+                    }
+                });
     }
     m_navigationButtons.constFirst()->setChecked(true);
     connect(navigationGroup,
             &QButtonGroup::idClicked,
             this,
-            &MainWindow::showSidebarPage);
+            [this](const int pageIndex) {
+                // 用户在侧栏已收起时再次点击当前导航项，checked 不会变化，toggled 因而不
+                // 会发出；点击信号负责这一条“用当前图标重新展开”的交互路径。
+                if (m_sidebarPanel == nullptr
+                    || !m_sidebarPanel->isVisible()
+                    || m_activeSidebarPage != pageIndex) {
+                    showSidebarPage(pageIndex);
+                }
+            });
     railLayout->addStretch(1);
 
     m_sidebarPanel = new QWidget(workspaceBody);
@@ -867,6 +899,25 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
             border-radius: 13px;
             padding: 10px;
         }
+        QToolButton[compactIconButton="true"] {
+            color: @TEXT@;
+            background: @SURFACE@;
+            border: 1px solid @BORDER@;
+            border-radius: 8px;
+            padding: 7px;
+        }
+        QToolButton[compactIconButton="true"]:hover {
+            background: @RAISED@;
+            border-color: @MUTED@;
+        }
+        QToolButton[compactIconButton="true"]:pressed {
+            background: @SELECTION@;
+            border-color: @ACCENT@;
+        }
+        QToolButton[compactIconButton="true"]:disabled {
+            background: @SIDEBAR@;
+            border-color: @BORDER@;
+        }
         QTabBar#SessionTitleTabs {
             background: transparent;
             border: 0;
@@ -914,6 +965,15 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
         QSpinBox:focus {
             border: 1px solid @ACCENT@;
         }
+        QPlainTextEdit#TerminalView {
+            color: palette(text);
+            background: palette(base);
+            selection-color: palette(highlighted-text);
+            selection-background-color: palette(highlight);
+            border: 0;
+            border-radius: 0;
+            padding: 6px;
+        }
         QPushButton {
             color: @TEXT@;
             background: @SURFACE@;
@@ -934,6 +994,22 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
         QPushButton:disabled {
             color: @MUTED@;
             background: @SIDEBAR@;
+        }
+        QPushButton[primaryAction="true"] {
+            color: #0c2f24;
+            background: @ACCENT@;
+            border-color: @ACCENT@;
+            font-weight: 700;
+        }
+        QPushButton[primaryAction="true"]:hover {
+            background: #45e394;
+            border-color: #45e394;
+        }
+        QLabel[sectionCaption="true"] {
+            color: @MUTED@;
+            font-size: 12px;
+            font-weight: 700;
+            padding: 3px 1px;
         }
         QTreeView,
         QListView,
@@ -1028,6 +1104,19 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
         }
         QSplitter::handle {
             background: @BORDER@;
+        }
+        QProgressBar {
+            color: @TEXT@;
+            background: @SURFACE@;
+            border: 1px solid @BORDER@;
+            border-radius: 5px;
+            min-height: 8px;
+            max-height: 8px;
+            text-align: center;
+        }
+        QProgressBar::chunk {
+            background: @ACCENT@;
+            border-radius: 4px;
         }
         QToolTip {
             color: @TEXT@;

@@ -20,6 +20,7 @@
 #include <QPushButton>
 #include <QSpinBox>
 #include <QTableWidget>
+#include <QToolButton>
 #include <QVBoxLayout>
 #include <QUuid>
 
@@ -31,6 +32,26 @@ namespace {
 
 /** @brief 表格首列存放持久化规则 id 的自定义数据角色。 */
 constexpr int kRuleIdRole = Qt::UserRole + 31;
+
+/**
+ * @brief 将端口转发侧栏的次要动作配置为紧凑图标按钮。
+ * @param button 待配置按钮；不得为空。
+ * @param accessibleName 完整动作名称，用于 Tooltip 与辅助技术。
+ *
+ * 端口转发始终位于 320 像素侧栏，五个文字按钮会造成横向滚动。保留“新建”主操作文字，
+ * 编辑、删除、启动和停止使用图标，并在右键菜单中继续提供完整文字入口。
+ */
+void configureForwardingIconButton(QToolButton *button, const QString &accessibleName)
+{
+    Q_ASSERT(button != nullptr);
+    button->setProperty("compactIconButton", true);
+    button->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    button->setAutoRaise(false);
+    button->setFixedSize(34, 34);
+    button->setIconSize(QSize(17, 17));
+    button->setToolTip(accessibleName);
+    button->setAccessibleName(accessibleName);
+}
 
 /**
  * @brief 新建/编辑单条转发规则的模态表单。
@@ -177,7 +198,8 @@ PortForwardManagerWidget::PortForwardManagerWidget(ApplicationDatabase *database
 {
     Q_ASSERT(m_database != nullptr);
     auto *layout = new QVBoxLayout(this);
-    layout->setContentsMargins(4, 4, 4, 4);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(8);
     auto *hostRow = new QHBoxLayout;
     hostRow->addWidget(new QLabel(tr("主机："), this));
     hostRow->addWidget(m_hostCombo, 1);
@@ -189,20 +211,35 @@ PortForwardManagerWidget::PortForwardManagerWidget(ApplicationDatabase *database
     m_ruleTable->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_ruleTable->setSelectionMode(QAbstractItemView::SingleSelection);
     m_ruleTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    m_ruleTable->setAlternatingRowColors(false);
+    m_ruleTable->setShowGrid(false);
+    m_ruleTable->verticalHeader()->setVisible(false);
+    m_ruleTable->verticalHeader()->setDefaultSectionSize(34);
     m_ruleTable->setContextMenuPolicy(Qt::CustomContextMenu);
     m_ruleTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
     for (int column = 1; column < m_ruleTable->columnCount(); ++column) {
         m_ruleTable->horizontalHeader()->setSectionResizeMode(column,
                                                               QHeaderView::ResizeToContents);
     }
+    // 该控件固定在窄侧栏中，主列表只保留“名称 / 类型 / 状态”。监听与目标地址、自动启动
+    // 和流量仍保存在数据模型中，并可通过编辑对话框或右键操作查看，避免七列压成不可读。
+    m_ruleTable->setColumnHidden(2, true);
+    m_ruleTable->setColumnHidden(3, true);
+    m_ruleTable->setColumnHidden(4, true);
+    m_ruleTable->setColumnHidden(6, true);
     layout->addWidget(m_ruleTable, 1);
 
     auto *buttons = new QHBoxLayout;
     auto *addButton = new QPushButton(tr("新建"), this);
-    auto *editButton = new QPushButton(tr("编辑"), this);
-    auto *deleteButton = new QPushButton(tr("删除"), this);
-    auto *startButton = new QPushButton(tr("启动"), this);
-    auto *stopButton = new QPushButton(tr("停止"), this);
+    addButton->setProperty("primaryAction", true);
+    auto *editButton = new QToolButton(this);
+    editButton->setText(tr("编辑"));
+    auto *deleteButton = new QToolButton(this);
+    deleteButton->setText(tr("删除"));
+    auto *startButton = new QToolButton(this);
+    startButton->setText(tr("启动"));
+    auto *stopButton = new QToolButton(this);
+    stopButton->setText(tr("停止"));
     UiIcons::decorateButton(
         addButton,
         UiIcons::themed(this, QStringLiteral("list-add"), QStyle::SP_FileDialogNewFolder),
@@ -223,6 +260,10 @@ PortForwardManagerWidget::PortForwardManagerWidget(ApplicationDatabase *database
         stopButton,
         UiIcons::themed(this, QStringLiteral("media-playback-stop"), QStyle::SP_MediaStop),
         tr("停止当前规则并关闭活动转发连接"));
+    configureForwardingIconButton(editButton, tr("编辑当前选中的端口转发规则"));
+    configureForwardingIconButton(deleteButton, tr("停止并删除当前规则"));
+    configureForwardingIconButton(startButton, tr("在当前主机 SSH 会话上启动规则"));
+    configureForwardingIconButton(stopButton, tr("停止当前规则并关闭活动转发连接"));
     buttons->addWidget(addButton);
     buttons->addWidget(editButton);
     buttons->addWidget(deleteButton);
@@ -237,7 +278,7 @@ PortForwardManagerWidget::PortForwardManagerWidget(ApplicationDatabase *database
             this, [this](const int) { reloadRules(); });
     connect(addButton, &QPushButton::clicked,
             this, [this]() { editRule(); });
-    connect(editButton, &QPushButton::clicked, this, [this]() {
+    connect(editButton, &QToolButton::clicked, this, [this]() {
         QString error;
         const std::optional<PortForwardRule> rule =
             m_database->findPortForward(selectedRuleId(), &error);
@@ -247,11 +288,11 @@ PortForwardManagerWidget::PortForwardManagerWidget(ApplicationDatabase *database
         }
         editRule(rule);
     });
-    connect(deleteButton, &QPushButton::clicked,
+    connect(deleteButton, &QToolButton::clicked,
             this, &PortForwardManagerWidget::removeSelectedRule);
-    connect(startButton, &QPushButton::clicked,
+    connect(startButton, &QToolButton::clicked,
             this, &PortForwardManagerWidget::startSelectedRule);
-    connect(stopButton, &QPushButton::clicked,
+    connect(stopButton, &QToolButton::clicked,
             this, &PortForwardManagerWidget::stopSelectedRule);
     connect(m_ruleTable, &QTableWidget::cellDoubleClicked,
             this, [this](const int, const int) { startSelectedRule(); });
@@ -288,10 +329,14 @@ PortForwardManagerWidget::PortForwardManagerWidget(ApplicationDatabase *database
                     QAction *deleteAction = menu.addAction(
                         UiIcons::themed(this, QStringLiteral("edit-delete"), QStyle::SP_TrashIcon),
                         tr("删除"));
-                    connect(startAction, &QAction::triggered, startButton, &QPushButton::click);
-                    connect(stopAction, &QAction::triggered, stopButton, &QPushButton::click);
-                    connect(editAction, &QAction::triggered, editButton, &QPushButton::click);
-                    connect(deleteAction, &QAction::triggered, deleteButton, &QPushButton::click);
+                    connect(startAction, &QAction::triggered,
+                            startButton, &QToolButton::click);
+                    connect(stopAction, &QAction::triggered,
+                            stopButton, &QToolButton::click);
+                    connect(editAction, &QAction::triggered,
+                            editButton, &QToolButton::click);
+                    connect(deleteAction, &QAction::triggered,
+                            deleteButton, &QToolButton::click);
                 }
                 menu.exec(m_ruleTable->viewport()->mapToGlobal(position));
             });

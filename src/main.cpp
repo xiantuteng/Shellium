@@ -27,8 +27,8 @@ int main(int argc, char *argv[])
     // 与工作区。环境变量比命令行参数更适合 macOS LaunchServices 启动的临时测试 Bundle。
     const bool uiPreviewMode = qEnvironmentVariableIsSet("SHELLIUM_UI_PREVIEW");
 
-    // Fusion 在 macOS 和 Linux 上具有一致的控件尺寸与 Dock 行为，便于当前跨平台 MVP 验证。
-    // 后续主题引擎上线后，将由用户设置覆盖该默认样式。
+    // Fusion 为 macOS/Linux 提供一致的表单尺寸和基础交互；窗口颜色、圆角、导航与终端
+    // 配色再由设置服务和 MainWindow 视觉系统覆盖，避免平台原生样式造成布局尺寸漂移。
     application.setStyle(QStyleFactory::create(QStringLiteral("Fusion")));
 
     ApplicationDatabase database(uiPreviewMode ? ApplicationDatabase::inMemoryPath()
@@ -39,6 +39,26 @@ int main(int argc, char *argv[])
                               QObject::tr("数据库初始化失败"),
                               QObject::tr("无法初始化 Shellium 本地数据：%1").arg(databaseError));
         return 1;
+    }
+
+    if (uiPreviewMode) {
+        // 可选主题仅写入本次内存数据库，用于持续集成分别截图浅色/深色界面。未知值回退为
+        // 跟随系统，不让测试辅助参数影响正常启动或制造无效持久化设置。
+        const QString requestedPreviewTheme =
+            qEnvironmentVariable("SHELLIUM_UI_PREVIEW_THEME").trimmed().toLower();
+        if (requestedPreviewTheme == QLatin1String("light")
+            || requestedPreviewTheme == QLatin1String("dark")) {
+            QString previewThemeError;
+            if (!database.setSetting(QStringLiteral("appearance/theme"),
+                                     requestedPreviewTheme,
+                                     &previewThemeError)) {
+                QMessageBox::critical(nullptr,
+                                      QObject::tr("UI 预览初始化失败"),
+                                      QObject::tr("无法写入隔离的预览主题：%1")
+                                          .arg(previewThemeError));
+                return 1;
+            }
+        }
     }
 
     CredentialVault credentialVault(database);

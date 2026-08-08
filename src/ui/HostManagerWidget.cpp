@@ -25,6 +25,7 @@
 #include <QSet>
 #include <QSaveFile>
 #include <QSpinBox>
+#include <QToolButton>
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
 #include <QUuid>
@@ -40,6 +41,27 @@ constexpr int HostKindRole = Qt::UserRole + 1;
 
 /** @brief 最近连接列表保存稳定主机 id 的角色。 */
 constexpr int RecentHostIdRole = Qt::UserRole;
+
+/**
+ * @brief 把侧栏次要动作配置成紧凑图标按钮。
+ * @param button 待配置的工具按钮；不得为空。
+ * @param accessibleName 无障碍名称和悬停提示中使用的完整动作说明。
+ *
+ * 320 像素侧栏若同时展示七个“图标 + 文字”按钮会被迫压缩成难以辨认的碎片。保留一个
+ * 明确的主操作文字，其余动作使用带完整 Tooltip/AccessibleName 的图标，是现代桌面工具
+ * 常用的信息密度平衡；功能并未隐藏到不可发现的菜单中。
+ */
+void configureSidebarIconButton(QToolButton *button, const QString &accessibleName)
+{
+    Q_ASSERT(button != nullptr);
+    button->setProperty("compactIconButton", true);
+    button->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    button->setAutoRaise(false);
+    button->setFixedSize(34, 34);
+    button->setIconSize(QSize(17, 17));
+    button->setToolTip(accessibleName);
+    button->setAccessibleName(accessibleName);
+}
 
 /**
  * @brief 编辑一条持久化主机或分组记录的内部对话框。
@@ -241,6 +263,11 @@ HostManagerWidget::HostManagerWidget(ApplicationDatabase *database,
 
     m_searchEdit->setPlaceholderText(tr("搜索名称/地址；输入 #标签 精确筛选"));
     m_searchEdit->setClearButtonEnabled(true);
+    m_searchEdit->addAction(
+        UiIcons::themed(this,
+                        QStringLiteral("edit-find"),
+                        QStyle::SP_FileDialogContentsView),
+        QLineEdit::LeadingPosition);
 
     m_tree->setHeaderHidden(true);
     m_tree->setRootIsDecorated(true);
@@ -248,13 +275,20 @@ HostManagerWidget::HostManagerWidget(ApplicationDatabase *database,
     m_tree->setContextMenuPolicy(Qt::CustomContextMenu);
     m_recentList->setContextMenuPolicy(Qt::CustomContextMenu);
 
-    auto *addGroupButton = new QPushButton(tr("新建分组"), this);
+    auto *addGroupButton = new QToolButton(this);
+    addGroupButton->setText(tr("新建分组"));
     auto *addHostButton = new QPushButton(tr("新建主机"), this);
-    auto *editButton = new QPushButton(tr("编辑"), this);
-    auto *deleteButton = new QPushButton(tr("删除"), this);
-    auto *refreshButton = new QPushButton(tr("刷新"), this);
-    auto *importButton = new QPushButton(tr("导入"), this);
-    auto *exportButton = new QPushButton(tr("导出"), this);
+    addHostButton->setProperty("primaryAction", true);
+    auto *editButton = new QToolButton(this);
+    editButton->setText(tr("编辑"));
+    auto *deleteButton = new QToolButton(this);
+    deleteButton->setText(tr("删除"));
+    auto *refreshButton = new QToolButton(this);
+    refreshButton->setText(tr("刷新"));
+    auto *importButton = new QToolButton(this);
+    importButton->setText(tr("导入"));
+    auto *exportButton = new QToolButton(this);
+    exportButton->setText(tr("导出"));
     UiIcons::decorateButton(
         addGroupButton,
         UiIcons::themed(this, QStringLiteral("folder-new"), QStyle::SP_FileDialogNewFolder),
@@ -283,11 +317,17 @@ HostManagerWidget::HostManagerWidget(ApplicationDatabase *database,
         exportButton,
         UiIcons::themed(this, QStringLiteral("document-save"), QStyle::SP_DialogSaveButton),
         tr("导出不含凭据的主机配置"));
+    configureSidebarIconButton(addGroupButton, tr("在当前层级新建主机分组"));
+    configureSidebarIconButton(editButton, tr("编辑当前选中的主机或分组"));
+    configureSidebarIconButton(deleteButton, tr("删除当前选中的主机或分组"));
+    configureSidebarIconButton(refreshButton, tr("重新读取主机与最近连接"));
+    configureSidebarIconButton(importButton, tr("从 OpenSSH 配置或 Shellium JSON 导入"));
+    configureSidebarIconButton(exportButton, tr("导出不含凭据的主机配置"));
 
     auto *buttonLayout = new QHBoxLayout;
     buttonLayout->setContentsMargins(0, 0, 0, 0);
-    buttonLayout->addWidget(addGroupButton);
     buttonLayout->addWidget(addHostButton);
+    buttonLayout->addWidget(addGroupButton);
     buttonLayout->addWidget(editButton);
     buttonLayout->addWidget(deleteButton);
     buttonLayout->addWidget(refreshButton);
@@ -299,24 +339,29 @@ HostManagerWidget::HostManagerWidget(ApplicationDatabase *database,
     transferLayout->addStretch(1);
 
     auto *layout = new QVBoxLayout(this);
-    layout->setContentsMargins(6, 6, 6, 6);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(8);
     layout->addWidget(m_searchEdit);
     layout->addLayout(buttonLayout);
     layout->addLayout(transferLayout);
-    layout->addWidget(new QLabel(tr("主机与分组"), this));
+    auto *hostsCaption = new QLabel(tr("主机与分组"), this);
+    hostsCaption->setProperty("sectionCaption", true);
+    layout->addWidget(hostsCaption);
     layout->addWidget(m_tree, 1);
-    layout->addWidget(new QLabel(tr("最近连接"), this));
+    auto *recentCaption = new QLabel(tr("最近连接"), this);
+    recentCaption->setProperty("sectionCaption", true);
+    layout->addWidget(recentCaption);
     m_recentList->setMaximumHeight(150);
     layout->addWidget(m_recentList);
 
     connect(m_searchEdit, &QLineEdit::textChanged, this, [this]() { applyFilter(); });
-    connect(addGroupButton, &QPushButton::clicked, this, &HostManagerWidget::addGroup);
+    connect(addGroupButton, &QToolButton::clicked, this, &HostManagerWidget::addGroup);
     connect(addHostButton, &QPushButton::clicked, this, &HostManagerWidget::addHost);
-    connect(editButton, &QPushButton::clicked, this, &HostManagerWidget::editSelected);
-    connect(deleteButton, &QPushButton::clicked, this, &HostManagerWidget::removeSelected);
-    connect(refreshButton, &QPushButton::clicked, this, &HostManagerWidget::refresh);
-    connect(importButton, &QPushButton::clicked, this, &HostManagerWidget::importHosts);
-    connect(exportButton, &QPushButton::clicked, this, &HostManagerWidget::exportHosts);
+    connect(editButton, &QToolButton::clicked, this, &HostManagerWidget::editSelected);
+    connect(deleteButton, &QToolButton::clicked, this, &HostManagerWidget::removeSelected);
+    connect(refreshButton, &QToolButton::clicked, this, &HostManagerWidget::refresh);
+    connect(importButton, &QToolButton::clicked, this, &HostManagerWidget::importHosts);
+    connect(exportButton, &QToolButton::clicked, this, &HostManagerWidget::exportHosts);
     connect(m_tree, &QTreeWidget::itemDoubleClicked,
             this, [this](QTreeWidgetItem *item, const int) { activateTreeItem(item); });
     connect(m_recentList, &QListWidget::itemDoubleClicked,

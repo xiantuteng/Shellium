@@ -23,6 +23,7 @@
 #include <QSplitter>
 #include <QTabWidget>
 #include <QTextEdit>
+#include <QToolButton>
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
 #include <QUuid>
@@ -38,6 +39,26 @@ constexpr int kKindRole = Qt::UserRole + 1;
 
 /** @brief 目标列表项 UserRole 中保存的持久化主机 id。 */
 constexpr int kTargetIdRole = Qt::UserRole;
+
+/**
+ * @brief 将效率侧栏的次要命令配置为紧凑图标按钮。
+ * @param button 待配置按钮；不得为空。
+ * @param accessibleName 动作完整中文名称，同时用于 Tooltip 和无障碍树。
+ *
+ * Snippet 页面需要把主要空间留给树与编辑器。次要管理动作使用图标，创建、保存、执行等
+ * 主要流程继续保留文字按钮，使信息密度提高但不会牺牲关键入口的可发现性。
+ */
+void configureProductivityIconButton(QToolButton *button, const QString &accessibleName)
+{
+    Q_ASSERT(button != nullptr);
+    button->setProperty("compactIconButton", true);
+    button->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    button->setAutoRaise(false);
+    button->setFixedSize(34, 34);
+    button->setIconSize(QSize(17, 17));
+    button->setToolTip(accessibleName);
+    button->setAccessibleName(accessibleName);
+}
 
 /**
  * @brief 创建一条可复选的执行目标列表项。
@@ -70,19 +91,25 @@ ProductivityWidget::ProductivityWidget(ProductivityModel *model, QWidget *parent
 void ProductivityWidget::buildUi()
 {
     auto *rootLayout = new QVBoxLayout(this);
-    rootLayout->setContentsMargins(4, 4, 4, 4);
+    rootLayout->setContentsMargins(0, 0, 0, 0);
     m_tabs = new QTabWidget(this);
+    m_tabs->setDocumentMode(true);
     rootLayout->addWidget(m_tabs);
 
     // -------------------------------------------------------------- Snippets 标签
     auto *snippetPage = new QWidget(m_tabs);
     auto *snippetPageLayout = new QVBoxLayout(snippetPage);
-    snippetPageLayout->setContentsMargins(2, 2, 2, 2);
+    snippetPageLayout->setContentsMargins(0, 8, 0, 0);
+    snippetPageLayout->setSpacing(8);
 
     auto *snippetToolbar = new QHBoxLayout;
-    auto *newGroupButton = new QPushButton(tr("新建分组"), snippetPage);
+    snippetToolbar->setSpacing(5);
+    auto *newGroupButton = new QToolButton(snippetPage);
+    newGroupButton->setText(tr("新建分组"));
     auto *newSnippetButton = new QPushButton(tr("新建片段"), snippetPage);
-    auto *removeButton = new QPushButton(tr("删除"), snippetPage);
+    newSnippetButton->setProperty("primaryAction", true);
+    auto *removeButton = new QToolButton(snippetPage);
+    removeButton->setText(tr("删除"));
     UiIcons::decorateButton(
         newGroupButton,
         UiIcons::themed(this, QStringLiteral("folder-new"), QStyle::SP_FileDialogNewFolder),
@@ -95,6 +122,8 @@ void ProductivityWidget::buildUi()
         removeButton,
         UiIcons::themed(this, QStringLiteral("edit-delete"), QStyle::SP_TrashIcon),
         tr("删除当前选中的分组或片段"));
+    configureProductivityIconButton(newGroupButton, tr("新建 Snippet 分组"));
+    configureProductivityIconButton(removeButton, tr("删除当前选中的分组或片段"));
     snippetToolbar->addWidget(newGroupButton);
     snippetToolbar->addWidget(newSnippetButton);
     snippetToolbar->addWidget(removeButton);
@@ -117,6 +146,7 @@ void ProductivityWidget::buildUi()
     m_descriptionEdit = new QTextEdit(editorBox);
     m_descriptionEdit->setMaximumHeight(72);
     m_saveButton = new QPushButton(tr("保存"), editorBox);
+    m_saveButton->setProperty("primaryAction", true);
     UiIcons::decorateButton(
         m_saveButton,
         UiIcons::themed(this, QStringLiteral("document-save"), QStyle::SP_DialogSaveButton),
@@ -138,6 +168,7 @@ void ProductivityWidget::buildUi()
     m_executionTargets->setObjectName(QStringLiteral("productivityExecutionTargets"));
     m_executionTargets->setMaximumHeight(105);
     auto *executeButton = new QPushButton(tr("执行选中片段"), executionBox);
+    executeButton->setProperty("primaryAction", true);
     UiIcons::decorateButton(
         executeButton,
         UiIcons::themed(this, QStringLiteral("media-playback-start"), QStyle::SP_MediaPlay),
@@ -146,13 +177,13 @@ void ProductivityWidget::buildUi()
     executionLayout->addWidget(m_executionTargets);
     executionLayout->addWidget(executeButton);
     snippetPageLayout->addWidget(executionBox);
-    m_tabs->addTab(snippetPage, tr("Snippets"));
+    m_tabs->addTab(snippetPage, tr("命令片段"));
 
-    connect(newGroupButton, &QPushButton::clicked, this,
+    connect(newGroupButton, &QToolButton::clicked, this,
             [this]() { beginNewRecord(SnippetNodeKind::Folder); });
     connect(newSnippetButton, &QPushButton::clicked, this,
             [this]() { beginNewRecord(SnippetNodeKind::Snippet); });
-    connect(removeButton, &QPushButton::clicked,
+    connect(removeButton, &QToolButton::clicked,
             this, &ProductivityWidget::removeSelectedRecord);
     connect(m_saveButton, &QPushButton::clicked,
             this, &ProductivityWidget::saveEditorRecord);
@@ -221,6 +252,8 @@ void ProductivityWidget::buildUi()
     // --------------------------------------------------------------- 历史标签
     auto *historyPage = new QWidget(m_tabs);
     auto *historyLayout = new QVBoxLayout(historyPage);
+    historyLayout->setContentsMargins(0, 8, 0, 0);
+    historyLayout->setSpacing(8);
     auto *historyFilterLayout = new QHBoxLayout;
     m_historyHostCombo = new QComboBox(historyPage);
     m_historyPrefixEdit = new QLineEdit(historyPage);
@@ -233,6 +266,7 @@ void ProductivityWidget::buildUi()
     m_historyList->setContextMenuPolicy(Qt::CustomContextMenu);
     historyLayout->addWidget(m_historyList, 1);
     auto *historyExecuteButton = new QPushButton(tr("在所选主机执行"), historyPage);
+    historyExecuteButton->setProperty("primaryAction", true);
     UiIcons::decorateButton(
         historyExecuteButton,
         UiIcons::themed(this, QStringLiteral("media-playback-start"), QStyle::SP_MediaPlay),
@@ -299,6 +333,8 @@ void ProductivityWidget::buildUi()
     // --------------------------------------------------------------- 广播标签
     auto *broadcastPage = new QWidget(m_tabs);
     auto *broadcastLayout = new QVBoxLayout(broadcastPage);
+    broadcastLayout->setContentsMargins(0, 8, 0, 0);
+    broadcastLayout->setSpacing(8);
     broadcastLayout->addWidget(new QLabel(
         tr("选择目标后可开启实时键盘广播；源终端由主窗口绑定为当前标签页。"), broadcastPage));
     m_broadcastTargets = new QListWidget(broadcastPage);
@@ -312,6 +348,7 @@ void ProductivityWidget::buildUi()
     m_broadcastInput->setObjectName(QStringLiteral("productivityBroadcastInput"));
     m_broadcastInput->setPlaceholderText(tr("一次性向选中目标发送命令"));
     auto *broadcastSendButton = new QPushButton(tr("广播发送"), broadcastPage);
+    broadcastSendButton->setProperty("primaryAction", true);
     UiIcons::decorateButton(
         broadcastSendButton,
         UiIcons::themed(this, QStringLiteral("mail-send"), QStyle::SP_ArrowForward),
