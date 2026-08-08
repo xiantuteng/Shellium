@@ -46,6 +46,23 @@ protected:
     /** @brief 绘制所有可见标签、终端图标、标题和悬停关闭按钮。 */
     void paintEvent(QPaintEvent *event) override;
 
+    /**
+     * @brief 在标签栏空白区按下左键时启动原生窗口拖动。
+     * @param event 当前鼠标按下事件。
+     *
+     * 只接管 tabAt() 返回 -1 的空白区域；标签胶囊内部仍交给 QTabBar，确保选择、拖动排序
+     * 与自绘关闭按钮保持原有行为。
+     */
+    void mousePressEvent(QMouseEvent *event) override;
+
+    /**
+     * @brief 双击标签栏空白区时切换窗口的标准放大/恢复状态。
+     * @param event 当前鼠标双击事件。
+     *
+     * 双击已有标签仍由 QTabBar 处理，避免标题栏窗口手势吞掉标签自身的扩展交互。
+     */
+    void mouseDoubleClickEvent(QMouseEvent *event) override;
+
     /** @brief 跟踪悬停标签，使关闭按钮和背景无需点击即可反馈。 */
     void mouseMoveEvent(QMouseEvent *event) override;
 

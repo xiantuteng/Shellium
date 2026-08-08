@@ -40,6 +40,7 @@
 #include <QMenuBar>
 #include <QMouseEvent>
 #include <QPointer>
+#include <QResizeEvent>
 #include <QSaveFile>
 #include <QSet>
 #include <QShowEvent>
@@ -60,12 +61,51 @@
 
 namespace {
 
+/** @brief 一体化标题栏的固定逻辑高度，同时作为 macOS 交通灯垂直对齐的唯一基准。 */
+constexpr int kWindowChromeHeight = 52;
+
+/**
+ * @brief 从标题区事件源启动操作系统级窗口移动。
+ * @param eventSource 实际接收鼠标事件的标题区控件。
+ * @return 原生或 Qt 系统移动接口成功接管事件时返回 true，否则返回 false。
+ *
+ * macOS 全尺寸客户区优先使用当前 NSEvent 驱动 NSWindow；其余平台或原生事件暂不可用时
+ * 回退 QWindow::startSystemMove。两条路径都由窗口系统处理多屏和缩放，避免手算坐标漂移。
+ */
+[[nodiscard]] bool beginWindowChromeMove(QWidget *eventSource)
+{
+    QWidget *topLevelWindow = eventSource != nullptr ? eventSource->window() : nullptr;
+    if (topLevelWindow == nullptr) {
+        return false;
+    }
+    if (beginMacWindowDrag(topLevelWindow)) {
+        return true;
+    }
+    return topLevelWindow->windowHandle() != nullptr
+        && topLevelWindow->windowHandle()->startSystemMove();
+}
+
+/**
+ * @brief 按平台标准语义在窗口放大状态与先前尺寸之间切换。
+ * @param eventSource 实际接收双击事件的标题区控件。
+ *
+ * macOS 的 zoom: 会记住用户原始 frame；Qt 回退仅用于其他平台或 Cocoa 窗口尚不可用时。
+ */
+void toggleWindowChromeZoom(QWidget *eventSource)
+{
+    QWidget *topLevelWindow = eventSource != nullptr ? eventSource->window() : nullptr;
+    if (topLevelWindow == nullptr || toggleMacWindowZoom(topLevelWindow)) {
+        return;
+    }
+    topLevelWindow->isMaximized() ? topLevelWindow->showNormal() : topLevelWindow->showMaximized();
+}
+
 /**
  * @brief 作为原生标题栏背景的可拖动 Qt 容器。
  *
  * macOS 的全尺寸内容模式会把该控件绘制到交通灯按钮所在区域，但普通 QWidget 并不会
- * 自动获得拖动窗口能力。本类只在用户按住“空白背景”时调用 QWindow::startSystemMove；
- * 标签和按钮等子控件会先接收自己的鼠标事件，因此不会误触发窗口移动。
+ * 自动获得拖动窗口能力。本类只在用户按住“空白背景”时调用平台窗口移动接口；标签和
+ * 按钮等子控件会先接收自己的鼠标事件，因此不会误触发窗口移动。
  */
 class WindowChromeWidget final : public QWidget {
 public:
@@ -80,12 +120,9 @@ protected:
     /** @brief 左键按住标题空白处时请求操作系统开始窗口拖动。 */
     void mousePressEvent(QMouseEvent *event) override
     {
-        if (event->button() == Qt::LeftButton
-            && window() != nullptr
-            && window()->windowHandle() != nullptr) {
+        if (event->button() == Qt::LeftButton && beginWindowChromeMove(this)) {
             // 交由操作系统执行移动可正确处理多屏缩放、全屏空间和贴边行为；手工修改窗口
             // 坐标会在 Retina 与普通屏幕之间产生跳动，也无法保持 macOS 的系统动画。
-            window()->windowHandle()->startSystemMove();
             event->accept();
             return;
         }
@@ -96,7 +133,7 @@ protected:
     void mouseDoubleClickEvent(QMouseEvent *event) override
     {
         if (event->button() == Qt::LeftButton && window() != nullptr) {
-            window()->isMaximized() ? window()->showNormal() : window()->showMaximized();
+            toggleWindowChromeZoom(this);
             event->accept();
             return;
         }
@@ -176,7 +213,7 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     rootLayout->setSpacing(0);
 
     m_titleChrome = new WindowChromeWidget(root);
-    m_titleChrome->setFixedHeight(52);
+    m_titleChrome->setFixedHeight(kWindowChromeHeight);
     auto *titleLayout = new QHBoxLayout(m_titleChrome);
 #ifdef Q_OS_MACOS
     // 为原生关闭、最小化和缩放按钮保留命中区域；该留白只在 macOS 全尺寸标题模式需要。
@@ -729,6 +766,37 @@ void MainWindow::showEvent(QShowEvent *event)
         // enableMacWindowChrome 在非 macOS 平台是无操作实现；在 macOS 原生句柄尚未附着时
         // 返回 false，保留下次 showEvent 重试机会，避免用定时器轮询窗口系统状态。
         m_macWindowChromeConfigured = enableMacWindowChrome(this);
+    }
+    if (m_macWindowChromeConfigured) {
+        alignMacWindowButtons(this, kWindowChromeHeight);
+        QTimer::singleShot(0, this, [this]() {
+            // showEvent 返回后 AppKit 仍可能执行一次标准标题栏布局。下一轮事件循环再次对齐
+            // 可消除首次启动时按钮先居中、随后又跳回默认短标题栏位置的竞态。
+            alignMacWindowButtons(this, kWindowChromeHeight);
+        });
+    }
+}
+
+void MainWindow::changeEvent(QEvent *event)
+{
+    QMainWindow::changeEvent(event);
+    if (event->type() != QEvent::WindowStateChange || !m_macWindowChromeConfigured) {
+        return;
+    }
+
+    QTimer::singleShot(0, this, [this]() {
+        // 最大化、恢复和全屏转换结束后，AppKit 才能给出最终标题按钮容器坐标。
+        alignMacWindowButtons(this, kWindowChromeHeight);
+    });
+}
+
+void MainWindow::resizeEvent(QResizeEvent *event)
+{
+    QMainWindow::resizeEvent(event);
+    if (m_macWindowChromeConfigured) {
+        // 对齐函数只调整三个按钮的纵坐标且具有幂等性，可安全覆盖原生 zoom 动画产生的
+        // 连续 resizeEvent；这也避免等待动画结束时按钮短暂贴在标题栏上沿。
+        alignMacWindowButtons(this, kWindowChromeHeight);
     }
 }
 

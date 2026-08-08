@@ -18,6 +18,7 @@ class QEvent;
 class QLabel;
 class QObject;
 class QPoint;
+class QResizeEvent;
 class QShowEvent;
 class QStackedWidget;
 class QTabBar;
@@ -65,6 +66,24 @@ protected:
      * 失败时不会改变功能，并会在后续显示事件安全重试。
      */
     void showEvent(QShowEvent *event) override;
+
+    /**
+     * @brief 在窗口最大化、恢复或全屏状态变化后重新对齐 macOS 原生标题按钮。
+     * @param event Qt 窗口状态变化事件；其他 changeEvent 类型只交给基类处理。
+     *
+     * AppKit 可能在状态转换期间重新布局红黄绿按钮，因此需要等待当前事件完成后再次校正，
+     * 否则按钮会短暂或永久回到系统默认短标题栏的纵向位置。
+     */
+    void changeEvent(QEvent *event) override;
+
+    /**
+     * @brief 在原生窗口尺寸变化后维持交通灯相对自定义标题栏的垂直位置。
+     * @param event Qt 窗口尺寸变化事件。
+     *
+     * macOS 的标准缩放动画会产生连续尺寸事件，却不保证对应 Qt::WindowStateChange；在这里
+     * 做幂等对齐可覆盖双击放大、绿色按钮缩放以及普通边缘调整三条路径。
+     */
+    void resizeEvent(QResizeEvent *event) override;
 
 private:
     /** @brief 打开连接对话框，并在当前标签页的终端中启动 SSH。 */

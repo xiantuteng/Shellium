@@ -1,11 +1,14 @@
 #include "ui/SessionTabBar.h"
 
+#include "ui/MacWindowChrome.h"
+
 #include <QEvent>
 #include <QFontMetrics>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPaintEvent>
 #include <QStyleOptionTab>
+#include <QWindow>
 
 #include <algorithm>
 
@@ -137,6 +140,43 @@ void SessionTabBar::paintEvent(QPaintEvent *event)
                              closeRect.center() + QPoint(-3, 3));
         }
     }
+}
+
+void SessionTabBar::mousePressEvent(QMouseEvent *event)
+{
+    const bool pressedEmptyChrome = event->button() == Qt::LeftButton
+        && tabAt(event->position().toPoint()) < 0;
+    if (pressedEmptyChrome && window() != nullptr) {
+        // macOS 优先消费当前 NSEvent，以获得与系统标题栏一致的拖动行为；其他平台或原生
+        // 句柄尚未就绪时再回退到 Qt 的系统移动接口，不能自行累加鼠标坐标。
+        bool moveStarted = beginMacWindowDrag(window());
+        if (!moveStarted && window()->windowHandle() != nullptr) {
+            moveStarted = window()->windowHandle()->startSystemMove();
+        }
+        if (moveStarted) {
+            event->accept();
+            return;
+        }
+    }
+
+    // 标签内部必须继续进入基类状态机，否则 QTabBar 无法完成标签选中和拖动排序。
+    QTabBar::mousePressEvent(event);
+}
+
+void SessionTabBar::mouseDoubleClickEvent(QMouseEvent *event)
+{
+    const bool doubleClickedEmptyChrome = event->button() == Qt::LeftButton
+        && tabAt(event->position().toPoint()) < 0;
+    if (doubleClickedEmptyChrome && window() != nullptr) {
+        if (!toggleMacWindowZoom(window())) {
+            // 非 macOS 平台或 Cocoa 句柄短暂不可用时保留 Qt 语义，避免标题栏手势完全失效。
+            window()->isMaximized() ? window()->showNormal() : window()->showMaximized();
+        }
+        event->accept();
+        return;
+    }
+
+    QTabBar::mouseDoubleClickEvent(event);
 }
 
 void SessionTabBar::mouseMoveEvent(QMouseEvent *event)
