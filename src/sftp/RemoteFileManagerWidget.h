@@ -50,16 +50,6 @@ public:
      */
     void requestUploadToCurrentDirectory();
 
-protected:
-    /**
-     * @brief 在文件区宽度变化时隐藏低优先级远程列。
-     * @param event Qt 尺寸事件，不得为空。
-     *
-     * 文件管理区可能与终端并排、也可能占据更大空间。固定显示六列会在窄窗口中让名称只
-     * 剩几个字符，因此按实际视口宽度渐进展示类型、权限、所有者和时间。
-     */
-    void resizeEvent(QResizeEvent *event) override;
-
 signals:
     /** @brief 文件操作或连接状态发生变化，供主窗口顶部非阻塞提示区显示。 */
     void statusMessage(const QString &message);
@@ -200,9 +190,6 @@ private:
 
     /** @brief 统一刷新按钮、进度条和状态文字。 */
     void setBusy(bool busy, const QString &message = {});
-
-    /** @brief 按当前远程树实际宽度刷新低优先级列的显隐状态。 */
-    void updateResponsiveColumns();
 
     /** @brief SFTP 操作成功后刷新目录并显示结果。 */
     void handleOperationSuccess(quint64 requestId, const QString &description);

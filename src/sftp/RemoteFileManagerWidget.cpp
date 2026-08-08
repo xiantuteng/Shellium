@@ -430,12 +430,20 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     m_fileTree->setSelectionMode(QAbstractItemView::ExtendedSelection);
     m_fileTree->setContextMenuPolicy(Qt::CustomContextMenu);
     m_fileTree->header()->setStretchLastSection(false);
-    m_fileTree->header()->setSectionResizeMode(0, QHeaderView::Stretch);
-    m_fileTree->header()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
-    m_fileTree->header()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
-    m_fileTree->header()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
-    m_fileTree->header()->setSectionResizeMode(4, QHeaderView::ResizeToContents);
-    m_fileTree->header()->setSectionResizeMode(5, QHeaderView::ResizeToContents);
+    // 六列全部固定显示且可手动拖拽调整宽度。Stretch 会把列压缩进可视宽度、
+    // ResizeToContents 则由内容独断宽度，两者都会剥夺用户调整列宽的能力；Interactive
+    // 配合初始宽度既保留拖拽，又让总宽超出面板时自然出现横向滚动条。
+    for (int column = 0; column < m_fileTree->columnCount(); ++column) {
+        m_fileTree->header()->setSectionResizeMode(column, QHeaderView::Interactive);
+    }
+    m_fileTree->header()->setMinimumSectionSize(56);
+    const QList<int> defaultColumnWidths = {240, 96, 84, 108, 116, 168};
+    for (int column = 0; column < defaultColumnWidths.size(); ++column) {
+        m_fileTree->setColumnWidth(column, defaultColumnWidths.at(column));
+    }
+    // 宽度不足时显示横向滚动条，而不是隐藏列；按像素滚动可停在任意列中间。
+    m_fileTree->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    m_fileTree->setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
     remoteLayout->addWidget(m_fileTree, 1);
 
     contentSplitter->addWidget(localPanel);
@@ -920,8 +928,6 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
             });
 
     rebuildTransferQueueView();
-    // 构造阶段布局尚未获得最终宽度，延迟到事件循环后用真实视口计算首次响应式列集合。
-    QTimer::singleShot(0, this, &RemoteFileManagerWidget::updateResponsiveColumns);
 }
 
 RemoteFileManagerWidget::~RemoteFileManagerWidget()
@@ -936,31 +942,6 @@ RemoteFileManagerWidget::~RemoteFileManagerWidget()
         target.password.fill(QChar::Null);
         target.password.clear();
     }
-}
-
-void RemoteFileManagerWidget::resizeEvent(QResizeEvent *event)
-{
-    QWidget::resizeEvent(event);
-    updateResponsiveColumns();
-}
-
-void RemoteFileManagerWidget::updateResponsiveColumns()
-{
-    if (m_fileTree == nullptr) {
-        return;
-    }
-
-    const int availableWidth = m_fileTree->viewport()->width();
-    // 名称始终保留且使用 Stretch；其他列按运维价值逐级加入。极窄侧栏只显示名称，稍宽时
-    // 首先展示大小，再展示类型/权限，只有宽屏才加入所有者与长时间戳。
-    const bool showSize = availableWidth >= 300;
-    const bool showTypeAndPermissions = availableWidth >= 520;
-    const bool showOwnerAndTime = availableWidth >= 720;
-    m_fileTree->setColumnHidden(1, !showSize);
-    m_fileTree->setColumnHidden(2, !showTypeAndPermissions);
-    m_fileTree->setColumnHidden(3, !showTypeAndPermissions);
-    m_fileTree->setColumnHidden(4, !showOwnerAndTime);
-    m_fileTree->setColumnHidden(5, !showOwnerAndTime);
 }
 
 void RemoteFileManagerWidget::setAvailableTargets(const QList<ConnectionTarget> &targets,

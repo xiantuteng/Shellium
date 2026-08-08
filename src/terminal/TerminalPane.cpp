@@ -284,8 +284,10 @@ void TerminalPane::connectToHost(const ConnectionTarget &target)
     // 会在认证成功后再次发出 targetsChanged 并开放该目标。
     emit targetsChanged(this);
     m_headerLabel->setText(tr("正在连接 %1…").arg(target.connectionSpecifier()));
+    // 终端里必须使用 CRLF。裸 LF 只把光标下移一行、不回到第 0 列，远端随后的第一行输出
+    // 会从本行末尾的列继续绘制，看起来就是"Last login 前面凭空多出一大段空格"。
     m_terminalView->appendTerminalOutput(
-        tr("正在连接 %1…\n").arg(target.connectionSpecifier()).toUtf8());
+        tr("正在连接 %1…\r\n").arg(target.connectionSpecifier()).toUtf8());
 
     m_sessionStack = new SshSessionStack(target, this);
     connect(m_sessionStack,
@@ -427,8 +429,8 @@ void TerminalPane::connectToHost(const ConnectionTarget &target)
         m_shellReady = false;
         m_remoteSessionEstablished = false;
         m_headerLabel->setText(tr("连接失败"));
-        m_terminalView->appendTerminalOutput((QStringLiteral("\n") + message
-                                              + QLatin1Char('\n')).toUtf8());
+        m_terminalView->appendTerminalOutput((QStringLiteral("\r\n") + message
+                                              + QStringLiteral("\r\n")).toUtf8());
         emit statusMessage(message);
         if (wasEstablished) {
             // 运行期写失败不会再触发 shellDisconnected，但已成功历史仍必须补齐结束时间，
@@ -485,7 +487,7 @@ void TerminalPane::connectToHost(const ConnectionTarget &target)
             const QString message = tr("已取消连接：服务器需要已禁用的 hmac-sha1。请升级服务器配置。");
             m_headerLabel->setText(tr("连接失败"));
             m_terminalView->appendTerminalOutput(
-                (QStringLiteral("\n") + message + QLatin1Char('\n')).toUtf8());
+                (QStringLiteral("\r\n") + message + QStringLiteral("\r\n")).toUtf8());
             emit statusMessage(message);
             emit rootConnectionFailed(target, message);
         }

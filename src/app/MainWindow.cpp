@@ -1271,18 +1271,32 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
         const bool livesInChrome = button->parentWidget() == m_titleChrome;
         const QColor iconColor = livesInChrome ? chromeIconColor : navigationIconColor;
         const QString role = button->property("chromeRole").toString();
+        QIcon icon;
         if (role == QStringLiteral("sidebar")) {
-            button->setIcon(UiIcons::symbol(this, UiIcons::Symbol::Sidebar, iconColor));
+            icon = UiIcons::symbol(this, UiIcons::Symbol::Sidebar, iconColor);
         } else if (role == QStringLiteral("newTab")) {
-            button->setIcon(UiIcons::symbol(this, UiIcons::Symbol::Plus, iconColor));
+            icon = UiIcons::symbol(this, UiIcons::Symbol::Plus, iconColor);
         } else if (role == QStringLiteral("scrollLeft")) {
-            button->setIcon(UiIcons::symbol(this, UiIcons::Symbol::ChevronLeft, iconColor));
+            icon = UiIcons::symbol(this, UiIcons::Symbol::ChevronLeft, iconColor);
         } else if (role == QStringLiteral("scrollRight")) {
-            button->setIcon(UiIcons::symbol(this, UiIcons::Symbol::ChevronRight, iconColor));
+            icon = UiIcons::symbol(this, UiIcons::Symbol::ChevronRight, iconColor);
         } else if (role == QStringLiteral("command")) {
-            button->setIcon(UiIcons::symbol(this, UiIcons::Symbol::Command, iconColor));
+            icon = UiIcons::symbol(this, UiIcons::Symbol::Command, iconColor);
         } else if (role == QStringLiteral("settings")) {
-            button->setIcon(UiIcons::symbol(this, UiIcons::Symbol::Settings, iconColor));
+            icon = UiIcons::symbol(this, UiIcons::Symbol::Settings, iconColor);
+        }
+        if (icon.isNull()) {
+            continue;
+        }
+        // 可勾选动作在每次切换时都会发出 changed()，QToolButton 随后从 defaultAction 重新
+        // 同步图标与文字。若图标只设在按钮上，动作自身的空图标会把它覆盖掉：按钮退化成
+        // 纯文字，又因宽度只有 38px 被省略成"…"——正是侧边栏按钮点一下就变三个点的原因。
+        // 因此对带默认动作的按钮把图标写回动作，让这次同步取到的仍是同一个图标。
+        if (QAction *defaultAction = button->defaultAction();
+            defaultAction != nullptr && defaultAction->isCheckable()) {
+            defaultAction->setIcon(icon);
+        } else {
+            button->setIcon(icon);
         }
         button->setIconSize(QSize(20, 20));
     }

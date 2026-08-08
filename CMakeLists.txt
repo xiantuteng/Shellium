@@ -153,6 +153,8 @@ if(BUILD_TESTING)
         src/terminal/VtermBridge.h
         src/terminal/LocalShellWorker.cpp
         src/terminal/LocalShellWorker.h
+        src/ui/VaultDialog.cpp
+        src/ui/VaultDialog.h
     )
     target_include_directories(ShelliumCoreTests PRIVATE src)
     target_link_libraries(ShelliumCoreTests PRIVATE

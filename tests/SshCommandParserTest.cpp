@@ -5,6 +5,7 @@
 #include "terminal/TerminalView.h"
 #include "terminal/LocalShellWorker.h"
 #include "security/Vault.h"
+#include "ui/VaultDialog.h"
 #include "settings/TerminalSettings.h"
 #include "storage/ApplicationDatabase.h"
 
@@ -20,7 +21,12 @@
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QTemporaryDir>
+#include <QApplication>
+#include <QLayout>
+#include <QScrollBar>
+#include <QSet>
 #include <QTest>
+#include <QTimer>
 
 #include <libssh/libssh.h>
 
@@ -162,6 +168,18 @@ private slots:
 
     /** @brief 闲置计时达到阈值才应清除密钥，禁用超时后不得自动锁定。 */
     void credentialVaultLocksAfterIdleTimeout();
+
+    /** @brief 输出超过一屏后，跟随底部与停留在历史位置都不得被重建文档重置到顶部。 */
+    void terminalViewKeepsScrollPositionAcrossRender();
+
+    /** @brief 本地状态提示必须以 CRLF 结束，避免远端输出被推到光标所在列。 */
+    void localNoticeEndsWithCarriageReturn();
+
+    /** @brief 应用级样式表不得覆盖终端背景色，空白区与字符区必须同色。 */
+    void terminalBackgroundIgnoresApplicationStyleSheet();
+
+    /** @brief 解锁模式下不得有游离在布局之外的可见子控件。 */
+    void vaultDialogHasNoStrayWidgets();
 };
 
 namespace {
@@ -1245,6 +1263,157 @@ void SshCommandParserTest::terminalSettingsPersistReconnectPolicy()
     QCOMPARE(reloaded.currentSettings().reconnectBaseDelaySeconds, 1);
     QCOMPARE(reloaded.shortcut(QStringLiteral("command.palette")),
              QKeySequence(QStringLiteral("Ctrl+Shift+P")));
+}
+
+void SshCommandParserTest::terminalViewKeepsScrollPositionAcrossRender()
+{
+    TerminalView view;
+    // 视图必须真实布局，否则滚动条范围恒为 0，用例会在任何实现下都"通过"。
+    view.resize(600, 220);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+
+    for (int line = 0; line < 200; ++line) {
+        view.appendTerminalOutput(
+            QStringLiteral("history line %1\r\n").arg(line).toUtf8());
+    }
+    QScrollBar *bar = view.verticalScrollBar();
+    QVERIFY2(bar->maximum() > 0, "输出必须超过一屏，否则本用例无法覆盖滚动行为");
+
+    // 场景一：停在底部时新输出到达，应继续跟随底部。VtermBridge::render 会整体重建
+    // QTextDocument，滚动条随之归零；若实现依赖重建后尚未刷新的 maximum()，这里会掉到顶部。
+    bar->setValue(bar->maximum());
+    view.appendTerminalOutput(QByteArrayLiteral("tail follows\r\n"));
+    QCOMPARE(bar->value(), bar->maximum());
+
+    // 场景二：用户上翻查看历史时新输出到达，位置必须保持，不得被重建文档弹回顶部。
+    const int middle = bar->maximum() / 2;
+    QVERIFY2(middle > 0, "滚动范围过小，无法区分'保持原位'与'跳到顶部'");
+    bar->setValue(middle);
+    view.appendTerminalOutput(QByteArrayLiteral("more output\r\n"));
+    QVERIFY2(bar->value() > 0,
+             "阅读历史时收到新输出后被重置到了文档顶部");
+    QCOMPARE(bar->value(), middle);
+}
+
+void SshCommandParserTest::localNoticeEndsWithCarriageReturn()
+{
+    TerminalView view;
+    // 终端里的换行必须是 CRLF：LF 只下移一行而不回到第 0 列，随后的远端输出会从当前
+    // 列继续绘制，表现为"Last login 前面有一大段空格"。
+    view.appendTerminalOutput(QStringLiteral("正在连接 root@10.0.0.1…\r\n").toUtf8());
+    view.appendTerminalOutput(QByteArrayLiteral("Last login: Sat Aug  8"));
+
+    const QStringList renderedLines = view.toPlainText().split(QLatin1Char('\n'));
+    QCOMPARE(renderedLines.size(), 2);
+    // 只断言"不被推到光标列"，不比较整行：光标所在单元格会额外渲染出一个尾随空格，
+    // 那是光标绘制的固有产物，与本用例要守住的行首对齐无关。
+    QVERIFY2(!renderedLines.at(1).startsWith(QLatin1Char(' ')),
+             "CRLF 之后的远端输出必须从第 0 列开始");
+    QCOMPARE(renderedLines.at(1).trimmed(), QStringLiteral("Last login: Sat Aug  8"));
+
+    // 仅用 LF 结尾会让下一行从原光标列开始，这正是需要杜绝的效果。
+    TerminalView staircase;
+    staircase.appendTerminalOutput(QStringLiteral("正在连接 root@10.0.0.1…\n").toUtf8());
+    staircase.appendTerminalOutput(QByteArrayLiteral("Last login: Sat Aug  8"));
+    const QStringList staircaseLines = staircase.toPlainText().split(QLatin1Char('\n'));
+    QVERIFY2(staircaseLines.size() == 2 && staircaseLines.at(1).startsWith(QLatin1Char(' ')),
+             "该断言固化 LF 的阶梯效应；若 libvterm 行为改变，说明上面的 CRLF 断言需要重新评估");
+}
+
+void SshCommandParserTest::terminalBackgroundIgnoresApplicationStyleSheet()
+{
+    // 主窗口的全局样式表用 palette(base) 描述终端背景，而它取到的是 QApplication 调色板的
+    // Base——与终端主题背景差一档。结果是有字符的单元格用终端背景色、空白区用应用色，
+    // 同一块终端里出现两种底色。这里用一个明显不同的颜色模拟该冲突。
+    const QString previousStyleSheet = qApp->styleSheet();
+    qApp->setStyleSheet(QStringLiteral(
+        "QPlainTextEdit#TerminalView { background: #ff00ff; }"));
+
+    TerminalSettings settings;
+    settings.themeMode = ThemeMode::Dark;
+    settings.colorScheme = TerminalColorScheme::Default;
+    const QColor expectedBackground = settings.normalized().effectivePalette().background;
+
+    TerminalView view;
+    view.resize(320, 160);
+    view.applySettings(settings);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QCoreApplication::processEvents();
+
+    const QImage rendered = view.grab().toImage();
+    // 取右下角一块必定没有字符的区域：终端此时只有一行提示符，右下角只会是控件背景。
+    const QColor emptyAreaColor = rendered.pixelColor(rendered.width() - 6,
+                                                      rendered.height() - 6);
+    qApp->setStyleSheet(previousStyleSheet);
+
+    QCOMPARE(emptyAreaColor.name(), expectedBackground.name());
+}
+
+namespace {
+
+/** @brief 递归收集某个布局（含嵌套子布局）直接管理的全部控件。 */
+void collectLayoutWidgets(QLayout *layout, QSet<QWidget *> *managed)
+{
+    if (layout == nullptr) {
+        return;
+    }
+    for (int index = 0; index < layout->count(); ++index) {
+        QLayoutItem *item = layout->itemAt(index);
+        if (QWidget *widget = item->widget()) {
+            managed->insert(widget);
+        }
+        collectLayoutWidgets(item->layout(), managed);
+    }
+}
+
+} // namespace
+
+void SshCommandParserTest::vaultDialogHasNoStrayWidgets()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+    ApplicationDatabase database(
+        temporaryDirectory.filePath(QStringLiteral("vault-dialog.db")));
+    QString error;
+    QVERIFY2(database.initialize(&error), qPrintable(error));
+
+    CredentialVault vault(database);
+    QVERIFY2(vault.initialize(QStringLiteral("一条足够长的主密码-2026"), &error), qPrintable(error));
+    vault.lock();
+    QCOMPARE(vault.state(&error), CredentialVault::State::Locked);
+
+    // VaultDialog 的构造函数是私有的，只能经 ensureUnlocked 弹出。对话框是模态的，因此
+    // 在进入事件循环后取当前模态窗口来检查，再关掉它让 ensureUnlocked 返回。
+    QString failure;
+    QTimer::singleShot(0, [&failure]() {
+        QWidget *dialog = QApplication::activeModalWidget();
+        if (dialog == nullptr) {
+            failure = QStringLiteral("解锁对话框未能弹出");
+            return;
+        }
+        QSet<QWidget *> managed;
+        collectLayoutWidgets(dialog->layout(), &managed);
+        const QList<QWidget *> directChildren =
+            dialog->findChildren<QWidget *>(Qt::FindDirectChildrenOnly);
+        for (QWidget *child : directChildren) {
+            // 显式隐藏的控件不绘制、也不参与 Tab 顺序，是可接受的"备用控件"形态。
+            if (child->isHidden() || managed.contains(child)) {
+                continue;
+            }
+            failure = QStringLiteral("控件 %1 可见但不在任何布局中，会浮在对话框左上角")
+                          .arg(QString::fromLatin1(child->metaObject()->className()));
+            break;
+        }
+        dialog->close();
+    });
+
+    // 解锁模式下不需要"确认主密码"输入框；它仍以对话框为父对象被创建，而父子关系只决定
+    // 归属、不决定位置：没有被任何布局接管的控件会停在 (0,0) 并按 sizeHint 绘制，于是
+    // 左上角出现一个盖住说明文字的空白输入框，而且还能被 Tab 选中。
+    VaultDialog::ensureUnlocked(&vault, nullptr, true);
+    QVERIFY2(failure.isEmpty(), qPrintable(failure));
 }
 
 QTEST_MAIN(SshCommandParserTest)

@@ -69,6 +69,12 @@ VaultDialog::VaultDialog(CredentialVault *vault,
     form->addRow(tr("主密码："), m_passwordEdit);
     if (creating) {
         form->addRow(tr("确认主密码："), m_confirmationEdit);
+    } else {
+        // 解锁模式不需要确认框，但它已经以本对话框为父对象创建。父子关系只决定归属，
+        // 不决定位置：未被任何布局接管的控件会停在 (0,0) 并按 sizeHint 绘制，表现为左上角
+        // 一个盖住说明文字的空白输入框，而且仍能被 Tab 选中并接收键入的主密码。
+        // 显式隐藏即可让它退出绘制与焦点链，同时保持 accept() 中的无条件 clear() 有效。
+        m_confirmationEdit->setVisible(false);
     }
 
     const QDialogButtonBox::StandardButtons buttons = allowCancel

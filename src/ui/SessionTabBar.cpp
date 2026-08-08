@@ -184,7 +184,9 @@ void SessionTabBar::paintEvent(QPaintEvent *event)
         painter.setBrush(Qt::NoBrush);
 
         // 自绘 17 像素终端图标可以与关闭图标保持同一线宽，且不依赖操作系统图标主题。
-        const QRectF terminalRect(rawRect.left() + 15.0, rawRect.center().y() - 8.0, 17.0, 16.0);
+        // 竖直定位走浮点中心，避免 QRect::center() 取整后整组图标一起偏上。
+        const qreal rowCenterY = QRectF(rawRect).center().y();
+        const QRectF terminalRect(rawRect.left() + 15.0, rowCenterY - 8.0, 17.0, 16.0);
         painter.drawRoundedRect(terminalRect, 3.0, 3.0);
         painter.drawLine(QPointF(terminalRect.left() + 4.0, terminalRect.top() + 5.0),
                          QPointF(terminalRect.left() + 7.0, terminalRect.top() + 8.0));
@@ -217,19 +219,22 @@ void SessionTabBar::paintEvent(QPaintEvent *event)
         painter.drawText(textRect, Qt::AlignVCenter | Qt::AlignLeft, visibleTitle);
 
         if (showCloseButton) {
-            const QRect closeRect = closeButtonRect(index);
+            const QRectF closeRect(closeButtonRect(index));
             if (closeRect.contains(mapFromGlobal(QCursor::pos()))) {
                 QColor closeBackground = foreground;
                 closeBackground.setAlpha(30);
                 painter.setPen(Qt::NoPen);
                 painter.setBrush(closeBackground);
-                painter.drawEllipse(closeRect.adjusted(2, 2, -2, -2));
+                painter.drawEllipse(closeRect.adjusted(2.0, 2.0, -2.0, -2.0));
             }
+            // 叉号同样按浮点中心绘制：QRect::center() 会再次向下取整，把已经居中的命中区
+            // 与实际画出的图形错开一像素。
+            const QPointF closeCenter = closeRect.center();
             painter.setPen(QPen(foreground, 1.7, Qt::SolidLine, Qt::RoundCap));
-            painter.drawLine(closeRect.center() + QPoint(-3, -3),
-                             closeRect.center() + QPoint(3, 3));
-            painter.drawLine(closeRect.center() + QPoint(3, -3),
-                             closeRect.center() + QPoint(-3, 3));
+            painter.drawLine(closeCenter + QPointF(-3.0, -3.0),
+                             closeCenter + QPointF(3.0, 3.0));
+            painter.drawLine(closeCenter + QPointF(3.0, -3.0),
+                             closeCenter + QPointF(-3.0, 3.0));
         }
     }
 }
@@ -311,5 +316,12 @@ QRect SessionTabBar::closeButtonRect(const int index) const
         return {};
     }
     const QRect targetTab = tabRect(index);
-    return QRect(targetTab.right() - 29, targetTab.center().y() - 9, 18, 18);
+    // 不使用 QRect::center()：整数矩形的 center 会向下取整（高 42 的标签得到 20 而不是
+    // 21），再叠加"减去半边长"的写法，关闭图标就会稳定偏上 1~2 像素。按高度差平分才能
+    // 得到真正的垂直居中。
+    constexpr int closeButtonSize = 18;
+    return QRect(targetTab.right() - 29,
+                 targetTab.top() + (targetTab.height() - closeButtonSize) / 2,
+                 closeButtonSize,
+                 closeButtonSize);
 }

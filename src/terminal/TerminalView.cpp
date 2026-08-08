@@ -211,7 +211,14 @@ void TerminalView::applySettings(const TerminalSettings &settings)
     viewPalette.setColor(QPalette::Text, terminalPalette.foreground);
     viewPalette.setColor(QPalette::Highlight, terminalPalette.selection);
     setPalette(viewPalette);
-    setStyleSheet(QStringLiteral("QPlainTextEdit { border: 0; padding: 6px; }"));
+    // 背景必须在本控件的样式表里写成具体颜色。主窗口全局样式表用 palette(base) 描述终端
+    // 背景，而它取的是 QApplication 调色板的 Base（另一档更浅的窗口色），并非这里刚设置的
+    // 终端背景色；两者相差一档，表现为"有字符的区域和空白区域颜色不一样"。控件自身的
+    // 样式表优先级高于应用级，写死颜色可让整块终端与 libvterm 单元格背景完全一致。
+    setStyleSheet(QStringLiteral("QPlainTextEdit#TerminalView {"
+                                 " background: %1; color: %2; border: 0; padding: 6px; }")
+                      .arg(terminalPalette.background.name(),
+                           terminalPalette.foreground.name()));
 
     setProperty("shelliumAudibleBell", normalized.audibleBell);
     if (normalized.cursorBlink) {
@@ -444,7 +451,9 @@ void TerminalView::appendTerminalOutput(const QByteArray &bytes)
     }
 
     QScrollBar *bar = verticalScrollBar();
-    const bool wasNearBottom = bar->maximum() - bar->value() < 80;
+    // QPlainTextEdit 的垂直滚动条以"块"（行）为单位，因此阈值也是行数而不是像素。
+    const bool wasNearBottom = bar->maximum() - bar->value() < 2;
+    const int previousValue = bar->value();
     m_vtermBridge->feed(bytes);
     m_vtermBridge->render(document());
 
@@ -459,10 +468,16 @@ void TerminalView::appendTerminalOutput(const QByteArray &bytes)
         emit shellPromptDetected();
     }
 
-    // 仅当用户原本就在底部附近时自动跟随输出，避免阅读旧日志时被强制拉回底部。
+    // VtermBridge::render 每次都会 document->clear() 后整体重建，滚动条随之归零。若不在
+    // 这里还原，任何一次输出都会把正在翻阅历史的用户弹回文档顶部——这不是"没有跟随底部"，
+    // 而是视图直接跳走。跟随底部与保持原位必须都显式处理。
     if (wasNearBottom) {
         bar->setValue(bar->maximum());
+        return;
     }
+    // 在底部之外时原样还原滚动位置。新行追加在文档末尾，不会移动上方已有内容，因此无需
+    // 按新增行数补偿；只有滚动缓冲写满、旧行被逐出时内容才会上移，那与主流终端的行为一致。
+    bar->setValue(std::clamp(previousValue, bar->minimum(), bar->maximum()));
 }
 
 void TerminalView::beginLocalLineCapture()
