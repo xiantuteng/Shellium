@@ -80,6 +80,8 @@ qt_add_executable(Shellium
     src/ui/HostManagerWidget.h
     src/ui/SettingsDialog.cpp
     src/ui/SettingsDialog.h
+    src/ui/SessionTabBar.cpp
+    src/ui/SessionTabBar.h
     src/ui/SshKeyManagerDialog.cpp
     src/ui/SshKeyManagerDialog.h
     src/ui/UiIcons.h
@@ -106,6 +108,15 @@ if(UNIX AND NOT APPLE)
 endif()
 
 if(APPLE)
+    # 原生 Cocoa 标题栏桥接仅在 macOS 编译。Objective-C++ 文件只负责调整 NSWindow
+    # 展示属性，业务界面仍保持跨平台 Qt 实现，Linux 构建不会引入 AppKit 依赖。
+    enable_language(OBJCXX)
+    target_sources(Shellium PRIVATE
+        src/ui/MacWindowChrome.h
+        src/ui/MacWindowChrome.mm
+    )
+    target_link_libraries(Shellium PRIVATE "-framework AppKit")
+
     # 生成标准 macOS App Bundle，后续可以直接补充图标、签名和公证配置。
     set_target_properties(Shellium PROPERTIES MACOSX_BUNDLE TRUE)
 endif()

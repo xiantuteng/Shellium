@@ -10,6 +10,8 @@
 #include "terminal/TerminalWorkspace.h"
 #include "ui/ConnectionDialog.h"
 #include "ui/HostManagerWidget.h"
+#include "ui/MacWindowChrome.h"
+#include "ui/SessionTabBar.h"
 #include "ui/SettingsDialog.h"
 #include "ui/SshKeyManagerDialog.h"
 #include "ui/UiIcons.h"
@@ -17,9 +19,9 @@
 
 #include <QAction>
 #include <QApplication>
+#include <QButtonGroup>
 #include <QDateTime>
 #include <QDialog>
-#include <QDockWidget>
 #include <QDir>
 #include <QEvent>
 #include <QFileDialog>
@@ -30,26 +32,86 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLabel>
+#include <QHBoxLayout>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QMenu>
 #include <QMessageBox>
 #include <QMenuBar>
+#include <QMouseEvent>
 #include <QPointer>
 #include <QSaveFile>
 #include <QSet>
+#include <QShowEvent>
 #include <QSignalBlocker>
 #include <QSizePolicy>
+#include <QStackedWidget>
 #include <QStyle>
 #include <QTabBar>
 #include <QTabWidget>
-#include <QToolBar>
 #include <QTimer>
+#include <QToolButton>
 #include <QVBoxLayout>
+#include <QWindow>
 #include <QUuid>
 
 #include <algorithm>
 #include <utility>
+
+namespace {
+
+/**
+ * @brief 作为原生标题栏背景的可拖动 Qt 容器。
+ *
+ * macOS 的全尺寸内容模式会把该控件绘制到交通灯按钮所在区域，但普通 QWidget 并不会
+ * 自动获得拖动窗口能力。本类只在用户按住“空白背景”时调用 QWindow::startSystemMove；
+ * 标签和按钮等子控件会先接收自己的鼠标事件，因此不会误触发窗口移动。
+ */
+class WindowChromeWidget final : public QWidget {
+public:
+    /** @brief 创建标题背景控件。 */
+    explicit WindowChromeWidget(QWidget *parent = nullptr)
+        : QWidget(parent)
+    {
+        setObjectName(QStringLiteral("WindowChrome"));
+    }
+
+protected:
+    /** @brief 左键按住标题空白处时请求操作系统开始窗口拖动。 */
+    void mousePressEvent(QMouseEvent *event) override
+    {
+        if (event->button() == Qt::LeftButton
+            && window() != nullptr
+            && window()->windowHandle() != nullptr) {
+            // 交由操作系统执行移动可正确处理多屏缩放、全屏空间和贴边行为；手工修改窗口
+            // 坐标会在 Retina 与普通屏幕之间产生跳动，也无法保持 macOS 的系统动画。
+            window()->windowHandle()->startSystemMove();
+            event->accept();
+            return;
+        }
+        QWidget::mousePressEvent(event);
+    }
+
+    /** @brief 双击标题空白处在最大化和普通状态之间切换。 */
+    void mouseDoubleClickEvent(QMouseEvent *event) override
+    {
+        if (event->button() == Qt::LeftButton && window() != nullptr) {
+            window()->isMaximized() ? window()->showNormal() : window()->showMaximized();
+            event->accept();
+            return;
+        }
+        QWidget::mouseDoubleClickEvent(event);
+    }
+};
+
+/** @brief 侧栏页面的稳定索引，必须与 QStackedWidget 添加顺序保持一致。 */
+enum SidebarPageIndex {
+    HostsPage = 0,
+    ProductivityPage = 1,
+    ForwardingPage = 2
+};
+
+} // namespace
 
 MainWindow::MainWindow(ApplicationDatabase *database,
                        CredentialVault *credentialVault,
@@ -80,53 +142,110 @@ MainWindow::MainWindow(ApplicationDatabase *database,
 
     setWindowTitle(tr("Shellium"));
     resize(1380, 860);
+    setMinimumSize(980, 620);
+
+    // QTabWidget 只负责页面生命周期和工作区序列化；其传统页签完全隐藏，真正可见的会话
+    // 标签由标题区 SessionTabBar 镜像。这样不会为了视觉效果重写可靠的页面管理逻辑。
+    m_tabs->setObjectName(QStringLiteral("TerminalPages"));
     m_tabs->setDocumentMode(true);
     m_tabs->setMovable(true);
     m_tabs->setTabsClosable(false);
-    // QTabWidget 继续负责页面生命周期和工作区序列化，但其自带标签栏隐藏；真正可见、可拖动
-    // 的镜像标签稍后放入标题栏。保留内部 QTabBar 的移动能力可复用 Qt 对页面顺序的维护。
     m_tabs->tabBar()->hide();
-    setCentralWidget(m_tabs);
 
-    // 主机管理使用可停靠面板：桌面窗口较窄时用户可以临时隐藏或移动，但其数据模型始终是
-    // 应用级数据库，不会随标签页切换而重复加载多个副本。
-    auto *hostDock = new QDockWidget(tr("主机管理"), this);
-    hostDock->setObjectName(QStringLiteral("HostManagerDock"));
-    hostDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
-    m_hostManager = new HostManagerWidget(m_database, m_credentialVault, hostDock);
-    hostDock->setWidget(m_hostManager);
-    addDockWidget(Qt::LeftDockWidgetArea, hostDock);
-    resizeDocks({hostDock}, {330}, Qt::Horizontal);
+    // 整个应用只保留一个中央根布局：标题区、左侧导航轨、单一侧栏与工作区构成稳定网格。
+    // 不再使用可浮动 Dock，因为 Dock 自带标题、拖动边框和标签组，会破坏现代客户端要求
+    // 的连续色块、固定对齐和可预测收缩行为。
+    auto *root = new QWidget(this);
+    root->setObjectName(QStringLiteral("ShelliumRoot"));
+    auto *rootLayout = new QVBoxLayout(root);
+    rootLayout->setContentsMargins(0, 0, 0, 0);
+    rootLayout->setSpacing(0);
 
-    // 效率工具与主机树共享左侧停靠区并以标签切换，避免同时挤压终端和每个标签独占的
-    // SFTP 双栏。其模型是应用级对象，但执行路由仍由主窗口按当前打开会话动态决定。
-    auto *productivityDock = new QDockWidget(tr("效率工具"), this);
-    productivityDock->setObjectName(QStringLiteral("ProductivityDock"));
-    productivityDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
-    m_productivityWidget = new ProductivityWidget(m_productivityModel, productivityDock);
-    productivityDock->setWidget(m_productivityWidget);
-    addDockWidget(Qt::LeftDockWidgetArea, productivityDock);
-    tabifyDockWidget(hostDock, productivityDock);
-    hostDock->raise();
+    m_titleChrome = new WindowChromeWidget(root);
+    m_titleChrome->setFixedHeight(52);
+    auto *titleLayout = new QHBoxLayout(m_titleChrome);
+#ifdef Q_OS_MACOS
+    // 为原生关闭、最小化和缩放按钮保留命中区域；该留白只在 macOS 全尺寸标题模式需要。
+    titleLayout->setContentsMargins(76, 5, 10, 5);
+#else
+    titleLayout->setContentsMargins(10, 5, 10, 5);
+#endif
+    titleLayout->setSpacing(6);
+    rootLayout->addWidget(m_titleChrome);
 
-    // 端口转发属于应用级规则，但运行时绑定某个标签的根 SSH 会话；单独侧栏可在不切换
-    // 终端布局的情况下管理 -L/-R/-D，并实时查看连接数和流量。
-    auto *forwardingDock = new QDockWidget(tr("端口转发"), this);
-    forwardingDock->setObjectName(QStringLiteral("PortForwardingDock"));
-    forwardingDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
-    m_portForwardManager = new PortForwardManagerWidget(m_database, forwardingDock);
-    forwardingDock->setWidget(m_portForwardManager);
-    addDockWidget(Qt::LeftDockWidgetArea, forwardingDock);
-    tabifyDockWidget(hostDock, forwardingDock);
-    hostDock->raise();
-    hostDock->setWindowIcon(
-        UiIcons::themed(this, QStringLiteral("network-server"), QStyle::SP_DriveNetIcon));
-    productivityDock->setWindowIcon(
-        UiIcons::themed(this, QStringLiteral("system-run"), QStyle::SP_CommandLink));
-    forwardingDock->setWindowIcon(
-        UiIcons::themed(this, QStringLiteral("network-transmit-receive"),
-                        QStyle::SP_ArrowForward));
-    m_sidebarDocks = {hostDock, productivityDock, forwardingDock};
+    auto *workspaceBody = new QWidget(root);
+    workspaceBody->setObjectName(QStringLiteral("WorkspaceBody"));
+    auto *bodyLayout = new QHBoxLayout(workspaceBody);
+    bodyLayout->setContentsMargins(0, 0, 0, 0);
+    bodyLayout->setSpacing(0);
+
+    m_navigationRail = new QWidget(workspaceBody);
+    m_navigationRail->setObjectName(QStringLiteral("NavigationRail"));
+    m_navigationRail->setFixedWidth(72);
+    auto *railLayout = new QVBoxLayout(m_navigationRail);
+    railLayout->setContentsMargins(10, 14, 10, 12);
+    railLayout->setSpacing(8);
+
+    auto *brandBadge = new QToolButton(m_navigationRail);
+    brandBadge->setObjectName(QStringLiteral("BrandBadge"));
+    brandBadge->setProperty("brandBadge", true);
+    brandBadge->setAutoRaise(false);
+    brandBadge->setEnabled(false);
+    brandBadge->setFixedSize(44, 44);
+    brandBadge->setAccessibleName(tr("Shellium"));
+    railLayout->addWidget(brandBadge, 0, Qt::AlignHCenter);
+    railLayout->addSpacing(12);
+
+    auto *navigationGroup = new QButtonGroup(this);
+    navigationGroup->setExclusive(true);
+    const QStringList navigationTooltips = {
+        tr("主机"), tr("效率工具"), tr("端口转发")};
+    for (int pageIndex = HostsPage; pageIndex <= ForwardingPage; ++pageIndex) {
+        auto *button = new QToolButton(m_navigationRail);
+        button->setProperty("navButton", true);
+        button->setCheckable(true);
+        button->setAutoRaise(false);
+        button->setFixedSize(44, 44);
+        button->setToolTip(navigationTooltips.at(pageIndex));
+        button->setAccessibleName(navigationTooltips.at(pageIndex));
+        navigationGroup->addButton(button, pageIndex);
+        railLayout->addWidget(button, 0, Qt::AlignHCenter);
+        m_navigationButtons.append(button);
+    }
+    m_navigationButtons.constFirst()->setChecked(true);
+    connect(navigationGroup,
+            &QButtonGroup::idClicked,
+            this,
+            &MainWindow::showSidebarPage);
+    railLayout->addStretch(1);
+
+    m_sidebarPanel = new QWidget(workspaceBody);
+    m_sidebarPanel->setObjectName(QStringLiteral("SidebarPanel"));
+    m_sidebarPanel->setFixedWidth(320);
+    auto *sidebarLayout = new QVBoxLayout(m_sidebarPanel);
+    sidebarLayout->setContentsMargins(14, 16, 14, 14);
+    sidebarLayout->setSpacing(12);
+    m_sidebarTitle = new QLabel(tr("主机"), m_sidebarPanel);
+    m_sidebarTitle->setObjectName(QStringLiteral("SidebarHeader"));
+    sidebarLayout->addWidget(m_sidebarTitle);
+
+    m_sidebarStack = new QStackedWidget(m_sidebarPanel);
+    m_sidebarStack->setObjectName(QStringLiteral("SidebarStack"));
+    // 三个页面共享应用级数据库/模型，但在侧栏中互斥展示。页面不会因切换被销毁，因此
+    // 主机选择、Snippet 编辑内容和转发统计都能原样保留。
+    m_hostManager = new HostManagerWidget(m_database, m_credentialVault, m_sidebarStack);
+    m_productivityWidget = new ProductivityWidget(m_productivityModel, m_sidebarStack);
+    m_portForwardManager = new PortForwardManagerWidget(m_database, m_sidebarStack);
+    m_sidebarStack->addWidget(m_hostManager);
+    m_sidebarStack->addWidget(m_productivityWidget);
+    m_sidebarStack->addWidget(m_portForwardManager);
+    sidebarLayout->addWidget(m_sidebarStack, 1);
+
+    bodyLayout->addWidget(m_navigationRail);
+    bodyLayout->addWidget(m_sidebarPanel);
+    bodyLayout->addWidget(m_tabs, 1);
+    rootLayout->addWidget(workspaceBody, 1);
+    setCentralWidget(root);
 
     m_workspace = createWorkspaceTab(tr("终端 1"));
 
@@ -196,70 +315,78 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     removeWorkspaceAction->setIcon(
         UiIcons::themed(this, QStringLiteral("edit-delete"), QStyle::SP_TrashIcon));
 
-    // 旧的“主工具栏”整体移除。新的会话栏只承担窗口级导航：侧栏开关、会话标签、新建
-    // 标签和瞬时反馈；连接、设置等命令仍在菜单和命令面板中，不再长期占据一整行按钮。
-    setUnifiedTitleAndToolBarOnMac(true);
-    auto *sessionToolbar = new QToolBar(tr("会话栏"), this);
-    addToolBar(Qt::TopToolBarArea, sessionToolbar);
-    sessionToolbar->setObjectName(QStringLiteral("SessionTitleBar"));
-    sessionToolbar->setMovable(false);
-    sessionToolbar->setFloatable(false);
-    sessionToolbar->setAllowedAreas(Qt::TopToolBarArea);
-    sessionToolbar->setToolButtonStyle(Qt::ToolButtonIconOnly);
-    sessionToolbar->setIconSize(QSize(18, 18));
-
-    m_sidebarToggleAction = new QAction(
-        UiIcons::themed(this, QStringLiteral("view-list-tree"), QStyle::SP_FileDialogListView),
-        tr("显示侧边栏"),
-        this);
+    // 标题区不是 QToolBar，而是中央内容树的第一行。macOS 原生标题栏透明后，这一行会
+    // 真正延伸到交通灯背后；因此会话标签与窗口标题只占一次高度，不会再上下叠两层。
+    m_sidebarToggleAction = new QAction(tr("显示侧边栏"), this);
     m_sidebarToggleAction->setCheckable(true);
     m_sidebarToggleAction->setChecked(true);
     m_sidebarToggleAction->setToolTip(tr("展开或收起左侧主机、效率工具和端口转发区域"));
-    sessionToolbar->addAction(m_sidebarToggleAction);
 
-    m_titleTabBar = new QTabBar(sessionToolbar);
+    auto *sidebarChromeButton = new QToolButton(m_titleChrome);
+    sidebarChromeButton->setProperty("chromeButton", true);
+    sidebarChromeButton->setProperty("chromeRole", QStringLiteral("sidebar"));
+    sidebarChromeButton->setDefaultAction(m_sidebarToggleAction);
+    sidebarChromeButton->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    sidebarChromeButton->setFixedSize(38, 38);
+    titleLayout->addWidget(sidebarChromeButton);
+    m_chromeButtons.append(sidebarChromeButton);
+
+    m_titleTabBar = new SessionTabBar(m_titleChrome);
     m_titleTabBar->setObjectName(QStringLiteral("SessionTitleTabs"));
-    m_titleTabBar->setDocumentMode(true);
-    m_titleTabBar->setMovable(true);
-    m_titleTabBar->setTabsClosable(true);
-    m_titleTabBar->setExpanding(false);
-    m_titleTabBar->setUsesScrollButtons(true);
-    m_titleTabBar->setElideMode(Qt::ElideRight);
     m_titleTabBar->setContextMenuPolicy(Qt::CustomContextMenu);
-    m_titleTabBar->setMinimumWidth(360);
-    m_titleTabBar->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    m_titleTabBar->setMinimumWidth(260);
+    m_titleTabBar->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     for (int index = 0; index < m_tabs->count(); ++index) {
         m_titleTabBar->addTab(m_tabs->tabIcon(index), m_tabs->tabText(index));
     }
     m_titleTabBar->setCurrentIndex(m_tabs->currentIndex());
-    sessionToolbar->addWidget(m_titleTabBar);
-    sessionToolbar->addAction(newTabAction);
+    titleLayout->addWidget(m_titleTabBar, 1);
 
-    m_transientMessageLabel = new QLabel(sessionToolbar);
+    auto *newTabButton = new QToolButton(m_titleChrome);
+    newTabButton->setProperty("chromeButton", true);
+    newTabButton->setProperty("chromeRole", QStringLiteral("newTab"));
+    newTabButton->setDefaultAction(newTabAction);
+    newTabButton->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    newTabButton->setFixedSize(38, 38);
+    titleLayout->addWidget(newTabButton);
+    m_chromeButtons.append(newTabButton);
+
+    m_transientMessageLabel = new QLabel(m_titleChrome);
     m_transientMessageLabel->setObjectName(QStringLiteral("TitleTransientMessage"));
     m_transientMessageLabel->setMinimumWidth(0);
-    m_transientMessageLabel->setMaximumWidth(340);
+    m_transientMessageLabel->setMaximumWidth(260);
     m_transientMessageLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
     m_transientMessageLabel->setVisible(false);
-    sessionToolbar->addWidget(m_transientMessageLabel);
+    titleLayout->addWidget(m_transientMessageLabel);
 
-    // 颜色全部引用活动 QPalette，主题服务切换深浅色后无需维护第二套固定色值。圆角、留白和
-    // 细边框只改变信息层级，不覆盖终端视图自己的字体与配色设置。
-    setStyleSheet(QStringLiteral(
-        "QToolBar#SessionTitleBar { border: 0; spacing: 4px; padding: 3px 6px; }"
-        "QTabBar#SessionTitleTabs::tab { border: 1px solid transparent; border-radius: 7px; "
-        "padding: 6px 12px; margin: 1px 2px; min-width: 92px; }"
-        "QTabBar#SessionTitleTabs::tab:selected { background: palette(base); "
-        "border-color: palette(mid); }"
-        "QTabBar#SessionTitleTabs::tab:hover:!selected { background: palette(alternate-base); }"
-        "QLabel#TitleTransientMessage { color: palette(mid); padding: 0 6px; }"
-        "QDockWidget::title { padding: 7px; font-weight: 600; }"
-        "QPushButton { min-height: 24px; padding: 3px 8px; border: 1px solid palette(mid); "
-        "border-radius: 6px; background: palette(button); }"
-        "QPushButton:hover { background: palette(alternate-base); }"
-        "QPushButton:pressed { background: palette(midlight); }"
-        "QLineEdit, QComboBox, QSpinBox { min-height: 24px; padding: 2px 5px; "
-        "border: 1px solid palette(mid); border-radius: 5px; }"));
+    auto *commandButton = new QToolButton(m_titleChrome);
+    commandButton->setProperty("chromeButton", true);
+    commandButton->setProperty("chromeRole", QStringLiteral("command"));
+    commandButton->setDefaultAction(commandPaletteAction);
+    commandButton->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    commandButton->setFixedSize(38, 38);
+    titleLayout->addWidget(commandButton);
+    m_chromeButtons.append(commandButton);
+
+    auto *settingsButton = new QToolButton(m_titleChrome);
+    settingsButton->setProperty("chromeButton", true);
+    settingsButton->setProperty("chromeRole", QStringLiteral("settings"));
+    settingsButton->setDefaultAction(settingsAction);
+    settingsButton->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    settingsButton->setFixedSize(38, 38);
+    titleLayout->addWidget(settingsButton);
+    m_chromeButtons.append(settingsButton);
+
+    // 导航轨底部重复提供设置入口，符合“上方是内容域、下方是全局工具”的稳定空间模型。
+    // 两个按钮共享同一个 QAction，因此快捷键、启用状态和命令面板始终只有一份状态源。
+    auto *railSettingsButton = new QToolButton(m_navigationRail);
+    railSettingsButton->setProperty("navButton", true);
+    railSettingsButton->setProperty("chromeRole", QStringLiteral("settings"));
+    railSettingsButton->setDefaultAction(settingsAction);
+    railSettingsButton->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    railSettingsButton->setFixedSize(44, 44);
+    railLayout->addWidget(railSettingsButton, 0, Qt::AlignHCenter);
+    m_chromeButtons.append(railSettingsButton);
 
     QMenu *connectionMenu = menuBar()->addMenu(tr("连接"));
     connectionMenu->addAction(connectAction);
@@ -278,9 +405,31 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     QMenu *viewMenu = menuBar()->addMenu(tr("视图"));
     viewMenu->addAction(m_sidebarToggleAction);
     viewMenu->addSeparator();
-    viewMenu->addAction(hostDock->toggleViewAction());
-    viewMenu->addAction(productivityDock->toggleViewAction());
-    viewMenu->addAction(forwardingDock->toggleViewAction());
+    QAction *showHostsAction = viewMenu->addAction(
+        UiIcons::themed(this, QStringLiteral("network-server"), QStyle::SP_DriveNetIcon),
+        tr("主机"));
+    QAction *showProductivityAction = viewMenu->addAction(
+        UiIcons::themed(this, QStringLiteral("system-run"), QStyle::SP_CommandLink),
+        tr("效率工具"));
+    QAction *showForwardingAction = viewMenu->addAction(
+        UiIcons::themed(this,
+                        QStringLiteral("network-transmit-receive"),
+                        QStyle::SP_ArrowForward),
+        tr("端口转发"));
+    // 视图菜单与导航轨都只切换同一个 QStackedWidget，防止出现菜单显示某个 Dock、导航轨
+    // 却高亮另一个页面的双重状态。
+    connect(showHostsAction,
+            &QAction::triggered,
+            this,
+            [this]() { showSidebarPage(HostsPage); });
+    connect(showProductivityAction,
+            &QAction::triggered,
+            this,
+            [this]() { showSidebarPage(ProductivityPage); });
+    connect(showForwardingAction,
+            &QAction::triggered,
+            this,
+            [this]() { showSidebarPage(ForwardingPage); });
 
     QMenu *terminalMenu = menuBar()->addMenu(tr("终端"));
     terminalMenu->addAction(searchTerminalAction);
@@ -318,6 +467,7 @@ MainWindow::MainWindow(ApplicationDatabase *database,
         {QStringLiteral("settings.open"), settingsAction},
     };
     applyConfiguredShortcuts();
+    applyModernAppearance(m_settingsService->currentSettings());
 
     // 底部状态栏已按新布局移除。短消息在标题栏自动消失，服务器、编码和尺寸则由每个
     // TerminalPane 自己的顶部状态栏持久展示，两类信息不再互相覆盖。
@@ -427,28 +577,6 @@ MainWindow::MainWindow(ApplicationDatabase *database,
             &QAction::toggled,
             this,
             &MainWindow::setSidebarVisible);
-    for (QDockWidget *dock : std::as_const(m_sidebarDocks)) {
-        connect(dock, &QDockWidget::visibilityChanged, this, [this](const bool) {
-            if (m_updatingSidebarVisibility || m_sidebarToggleAction == nullptr) {
-                return;
-            }
-            // tabified Dock 切换时 Qt 可能先让旧页发出 false，再让新页发出 true。延迟到本轮
-            // 事件全部处理完再汇总，避免中间“全部不可见”的瞬态误触发侧栏整体收起。
-            QTimer::singleShot(0, this, [this]() {
-                if (m_updatingSidebarVisibility || m_sidebarToggleAction == nullptr) {
-                    return;
-                }
-                const bool anyVisible = std::any_of(
-                    m_sidebarDocks.cbegin(),
-                    m_sidebarDocks.cend(),
-                    [](const QDockWidget *candidate) { return candidate->isVisible(); });
-                if (m_sidebarToggleAction->isChecked() != anyVisible) {
-                    const QSignalBlocker blocker(m_sidebarToggleAction);
-                    m_sidebarToggleAction->setChecked(anyVisible);
-                }
-            });
-        });
-    }
     connect(m_hostManager,
             &HostManagerWidget::hostConnectionRequested,
             this,
@@ -494,6 +622,7 @@ MainWindow::MainWindow(ApplicationDatabase *database,
                     pane->applyTerminalSettings(settings);
                 }
                 applyConfiguredShortcuts();
+                applyModernAppearance(settings);
             });
 
     connect(m_productivityWidget,
@@ -561,6 +690,16 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
     return false;
 }
 
+void MainWindow::showEvent(QShowEvent *event)
+{
+    QMainWindow::showEvent(event);
+    if (!m_macWindowChromeConfigured) {
+        // enableMacWindowChrome 在非 macOS 平台是无操作实现；在 macOS 原生句柄尚未附着时
+        // 返回 false，保留下次 showEvent 重试机会，避免用定时器轮询窗口系统状态。
+        m_macWindowChromeConfigured = enableMacWindowChrome(this);
+    }
+}
+
 void MainWindow::closeWorkspaceTab(const int index, const bool allowLast)
 {
     if (index < 0 || index >= m_tabs->count()) {
@@ -602,23 +741,362 @@ void MainWindow::setWorkspaceTabText(const int index, const QString &title)
 
 void MainWindow::setSidebarVisible(const bool visible)
 {
-    m_updatingSidebarVisibility = true;
-    for (QDockWidget *dock : std::as_const(m_sidebarDocks)) {
-        if (dock != nullptr) {
-            dock->setVisible(visible);
-        }
+    if (m_sidebarPanel != nullptr) {
+        m_sidebarPanel->setVisible(visible);
     }
-    if (visible && !m_sidebarDocks.isEmpty() && m_sidebarDocks.constFirst() != nullptr) {
-        // 三个 Dock 已被 tabify；恢复时把主机管理抬到前台，给用户一个稳定入口，同时其余
-        // Dock 仍保留在同一侧栏标签组中，可以直接切换。
-        m_sidebarDocks.constFirst()->raise();
-    }
-    m_updatingSidebarVisibility = false;
 
     if (m_sidebarToggleAction != nullptr
         && m_sidebarToggleAction->isChecked() != visible) {
         const QSignalBlocker blocker(m_sidebarToggleAction);
         m_sidebarToggleAction->setChecked(visible);
+    }
+}
+
+void MainWindow::showSidebarPage(const int pageIndex)
+{
+    if (m_sidebarStack == nullptr
+        || pageIndex < 0
+        || pageIndex >= m_sidebarStack->count()) {
+        return;
+    }
+
+    static const QStringList pageTitles = {
+        tr("主机"), tr("效率工具"), tr("端口转发")};
+    m_activeSidebarPage = pageIndex;
+    m_sidebarStack->setCurrentIndex(pageIndex);
+    if (m_sidebarTitle != nullptr) {
+        m_sidebarTitle->setText(pageTitles.value(pageIndex));
+    }
+
+    // QButtonGroup 已设置互斥，但菜单触发并不会自动点击按钮，因此这里显式同步选中态。
+    // 使用信号阻断避免 setChecked 再次触发页面切换，保持状态流只有一个入口。
+    for (int index = 0; index < m_navigationButtons.size(); ++index) {
+        QToolButton *button = m_navigationButtons.at(index);
+        if (button != nullptr && button->isChecked() != (index == pageIndex)) {
+            const QSignalBlocker blocker(button);
+            button->setChecked(index == pageIndex);
+        }
+    }
+    setSidebarVisible(true);
+}
+
+void MainWindow::applyModernAppearance(const TerminalSettings &settings)
+{
+    const bool dark = settings.effectiveThemeMode() == ThemeMode::Dark;
+
+    // 标题区保持稳定深色，可以在深浅主题间提供连续的窗口身份；工作区颜色则跟随用户
+    // 主题。所有颜色在此集中声明，避免各子控件出现大量“近似但不一致”的硬编码灰色。
+    const QString workspaceBackground = dark ? QStringLiteral("#101525")
+                                             : QStringLiteral("#edf1f4");
+    const QString navigationBackground = dark ? QStringLiteral("#151a2b")
+                                              : QStringLiteral("#e8edf0");
+    const QString sidebarBackground = dark ? QStringLiteral("#191f31")
+                                           : QStringLiteral("#f5f7f8");
+    const QString surfaceBackground = dark ? QStringLiteral("#21283b")
+                                           : QStringLiteral("#ffffff");
+    const QString raisedBackground = dark ? QStringLiteral("#293147")
+                                          : QStringLiteral("#f0f3f5");
+    const QString borderColor = dark ? QStringLiteral("#30384f")
+                                     : QStringLiteral("#d9e0e4");
+    const QString textColor = dark ? QStringLiteral("#f0f3fa")
+                                   : QStringLiteral("#1b2230");
+    const QString mutedTextColor = dark ? QStringLiteral("#929bb3")
+                                        : QStringLiteral("#71808d");
+    const QString accentColor = QStringLiteral("#2bd981");
+    const QString selectionBackground = dark ? QStringLiteral("#24413d")
+                                             : QStringLiteral("#dff6ec");
+
+    QString styleSheet = QStringLiteral(R"QSS(
+        QWidget#ShelliumRoot,
+        QWidget#WorkspaceBody {
+            background: @WORKSPACE@;
+            color: @TEXT@;
+        }
+        QWidget#WindowChrome {
+            background: #30364f;
+            border: 0;
+        }
+        QWidget#NavigationRail {
+            background: @NAVIGATION@;
+            border-right: 1px solid @BORDER@;
+        }
+        QWidget#SidebarPanel {
+            background: @SIDEBAR@;
+            border-right: 1px solid @BORDER@;
+        }
+        QLabel#SidebarHeader {
+            color: @TEXT@;
+            font-size: 18px;
+            font-weight: 700;
+            padding: 2px 4px 7px 4px;
+        }
+        QLabel#TitleTransientMessage {
+            color: #c2c9da;
+            background: rgba(255, 255, 255, 18);
+            border-radius: 8px;
+            padding: 5px 9px;
+        }
+        QToolButton[chromeButton="true"] {
+            background: transparent;
+            border: 0;
+            border-radius: 9px;
+            padding: 7px;
+        }
+        QToolButton[chromeButton="true"]:hover {
+            background: rgba(255, 255, 255, 22);
+        }
+        QToolButton[chromeButton="true"]:pressed {
+            background: rgba(255, 255, 255, 34);
+        }
+        QToolButton[navButton="true"] {
+            background: transparent;
+            border: 0;
+            border-radius: 12px;
+            padding: 10px;
+        }
+        QToolButton[navButton="true"]:hover {
+            background: @RAISED@;
+        }
+        QToolButton[navButton="true"]:checked {
+            background: @SELECTION@;
+            border-left: 2px solid @ACCENT@;
+        }
+        QToolButton#BrandBadge {
+            background: @ACCENT@;
+            border: 0;
+            border-radius: 13px;
+            padding: 10px;
+        }
+        QTabBar#SessionTitleTabs {
+            background: transparent;
+            border: 0;
+        }
+        QTabWidget#TerminalPages::pane,
+        QStackedWidget#SidebarStack {
+            border: 0;
+            background: transparent;
+        }
+        QTabWidget QTabBar::tab {
+            color: @MUTED@;
+            background: transparent;
+            border: 0;
+            border-radius: 8px;
+            min-height: 26px;
+            padding: 5px 11px;
+            margin: 1px 2px;
+        }
+        QTabWidget QTabBar::tab:selected {
+            color: @TEXT@;
+            background: @RAISED@;
+        }
+        QTabWidget QTabBar::tab:hover:!selected {
+            color: @TEXT@;
+            background: @SURFACE@;
+        }
+        QLineEdit,
+        QTextEdit,
+        QPlainTextEdit,
+        QComboBox,
+        QSpinBox {
+            color: @TEXT@;
+            background: @SURFACE@;
+            selection-color: @TEXT@;
+            selection-background-color: @SELECTION@;
+            border: 1px solid @BORDER@;
+            border-radius: 8px;
+            min-height: 28px;
+            padding: 3px 8px;
+        }
+        QLineEdit:focus,
+        QTextEdit:focus,
+        QPlainTextEdit:focus,
+        QComboBox:focus,
+        QSpinBox:focus {
+            border: 1px solid @ACCENT@;
+        }
+        QPushButton {
+            color: @TEXT@;
+            background: @SURFACE@;
+            border: 1px solid @BORDER@;
+            border-radius: 8px;
+            min-height: 28px;
+            padding: 4px 11px;
+        }
+        QPushButton:hover {
+            background: @RAISED@;
+            border-color: @MUTED@;
+        }
+        QPushButton:pressed,
+        QPushButton:checked {
+            background: @SELECTION@;
+            border-color: @ACCENT@;
+        }
+        QPushButton:disabled {
+            color: @MUTED@;
+            background: @SIDEBAR@;
+        }
+        QTreeView,
+        QListView,
+        QTableView {
+            color: @TEXT@;
+            background: transparent;
+            alternate-background-color: @SURFACE@;
+            border: 0;
+            outline: 0;
+            selection-color: @TEXT@;
+            selection-background-color: @SELECTION@;
+        }
+        QTreeView::item,
+        QListView::item,
+        QTableView::item {
+            min-height: 28px;
+            border: 0;
+            border-radius: 7px;
+            padding: 3px 5px;
+        }
+        QTreeView::item:hover,
+        QListView::item:hover,
+        QTableView::item:hover {
+            background: @RAISED@;
+        }
+        QHeaderView::section {
+            color: @MUTED@;
+            background: @SIDEBAR@;
+            border: 0;
+            border-bottom: 1px solid @BORDER@;
+            padding: 6px;
+            font-weight: 600;
+        }
+        QGroupBox {
+            color: @TEXT@;
+            border: 1px solid @BORDER@;
+            border-radius: 10px;
+            margin-top: 10px;
+            padding-top: 8px;
+        }
+        QGroupBox::title {
+            subcontrol-origin: margin;
+            left: 10px;
+            padding: 0 5px;
+        }
+        QCheckBox,
+        QRadioButton,
+        QLabel {
+            color: @TEXT@;
+        }
+        QMenuBar,
+        QMenu {
+            color: @TEXT@;
+            background: @SURFACE@;
+            border: 1px solid @BORDER@;
+        }
+        QMenuBar::item,
+        QMenu::item {
+            background: transparent;
+            border-radius: 6px;
+            padding: 5px 9px;
+        }
+        QMenuBar::item:selected,
+        QMenu::item:selected {
+            background: @SELECTION@;
+        }
+        QMenu::separator {
+            height: 1px;
+            background: @BORDER@;
+            margin: 4px 8px;
+        }
+        QScrollBar:vertical {
+            background: transparent;
+            width: 10px;
+            margin: 2px;
+        }
+        QScrollBar::handle:vertical {
+            background: @BORDER@;
+            border-radius: 4px;
+            min-height: 28px;
+        }
+        QScrollBar::handle:vertical:hover {
+            background: @MUTED@;
+        }
+        QScrollBar::add-line:vertical,
+        QScrollBar::sub-line:vertical,
+        QScrollBar::add-page:vertical,
+        QScrollBar::sub-page:vertical {
+            background: transparent;
+            border: 0;
+            height: 0;
+        }
+        QSplitter::handle {
+            background: @BORDER@;
+        }
+        QToolTip {
+            color: @TEXT@;
+            background: @SURFACE@;
+            border: 1px solid @BORDER@;
+            padding: 5px;
+        }
+    )QSS");
+    styleSheet.replace(QStringLiteral("@WORKSPACE@"), workspaceBackground);
+    styleSheet.replace(QStringLiteral("@NAVIGATION@"), navigationBackground);
+    styleSheet.replace(QStringLiteral("@SIDEBAR@"), sidebarBackground);
+    styleSheet.replace(QStringLiteral("@SURFACE@"), surfaceBackground);
+    styleSheet.replace(QStringLiteral("@RAISED@"), raisedBackground);
+    styleSheet.replace(QStringLiteral("@BORDER@"), borderColor);
+    styleSheet.replace(QStringLiteral("@TEXT@"), textColor);
+    styleSheet.replace(QStringLiteral("@MUTED@"), mutedTextColor);
+    styleSheet.replace(QStringLiteral("@ACCENT@"), accentColor);
+    styleSheet.replace(QStringLiteral("@SELECTION@"), selectionBackground);
+    setStyleSheet(styleSheet);
+
+    if (auto *sessionTabs = dynamic_cast<SessionTabBar *>(m_titleTabBar)) {
+        sessionTabs->setVisualColors(QColor(QStringLiteral("#aeb6cc")),
+                                     QColor(QStringLiteral("#f8f9fd")),
+                                     QColor(QStringLiteral("#39415d")),
+                                     QColor(QStringLiteral("#424b68")),
+                                     QColor(accentColor));
+    }
+
+    const QColor chromeIconColor(QStringLiteral("#c6ccdc"));
+    const QColor navigationIconColor(mutedTextColor);
+    for (QToolButton *button : std::as_const(m_chromeButtons)) {
+        if (button == nullptr) {
+            continue;
+        }
+        const bool livesInChrome = button->parentWidget() == m_titleChrome;
+        const QColor iconColor = livesInChrome ? chromeIconColor : navigationIconColor;
+        const QString role = button->property("chromeRole").toString();
+        if (role == QStringLiteral("sidebar")) {
+            button->setIcon(UiIcons::symbol(this, UiIcons::Symbol::Sidebar, iconColor));
+        } else if (role == QStringLiteral("newTab")) {
+            button->setIcon(UiIcons::symbol(this, UiIcons::Symbol::Plus, iconColor));
+        } else if (role == QStringLiteral("command")) {
+            button->setIcon(UiIcons::symbol(this, UiIcons::Symbol::Command, iconColor));
+        } else if (role == QStringLiteral("settings")) {
+            button->setIcon(UiIcons::symbol(this, UiIcons::Symbol::Settings, iconColor));
+        }
+        button->setIconSize(QSize(20, 20));
+    }
+
+    const QList<UiIcons::Symbol> navigationSymbols = {
+        UiIcons::Symbol::Hosts,
+        UiIcons::Symbol::Snippets,
+        UiIcons::Symbol::Forwarding};
+    for (int index = 0;
+         index < m_navigationButtons.size() && index < navigationSymbols.size();
+         ++index) {
+        QToolButton *button = m_navigationButtons.at(index);
+        button->setIcon(UiIcons::symbol(this,
+                                        navigationSymbols.at(index),
+                                        navigationIconColor));
+        button->setIconSize(QSize(21, 21));
+    }
+    if (auto *brandBadge = m_navigationRail->findChild<QToolButton *>(
+            QStringLiteral("BrandBadge"))) {
+        brandBadge->setIcon(UiIcons::symbol(this,
+                                            UiIcons::Symbol::Terminal,
+                                            QColor(QStringLiteral("#0f3a2d")),
+                                            QSize(22, 22)));
+        brandBadge->setIconSize(QSize(22, 22));
     }
 }
 

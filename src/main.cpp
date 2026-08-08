@@ -5,8 +5,9 @@
 
 #include <QApplication>
 #include <QCoreApplication>
-#include <QStyleFactory>
 #include <QMessageBox>
+#include <QStyleFactory>
+#include <QUuid>
 
 /**
  * @brief Shellium 图形应用入口。
@@ -21,11 +22,17 @@ int main(int argc, char *argv[])
     QCoreApplication::setApplicationVersion(QStringLiteral("0.1.0"));
     QCoreApplication::setOrganizationName(QStringLiteral("Shellium"));
 
+    // UI 预览模式只供开发和自动化视觉验收使用。最重要的安全边界是：一旦开启就强制
+    // 使用内存数据库，后续即使初始化逻辑发生变化，也不能读取或覆盖用户真实主机、凭据
+    // 与工作区。环境变量比命令行参数更适合 macOS LaunchServices 启动的临时测试 Bundle。
+    const bool uiPreviewMode = qEnvironmentVariableIsSet("SHELLIUM_UI_PREVIEW");
+
     // Fusion 在 macOS 和 Linux 上具有一致的控件尺寸与 Dock 行为，便于当前跨平台 MVP 验证。
     // 后续主题引擎上线后，将由用户设置覆盖该默认样式。
     application.setStyle(QStyleFactory::create(QStringLiteral("Fusion")));
 
-    ApplicationDatabase database;
+    ApplicationDatabase database(uiPreviewMode ? ApplicationDatabase::inMemoryPath()
+                                               : QString{});
     QString databaseError;
     if (!database.initialize(&databaseError)) {
         QMessageBox::critical(nullptr,
@@ -35,15 +42,32 @@ int main(int argc, char *argv[])
     }
 
     CredentialVault credentialVault(database);
-    // 首次启动必须创建主密码，后续启动必须成功解锁。这里不允许取消后继续进入一个看似可用
-    // 但无法读取保存凭据的半初始化界面；用户关闭窗口时直接结束进程，数据库不会被修改。
-    if (!VaultDialog::ensureUnlocked(&credentialVault, nullptr, false)) {
-        return 1;
+    if (uiPreviewMode) {
+        // 一次性随机字符串仅用于让内存保险库进入“已解锁”状态，不是默认主密码，也不会
+        // 写入磁盘。采用随机值而非代码常量可避免维护者误把预览路径复制到生产解锁逻辑。
+        QString previewVaultError;
+        const QString transientPassword = QUuid::createUuid().toString(QUuid::WithoutBraces);
+        if (!credentialVault.initialize(transientPassword, &previewVaultError)) {
+            QMessageBox::critical(nullptr,
+                                  QObject::tr("UI 预览初始化失败"),
+                                  QObject::tr("无法初始化隔离的内存保险库：%1")
+                                      .arg(previewVaultError));
+            return 1;
+        }
+    } else {
+        // 正常模式首次启动必须创建主密码，后续启动必须成功解锁。这里不允许取消后继续进入
+        // 一个看似可用但无法读取保存凭据的半初始化界面；关闭窗口时直接结束且不改数据库。
+        if (!VaultDialog::ensureUnlocked(&credentialVault, nullptr, false)) {
+            return 1;
+        }
     }
 
     // 数据库与保险库服务都由 main() 持有，生命周期覆盖 MainWindow。显式注入保证主机树、
     // 最近连接和凭据解密共享同一份已迁移数据与同一把会话密钥。
     MainWindow window(&database, &credentialVault);
+    if (uiPreviewMode) {
+        window.setWindowTitle(QObject::tr("Shellium · UI Preview"));
+    }
     window.show();
     return application.exec();
 }

@@ -12,15 +12,19 @@ class HostManagerWidget;
 class PortForwardManagerWidget;
 class ProductivityModel;
 class ProductivityWidget;
+struct TerminalSettings;
 class QAction;
-class QDockWidget;
 class QEvent;
 class QLabel;
 class QObject;
 class QPoint;
+class QShowEvent;
+class QStackedWidget;
 class QTabBar;
 class QTabWidget;
 class QTimer;
+class QToolButton;
+class QWidget;
 class TerminalPane;
 class TerminalSettingsService;
 class TerminalWorkspace;
@@ -53,6 +57,14 @@ protected:
      * 否则一个持续输出日志的无人值守终端会让保险库永不自动锁定。
      */
     bool eventFilter(QObject *watched, QEvent *event) override;
+
+    /**
+     * @brief 窗口首次显示后配置 macOS 原生透明标题栏。
+     *
+     * Cocoa 的 NSWindow 在 QWidget 构造阶段还不一定存在，因此必须延迟到 showEvent；配置
+     * 失败时不会改变功能，并会在后续显示事件安全重试。
+     */
+    void showEvent(QShowEvent *event) override;
 
 private:
     /** @brief 打开连接对话框，并在当前标签页的终端中启动 SSH。 */
@@ -110,10 +122,28 @@ private:
     void setWorkspaceTabText(int index, const QString &title);
 
     /**
-     * @brief 显示或隐藏整个左侧停靠区。
-     * @param visible true 表示恢复三个已标签化侧栏，false 表示全部收起。
+     * @brief 显示或隐藏左侧单一内容侧栏。
+     * @param visible true 表示显示当前侧栏页面，false 表示仅保留窄图标导航轨。
      */
     void setSidebarVisible(bool visible);
+
+    /**
+     * @brief 切换左侧侧栏中的功能页面并确保侧栏可见。
+     * @param pageIndex 0 为主机、1 为效率工具、2 为端口转发；越界值会被忽略。
+     *
+     * 页面采用一个 QStackedWidget 而不是多个 Dock。这样导航轨、标题和正文始终共享同一
+     * 对齐体系，窗口缩放时不会出现 Dock 标题条、拖动把手和页签反复挤压终端的问题。
+     */
+    void showSidebarPage(int pageIndex);
+
+    /**
+     * @brief 根据当前设置应用窗口级现代化视觉系统。
+     * @param settings 已规范化的终端设置快照。
+     *
+     * 该方法只负责窗口框架、通用表单和列表的颜色/间距；终端正文仍由 TerminalPane 使用
+     * 自己的终端调色板，避免 QSS 覆盖 ANSI 渲染颜色。
+     */
+    void applyModernAppearance(const TerminalSettings &settings);
 
     /**
      * @brief 在标题栏标签的右键位置打开会话菜单。
@@ -180,6 +210,20 @@ private:
     QTabWidget *m_tabs = nullptr;
     /** @brief 融入窗口标题栏的可交互会话标签，内容与 m_tabs 严格镜像。 */
     QTabBar *m_titleTabBar = nullptr;
+    /** @brief 覆盖 macOS 原生标题区的 52 像素会话导航容器。 */
+    QWidget *m_titleChrome = nullptr;
+    /** @brief 始终保留的窄图标导航轨，负责选择侧栏功能。 */
+    QWidget *m_navigationRail = nullptr;
+    /** @brief 可整体收起的单一侧栏容器。 */
+    QWidget *m_sidebarPanel = nullptr;
+    /** @brief 承载主机、效率工具和端口转发三个互斥页面。 */
+    QStackedWidget *m_sidebarStack = nullptr;
+    /** @brief 当前侧栏页面标题。 */
+    QLabel *m_sidebarTitle = nullptr;
+    /** @brief 导航轨上与三个侧栏页面一一对应的互斥按钮。 */
+    QList<QToolButton *> m_navigationButtons;
+    /** @brief 标题区及导航轨中需要随主题重新着色的图标按钮。 */
+    QList<QToolButton *> m_chromeButtons;
     ApplicationDatabase *m_database = nullptr;
     CredentialVault *m_credentialVault = nullptr;
     HostManagerWidget *m_hostManager = nullptr;
@@ -195,12 +239,12 @@ private:
     /** @brief 顶部会话栏尚未创建时暂存的设置加载警告。 */
     QString m_pendingTransientMessage;
 
-    /** @brief 需要由标题栏左侧按钮整体展开或收起的全部侧栏。 */
-    QList<QDockWidget *> m_sidebarDocks;
     /** @brief 标题栏最左侧的侧栏显隐动作。 */
     QAction *m_sidebarToggleAction = nullptr;
-    /** @brief 批量修改 Dock 可见性时阻止 visibilityChanged 回调反复改写动作状态。 */
-    bool m_updatingSidebarVisibility = false;
+    /** @brief 当前侧栏页索引，用于收起后恢复到用户最后使用的功能。 */
+    int m_activeSidebarPage = 0;
+    /** @brief 防止重复桥接 macOS NSWindow；false 时 showEvent 会继续安全重试。 */
+    bool m_macWindowChromeConfigured = false;
 
     /** @brief 正在连接但尚未认证成功的面板与持久化主机 id。 */
     QHash<TerminalPane *, QString> m_pendingHistoryHosts;
