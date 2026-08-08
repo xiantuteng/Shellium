@@ -51,21 +51,24 @@ TerminalPane::TerminalPane(QWidget *parent)
     m_terminalMetaLabel->setToolTip(tr("当前终端编码和列×行尺寸"));
     m_fileManagerButton->setObjectName(QStringLiteral("terminalFileManagerToggle"));
     m_fileManagerButton->setCheckable(true);
-    m_fileManagerButton->setChecked(true);
+    // 远程文件管理默认收起：多数会话只用终端，一进来就占掉三分之一宽度并立刻发起 SFTP
+    // 连接既浪费空间也浪费一条链路。
+    m_fileManagerButton->setChecked(false);
     m_fileManagerButton->setAutoRaise(true);
-    m_fileManagerButton->setIcon(
-        UiIcons::themed(this, QStringLiteral("folder-remote"), QStyle::SP_DirIcon));
     m_fileManagerButton->setIconSize(QSize(18, 18));
-    m_fileManagerButton->setToolTip(tr("显示或隐藏当前会话的远程文件管理（Ctrl+Shift+F）"));
+    m_fileManagerButton->setToolTip(tr("显示当前会话的远程文件管理（Ctrl+Shift+F）"));
     m_fileManagerButton->setAccessibleName(tr("远程文件管理"));
+    updateFileManagerButtonIcon();
     headerLayout->addWidget(m_headerLabel, 1);
     headerLayout->addWidget(m_terminalMetaLabel);
     headerLayout->addWidget(m_fileManagerButton);
     layout->addWidget(m_headerBar);
     layout->addWidget(m_terminalView, 1);
 
-    connect(m_fileManagerButton, &QToolButton::toggled,
-            this, &TerminalPane::fileManagerVisibilityRequested);
+    connect(m_fileManagerButton, &QToolButton::toggled, this, [this](const bool visible) {
+        updateFileManagerButtonIcon();
+        emit fileManagerVisibilityRequested(visible);
+    });
     connect(m_terminalView,
             &TerminalView::terminalSizeChanged,
             this,
@@ -665,6 +668,11 @@ void TerminalPane::applyTerminalSettings(const TerminalSettings &settings)
             .arg(headerBackground.name(),
                  palette.foreground.name(),
                  palette.selection.name()));
+
+    // 自绘图标的线条色不受样式表 color 影响，必须随主题显式重绘，否则深色配色下会残留
+    // 上一套主题的浅色线条。
+    m_headerIconColor = palette.foreground;
+    updateFileManagerButtonIcon();
 }
 
 void TerminalPane::setFileManagerVisible(const bool visible)
@@ -677,6 +685,18 @@ void TerminalPane::setFileManagerVisible(const bool visible)
         visible
             ? tr("隐藏当前会话的远程文件管理（Ctrl+Shift+F）")
             : tr("显示当前会话的远程文件管理（Ctrl+Shift+F）"));
+    // 阻断 toggled 的同时也阻断了图标刷新，这里必须显式补上。
+    updateFileManagerButtonIcon();
+}
+
+void TerminalPane::updateFileManagerButtonIcon()
+{
+    m_fileManagerButton->setIcon(
+        UiIcons::symbol(this,
+                        m_fileManagerButton->isChecked() ? UiIcons::Symbol::Folder
+                                                          : UiIcons::Symbol::FolderHidden,
+                        m_headerIconColor,
+                        QSize(18, 18)));
 }
 
 bool TerminalPane::scheduleAutomaticReconnect(const ConnectionTarget &target,

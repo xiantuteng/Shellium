@@ -102,6 +102,11 @@ TerminalView::TerminalView(QWidget *parent)
     setAttribute(Qt::WA_InputMethodEnabled, true);
     setUndoRedoEnabled(false);
     setLineWrapMode(QPlainTextEdit::NoWrap);
+    // 终端列数已经按 viewport 宽度算好并通过 SIGWINCH 告知远端，正常渲染内容不会超出
+    // viewport。允许横向滚动条按需出现/消失会改变 viewport 高度，进而触发新一轮
+    // resize→SIGWINCH→重排→滚动条再次切换的死循环，表现为窗口不停上下跳动；关闭横向
+    // 滚动条彻底切断这个反馈环。
+    setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     // 终端中的 Tab 属于 Shell 补全协议，不应切换到右侧文件管理器或工具栏。
     setTabChangesFocus(false);
     setFocusPolicy(Qt::StrongFocus);
@@ -186,6 +191,7 @@ void TerminalView::applySettings(const TerminalSettings &settings)
     terminalFont.setLetterSpacing(QFont::AbsoluteSpacing, normalized.letterSpacing);
     setFont(terminalFont);
 
+    m_basePointSize = normalized.fontPointSize;
     m_lineHeightPercent = normalized.lineHeightPercent;
     m_cursorShape = static_cast<int>(normalized.cursorShape);
     m_cursorColor = terminalPalette.cursor;
@@ -218,6 +224,30 @@ void TerminalView::applySettings(const TerminalSettings &settings)
 
     // 字体或行高变化会改变 PTY 的字符尺寸；主动重新计算，让远端及时收到 SIGWINCH，
     // 而不是必须等用户再拖动一次窗口。
+    recalculateTerminalGeometry();
+}
+
+void TerminalView::zoomFont(const int deltaPoints)
+{
+    QFont terminalFont = font();
+    const int clamped = std::clamp(terminalFont.pointSize() + deltaPoints, 6, 72);
+    if (clamped == terminalFont.pointSize()) {
+        return;
+    }
+    terminalFont.setPointSize(clamped);
+    setFont(terminalFont);
+    m_vtermBridge->render(document());
+    viewport()->update();
+    recalculateTerminalGeometry();
+}
+
+void TerminalView::resetZoom()
+{
+    zoomFont(m_basePointSize - font().pointSize());
+}
+
+void TerminalView::recalculateTerminalGeometry()
+{
     const QFontMetrics metrics(font());
     const int cellWidth = std::max(metrics.horizontalAdvance(QLatin1Char('M')), 1);
     const int baseHeight = std::max(metrics.lineSpacing(), 1);
@@ -447,6 +477,29 @@ void TerminalView::beginLocalLineCapture()
 
 void TerminalView::keyPressEvent(QKeyEvent *event)
 {
+    // macOS 下 Command 映射为 Qt::ControlModifier（hasTerminalControlModifier 顶部注释），
+    // 因此 Cmd+=/Cmd+-/Cmd+0 在这里表现为 ControlModifier 而非 MetaModifier。缩放不产生
+    // 需要发给远端 PTY 的字节，必须在密码本地捕获分支之前拦截，否则会被当作普通字符。
+    if (event->modifiers().testFlag(Qt::ControlModifier)
+        && !event->modifiers().testFlag(Qt::ShiftModifier)
+        && !event->modifiers().testFlag(Qt::AltModifier)) {
+        if (event->key() == Qt::Key_Equal || event->key() == Qt::Key_Plus) {
+            zoomFont(1);
+            event->accept();
+            return;
+        }
+        if (event->key() == Qt::Key_Minus) {
+            zoomFont(-1);
+            event->accept();
+            return;
+        }
+        if (event->key() == Qt::Key_0) {
+            resetZoom();
+            event->accept();
+            return;
+        }
+    }
+
     QByteArray encoded;
     const bool terminalControl = hasTerminalControlModifier(event);
 
@@ -651,15 +704,9 @@ void TerminalView::keyPressEvent(QKeyEvent *event)
 void TerminalView::resizeEvent(QResizeEvent *event)
 {
     QPlainTextEdit::resizeEvent(event);
-    const QFontMetrics metrics(font());
-    const int cellWidth = std::max(metrics.horizontalAdvance(QLatin1Char('M')), 1);
-    const int cellHeight = std::max(metrics.lineSpacing() * m_lineHeightPercent / 100, 1);
     // viewport 排除了滚动条和边框，得到的行列数比直接使用 QWidget::size 更接近实际绘制区域。
-    const int columns = std::max(viewport()->width() / cellWidth, 1);
-    const int rows = std::max(viewport()->height() / cellHeight, 1);
-    m_vtermBridge->resize(rows, columns);
+    recalculateTerminalGeometry();
     m_vtermBridge->render(document());
-    emit terminalSizeChanged(columns, rows);
 }
 
 void TerminalView::paintEvent(QPaintEvent *event)

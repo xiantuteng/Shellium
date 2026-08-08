@@ -3,6 +3,7 @@
 #include "core/ConnectionTarget.h"
 #include "terminal/TerminalEchoFilter.h"
 
+#include <QColor>
 #include <QSet>
 #include <QVector>
 #include <QStringList>
@@ -257,6 +258,17 @@ private:
 
     /** @brief 当前标签专属的远程文件管理显隐按钮，位于状态栏最右侧。 */
     QToolButton *m_fileManagerButton = nullptr;
+
+    /** @brief 状态栏图标线条色，随终端主题更新，供文件管理按钮重绘图标使用。 */
+    QColor m_headerIconColor = QColor(QStringLiteral("#e6e6e6"));
+
+    /**
+     * @brief 按当前显隐状态重绘远程文件管理按钮图标。
+     *
+     * 显示与隐藏必须是两个不同的图形，只靠 checked 底色区分在浅色主题下几乎看不出来，
+     * 用户无法判断点击后会发生什么。
+     */
+    void updateFileManagerButtonIcon();
 
     TerminalView *m_terminalView = nullptr;
     SshSessionStack *m_sessionStack = nullptr;

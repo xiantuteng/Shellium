@@ -42,8 +42,10 @@ signals:
     /**
      * @brief 用户要求连接一条已保存的主机记录。
      * @param hostId 数据库 hosts 表中的稳定主键；接收方应再次 resolveHost，不能信任旧快照。
+     * @param openInNewTab true 表示应在新标签页中连接（双击触发），而不是复用当前标签页。
      */
-    void hostConnectionRequested(const QString &hostId, const ConnectionTarget &sessionTarget);
+    void hostConnectionRequested(const QString &hostId, const ConnectionTarget &sessionTarget,
+                                 bool openInNewTab);
 
 private:
     /** @brief 从数据库递归加载某个分组的直接子节点。 */
@@ -72,7 +74,7 @@ private:
     /** @brief 把全部主机和分组导出为不含凭据的 Shellium JSON。 */
     void exportHosts();
 
-    /** @brief 处理树或最近列表双击，只允许可连接的 Host 节点发出请求。 */
+    /** @brief 处理树或最近列表双击，只允许可连接的 Host 节点发出请求；双击总是新开标签页。 */
     void activateTreeItem(QTreeWidgetItem *item);
     void activateRecentItem(QListWidgetItem *item);
 
@@ -80,9 +82,11 @@ private:
      * @brief 解析持久化主机并发出连接请求。
      * @param hostId 数据库稳定主键。
      * @param sessionTarget 可选的本次会话覆盖值；新建主机时用于携带不落库的临时密码。
+     * @param openInNewTab true 表示应在新标签页中连接。
      */
     void requestConnection(const QString &hostId,
-                           const ConnectionTarget &sessionTarget = ConnectionTarget{});
+                           const ConnectionTarget &sessionTarget = ConnectionTarget{},
+                           bool openInNewTab = false);
 
     /** @brief 返回当前选中节点；没有选择时返回空记录。 */
     [[nodiscard]] std::optional<HostRecord> selectedRecord(QString *errorMessage = nullptr) const;

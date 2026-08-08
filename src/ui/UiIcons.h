@@ -36,12 +36,16 @@ enum class Symbol {
     Forwarding,
     Terminal,
     Folder,
+    /** @brief 带斜杠的文件夹，表示远程文件管理当前处于隐藏状态。 */
+    FolderHidden,
     Plus,
     Search,
     Settings,
     Command,
     Lock,
-    Bell
+    Bell,
+    ChevronLeft,
+    ChevronRight
 };
 
 /**
@@ -132,9 +136,37 @@ enum class Symbol {
         painter.drawPath(folder);
         break;
     }
+    case Symbol::FolderHidden: {
+        // 与 Folder 共用同一条轮廓，额外叠加一道贯穿斜杠。同形加否定符是文件、通知等
+        // 开关类图标的通用表达，用户无需记忆两个互不相关的图形。
+        QPainterPath folder;
+        folder.moveTo(3.0, 7.0);
+        folder.lineTo(3.0, 18.5);
+        folder.quadTo(3.0, 20.5, 5.0, 20.5);
+        folder.lineTo(19.0, 20.5);
+        folder.quadTo(21.0, 20.5, 21.0, 18.5);
+        folder.lineTo(21.0, 8.5);
+        folder.quadTo(21.0, 6.5, 19.0, 6.5);
+        folder.lineTo(12.0, 6.5);
+        folder.lineTo(9.5, 3.8);
+        folder.lineTo(5.0, 3.8);
+        folder.quadTo(3.0, 3.8, 3.0, 5.8);
+        folder.closeSubpath();
+        painter.drawPath(folder);
+        painter.drawLine(QPointF(4.5, 20.5), QPointF(19.5, 3.5));
+        break;
+    }
     case Symbol::Plus:
         painter.drawLine(QPointF(12.0, 4.5), QPointF(12.0, 19.5));
         painter.drawLine(QPointF(4.5, 12.0), QPointF(19.5, 12.0));
+        break;
+    case Symbol::ChevronLeft:
+        painter.drawLine(QPointF(14.5, 5.0), QPointF(8.5, 12.0));
+        painter.drawLine(QPointF(8.5, 12.0), QPointF(14.5, 19.0));
+        break;
+    case Symbol::ChevronRight:
+        painter.drawLine(QPointF(9.5, 5.0), QPointF(15.5, 12.0));
+        painter.drawLine(QPointF(15.5, 12.0), QPointF(9.5, 19.0));
         break;
     case Symbol::Search:
         painter.drawEllipse(QRectF(4.0, 4.0, 11.5, 11.5));

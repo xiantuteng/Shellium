@@ -365,7 +365,7 @@ HostManagerWidget::HostManagerWidget(ApplicationDatabase *database,
     connect(m_tree, &QTreeWidget::itemDoubleClicked,
             this, [this](QTreeWidgetItem *item, const int) { activateTreeItem(item); });
     connect(m_recentList, &QListWidget::itemDoubleClicked,
-            this, &HostManagerWidget::activateRecentItem);
+            this, [this](QListWidgetItem *item) { activateRecentItem(item); });
     connect(m_tree, &QWidget::customContextMenuRequested, this, [this](const QPoint &position) {
         QTreeWidgetItem *item = m_tree->itemAt(position);
         if (item != nullptr) {
@@ -600,7 +600,7 @@ void HostManagerWidget::addHost()
     // 生成；明文仍只取对话框的本次会话副本，不会进入数据库。
     target = record.toConnectionTarget();
     target.password = dialog.sessionPassword();
-    emit hostConnectionRequested(record.id, target);
+    emit hostConnectionRequested(record.id, target, false);
 }
 
 void HostManagerWidget::editSelected()
@@ -819,23 +819,25 @@ void HostManagerWidget::activateTreeItem(QTreeWidgetItem *item)
             != HostNodeKind::Host) {
         return;
     }
-    requestConnection(item->data(0, HostIdRole).toString());
+    // 双击总是开新标签页，与单击选中/右键"连接"复用当前标签页的行为区分开。
+    requestConnection(item->data(0, HostIdRole).toString(), ConnectionTarget{}, true);
 }
 
 void HostManagerWidget::activateRecentItem(QListWidgetItem *item)
 {
     if (item != nullptr) {
-        requestConnection(item->data(RecentHostIdRole).toString());
+        requestConnection(item->data(RecentHostIdRole).toString(), ConnectionTarget{}, true);
     }
 }
 
 void HostManagerWidget::requestConnection(const QString &hostId,
-                                          const ConnectionTarget &sessionTarget)
+                                          const ConnectionTarget &sessionTarget,
+                                          const bool openInNewTab)
 {
     if (sessionTarget.isValid()) {
         // 新建主机后立即连接时，使用对话框产生的会话快照以保留未落库密码；其他字段仍与
         // 刚保存的记录一致。后续从树中连接会重新 resolveHost，获取最新的分组继承结果。
-        emit hostConnectionRequested(hostId, sessionTarget);
+        emit hostConnectionRequested(hostId, sessionTarget, openInNewTab);
         return;
     }
 
@@ -856,7 +858,7 @@ void HostManagerWidget::requestConnection(const QString &hostId,
             return;
         }
     }
-    emit hostConnectionRequested(hostId, target);
+    emit hostConnectionRequested(hostId, target, openInNewTab);
 }
 
 std::optional<HostRecord> HostManagerWidget::selectedRecord(QString *errorMessage) const

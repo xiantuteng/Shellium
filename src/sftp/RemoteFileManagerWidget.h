@@ -220,8 +220,21 @@ private:
     /** @brief 当前标签页连接链的服务器层选择器。 */
     QComboBox *m_targetCombo = nullptr;
 
-    /** @brief 当前标签页独立的自动跟随偏好；手选外层后保持关闭直至用户重新开启。 */
+    /** @brief 服务器选择器所在整行；只有连接链存在两层及以上时才显示。 */
+    QWidget *m_targetRow = nullptr;
+
+    /**
+     * @brief 当前标签页独立的自动跟随偏好；手选外层后保持关闭直至连接链重建。
+     *
+     * 该控件不显示在界面上，仅作为内部状态载体：默认行为固定为跟随最内层。
+     */
     QCheckBox *m_followInnermostCheck = nullptr;
+
+    /** @brief 是否显示本地文件面板；默认关闭，只展示远程文件。 */
+    QToolButton *m_localPanelToggle = nullptr;
+
+    /** @brief 本地文件面板容器；随 m_localPanelToggle 显隐，默认隐藏。 */
+    QWidget *m_localPanel = nullptr;
 
     /** @brief 本地侧当前绝对目录输入框。 */
     QLineEdit *m_localPathEdit = nullptr;

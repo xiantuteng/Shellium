@@ -21,11 +21,11 @@ class QPoint;
 class QResizeEvent;
 class QShowEvent;
 class QStackedWidget;
-class QTabBar;
 class QTabWidget;
 class QTimer;
 class QToolButton;
 class QWidget;
+class SessionTabBar;
 class TerminalPane;
 class TerminalSettingsService;
 class TerminalWorkspace;
@@ -101,8 +101,10 @@ private:
      * @brief 从主机树或最近连接列表连接一条持久化主机记录。
      * @param hostId 数据库稳定主键，用于连接历史与凭据引用。
      * @param sessionTarget 已解析配置；新建主机后首次连接时还可能带进程内临时密码。
+     * @param openInNewTab true 时先新建标签页再连接（双击主机），而不是复用当前标签页。
      */
-    void connectSavedHost(const QString &hostId, const ConnectionTarget &sessionTarget);
+    void connectSavedHost(const QString &hostId, const ConnectionTarget &sessionTarget,
+                          bool openInNewTab = false);
 
     /** @brief 根连接认证成功后写入进行中的成功历史。 */
     void recordConnectionSucceeded(TerminalPane *pane, const ConnectionTarget &target);
@@ -228,7 +230,7 @@ private:
     TerminalWorkspace *m_workspace = nullptr;
     QTabWidget *m_tabs = nullptr;
     /** @brief 融入窗口标题栏的可交互会话标签，内容与 m_tabs 严格镜像。 */
-    QTabBar *m_titleTabBar = nullptr;
+    SessionTabBar *m_titleTabBar = nullptr;
     /** @brief 覆盖 macOS 原生标题区的 52 像素会话导航容器。 */
     QWidget *m_titleChrome = nullptr;
     /** @brief 始终保留的窄图标导航轨，负责选择侧栏功能。 */

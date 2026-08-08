@@ -400,6 +400,24 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     titleLayout->addWidget(sidebarChromeButton);
     m_chromeButtons.append(sidebarChromeButton);
 
+    // 标签滚动箭头分置标签栏两侧，与标签栏、"新建标签"按钮同为标题行的布局项。用布局
+    // 分配空间而不是把按钮浮动叠在标签栏之上，标签再多也不会与"+"互相遮挡。
+    auto *scrollLeftButton = new QToolButton(m_titleChrome);
+    scrollLeftButton->setProperty("chromeButton", true);
+    scrollLeftButton->setProperty("chromeRole", QStringLiteral("scrollLeft"));
+    scrollLeftButton->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    scrollLeftButton->setFixedSize(30, 38);
+    scrollLeftButton->setToolTip(tr("向左滚动标签"));
+    scrollLeftButton->setAccessibleName(tr("向左滚动标签"));
+    // 显隐若改变布局宽度，就会反过来改变标签是否溢出的判定，形成显示→不溢出→隐藏→
+    // 溢出的抖动死循环。保留隐藏时的占位可彻底切断这条反馈路径。
+    QSizePolicy scrollPolicy = scrollLeftButton->sizePolicy();
+    scrollPolicy.setRetainSizeWhenHidden(true);
+    scrollLeftButton->setSizePolicy(scrollPolicy);
+    scrollLeftButton->hide();
+    titleLayout->addWidget(scrollLeftButton);
+    m_chromeButtons.append(scrollLeftButton);
+
     m_titleTabBar = new SessionTabBar(m_titleChrome);
     m_titleTabBar->setObjectName(QStringLiteral("SessionTitleTabs"));
     m_titleTabBar->setContextMenuPolicy(Qt::CustomContextMenu);
@@ -411,6 +429,18 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     m_titleTabBar->setCurrentIndex(m_tabs->currentIndex());
     titleLayout->addWidget(m_titleTabBar, 1);
 
+    auto *scrollRightButton = new QToolButton(m_titleChrome);
+    scrollRightButton->setProperty("chromeButton", true);
+    scrollRightButton->setProperty("chromeRole", QStringLiteral("scrollRight"));
+    scrollRightButton->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    scrollRightButton->setFixedSize(30, 38);
+    scrollRightButton->setToolTip(tr("向右滚动标签"));
+    scrollRightButton->setAccessibleName(tr("向右滚动标签"));
+    scrollRightButton->setSizePolicy(scrollPolicy);
+    scrollRightButton->hide();
+    titleLayout->addWidget(scrollRightButton);
+    m_chromeButtons.append(scrollRightButton);
+
     auto *newTabButton = new QToolButton(m_titleChrome);
     newTabButton->setProperty("chromeButton", true);
     newTabButton->setProperty("chromeRole", QStringLiteral("newTab"));
@@ -420,6 +450,22 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     titleLayout->addWidget(newTabButton);
     m_chromeButtons.append(newTabButton);
 
+    connect(scrollLeftButton, &QToolButton::clicked,
+            m_titleTabBar, &SessionTabBar::scrollTabsLeft);
+    connect(scrollRightButton, &QToolButton::clicked,
+            m_titleTabBar, &SessionTabBar::scrollTabsRight);
+    connect(m_titleTabBar,
+            &SessionTabBar::scrollStateChanged,
+            this,
+            [scrollLeftButton, scrollRightButton](const bool scrollable,
+                                                  const bool canScrollLeft,
+                                                  const bool canScrollRight) {
+                scrollLeftButton->setVisible(scrollable);
+                scrollRightButton->setVisible(scrollable);
+                scrollLeftButton->setEnabled(canScrollLeft);
+                scrollRightButton->setEnabled(canScrollRight);
+            });
+
     m_transientMessageLabel = new QLabel(m_titleChrome);
     m_transientMessageLabel->setObjectName(QStringLiteral("TitleTransientMessage"));
     m_transientMessageLabel->setMinimumWidth(0);
@@ -428,34 +474,25 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     m_transientMessageLabel->setVisible(false);
     titleLayout->addWidget(m_transientMessageLabel);
 
-    auto *commandButton = new QToolButton(m_titleChrome);
-    commandButton->setProperty("chromeButton", true);
+    // 命令面板与设置属于全局工具，归入导航轨底部；标题行因此只保留与当前会话直接相关
+    // 的标签、滚动和新建入口，符合"上方是内容域、下方是全局工具"的稳定空间模型。
+    auto *commandButton = new QToolButton(m_navigationRail);
+    commandButton->setProperty("navButton", true);
     commandButton->setProperty("chromeRole", QStringLiteral("command"));
     commandButton->setDefaultAction(commandPaletteAction);
     commandButton->setToolButtonStyle(Qt::ToolButtonIconOnly);
-    commandButton->setFixedSize(38, 38);
-    titleLayout->addWidget(commandButton);
+    commandButton->setFixedSize(44, 44);
+    railLayout->addWidget(commandButton, 0, Qt::AlignHCenter);
     m_chromeButtons.append(commandButton);
 
-    auto *settingsButton = new QToolButton(m_titleChrome);
-    settingsButton->setProperty("chromeButton", true);
+    auto *settingsButton = new QToolButton(m_navigationRail);
+    settingsButton->setProperty("navButton", true);
     settingsButton->setProperty("chromeRole", QStringLiteral("settings"));
     settingsButton->setDefaultAction(settingsAction);
     settingsButton->setToolButtonStyle(Qt::ToolButtonIconOnly);
-    settingsButton->setFixedSize(38, 38);
-    titleLayout->addWidget(settingsButton);
+    settingsButton->setFixedSize(44, 44);
+    railLayout->addWidget(settingsButton, 0, Qt::AlignHCenter);
     m_chromeButtons.append(settingsButton);
-
-    // 导航轨底部重复提供设置入口，符合“上方是内容域、下方是全局工具”的稳定空间模型。
-    // 两个按钮共享同一个 QAction，因此快捷键、启用状态和命令面板始终只有一份状态源。
-    auto *railSettingsButton = new QToolButton(m_navigationRail);
-    railSettingsButton->setProperty("navButton", true);
-    railSettingsButton->setProperty("chromeRole", QStringLiteral("settings"));
-    railSettingsButton->setDefaultAction(settingsAction);
-    railSettingsButton->setToolButtonStyle(Qt::ToolButtonIconOnly);
-    railSettingsButton->setFixedSize(44, 44);
-    railLayout->addWidget(railSettingsButton, 0, Qt::AlignHCenter);
-    m_chromeButtons.append(railSettingsButton);
 
     QMenu *connectionMenu = menuBar()->addMenu(tr("连接"));
     connectionMenu->addAction(connectAction);
@@ -948,6 +985,18 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
         QToolButton[chromeButton="true"]:pressed {
             background: rgba(255, 255, 255, 34);
         }
+        QToolButton[chromeRole="scrollLeft"]:hover,
+        QToolButton[chromeRole="scrollRight"]:hover {
+            background: #3a4260;
+        }
+        QToolButton[chromeRole="scrollLeft"]:pressed,
+        QToolButton[chromeRole="scrollRight"]:pressed {
+            background: #464f70;
+        }
+        QToolButton[chromeRole="scrollLeft"]:disabled,
+        QToolButton[chromeRole="scrollRight"]:disabled {
+            background: transparent;
+        }
         QToolButton[navButton="true"] {
             background: transparent;
             border: 0;
@@ -1226,6 +1275,10 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
             button->setIcon(UiIcons::symbol(this, UiIcons::Symbol::Sidebar, iconColor));
         } else if (role == QStringLiteral("newTab")) {
             button->setIcon(UiIcons::symbol(this, UiIcons::Symbol::Plus, iconColor));
+        } else if (role == QStringLiteral("scrollLeft")) {
+            button->setIcon(UiIcons::symbol(this, UiIcons::Symbol::ChevronLeft, iconColor));
+        } else if (role == QStringLiteral("scrollRight")) {
+            button->setIcon(UiIcons::symbol(this, UiIcons::Symbol::ChevronRight, iconColor));
         } else if (role == QStringLiteral("command")) {
             button->setIcon(UiIcons::symbol(this, UiIcons::Symbol::Command, iconColor));
         } else if (role == QStringLiteral("settings")) {
@@ -1381,11 +1434,21 @@ void MainWindow::connectNestedFromCurrentPane()
 }
 
 void MainWindow::connectSavedHost(const QString &hostId,
-                                  const ConnectionTarget &sessionTarget)
+                                  const ConnectionTarget &sessionTarget,
+                                  const bool openInNewTab)
 {
-    TerminalWorkspace *workspace = activeWorkspace();
+    if (!sessionTarget.isValid()) {
+        return;
+    }
+    TerminalWorkspace *workspace = openInNewTab
+        ? createWorkspaceTab(sessionTarget.displayName.isEmpty() ? sessionTarget.host
+                                                                  : sessionTarget.displayName)
+        : activeWorkspace();
+    if (openInNewTab && workspace != nullptr) {
+        m_tabs->setCurrentWidget(workspace);
+    }
     TerminalPane *pane = workspace == nullptr ? nullptr : workspace->activePane();
-    if (pane == nullptr || !sessionTarget.isValid()) {
+    if (pane == nullptr) {
         return;
     }
 

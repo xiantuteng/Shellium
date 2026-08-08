@@ -262,6 +262,25 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME ShelliumProductivityTests COMMAND ShelliumProductivityTests)
 
+    # 标题栏标签控件测试需要真实的 QTabBar 布局与窗口曝光，因此依赖 Qt6::Widgets 和
+    # 平台 GUI；macOS 上还需要 Objective-C++ 的原生标题栏桥接。
+    qt_add_executable(ShelliumSessionTabBarTests
+        tests/SessionTabBarTest.cpp
+        src/ui/SessionTabBar.cpp
+        src/ui/SessionTabBar.h
+    )
+    target_include_directories(ShelliumSessionTabBarTests PRIVATE src)
+    target_link_libraries(ShelliumSessionTabBarTests PRIVATE
+        Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test)
+    if(APPLE)
+        target_sources(ShelliumSessionTabBarTests PRIVATE
+            src/ui/MacWindowChrome.h
+            src/ui/MacWindowChrome.mm
+        )
+        target_link_libraries(ShelliumSessionTabBarTests PRIVATE "-framework AppKit")
+    endif()
+    add_test(NAME ShelliumSessionTabBarTests COMMAND ShelliumSessionTabBarTests)
+
     # 保活判定同样是内联纯逻辑，不需要 libssh 会话即可覆盖。独立成目标而不是并进
     # ShelliumCoreTests：一个可执行文件只能有一个 main，共用 main 还会让按名过滤测试时
     # 另一套报 "Unknown test function" 并返回非零，破坏单独复现某个用例的工作流。

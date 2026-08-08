@@ -3,8 +3,11 @@
 #include <QColor>
 #include <QTabBar>
 
+class QAbstractButton;
 class QMouseEvent;
 class QPaintEvent;
+class QResizeEvent;
+class QWidget;
 
 /**
  * @brief 用于窗口标题区的胶囊式会话标签栏。
@@ -15,6 +18,8 @@ class QPaintEvent;
  * 紧凑标题栏体验。控件不持有任何终端对象，标签生命周期仍由 MainWindow 统一管理。
  */
 class SessionTabBar final : public QTabBar {
+    Q_OBJECT
+
 public:
     /**
      * @brief 创建标题栏会话标签控件。
@@ -39,7 +44,49 @@ public:
                          const QColor &selectedColor,
                          const QColor &accentColor);
 
+    /**
+     * @brief 向左滚动一格标签。
+     *
+     * QTabBar 的滚动偏移量是私有实现细节，无法直接读写。本方法转而驱动 QTabBar 自带的
+     * 内置滚动按钮，从而完整复用 Qt 已验证的滚动、边界和动画行为；内置按钮本身被移出
+     * 可视区域，由标题栏中左右分置的外部按钮代为呈现。
+     */
+    void scrollTabsLeft();
+
+    /** @brief 向右滚动一格标签；实现方式与 scrollTabsLeft 相同。 */
+    void scrollTabsRight();
+
+signals:
+    /**
+     * @brief 标签是否溢出、以及两端是否还能继续滚动发生变化。
+     * @param scrollable 标签总宽度超过可视宽度，需要显示外部滚动按钮。
+     * @param canScrollLeft 左侧仍有被遮挡的标签。
+     * @param canScrollRight 右侧仍有被遮挡的标签。
+     *
+     * 只在状态真正变化时发出。外部按钮必须使用 retainSizeWhenHidden，否则显隐会改变
+     * 标签栏可用宽度，反过来又改变溢出判定，形成与终端滚动条同类的抖动死循环。
+     */
+    void scrollStateChanged(bool scrollable, bool canScrollLeft, bool canScrollRight);
+
 protected:
+    /** @brief 尺寸变化后重新同步滚动状态。 */
+    void resizeEvent(QResizeEvent *event) override;
+
+    /** @brief 标签增删后重新同步滚动状态。 */
+    void tabLayoutChange() override;
+
+    /**
+     * @brief 监视内置滚动按钮的可用性与显隐变化。
+     * @param watched 事件来源，只处理两个内置滚动按钮。
+     * @param event 当前事件。
+     * @return 始终交还给基类继续处理，本过滤器只做观察。
+     *
+     * QTabBar 完成一次滚动后只更新内置按钮的 enabled 状态并重绘，并不会调用
+     * tabLayoutChange()。仅依赖布局回调会让外部箭头停留在滚动前的可用状态——向右滚动
+     * 之后左箭头依旧是灰的，用户再也回不去。
+     */
+    bool eventFilter(QObject *watched, QEvent *event) override;
+
     /** @brief 返回包含胶囊留白和按需关闭按钮空间的标签建议尺寸。 */
     QSize tabSizeHint(int index) const override;
 
@@ -79,6 +126,23 @@ private:
      * @return 相对于标签栏的关闭按钮矩形。
      */
     [[nodiscard]] QRect closeButtonRect(int index) const;
+
+    /** @brief 把内置滚动按钮移出可视区域，并在状态变化时发出 scrollStateChanged。 */
+    void syncScrollButtons();
+
+    /**
+     * @brief QTabBar 自带的左右滚动按钮，由 Qt 在构造时创建并全权管理生命周期。
+     *
+     * 通过 Qt 固定的对象名查找；查不到时两者保持为空，外部滚动按钮相应保持隐藏，
+     * 标签栏退化为 Qt 默认行为而不会崩溃。
+     */
+    QAbstractButton *m_internalScrollLeft = nullptr;
+    QAbstractButton *m_internalScrollRight = nullptr;
+
+    /** @brief 最近一次发出的滚动状态，用于抑制重复信号并避免布局递归。 */
+    bool m_scrollable = false;
+    bool m_canScrollLeft = false;
+    bool m_canScrollRight = false;
 
     /** @brief 当前鼠标悬停标签；-1 表示鼠标不位于任何标签。 */
     int m_hoveredIndex = -1;

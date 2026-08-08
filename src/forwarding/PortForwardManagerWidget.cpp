@@ -216,10 +216,8 @@ PortForwardManagerWidget::PortForwardManagerWidget(ApplicationDatabase *database
     m_ruleTable->verticalHeader()->setVisible(false);
     m_ruleTable->verticalHeader()->setDefaultSectionSize(34);
     m_ruleTable->setContextMenuPolicy(Qt::CustomContextMenu);
-    m_ruleTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
-    for (int column = 1; column < m_ruleTable->columnCount(); ++column) {
-        m_ruleTable->horizontalHeader()->setSectionResizeMode(column,
-                                                              QHeaderView::ResizeToContents);
+    for (int column = 0; column < m_ruleTable->columnCount(); ++column) {
+        m_ruleTable->horizontalHeader()->setSectionResizeMode(column, QHeaderView::Stretch);
     }
     // 该控件固定在窄侧栏中，主列表只保留“名称 / 类型 / 状态”。监听与目标地址、自动启动
     // 和流量仍保存在数据模型中，并可通过编辑对话框或右键操作查看，避免七列压成不可读。
@@ -227,6 +225,10 @@ PortForwardManagerWidget::PortForwardManagerWidget(ApplicationDatabase *database
     m_ruleTable->setColumnHidden(3, true);
     m_ruleTable->setColumnHidden(4, true);
     m_ruleTable->setColumnHidden(6, true);
+    // 三个可见列全部使用 Stretch 均分宽度，永远填满而不超出侧栏；空间不够时靠自动换行
+    // 显示完整内容，而不是像 ResizeToContents 那样把列撑宽触发横向滚动条。
+    m_ruleTable->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_ruleTable->setWordWrap(true);
     layout->addWidget(m_ruleTable, 1);
 
     auto *buttons = new QHBoxLayout;
@@ -521,6 +523,9 @@ void PortForwardManagerWidget::reloadRules()
         activeConnections += statistics.activeConnections;
         totalTraffic += traffic;
     }
+    // Stretch 列宽会随侧栏宽度收窄，长文本改用换行而不是隐藏在横向滚动条后面，因此每次
+    // 重新填充数据后都要按新内容重算行高。
+    m_ruleTable->resizeRowsToContents();
     m_summaryLabel->setText(
         tr("%1 条规则，%2 条活动连接，累计流量 %3；%4")
             .arg(rules.size())

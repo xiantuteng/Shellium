@@ -2,12 +2,15 @@
 
 #include "ui/MacWindowChrome.h"
 
+#include <QAbstractButton>
 #include <QEvent>
 #include <QFontMetrics>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPaintEvent>
+#include <QResizeEvent>
 #include <QStyleOptionTab>
+#include <QWidget>
 #include <QWindow>
 
 #include <algorithm>
@@ -20,6 +23,18 @@ constexpr int kMinimumTabWidth = 132;
 constexpr int kMaximumTabWidth = 238;
 /** @brief 胶囊标签固定高度；标题区上下各保留 5 像素呼吸空间。 */
 constexpr int kTabHeight = 42;
+
+/**
+ * @brief QTabBar 内置滚动按钮的固定对象名，自 Qt 4 起保持稳定。
+ *
+ * Qt 未公开滚动偏移量的读写接口，但为这两个按钮设置了稳定对象名；借助它们即可在不
+ * 复制 QTabBar 私有布局逻辑的前提下把滚动动作交给外部按钮触发。
+ */
+const char *const kInternalScrollLeftName = "ScrollLeftButton";
+const char *const kInternalScrollRightName = "ScrollRightButton";
+
+/** @brief 内置滚动按钮移出可视区域后的横坐标；子控件会被父控件裁剪而不可见。 */
+constexpr int kHiddenScrollButtonX = -400;
 
 } // namespace
 
@@ -38,6 +53,69 @@ SessionTabBar::SessionTabBar(QWidget *parent)
     setIconSize(QSize(18, 18));
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     setFixedHeight(kTabHeight);
+
+    // 内置滚动按钮必须保留：它们持有 QTabBar 唯一可用的滚动入口。这里只把它们移出可视
+    // 区域，改由标题栏中左右分置的外部按钮转发点击。
+    m_internalScrollLeft = findChild<QAbstractButton *>(
+        QLatin1String(kInternalScrollLeftName));
+    m_internalScrollRight = findChild<QAbstractButton *>(
+        QLatin1String(kInternalScrollRightName));
+    if (m_internalScrollLeft != nullptr && m_internalScrollRight != nullptr) {
+        m_internalScrollLeft->installEventFilter(this);
+        m_internalScrollRight->installEventFilter(this);
+    }
+    syncScrollButtons();
+}
+
+bool SessionTabBar::eventFilter(QObject *watched, QEvent *event)
+{
+    if ((watched == m_internalScrollLeft || watched == m_internalScrollRight)
+        && (event->type() == QEvent::EnabledChange
+            || event->type() == QEvent::Show
+            || event->type() == QEvent::Hide)) {
+        syncScrollButtons();
+    }
+    return QTabBar::eventFilter(watched, event);
+}
+
+void SessionTabBar::scrollTabsLeft()
+{
+    if (m_internalScrollLeft != nullptr && m_internalScrollLeft->isEnabled()) {
+        m_internalScrollLeft->click();
+    }
+}
+
+void SessionTabBar::scrollTabsRight()
+{
+    if (m_internalScrollRight != nullptr && m_internalScrollRight->isEnabled()) {
+        m_internalScrollRight->click();
+    }
+}
+
+void SessionTabBar::syncScrollButtons()
+{
+    if (m_internalScrollLeft == nullptr || m_internalScrollRight == nullptr) {
+        return;
+    }
+    // QTabBar 每次重新布局都会把两个按钮摆回右下角，因此每次布局后都要重新移开。
+    m_internalScrollLeft->move(kHiddenScrollButtonX, 0);
+    m_internalScrollRight->move(kHiddenScrollButtonX, 0);
+
+    // Qt 用可见性表达"标签是否溢出"，用可用性表达"该方向是否还有内容"。
+    const bool scrollable = !m_internalScrollLeft->isHidden();
+    const bool canScrollLeft = scrollable && m_internalScrollLeft->isEnabled();
+    const bool canScrollRight = scrollable && m_internalScrollRight->isEnabled();
+    if (scrollable == m_scrollable
+        && canScrollLeft == m_canScrollLeft
+        && canScrollRight == m_canScrollRight) {
+        // 布局在窗口缩放期间会被反复触发；只在状态真正变化时通知外部，避免无谓的重绘，
+        // 也避免外部按钮反复更新再反过来触发本控件重新布局。
+        return;
+    }
+    m_scrollable = scrollable;
+    m_canScrollLeft = canScrollLeft;
+    m_canScrollRight = canScrollRight;
+    emit scrollStateChanged(scrollable, canScrollLeft, canScrollRight);
 }
 
 void SessionTabBar::setVisualColors(const QColor &textColor,
@@ -52,6 +130,18 @@ void SessionTabBar::setVisualColors(const QColor &textColor,
     m_selectedColor = selectedColor;
     m_accentColor = accentColor;
     update();
+}
+
+void SessionTabBar::resizeEvent(QResizeEvent *event)
+{
+    QTabBar::resizeEvent(event);
+    syncScrollButtons();
+}
+
+void SessionTabBar::tabLayoutChange()
+{
+    QTabBar::tabLayoutChange();
+    syncScrollButtons();
 }
 
 QSize SessionTabBar::tabSizeHint(const int index) const
@@ -111,7 +201,9 @@ void SessionTabBar::paintEvent(QPaintEvent *event)
                                 2.2);
         }
 
-        const bool showCloseButton = selected || hovered;
+        // 关闭按钮只在鼠标悬停的标签上出现。当前标签常驻显示关闭图标既是持续的误点风险，
+        // 也让标题栏在静止时显得杂乱；标签宽度已按含关闭按钮预留，出现与否不会挤动文字。
+        const bool showCloseButton = hovered;
         const int textRight = showCloseButton ? closeButtonRect(index).left() - 7
                                               : rawRect.right() - 13;
         const QRect textRect(rawRect.left() + 42,
@@ -200,9 +292,11 @@ void SessionTabBar::leaveEvent(QEvent *event)
 void SessionTabBar::mouseReleaseEvent(QMouseEvent *event)
 {
     const int index = tabAt(event->position().toPoint());
+    // 命中判定必须与绘制条件一致：只有正在悬停、因而真正画出了关闭图标的标签才可点击
+    // 关闭，否则当前标签右端会残留一块看不见却能关掉会话的热区。
     if (event->button() == Qt::LeftButton
         && index >= 0
-        && (index == currentIndex() || index == m_hoveredIndex)
+        && index == m_hoveredIndex
         && closeButtonRect(index).contains(event->position().toPoint())) {
         event->accept();
         emit tabCloseRequested(index);

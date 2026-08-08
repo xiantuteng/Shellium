@@ -16,6 +16,7 @@ namespace {
 
 /** @brief 设置表中键名前缀，集中定义可避免保存和加载使用不同拼写。 */
 const QString kThemeKey = QStringLiteral("appearance/theme");
+const QString kColorSchemeKey = QStringLiteral("appearance/color_scheme");
 const QString kFontFamilyKey = QStringLiteral("terminal/font_family");
 const QString kFontSizeKey = QStringLiteral("terminal/font_size");
 const QString kLineHeightKey = QStringLiteral("terminal/line_height_percent");
@@ -55,6 +56,46 @@ std::optional<ThemeMode> parseTheme(const QString &value)
     }
     if (normalized == QLatin1String("dark")) {
         return ThemeMode::Dark;
+    }
+    return std::nullopt;
+}
+
+/** @brief 把终端配色风格序列化为不受本地化影响的稳定字符串。 */
+QString serializeColorScheme(const TerminalColorScheme scheme)
+{
+    switch (scheme) {
+    case TerminalColorScheme::SolarizedDark:
+        return QStringLiteral("solarized_dark");
+    case TerminalColorScheme::Dracula:
+        return QStringLiteral("dracula");
+    case TerminalColorScheme::Monokai:
+        return QStringLiteral("monokai");
+    case TerminalColorScheme::Nord:
+        return QStringLiteral("nord");
+    case TerminalColorScheme::Default:
+    default:
+        return QStringLiteral("default");
+    }
+}
+
+/** @brief 解析终端配色风格字符串；未知值返回空，调用方据此回退默认值并报告警告。 */
+std::optional<TerminalColorScheme> parseColorScheme(const QString &value)
+{
+    const QString normalized = value.trimmed().toLower();
+    if (normalized == QLatin1String("default")) {
+        return TerminalColorScheme::Default;
+    }
+    if (normalized == QLatin1String("solarized_dark")) {
+        return TerminalColorScheme::SolarizedDark;
+    }
+    if (normalized == QLatin1String("dracula")) {
+        return TerminalColorScheme::Dracula;
+    }
+    if (normalized == QLatin1String("monokai")) {
+        return TerminalColorScheme::Monokai;
+    }
+    if (normalized == QLatin1String("nord")) {
+        return TerminalColorScheme::Nord;
     }
     return std::nullopt;
 }
@@ -274,6 +315,46 @@ ThemeMode TerminalSettings::effectiveThemeMode() const
 
 TerminalPalette TerminalSettings::effectivePalette() const
 {
+    // 除 Default 外的配色风格都是固定搭配好的一整套主题（对应主流终端模拟器的同名预设），
+    // 不再随浅色/深色切换而改变，因此在这里直接短路，不看 effectiveThemeMode()。
+    switch (colorScheme) {
+    case TerminalColorScheme::SolarizedDark:
+        return {
+            QColor(QStringLiteral("#002b36")),
+            QColor(QStringLiteral("#839496")),
+            QColor(QStringLiteral("#d33682")),
+            QColor(QStringLiteral("#073642")),
+            QColor(QStringLiteral("#268bd2")),
+        };
+    case TerminalColorScheme::Dracula:
+        return {
+            QColor(QStringLiteral("#282a36")),
+            QColor(QStringLiteral("#f8f8f2")),
+            QColor(QStringLiteral("#ff79c6")),
+            QColor(QStringLiteral("#44475a")),
+            QColor(QStringLiteral("#8be9fd")),
+        };
+    case TerminalColorScheme::Monokai:
+        return {
+            QColor(QStringLiteral("#272822")),
+            QColor(QStringLiteral("#f8f8f2")),
+            QColor(QStringLiteral("#f92672")),
+            QColor(QStringLiteral("#49483e")),
+            QColor(QStringLiteral("#66d9ef")),
+        };
+    case TerminalColorScheme::Nord:
+        return {
+            QColor(QStringLiteral("#2e3440")),
+            QColor(QStringLiteral("#d8dee9")),
+            QColor(QStringLiteral("#88c0d0")),
+            QColor(QStringLiteral("#434c5e")),
+            QColor(QStringLiteral("#81a1c1")),
+        };
+    case TerminalColorScheme::Default:
+    default:
+        break;
+    }
+
     if (effectiveThemeMode() == ThemeMode::Dark) {
         return {
             QColor(QStringLiteral("#111318")),
@@ -295,6 +376,7 @@ TerminalPalette TerminalSettings::effectivePalette() const
 bool TerminalSettings::operator==(const TerminalSettings &other) const
 {
     return themeMode == other.themeMode
+        && colorScheme == other.colorScheme
         && fontFamily == other.fontFamily
         && fontPointSize == other.fontPointSize
         && lineHeightPercent == other.lineHeightPercent
@@ -399,6 +481,19 @@ bool TerminalSettingsService::load(QString *errorMessage)
         return false;
     }
 
+    if (const std::optional<QString> raw = readValue(kColorSchemeKey, &queryFailed);
+        raw.has_value() && !queryFailed) {
+        const std::optional<TerminalColorScheme> parsed = parseColorScheme(*raw);
+        if (parsed.has_value()) {
+            loaded.colorScheme = *parsed;
+        } else {
+            warnings.append(tr("未知终端配色“%1”，已恢复默认配色").arg(*raw));
+        }
+    }
+    if (queryFailed) {
+        return false;
+    }
+
     if (const std::optional<QString> raw = readValue(kFontFamilyKey, &queryFailed);
         raw.has_value() && !queryFailed) {
         loaded.fontFamily = *raw;
@@ -497,6 +592,7 @@ bool TerminalSettingsService::save(const TerminalSettings &settings, QString *er
                 return m_database->setSetting(key, value, transactionError);
             };
             if (!write(kThemeKey, serializeTheme(normalizedSettings.themeMode))
+                || !write(kColorSchemeKey, serializeColorScheme(normalizedSettings.colorScheme))
                 || !write(kFontFamilyKey, normalizedSettings.fontFamily)
                 || !write(kFontSizeKey, QString::number(normalizedSettings.fontPointSize))
                 || !write(kLineHeightKey, QString::number(normalizedSettings.lineHeightPercent))

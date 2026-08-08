@@ -303,6 +303,7 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     : QWidget(parent)
     , m_targetCombo(new QComboBox(this))
     , m_followInnermostCheck(new QCheckBox(tr("自动跟随最内层"), this))
+    , m_localPanelToggle(new QToolButton(this))
     , m_localPathEdit(new QLineEdit(QDir::homePath(), this))
     , m_localModel(new QFileSystemModel(this))
     , m_localTree(new LocalDropTree(this))
@@ -320,17 +321,42 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     mainLayout->setContentsMargins(10, 10, 10, 8);
     mainLayout->setSpacing(8);
 
-    auto *serverRow = new QHBoxLayout;
-    serverRow->addWidget(new QLabel(tr("服务器："), this));
-    serverRow->addWidget(m_targetCombo, 1);
+    // 服务器选择器只在存在嵌套连接链时才有意义：单层会话里它永远只有一项，占着一整行
+    // 却不提供任何选择。整行打包成容器统一显隐，避免只隐藏下拉框留下孤立的标签文字。
+    m_targetRow = new QWidget(this);
+    auto *targetRowLayout = new QHBoxLayout(m_targetRow);
+    targetRowLayout->setContentsMargins(0, 0, 0, 0);
+    targetRowLayout->setSpacing(6);
+    targetRowLayout->addWidget(new QLabel(tr("服务器："), m_targetRow));
+    targetRowLayout->addWidget(m_targetCombo, 1);
+    m_targetRow->setVisible(false);
+
+    // 自动跟随最内层是唯一合理的默认行为，不再作为可见选项占用顶部空间；它退化为内部
+    // 状态：用户一旦在下拉框里手动选择外层，这里会自动置否，避免后续刷新把人抢回内层。
     m_followInnermostCheck->setChecked(true);
-    m_followInnermostCheck->setToolTip(
-        tr("开启后自动切换到连接链的最新内层；手动选择外层会自动关闭。"));
-    serverRow->addWidget(m_followInnermostCheck);
+    m_followInnermostCheck->setVisible(false);
+
+    auto *serverRow = new QHBoxLayout;
+    // 默认只展示远程文件，减少初次打开时的信息量；需要在本机和远端之间拖放时再手动
+    // 打开本地面板。
+    m_localPanelToggle->setCheckable(true);
+    m_localPanelToggle->setChecked(false);
+    m_localPanelToggle->setAutoRaise(true);
+    m_localPanelToggle->setIconSize(QSize(18, 18));
+    m_localPanelToggle->setIcon(
+        UiIcons::themed(this, QStringLiteral("user-home"), QStyle::SP_DirHomeIcon));
+    m_localPanelToggle->setToolTip(tr("显示本地文件面板，用于本机与远程之间的拖放传输"));
+    m_localPanelToggle->setAccessibleName(tr("本地文件"));
+    // 本地文件开关固定在最左侧，与它控制的左侧面板同侧；服务器选择器随后填充剩余宽度。
+    // 末尾的弹簧只在选择器隐藏时生效，保证开关不会因为单层会话而漂移到行中间。
+    serverRow->addWidget(m_localPanelToggle);
+    serverRow->addWidget(m_targetRow, 1);
+    serverRow->addStretch(0);
     mainLayout->addLayout(serverRow);
 
     auto *contentSplitter = new QSplitter(Qt::Horizontal, this);
-    auto *localPanel = new QWidget(contentSplitter);
+    m_localPanel = new QWidget(contentSplitter);
+    auto *localPanel = m_localPanel;
     auto *localLayout = new QVBoxLayout(localPanel);
     localLayout->setContentsMargins(0, 0, 0, 0);
     localLayout->setSpacing(4);
@@ -419,6 +445,9 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     contentSplitter->setStretchFactor(1, 1);
     contentSplitter->setSizes({420, 520});
     mainLayout->addWidget(contentSplitter, 1);
+
+    m_localPanel->setVisible(false);
+    connect(m_localPanelToggle, &QToolButton::toggled, m_localPanel, &QWidget::setVisible);
 
     auto *operationRow = new QHBoxLayout;
     operationRow->setSpacing(5);
@@ -953,6 +982,10 @@ void RemoteFileManagerWidget::setAvailableTargets(const QList<ConnectionTarget> 
             m_sessionSecrets.insert(target.stableKey(), target.password);
         }
     }
+
+    // 只有真正存在嵌套连接链时，"第 N 层"才是一个需要用户做的选择；单层会话下拉框永远
+    // 只有一项，显示它只会让顶部多出一行噪声。
+    m_targetRow->setVisible(m_targets.size() > 1);
 
     m_targetCombo->blockSignals(true);
     m_targetCombo->clear();

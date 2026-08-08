@@ -25,6 +25,7 @@ SettingsDialog::SettingsDialog(TerminalSettingsService *service, QWidget *parent
     , m_originalSettings(service == nullptr ? TerminalSettings{}.normalized()
                                             : service->currentSettings())
     , m_themeCombo(new QComboBox(this))
+    , m_colorSchemeCombo(new QComboBox(this))
     , m_fontCombo(new QFontComboBox(this))
     , m_fontSizeSpin(new QSpinBox(this))
     , m_lineHeightSpin(new QSpinBox(this))
@@ -56,6 +57,18 @@ SettingsDialog::SettingsDialog(TerminalSettingsService *service, QWidget *parent
     m_themeCombo->addItem(tr("浅色"), static_cast<int>(ThemeMode::Light));
     m_themeCombo->addItem(tr("深色"), static_cast<int>(ThemeMode::Dark));
 
+    m_colorSchemeCombo->setObjectName(QStringLiteral("colorSchemeCombo"));
+    m_colorSchemeCombo->addItem(tr("默认（跟随主题）"),
+                                static_cast<int>(TerminalColorScheme::Default));
+    m_colorSchemeCombo->addItem(QStringLiteral("Solarized Dark"),
+                                static_cast<int>(TerminalColorScheme::SolarizedDark));
+    m_colorSchemeCombo->addItem(QStringLiteral("Dracula"),
+                                static_cast<int>(TerminalColorScheme::Dracula));
+    m_colorSchemeCombo->addItem(QStringLiteral("Monokai"),
+                                static_cast<int>(TerminalColorScheme::Monokai));
+    m_colorSchemeCombo->addItem(QStringLiteral("Nord"),
+                                static_cast<int>(TerminalColorScheme::Nord));
+
     m_fontCombo->setObjectName(QStringLiteral("terminalFontCombo"));
     m_fontCombo->setFontFilters(QFontComboBox::MonospacedFonts);
     m_fontSizeSpin->setObjectName(QStringLiteral("terminalFontSizeSpin"));
@@ -80,6 +93,7 @@ SettingsDialog::SettingsDialog(TerminalSettingsService *service, QWidget *parent
         tr("减小该值会立即丢弃超过上限的最旧历史；已经丢弃的内容无法恢复。"));
 
     appearanceForm->addRow(tr("主题："), m_themeCombo);
+    appearanceForm->addRow(tr("终端配色："), m_colorSchemeCombo);
     appearanceForm->addRow(tr("等宽字体："), m_fontCombo);
     appearanceForm->addRow(tr("字号："), m_fontSizeSpin);
     appearanceForm->addRow(tr("行高："), m_lineHeightSpin);
@@ -172,6 +186,7 @@ SettingsDialog::SettingsDialog(TerminalSettingsService *service, QWidget *parent
         connect(control, signal, this, SLOT(previewChanges()));
     };
     connectPreview(m_themeCombo, SIGNAL(currentIndexChanged(int)));
+    connectPreview(m_colorSchemeCombo, SIGNAL(currentIndexChanged(int)));
     connectPreview(m_fontCombo, SIGNAL(currentFontChanged(QFont)));
     connectPreview(m_fontSizeSpin, SIGNAL(valueChanged(int)));
     connectPreview(m_lineHeightSpin, SIGNAL(valueChanged(int)));
@@ -200,6 +215,8 @@ TerminalSettings SettingsDialog::editedSettings() const
 {
     TerminalSettings settings;
     settings.themeMode = static_cast<ThemeMode>(m_themeCombo->currentData().toInt());
+    settings.colorScheme =
+        static_cast<TerminalColorScheme>(m_colorSchemeCombo->currentData().toInt());
     settings.fontFamily = m_fontCombo->currentFont().family();
     settings.fontPointSize = m_fontSizeSpin->value();
     settings.lineHeightPercent = m_lineHeightSpin->value();
@@ -242,6 +259,8 @@ void SettingsDialog::populateControls(const TerminalSettings &settings)
     m_populating = true;
     const TerminalSettings normalized = settings.normalized();
     m_themeCombo->setCurrentIndex(m_themeCombo->findData(static_cast<int>(normalized.themeMode)));
+    m_colorSchemeCombo->setCurrentIndex(
+        m_colorSchemeCombo->findData(static_cast<int>(normalized.colorScheme)));
 
     const QFont font = normalized.fontFamily.isEmpty()
         ? QFontDatabase::systemFont(QFontDatabase::FixedFont)

@@ -105,6 +105,15 @@ public:
     void applySettings(const TerminalSettings &settings);
 
     /**
+     * @brief 按快捷键临时放大/缩小终端字号，不写回持久化设置。
+     * @param deltaPoints 字号变化量，正数放大、负数缩小；结果夹在 6~72pt 之间。
+     */
+    void zoomFont(int deltaPoints);
+
+    /** @brief 把字号重置为最近一次 applySettings 配置的基准值。 */
+    void resetZoom();
+
+    /**
      * @brief 在当前终端文档中查找文本并选中命中项。
      * @param text 非空查找文本。
      * @param backward true 表示向前查找，false 表示向后查找。
@@ -273,4 +282,10 @@ private:
 
     /** @brief 当前行高百分比，用于把像素高度换算成准确 PTY 行数。 */
     int m_lineHeightPercent = 100;
+
+    /** @brief 最近一次 applySettings 中配置的基准字号，Cmd+0 重置缩放时回到该值。 */
+    int m_basePointSize = 13;
+
+    /** @brief 依据当前 viewport 尺寸重算列/行数并通知远端 PTY，缩放和 resizeEvent 共用。 */
+    void recalculateTerminalGeometry();
 };

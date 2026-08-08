@@ -18,8 +18,8 @@ TerminalWorkspace::TerminalWorkspace(QWidget *parent)
     pageLayout->setSpacing(0);
     pageLayout->addWidget(m_pageSplitter);
 
-    // 终端在左、文件管理在右。分隔器只负责两者的宽度比例，由 Qt 原生分隔条处理拖动和
-    // 窗口缩放。
+    // 终端在左、文件管理在右，两者并排分屏；文件管理器打开或关闭只改变自身的显隐和
+    // 分隔器占宽，终端会话始终保持可见，不会被文件管理器盖住。
     m_pageSplitter->insertWidget(0, m_pane);
     m_pane->setMinimumWidth(360);
     m_fileManager->setMinimumWidth(420);
@@ -64,6 +64,8 @@ TerminalWorkspace::TerminalWorkspace(QWidget *parent)
                 &RemoteFileManagerWidget::requestUploadToCurrentDirectory);
     }
 
+    // 默认收起远程文件管理，终端独占整个标签页宽度；用户按需展开后该标签会记住选择。
+    setFileManagerVisible(false);
     synchronizeFileManager(false);
 }
 

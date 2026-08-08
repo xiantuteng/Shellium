@@ -35,6 +35,20 @@ enum class ThemeMode {
 };
 
 /**
+ * @brief 终端配色风格。
+ *
+ * Default 沿用 ThemeMode 解析出的浅色/深色两套内置配色；其余选项各自是一套固定配色，
+ * 不再随浅色/深色主题切换而改变，效果与主流终端模拟器的预设主题一致。
+ */
+enum class TerminalColorScheme {
+    Default,
+    SolarizedDark,
+    Dracula,
+    Monokai,
+    Nord
+};
+
+/**
  * @brief 一套终端主题使用的关键颜色。
  *
  * 颜色集中为值对象是为了让终端、设置预览和应用级 QPalette 使用同一来源，避免多个控件
@@ -56,8 +70,11 @@ struct TerminalPalette {
  * 负数滚动缓冲或异常大的内存占用。
  */
 struct TerminalSettings {
-    /** @brief 主题选择，默认跟随操作系统。 */
-    ThemeMode themeMode = ThemeMode::FollowSystem;
+    /** @brief 主题选择，默认深色，与大多数终端模拟器的开箱体验一致。 */
+    ThemeMode themeMode = ThemeMode::Dark;
+
+    /** @brief 终端配色风格，默认使用 ThemeMode 对应的内置浅色/深色配色。 */
+    TerminalColorScheme colorScheme = TerminalColorScheme::Default;
 
     /** @brief 等宽字体族；空字符串表示使用 Qt 平台默认等宽字体。 */
     QString fontFamily;
@@ -142,6 +159,7 @@ struct TerminalSettings {
 
 Q_DECLARE_METATYPE(TerminalSettings)
 Q_DECLARE_METATYPE(ThemeMode)
+Q_DECLARE_METATYPE(TerminalColorScheme)
 
 /**
  * @brief 负责加载、校验、原子保存并广播终端设置的应用级服务。

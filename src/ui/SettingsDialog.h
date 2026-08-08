@@ -57,6 +57,8 @@ private:
     bool m_populating = false;
 
     QComboBox *m_themeCombo = nullptr;
+    /** @brief 终端配色风格选择；Default 之外的选项各自是一套固定的内置预设主题。 */
+    QComboBox *m_colorSchemeCombo = nullptr;
     QFontComboBox *m_fontCombo = nullptr;
     QSpinBox *m_fontSizeSpin = nullptr;
     QSpinBox *m_lineHeightSpin = nullptr;
