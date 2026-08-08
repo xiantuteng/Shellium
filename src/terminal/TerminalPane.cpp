@@ -4,6 +4,8 @@
 #include "ssh/SshCommandParser.h"
 #include "ssh/SshSessionStack.h"
 #include "ssh/SshTunnelBroker.h"
+#include "settings/TerminalSettings.h"
+#include "storage/ApplicationDatabase.h"
 #include "terminal/LocalShellWorker.h"
 #include "terminal/TerminalView.h"
 
@@ -14,6 +16,7 @@
 #include <QTimer>
 #include <QVBoxLayout>
 
+#include <algorithm>
 #include <utility>
 
 namespace {
@@ -37,11 +40,10 @@ TerminalPane::TerminalPane(QWidget *parent)
     layout->addWidget(m_terminalView, 1);
 
     connect(m_terminalView, &TerminalView::inputBytes, this, [this](const QByteArray &bytes) {
-        if (m_sessionStack != nullptr && m_sessionStack->isRunning()) {
-            m_sessionStack->enqueueInput(bytes);
-        } else if (m_localWorker != nullptr && m_localWorker->isRunning()) {
-            m_localWorker->enqueueInput(bytes);
-        }
+        // 先广播源输入，再写本终端；上层把相同字节送给其他面板时调用 sendInputBytes，后者
+        // 不再次发信号，因此不会形成 A→B→A 的循环广播。
+        emit broadcastSourceInput(this, bytes);
+        sendInputBytes(bytes);
     });
     connect(m_terminalView,
             &TerminalView::commandSubmitted,
@@ -134,12 +136,18 @@ TerminalPane::TerminalPane(QWidget *parent)
 
 void TerminalPane::openLocalShell(const QString &shellPath)
 {
+    // 用户主动打开本地终端或重连次数耗尽都终止恢复周期；递增令牌可让尚在事件队列中的
+    // 旧重连 lambda 只退出而不覆盖新本地 Shell。
+    m_reconnectCycleActive = false;
+    m_reconnectAttempts = 0;
+    ++m_reconnectToken;
     // 主动打开本地终端代表开始新会话；递增代次后，旧 SSH 已排队的断开回调无法再触发
     // 自动回退，从而不会重复创建本地 zsh。
     const quint64 sessionGeneration = ++m_sessionGeneration;
     stopWorker();
     m_ownedTargets.clear();
     m_inferredTargets.clear();
+    refreshCommandCompletions();
     m_echoFilter.reset();
     m_shellReady = false;
     // 切换成本地 Shell 后当前终端不再具备远程目标，立即通知所属标签页清空自己的文件
@@ -215,6 +223,12 @@ void TerminalPane::connectToHost(const ConnectionTarget &target)
     if (!target.isValid()) {
         return;
     }
+    if (!m_automaticReconnectInvocation) {
+        // 菜单、主机树或工作区发起的新连接代表用户改变意图，必须取消旧异常恢复周期。
+        m_reconnectCycleActive = false;
+        m_reconnectAttempts = 0;
+        ++m_reconnectToken;
+    }
     // 在停止旧工作线程前先推进代次，保证旧线程随后发出的 shellDisconnected 被识别为
     // 过期事件，不能中断这次新连接。
     const quint64 sessionGeneration = ++m_sessionGeneration;
@@ -223,6 +237,7 @@ void TerminalPane::connectToHost(const ConnectionTarget &target)
     m_shellReady = false;
     m_ownedTargets.clear();
     m_inferredTargets.clear();
+    refreshCommandCompletions();
     // 旧会话登记的期望串永远不会再出现；继续持有只会让新会话的第一段输出被误扣。
     m_echoFilter.reset();
     // 新 SSH 尚未完成主机校验和认证，此时先让所属标签页清空旧 SFTP 内容；shellConnected
@@ -250,8 +265,13 @@ void TerminalPane::connectToHost(const ConnectionTarget &target)
         }
         m_shellReady = true;
         m_remoteSessionEstablished = true;
+        // 一旦重连真正完成认证，本轮故障已经恢复；后续再次异常断线应获得全新的尝试额度。
+        m_reconnectCycleActive = false;
+        m_reconnectAttempts = 0;
+        ++m_reconnectToken;
         m_headerLabel->setText(target.connectionSpecifier());
         emit statusMessage(tr("已连接 %1").arg(target.connectionSpecifier()));
+        emit rootConnectionSucceeded(target);
         // 这里刻意不发 targetsChanged：此刻 m_ownedTargets 仍为空，发出去会让文件管理器
         // 先清空再被紧随其后的 layersChanged 重新填充，用户能看到一次闪烁。栈保证
         // layersChanged 紧跟在 shellConnected 之后到达，由它统一通知即可。
@@ -272,6 +292,7 @@ void TerminalPane::connectToHost(const ConnectionTarget &target)
         m_pendingNestedCredentialTargetId.clear();
         m_captureNextLineAsCredential = false;
         refreshHeaderLabel();
+        refreshCommandCompletions();
         emit targetsChanged(this);
 
 
@@ -286,6 +307,20 @@ void TerminalPane::connectToHost(const ConnectionTarget &target)
         // 脚本正文走独立 exec 通道，不经过终端；交互式 Shell 里只会出现这条极短的 source
         // 命令，登记后由过滤器扣掉，用户什么也看不到。
         m_echoFilter.expect(ShellShim::sourceCommand(path));
+    });
+    connect(m_sessionStack,
+            &SshSessionStack::shellIntegrationFailed,
+            this,
+            [this, sessionGeneration](const ConnectionTarget &failedTarget,
+                                      const QString &message) {
+        if (sessionGeneration != m_sessionGeneration) {
+            return;
+        }
+        // Shell 集成失败不会中断 SSH；清楚告知已进入降级识别，避免用户把后续推测层当成
+        // 已由程序认证的确定层。完整原因保留在状态消息中，便于定位权限或 Shell 兼容问题。
+        emit statusMessage(
+            tr("%1 的 Shell 集成未启用，嵌套识别已降级：%2")
+                .arg(failedTarget.connectionSpecifier(), message));
     });
     connect(m_sessionStack,
             &SshSessionStack::layerCredentialRequired,
@@ -344,16 +379,42 @@ void TerminalPane::connectToHost(const ConnectionTarget &target)
     connect(m_sessionStack,
             &SshSessionStack::connectionError,
             this,
-            [this, sessionGeneration](const QString &message) {
+            [this, target, sessionGeneration](const QString &message) {
         if (sessionGeneration != m_sessionGeneration) {
             return;
         }
+        const bool wasEstablished = m_remoteSessionEstablished;
         m_shellReady = false;
         m_remoteSessionEstablished = false;
         m_headerLabel->setText(tr("连接失败"));
         m_terminalView->appendTerminalOutput((QStringLiteral("\n") + message
                                               + QLatin1Char('\n')).toUtf8());
         emit statusMessage(message);
+        if (wasEstablished) {
+            // 运行期写失败不会再触发 shellDisconnected，但已成功历史仍必须补齐结束时间，
+            // 端口转发也必须解绑；用 -1 结构化表示网络异常，不伪造远端退出码。
+            emit targetsChanged(this);
+            emit rootConnectionDisconnected(target, -1);
+            if (m_automaticReconnectEnabled && m_reconnectMaxAttempts > 0) {
+                m_reconnectCycleActive = true;
+                m_reconnectAttempts = 0;
+                if (scheduleAutomaticReconnect(target, sessionGeneration)) {
+                    return;
+                }
+            }
+            QTimer::singleShot(0, this, [this, sessionGeneration]() {
+                if (sessionGeneration == m_sessionGeneration
+                    && !m_remoteSessionEstablished) {
+                    openLocalShell();
+                }
+            });
+            return;
+        }
+
+        emit rootConnectionFailed(target, message);
+        if (m_reconnectCycleActive) {
+            scheduleAutomaticReconnect(target, sessionGeneration);
+        }
     });
     connect(m_sessionStack,
             &SshSessionStack::legacyHmacRequired,
@@ -386,12 +447,13 @@ void TerminalPane::connectToHost(const ConnectionTarget &target)
             m_terminalView->appendTerminalOutput(
                 (QStringLiteral("\n") + message + QLatin1Char('\n')).toUtf8());
             emit statusMessage(message);
+            emit rootConnectionFailed(target, message);
         }
     });
     connect(m_sessionStack,
             &SshSessionStack::shellDisconnected,
             this,
-            [this, sessionGeneration](const int exitStatus) {
+            [this, target, sessionGeneration](const int exitStatus) {
         if (sessionGeneration != m_sessionGeneration || !m_remoteSessionEstablished) {
             // 主动切换会话会先递增 generation 并清除 established；此类旧断开事件不能再
             // 修改标题、文件管理目标或启动额外的本地 Shell。
@@ -400,13 +462,25 @@ void TerminalPane::connectToHost(const ConnectionTarget &target)
 
         m_remoteSessionEstablished = false;
         m_shellReady = false;
-        const QString message = tr("SSH 连接已结束（退出状态 %1），正在退回本地 zsh")
-                                    .arg(exitStatus);
+        const bool shouldReconnect = exitStatus == -1 && m_automaticReconnectEnabled
+            && m_reconnectMaxAttempts > 0;
+        const QString message = shouldReconnect
+            ? tr("SSH 连接因网络异常中断，准备自动重连")
+            : tr("SSH 连接已结束（退出状态 %1），正在退回本地 zsh").arg(exitStatus);
         m_headerLabel->setText(message);
         m_terminalView->appendTerminalOutput((QStringLiteral("\r\n") + message
                                               + QStringLiteral("\r\n")).toUtf8());
         emit statusMessage(message);
         emit targetsChanged(this);
+        emit rootConnectionDisconnected(target, exitStatus);
+
+        if (shouldReconnect) {
+            m_reconnectCycleActive = true;
+            m_reconnectAttempts = 0;
+            if (scheduleAutomaticReconnect(target, sessionGeneration)) {
+                return;
+            }
+        }
 
         // shellDisconnected 在工作线程 run() 返回前发出。延迟到下一轮事件循环后再停止并
         // 销毁旧 worker，可避免 GUI 线程在信号处理期间等待尚未完成的发射栈。
@@ -491,6 +565,7 @@ void TerminalPane::refreshHeaderLabel()
     m_headerLabel->setText(inferred
                                ? tr("%1（推测）").arg(target.connectionSpecifier())
                                : target.connectionSpecifier());
+    refreshCommandCompletions();
 }
 
 bool TerminalPane::isConnected() const
@@ -503,8 +578,194 @@ void TerminalPane::focusTerminal()
     m_terminalView->setFocus(Qt::OtherFocusReason);
 }
 
+SshSessionStack *TerminalPane::forwardingSessionStack() const
+{
+    // 断线处理先把 m_shellReady 清为 false，再通知上层。这里若按“可交互”过滤，管理器在
+    // rootConnectionDisconnected 中只能拿到 nullptr，无法识别并删除绑定旧栈的 Runtime。
+    // QObject 在 stopWorker 完成前仍有效，按身份返回它正是清理生命周期所需的语义。
+    return m_sessionStack;
+}
+
+void TerminalPane::setCommandHistoryDatabase(ApplicationDatabase *database)
+{
+    m_commandHistoryDatabase = database;
+    refreshCommandCompletions();
+}
+
+void TerminalPane::applyTerminalSettings(const TerminalSettings &settings)
+{
+    const TerminalSettings normalized = settings.normalized();
+    m_automaticReconnectEnabled = normalized.automaticReconnect;
+    m_reconnectMaxAttempts = normalized.reconnectMaxAttempts;
+    m_reconnectBaseDelaySeconds = normalized.reconnectBaseDelaySeconds;
+    if ((!m_automaticReconnectEnabled || m_reconnectMaxAttempts == 0)
+        && m_reconnectCycleActive) {
+        // 设置对话框可实时关闭自动重连。取消令牌后，已经安排但尚未触发的任务不会再连接；
+        // 当前终端保持断开状态，用户可明确选择本地 Shell 或其他主机。
+        m_reconnectCycleActive = false;
+        m_reconnectAttempts = 0;
+        ++m_reconnectToken;
+    }
+    m_terminalView->applySettings(normalized);
+    const TerminalPalette palette = normalized.effectivePalette();
+
+    // 标题栏沿用主题配色但略微向窗口色混合，以与终端正文形成层次；动态属性写法比固定
+    // 深色样式更容易在设置预览时即时更新，也不会覆盖标题文本本身。
+    const QColor headerBackground = normalized.effectiveThemeMode() == ThemeMode::Dark
+        ? palette.background.lighter(145)
+        : palette.background.darker(108);
+    m_headerLabel->setStyleSheet(
+        QStringLiteral("QLabel { background: %1; color: %2; font-weight: 600; }")
+            .arg(headerBackground.name(), palette.foreground.name()));
+}
+
+bool TerminalPane::scheduleAutomaticReconnect(const ConnectionTarget &target,
+                                              const quint64 sessionGeneration)
+{
+    if (!m_reconnectCycleActive || !m_automaticReconnectEnabled
+        || m_reconnectMaxAttempts <= 0) {
+        return false;
+    }
+    if (m_reconnectAttempts >= m_reconnectMaxAttempts) {
+        m_reconnectCycleActive = false;
+        const QString exhausted = tr("自动重连已达到 %1 次上限，正在退回本地 zsh")
+                                      .arg(m_reconnectMaxAttempts);
+        m_headerLabel->setText(exhausted);
+        m_terminalView->appendTerminalOutput(
+            (QStringLiteral("\r\n") + exhausted + QStringLiteral("\r\n")).toUtf8());
+        emit statusMessage(exhausted);
+        QTimer::singleShot(0, this, [this, sessionGeneration]() {
+            if (sessionGeneration == m_sessionGeneration && !m_remoteSessionEstablished) {
+                openLocalShell();
+            }
+        });
+        return false;
+    }
+
+    ++m_reconnectAttempts;
+    const int attempt = m_reconnectAttempts;
+    // 最大 10 次时位移仍在 int 安全范围；最终再封顶 60 秒，网络长期故障时不会高频刷服务器。
+    const int exponentialDelay = m_reconnectBaseDelaySeconds * (1 << (attempt - 1));
+    const int delaySeconds = std::min(exponentialDelay, 60);
+    const quint64 reconnectToken = m_reconnectToken;
+    const QString waiting = tr("将在 %1 秒后自动重连 %2（第 %3/%4 次）")
+                                .arg(delaySeconds)
+                                .arg(target.connectionSpecifier())
+                                .arg(attempt)
+                                .arg(m_reconnectMaxAttempts);
+    m_headerLabel->setText(waiting);
+    emit statusMessage(waiting);
+
+    QTimer::singleShot(delaySeconds * 1000,
+                       this,
+                       [this, target, sessionGeneration, reconnectToken, attempt]() {
+        if (!m_reconnectCycleActive || reconnectToken != m_reconnectToken
+            || sessionGeneration != m_sessionGeneration || m_remoteSessionEstablished) {
+            return;
+        }
+        emit automaticReconnectStarted(target, attempt, m_reconnectMaxAttempts);
+        // 该标志只覆盖同步的 connectToHost 设置阶段；真正网络连接随后异步运行。这样内部调用
+        // 不会清空恢复次数，而用户从菜单发起的新连接仍会取消本周期。
+        m_automaticReconnectInvocation = true;
+        connectToHost(target);
+        m_automaticReconnectInvocation = false;
+    });
+    return true;
+}
+
+bool TerminalPane::findTerminalText(const QString &text, const bool backward)
+{
+    return m_terminalView->findTerminalText(text, backward);
+}
+
+QString TerminalPane::terminalPlainText() const
+{
+    return m_terminalView->terminalPlainText();
+}
+
+void TerminalPane::sendInputBytes(const QByteArray &bytes)
+{
+    if (bytes.isEmpty()) {
+        return;
+    }
+    if (m_sessionStack != nullptr && m_sessionStack->isRunning()) {
+        m_sessionStack->enqueueInput(bytes);
+    } else if (m_localWorker != nullptr && m_localWorker->isRunning()) {
+        m_localWorker->enqueueInput(bytes);
+    }
+}
+
+void TerminalPane::executeCommand(const QString &command)
+{
+    if (!m_shellReady || command.trimmed().isEmpty()) {
+        emit statusMessage(tr("当前终端尚未就绪，无法执行命令"));
+        return;
+    }
+    m_terminalView->submitCommand(command);
+}
+
+void TerminalPane::recordSubmittedCommand(const QString &command)
+{
+    if (m_commandHistoryDatabase == nullptr || command.trimmed().isEmpty()
+        || command == QStringLiteral("Ctrl-D") || command.front().isSpace()) {
+        // 以空白开头时尊重常见 Shell 的 HISTCONTROL=ignorespace 约定。用户通常用这一路径
+        // 执行带令牌的临时命令，本应用不应把 Shell 刻意忽略的秘密重新写入自己的数据库。
+        return;
+    }
+
+    CommandHistoryEntry entry;
+    const ConnectionTarget target = activeTarget();
+    entry.hostId = target.isValid() ? target.id : QString();
+    entry.command = command.trimmed();
+    QString error;
+    if (!m_commandHistoryDatabase->appendCommandHistory(entry, &error).has_value()) {
+        emit statusMessage(tr("写入命令历史失败：%1").arg(error));
+        return;
+    }
+    emit commandHistoryChanged(entry.hostId);
+    refreshCommandCompletions();
+}
+
+void TerminalPane::refreshCommandCompletions()
+{
+    if (m_commandHistoryDatabase == nullptr) {
+        m_terminalView->setCommandCompletions({});
+        return;
+    }
+    const ConnectionTarget target = activeTarget();
+    const QString hostId = target.isValid() ? target.id : QString();
+    bool ok = false;
+    QString error;
+    const QList<CommandHistoryEntry> history = m_commandHistoryDatabase->recentCommands(
+        hostId, 500, &ok, &error);
+    if (!ok) {
+        m_terminalView->setCommandCompletions({});
+        emit statusMessage(tr("读取命令历史失败：%1").arg(error));
+        return;
+    }
+
+    QStringList candidates;
+    QSet<QString> seen;
+    for (const CommandHistoryEntry &entry : history) {
+        if (entry.command.isEmpty() || seen.contains(entry.command)) {
+            continue;
+        }
+        seen.insert(entry.command);
+        candidates.append(entry.command);
+    }
+    m_terminalView->setCommandCompletions(candidates);
+}
+
 void TerminalPane::inspectSubmittedCommand(const QString &command)
 {
+    const bool isNestedCredential = m_captureNextLineAsCredential
+        && !m_pendingNestedCredentialTargetId.isEmpty();
+    if (!isNestedCredential) {
+        // 必须在解析 ssh/exit 改变连接链之前记录：命令属于用户按下回车时所在的服务器，
+        // 而不是命令执行后可能进入的新服务器。
+        recordSubmittedCommand(command);
+    }
+
     if (m_ownedTargets.isEmpty()) {
         return;
     }
@@ -572,6 +833,7 @@ void TerminalPane::inspectSubmittedCommand(const QString &command)
         }
         nestedTarget.interactiveAuthenticationPending = true;
         m_inferredTargets.append(nestedTarget);
+        refreshCommandCompletions();
         m_pendingNestedCredentialTargetId = nestedTarget.id;
         m_headerLabel->setText(tr("%1（嵌套目标）").arg(nestedTarget.connectionSpecifier()));
         emit statusMessage(tr("已识别嵌套 SSH 目标：%1").arg(nestedTarget.connectionSpecifier()));
@@ -789,7 +1051,11 @@ void TerminalPane::stopWorker()
     if (m_sessionStack == nullptr) {
         return;
     }
+    // PortForwardRuntime 的网络线程可能正在等待 openRootForwardSocket。先置停止标志，
+    // 让栈线程尽快中止并唤醒等待者；随后在对象仍有效时同步通知上层关闭所有运行时。
+    // 不能只依赖 QObject::destroyed 的事后通知，否则 Runtime 可能继续解引用失效的栈。
     m_sessionStack->requestStop();
+    emit forwardingSessionAboutToClose(m_sessionStack);
     if (!m_sessionStack->wait(3000)) {
         // libssh 连接阶段受 15 秒超时保护。这里不调用 QThread::terminate，因为异步终止可能
         // 让 libssh 在持锁状态下泄漏；工作线程会在网络调用返回后自行退出并被 deleteLater。

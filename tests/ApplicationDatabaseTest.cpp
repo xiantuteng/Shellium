@@ -1,6 +1,8 @@
 #include "core/HostRecord.h"
 #include "storage/ApplicationDatabase.h"
 
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QSqlDatabase>
 #include <QSqlError>
 #include <QSqlQuery>
@@ -48,6 +50,9 @@ private slots:
     /** @brief 凭据只接受密文与元数据，缺少密文或算法标识必须被拒绝。 */
     void credentialRejectsPlaintextAndRoundTripsMetadata();
 
+    /** @brief 保险库公开配置必须完整往返，并把“未初始化”与“配置损坏”严格区分。 */
+    void vaultConfigurationDistinguishesUninitializedFromCorrupt();
+
     /** @brief 连接历史按时间倒序返回，补录断开时间会算出时长。 */
     void connectionHistoryOrdersByRecencyAndComputesDuration();
 
@@ -56,6 +61,9 @@ private slots:
 
     /** @brief 设置项的类型化读取要区分“未设置”和“值已损坏”。 */
     void typedSettingsDistinguishUnsetFromCorrupt();
+
+    /** @brief 工作区布局必须校验 JSON、稳定往返并按更新时间排序。 */
+    void workspaceRoundTripValidatesJsonAndOrdersByUpdateTime();
 
     /** @brief 事务中任一步失败，之前的写入必须全部回滚。 */
     void failedTransactionRollsBackEarlierWrites();
@@ -398,11 +406,14 @@ void ApplicationDatabaseTest::credentialRejectsPlaintextAndRoundTripsMetadata()
     record.name = QStringLiteral("生产 root");
     record.type = CredentialType::PrivateKey;
     // 密文含 0x00 字节，用来验证走的是 BLOB 而不是会被截断的字符串通道。
-    record.encryptedPayload = QByteArrayLiteral("\x01\x00\x02\xff" "ciphertext");
-    record.cipher = QStringLiteral("xchacha20-poly1305");
-    record.nonce = QByteArrayLiteral("\x10\x00\x11nonce");
-    record.kdfAlgorithm = QStringLiteral("argon2id");
-    record.kdfSalt = QByteArrayLiteral("\x20\x00salt");
+    record.encryptedPayload = QByteArray(16, '\x5a') + QByteArrayLiteral("ciphertext");
+    record.encryptedPayload[1] = '\0';
+    record.cipher = QStringLiteral("xchacha20-poly1305-v1");
+    record.nonce = QByteArray(24, '\x10');
+    record.nonce[1] = '\0';
+    record.kdfAlgorithm = QStringLiteral("argon2id13");
+    record.kdfSalt = QByteArray(16, '\x20');
+    record.kdfSalt[1] = '\0';
     record.kdfIterations = 4;
     record.kdfMemoryKib = 262144;
     record.kdfParallelism = 1;
@@ -429,6 +440,49 @@ void ApplicationDatabaseTest::credentialRejectsPlaintextAndRoundTripsMetadata()
     QVERIFY2(m_database->removeCredential(record.id, &removed, &error), qPrintable(error));
     QCOMPARE(removed, 1);
     QVERIFY(m_database->listCredentials(&ok, &error).isEmpty());
+}
+
+void ApplicationDatabaseTest::vaultConfigurationDistinguishesUninitializedFromCorrupt()
+{
+    QString error = QStringLiteral("哨兵");
+    const std::optional<VaultConfiguration> missing = m_database->vaultConfiguration(&error);
+    QVERIFY(!missing.has_value());
+    // 没有配置是正常的首次启动状态，不能覆盖调用方已有错误缓冲。
+    QCOMPARE(error, QStringLiteral("哨兵"));
+
+    VaultConfiguration incomplete;
+    incomplete.kdfAlgorithm = QStringLiteral("argon2id13");
+    error.clear();
+    QVERIFY(!m_database->saveVaultConfiguration(incomplete, &error));
+    QVERIFY2(!error.isEmpty(), "缺少盐值和校验块的配置被写入数据库");
+
+    VaultConfiguration configuration;
+    configuration.formatVersion = 1;
+    configuration.kdfAlgorithm = QStringLiteral("argon2id13");
+    configuration.salt = QByteArray(16, '\x31');
+    configuration.verifier = QByteArray(40, '\x42');
+    const QDateTime created = QDateTime::fromString(QStringLiteral("2026-08-08T01:02:03.004Z"),
+                                                    Qt::ISODateWithMs);
+    configuration.createdAt = created;
+    configuration.updatedAt = created;
+    error.clear();
+    QVERIFY2(m_database->saveVaultConfiguration(configuration, &error), qPrintable(error));
+
+    const std::optional<VaultConfiguration> loaded = m_database->vaultConfiguration(&error);
+    QVERIFY2(loaded.has_value(), qPrintable(error));
+    QCOMPARE(loaded->formatVersion, 1);
+    QCOMPARE(loaded->kdfAlgorithm, configuration.kdfAlgorithm);
+    QCOMPARE(loaded->salt, configuration.salt);
+    QCOMPARE(loaded->verifier, configuration.verifier);
+    QCOMPARE(loaded->createdAt, created);
+
+    // 模拟磁盘截断产生的空校验块：必须报告损坏，不能退回“未初始化”创建流程。
+    QSqlQuery corrupt(m_database->connection());
+    QVERIFY2(corrupt.exec(QStringLiteral("UPDATE vault_metadata SET verifier = X'' WHERE id = 1")),
+             qPrintable(corrupt.lastError().text()));
+    error.clear();
+    QVERIFY(!m_database->vaultConfiguration(&error).has_value());
+    QVERIFY2(!error.isEmpty(), "损坏的保险库配置没有返回错误原因");
 }
 
 void ApplicationDatabaseTest::connectionHistoryOrdersByRecencyAndComputesDuration()
@@ -588,6 +642,55 @@ void ApplicationDatabaseTest::typedSettingsDistinguishUnsetFromCorrupt()
     QVERIFY(!m_database->setting(QStringLiteral("ui/theme"), &error).has_value());
 }
 
+void ApplicationDatabaseTest::workspaceRoundTripValidatesJsonAndOrdersByUpdateTime()
+{
+    QString error;
+    WorkspaceRecord invalid;
+    invalid.id = QStringLiteral("invalid");
+    invalid.name = QStringLiteral("损坏布局");
+    invalid.layoutJson = QStringLiteral("{not-json");
+    QVERIFY(!m_database->saveWorkspace(invalid, &error));
+    QVERIFY2(!error.isEmpty(), "非法工作区 JSON 被持久化了");
+
+    WorkspaceRecord older;
+    older.id = QStringLiteral("workspace-old");
+    older.name = QStringLiteral("日常运维");
+    older.layoutJson = QStringLiteral(
+        R"({"version":1,"tabs":[{"title":"数据库","hostId":"host-db","filesVisible":true}]})");
+    older.updatedAt = QDateTime::fromString(QStringLiteral("2026-08-01T01:02:03.000Z"),
+                                            Qt::ISODateWithMs);
+    error.clear();
+    QVERIFY2(m_database->saveWorkspace(older, &error), qPrintable(error));
+
+    WorkspaceRecord newer;
+    newer.id = QStringLiteral("workspace-new");
+    newer.name = QStringLiteral("故障排查");
+    newer.layoutJson = QStringLiteral(
+        R"({"version":1,"tabs":[{"title":"本地","hostId":"","filesVisible":false}]})");
+    newer.updatedAt = older.updatedAt.addDays(1);
+    QVERIFY2(m_database->saveWorkspace(newer, &error), qPrintable(error));
+
+    const std::optional<WorkspaceRecord> loaded =
+        m_database->findWorkspace(older.id, &error);
+    QVERIFY2(loaded.has_value(), qPrintable(error));
+    QCOMPARE(loaded->name, older.name);
+    // 数据库会把 JSON 规范成紧凑格式，但结构化内容必须仍可解析且版本保持不变。
+    const QJsonDocument layout = QJsonDocument::fromJson(loaded->layoutJson.toUtf8());
+    QVERIFY(layout.isObject());
+    QCOMPARE(layout.object().value(QStringLiteral("version")).toInt(), 1);
+
+    bool ok = false;
+    const QList<WorkspaceRecord> records = m_database->listWorkspaces(&ok, &error);
+    QVERIFY2(ok, qPrintable(error));
+    QCOMPARE(records.size(), 2);
+    QCOMPARE(records.constFirst().id, newer.id);
+
+    int removed = -1;
+    QVERIFY2(m_database->removeWorkspace(older.id, &removed, &error), qPrintable(error));
+    QCOMPARE(removed, 1);
+    QVERIFY(!m_database->findWorkspace(older.id, &error).has_value());
+}
+
 void ApplicationDatabaseTest::failedTransactionRollsBackEarlierWrites()
 {
     QString error;
@@ -709,11 +812,16 @@ void ApplicationDatabaseTest::migrationFromVersionOnePreservesData()
     CredentialRecord fresh;
     fresh.id = QStringLiteral("new-cred");
     fresh.name = QStringLiteral("新凭据");
-    fresh.encryptedPayload = QByteArrayLiteral("cipher");
-    fresh.cipher = QStringLiteral("xchacha20-poly1305");
-    fresh.kdfAlgorithm = QStringLiteral("argon2id");
+    fresh.encryptedPayload = QByteArray(16, '\x43');
+    fresh.cipher = QStringLiteral("xchacha20-poly1305-v1");
+    fresh.nonce = QByteArray(24, '\x44');
+    fresh.kdfAlgorithm = QStringLiteral("argon2id13");
+    fresh.kdfSalt = QByteArray(16, '\x45');
+    fresh.kdfIterations = 2;
+    fresh.kdfMemoryKib = 65536;
+    fresh.kdfParallelism = 1;
     QVERIFY2(upgraded.saveCredential(fresh, &error), qPrintable(error));
-    QCOMPARE(upgraded.findCredential(fresh.id, &error)->kdfAlgorithm, QStringLiteral("argon2id"));
+    QCOMPARE(upgraded.findCredential(fresh.id, &error)->kdfAlgorithm, QStringLiteral("argon2id13"));
 
     // 重复初始化（用户第二次启动）不得再次执行 ALTER TABLE。
     ApplicationDatabase reopened(path);

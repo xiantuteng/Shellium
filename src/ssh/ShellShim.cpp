@@ -25,8 +25,11 @@ QByteArray ShellShim::scriptBody()
     // 设计约束逐条说明：
     //   * 脚本经独立 exec 通道写入远端文件，正文不经过终端；交互式 Shell 里只执行一条
     //     极短的 source 命令，其回显可以被本地过滤器精确扣掉。
-    //   * 外层用 [ -n "$BASH_VERSION$ZSH_VERSION" ] 限定，其他 Shell 下什么都不定义；
+    //   * 外层用 Bash/Zsh 版本变量限定，其他 Bourne Shell 下什么都不定义；安装命令还会
+    //     在独立 exec 通道核对登录 Shell，fish/csh 等环境不会收到 source 命令；
     //     case "$-" in *i*) 再限定只在交互式 Shell 生效，脚本里的 ssh 不受影响。
+    //   * Bash 的 HISTCONTROL 只在缺少忽略空格策略时追加 ignorespace，保留用户原有的
+    //     ignoredups/erasedups；Zsh 不使用该变量，因此不做无意义的环境改动。
     //   * argv 用 0x1E 连接后再 base64——**不能直接把 0x1E 放进 OSC**：它是 C0 控制字符，
     //     libvterm 会在此处中止字符串解析，导致只收到第一个参数。base64 的字符集
     //     [A-Za-z0-9+/=] 在 OSC 中完全安全。
@@ -39,8 +42,13 @@ QByteArray ShellShim::scriptBody()
     //     回执若先于 stty 抵达就被吞掉，shim 将永久阻塞。宁可留下一行噪音，也不能冒
     //     丢输入或死锁的风险。
     return QByteArrayLiteral(
-        "if [ -n \"$BASH_VERSION$ZSH_VERSION\" ]; then"
-        " export HISTCONTROL=ignorespace;"
+        "if [ -n \"${BASH_VERSION-}${ZSH_VERSION-}\" ]; then"
+        " if [ -n \"${BASH_VERSION-}\" ]; then"
+        " case \":${HISTCONTROL-}:\" in"
+        " *:ignorespace:*|*:ignoreboth:*) ;;"
+        " *) HISTCONTROL=\"${HISTCONTROL:+$HISTCONTROL:}ignorespace\"; export HISTCONTROL;;"
+        " esac;"
+        " fi;"
         " ssh() {"
         " case \"$-\" in *i*) ;; *) command ssh \"$@\"; return $?;; esac;"
         " _shellium_a='';"
@@ -62,9 +70,14 @@ QByteArray ShellShim::scriptBody()
 
 QByteArray ShellShim::installCommand(const QByteArray &path)
 {
+    // 登录 Shell 检查发生在独立 exec 通道：即使用户使用 fish/csh，其语法错误与非零退出码
+    // 也不会污染交互终端；SshSessionStack 看到失败后不会再发送 `. path`。
+    // umask 077 防止同机其他用户在“写入完成—交互 source”之间读取或篡改临时脚本。
     // here-doc 定界符不会出现在脚本正文中；引号形式禁止变量展开，正文原样落盘。
-    // 脚本末尾自删：这样交互式终端里那条 source 命令可以保持最短，无需再跟一条 rm。
-    return "cat > " + path + " <<'SHELLIUM_SHIM_EOF'\n"
+    return "case \"${SHELL##*/}\" in bash|zsh) ;; *) "
+           "printf 'shellium: unsupported login shell: %s\\n' \"${SHELL:-unknown}\" >&2; "
+           "exit 64;; esac\n"
+           "umask 077\ncat > " + path + " <<'SHELLIUM_SHIM_EOF'\n"
         + scriptBody() + "\nrm -f " + path + "\nSHELLIUM_SHIM_EOF\n";
 }
 

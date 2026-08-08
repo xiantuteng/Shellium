@@ -19,6 +19,13 @@ class VtermBridge final : public QObject {
     Q_OBJECT
 
 public:
+    /** @brief 终端光标的绘制形态；桥接层使用独立枚举以避免依赖设置 UI。 */
+    enum class CursorShape {
+        Block,     ///< 使用高亮背景覆盖当前单元格。
+        Underline, ///< 在当前单元格底部绘制横线。
+        IBeam      ///< 由 TerminalView 在当前单元格左侧绘制竖线。
+    };
+
     explicit VtermBridge(QObject *parent = nullptr);
     ~VtermBridge() override;
 
@@ -30,6 +37,33 @@ public:
 
     /** @brief 改变终端字符尺寸并触发 libvterm 重排可重排内容。 */
     void resize(int rows, int columns);
+
+    /**
+     * @brief 更新终端默认色与光标颜色。
+     * @param foreground 未显式指定 ANSI 颜色的文本颜色。
+     * @param background 未显式指定 ANSI 颜色的背景颜色。
+     * @param cursorColor 光标绘制颜色。
+     */
+    void setDefaultColors(const QColor &foreground,
+                          const QColor &background,
+                          const QColor &cursorColor);
+
+    /** @brief 设置滚动历史上限，并立即丢弃超过新上限的最旧行。 */
+    void setScrollbackLimit(int lineCount);
+
+    /** @brief 设置行高百分比；异常值会限制在 80% 到 250%。 */
+    void setLineHeightPercent(int percent);
+
+    /** @brief 设置光标形态和闪烁相位；不会覆盖远端要求隐藏光标的状态。 */
+    void setCursorPresentation(CursorShape shape, bool phaseVisible);
+
+    /**
+     * @brief 返回最近一次 render() 中光标对应的 QTextDocument 字符位置。
+     * @return 光标没有进入已渲染区域时返回 -1。
+     *
+     * IBeam 无法仅靠 QTextCharFormat 表达，因此 TerminalView 使用该位置叠加竖线。
+     */
+    [[nodiscard]] int renderedCursorPosition() const { return m_renderedCursorPosition; }
 
     /**
      * @brief 返回终端光标当前所在屏幕行的可见文本。
@@ -122,5 +156,12 @@ private:
     int m_cursorRow = 0;
     int m_cursorColumn = 0;
     bool m_cursorVisible = true;
-    static constexpr int MaxScrollbackLines = 10000;
+    int m_scrollbackLimit = 10000;
+    int m_lineHeightPercent = 100;
+    CursorShape m_cursorShape = CursorShape::Block;
+    bool m_cursorPhaseVisible = true;
+    QColor m_cursorColor = QColor(QStringLiteral("#e6e6e6"));
+
+    /** @brief 最近一次渲染得到的光标文档位置；render() 为 const，因此缓存声明为 mutable。 */
+    mutable int m_renderedCursorPosition = -1;
 };

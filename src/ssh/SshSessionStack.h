@@ -95,6 +95,46 @@ public:
                           quint16 port,
                           QString *errorMessage);
 
+    /**
+     * @brief 通过根 SSH 会话打开到根服务器视角目标的 direct-tcpip 通道。
+     * @param host 根服务器能够解析和访问的目标地址。
+     * @param port 目标端口。
+     * @param errorMessage 失败原因输出。
+     * @return 与 SSH 通道相连的本进程 socket fd；失败返回 -1，成功时调用方取得所有权。
+     *
+     * 本地与动态端口转发绑定的是持久化根主机，不能使用 openForwardSocket() 的“当前栈顶”
+     * 语义。否则用户进入内层服务器后，同一条 -L/-D 规则会悄悄改从内层出网。
+     */
+    int openRootForwardSocket(const QString &host,
+                              quint16 port,
+                              QString *errorMessage);
+
+    /**
+     * @brief 在根 SSH 会话上申请服务端远程监听（OpenSSH -R 语义）。
+     * @param ruleId 持久化端口转发规则 id。
+     * @param bindHost SSH 服务器侧监听地址。
+     * @param bindPort SSH 服务器侧监听端口。
+     * @param errorMessage 失败原因输出。
+     * @return 服务端确认监听成功返回 true。
+     *
+     * 调用方通常是 PortForwardRuntime 后台线程；本方法只等待受 QWaitCondition 保护的结果，
+     * 所有 libssh API 仍由本栈工作线程执行。根层而非当前栈顶承载规则，保证规则始终与其
+     * 持久化 hostId 对应，不会因用户进入临时嵌套层而悄悄改变服务端。
+     */
+    bool startRemoteForward(const QString &ruleId,
+                            const QString &bindHost,
+                            quint16 bindPort,
+                            QString *errorMessage);
+
+    /**
+     * @brief 异步停止根会话上的一条远程监听。
+     * @param ruleId 持久化规则 id。
+     *
+     * 停止不等待服务端网络往返；节点状态机会继续推进 cancel-tcpip-forward。调用方可立即
+     * 关闭本地运行时，后续到达的入站 channel 会由节点直接释放。
+     */
+    void stopRemoteForward(const QString &ruleId);
+
 signals:
     /** @brief 栈顶层的远端 PTY 产生了新的原始输出。 */
     void outputReady(const QByteArray &bytes);
@@ -137,6 +177,16 @@ signals:
     void shellIntegrationPathReady(const QByteArray &path);
 
     /**
+     * @brief 某一层的 Shell 集成脚本安装失败，该层已自动退回命令解析降级路径。
+     * @param target 安装失败的服务器层。
+     * @param message 远端退出码、stderr 或通道错误组成的可读原因。
+     *
+     * 安装失败不应断开 SSH 会话，但也不能静默忽略：用户需要知道自动识别已从确定性的
+     * Shell 事件退化为推测式命令解析，文件操作层据此应保持更谨慎的预期。
+     */
+    void shellIntegrationFailed(const ConnectionTarget &target, const QString &message);
+
+    /**
      * @brief 正在建立的层需要密码。
      * @param target 待认证的服务器。
      * @param retry 是否为上一次密码被拒后的重试。
@@ -145,6 +195,13 @@ signals:
      * 的原生体验——用户预期的是终端里的 password 提示，不是一个窗口。
      */
     void layerCredentialRequired(const ConnectionTarget &target, bool retry);
+
+    /**
+     * @brief 远程监听收到一条新连接，交给对应规则运行时连接本机目标。
+     * @param ruleId 持久化规则 id。
+     * @param tunnelFd 与入站 SSH channel 相连的本地 socket，接收方取得所有权。
+     */
+    void remoteForwardConnection(const QString &ruleId, int tunnelFd);
 
 protected:
     /** @brief 建立栈底层并执行统一的输入、输出与转发泵送循环。 */
@@ -159,12 +216,26 @@ private:
         QString layerId;
         QString host;
         quint16 port = 22;
+        bool rootOrigin = false;
         QMutex mutex;
         QWaitCondition condition;
         int clientFd = -1;
         QString error;
         bool completed = false;
         bool cancelled = false;
+    };
+
+    /** @brief 跨线程等待 tcpip-forward 全局请求结果。 */
+    struct RemoteListenRequest {
+        QString ruleId;
+        QString bindHost;
+        quint16 bindPort = 0;
+        QMutex mutex;
+        QWaitCondition condition;
+        bool completed = false;
+        bool succeeded = false;
+        bool cancelled = false;
+        QString error;
     };
 
     /**
@@ -212,6 +283,16 @@ private:
 
     /** @brief 把 GUI/SFTP 线程排队的 direct-tcpip 请求转成异步建立，不等待结果。 */
     void serviceForwardRequests();
+
+    /** @brief 构造并同步等待一条跨线程 direct-tcpip 请求，供两种公开入口复用。 */
+    int openForwardSocketImpl(bool rootOrigin,
+                              const QString &layerId,
+                              const QString &host,
+                              quint16 port,
+                              QString *errorMessage);
+
+    /** @brief 把跨线程的远程监听启动/停止请求转交根节点的非阻塞状态机。 */
+    void serviceRemoteForwardRequests();
 
     /**
      * @brief 找出应当由谁发起通往 layerId 的转发。
@@ -281,4 +362,13 @@ private:
     int m_rows = 24;
     bool m_sizeDirty = true;
     QList<QSharedPointer<ForwardRequest>> m_forwardRequests;
+
+    /** @brief 尚未由工作线程发起的远程监听申请。 */
+    QList<QSharedPointer<RemoteListenRequest>> m_remoteListenRequests;
+
+    /** @brief 已进入节点状态机的远程监听申请，按节点请求编号索引。 */
+    QHash<quint64, QSharedPointer<RemoteListenRequest>> m_remoteListensInFlight;
+
+    /** @brief GUI/运行时排队的远程监听停止请求。 */
+    QStringList m_pendingRemoteStops;
 };

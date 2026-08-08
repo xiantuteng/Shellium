@@ -1,6 +1,7 @@
 #include "ssh/SshSessionNode.h"
 
 #include <QFile>
+#include <QLoggingCategory>
 #include <QtEndian>
 
 #include <algorithm>
@@ -13,6 +14,31 @@
 #include <unistd.h>
 
 namespace {
+
+/** @brief SSH 传输层诊断分类；中继已交付后的异步失败无法再走返回值，只能记录到日志。 */
+Q_LOGGING_CATEGORY(sshLog, "shellium.ssh", QtWarningMsg)
+
+/** @brief 后台 exec 与中继 stderr 最多保留的字节数，避免异常远端持续输出耗尽内存。 */
+constexpr qsizetype kMaximumDiagnosticBytes = 4096;
+
+/** @brief exec 中继启动后的短暂观察窗口；用于捕获“命令不存在”等立即失败。 */
+constexpr qint64 kRelayConfirmationMs = 250;
+
+/**
+ * @brief 把远端诊断追加到受限缓冲。
+ * @param destination 目标诊断缓冲。
+ * @param data 本轮读到的数据。
+ *
+ * 保留最前面的诊断是有意选择：Shell 通常把“command not found”等根因写在第一行，后续
+ * 重复输出价值较低。达到上限后直接丢弃尾部，确保远端无法用 stderr 制造无界内存增长。
+ */
+void appendBoundedDiagnostic(QByteArray &destination, const QByteArray &data)
+{
+    const qsizetype remaining = kMaximumDiagnosticBytes - destination.size();
+    if (remaining > 0) {
+        destination.append(data.left(remaining));
+    }
+}
 
 /**
  * @brief 向 RFC 4254 终端模式字节串追加一个 opcode + uint32 值。
@@ -179,9 +205,8 @@ constexpr qint64 kEstablishTimeoutMs = 30000;
 
 } // namespace
 
-SshSessionNode::SshSessionNode(ConnectionTarget target, QByteArray shellIntegrationScript)
+SshSessionNode::SshSessionNode(ConnectionTarget target)
     : m_target(std::move(target))
-    , m_shellIntegrationScript(std::move(shellIntegrationScript))
 {
 }
 
@@ -206,8 +231,8 @@ SshSessionNode::~SshSessionNode()
     m_pendingForwards.clear();
 
     if (m_shell != nullptr) {
-        ssh_channel_send_eof(m_shell);
-        ssh_channel_close(m_shell);
+        // 会话已经处于非阻塞模式，显式 close/send_eof 可能返回 SSH_AGAIN 并把半个关闭包
+        // 留在整条 SSH 流里，进而破坏同一会话上的其他通道。libssh 的 free 会完成必要清理。
         ssh_channel_free(m_shell);
         m_shell = nullptr;
     }
@@ -593,6 +618,10 @@ bool SshSessionNode::beginDetachedExec(const QByteArray &command)
         return false;
     }
     m_execCommand = command;
+    m_execDiagnostic.clear();
+    m_execError.clear();
+    m_execHasResult = false;
+    m_execSucceeded = false;
     m_execStage = ExecStage::Opening;
     m_execTimer.start();
     return true;
@@ -604,7 +633,7 @@ void SshSessionNode::pumpExec()
         return;
     }
 
-    const auto finish = [this](const bool succeeded) {
+    const auto finish = [this](const bool succeeded, const QString &reason = QString()) {
         // 只 free 不 close：非阻塞会话上 ssh_channel_close 会返回 SSH_AGAIN 并留下半写包，
         // 之后整条 SSH 流失步，连交互式 Shell 也会一起废掉。
         ssh_channel_free(m_execChannel);
@@ -612,12 +641,13 @@ void SshSessionNode::pumpExec()
         m_execStage = ExecStage::Finished;
         m_execHasResult = true;
         m_execSucceeded = succeeded;
+        m_execError = succeeded ? QString() : reason;
     };
 
     // 安装脚本只是写个小文件；超时说明远端异常，此时放弃即可，交互式会话不受影响。
     constexpr qint64 kExecTimeoutMs = 15000;
     if (m_execTimer.isValid() && m_execTimer.elapsed() > kExecTimeoutMs) {
-        finish(false);
+        finish(false, tr("后台命令执行超时"));
         return;
     }
 
@@ -628,7 +658,7 @@ void SshSessionNode::pumpExec()
             return;
         }
         if (result != SSH_OK) {
-            finish(false);
+            finish(false, tr("无法打开后台命令通道：%1").arg(lastError()));
             return;
         }
         m_execStage = ExecStage::Requesting;
@@ -640,7 +670,7 @@ void SshSessionNode::pumpExec()
             return;
         }
         if (result != SSH_OK) {
-            finish(false);
+            finish(false, tr("远端拒绝执行后台命令：%1").arg(lastError()));
             return;
         }
         m_execStage = ExecStage::Draining;
@@ -648,13 +678,36 @@ void SshSessionNode::pumpExec()
     }
     case ExecStage::Draining: {
         char buffer[1024];
-        for (const int stderrStream : {0, 1}) {
-            while (ssh_channel_read_nonblocking(
-                       m_execChannel, buffer, sizeof(buffer), stderrStream) > 0) {
+        while (true) {
+            const int count = ssh_channel_read_nonblocking(
+                m_execChannel, buffer, sizeof(buffer), 0);
+            if (count <= 0) {
+                break;
             }
         }
+        while (true) {
+            const int count = ssh_channel_read_nonblocking(
+                m_execChannel, buffer, sizeof(buffer), 1);
+            if (count <= 0) {
+                break;
+            }
+            appendBoundedDiagnostic(m_execDiagnostic, QByteArray(buffer, count));
+        }
         if (ssh_channel_is_eof(m_execChannel) != 0) {
-            finish(true);
+            uint32_t exitCode = static_cast<uint32_t>(-1);
+            ssh_channel_get_exit_state(m_execChannel, &exitCode, nullptr, nullptr);
+            if (exitCode == 0) {
+                finish(true);
+            } else {
+                const QString diagnostic = QString::fromUtf8(m_execDiagnostic).trimmed();
+                const QString exitDescription = exitCode == static_cast<uint32_t>(-1)
+                    ? tr("远端未返回退出码")
+                    : tr("退出码 %1").arg(exitCode);
+                finish(false,
+                       diagnostic.isEmpty()
+                           ? exitDescription
+                           : tr("%1：%2").arg(exitDescription, diagnostic));
+            }
         }
         return;
     }
@@ -664,7 +717,7 @@ void SshSessionNode::pumpExec()
     }
 }
 
-bool SshSessionNode::takeExecResult(bool *succeeded)
+bool SshSessionNode::takeExecResult(bool *succeeded, QString *errorMessage)
 {
     if (!m_execHasResult) {
         return false;
@@ -673,6 +726,10 @@ bool SshSessionNode::takeExecResult(bool *succeeded)
     if (succeeded != nullptr) {
         *succeeded = m_execSucceeded;
     }
+    if (errorMessage != nullptr) {
+        *errorMessage = m_execError;
+    }
+    m_execError.clear();
     return true;
 }
 
@@ -737,7 +794,9 @@ qint64 SshSessionNode::idleMs() const
 
 SshKeepAlive::LayerIdleState SshSessionNode::keepAliveState() const
 {
-    return {isReady(), idleMs()};
+    return {isReady(),
+            idleMs(),
+            m_keepAliveAttemptTimer.isValid() ? m_keepAliveAttemptTimer.elapsed() : -1};
 }
 
 bool SshSessionNode::sendKeepAlive()
@@ -745,12 +804,15 @@ bool SshSessionNode::sendKeepAlive()
     if (m_session == nullptr) {
         return false;
     }
+    // 在真正进入 libssh 前记录尝试时刻。无论成功还是缓冲暂满，下一轮都应经过最小退避；
+    // 否则失败分支会按约 10ms 的 SSH 泵送周期忙重试。
+    m_keepAliveAttemptTimer.start();
     // 空载荷足矣：RFC 4253 规定 SSH_MSG_IGNORE 的接收方解析后直接丢弃，而链路上的 NAT 与
     // 状态防火墙只看得到一个真实的加密报文，空闲表项就此刷新。
     if (ssh_send_ignore(m_session, "") != SSH_OK) {
         // 非阻塞会话上发送缓冲可能暂时写不下。这不是会话故障，绝不能据此断开，也绝不能
         // 在这里等待——工作线程一旦被钉住，整栈的数据搬运都会停摆。不重置计时，让下一轮
-        // 泵送自然重试。
+        // 在 keepAliveState 的最小重试窗口结束后再重试。
         return false;
     }
     noteActivity();
@@ -788,8 +850,10 @@ void SshSessionNode::closeShell()
     if (m_shell == nullptr) {
         return;
     }
-    ssh_channel_send_eof(m_shell);
-    ssh_channel_close(m_shell);
+    // requestPopLayer 发生时外层会话仍要继续使用；只 free 能避免非阻塞 close 留下半写包
+    // 让整条复用连接失步。置空后 isShellAlive() 会立即反映该层已经关闭。
+    ssh_channel_free(m_shell);
+    m_shell = nullptr;
 }
 
 quint64 SshSessionNode::beginForward(const QString &host,
@@ -878,6 +942,8 @@ bool SshSessionNode::convertToRelay(PendingForward &pending)
     }
     pending.transport = ForwardTransport::ExecRelay;
     pending.relayStage = RelayStage::OpeningSession;
+    pending.relayExecStartedAtMs = -1;
+    pending.relayDiagnostic.clear();
     pending.timer.start();
     return true;
 }
@@ -983,7 +1049,36 @@ bool SshSessionNode::advanceRelayForward(PendingForward &pending,
         if (result != SSH_OK) {
             return fail(lastError());
         }
-        // 中继已经在跑：它的标准输入输出就是到目标的字节管道，后续搬运与转发通道完全一致。
+        // exec 请求被接受只表示服务端愿意启动命令，不表示远端确实有可用的中继工具。
+        // 进入短暂确认阶段，先捕获“no relay tool available”等立即失败，再向调用方交付 fd。
+        pending.relayStage = RelayStage::ConfirmingExec;
+        pending.relayExecStartedAtMs = pending.timer.elapsed();
+        return false;
+    }
+    case RelayStage::ConfirmingExec: {
+        char diagnosticBuffer[1024];
+        while (true) {
+            const int count = ssh_channel_read_nonblocking(
+                pending.channel, diagnosticBuffer, sizeof(diagnosticBuffer), 1);
+            if (count <= 0) {
+                break;
+            }
+            appendBoundedDiagnostic(pending.relayDiagnostic,
+                                    QByteArray(diagnosticBuffer, count));
+        }
+
+        if (ssh_channel_is_eof(pending.channel) != 0) {
+            const QString diagnostic = QString::fromUtf8(pending.relayDiagnostic).trimmed();
+            return fail(diagnostic.isEmpty()
+                            ? tr("远端中继命令启动后立即退出")
+                            : diagnostic);
+        }
+        if (pending.timer.elapsed() - pending.relayExecStartedAtMs < kRelayConfirmationMs) {
+            return false;
+        }
+
+        // 中继在观察窗内持续运行：它的标准输入输出就是到目标的字节管道，后续搬运与
+        // direct-tcpip 通道完全一致。此处才把 fd 交给调用方，避免伪成功。
         ForwardOutcome outcome;
         outcome.id = pending.id;
         outcome.ok = true;
@@ -1022,6 +1117,7 @@ QList<SshSessionNode::ForwardOutcome> SshSessionNode::pumpForwards()
     char tunnelBuffer[64 * 1024];
     for (qsizetype index = m_forwards.size() - 1; index >= 0; --index) {
         ActiveForward &forward = m_forwards[index];
+        bool forwardRemoved = false;
 
         while (true) {
             const ssize_t count = ::read(forward.socketFd, tunnelBuffer, sizeof(tunnelBuffer));
@@ -1042,7 +1138,11 @@ QList<SshSessionNode::ForwardOutcome> SshSessionNode::pumpForwards()
                 break;
             }
             if (written < 0) {
-                ssh_channel_close(forward.channel);
+                qCWarning(sshLog) << "SSH 转发通道写入失败：" << lastError();
+                // 这里同样不能显式 close。立即 free 并移除本条桥，避免下一轮继续访问坏通道。
+                releaseForward(forward);
+                m_forwards.removeAt(index);
+                forwardRemoved = true;
                 break;
             }
             // 转发通道上的密文同样承载在本层这条 TCP 上，因此也算本层活跃：内层会话正在
@@ -1050,7 +1150,28 @@ QList<SshSessionNode::ForwardOutcome> SshSessionNode::pumpForwards()
             noteActivity();
             forward.socketToChannel.remove(0, written);
         }
-        // 中继命令的诊断信息走 stderr，不能混进数据流；只搬运标准输出。
+        if (forwardRemoved) {
+            // 上面的写入失败分支已经移除了当前元素，不能继续访问失效的引用。
+            continue;
+        }
+
+        // 中继命令的诊断信息走 stderr，不能混进数据流；只搬运标准输出。中继已交付后若
+        // 异步失败，返回值通道已经不存在，因此把诊断写入专用日志供排障。
+        QByteArray runtimeDiagnostic;
+        while (true) {
+            const int count = ssh_channel_read_nonblocking(
+                forward.channel, tunnelBuffer, sizeof(tunnelBuffer), 1);
+            if (count <= 0) {
+                break;
+            }
+            appendBoundedDiagnostic(runtimeDiagnostic, QByteArray(tunnelBuffer, count));
+        }
+        if (!runtimeDiagnostic.isEmpty()) {
+            qCWarning(sshLog).noquote()
+                << tr("服务器 %1 的 exec 中继诊断：%2")
+                       .arg(m_target.connectionSpecifier(true),
+                            QString::fromUtf8(runtimeDiagnostic).trimmed());
+        }
         while (true) {
             const int count = ssh_channel_read_nonblocking(
                 forward.channel, tunnelBuffer, sizeof(tunnelBuffer), 0);
@@ -1077,6 +1198,163 @@ QList<SshSessionNode::ForwardOutcome> SshSessionNode::pumpForwards()
         }
     }
     return outcomes;
+}
+
+quint64 SshSessionNode::beginRemoteListen(const QString &ruleId,
+                                          const QString &bindHost,
+                                          const quint16 bindPort,
+                                          QString *error)
+{
+    const auto fail = [error](const QString &message) -> quint64 {
+        if (error != nullptr) {
+            *error = message;
+        }
+        return 0;
+    };
+    if (!isReady() || m_session == nullptr) {
+        return fail(tr("SSH 会话尚未完成认证"));
+    }
+    if (ruleId.trimmed().isEmpty() || bindHost.trimmed().isEmpty() || bindPort == 0) {
+        return fail(tr("远程监听规则、地址和端口必须有效"));
+    }
+    const auto sameRule = [&ruleId](const auto &listener) {
+        return listener.ruleId == ruleId;
+    };
+    if (std::any_of(m_pendingRemoteListeners.cbegin(),
+                    m_pendingRemoteListeners.cend(), sameRule)
+        || std::any_of(m_remoteListeners.cbegin(), m_remoteListeners.cend(), sameRule)) {
+        return fail(tr("该远程转发规则已经启动或正在启动"));
+    }
+
+    PendingRemoteListen pendingListener;
+    pendingListener.requestId = m_nextRemoteListenId++;
+    pendingListener.ruleId = ruleId;
+    pendingListener.bindHost = bindHost.trimmed().toUtf8();
+    pendingListener.bindPort = bindPort;
+    pendingListener.timer.start();
+    m_pendingRemoteListeners.append(pendingListener);
+    return pendingListener.requestId;
+}
+
+void SshSessionNode::cancelRemoteListen(const QString &ruleId)
+{
+    // 尚未得到服务端确认的请求本地直接撤销；上层同步请求会由 SshSessionStack 主动唤醒，
+    // 因此这里不再制造一个“启动失败”结果与停止操作竞态。
+    for (qsizetype index = m_pendingRemoteListeners.size() - 1; index >= 0; --index) {
+        if (m_pendingRemoteListeners.at(index).ruleId == ruleId) {
+            m_pendingRemoteListeners.removeAt(index);
+        }
+    }
+    for (RemoteListener &listener : m_remoteListeners) {
+        if (listener.ruleId == ruleId) {
+            listener.cancelRequested = true;
+        }
+    }
+}
+
+void SshSessionNode::pumpRemoteForwarding(QList<RemoteListenOutcome> &outcomes,
+                                          QList<RemoteAcceptedConnection> &accepted)
+{
+    constexpr qint64 kRemoteListenTimeoutMs = 15000;
+
+    // tcpip-forward 是一次 SSH global request，在非阻塞会话上同样可能返回 SSH_AGAIN；每轮
+    // 最多推进一次，绝不能在此自旋，否则交互 Shell 和既有转发都会饥饿。
+    for (qsizetype index = m_pendingRemoteListeners.size() - 1; index >= 0; --index) {
+        PendingRemoteListen &pendingListener = m_pendingRemoteListeners[index];
+        int boundPort = pendingListener.bindPort;
+        const int result = ssh_channel_listen_forward(m_session,
+                                                      pendingListener.bindHost.constData(),
+                                                      pendingListener.bindPort,
+                                                      &boundPort);
+        if (result == SSH_AGAIN && pendingListener.timer.elapsed() <= kRemoteListenTimeoutMs) {
+            continue;
+        }
+
+        RemoteListenOutcome outcome;
+        outcome.requestId = pendingListener.requestId;
+        outcome.ruleId = pendingListener.ruleId;
+        if (result == SSH_OK && boundPort > 0 && boundPort <= 65535) {
+            outcome.ok = true;
+            outcome.boundPort = static_cast<quint16>(boundPort);
+            m_remoteListeners.append({pendingListener.ruleId,
+                                      pendingListener.bindHost,
+                                      outcome.boundPort,
+                                      false});
+        } else if (result == SSH_AGAIN) {
+            outcome.error = tr("申请远程监听 %1:%2 超时")
+                                .arg(QString::fromUtf8(pendingListener.bindHost))
+                                .arg(pendingListener.bindPort);
+        } else {
+            outcome.error = tr("服务器拒绝远程监听 %1:%2：%3")
+                                .arg(QString::fromUtf8(pendingListener.bindHost))
+                                .arg(pendingListener.bindPort)
+                                .arg(lastError());
+        }
+        outcomes.append(outcome);
+        m_pendingRemoteListeners.removeAt(index);
+    }
+
+    // 取消请求也可能返回 SSH_AGAIN。标志一直保留到服务端确认或明确失败，但从标记时起就不
+    // 再把新 channel 交给运行时，确保用户按下“停止”后不会看到连接数继续增长。
+    for (qsizetype index = m_remoteListeners.size() - 1; index >= 0; --index) {
+        RemoteListener &listener = m_remoteListeners[index];
+        if (!listener.cancelRequested) {
+            continue;
+        }
+        const int result = ssh_channel_cancel_forward(m_session,
+                                                      listener.bindHost.constData(),
+                                                      listener.boundPort);
+        if (result == SSH_AGAIN) {
+            continue;
+        }
+        if (result != SSH_OK) {
+            qCWarning(sshLog).noquote()
+                << tr("取消远程监听 %1:%2 失败：%3")
+                       .arg(QString::fromUtf8(listener.bindHost))
+                       .arg(listener.boundPort)
+                       .arg(lastError());
+        }
+        m_remoteListeners.removeAt(index);
+    }
+
+    // 单轮设置上限，避免突发大量远程连接把终端 IO 永久饿死；剩余 channel 下轮继续接收。
+    constexpr int kMaximumAcceptsPerPump = 32;
+    for (int attempt = 0; attempt < kMaximumAcceptsPerPump; ++attempt) {
+        int destinationPort = 0;
+        char *originator = nullptr;
+        int originatorPort = 0;
+        ssh_channel channel = ssh_channel_open_forward_port(
+            m_session, 0, &destinationPort, &originator, &originatorPort);
+        if (originator != nullptr) {
+            ssh_string_free_char(originator);
+        }
+        if (channel == nullptr) {
+            break;
+        }
+
+        const auto listenerIt = std::find_if(
+            m_remoteListeners.cbegin(), m_remoteListeners.cend(),
+            [destinationPort](const RemoteListener &listener) {
+                return !listener.cancelRequested && listener.boundPort == destinationPort;
+            });
+        if (listenerIt == m_remoteListeners.cend()) {
+            // 监听已经停止或端口无法匹配；free-only 规则同样适用于服务端主动打开的 channel。
+            ssh_channel_free(channel);
+            continue;
+        }
+
+        int socketPair[2] = {-1, -1};
+        if (::socketpair(AF_UNIX, SOCK_STREAM, 0, socketPair) != 0) {
+            qCWarning(sshLog) << "为远程转发创建 socketpair 失败：" << std::strerror(errno);
+            ssh_channel_free(channel);
+            continue;
+        }
+        // SshSessionStack 每轮泵送所有通道，工作端必须非阻塞；调用端交给独立转发运行时，
+        // 后者会按自己的 poll 循环设置模式并负责最终关闭。
+        fcntl(socketPair[0], F_SETFL, fcntl(socketPair[0], F_GETFL, 0) | O_NONBLOCK);
+        m_forwards.append({socketPair[0], channel, {}, {}});
+        accepted.append({listenerIt->ruleId, socketPair[1]});
+    }
 }
 
 void SshSessionNode::releaseForward(ActiveForward &forward)

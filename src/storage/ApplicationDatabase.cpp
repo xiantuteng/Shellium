@@ -2,6 +2,7 @@
 
 #include <QDir>
 #include <QFileInfo>
+#include <QJsonDocument>
 #include <QSet>
 #include <QSqlError>
 #include <QSqlQuery>
@@ -12,7 +13,7 @@
 namespace {
 
 /// 当前代码要求的 schema 版本。每次结构变更必须递增，并在 upgradeSchema 中补齐对应分支。
-constexpr int kSchemaVersion = 2;
+constexpr int kSchemaVersion = 4;
 
 /// 内存数据库的 SQLite 特殊路径。
 const QString kMemoryPath = QStringLiteral(":memory:");
@@ -143,6 +144,54 @@ CredentialRecord readCredentialRow(const QSqlQuery &query)
     return record;
 }
 
+/**
+ * @brief 将 snippets 查询的当前行转换为强类型记录。
+ *
+ * 旧 schema 没有单独的 kind 列，而是用 command=NULL 表示分组。转换集中在这里可以避免
+ * 各查询接口分别猜测节点类型，也为未来迁移到显式 kind 列保留单一修改点。
+ */
+SnippetRecord readSnippetRow(const QSqlQuery &query)
+{
+    SnippetRecord record;
+    record.id = query.value(QStringLiteral("id")).toString();
+    record.parentId = query.value(QStringLiteral("parent_id")).toString();
+    record.name = query.value(QStringLiteral("name")).toString();
+    const QVariant command = query.value(QStringLiteral("command"));
+    record.kind = command.isNull() ? SnippetNodeKind::Folder : SnippetNodeKind::Snippet;
+    record.command = command.toString();
+    record.description = query.value(QStringLiteral("description")).toString();
+    record.sortOrder = query.value(QStringLiteral("sort_order")).toInt();
+    record.updatedAt = deserializeTime(query.value(QStringLiteral("updated_at")));
+    return record;
+}
+
+/** @brief 把 port_forwards 查询当前行转换为领域模型。 */
+PortForwardRule readPortForwardRow(const QSqlQuery &query)
+{
+    PortForwardRule rule;
+    rule.id = query.value(QStringLiteral("id")).toString();
+    rule.hostId = query.value(QStringLiteral("host_id")).toString();
+    rule.name = query.value(QStringLiteral("name")).toString();
+    rule.type = static_cast<PortForwardType>(query.value(QStringLiteral("type")).toInt());
+    rule.bindHost = query.value(QStringLiteral("bind_host")).toString();
+    rule.bindPort = static_cast<quint16>(query.value(QStringLiteral("bind_port")).toUInt());
+    rule.targetHost = query.value(QStringLiteral("target_host")).toString();
+    rule.targetPort = static_cast<quint16>(query.value(QStringLiteral("target_port")).toUInt());
+    rule.autoStart = query.value(QStringLiteral("auto_start")).toInt() != 0;
+    return rule;
+}
+
+/** @brief 把 workspaces 查询当前行转换为不解释布局内容的持久化记录。 */
+WorkspaceRecord readWorkspaceRow(const QSqlQuery &query)
+{
+    WorkspaceRecord record;
+    record.id = query.value(QStringLiteral("id")).toString();
+    record.name = query.value(QStringLiteral("name")).toString();
+    record.layoutJson = query.value(QStringLiteral("layout_json")).toString();
+    record.updatedAt = deserializeTime(query.value(QStringLiteral("updated_at")));
+    return record;
+}
+
 /// 供列表接口统一设置 ok 出参，避免每处都写一遍空指针判断。
 void setFlag(bool *flag, const bool value)
 {
@@ -251,6 +300,9 @@ bool ApplicationDatabase::createBaseSchema(QString *errorMessage)
         QStringLiteral("CREATE TABLE IF NOT EXISTS snippets ("
                        "id TEXT PRIMARY KEY, parent_id TEXT, name TEXT NOT NULL, command TEXT, "
                        "description TEXT, sort_order INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL)"),
+        // 父分组列表是 Snippet 侧栏最频繁的查询；组合索引同时覆盖父级筛选和稳定排序。
+        QStringLiteral("CREATE INDEX IF NOT EXISTS idx_snippets_parent "
+                       "ON snippets(parent_id, sort_order, name)"),
         QStringLiteral("CREATE TABLE IF NOT EXISTS command_history ("
                        "id INTEGER PRIMARY KEY AUTOINCREMENT, host_id TEXT, command TEXT NOT NULL, "
                        "executed_at TEXT NOT NULL, exit_code INTEGER)"),
@@ -322,6 +374,42 @@ bool ApplicationDatabase::upgradeSchema(QString *errorMessage)
                    << QStringLiteral("CREATE INDEX IF NOT EXISTS idx_connection_history_time "
                                      "ON connection_history(connected_at DESC)")
                    << QStringLiteral("CREATE INDEX IF NOT EXISTS idx_hosts_name ON hosts(name)");
+    }
+    if (*currentVersion < 3) {
+        // 版本 3：新增全局保险库公开配置。固定 id=1 并通过 CHECK 约束保证表中永远只有
+        // 一行，避免两个不同盐值同时存在时调用方无法判断应该用哪一个派生密钥。
+        statements << QStringLiteral(
+            "CREATE TABLE vault_metadata ("
+            "id INTEGER PRIMARY KEY CHECK(id = 1), "
+            "format_version INTEGER NOT NULL, kdf_algorithm TEXT NOT NULL, "
+            "salt BLOB NOT NULL, verifier BLOB NOT NULL, "
+            "created_at TEXT NOT NULL, updated_at TEXT NOT NULL)");
+    }
+    if (*currentVersion < 4) {
+        // 版本 4：旧 port_forwards 只是占位表，没有外键和字段约束。SQLite 不能直接为既有
+        // 表补外键，因此在同一事务中重建；只迁移仍能匹配 hosts 的合法规则，孤儿占位数据
+        // 不应在连接后被误启动。字段 CHECK 把损坏尽量拦在数据库边界。
+        statements << QStringLiteral("ALTER TABLE port_forwards RENAME TO port_forwards_v3")
+                   << QStringLiteral(
+                          "CREATE TABLE port_forwards ("
+                          "id TEXT PRIMARY KEY, "
+                          "host_id TEXT NOT NULL REFERENCES hosts(id) ON DELETE CASCADE, "
+                          "name TEXT NOT NULL, type INTEGER NOT NULL CHECK(type BETWEEN 0 AND 2), "
+                          "bind_host TEXT NOT NULL, bind_port INTEGER NOT NULL CHECK(bind_port BETWEEN 1 AND 65535), "
+                          "target_host TEXT, target_port INTEGER CHECK(target_port BETWEEN 0 AND 65535), "
+                          "auto_start INTEGER NOT NULL DEFAULT 0 CHECK(auto_start IN (0, 1)))")
+                   << QStringLiteral(
+                          "INSERT INTO port_forwards(id, host_id, name, type, bind_host, bind_port, "
+                          "target_host, target_port, auto_start) "
+                          "SELECT p.id, p.host_id, p.name, p.type, COALESCE(NULLIF(p.bind_host, ''), '127.0.0.1'), "
+                          "p.bind_port, p.target_host, COALESCE(p.target_port, 0), p.auto_start "
+                          "FROM port_forwards_v3 p JOIN hosts h ON h.id = p.host_id "
+                          "WHERE p.type BETWEEN 0 AND 2 AND p.bind_port BETWEEN 1 AND 65535 "
+                          "AND (p.type = 2 OR (p.target_host IS NOT NULL AND p.target_host <> '' "
+                          "AND p.target_port BETWEEN 1 AND 65535))")
+                   << QStringLiteral("DROP TABLE port_forwards_v3")
+                   << QStringLiteral("CREATE INDEX idx_port_forwards_host "
+                                     "ON port_forwards(host_id, name)");
     }
     statements << QStringLiteral("UPDATE schema_version SET version = %1").arg(kSchemaVersion);
 
@@ -686,10 +774,21 @@ bool ApplicationDatabase::saveCredential(const CredentialRecord &record, QString
         }
         return false;
     }
-    // 这两项为空说明调用方绕过了 Vault：与其把疑似明文写进磁盘，不如让保存直接失败。
-    if (record.encryptedPayload.isEmpty() || record.cipher.trimmed().isEmpty()) {
+    // 仅检查 payload 非空无法阻止调用方把口令原文塞进 BLOB。数据库层虽然不能自行验证
+    // AEAD 标签，但可以强制要求当前 XChaCha20/Argon2 封装的全部公开元数据和最小长度，
+    // 把最常见的“绕过 Vault 直接保存”错误挡在落盘之前。
+    constexpr qsizetype xChaChaNonceBytes = 24;
+    constexpr qsizetype poly1305TagBytes = 16;
+    constexpr qsizetype argon2SaltBytes = 16;
+    const bool supportedCipher = record.cipher == QStringLiteral("xchacha20-poly1305-v1");
+    const bool supportedKdf = record.kdfAlgorithm == QStringLiteral("argon2id13");
+    if (record.encryptedPayload.size() < poly1305TagBytes || !supportedCipher
+        || record.nonce.size() != xChaChaNonceBytes || !supportedKdf
+        || record.kdfSalt.size() != argon2SaltBytes || record.kdfIterations <= 0
+        || record.kdfMemoryKib <= 0 || record.kdfParallelism <= 0) {
         if (errorMessage != nullptr) {
-            *errorMessage = QStringLiteral("凭据必须携带密文与加密算法标识，禁止写入明文");
+            *errorMessage = QStringLiteral(
+                "凭据必须携带完整的 XChaCha20-Poly1305/Argon2id 密文元数据，禁止写入明文");
         }
         return false;
     }
@@ -785,6 +884,87 @@ QList<CredentialRecord> ApplicationDatabase::listCredentials(bool *ok, QString *
     }
     setFlag(ok, true);
     return records;
+}
+
+// ---------------------------------------------------------------- 保险库公开配置
+
+bool ApplicationDatabase::saveVaultConfiguration(const VaultConfiguration &configuration,
+                                                  QString *errorMessage)
+{
+    if (configuration.formatVersion != 1) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("不支持的保险库格式版本：%1")
+                                .arg(configuration.formatVersion);
+        }
+        return false;
+    }
+    if (configuration.kdfAlgorithm.trimmed().isEmpty() || configuration.salt.isEmpty()
+        || configuration.verifier.isEmpty()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("保险库配置缺少 KDF、盐值或主密码校验块");
+        }
+        return false;
+    }
+
+    const QDateTime now = QDateTime::currentDateTimeUtc();
+    const QDateTime createdAt = configuration.createdAt.isValid() ? configuration.createdAt : now;
+    const QDateTime updatedAt = configuration.updatedAt.isValid() ? configuration.updatedAt : now;
+    return runInTransaction([&](QString *innerError) {
+        QSqlQuery query(m_database);
+        // upsert 仅用于以后安全迁移 KDF 参数；日常首次创建流程会在服务层拒绝覆盖已有配置。
+        query.prepare(QStringLiteral(
+            "INSERT INTO vault_metadata (id, format_version, kdf_algorithm, salt, verifier, "
+            "created_at, updated_at) VALUES (1, :format_version, :kdf_algorithm, :salt, "
+            ":verifier, :created_at, :updated_at) "
+            "ON CONFLICT(id) DO UPDATE SET format_version = excluded.format_version, "
+            "kdf_algorithm = excluded.kdf_algorithm, salt = excluded.salt, "
+            "verifier = excluded.verifier, updated_at = excluded.updated_at"));
+        query.bindValue(QStringLiteral(":format_version"), configuration.formatVersion);
+        query.bindValue(QStringLiteral(":kdf_algorithm"), configuration.kdfAlgorithm);
+        query.bindValue(QStringLiteral(":salt"), configuration.salt);
+        query.bindValue(QStringLiteral(":verifier"), configuration.verifier);
+        query.bindValue(QStringLiteral(":created_at"), serializeTime(createdAt));
+        query.bindValue(QStringLiteral(":updated_at"), serializeTime(updatedAt));
+        if (!query.exec()) {
+            reportQueryError(query, innerError);
+            return false;
+        }
+        return true;
+    }, errorMessage);
+}
+
+std::optional<VaultConfiguration>
+ApplicationDatabase::vaultConfiguration(QString *errorMessage) const
+{
+    QSqlQuery query(m_database);
+    if (!query.exec(QStringLiteral("SELECT * FROM vault_metadata WHERE id = 1"))) {
+        reportQueryError(query, errorMessage);
+        return std::nullopt;
+    }
+    if (!query.next()) {
+        // 没有记录是正常的首次启动状态，不能把它报告为数据库错误。
+        return std::nullopt;
+    }
+
+    VaultConfiguration configuration;
+    configuration.formatVersion = query.value(QStringLiteral("format_version")).toInt();
+    configuration.kdfAlgorithm = query.value(QStringLiteral("kdf_algorithm")).toString();
+    configuration.salt = query.value(QStringLiteral("salt")).toByteArray();
+    configuration.verifier = query.value(QStringLiteral("verifier")).toByteArray();
+    configuration.createdAt = deserializeTime(query.value(QStringLiteral("created_at")));
+    configuration.updatedAt = deserializeTime(query.value(QStringLiteral("updated_at")));
+
+    // 这里做结构完整性校验，而不是把空字段交给 Vault。否则上层无法区分“主密码错误”和
+    // “磁盘上的初始化数据被截断”，也可能错误地向用户反复索要一个永远不可能成功的密码。
+    if (configuration.formatVersion != 1 || configuration.kdfAlgorithm.trimmed().isEmpty()
+        || configuration.salt.isEmpty() || configuration.verifier.isEmpty()
+        || !configuration.createdAt.isValid() || !configuration.updatedAt.isValid()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("保险库公开配置不完整或格式版本不受支持");
+        }
+        return std::nullopt;
+    }
+    return configuration;
 }
 
 // -------------------------------------------------------------------- 连接历史
@@ -998,6 +1178,432 @@ QList<CommandHistoryEntry> ApplicationDatabase::recentCommands(const QString &ho
     return entries;
 }
 
+// -------------------------------------------------------------------- Snippets
+
+bool ApplicationDatabase::saveSnippet(const SnippetRecord &record, QString *errorMessage)
+{
+    const QString normalizedName = record.name.trimmed();
+    if (record.id.trimmed().isEmpty() || normalizedName.isEmpty()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("Snippet 的 id 和名称不能为空");
+        }
+        return false;
+    }
+    if (record.kind == SnippetNodeKind::Snippet && record.command.trimmed().isEmpty()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("可执行 Snippet 的命令不能为空");
+        }
+        return false;
+    }
+    if (record.parentId == record.id) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("Snippet 分组不能以自身作为父分组");
+        }
+        return false;
+    }
+
+    return runInTransaction([&](QString *innerError) {
+        if (!record.parentId.isEmpty()) {
+            QSqlQuery parentQuery(m_database);
+            parentQuery.prepare(QStringLiteral("SELECT command FROM snippets WHERE id = :id"));
+            parentQuery.bindValue(QStringLiteral(":id"), record.parentId);
+            if (!parentQuery.exec()) {
+                reportQueryError(parentQuery, innerError);
+                return false;
+            }
+            if (!parentQuery.next()) {
+                *innerError = QStringLiteral("父 Snippet 分组不存在：%1").arg(record.parentId);
+                return false;
+            }
+            if (!parentQuery.value(0).isNull()) {
+                *innerError = QStringLiteral("Snippet 只能放入分组，不能放入另一条可执行片段");
+                return false;
+            }
+
+            // 从候选父节点一路向上找祖先。若能遇到当前记录，说明本次移动会形成环；使用
+            // UNION 去重而非 UNION ALL，使已被旧版本数据污染的环也不会让查询无限递归。
+            QSqlQuery cycleQuery(m_database);
+            cycleQuery.prepare(QStringLiteral(
+                "WITH RECURSIVE ancestors(id, parent_id) AS ("
+                " SELECT id, parent_id FROM snippets WHERE id = :parent_id"
+                " UNION SELECT s.id, s.parent_id FROM snippets s"
+                " JOIN ancestors a ON s.id = a.parent_id"
+                ") SELECT 1 FROM ancestors WHERE id = :id LIMIT 1"));
+            cycleQuery.bindValue(QStringLiteral(":parent_id"), record.parentId);
+            cycleQuery.bindValue(QStringLiteral(":id"), record.id);
+            if (!cycleQuery.exec()) {
+                reportQueryError(cycleQuery, innerError);
+                return false;
+            }
+            if (cycleQuery.next()) {
+                *innerError = QStringLiteral("不能把 Snippet 分组移动到自己的后代中");
+                return false;
+            }
+        }
+
+        if (record.kind == SnippetNodeKind::Snippet) {
+            // 有子节点的分组不能直接改成片段，否则已有子节点会指向一个不可容纳子节点的
+            // 叶子。要求用户先移动或删除子节点，避免树结构静默损坏。
+            QSqlQuery childrenQuery(m_database);
+            childrenQuery.prepare(
+                QStringLiteral("SELECT 1 FROM snippets WHERE parent_id = :id LIMIT 1"));
+            childrenQuery.bindValue(QStringLiteral(":id"), record.id);
+            if (!childrenQuery.exec()) {
+                reportQueryError(childrenQuery, innerError);
+                return false;
+            }
+            if (childrenQuery.next()) {
+                *innerError = QStringLiteral("含有子节点的分组不能直接改为可执行 Snippet");
+                return false;
+            }
+        }
+
+        const QDateTime updatedAt = record.updatedAt.isValid()
+            ? record.updatedAt
+            : QDateTime::currentDateTimeUtc();
+        QSqlQuery query(m_database);
+        query.prepare(QStringLiteral(
+            "INSERT INTO snippets "
+            "(id, parent_id, name, command, description, sort_order, updated_at) "
+            "VALUES (:id, :parent_id, :name, :command, :description, :sort_order, :updated_at) "
+            "ON CONFLICT(id) DO UPDATE SET "
+            "parent_id = excluded.parent_id, name = excluded.name, command = excluded.command, "
+            "description = excluded.description, sort_order = excluded.sort_order, "
+            "updated_at = excluded.updated_at"));
+        query.bindValue(QStringLiteral(":id"), record.id);
+        query.bindValue(QStringLiteral(":parent_id"), nullableText(record.parentId));
+        query.bindValue(QStringLiteral(":name"), normalizedName);
+        query.bindValue(QStringLiteral(":command"),
+                        record.kind == SnippetNodeKind::Folder
+                            ? QVariant()
+                            : QVariant(record.command));
+        query.bindValue(QStringLiteral(":description"), nullableText(record.description));
+        query.bindValue(QStringLiteral(":sort_order"), record.sortOrder);
+        query.bindValue(QStringLiteral(":updated_at"), serializeTime(updatedAt));
+        if (!query.exec()) {
+            reportQueryError(query, innerError);
+            return false;
+        }
+        return true;
+    }, errorMessage);
+}
+
+std::optional<SnippetRecord> ApplicationDatabase::findSnippet(const QString &id,
+                                                               QString *errorMessage) const
+{
+    QSqlQuery query(m_database);
+    query.prepare(QStringLiteral("SELECT * FROM snippets WHERE id = :id"));
+    query.bindValue(QStringLiteral(":id"), id);
+    if (!query.exec()) {
+        reportQueryError(query, errorMessage);
+        return std::nullopt;
+    }
+    if (!query.next()) {
+        return std::nullopt;
+    }
+    return readSnippetRow(query);
+}
+
+QList<SnippetRecord> ApplicationDatabase::listSnippetsInGroup(const QString &parentId,
+                                                              bool *ok,
+                                                              QString *errorMessage) const
+{
+    setFlag(ok, false);
+    QSqlQuery query(m_database);
+    if (parentId.isEmpty()) {
+        query.prepare(QStringLiteral(
+            "SELECT * FROM snippets WHERE parent_id IS NULL ORDER BY sort_order, name, id"));
+    } else {
+        query.prepare(QStringLiteral(
+            "SELECT * FROM snippets WHERE parent_id = :parent_id ORDER BY sort_order, name, id"));
+        query.bindValue(QStringLiteral(":parent_id"), parentId);
+    }
+    if (!query.exec()) {
+        reportQueryError(query, errorMessage);
+        return {};
+    }
+
+    QList<SnippetRecord> records;
+    while (query.next()) {
+        records.append(readSnippetRow(query));
+    }
+    setFlag(ok, true);
+    return records;
+}
+
+bool ApplicationDatabase::removeSnippet(const QString &id,
+                                        int *removedCount,
+                                        QString *errorMessage)
+{
+    if (removedCount != nullptr) {
+        *removedCount = 0;
+    }
+    if (id.isEmpty()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("待删除 Snippet 的 id 不能为空");
+        }
+        return false;
+    }
+
+    int count = 0;
+    const bool succeeded = runInTransaction([&](QString *innerError) {
+        // 先在同一事务里统计，再递归删除。DELETE 的 numRowsAffected 在不同 SQLite 驱动
+        // 版本对 WITH RECURSIVE 的返回不一致，显式 COUNT 才能稳定报告删除数量。
+        const QString descendantsCte = QStringLiteral(
+            "WITH RECURSIVE descendants(id) AS ("
+            " SELECT id FROM snippets WHERE id = :id"
+            " UNION SELECT s.id FROM snippets s JOIN descendants d ON s.parent_id = d.id"
+            ") ");
+        QSqlQuery countQuery(m_database);
+        countQuery.prepare(descendantsCte
+                           + QStringLiteral("SELECT COUNT(*) FROM descendants"));
+        countQuery.bindValue(QStringLiteral(":id"), id);
+        if (!countQuery.exec() || !countQuery.next()) {
+            reportQueryError(countQuery, innerError);
+            return false;
+        }
+        count = countQuery.value(0).toInt();
+
+        QSqlQuery deleteQuery(m_database);
+        deleteQuery.prepare(descendantsCte
+                            + QStringLiteral("DELETE FROM snippets WHERE id IN "
+                                             "(SELECT id FROM descendants)"));
+        deleteQuery.bindValue(QStringLiteral(":id"), id);
+        if (!deleteQuery.exec()) {
+            reportQueryError(deleteQuery, innerError);
+            return false;
+        }
+        return true;
+    }, errorMessage);
+
+    if (succeeded && removedCount != nullptr) {
+        *removedCount = count;
+    }
+    return succeeded;
+}
+
+// -------------------------------------------------------------------- 端口转发规则
+
+bool ApplicationDatabase::savePortForward(const PortForwardRule &rule, QString *errorMessage)
+{
+    QString validationError;
+    if (!rule.isValid(&validationError)) {
+        if (errorMessage != nullptr) {
+            *errorMessage = validationError;
+        }
+        return false;
+    }
+
+    return runInTransaction([&](QString *innerError) {
+        // 除外键存在性外还要拒绝分组节点：分组没有可建立 SSH 会话的地址，给它保存规则只会
+        // 形成永远无法触发的配置。校验放在同一事务内，避免查询后主机恰好被并发删除。
+        QSqlQuery hostQuery(m_database);
+        hostQuery.prepare(QStringLiteral("SELECT kind FROM hosts WHERE id = :host_id"));
+        hostQuery.bindValue(QStringLiteral(":host_id"), rule.hostId);
+        if (!hostQuery.exec()) {
+            reportQueryError(hostQuery, innerError);
+            return false;
+        }
+        if (!hostQuery.next()) {
+            *innerError = QStringLiteral("端口转发绑定的主机不存在：%1").arg(rule.hostId);
+            return false;
+        }
+        if (hostQuery.value(0).toInt() != static_cast<int>(HostNodeKind::Host)) {
+            *innerError = QStringLiteral("端口转发不能绑定到主机分组");
+            return false;
+        }
+
+        QSqlQuery query(m_database);
+        query.prepare(QStringLiteral(
+            "INSERT INTO port_forwards "
+            "(id, host_id, name, type, bind_host, bind_port, target_host, target_port, auto_start) "
+            "VALUES (:id, :host_id, :name, :type, :bind_host, :bind_port, :target_host, "
+            ":target_port, :auto_start) "
+            "ON CONFLICT(id) DO UPDATE SET host_id = excluded.host_id, name = excluded.name, "
+            "type = excluded.type, bind_host = excluded.bind_host, bind_port = excluded.bind_port, "
+            "target_host = excluded.target_host, target_port = excluded.target_port, "
+            "auto_start = excluded.auto_start"));
+        query.bindValue(QStringLiteral(":id"), rule.id);
+        query.bindValue(QStringLiteral(":host_id"), rule.hostId);
+        query.bindValue(QStringLiteral(":name"), rule.name.trimmed());
+        query.bindValue(QStringLiteral(":type"), static_cast<int>(rule.type));
+        query.bindValue(QStringLiteral(":bind_host"), rule.bindHost.trimmed());
+        query.bindValue(QStringLiteral(":bind_port"), rule.bindPort);
+        query.bindValue(QStringLiteral(":target_host"),
+                        rule.type == PortForwardType::Dynamic
+                            ? QVariant()
+                            : QVariant(rule.targetHost.trimmed()));
+        query.bindValue(QStringLiteral(":target_port"),
+                        rule.type == PortForwardType::Dynamic
+                            ? QVariant(0)
+                            : QVariant(rule.targetPort));
+        query.bindValue(QStringLiteral(":auto_start"), rule.autoStart ? 1 : 0);
+        if (!query.exec()) {
+            reportQueryError(query, innerError);
+            return false;
+        }
+        return true;
+    }, errorMessage);
+}
+
+std::optional<PortForwardRule>
+ApplicationDatabase::findPortForward(const QString &id, QString *errorMessage) const
+{
+    QSqlQuery query(m_database);
+    query.prepare(QStringLiteral("SELECT * FROM port_forwards WHERE id = :id"));
+    query.bindValue(QStringLiteral(":id"), id);
+    if (!query.exec()) {
+        reportQueryError(query, errorMessage);
+        return std::nullopt;
+    }
+    if (!query.next()) {
+        return std::nullopt;
+    }
+    return readPortForwardRow(query);
+}
+
+QList<PortForwardRule> ApplicationDatabase::listPortForwards(const QString &hostId,
+                                                             bool *ok,
+                                                             QString *errorMessage) const
+{
+    setFlag(ok, false);
+    if (hostId.trimmed().isEmpty()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("列出端口转发时 hostId 不能为空");
+        }
+        return {};
+    }
+
+    QSqlQuery query(m_database);
+    query.prepare(QStringLiteral(
+        "SELECT * FROM port_forwards WHERE host_id = :host_id "
+        "ORDER BY name COLLATE NOCASE, id"));
+    query.bindValue(QStringLiteral(":host_id"), hostId);
+    if (!query.exec()) {
+        reportQueryError(query, errorMessage);
+        return {};
+    }
+    QList<PortForwardRule> rules;
+    while (query.next()) {
+        rules.append(readPortForwardRow(query));
+    }
+    setFlag(ok, true);
+    return rules;
+}
+
+bool ApplicationDatabase::removePortForward(const QString &id,
+                                            int *removedCount,
+                                            QString *errorMessage)
+{
+    return runInTransaction([&](QString *innerError) {
+        QSqlQuery query(m_database);
+        query.prepare(QStringLiteral("DELETE FROM port_forwards WHERE id = :id"));
+        query.bindValue(QStringLiteral(":id"), id);
+        if (!query.exec()) {
+            reportQueryError(query, innerError);
+            return false;
+        }
+        if (removedCount != nullptr) {
+            *removedCount = query.numRowsAffected();
+        }
+        return true;
+    }, errorMessage);
+}
+
+// ---------------------------------------------------------------------- 工作区
+
+bool ApplicationDatabase::saveWorkspace(const WorkspaceRecord &record,
+                                         QString *errorMessage)
+{
+    const QString id = record.id.trimmed();
+    const QString name = record.name.trimmed();
+    QJsonParseError parseError;
+    const QJsonDocument layout = QJsonDocument::fromJson(record.layoutJson.toUtf8(), &parseError);
+    if (id.isEmpty() || name.isEmpty() || layout.isNull()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = layout.isNull() && !record.layoutJson.trimmed().isEmpty()
+                ? QStringLiteral("工作区布局 JSON 无效：%1").arg(parseError.errorString())
+                : QStringLiteral("工作区 id、名称和布局不能为空");
+        }
+        return false;
+    }
+    const QDateTime updatedAt = record.updatedAt.isValid()
+        ? record.updatedAt
+        : QDateTime::currentDateTimeUtc();
+    return runInTransaction([&](QString *innerError) {
+        QSqlQuery query(m_database);
+        query.prepare(QStringLiteral(
+            "INSERT INTO workspaces (id, name, layout_json, updated_at) "
+            "VALUES (:id, :name, :layout_json, :updated_at) "
+            "ON CONFLICT(id) DO UPDATE SET name = excluded.name, "
+            "layout_json = excluded.layout_json, updated_at = excluded.updated_at"));
+        query.bindValue(QStringLiteral(":id"), id);
+        query.bindValue(QStringLiteral(":name"), name);
+        // 重新压缩序列化，避免同一布局因无意义空白产生不同磁盘内容和导出差异。
+        query.bindValue(QStringLiteral(":layout_json"),
+                        QString::fromUtf8(layout.toJson(QJsonDocument::Compact)));
+        query.bindValue(QStringLiteral(":updated_at"), serializeTime(updatedAt));
+        if (!query.exec()) {
+            reportQueryError(query, innerError);
+            return false;
+        }
+        return true;
+    }, errorMessage);
+}
+
+std::optional<WorkspaceRecord>
+ApplicationDatabase::findWorkspace(const QString &id, QString *errorMessage) const
+{
+    QSqlQuery query(m_database);
+    query.prepare(QStringLiteral("SELECT * FROM workspaces WHERE id = :id"));
+    query.bindValue(QStringLiteral(":id"), id);
+    if (!query.exec()) {
+        reportQueryError(query, errorMessage);
+        return std::nullopt;
+    }
+    if (!query.next()) {
+        return std::nullopt;
+    }
+    return readWorkspaceRow(query);
+}
+
+QList<WorkspaceRecord> ApplicationDatabase::listWorkspaces(bool *ok,
+                                                           QString *errorMessage) const
+{
+    setFlag(ok, false);
+    QSqlQuery query(m_database);
+    if (!query.exec(QStringLiteral(
+            "SELECT * FROM workspaces ORDER BY updated_at DESC, name COLLATE NOCASE, id"))) {
+        reportQueryError(query, errorMessage);
+        return {};
+    }
+    QList<WorkspaceRecord> records;
+    while (query.next()) {
+        records.append(readWorkspaceRow(query));
+    }
+    setFlag(ok, true);
+    return records;
+}
+
+bool ApplicationDatabase::removeWorkspace(const QString &id,
+                                          int *removedCount,
+                                          QString *errorMessage)
+{
+    return runInTransaction([&](QString *innerError) {
+        QSqlQuery query(m_database);
+        query.prepare(QStringLiteral("DELETE FROM workspaces WHERE id = :id"));
+        query.bindValue(QStringLiteral(":id"), id);
+        if (!query.exec()) {
+            reportQueryError(query, innerError);
+            return false;
+        }
+        if (removedCount != nullptr) {
+            *removedCount = query.numRowsAffected();
+        }
+        return true;
+    }, errorMessage);
+}
+
 // -------------------------------------------------------------------- 设置项
 
 bool ApplicationDatabase::setSetting(const QString &key, const QString &value, QString *errorMessage)
@@ -1008,13 +1614,18 @@ bool ApplicationDatabase::setSetting(const QString &key, const QString &value, Q
         }
         return false;
     }
+    // Qt 的默认 QString 具有“空且为 null”的内部状态。QSqlQuery 会把这种值绑定成 SQL
+    // NULL，而不是长度为 0 的 TEXT；但设置表明确使用 NOT NULL，并且“空字体族”“已取消
+    // 的快捷键”等业务值本来就需要合法保存为空文本。因此统一在数据库边界把 null QString
+    // 规范化为非 null 空串，既保留业务语义，也避免各个设置调用方重复处理 Qt 的这一细节。
+    const QString storedValue = value.isNull() ? QStringLiteral("") : value;
     return runInTransaction([&](QString *innerError) {
         QSqlQuery query(m_database);
         query.prepare(QStringLiteral(
             "INSERT INTO settings (key, value) VALUES (:key, :value) "
             "ON CONFLICT(key) DO UPDATE SET value = excluded.value"));
         query.bindValue(QStringLiteral(":key"), key);
-        query.bindValue(QStringLiteral(":value"), value);
+        query.bindValue(QStringLiteral(":value"), storedValue);
         if (!query.exec()) {
             reportQueryError(query, innerError);
             return false;

@@ -124,6 +124,47 @@ void VtermBridge::resize(const int rows, const int columns)
     vterm_screen_flush_damage(m_screen);
 }
 
+void VtermBridge::setDefaultColors(const QColor &foreground,
+                                   const QColor &background,
+                                   const QColor &cursorColor)
+{
+    const QColor safeForeground = foreground.isValid() ? foreground : QColor(Qt::white);
+    const QColor safeBackground = background.isValid() ? background : QColor(Qt::black);
+    m_cursorColor = cursorColor.isValid() ? cursorColor : safeForeground;
+
+    VTermColor nativeForeground;
+    VTermColor nativeBackground;
+    vterm_color_rgb(&nativeForeground,
+                    static_cast<uint8_t>(safeForeground.red()),
+                    static_cast<uint8_t>(safeForeground.green()),
+                    static_cast<uint8_t>(safeForeground.blue()));
+    vterm_color_rgb(&nativeBackground,
+                    static_cast<uint8_t>(safeBackground.red()),
+                    static_cast<uint8_t>(safeBackground.green()),
+                    static_cast<uint8_t>(safeBackground.blue()));
+    vterm_screen_set_default_colors(m_screen, &nativeForeground, &nativeBackground);
+}
+
+void VtermBridge::setScrollbackLimit(const int lineCount)
+{
+    m_scrollbackLimit = std::clamp(lineCount, 100, 1000000);
+    if (m_scrollback.size() > m_scrollbackLimit) {
+        // 从头部批量删除比逐行 removeFirst 更高效；设置调小时可能一次裁掉数万行。
+        m_scrollback.remove(0, m_scrollback.size() - m_scrollbackLimit);
+    }
+}
+
+void VtermBridge::setLineHeightPercent(const int percent)
+{
+    m_lineHeightPercent = std::clamp(percent, 80, 250);
+}
+
+void VtermBridge::setCursorPresentation(const CursorShape shape, const bool phaseVisible)
+{
+    m_cursorShape = shape;
+    m_cursorPhaseVisible = phaseVisible;
+}
+
 QString VtermBridge::cursorLineText() const
 {
     if (m_cursorRow < 0 || m_cursorRow >= m_rows) {
@@ -148,12 +189,16 @@ void VtermBridge::render(QTextDocument *document) const
     }
 
     document->clear();
+    m_renderedCursorPosition = -1;
     QTextCursor cursor(document);
     cursor.beginEditBlock();
 
     const auto insertLine = [this, &cursor](const Line &line,
                                             const int visualRow,
                                             const bool currentScreen) {
+        QTextBlockFormat blockFormat;
+        blockFormat.setLineHeight(m_lineHeightPercent, QTextBlockFormat::ProportionalHeight);
+        cursor.setBlockFormat(blockFormat);
         int lastContentColumn = -1;
         for (int column = 0; column < line.size(); ++column) {
             if (!line.at(column).text.trimmed().isEmpty()
@@ -169,10 +214,19 @@ void VtermBridge::render(QTextDocument *document) const
             }
             QColor foreground = cell.foreground;
             QColor background = cell.background;
-            const bool cursorCell = currentScreen && m_cursorVisible
+            const bool cursorCell = currentScreen && m_cursorVisible && m_cursorPhaseVisible
                 && visualRow == m_cursorRow && column == m_cursorColumn;
-            if (cell.reverse || cursorCell) {
+            if (cell.reverse) {
                 std::swap(foreground, background);
+            }
+            if (cursorCell) {
+                m_renderedCursorPosition = cursor.position();
+                if (m_cursorShape == CursorShape::Block) {
+                    // 块状光标使用可配置光标色；文本采用该单元格原背景色以保证深浅主题下
+                    // 都有对比度，同时不修改 libvterm 的真实屏幕状态。
+                    foreground = background;
+                    background = m_cursorColor;
+                }
             }
             if (cell.conceal) {
                 foreground = background;
@@ -184,6 +238,11 @@ void VtermBridge::render(QTextDocument *document) const
             format.setFontWeight(cell.bold ? QFont::Bold : QFont::Normal);
             format.setFontItalic(cell.italic);
             format.setFontUnderline(cell.underline);
+            if (cursorCell && m_cursorShape == CursorShape::Underline) {
+                format.setFontUnderline(true);
+                format.setUnderlineColor(m_cursorColor);
+                format.setUnderlineStyle(QTextCharFormat::SingleUnderline);
+            }
             format.setFontStrikeOut(cell.strike);
             cursor.insertText(cell.text.isEmpty() ? QStringLiteral(" ") : cell.text, format);
         }
@@ -325,9 +384,9 @@ int VtermBridge::pushScrollbackCallback(const int columns,
         line.append(bridge->convertCell(cells[column]));
     }
     bridge->m_scrollback.append(std::move(line));
-    if (bridge->m_scrollback.size() > MaxScrollbackLines) {
+    if (bridge->m_scrollback.size() > bridge->m_scrollbackLimit) {
         bridge->m_scrollback.remove(0,
-            bridge->m_scrollback.size() - MaxScrollbackLines);
+            bridge->m_scrollback.size() - bridge->m_scrollbackLimit);
     }
     return 1;
 }

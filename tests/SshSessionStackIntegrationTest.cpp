@@ -470,9 +470,16 @@ void SshSessionStackIntegrationTest::shellShimReportsSshInvocationFromRealShell(
     QVERIFY2(failed.isEmpty(), "第一层连接失败");
     QVERIFY(waitFor([&]() { return !output.isEmpty(); }, 15000));
 
-    // 注入 shim。这一步在真实 Shell 里跑：语法错误、base64 缺失、引号转义问题都只有
-    // 在这里才会暴露，桩替身完全测不出来。
+    // 注入前设置一条用户策略，再在真实 Shell 里执行 shim。除语法、base64 和引号问题外，
+    // 还要确认注入不会像旧实现那样把 HISTCONTROL 无条件覆盖为 ignorespace。
+    stack.enqueueInput("HISTCONTROL=erasedups\n");
     stack.enqueueInput(ShellShim::scriptBody() + "\n");
+    output.clear();
+    stack.enqueueInput("printf '<SHELLIUM_HC>%s</SHELLIUM_HC>\\n' \"$HISTCONTROL\"\n");
+    QVERIFY2(waitFor([&]() {
+                 return output.contains("<SHELLIUM_HC>erasedups:ignorespace</SHELLIUM_HC>");
+             }, 15000),
+             "shim 覆盖或丢失了用户已有的 HISTCONTROL 策略");
     output.clear();
     stack.enqueueInput("type ssh | head -1\n");
     QVERIFY2(waitFor([&]() { return output.contains("function"); }, 15000),

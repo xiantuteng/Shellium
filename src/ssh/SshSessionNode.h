@@ -31,6 +31,14 @@ namespace SshKeepAlive {
 inline constexpr qint64 kIdleIntervalMs = 30000;
 
 /**
+ * @brief 保活发送失败后的最小重试间隔。
+ *
+ * libssh 非阻塞发送缓冲满时会立刻失败；SSH 栈泵送周期约 10ms，若不退避就会每秒调用约
+ * 100 次 ssh_send_ignore。1 秒仍足以在 NAT 过期前重试，同时避免故障链路上的忙循环。
+ */
+inline constexpr qint64 kMinimumRetryIntervalMs = 1000;
+
+/**
  * @brief 判断某一层此刻是否应当发送保活探测。
  * @param sessionReady 该层是否已完成认证；建立阶段有独立的握手超时兜底，不需要保活。
  * @param idleMs 距最近一次数据往来的毫秒数；计时尚未开始时传负数。
@@ -50,6 +58,8 @@ inline constexpr qint64 kIdleIntervalMs = 30000;
 struct LayerIdleState {
     bool ready = false;
     qint64 idleMs = -1;
+    /** @brief 距上次实际调用发送 API 的毫秒数；从未尝试时为 -1。 */
+    qint64 sinceLastAttemptMs = -1;
 };
 
 /**
@@ -66,7 +76,10 @@ struct LayerIdleState {
 {
     QList<int> indices;
     for (int index = 0; index < layers.size(); ++index) {
-        if (shouldSend(layers.at(index).ready, layers.at(index).idleMs, intervalMs)) {
+        const LayerIdleState &layer = layers.at(index);
+        const bool retryWindowElapsed = layer.sinceLastAttemptMs < 0
+            || layer.sinceLastAttemptMs >= kMinimumRetryIntervalMs;
+        if (retryWindowElapsed && shouldSend(layer.ready, layer.idleMs, intervalMs)) {
             indices.append(index);
         }
     }
@@ -118,15 +131,7 @@ public:
      * @brief 构造一层，但不发起任何网络操作。
      * @param target 该层的服务器配置；password 只在本对象生命周期内驻留内存。
      */
-    /**
-     * @brief 构造一层，但不发起任何网络操作。
-     * @param target 该层的服务器配置；password 只在本对象生命周期内驻留内存。
-     * @param shellIntegrationScript Shell 起来前抢先写入的注入脚本；空则不注入。
-     */
-    SshSessionNode(ConnectionTarget target, QByteArray shellIntegrationScript);
-
-    explicit SshSessionNode(ConnectionTarget target)
-        : SshSessionNode(std::move(target), {}) {}
+    explicit SshSessionNode(ConnectionTarget target);
     ~SshSessionNode();
 
     SshSessionNode(const SshSessionNode &) = delete;
@@ -179,7 +184,7 @@ public:
     [[nodiscard]] bool isAwaitingCredential() const;
 
     /**
-     * @brief 在本层会话上非阻塞地执行一条命令，不关心其输出。
+     * @brief 在本层会话上非阻塞地执行一条命令，并收集受限长度的失败诊断。
      * @param command 交给远端 Shell 执行的完整命令。
      * @return 是否成功发起；已有执行在途或会话未建立时返回 false。
      *
@@ -187,15 +192,19 @@ public:
      */
     bool beginDetachedExec(const QByteArray &command);
 
-    /** @brief 推进在途的 exec；结束时把结果交给 execFinished 消费。 */
+    /** @brief 推进在途的 exec；结束时把经退出码校验的结果交给 takeExecResult() 消费。 */
     void pumpExec();
 
     /**
-     * @brief 取走一次 exec 完成事件。
-     * @param succeeded 输出执行是否成功。
-     * @return 有完成事件返回 true；否则返回 false。
+     * @brief 取走最近一次后台 exec 的完成结果。
+     * @param succeeded 输出远端命令是否明确以退出码 0 结束；可传 nullptr。
+     * @param errorMessage 失败时输出通道错误、退出码和受限长度的 stderr 诊断；可传 nullptr。
+     * @return 有尚未消费的完成结果返回 true；命令仍在执行或没有发起过返回 false。
+     *
+     * 仅看到通道 EOF 不能证明命令成功：例如临时目录不可写时 `cat` 同样会很快 EOF。
+     * 因此调用方必须通过本接口消费经过退出状态校验后的结果，不能自行把 EOF 当成功。
      */
-    bool takeExecResult(bool *succeeded);
+    bool takeExecResult(bool *succeeded, QString *errorMessage = nullptr);
 
     /**
      * @brief 写出内部排队的字节（目前只有 Shell 集成注入）。
@@ -263,6 +272,21 @@ public:
         QString error;
     };
 
+    /** @brief 一次远程监听申请的异步完成结果。 */
+    struct RemoteListenOutcome {
+        quint64 requestId = 0;
+        QString ruleId;
+        bool ok = false;
+        quint16 boundPort = 0;
+        QString error;
+    };
+
+    /** @brief SSH 服务器向某条 -R 监听送来的一条新连接。 */
+    struct RemoteAcceptedConnection {
+        QString ruleId;
+        int callerFd = -1; ///< 与 SSH channel 相连的 socket；调用方取得所有权。
+    };
+
     /**
      * @brief 发起一条到内网目标的 direct-tcpip 通道，立即返回，绝不等待远端应答。
      * @param host 从本层服务器视角可达的主机。
@@ -288,6 +312,36 @@ public:
      * @return 本轮得出结论的建立结果；没有则为空。
      */
     QList<ForwardOutcome> pumpForwards();
+
+    /**
+     * @brief 非阻塞发起一条 SSH 服务器侧监听（OpenSSH -R 语义）。
+     * @param ruleId 持久化转发规则 id，用于把后续入站连接路由回对应运行时。
+     * @param bindHost 服务端监听地址；是否允许非回环地址由服务端 GatewayPorts 决定。
+     * @param bindPort 服务端监听端口，必须为 1..65535。
+     * @param error 同步参数错误输出；异步结果由 pumpRemoteForwarding 返回。
+     * @return 非零请求 id 表示已进入状态机；0 表示未发起。
+     */
+    quint64 beginRemoteListen(const QString &ruleId,
+                              const QString &bindHost,
+                              quint16 bindPort,
+                              QString *error = nullptr);
+
+    /**
+     * @brief 请求取消一条服务器侧监听。
+     * @param ruleId 持久化规则 id。
+     *
+     * 取消同样按非阻塞状态机推进；调用后本地立即停止接收该规则的新连接，服务端确认包在
+     * 后续 pump 中完成，避免 GUI 或 SSH 栈线程等待网络。
+     */
+    void cancelRemoteListen(const QString &ruleId);
+
+    /**
+     * @brief 推进远程监听申请/取消并接收服务端送来的入站 channel。
+     * @param outcomes 本轮完成的监听申请。
+     * @param accepted 本轮接收的入站连接；callerFd 所有权交给调用方。
+     */
+    void pumpRemoteForwarding(QList<RemoteListenOutcome> &outcomes,
+                              QList<RemoteAcceptedConnection> &accepted);
 
     /** @brief 是否还有尚未得出结论的转发建立请求。 */
     [[nodiscard]] bool hasPendingForwards() const { return !m_pendingForwards.isEmpty(); }
@@ -339,8 +393,14 @@ private:
      */
     enum class ForwardTransport { DirectTcpIp, ExecRelay };
 
-    /** @brief ExecRelay 的推进阶段。 */
-    enum class RelayStage { OpeningSession, RequestingExec };
+    /**
+     * @brief ExecRelay 的推进阶段。
+     *
+     * ConfirmingExec 会短暂收集 stderr 并观察通道是否立即退出。若远端没有 bash `/dev/tcp`、
+     * nc 或 socat，旧实现会先把本地 socket 当作成功交给调用方，随后只留下一个无法解释的
+     * EOF；增加确认阶段后可把真实诊断随 ForwardOutcome 返回。
+     */
+    enum class RelayStage { OpeningSession, RequestingExec, ConfirmingExec };
 
     /** @brief 一条已发起但远端尚未应答的通道建立请求。 */
     struct PendingForward {
@@ -354,6 +414,27 @@ private:
         QElapsedTimer timer;
         ForwardTransport transport = ForwardTransport::DirectTcpIp;
         RelayStage relayStage = RelayStage::OpeningSession;
+        /** @brief exec 请求被服务端接受时相对 timer 起点的毫秒数，用于短暂失败观察窗。 */
+        qint64 relayExecStartedAtMs = -1;
+        /** @brief 确认阶段收集的远端 stderr，限制长度后用于向用户解释中继失败。 */
+        QByteArray relayDiagnostic;
+    };
+
+    /** @brief 尚未收到服务端确认的 tcpip-forward 请求。 */
+    struct PendingRemoteListen {
+        quint64 requestId = 0;
+        QString ruleId;
+        QByteArray bindHost;
+        quint16 bindPort = 0;
+        QElapsedTimer timer;
+    };
+
+    /** @brief 已由服务端建立的远程监听。 */
+    struct RemoteListener {
+        QString ruleId;
+        QByteArray bindHost;
+        quint16 boundPort = 0;
+        bool cancelRequested = false;
     };
 
     /** @brief 推进 TCP/SSH 握手并在成功后立即校验主机密钥。 */
@@ -388,9 +469,13 @@ private:
     ssh_channel m_shell = nullptr;
     QList<ActiveForward> m_forwards;
     QList<PendingForward> m_pendingForwards;
+    QList<PendingRemoteListen> m_pendingRemoteListeners;
+    QList<RemoteListener> m_remoteListeners;
 
     /** @brief 本层内单调递增的转发请求编号，用于把结果匹配回发起方。 */
     quint64 m_nextForwardId = 1;
+    /** @brief 远程监听申请编号，与普通 direct-tcpip 编号分开，避免两个状态机互相耦合。 */
+    quint64 m_nextRemoteListenId = 1;
 
     /**
      * @brief 本层服务器是否已确认禁用 TCP 转发。
@@ -414,9 +499,6 @@ private:
     /** @brief PTY 模式字节串，出于同样的重试稳定性要求而缓存。 */
     QByteArray m_terminalModes;
 
-    /** @brief Shell 通道就绪后抢先写出的注入脚本。 */
-    QByteArray m_shellIntegrationScript;
-
     /** @brief 尚未写完的内部字节。 */
     QByteArray m_outgoing;
 
@@ -429,6 +511,10 @@ private:
     QElapsedTimer m_execTimer;
     bool m_execHasResult = false;
     bool m_execSucceeded = false;
+    /** @brief 最近一次后台 exec 的可读失败原因；成功时为空。 */
+    QString m_execError;
+    /** @brief 后台 exec 的 stderr 摘要，防止诊断输出无限占用内存。 */
+    QByteArray m_execDiagnostic;
 
     int m_columns = 80;
     int m_rows = 24;
@@ -456,4 +542,12 @@ private:
 
     /** @brief 距最近一次数据往来的计时，保活判定的唯一依据；未就绪前不启动。 */
     QElapsedTimer m_idleTimer;
+
+    /**
+     * @brief 距最近一次保活发送尝试的计时。
+     *
+     * 成功时 m_idleTimer 会重置，失败时本计时器单独提供最小退避；二者不能共用，否则一次
+     * 失败会被误当作真实网络活动并把下一次必要探测推迟完整 30 秒。
+     */
+    QElapsedTimer m_keepAliveAttemptTimer;
 };

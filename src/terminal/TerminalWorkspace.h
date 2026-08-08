@@ -37,6 +37,21 @@ signals:
     /** @brief 终端面板产生可展示给用户的状态消息。 */
     void statusMessage(const QString &message);
 
+    /**
+     * @brief 当前标签页的结构化终端状态发生变化。
+     * @param server 当前服务器连接说明；本地终端和未连接会使用明确中文标识。
+     * @param encoding 当前终端输入输出编码，现阶段固定为 UTF-8。
+     * @param columns 终端可见列数。
+     * @param rows 终端可见行数。
+     *
+     * 主窗口应监听当前标签页的该信号来绘制持久状态栏，不能从短暂的 statusMessage 文本
+     * 反向解析；每个 TerminalWorkspace 保存自己的尺寸，因此标签切换不会串用其他会话状态。
+     */
+    void terminalStatusChanged(const QString &server,
+                               const QString &encoding,
+                               int columns,
+                               int rows);
+
 private:
     /**
      * @brief 将终端的连接链同步给本标签页专属文件管理器。
@@ -44,7 +59,16 @@ private:
      */
     void synchronizeFileManager(bool followInnermost);
 
+    /** @brief 根据当前连接层和最近字符尺寸发出结构化终端状态。 */
+    void emitTerminalStatus();
+
     QSplitter *m_pageSplitter = nullptr;
     RemoteFileManagerWidget *m_fileManager = nullptr;
     TerminalPane *m_pane = nullptr;
+
+    /** @brief 本标签最近一次终端列数，窗口尚未布局时使用标准 80 列。 */
+    int m_terminalColumns = 80;
+
+    /** @brief 本标签最近一次终端行数，窗口尚未布局时使用标准 24 行。 */
+    int m_terminalRows = 24;
 };

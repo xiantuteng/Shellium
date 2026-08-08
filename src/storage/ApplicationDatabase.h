@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/HostRecord.h"
+#include "forwarding/PortForwardRule.h"
 
 #include <QList>
 #include <QSqlDatabase>
@@ -8,6 +9,20 @@
 
 #include <functional>
 #include <optional>
+
+/**
+ * @brief 一个可持久化工作区的名称与版本化布局 JSON。
+ *
+ * 数据库层不解释 layoutJson：布局属于应用层协议，当前版本保存标签名称、持久化主机 id 和
+ * 文件管理器显隐状态。把 JSON 作为不透明字段可让后续加入窗口几何或模板参数时保持表结构
+ * 稳定；应用层读取时仍必须校验版本和每个字段，不能盲目信任磁盘内容。
+ */
+struct WorkspaceRecord {
+    QString id;         ///< 稳定 UUID；保存同名工作区不会隐式覆盖其他 id。
+    QString name;       ///< 用户可见名称，去除首尾空白后不得为空。
+    QString layoutJson; ///< 应用层生成的紧凑 JSON，不得为空且必须是合法 JSON 文档。
+    QDateTime updatedAt;
+};
 
 /**
  * @brief 管理 Shellium SQLite 数据库连接、事务、版本化建表与全部持久化读写。
@@ -136,6 +151,32 @@ public:
     [[nodiscard]] QList<CredentialRecord> listCredentials(bool *ok = nullptr,
                                                           QString *errorMessage = nullptr) const;
 
+    // ------------------------------------------------------------ 保险库公开配置
+
+    /**
+     * @brief 原子保存保险库盐值和主密码校验块。
+     *
+     * 表中只允许存在一条配置。调用方必须先完成密钥派生与校验块加密，再调用本方法；
+     * 主密码和会话密钥永远不会进入数据库层。缺少任一关键字段都会被拒绝，防止半写入的
+     * 初始化数据让后续启动既不能创建也不能解锁。
+     * @param configuration 待持久化的公开配置。
+     * @param errorMessage 失败时接收可读错误；可为空。
+     * @return 写入并提交成功返回 true。
+     */
+    bool saveVaultConfiguration(const VaultConfiguration &configuration,
+                                QString *errorMessage = nullptr);
+
+    /**
+     * @brief 读取唯一的保险库公开配置。
+     * @param errorMessage 查询失败或字段损坏时接收原因；可为空。
+     * @return 尚未初始化时返回 std::nullopt 且不设置错误；记录完整时返回配置。
+     *
+     * 空盐值、空校验块、未知格式版本都视为数据损坏，而不是“尚未初始化”。这一边界可以
+     * 避免应用静默创建新保险库并使已有凭据永久不可解密。
+     */
+    [[nodiscard]] std::optional<VaultConfiguration>
+    vaultConfiguration(QString *errorMessage = nullptr) const;
+
     // ---------------------------------------------------------------- 连接历史
 
     /**
@@ -176,6 +217,108 @@ public:
                                                             int limit,
                                                             bool *ok = nullptr,
                                                             QString *errorMessage = nullptr) const;
+
+    // ---------------------------------------------------------------- Snippets
+
+    /**
+     * @brief 新增或整体更新一条 Snippet / 分组记录。
+     * @param record 待保存记录；id、name 不能为空，可执行片段还必须包含非空 command。
+     * @param errorMessage 失败时接收参数校验、父节点或 SQL 错误；可为空。
+     * @return 校验、写入和事务提交全部成功时返回 true。
+     *
+     * 父节点必须是已存在的分组；把分组移动到自己的后代下会被拒绝。更新使用 UPSERT 而
+     * 不是 REPLACE，避免 SQLite 先删除旧行后让子节点短暂失去父级。
+     */
+    bool saveSnippet(const SnippetRecord &record, QString *errorMessage = nullptr);
+
+    /**
+     * @brief 按稳定 id 读取一条 Snippet 或分组。
+     * @return 存在时返回完整记录；不存在返回 std::nullopt 且不设置 errorMessage。
+     */
+    [[nodiscard]] std::optional<SnippetRecord> findSnippet(
+        const QString &id,
+        QString *errorMessage = nullptr) const;
+
+    /**
+     * @brief 列出某个分组的直接子节点。
+     * @param parentId 空表示根层级。
+     * @param ok 查询成功时置 true；空分组同样属于成功。
+     * @param errorMessage 查询失败时接收可读错误；可为空。
+     * @return 按 sortOrder、name 排序的直接子节点，不递归展开。
+     */
+    [[nodiscard]] QList<SnippetRecord> listSnippetsInGroup(
+        const QString &parentId,
+        bool *ok = nullptr,
+        QString *errorMessage = nullptr) const;
+
+    /**
+     * @brief 删除 Snippet；删除分组时递归删除全部后代。
+     * @param id 目标稳定 id。
+     * @param removedCount 可选出参，接收本次删除的目标及后代总行数。
+     * @param errorMessage 失败时接收可读错误；可为空。
+     * @return SQL 成功执行并提交时返回 true；id 不存在也返回 true 且删除数为 0。
+     */
+    bool removeSnippet(const QString &id,
+                       int *removedCount = nullptr,
+                       QString *errorMessage = nullptr);
+
+    // --------------------------------------------------------------- 端口转发规则
+
+    /**
+     * @brief 插入或整体更新一条端口转发规则。
+     * @param rule 必须通过 PortForwardRule::isValid()，且 hostId 必须指向可连接主机节点。
+     * @param errorMessage 失败时接收字段、外键或 SQL 错误；可传 nullptr。
+     * @return 写入并提交成功返回 true。
+     *
+     * hostId 绑定持久化 hosts 主键，而不是一次会话里的地址字符串。这样主机改名或修改地址
+     * 后规则仍属于同一主机，根连接生命周期也能无歧义地触发 autoStart。
+     */
+    bool savePortForward(const PortForwardRule &rule, QString *errorMessage = nullptr);
+
+    /** @brief 按稳定 id 读取规则；不存在返回 std::nullopt 且不设置错误。 */
+    [[nodiscard]] std::optional<PortForwardRule>
+    findPortForward(const QString &id, QString *errorMessage = nullptr) const;
+
+    /**
+     * @brief 列出某台持久化主机的全部规则，按名称排序。
+     * @param hostId hosts 表主键；空字符串不会退化成“列出全部”，而是返回参数错误。
+     */
+    [[nodiscard]] QList<PortForwardRule> listPortForwards(const QString &hostId,
+                                                          bool *ok = nullptr,
+                                                          QString *errorMessage = nullptr) const;
+
+    /** @brief 删除规则；id 不存在仍算成功，并通过 removedCount 返回 0。 */
+    bool removePortForward(const QString &id,
+                           int *removedCount = nullptr,
+                           QString *errorMessage = nullptr);
+
+    // ---------------------------------------------------------------- 工作区
+
+    /**
+     * @brief 新增或整体更新一个工作区。
+     * @param record id、name 和 layoutJson 必须有效；layoutJson 会解析一次以拒绝损坏数据。
+     * @param errorMessage 参数、JSON 或 SQL 错误输出；可为空。
+     * @return 写入并提交成功返回 true。
+     */
+    bool saveWorkspace(const WorkspaceRecord &record, QString *errorMessage = nullptr);
+
+    /** @brief 按稳定 id 读取工作区；不存在返回空且不设置错误。 */
+    [[nodiscard]] std::optional<WorkspaceRecord>
+    findWorkspace(const QString &id, QString *errorMessage = nullptr) const;
+
+    /**
+     * @brief 列出全部工作区，最近更新的排在前面。
+     * @param ok 查询成功时置 true，空列表也是成功。
+     * @param errorMessage 查询失败时接收原因；可为空。
+     */
+    [[nodiscard]] QList<WorkspaceRecord> listWorkspaces(
+        bool *ok = nullptr,
+        QString *errorMessage = nullptr) const;
+
+    /** @brief 删除工作区；不存在也返回成功，并通过 removedCount 返回 0。 */
+    bool removeWorkspace(const QString &id,
+                         int *removedCount = nullptr,
+                         QString *errorMessage = nullptr);
 
     // ---------------------------------------------------------------- 设置项
 

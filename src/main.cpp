@@ -1,5 +1,7 @@
 #include "app/MainWindow.h"
+#include "security/Vault.h"
 #include "storage/ApplicationDatabase.h"
+#include "ui/VaultDialog.h"
 
 #include <QApplication>
 #include <QCoreApplication>
@@ -32,7 +34,16 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    MainWindow window;
+    CredentialVault credentialVault(database);
+    // 首次启动必须创建主密码，后续启动必须成功解锁。这里不允许取消后继续进入一个看似可用
+    // 但无法读取保存凭据的半初始化界面；用户关闭窗口时直接结束进程，数据库不会被修改。
+    if (!VaultDialog::ensureUnlocked(&credentialVault, nullptr, false)) {
+        return 1;
+    }
+
+    // 数据库与保险库服务都由 main() 持有，生命周期覆盖 MainWindow。显式注入保证主机树、
+    // 最近连接和凭据解密共享同一份已迁移数据与同一把会话密钥。
+    MainWindow window(&database, &credentialVault);
     window.show();
     return application.exec();
 }

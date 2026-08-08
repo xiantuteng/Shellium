@@ -8,10 +8,12 @@
 #include <QStringList>
 #include <QWidget>
 
+class ApplicationDatabase;
 class QLabel;
 class LocalShellWorker;
 class SshSessionStack;
 class TerminalView;
+struct TerminalSettings;
 
 /**
  * @brief 一个标签页内的终端面板，可独立连接和关闭。
@@ -56,12 +58,120 @@ public:
     /** @brief 把键盘焦点交给终端显示区。 */
     void focusTerminal();
 
+    /**
+     * @brief 返回当前根连接的受控 SSH 会话栈，供端口转发运行时使用。
+     * @return 当前根会话栈对象仍存在时返回非空；尚未创建或已清理时返回 nullptr。
+     *
+     * 返回值不转移所有权。调用方只能使用 SshSessionStack 明确标注为跨线程安全的转发接口，
+     * 不得直接访问 libssh 句柄。该方法在断线信号中仍返回准确对象，是为了让管理器按对象
+     * 身份注销旧运行时；真正启动新转发仍只能发生在 rootConnectionSucceeded 之后。
+     */
+    [[nodiscard]] SshSessionStack *forwardingSessionStack() const;
+
+    /**
+     * @brief 注入命令历史数据库并立即加载当前主机的补全候选。
+     * @param database 已初始化数据库，生命周期必须覆盖本面板；传 nullptr 可关闭持久化。
+     *
+     * TerminalPane 不拥有数据库。显式注入而不是使用全局单例，可让测试使用隔离的内存
+     * 数据库，也避免终端层隐式打开第二条 SQLite 连接。
+     */
+    void setCommandHistoryDatabase(ApplicationDatabase *database);
+
+    /** @brief 把应用级终端设置应用到视图和面板标题栏。 */
+    void applyTerminalSettings(const TerminalSettings &settings);
+
+    /** @brief 在终端输出中查找文本；到达边界时由视图自动环回。 */
+    bool findTerminalText(const QString &text, bool backward = false);
+
+    /** @brief 返回当前终端的纯文本输出，供主窗口原子导出。 */
+    [[nodiscard]] QString terminalPlainText() const;
+
+public slots:
+    /**
+     * @brief 向当前 SSH 或本地 PTY 写入原始字节，不产生新的广播源信号。
+     * @param bytes 已按终端协议编码的数据。
+     *
+     * 广播路由必须调用该槽，而不能重新注入 TerminalView::inputBytes，否则多个已开启广播
+     * 的面板会互相回送并形成无限循环。
+     */
+    void sendInputBytes(const QByteArray &bytes);
+
+    /**
+     * @brief 在当前终端执行完整命令，供 Snippet 和历史重放使用。
+     * @param command 不带结尾换行的命令。
+     *
+     * 该入口会同时经过命令历史和嵌套 SSH 识别；它不是简单的 worker 写入快捷方式。
+     */
+    void executeCommand(const QString &command);
+
 signals:
+    /**
+     * @brief 根 SSH 栈即将停止，端口转发必须在该对象失效前同步结束网络线程。
+     * @param sessionStack 已收到 requestStop、但仍然有效的准确栈对象。
+     *
+     * 先置停止标志是为了唤醒可能等待建隧道结果的转发线程；信号仍早于对象析构，因此
+     * 管理器可以同步结束 Runtime，并安全移除对该栈的全部非拥有引用。
+     */
+    void forwardingSessionAboutToClose(SshSessionStack *sessionStack);
+
     /** @brief 嵌套 SSH 进入或退出导致可选服务器链发生变化。 */
     void targetsChanged(TerminalPane *pane);
 
     /** @brief 连接状态文字发生变化，供状态栏展示。 */
     void statusMessage(const QString &message);
+
+    /**
+     * @brief 当前终端视图产生了待发送的原始输入，可作为实时广播的源。
+     * @param source 产生输入的面板；上层用它排除源自身。
+     * @param bytes 键盘、粘贴、输入法或 Snippet 提交产生的原始终端字节。
+     *
+     * sendInputBytes 不会再次发出本信号，因此广播接收端不会形成回路。
+     */
+    void broadcastSourceInput(TerminalPane *source, const QByteArray &bytes);
+
+    /** @brief 一条非敏感命令成功写入持久历史，效率侧栏可按主机刷新。 */
+    void commandHistoryChanged(const QString &hostId);
+
+    /**
+     * @brief 根 SSH 会话完成认证并进入可交互状态。
+     * @param target 本次根连接使用的完整目标快照。
+     *
+     * 该信号提供给连接历史等业务层使用；上层不得解析 statusMessage 的本地化文本来判断
+     * 成功。嵌套层成功由 targetsChanged 表达，不会重复触发本信号。
+     */
+    void rootConnectionSucceeded(const ConnectionTarget &target);
+
+    /**
+     * @brief 异常断线退避结束、即将发起一次自动重连。
+     * @param target 与原成功会话相同的根目标快照。
+     * @param attempt 当前是本轮第几次尝试，从 1 开始。
+     * @param maximumAttempts 当前设置允许的最大次数。
+     *
+     * 业务层可据此为本次尝试建立独立连接历史；不要从状态栏文本推断重连开始。
+     */
+    void automaticReconnectStarted(const ConnectionTarget &target,
+                                   int attempt,
+                                   int maximumAttempts);
+
+    /**
+     * @brief 根 SSH 的建立或运行过程发生致命错误。
+     * @param target 本次根连接使用的完整目标快照。
+     * @param message libssh、主机校验或认证流程返回的可读错误。
+     *
+     * 建立阶段失败和已连接后的网络/写入错误都会走该信号；主动停止旧会话不会发出失败。
+     * 会话代次校验还会丢弃旧工作线程延迟到达的错误，避免污染新连接的历史。
+     */
+    void rootConnectionFailed(const ConnectionTarget &target, const QString &message);
+
+    /**
+     * @brief 已经成功的根 SSH 会话由远端结束。
+     * @param target 已结束会话的根连接目标快照。
+     * @param exitStatus 远端 Shell 退出码；服务器未发送退出状态或网络异常时为 -1。
+     *
+     * 主动切换会话和面板析构会先清除 established 状态，因此不会产生伪断开记录；是否把
+     * -1 归类为异常由持久化层决定。
+     */
+    void rootConnectionDisconnected(const ConnectionTarget &target, int exitStatus);
 
 private slots:
     /** @brief 根据用户提交的命令更新嵌套服务器链。 */
@@ -103,6 +213,21 @@ private:
      */
     void rollBackPendingNestedTarget(const QString &reason);
 
+    /** @brief 把非凭据命令按提交前所在主机写入历史，并刷新补全候选。 */
+    void recordSubmittedCommand(const QString &command);
+
+    /** @brief 从当前主机最近历史生成去重候选并交给 TerminalView。 */
+    void refreshCommandCompletions();
+
+    /**
+     * @brief 为异常断线安排下一次有限指数退避重连。
+     * @param target 原成功根连接；保留原凭据仅用于本轮恢复。
+     * @param sessionGeneration 安排任务时的会话代次，用户切换会话后任务自动失效。
+     * @return 已安排下一次尝试返回 true；功能关闭或次数耗尽返回 false，并回退本地 Shell。
+     */
+    bool scheduleAutomaticReconnect(const ConnectionTarget &target,
+                                    quint64 sessionGeneration);
+
     QLabel *m_headerLabel = nullptr;
     TerminalView *m_terminalView = nullptr;
     SshSessionStack *m_sessionStack = nullptr;
@@ -141,6 +266,21 @@ private:
      */
     quint64 m_sessionGeneration = 0;
 
+    /** @brief 当前设置是否允许异常网络断线后自动重连。 */
+    bool m_automaticReconnectEnabled = true;
+    /** @brief 单个断线恢复周期的最大尝试次数。 */
+    int m_reconnectMaxAttempts = 3;
+    /** @brief 指数退避首轮秒数。 */
+    int m_reconnectBaseDelaySeconds = 1;
+    /** @brief 当前恢复周期已经发起/安排的尝试次数。 */
+    int m_reconnectAttempts = 0;
+    /** @brief 是否处于由一次已建立会话异常断线触发的恢复周期。 */
+    bool m_reconnectCycleActive = false;
+    /** @brief 定时任务取消令牌；用户主动切换会话时递增，使旧 lambda 安全失效。 */
+    quint64 m_reconnectToken = 0;
+    /** @brief 防止自动重连内部调用 connectToHost 时被误判成用户主动连接。 */
+    bool m_automaticReconnectInvocation = false;
+
     QStringList m_tunnelRouteIds;
 
     /** @brief 为自持层注册的隧道路由，随层栈变化整体重建。 */
@@ -161,14 +301,6 @@ private:
      * 只在内存中取得同一份输入，不要求用户再次输入。
      */
     bool m_captureNextLineAsCredential = false;
-
-    /**
-     * @brief 是否向远端 Shell 注入 ssh 接管函数。
-     *
-     * 注入会覆盖用户在该会话中的 ssh 命令，属于对远端环境的可见改动，因此保留开关。
-     * 关闭后嵌套识别退回命令解析的降级路径，推测层会被显式标注为不确定。
-     */
-    bool m_shellIntegrationEnabled = true;
 
     /**
      * @brief 当前层的密码提示语；非空表示正在等待用户输入密码。
@@ -200,4 +332,11 @@ private:
      * 直接放行原生 ssh，不再让用户反复撞同一堵墙。
      */
     QSet<QString> m_forwardingProhibitedHosts;
+
+    /**
+     * @brief 非拥有的应用数据库，用于按主机持久化命令历史。
+     *
+     * 面板析构前数据库必须仍然有效。为空时终端仍可工作，只是不记录历史和提供持久补全。
+     */
+    ApplicationDatabase *m_commandHistoryDatabase = nullptr;
 };

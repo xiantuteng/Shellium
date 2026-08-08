@@ -314,6 +314,111 @@ struct TransferSummary {
 Q_DECLARE_METATYPE(SftpRecursive::TransferSummary)
 
 /**
+ * @brief 远程文件管理器的纯界面状态选择逻辑。
+ *
+ * 把“连接链刷新后应选哪一层”从 QWidget 中抽离，避免用户手动选择外层后被无关刷新抢回
+ * 最内层。该逻辑不依赖网络和控件，可由单元测试覆盖每标签状态隔离所需的边界条件。
+ */
+namespace SftpUiState {
+
+/**
+ * @brief 计算服务器链刷新后的选中下标。
+ * @param stableKeys 新连接链中从外到内排列的稳定键。
+ * @param previousKey 刷新前用户选中服务器的稳定键。
+ * @param previousIndex 刷新前下标，仅在原目标已消失时用于选择最接近的剩余层。
+ * @param followInnermost true 时始终选择最新最内层；false 时优先保留手工选择。
+ * @return 新链中的下标；列表为空时返回 -1。
+ */
+[[nodiscard]] inline int selectTargetIndex(const QStringList &stableKeys,
+                                           const QString &previousKey,
+                                           const int previousIndex,
+                                           const bool followInnermost)
+{
+    if (stableKeys.isEmpty()) {
+        return -1;
+    }
+    if (followInnermost) {
+        return static_cast<int>(stableKeys.size() - 1);
+    }
+
+    const qsizetype preservedIndex = stableKeys.indexOf(previousKey);
+    if (preservedIndex >= 0) {
+        return static_cast<int>(preservedIndex);
+    }
+
+    // 手选层已经退出时选择与原位置最接近的剩余层，而不是返回 -1 留下一个无法操作的
+    // 文件管理器；向内层收缩时通常会自然落回新的最内层。
+    return std::clamp(previousIndex, 0, static_cast<int>(stableKeys.size() - 1));
+}
+
+} // namespace SftpUiState
+
+/**
+ * @brief 单文件和递归传输共用的续传决策与安全上限。
+ *
+ * 该命名空间只处理大小与策略，不访问文件系统或网络，便于在没有真实 SFTP 服务器时验证
+ * “续传、已完成、目标异常偏大、强制覆盖”等关键边界。
+ */
+namespace SftpTransfer {
+
+/** @brief 目标已存在时的处理策略。 */
+enum class ExistingFilePolicy {
+    ResumeWhenPossible,
+    Overwrite
+};
+
+/** @brief 根据源和目标大小计算出的续传动作。 */
+struct ResumePlan {
+    /** @brief 源端和目标端都应跳转到的字节偏移。 */
+    quint64 offset = 0;
+
+    /** @brief 打开目标时是否必须截断，防止异常偏大的旧文件残留尾部。 */
+    bool truncateDestination = true;
+
+    /** @brief 两端大小已完全一致，可直接视为完成而无需发起读写。 */
+    bool alreadyComplete = false;
+};
+
+/**
+ * @brief 依据源文件大小、目标已有大小和用户策略制定续传动作。
+ * @param sourceSize 完整源文件大小。
+ * @param destinationSize 目标文件当前大小；不存在时传 0。
+ * @param policy 用户选择的续传或覆盖策略。
+ * @return 安全偏移、是否截断以及是否已完成。
+ */
+[[nodiscard]] inline ResumePlan makeResumePlan(
+    const quint64 sourceSize,
+    const quint64 destinationSize,
+    const ExistingFilePolicy policy)
+{
+    if (policy == ExistingFilePolicy::Overwrite || destinationSize > sourceSize) {
+        // 目标比源更大时绝不能从源末尾继续写，否则旧尾部会保留并生成损坏文件。
+        return {.offset = 0, .truncateDestination = true, .alreadyComplete = false};
+    }
+    if (destinationSize == sourceSize) {
+        return {.offset = sourceSize,
+                .truncateDestination = false,
+                .alreadyComplete = true};
+    }
+    return {.offset = destinationSize,
+            .truncateDestination = false,
+            .alreadyComplete = false};
+}
+
+/** @brief 安全预览允许读取的硬上限，调用方传入更大值也会被压到该范围。 */
+inline constexpr quint64 MaximumPreviewBytes = 2ULL * 1024ULL * 1024ULL;
+
+/** @brief 把预览请求限制在 1 字节到 2 MiB，避免零值或超大值绕过内存保护。 */
+[[nodiscard]] inline quint64 boundedPreviewLimit(const quint64 requestedBytes)
+{
+    return std::clamp<quint64>(requestedBytes,
+                               static_cast<quint64>(1),
+                               MaximumPreviewBytes);
+}
+
+} // namespace SftpTransfer
+
+/**
  * @brief 在后台线程中执行 libssh SFTP 操作，并把结果安全送回主线程。
  *
  * 连接按目标池化：同一服务器的操作复用一条已认证连接，不同目标仍并行，
@@ -354,12 +459,16 @@ public:
     /** @brief 异步上传单个本地文件到指定远端完整路径。 */
     quint64 uploadFile(const ConnectionTarget &target,
                        const QString &localPath,
-                       const QString &remotePath);
+                       const QString &remotePath,
+                       SftpTransfer::ExistingFilePolicy policy =
+                           SftpTransfer::ExistingFilePolicy::ResumeWhenPossible);
 
     /** @brief 异步下载单个远端文件到指定本地完整路径。 */
     quint64 downloadFile(const ConnectionTarget &target,
                          const QString &remotePath,
-                         const QString &localPath);
+                         const QString &localPath,
+                         SftpTransfer::ExistingFilePolicy policy =
+                             SftpTransfer::ExistingFilePolicy::ResumeWhenPossible);
 
     /**
      * @brief 异步递归上传整个本地目录。
@@ -371,7 +480,9 @@ public:
      */
     quint64 uploadDirectory(const ConnectionTarget &target,
                             const QString &localDirectory,
-                            const QString &remoteParentDirectory);
+                            const QString &remoteParentDirectory,
+                            SftpTransfer::ExistingFilePolicy policy =
+                                SftpTransfer::ExistingFilePolicy::ResumeWhenPossible);
 
     /**
      * @brief 异步递归下载整个远端目录。
@@ -382,7 +493,9 @@ public:
      */
     quint64 downloadDirectory(const ConnectionTarget &target,
                               const QString &remoteDirectory,
-                              const QString &localParentDirectory);
+                              const QString &localParentDirectory,
+                              SftpTransfer::ExistingFilePolicy policy =
+                                  SftpTransfer::ExistingFilePolicy::ResumeWhenPossible);
 
     /**
      * @brief 请求取消一个仍在进行的递归传输。
@@ -391,6 +504,32 @@ public:
      * 的 libssh 句柄。已经传完的文件保留在目标端，汇总里会说明传输被中断。
      */
     void cancelRequest(quint64 requestId);
+
+    /**
+     * @brief 暂停传输请求。
+     *
+     * 暂停在下一次 64 KiB 分块边界生效；已经进入 libssh 的单次阻塞读写无法被安全打断。
+     */
+    void pauseRequest(quint64 requestId);
+
+    /** @brief 恢复被暂停的传输请求，并唤醒等待中的后台任务。 */
+    void resumeRequest(quint64 requestId);
+
+    /**
+     * @brief 异步读取远程文件的安全预览片段。
+     * @param maximumBytes 请求读取上限，服务端还会强制限制在 2 MiB 内。
+     *
+     * 只返回原始字节，不写入磁盘、不启动外部程序、不解释脚本；界面只能以只读文本或图片
+     * 解码方式展示。
+     */
+    quint64 previewFile(const ConnectionTarget &target,
+                        const QString &remotePath,
+                        quint64 maximumBytes = SftpTransfer::MaximumPreviewBytes);
+
+    /** @brief 异步修改远程文件或目录的 POSIX 权限位。 */
+    quint64 chmodPath(const ConnectionTarget &target,
+                      const QString &remotePath,
+                      quint32 permissions);
 
     /** @brief 异步重命名或移动一个远端条目。 */
     quint64 renamePath(const ConnectionTarget &target,
@@ -447,6 +586,19 @@ signals:
     /** @brief 递归传输结束（含被取消与部分失败），携带完整汇总。 */
     void recursiveTransferFinished(quint64 requestId,
                                    const SftpRecursive::TransferSummary &summary);
+
+    /**
+     * @brief 远程文件预览读取成功。
+     * @param data 不超过安全上限的原始内容。
+     * @param mimeType 根据文件名和内容推断的 MIME 类型，仅用于选择只读展示控件。
+     * @param truncated 文件是否大于读取上限；true 时界面必须明确提示内容不完整。
+     */
+    void filePreviewReady(quint64 requestId,
+                          const ConnectionTarget &target,
+                          const QString &remotePath,
+                          const QByteArray &data,
+                          const QString &mimeType,
+                          bool truncated);
 
 private:
     /** @brief 生成线程安全且进程内单调递增的请求编号。 */

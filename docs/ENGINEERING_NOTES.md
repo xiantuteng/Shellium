@@ -79,6 +79,10 @@ CHANNEL_CLOSE 包，之后整条 SSH 流失步——**同一会话上其他完�
 
 `ssh_channel_free()` 自身会在需要时关闭，并正确处理"未打开"与"非阻塞待关闭"两种情况。
 
+当前 `SshSessionNode` 的交互 Shell、后台 exec、待建立转发和活动转发均已统一为 **free-only**
+释放路径；`requestPopLayer()` 也会立即 free 并置空栈顶 Shell，不再发送 EOF 后调用 close。
+后续新增通道时必须继续执行这一约束，不能因为“正常退出更礼貌”而重新引入显式 close。
+
 > 症状极具迷惑性：转发失败之后终端"莫名其妙"不再响应，看起来像终端的问题而非转发的问题。
 
 ---
@@ -208,10 +212,12 @@ SSH 会话尚未认证完成，远端还不存在。
 
 | 目标 | 内容 | 依赖 |
 |------|------|------|
-| `ShelliumCoreTests` | 命令解析、终端视图、Vault | GUI + libssh + libvterm |
+| `ShelliumCoreTests` | 命令解析、终端视图、设置、Vault | GUI + Sql + libssh + libvterm + libsodium |
 | `ShelliumKeepAliveTests` | 保活判定纯逻辑 | Core + libssh |
 | `ShelliumStorageTests` | 持久化读写 | Core + Sql |
 | `ShelliumSftpRecursiveTests` | 递归传输纯逻辑 | Core |
+| `ShelliumConnectionToolsTests` | 配置导入导出、SSH 密钥、SOCKS5 协议 | Core + Network + Sql + libssh |
+| `ShelliumProductivityTests` | Snippet、历史、补全、多目标与广播接线 | GUI + Sql + SSH/终端依赖 |
 | `ShelliumSshIntegrationTests` | **真实服务器**连接路径 | 全部；缺 `SHELLIUM_IT_*` 时自动跳过 |
 
 ### 必须验证测试真的抓得住
@@ -261,11 +267,85 @@ SSH 会话尚未认证完成，远端还不存在。
 |---|---|
 | `/tmp/.shm-xxxxxxxx` 约 700 字节临时文件 | 脚本末尾 `rm -f` 自删 |
 | 定义 `ssh()` 函数 | 仅当前交互式 shell 进程，内存中 |
-| `export HISTCONTROL=ignorespace` | 仅当前会话及其子进程；**会覆盖用户原有取值** |
+| 给 Bash 的 `HISTCONTROL` 追加 `ignorespace` | 保留原有 ignoredups/erasedups；已有 ignoreboth 时不改动 |
 
 不写入任何 rc 文件，断开即消失。函数只在交互式 shell 生效（`case "$-" in *i*)` 护栏），
 `command ssh` 可绕过。
 
-已知待改进：`HISTCONTROL` 应改为追加而非覆盖；exec 安装脚本未检查退出码；
-非 bash/zsh 会打印一行语法错误；`m_shellIntegrationEnabled` 开关目前是**死变量**，
-注入实际发生在 `SshSessionStack` 里而该标志没有被读取。
+安装命令会在独立 exec 通道检查登录 Shell，仅 bash/zsh 才写入权限为 0600 的临时脚本；
+后台 exec 必须明确返回退出码 0 才会向交互终端发送 source。失败原因（通道错误、退出码与
+受限长度的 stderr）通过 `shellIntegrationFailed` 上报，SSH 会话本身继续可用并降级到命令
+解析路径。原先从未被读取的 `m_shellIntegrationEnabled` 已删除，避免出现“界面以为关闭、
+工作线程仍继续注入”的伪开关。
+
+exec 中继在 `ssh_channel_request_exec()` 成功后还会保留一个短暂确认窗口：远端缺少
+`/dev/tcp`、`nc`、`socat` 或命令立即退出时，错误会作为转发失败返回，而不是先交付一个
+随后立刻 EOF 的伪成功 socket；交付后的异步 stderr 则写入 `shellium.ssh` 日志分类。
+
+---
+
+## 十一、端口转发的 fd 所有权
+
+本地转发（-L）、远程转发（-R）和动态转发（-D）均绑定一条已经认证的**根 SSH 会话**。
+规则运行时不允许直接从自己的网络线程调用 libssh，所有通道操作都必须排队回
+`SshSessionStack` 所属工作线程。
+
+远程转发尤其要遵守“一个 fd 只有一个所有者”：
+
+1. `SshSessionNode` 接受 `forwarded-tcpip` 后只向上交付一次 fd；
+2. `PortForwardManagerWidget::dispatchRemoteConnection` 按准确的 sessionStack 与 ruleId
+   唯一路由；
+3. 命中运行时后由 `PortForwardRuntime::acceptRemoteConnection` 接管；
+4. 规则已停止、标签已切换或找不到运行时时，管理器必须立即关闭孤儿 fd。
+
+不能让每个规则分别订阅同一个“新连接”信号。那会形成多个接收者同时认为自己拥有 fd 的
+双重关闭/重复读写竞态，通常只在快速停启规则或同一主机打开多个标签时出现。
+
+终端断开时必须先 `requestStop()`，再发送会话即将关闭信号，让所有运行时停止后才释放
+`SshSessionStack`。断开清理期间 `TerminalPane::forwardingSessionStack()` 仍应返回尚存活的
+原对象，不能仅因 `m_shellReady` 已变为 false 就返回空指针，否则管理器无法精确注销。
+
+---
+
+## 十二、自动重连不是无限重试
+
+自动重连只针对“曾经成功建立、随后没有远端正常退出码”的异常断线。以下情况不能自动重试：
+
+- 用户主动关闭、切换或正常执行 exit；
+- 首次主机指纹、认证或算法协商失败；
+- 服务端给出正常退出状态；
+- 用户把最大重试次数设为 0。
+
+每轮异常断线有独立 token，默认最多 3 次；延迟按首轮秒数指数增长并封顶 60 秒。新连接成功、
+用户手动发起连接或标签销毁都会使旧 token 失效，排队中的 QTimer 回调必须再次核对 token，
+不能让上一台主机的延迟任务覆盖用户刚打开的新会话。
+
+每次自动尝试都应写入保存主机的连接历史；临时连接没有持久 hostId，不得制造无法归属的
+孤立历史行。重试耗尽后回到本地 Shell，使标签保持可操作。
+
+---
+
+## 十三、Qt 空字符串与 SQLite NOT NULL
+
+Qt 的默认 `QString` 可处于“长度为 0 且 `isNull()` 为 true”的状态。把这种值直接交给
+`QSqlQuery::bindValue` 会绑定成 SQL NULL，而不是空 TEXT。设置表的 value 是 NOT NULL，
+而空字体族和用户主动取消的快捷键又确实需要保存为空文本。
+
+因此 `ApplicationDatabase::setSetting` 必须在数据库边界把 null QString 规范化为非 null
+空串。不要要求每个调用方分别修补，也不要放宽表约束；后者会让“缺失值”和“业务空值”
+再次混在一起。
+
+---
+
+## 十四、工作区恢复必须先验证、后破坏
+
+打开保存工作区会关闭当前全部连接，是不可轻易回滚的 UI 操作。恢复流程必须先完成：
+
+1. JSON 语法、版本、标签数量和字段类型校验；
+2. 所有非空 hostId 的存在性与 Host 类型校验；
+3. 构造完整的待恢复快照；
+4. 向用户确认替换当前标签。
+
+只有全部成功后才能移除当前标签并新建工作区。逐个“关一个、解析一个”会让中途损坏的
+工作区把用户现有会话破坏到一半。临时连接也不能被静默保存成本地 Shell：没有持久主机记录，
+下次无法可靠恢复地址、跳板链与凭据引用，应在保存阶段整体拒绝并提示先保存主机。

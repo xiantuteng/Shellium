@@ -38,7 +38,8 @@ public:
     /**
      * @brief 返回 shim 的脚本正文，供写入远端临时文件。
      *
-     * 自我限定在 bash/zsh 交互式 Shell 内，其他 Shell 下不会定义任何东西。
+     * 自我限定在 bash/zsh 交互式 Shell 内，其他 Bourne 兼容 Shell 下不会定义任何东西。
+     * 安装命令还会先检查登录 Shell；fish/csh 等语法不兼容的环境不会把本脚本送进交互终端。
      */
     [[nodiscard]] static QByteArray scriptBody();
 
@@ -49,6 +50,8 @@ public:
      * 脚本正文经此通道传输，**绝不经过交互式终端**：远端 Shell 一旦接管，readline 会按
      * 自己的方式重绘超宽行，回显不再与发出的字节一一对应，本地过滤器就无论如何都扣不
      * 干净。用 here-doc 而非 base64 是为了不依赖远端是否有 base64 及其 -d/-D 差异。
+     * 命令还会核对 `$SHELL`，非 bash/zsh 以明确的非零退出码结束；调用方必须检查退出
+     * 状态，不能在安装失败后继续向用户 Shell 发送不兼容的 source 语法。
      */
     [[nodiscard]] static QByteArray installCommand(const QByteArray &path);
 
@@ -57,7 +60,8 @@ public:
      * @param path 远端临时文件路径。
      *
      * 刻意保持极短：短行 readline 会逐字回显，本地过滤器因此可以精确扣掉，用户看不到它。
-     * 以空格开头，配合 HISTCONTROL=ignorespace 不进历史。脚本会在加载后自删。
+     * 以空格开头；shim 在 bash 中只会给现有 HISTCONTROL **追加** ignorespace，不会覆盖
+     * 用户原有的 ignoredups/erasedups 策略。脚本会在加载后自删。
      */
     [[nodiscard]] static QByteArray sourceCommand(const QByteArray &path);
 

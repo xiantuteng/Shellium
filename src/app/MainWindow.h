@@ -1,9 +1,25 @@
 #pragma once
 
 #include <QMainWindow>
+#include <QHash>
+#include <QList>
+#include <QStringList>
 
+class ApplicationDatabase;
+class ConnectionTarget;
+class CredentialVault;
+class HostManagerWidget;
+class PortForwardManagerWidget;
+class ProductivityModel;
+class ProductivityWidget;
+class QAction;
+class QEvent;
+class QLabel;
+class QObject;
 class QTabWidget;
+class QTimer;
 class TerminalPane;
+class TerminalSettingsService;
 class TerminalWorkspace;
 
 /**
@@ -16,7 +32,24 @@ class MainWindow final : public QMainWindow {
     Q_OBJECT
 
 public:
-    explicit MainWindow(QWidget *parent = nullptr);
+    /**
+     * @brief 创建主窗口并接入已初始化的持久化数据库。
+     * @param database 应用级数据库，生命周期由 main() 管理并覆盖整个窗口。
+     * @param parent Qt 父对象。
+     */
+    explicit MainWindow(ApplicationDatabase *database,
+                        CredentialVault *credentialVault,
+                        QWidget *parent = nullptr);
+    ~MainWindow() override;
+
+protected:
+    /**
+     * @brief 观察全应用的人机输入并刷新保险库闲置计时器。
+     *
+     * 只处理键盘、鼠标、滚轮和触摸等真实活动；绘制、网络与定时器事件不能延长解锁时间，
+     * 否则一个持续输出日志的无人值守终端会让保险库永不自动锁定。
+     */
+    bool eventFilter(QObject *watched, QEvent *event) override;
 
 private:
     /** @brief 打开连接对话框，并在当前标签页的终端中启动 SSH。 */
@@ -30,12 +63,111 @@ private:
      */
     void connectNestedFromCurrentPane();
 
+    /**
+     * @brief 从主机树或最近连接列表连接一条持久化主机记录。
+     * @param hostId 数据库稳定主键，用于连接历史与凭据引用。
+     * @param sessionTarget 已解析配置；新建主机后首次连接时还可能带进程内临时密码。
+     */
+    void connectSavedHost(const QString &hostId, const ConnectionTarget &sessionTarget);
+
+    /** @brief 根连接认证成功后写入进行中的成功历史。 */
+    void recordConnectionSucceeded(TerminalPane *pane, const ConnectionTarget &target);
+
+    /** @brief 根连接认证前失败后写入带错误原因的完整历史。 */
+    void recordConnectionFailed(TerminalPane *pane,
+                                const ConnectionTarget &target,
+                                const QString &message);
+
+    /** @brief 已成功根连接断开后补齐结束时间和持续时长。 */
+    void recordConnectionDisconnected(TerminalPane *pane,
+                                      const ConnectionTarget &target,
+                                      int exitStatus);
+
+    /** @brief 确保保险库已解锁，供连接已保存凭据和安全设置操作复用。 */
+    bool ensureVaultUnlocked();
+
     /** @brief 创建一个拥有独立终端与文件管理器的新标签页，并统一连接状态信号。 */
     TerminalWorkspace *createWorkspaceTab(const QString &title);
 
     /** @brief 返回当前标签页的终端工作区。 */
     [[nodiscard]] TerminalWorkspace *activeWorkspace() const;
 
+    /** @brief 收集所有已打开标签的终端面板；返回值不转移所有权。 */
+    [[nodiscard]] QList<TerminalPane *> allTerminalPanes() const;
+
+    /** @brief 根据当前可交互标签刷新效率工具的主机选择器。 */
+    void refreshProductivityTargets();
+
+    /** @brief 把设置服务中的快捷键映射到实际 QAction。 */
+    void applyConfiguredShortcuts();
+
+    /** @brief 弹出查找文本输入框并在当前终端中循环查找。 */
+    void searchCurrentTerminal();
+
+    /**
+     * @brief 打开可搜索命令面板并触发选中的当前可用 QAction。
+     *
+     * 面板在每次打开时从窗口实际动作树采集条目，因此插件式新增菜单动作后无需维护第二份
+     * 命令注册表；菜单容器、分隔符、不可见和禁用动作不会出现在结果中。
+     */
+    void openCommandPalette();
+
+    /** @brief 将当前终端纯文本通过 QSaveFile 原子写入用户选择的文件。 */
+    void exportCurrentTerminal();
+
+    /**
+     * @brief 把当前全部标签的名称、保存主机 id 和文件管理显隐状态保存为工作区。
+     *
+     * 临时连接没有可重建的凭据引用，因此会拒绝保存并提示用户先把主机加入主机树；本地
+     * Shell 标签可以保存为空 hostId，恢复时重新打开本地登录 Shell。
+     */
+    void saveCurrentWorkspace();
+
+    /** @brief 选择并严格校验一个工作区，然后用其中的标签组合替换当前全部标签。 */
+    void openSavedWorkspace();
+
+    /** @brief 选择并删除一个持久化工作区，不影响当前已经打开的终端会话。 */
+    void removeSavedWorkspace();
+
+    /** @brief 将命令路由到指定主机 id 对应的全部已打开终端；空列表表示当前终端。 */
+    void executeOnTargets(const QString &command, const QStringList &targetIds);
+
+    /** @brief 将原始终端字节发送到指定主机 id 的已打开终端，可排除广播源。 */
+    void sendBytesToTargets(const QByteArray &bytes,
+                            const QStringList &targetIds,
+                            TerminalPane *excludedSource = nullptr);
+
     TerminalWorkspace *m_workspace = nullptr;
     QTabWidget *m_tabs = nullptr;
+    ApplicationDatabase *m_database = nullptr;
+    CredentialVault *m_credentialVault = nullptr;
+    HostManagerWidget *m_hostManager = nullptr;
+    PortForwardManagerWidget *m_portForwardManager = nullptr;
+    ProductivityModel *m_productivityModel = nullptr;
+    ProductivityWidget *m_productivityWidget = nullptr;
+    TerminalSettingsService *m_settingsService = nullptr;
+    QTimer *m_vaultIdleTimer = nullptr;
+    QLabel *m_terminalStatusLabel = nullptr;
+
+    /** @brief 每个标签最近一次结构化状态文本，切换标签时恢复而不串用其他会话数据。 */
+    QHash<TerminalWorkspace *, QString> m_terminalStatusByWorkspace;
+
+    /** @brief 正在连接但尚未认证成功的面板与持久化主机 id。 */
+    QHash<TerminalPane *, QString> m_pendingHistoryHosts;
+
+    /** @brief 连接按钮触发时的 UTC 时间，成功和失败历史都以此为起点。 */
+    QHash<TerminalPane *, QDateTime> m_pendingHistoryStartedAt;
+
+    /** @brief 已成功连接且尚未写入断开时间的面板与连接历史行 id。 */
+    QHash<TerminalPane *, qint64> m_openHistoryRows;
+
+    /** @brief 稳定设置动作 id 到主窗口 QAction 的映射，设置变化时统一更新快捷键。 */
+    QHash<QString, QAction *> m_configurableActions;
+
+    /** @brief 实时广播开关和当前明确选择的目标主机 id。 */
+    bool m_broadcastEnabled = false;
+    QStringList m_broadcastTargetIds;
+
+    /** @brief 最近一次终端搜索文本，重复打开查找框时作为默认值。 */
+    QString m_lastTerminalSearch;
 };

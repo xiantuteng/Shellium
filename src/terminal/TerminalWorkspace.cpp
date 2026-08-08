@@ -2,6 +2,7 @@
 
 #include "sftp/RemoteFileManagerWidget.h"
 #include "terminal/TerminalPane.h"
+#include "terminal/TerminalView.h"
 
 #include <QBoxLayout>
 #include <QSplitter>
@@ -33,9 +34,31 @@ TerminalWorkspace::TerminalWorkspace(QWidget *parent)
             &TerminalWorkspace::statusMessage);
     connect(m_pane, &TerminalPane::targetsChanged, this, [this](TerminalPane *pane) {
         synchronizeFileManager(true);
+        emitTerminalStatus();
         emit activeTargetsChanged(pane);
     });
     connect(m_pane, &TerminalPane::statusMessage, this, &TerminalWorkspace::statusMessage);
+
+    // TerminalPane 对外只暴露业务层连接状态；字符尺寸由其唯一的 TerminalView 产生。
+    // 通过 QObject 子树查找可保持 Pane 的网络接口不变，同时把纯展示状态提升到工作区层。
+    if (TerminalView *terminalView = m_pane->findChild<TerminalView *>();
+        terminalView != nullptr) {
+        connect(terminalView,
+                &TerminalView::terminalSizeChanged,
+                this,
+                [this](const int columns, const int rows) {
+                    m_terminalColumns = columns;
+                    m_terminalRows = rows;
+                    emitTerminalStatus();
+                });
+        // 右键动作必须路由到当前 TerminalWorkspace 自己的文件管理器。不能经过 MainWindow
+        // 查找“当前标签”，因为菜单弹出后用户可能用快捷键切换标签，异步文件选择器若再按
+        // 全局当前项解析就可能把文件上传到另一台服务器。
+        connect(terminalView,
+                &TerminalView::uploadToCurrentDirectoryRequested,
+                m_fileManager,
+                &RemoteFileManagerWidget::requestUploadToCurrentDirectory);
+    }
 
     synchronizeFileManager(false);
 }
@@ -66,4 +89,25 @@ void TerminalWorkspace::synchronizeFileManager(const bool followInnermost)
     m_fileManager->setAvailableTargets(m_pane->isConnected() ? m_pane->targets()
                                                              : QList<ConnectionTarget>{},
                                        followInnermost);
+}
+
+void TerminalWorkspace::emitTerminalStatus()
+{
+    const ConnectionTarget target = m_pane->activeTarget();
+    QString server;
+    if (target.isValid()) {
+        server = target.connectionSpecifier(true);
+        if (target.confidence == ConnectionTarget::Confidence::Inferred) {
+            server.prepend(tr("推测 · "));
+        }
+    } else {
+        server = m_pane->isConnected() ? tr("本地终端") : tr("未连接");
+    }
+
+    // libvterm 与所有 SSH/PTY 输入输出均以 UTF-8 工作；在真正支持可切换编码前，明确发出
+    // 常量比让主窗口猜测更可靠，也为以后增加编码设置预留稳定信号形状。
+    emit terminalStatusChanged(server,
+                               QStringLiteral("UTF-8"),
+                               m_terminalColumns,
+                               m_terminalRows);
 }

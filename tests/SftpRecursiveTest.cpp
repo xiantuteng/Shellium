@@ -54,6 +54,9 @@ private slots:
 
     /** @brief 被取消的传输必须在消息里明确说明，不能伪装成成功。 */
     void reportsCancellationDistinctlyFromSuccess();
+
+    /** @brief 手动选择外层后，连接链的无关刷新不得重新抢回最内层。 */
+    void preservesManualServerSelectionAcrossRefresh();
 };
 
 namespace {
@@ -332,6 +335,33 @@ void SftpRecursiveTest::reportsCancellationDistinctlyFromSuccess()
     const QString message = summary.toMessage();
     QVERIFY(message.contains(QStringLiteral("取消")));
     QVERIFY(!message.contains(QStringLiteral("已传输")));
+}
+
+void SftpRecursiveTest::preservesManualServerSelectionAcrossRefresh()
+{
+    const QStringList threeLayers{
+        QStringLiteral("outer"), QStringLiteral("middle"), QStringLiteral("inner")};
+
+    QCOMPARE(SftpUiState::selectTargetIndex(threeLayers,
+                                            QStringLiteral("middle"),
+                                            1,
+                                            false),
+             1);
+    // 开启自动跟随后，新进入一层必须立即选择最内层，与原手工选择无关。
+    QCOMPARE(SftpUiState::selectTargetIndex(threeLayers,
+                                            QStringLiteral("outer"),
+                                            0,
+                                            true),
+             2);
+
+    const QStringList afterInnerExit{QStringLiteral("outer"), QStringLiteral("middle")};
+    // 原层已经退出时回落到最接近的有效层，不能留下 -1 导致整个文件管理器不可操作。
+    QCOMPARE(SftpUiState::selectTargetIndex(afterInnerExit,
+                                            QStringLiteral("inner"),
+                                            2,
+                                            false),
+             1);
+    QCOMPARE(SftpUiState::selectTargetIndex({}, QString(), -1, false), -1);
 }
 
 QTEST_MAIN(SftpRecursiveTest)

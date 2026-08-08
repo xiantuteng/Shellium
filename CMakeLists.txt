@@ -11,7 +11,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-find_package(Qt6 6.8 REQUIRED COMPONENTS Core Widgets Concurrent Sql)
+find_package(Qt6 6.8 REQUIRED COMPONENTS Core Widgets Concurrent Network Sql)
 
 # Homebrew、Linux 发行版和 vcpkg 提供的 libssh 均会安装 pkg-config 元数据。
 # 通过 IMPORTED_TARGET 引入可以同时携带头文件路径、库路径和间接链接参数。
@@ -27,8 +27,25 @@ qt_add_executable(Shellium
     src/app/MainWindow.h
     src/core/ConnectionTarget.cpp
     src/core/ConnectionTarget.h
+    src/forwarding/PortForwardManagerWidget.cpp
+    src/forwarding/PortForwardManagerWidget.h
+    src/forwarding/PortForwardRule.h
+    src/forwarding/PortForwardRuntime.cpp
+    src/forwarding/PortForwardRuntime.h
+    src/forwarding/Socks5Protocol.cpp
+    src/forwarding/Socks5Protocol.h
+    src/core/ConnectionConfigCodec.cpp
+    src/core/ConnectionConfigCodec.h
+    src/productivity/ProductivityModel.cpp
+    src/productivity/ProductivityModel.h
+    src/productivity/ProductivityWidget.cpp
+    src/productivity/ProductivityWidget.h
     src/security/Vault.cpp
     src/security/Vault.h
+    src/security/SshKeyManager.cpp
+    src/security/SshKeyManager.h
+    src/settings/TerminalSettings.cpp
+    src/settings/TerminalSettings.h
     src/storage/ApplicationDatabase.cpp
     src/storage/ApplicationDatabase.h
     src/sftp/RemoteFileManagerWidget.cpp
@@ -59,6 +76,14 @@ qt_add_executable(Shellium
     src/terminal/TerminalWorkspace.h
     src/ui/ConnectionDialog.cpp
     src/ui/ConnectionDialog.h
+    src/ui/HostManagerWidget.cpp
+    src/ui/HostManagerWidget.h
+    src/ui/SettingsDialog.cpp
+    src/ui/SettingsDialog.h
+    src/ui/SshKeyManagerDialog.cpp
+    src/ui/SshKeyManagerDialog.h
+    src/ui/VaultDialog.cpp
+    src/ui/VaultDialog.h
 )
 
 target_include_directories(Shellium PRIVATE src)
@@ -66,6 +91,7 @@ target_link_libraries(Shellium PRIVATE
     Qt6::Core
     Qt6::Widgets
     Qt6::Concurrent
+    Qt6::Network
     Qt6::Sql
     PkgConfig::LIBSSH
     PkgConfig::LIBVTERM
@@ -96,8 +122,11 @@ if(BUILD_TESTING)
         tests/SshCommandParserTest.cpp
         src/core/ConnectionTarget.cpp
         src/core/ConnectionTarget.h
+        src/core/HostRecord.h
         src/security/Vault.cpp
         src/security/Vault.h
+        src/settings/TerminalSettings.cpp
+        src/settings/TerminalSettings.h
         src/storage/ApplicationDatabase.cpp
         src/storage/ApplicationDatabase.h
         src/ssh/ShellShim.cpp
@@ -148,6 +177,79 @@ if(BUILD_TESTING)
 
     add_test(NAME ShelliumStorageTests COMMAND ShelliumStorageTests)
 
+    # 连接管理工具单独测试：密钥生成依赖 libssh，配置持久化依赖 SQLite，但不需要 GUI。
+    # 独立目标避免给核心解析测试继续叠加职责，并可单独复现文件权限或格式兼容问题。
+    qt_add_executable(ShelliumConnectionToolsTests
+        tests/ConnectionToolsTest.cpp
+        src/core/ConnectionConfigCodec.cpp
+        src/core/ConnectionConfigCodec.h
+        src/core/ConnectionTarget.cpp
+        src/core/ConnectionTarget.h
+        src/core/HostRecord.h
+        src/forwarding/PortForwardRule.h
+        src/forwarding/Socks5Protocol.cpp
+        src/forwarding/Socks5Protocol.h
+        src/security/SshKeyManager.cpp
+        src/security/SshKeyManager.h
+        src/storage/ApplicationDatabase.cpp
+        src/storage/ApplicationDatabase.h
+    )
+    target_include_directories(ShelliumConnectionToolsTests PRIVATE src)
+    target_link_libraries(ShelliumConnectionToolsTests PRIVATE
+        Qt6::Core Qt6::Network Qt6::Sql Qt6::Test PkgConfig::LIBSSH)
+    add_test(NAME ShelliumConnectionToolsTests COMMAND ShelliumConnectionToolsTests)
+
+    # 效率工具测试覆盖 Snippet 树、历史补全、多目标信号以及 TerminalPane 到数据库的真实
+    # 接线。由于 Pane 同时引用完整 SSH 栈，这里显式列出相关实现；测试本身不连接网络。
+    qt_add_executable(ShelliumProductivityTests
+        tests/ProductivityTest.cpp
+        src/core/ConnectionTarget.cpp
+        src/core/ConnectionTarget.h
+        src/core/HostRecord.h
+        src/productivity/ProductivityModel.cpp
+        src/productivity/ProductivityModel.h
+        src/productivity/ProductivityWidget.cpp
+        src/productivity/ProductivityWidget.h
+        src/settings/TerminalSettings.cpp
+        src/settings/TerminalSettings.h
+        src/storage/ApplicationDatabase.cpp
+        src/storage/ApplicationDatabase.h
+        src/ssh/ShellShim.cpp
+        src/ssh/ShellShim.h
+        src/ssh/SshCommandParser.cpp
+        src/ssh/SshCommandParser.h
+        src/ssh/SshSessionNode.cpp
+        src/ssh/SshSessionNode.h
+        src/ssh/SshSessionStack.cpp
+        src/ssh/SshSessionStack.h
+        src/ssh/SshTunnelBroker.cpp
+        src/ssh/SshTunnelBroker.h
+        src/terminal/LocalShellWorker.cpp
+        src/terminal/LocalShellWorker.h
+        src/terminal/TerminalEchoFilter.cpp
+        src/terminal/TerminalEchoFilter.h
+        src/terminal/TerminalPane.cpp
+        src/terminal/TerminalPane.h
+        src/terminal/TerminalView.cpp
+        src/terminal/TerminalView.h
+        src/terminal/VtermBridge.cpp
+        src/terminal/VtermBridge.h
+    )
+    target_include_directories(ShelliumProductivityTests PRIVATE src)
+    target_link_libraries(ShelliumProductivityTests PRIVATE
+        Qt6::Core
+        Qt6::Concurrent
+        Qt6::Sql
+        Qt6::Widgets
+        Qt6::Test
+        PkgConfig::LIBSSH
+        PkgConfig::LIBVTERM
+    )
+    if(UNIX AND NOT APPLE)
+        target_link_libraries(ShelliumProductivityTests PRIVATE util)
+    endif()
+    add_test(NAME ShelliumProductivityTests COMMAND ShelliumProductivityTests)
+
     # 保活判定同样是内联纯逻辑，不需要 libssh 会话即可覆盖。独立成目标而不是并进
     # ShelliumCoreTests：一个可执行文件只能有一个 main，共用 main 还会让按名过滤测试时
     # 另一套报 "Unknown test function" 并返回非零，破坏单独复现某个用例的工作流。
@@ -171,6 +273,9 @@ if(BUILD_TESTING)
         tests/SshSessionStackIntegrationTest.cpp
         src/core/ConnectionTarget.cpp
         src/core/ConnectionTarget.h
+        src/core/HostRecord.h
+        src/storage/ApplicationDatabase.cpp
+        src/storage/ApplicationDatabase.h
         src/sftp/SftpService.cpp
         src/sftp/SftpService.h
         src/ssh/ShellShim.cpp
@@ -193,12 +298,15 @@ if(BUILD_TESTING)
         src/terminal/VtermBridge.h
         src/terminal/LocalShellWorker.cpp
         src/terminal/LocalShellWorker.h
+        src/settings/TerminalSettings.cpp
+        src/settings/TerminalSettings.h
     )
     target_include_directories(ShelliumSshIntegrationTests PRIVATE src)
     target_link_libraries(ShelliumSshIntegrationTests PRIVATE
         Qt6::Core
         Qt6::Concurrent
         Qt6::Gui
+        Qt6::Sql
         Qt6::Widgets
         Qt6::Test
         PkgConfig::LIBSSH

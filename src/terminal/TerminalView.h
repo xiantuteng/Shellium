@@ -1,8 +1,17 @@
 #pragma once
 
+#include <QColor>
 #include <QPlainTextEdit>
+#include <QStringList>
 
+struct TerminalSettings;
 class QInputMethodEvent;
+class QCompleter;
+class QContextMenuEvent;
+class QMenu;
+class QPaintEvent;
+class QStringListModel;
+class QTimer;
 class VtermBridge;
 
 /**
@@ -15,7 +24,41 @@ class TerminalView final : public QPlainTextEdit {
     Q_OBJECT
 
 public:
+    /**
+     * @brief 普通终端粘贴在发送给 PTY 前的安全检查结果。
+     *
+     * text 已统一换行并移除不可见的危险控制字符；removedControlCharacters 和
+     * containsLineBreak 用于决定是否必须让用户明确确认，避免粘贴内容静默执行多条命令。
+     */
+    struct PastePreparation {
+        /** @brief 已统一换行并移除危险控制字符、可在确认后发送给 PTY 的文本。 */
+        QString text;
+
+        /** @brief 清理过程中移除的 C0、DEL 或 C1 控制字符数量。 */
+        qsizetype removedControlCharacters = 0;
+
+        /** @brief 清理后的内容是否仍含换行；含换行意味着可能一次执行多条命令。 */
+        bool containsLineBreak = false;
+
+        /** @brief 是否存在需要用户确认的多行或控制字符风险。 */
+        [[nodiscard]] bool requiresConfirmation() const
+        {
+            return containsLineBreak || removedControlCharacters > 0;
+        }
+    };
+
     explicit TerminalView(QWidget *parent = nullptr);
+
+    /**
+     * @brief 清理剪贴板文本并计算粘贴风险，不访问剪贴板或弹出界面。
+     * @param clipboardText 剪贴板提供的原始 Unicode 文本。
+     * @return 可发送文本、被移除控制字符数量以及是否含换行。
+     *
+     * 允许普通可打印字符、Tab 和换行；CRLF/CR 会统一为 LF。ESC、NUL、DEL 以及 C1
+     * 控制字符会被删除，因为它们可注入终端控制序列或改变下游程序状态。该纯函数单独公开，
+     * 是为了让安全边界能在不操作系统剪贴板、不弹确认框的单元测试中稳定复核。
+     */
+    [[nodiscard]] static PastePreparation prepareClipboardPaste(const QString &clipboardText);
 
     /**
      * @brief 将 SSH 进程输出追加到视图。
@@ -33,6 +76,53 @@ public:
 
     /** @brief 是否正处于本地行捕获状态。 */
     [[nodiscard]] bool isCapturingLocalLine() const { return m_localCapture; }
+
+    /**
+     * @brief 替换当前主机的历史命令补全候选。
+     * @param commands 按最近使用优先排列的完整命令；空项和重复项会被丢弃。
+     *
+     * 候选仅在用户普通输入命令时显示，不会在密码本地捕获期间出现。TerminalView 不自行
+     * 访问数据库，因此本方法也可由内存模型或未来远程同步历史提供数据。
+     */
+    void setCommandCompletions(const QStringList &commands);
+
+    /**
+     * @brief 以程序方式向当前终端提交一条完整命令。
+     * @param command 不带结尾换行的命令；空命令会被忽略。
+     *
+     * Snippet 执行必须走此入口而不是直接写 worker：它会先发送 UTF-8 命令和回车，再发出
+     * commandSubmitted，使嵌套 SSH 识别与命令历史和真实键盘输入保持同一条业务路径。
+     */
+    void submitCommand(const QString &command);
+
+    /**
+     * @brief 实时应用终端外观与行为设置。
+     * @param settings 已规范化或待规范化的设置快照。
+     *
+     * 该方法不访问数据库；所有标签页由 MainWindow 订阅设置服务后统一调用，因此实时
+     * 预览、保存和系统深浅色变化都经过同一条实现路径。
+     */
+    void applySettings(const TerminalSettings &settings);
+
+    /**
+     * @brief 在当前终端文档中查找文本并选中命中项。
+     * @param text 非空查找文本。
+     * @param backward true 表示向前查找，false 表示向后查找。
+     * @return 找到文本返回 true；到达边界后会从另一端再查一次。
+     */
+    bool findTerminalText(const QString &text, bool backward = false);
+
+    /** @brief 返回可导出的纯文本终端内容，不包含光标或富文本样式。 */
+    [[nodiscard]] QString terminalPlainText() const;
+
+    /**
+     * @brief 创建包含 Qt 标准文本动作和 Shellium SFTP 入口的终端右键菜单。
+     * @return 新创建的菜单；调用方拥有并负责销毁。
+     *
+     * 把菜单构造从 contextMenuEvent 分离，既让键盘菜单、自动化测试和未来触控入口能够
+     * 复用同一组动作，也避免测试依赖不同 QPA 插件对原生弹出菜单的实现差异。
+     */
+    [[nodiscard]] QMenu *createTerminalContextMenu();
 
 signals:
     /** @brief 用户输入了需要立即发送给远端 PTY 的字节。 */
@@ -93,6 +183,15 @@ signals:
     /** @brief 视图像素尺寸变化后计算出的终端字符列数和行数。 */
     void terminalSizeChanged(int columns, int rows);
 
+    /**
+     * @brief 用户从终端右键菜单请求把本地文件上传到当前层服务器的当前远程目录。
+     *
+     * TerminalView 不持有服务器、路径或凭据，只发出用户意图；同标签页的
+     * TerminalWorkspace 会把请求路由给专属 RemoteFileManagerWidget。这样既不会让纯
+     * 终端视图依赖 SFTP 模块，也能保证多标签页之间不会误用其他会话的上传目标。
+     */
+    void uploadToCurrentDirectoryRequested();
+
 protected:
     /** @brief 将 Qt 键盘事件编码为常见的 xterm/VT 控制序列。 */
     void keyPressEvent(QKeyEvent *event) override;
@@ -115,10 +214,28 @@ protected:
      */
     void inputMethodEvent(QInputMethodEvent *event) override;
 
+    /** @brief 在基础文本绘制后叠加 IBeam 光标；块状与下划线由桥接层格式化。 */
+    void paintEvent(QPaintEvent *event) override;
+
     /** @brief 告知系统输入法终端仍可接收文本，并提供候选窗口定位信息。 */
     QVariant inputMethodQuery(Qt::InputMethodQuery query) const override;
 
+    /**
+     * @brief 在 Qt 标准文本菜单末尾增加“上传到当前远程目录”动作。
+     * @param event 携带菜单弹出位置的上下文菜单事件；Qt 保证非空。
+     *
+     * 保留复制、全选等标准动作，避免为了一个业务入口破坏平台原生文本操作；实际文件
+     * 选择与连接校验由远程文件管理器完成。
+     */
+    void contextMenuEvent(QContextMenuEvent *event) override;
+
 private:
+    /** @brief 根据当前输入前缀显示或隐藏历史补全弹层。 */
+    void updateCompletionPopup();
+
+    /** @brief 接受补全候选，只向 PTY 发送尚未输入的后缀。 */
+    void acceptCompletion(const QString &completion);
+
     /** @brief 当前尚未按回车提交的输入；同时用于识别 ssh 命令和一次性复用内层密码。 */
     QString m_currentCommand;
 
@@ -139,4 +256,21 @@ private:
 
     /** @brief 防止同一条最终 Permission denied 输出重复撤销嵌套目标。 */
     bool m_authenticationFailureReported = false;
+
+    /** @brief 基于当前主机持久命令历史的弹出式补全器。 */
+    QCompleter *m_commandCompleter = nullptr;
+
+    /** @brief 补全器的数据模型；候选顺序保持“最近使用优先”。 */
+    QStringListModel *m_completionModel = nullptr;
+
+    /** @brief 光标闪烁定时器；关闭闪烁时停止，避免隐藏窗口仍持续唤醒 GUI 线程。 */
+    QTimer *m_cursorBlinkTimer = nullptr;
+
+    /** @brief 当前光标闪烁相位和形态，供 paintEvent 与 VtermBridge 同步使用。 */
+    bool m_cursorPhaseVisible = true;
+    int m_cursorShape = 0;
+    QColor m_cursorColor;
+
+    /** @brief 当前行高百分比，用于把像素高度换算成准确 PTY 行数。 */
+    int m_lineHeightPercent = 100;
 };

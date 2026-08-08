@@ -120,9 +120,9 @@ struct CredentialRecord {
     CredentialType type = CredentialType::Password;
 
     QByteArray encryptedPayload; ///< 认证密文，绝不允许写入明文。
-    QString cipher;              ///< 例如 "xchacha20-poly1305"。
+    QString cipher;              ///< 例如 "xchacha20-poly1305-v1"。
     QByteArray nonce;            ///< 每条密文独立的随机 nonce。
-    QString kdfAlgorithm;        ///< 例如 "argon2id"。
+    QString kdfAlgorithm;        ///< 例如 "argon2id13"。
     QByteArray kdfSalt;
     qint64 kdfIterations = 0;   ///< Argon2 的 opslimit 或 PBKDF2 轮数。
     qint64 kdfMemoryKib = 0;    ///< Argon2 memlimit，单位 KiB。
@@ -130,6 +130,22 @@ struct CredentialRecord {
 
     QDateTime createdAt;
     QDateTime updatedAt;
+};
+
+/**
+ * @brief 保险库的全局公开配置，用于在下次启动时重新派生并校验会话密钥。
+ *
+ * 该结构只包含盐值、算法标识和认证校验块，不包含主密码或派生密钥，因此可以安全写入
+ * SQLite。校验块本质上是一段带认证标签的密文：使用错误主密码派生出的密钥无法解开它，
+ * 从而让解锁流程在读取真实凭据之前就能明确报告“主密码错误或元数据损坏”。
+ */
+struct VaultConfiguration {
+    int formatVersion = 1;           ///< 密文封装格式版本，供未来迁移算法时区分旧数据。
+    QString kdfAlgorithm;            ///< 密钥派生算法，例如 "argon2id13"。
+    QByteArray salt;                 ///< Argon2id 的公开随机盐值，不属于秘密。
+    QByteArray verifier;             ///< 使用派生密钥加密的固定校验块，禁止为空。
+    QDateTime createdAt;             ///< 首次创建时间；更新配置时保持不变。
+    QDateTime updatedAt;             ///< 最近一次写入时间。
 };
 
 /** @brief 一次连接尝试的历史记录。 */
@@ -152,5 +168,37 @@ struct CommandHistoryEntry {
     std::optional<int> exitCode; ///< 未设置表示退出码未知（例如命令仍在运行）。
 };
 
+/**
+ * @brief Snippet 树节点的类型。
+ *
+ * 分组与可执行片段共用一棵树：分组只负责组织，片段保存真正发送到终端的命令。数据库
+ * 目前使用 command 是否为 NULL 区分两者，业务层仍使用显式枚举，避免界面把空命令误判
+ * 为分组或把分组当作可执行内容。
+ */
+enum class SnippetNodeKind {
+    Folder = 0, ///< 仅用于组织 Snippet 的分组节点，不可执行。
+    Snippet = 1 ///< 保存非空命令的可执行片段。
+};
+
+/**
+ * @brief 一条可持久化的 Snippet 或 Snippet 分组记录。
+ *
+ * parentId 为空表示根层级；sortOrder 决定同组内顺序。updatedAt 使用 UTC 时间持久化，
+ * 便于未来实现同步冲突检测。分组的 command 必须为空，可执行片段的 command 必须非空。
+ */
+struct SnippetRecord {
+    QString id;                         ///< 稳定主键；由调用方生成，保存后不可随名称变化。
+    QString parentId;                   ///< 父分组 id；空字符串表示根层级。
+    SnippetNodeKind kind = SnippetNodeKind::Snippet;
+    QString name;                       ///< 展示名称，同一分组内允许重名。
+    QString command;                    ///< 发送给终端的命令；分组必须为空。
+    QString description;                ///< 用途、风险或参数说明，可为空。
+    int sortOrder = 0;                  ///< 同一父节点内的稳定排序值。
+    QDateTime updatedAt;                ///< 最近更新时间；无效值由数据库自动补为当前 UTC。
+};
+
 Q_DECLARE_METATYPE(HostRecord)
 Q_DECLARE_METATYPE(CredentialRecord)
+Q_DECLARE_METATYPE(VaultConfiguration)
+Q_DECLARE_METATYPE(CommandHistoryEntry)
+Q_DECLARE_METATYPE(SnippetRecord)

@@ -1,5 +1,6 @@
 #include "terminal/TerminalView.h"
 
+#include "settings/TerminalSettings.h"
 #include "terminal/VtermBridge.h"
 
 #include <QApplication>
@@ -10,13 +11,23 @@
 #include <QResizeEvent>
 #include <QLoggingCategory>
 #include <QRegularExpression>
+#include <QSet>
 
 #include <utility>
 #include <QScrollBar>
 #include <QClipboard>
+#include <QCompleter>
+#include <QContextMenuEvent>
 #include <QFontMetrics>
 #include <QKeySequence>
+#include <QMenu>
+#include <QMessageBox>
+#include <QPainter>
+#include <QPaintEvent>
+#include <QAbstractItemView>
+#include <QStringListModel>
 #include <QTextCursor>
+#include <QTimer>
 
 #include <algorithm>
 
@@ -78,6 +89,9 @@ QString recoverEchoedSshCommand(const QString &bufferedCommand, const QString &c
 TerminalView::TerminalView(QWidget *parent)
     : QPlainTextEdit(parent)
     , m_vtermBridge(new VtermBridge(this))
+    , m_commandCompleter(new QCompleter(this))
+    , m_completionModel(new QStringListModel(this))
+    , m_cursorBlinkTimer(new QTimer(this))
 {
     setReadOnly(true);
     // macOS 会根据该属性决定是否把字符交给输入法。只读文本控件默认关闭此属性，但终端
@@ -99,13 +113,248 @@ TerminalView::TerminalView(QWidget *parent)
     // 终端收到 DSR/DA 等查询后，libvterm 会生成必须回送给 PTY 的协议字节。
     connect(m_vtermBridge, &VtermBridge::protocolResponse,
             this, &TerminalView::inputBytes);
-    connect(m_vtermBridge, &VtermBridge::bell, this, []() {
-        QApplication::beep();
+    connect(m_vtermBridge, &VtermBridge::bell, this, [this]() {
+        if (property("shelliumAudibleBell").toBool()) {
+            QApplication::beep();
+        }
     });
     connect(m_vtermBridge,
             &VtermBridge::shellIntegrationEvent,
             this,
             &TerminalView::shellIntegrationEvent);
+
+    // 补全只做前缀匹配并保持模型传入的最近使用顺序。UnsortedModel 可以避免 QCompleter
+    // 为二分查找重新排序，从而把多年未用但字典序靠前的命令放到最近命令之前。
+    m_commandCompleter->setWidget(this);
+    m_commandCompleter->setModel(m_completionModel);
+    m_commandCompleter->setCaseSensitivity(Qt::CaseInsensitive);
+    m_commandCompleter->setCompletionMode(QCompleter::PopupCompletion);
+    m_commandCompleter->setModelSorting(QCompleter::UnsortedModel);
+    m_commandCompleter->setFilterMode(Qt::MatchStartsWith);
+    m_commandCompleter->setMaxVisibleItems(10);
+    connect(m_commandCompleter,
+            qOverload<const QString &>(&QCompleter::activated),
+            this,
+            &TerminalView::acceptCompletion);
+
+    m_cursorBlinkTimer->setInterval(600);
+    connect(m_cursorBlinkTimer, &QTimer::timeout, this, [this]() {
+        m_cursorPhaseVisible = !m_cursorPhaseVisible;
+        m_vtermBridge->setCursorPresentation(
+            static_cast<VtermBridge::CursorShape>(m_cursorShape), m_cursorPhaseVisible);
+        m_vtermBridge->render(document());
+        viewport()->update();
+    });
+
+    // 即使设置服务尚未接入，终端也使用同一份规范化默认值，避免构造路径与设置路径出现
+    // 两套字体、颜色或铃声行为。
+    applySettings(TerminalSettings{}.normalized());
+}
+
+void TerminalView::contextMenuEvent(QContextMenuEvent *event)
+{
+    QMenu *menu = createTerminalContextMenu();
+    // 菜单执行结束后 deleteLater() 可避免在某个 triggered 槽仍处理事件时同步销毁动作。
+    menu->exec(event->globalPos());
+    menu->deleteLater();
+}
+
+QMenu *TerminalView::createTerminalContextMenu()
+{
+    // createStandardContextMenu() 返回由调用方负责销毁的菜单。继续使用 Qt 的标准
+    // 复制/全选动作，只在末尾追加 SFTP 入口，保证平台原生文本操作不因业务菜单被替换。
+    QMenu *menu = createStandardContextMenu();
+    menu->addSeparator();
+    QAction *uploadAction = menu->addAction(tr("上传到当前远程目录…"));
+    connect(uploadAction, &QAction::triggered,
+            this, &TerminalView::uploadToCurrentDirectoryRequested);
+    return menu;
+}
+
+void TerminalView::applySettings(const TerminalSettings &settings)
+{
+    const TerminalSettings normalized = settings.normalized();
+    const TerminalPalette terminalPalette = normalized.effectivePalette();
+
+    QFont terminalFont = normalized.fontFamily.isEmpty()
+        ? QFontDatabase::systemFont(QFontDatabase::FixedFont)
+        : QFont(normalized.fontFamily);
+    terminalFont.setPointSize(normalized.fontPointSize);
+    terminalFont.setLetterSpacing(QFont::AbsoluteSpacing, normalized.letterSpacing);
+    setFont(terminalFont);
+
+    m_lineHeightPercent = normalized.lineHeightPercent;
+    m_cursorShape = static_cast<int>(normalized.cursorShape);
+    m_cursorColor = terminalPalette.cursor;
+    m_cursorPhaseVisible = true;
+    m_vtermBridge->setDefaultColors(terminalPalette.foreground,
+                                    terminalPalette.background,
+                                    terminalPalette.cursor);
+    m_vtermBridge->setScrollbackLimit(normalized.scrollbackLines);
+    m_vtermBridge->setLineHeightPercent(normalized.lineHeightPercent);
+    m_vtermBridge->setCursorPresentation(
+        static_cast<VtermBridge::CursorShape>(m_cursorShape), true);
+
+    // 使用控件调色板而非固定背景样式，选择颜色与主题可在设置实时预览时同步更新。终端
+    // 单元格的显式 ANSI 色仍由 libvterm 提供，不会被这里覆盖。
+    QPalette viewPalette = palette();
+    viewPalette.setColor(QPalette::Base, terminalPalette.background);
+    viewPalette.setColor(QPalette::Text, terminalPalette.foreground);
+    viewPalette.setColor(QPalette::Highlight, terminalPalette.selection);
+    setPalette(viewPalette);
+    setStyleSheet(QStringLiteral("QPlainTextEdit { border: 0; padding: 6px; }"));
+
+    setProperty("shelliumAudibleBell", normalized.audibleBell);
+    if (normalized.cursorBlink) {
+        m_cursorBlinkTimer->start();
+    } else {
+        m_cursorBlinkTimer->stop();
+    }
+    m_vtermBridge->render(document());
+    viewport()->update();
+
+    // 字体或行高变化会改变 PTY 的字符尺寸；主动重新计算，让远端及时收到 SIGWINCH，
+    // 而不是必须等用户再拖动一次窗口。
+    const QFontMetrics metrics(font());
+    const int cellWidth = std::max(metrics.horizontalAdvance(QLatin1Char('M')), 1);
+    const int baseHeight = std::max(metrics.lineSpacing(), 1);
+    const int cellHeight = std::max(baseHeight * m_lineHeightPercent / 100, 1);
+    const int columns = std::max(viewport()->width() / cellWidth, 1);
+    const int rows = std::max(viewport()->height() / cellHeight, 1);
+    m_vtermBridge->resize(rows, columns);
+    emit terminalSizeChanged(columns, rows);
+}
+
+bool TerminalView::findTerminalText(const QString &text, const bool backward)
+{
+    if (text.isEmpty()) {
+        return false;
+    }
+    const QTextDocument::FindFlags flags = backward ? QTextDocument::FindBackward
+                                                     : QTextDocument::FindFlags{};
+    if (find(text, flags)) {
+        return true;
+    }
+
+    // 到达文档边界时环回，连续按快捷键可以遍历全部命中，而无需手工滚回开头。
+    QTextCursor cursor(document());
+    cursor.movePosition(backward ? QTextCursor::End : QTextCursor::Start);
+    setTextCursor(cursor);
+    return find(text, flags);
+}
+
+QString TerminalView::terminalPlainText() const
+{
+    return document()->toPlainText();
+}
+
+void TerminalView::setCommandCompletions(const QStringList &commands)
+{
+    QStringList normalized;
+    QSet<QString> seen;
+    normalized.reserve(commands.size());
+    for (const QString &command : commands) {
+        if (command.trimmed().isEmpty() || seen.contains(command)) {
+            continue;
+        }
+        seen.insert(command);
+        normalized.append(command);
+    }
+    m_completionModel->setStringList(normalized);
+    updateCompletionPopup();
+}
+
+void TerminalView::submitCommand(const QString &command)
+{
+    if (m_localCapture || command.trimmed().isEmpty()) {
+        return;
+    }
+    // 命令和回车合并发送可保持 worker 队列中的原子顺序；commandSubmitted 随后触发历史
+    // 与嵌套识别，上层仍然看到和真实键盘回车完全一致的提交时点。
+    emit inputBytes(command.toUtf8() + QByteArrayLiteral("\r"));
+    emit commandSubmitted(command);
+    m_currentCommand.clear();
+    m_commandCompleter->popup()->hide();
+}
+
+void TerminalView::updateCompletionPopup()
+{
+    if (m_localCapture || m_currentCommand.size() < 2 || m_completionModel->rowCount() == 0) {
+        m_commandCompleter->popup()->hide();
+        return;
+    }
+    m_commandCompleter->setCompletionPrefix(m_currentCommand);
+    if (m_commandCompleter->completionCount() <= 0) {
+        m_commandCompleter->popup()->hide();
+        return;
+    }
+
+    // 终端文档的文本光标不等于远端 PTY 光标，但它始终位于视图末尾附近；以此作为弹层
+    // 锚点比固定在左上角更自然，也不会尝试从终端输出反推 Shell 的行编辑状态。
+    QRect popupRect = cursorRect();
+    popupRect.setWidth(qMax(320, m_commandCompleter->popup()->sizeHintForColumn(0)
+                                    + m_commandCompleter->popup()->verticalScrollBar()->sizeHint().width()));
+    m_commandCompleter->complete(popupRect);
+}
+
+void TerminalView::acceptCompletion(const QString &completion)
+{
+    if (m_localCapture || completion.size() < m_currentCommand.size()
+        || !completion.startsWith(m_currentCommand, Qt::CaseInsensitive)) {
+        m_commandCompleter->popup()->hide();
+        return;
+    }
+    const QString suffix = completion.mid(m_currentCommand.size());
+    if (!suffix.isEmpty()) {
+        emit inputBytes(suffix.toUtf8());
+    }
+    m_currentCommand = completion;
+    m_commandCompleter->popup()->hide();
+}
+
+TerminalView::PastePreparation TerminalView::prepareClipboardPaste(
+    const QString &clipboardText)
+{
+    PastePreparation result;
+    result.text.reserve(clipboardText.size());
+
+    for (qsizetype index = 0; index < clipboardText.size(); ++index) {
+        const QChar character = clipboardText.at(index);
+        if (character == QLatin1Char('\r')) {
+            // CRLF 只生成一个 LF；裸 CR 也规范化为 LF，避免同一份剪贴板文本在不同平台
+            // 上表现为不同的命令提交次数。
+            if (index + 1 < clipboardText.size()
+                && clipboardText.at(index + 1) == QLatin1Char('\n')) {
+                ++index;
+            }
+            result.text.append(QLatin1Char('\n'));
+            result.containsLineBreak = true;
+            continue;
+        }
+        if (character == QLatin1Char('\n')) {
+            result.text.append(character);
+            result.containsLineBreak = true;
+            continue;
+        }
+        if (character == QLatin1Char('\t')) {
+            // Tab 是 Shell 补全、缩进文本和交互式程序中的正常输入，不属于危险控制字符。
+            result.text.append(character);
+            continue;
+        }
+
+        const ushort code = character.unicode();
+        const bool c0Control = code < 0x20;
+        const bool deleteControl = code == 0x7f;
+        const bool c1Control = code >= 0x80 && code <= 0x9f;
+        if (c0Control || deleteControl || c1Control) {
+            // ESC 可伪造 CSI/OSC 序列，NUL 会改变 C 字符串语义，其余 C0/C1 字符也可能
+            // 触发终端模式切换；普通粘贴没有理由静默放行这些不可见字节。
+            ++result.removedControlCharacters;
+            continue;
+        }
+        result.text.append(character);
+    }
+    return result;
 }
 
 void TerminalView::appendTerminalOutput(const QByteArray &bytes)
@@ -189,6 +438,8 @@ void TerminalView::beginLocalLineCapture()
             static_cast<long long>(m_localLine.size()));
     m_localCapture = true;
     m_localLine.clear();
+    // 密码捕获期间绝不能展示历史命令：候选会遮挡提示，也可能让旁观者看到以前的敏感操作。
+    m_commandCompleter->popup()->hide();
 }
 
 void TerminalView::keyPressEvent(QKeyEvent *event)
@@ -248,13 +499,60 @@ void TerminalView::keyPressEvent(QKeyEvent *event)
         return;
     }
 
+    if (m_commandCompleter->popup()->isVisible()) {
+        if (event->key() == Qt::Key_Escape) {
+            m_commandCompleter->popup()->hide();
+            event->accept();
+            return;
+        }
+        if (event->key() == Qt::Key_Tab || event->key() == Qt::Key_Return
+            || event->key() == Qt::Key_Enter) {
+            const QModelIndex current = m_commandCompleter->popup()->currentIndex();
+            if (current.isValid()) {
+                acceptCompletion(current.data(Qt::DisplayRole).toString());
+                event->accept();
+                return;
+            }
+        }
+    }
+
     if (event->matches(QKeySequence::Paste)) {
-        // 只发送纯文本并移除 NUL。NUL 在交互式 Shell 中没有可见意义，却可能让下游程序
-        // 误判字符串终止；其余换行和控制字符仍保留，方便粘贴多行脚本和终端快捷操作。
-        QString clipboardText = QGuiApplication::clipboard()->text();
-        clipboardText.remove(QChar::Null);
-        encoded = clipboardText.toUtf8();
-        m_currentCommand.append(clipboardText.section(QLatin1Char('\n'), -1));
+        const PastePreparation prepared = prepareClipboardPaste(
+            QGuiApplication::clipboard()->text());
+        if (prepared.text.isEmpty()) {
+            // 剪贴板为空或仅含危险控制字符时不向 PTY 发送任何内容，避免一次“空粘贴”
+            // 被下游交互式程序误解为特殊输入。
+            event->accept();
+            return;
+        }
+
+        if (prepared.requiresConfirmation()) {
+            QStringList riskDescriptions;
+            if (prepared.containsLineBreak) {
+                riskDescriptions.append(tr("内容包含 %1 行，发送后可能立即执行多条命令。")
+                                            .arg(prepared.text.count(QLatin1Char('\n')) + 1));
+            }
+            if (prepared.removedControlCharacters > 0) {
+                riskDescriptions.append(tr("已移除 %1 个可能注入终端控制序列的不可见字符。")
+                                            .arg(prepared.removedControlCharacters));
+            }
+            riskDescriptions.append(tr("确认将清理后的内容发送到当前终端吗？"));
+            const QMessageBox::StandardButton answer = QMessageBox::warning(
+                this,
+                tr("确认终端粘贴"),
+                riskDescriptions.join(QLatin1Char('\n')),
+                QMessageBox::Yes | QMessageBox::Cancel,
+                QMessageBox::Cancel);
+            if (answer != QMessageBox::Yes) {
+                event->accept();
+                return;
+            }
+        }
+
+        // 多行能力仍然保留，但只有用户看见风险并明确确认后才会进入 PTY。命令缓冲只保留
+        // 最后一个尚未换行的片段；已经包含换行的部分已由 PTY 提交，不能再次上报。
+        encoded = prepared.text.toUtf8();
+        m_currentCommand.append(prepared.text.section(QLatin1Char('\n'), -1));
     } else if (event->matches(QKeySequence::Copy)) {
         copy();
         event->accept();
@@ -264,6 +562,7 @@ void TerminalView::keyPressEvent(QKeyEvent *event)
         const QString submittedCommand = recoverEchoedSshCommand(
             m_currentCommand, m_vtermBridge->cursorLineText());
         m_currentCommand.clear();
+        m_commandCompleter->popup()->hide();
         // 提交密码或普通命令后允许识别下一次认证重试提示。
         m_authenticationPromptReported = false;
         m_authenticationFailureReported = false;
@@ -323,6 +622,7 @@ void TerminalView::keyPressEvent(QKeyEvent *event)
             // 目标时才据此回滚，普通命令的中断不会影响连接链。
             emit nestedSshAborted();
             m_currentCommand.clear();
+            m_commandCompleter->popup()->hide();
         }
     } else if (!event->text().isEmpty()
                && !event->modifiers().testFlag(Qt::ControlModifier)
@@ -339,6 +639,9 @@ void TerminalView::keyPressEvent(QKeyEvent *event)
         encoded.prepend('\x1b');
     }
     emit inputBytes(encoded);
+    // 普通字符、粘贴和退格会改变前缀；方向键等不会改变 m_currentCommand，重复计算只涉及
+    // 很小的内存模型，可换来所有输入路径的一致行为并避免漏掉输入法或未来新增按键分支。
+    updateCompletionPopup();
     event->accept();
 }
 
@@ -347,13 +650,33 @@ void TerminalView::resizeEvent(QResizeEvent *event)
     QPlainTextEdit::resizeEvent(event);
     const QFontMetrics metrics(font());
     const int cellWidth = std::max(metrics.horizontalAdvance(QLatin1Char('M')), 1);
-    const int cellHeight = std::max(metrics.lineSpacing(), 1);
+    const int cellHeight = std::max(metrics.lineSpacing() * m_lineHeightPercent / 100, 1);
     // viewport 排除了滚动条和边框，得到的行列数比直接使用 QWidget::size 更接近实际绘制区域。
     const int columns = std::max(viewport()->width() / cellWidth, 1);
     const int rows = std::max(viewport()->height() / cellHeight, 1);
     m_vtermBridge->resize(rows, columns);
     m_vtermBridge->render(document());
     emit terminalSizeChanged(columns, rows);
+}
+
+void TerminalView::paintEvent(QPaintEvent *event)
+{
+    QPlainTextEdit::paintEvent(event);
+    if (!m_cursorPhaseVisible
+        || static_cast<TerminalCursorShape>(m_cursorShape) != TerminalCursorShape::IBeam) {
+        return;
+    }
+    const int position = m_vtermBridge->renderedCursorPosition();
+    if (position < 0 || position >= document()->characterCount()) {
+        return;
+    }
+
+    QTextCursor cursor(document());
+    cursor.setPosition(position);
+    const QRect cursorArea = cursorRect(cursor);
+    QPainter painter(viewport());
+    painter.setPen(QPen(m_cursorColor, 2.0));
+    painter.drawLine(cursorArea.topLeft(), cursorArea.bottomLeft());
 }
 
 bool TerminalView::focusNextPrevChild(const bool next)
@@ -403,6 +726,7 @@ void TerminalView::inputMethodEvent(QInputMethodEvent *event)
                 m_currentCommand.append(character);
             }
         }
+        updateCompletionPopup();
     }
     event->accept();
 }

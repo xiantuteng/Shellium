@@ -26,6 +26,9 @@ private slots:
 
     /** @brief 默认间隔必须短于常见 NAT 表项寿命，否则保活形同虚设。 */
     void defaultIntervalStaysBelowCommonNatTimeout();
+
+    /** @brief 一次发送失败后必须至少退避 1 秒，不能按 10ms 泵送周期忙重试。 */
+    void failedSendUsesMinimumRetryBackoff();
 };
 
 void KeepAliveTest::firesOnlyAfterIdleIntervalElapsed()
@@ -85,6 +88,19 @@ void KeepAliveTest::defaultIntervalStaysBelowCommonNatTimeout()
     // 观察到的最短一档 NAT/防火墙空闲回收在 60 秒量级；间隔必须留出至少一次重发余量。
     QVERIFY(SshKeepAlive::kIdleIntervalMs > 0);
     QVERIFY(SshKeepAlive::kIdleIntervalMs <= 30000);
+}
+
+void KeepAliveTest::failedSendUsesMinimumRetryBackoff()
+{
+    constexpr qint64 interval = SshKeepAlive::kIdleIntervalMs;
+    const QList<SshKeepAlive::LayerIdleState> layers{
+        {true, interval * 2, -1},
+        {true, interval * 2, SshKeepAlive::kMinimumRetryIntervalMs - 1},
+        {true, interval * 2, SshKeepAlive::kMinimumRetryIntervalMs},
+    };
+    // 从未尝试与恰好到达退避边界的层可发送；刚失败的中间层必须保持安静。
+    QCOMPARE(SshKeepAlive::layersNeedingKeepAlive(layers, interval), (QList<int>{0, 2}));
+    QVERIFY(SshKeepAlive::kMinimumRetryIntervalMs >= 1000);
 }
 
 QTEST_APPLESS_MAIN(KeepAliveTest)

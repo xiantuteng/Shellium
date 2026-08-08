@@ -94,6 +94,22 @@ int SshSessionStack::openForwardSocket(const QString &layerId,
                                        const quint16 port,
                                        QString *errorMessage)
 {
+    return openForwardSocketImpl(false, layerId, host, port, errorMessage);
+}
+
+int SshSessionStack::openRootForwardSocket(const QString &host,
+                                           const quint16 port,
+                                           QString *errorMessage)
+{
+    return openForwardSocketImpl(true, {}, host, port, errorMessage);
+}
+
+int SshSessionStack::openForwardSocketImpl(const bool rootOrigin,
+                                           const QString &layerId,
+                                           const QString &host,
+                                           const quint16 port,
+                                           QString *errorMessage)
+{
     if (!isRunning() || shouldStop()) {
         if (errorMessage != nullptr) {
             *errorMessage = tr("外层 SSH 会话已经结束");
@@ -105,6 +121,7 @@ int SshSessionStack::openForwardSocket(const QString &layerId,
     request->layerId = layerId;
     request->host = host;
     request->port = port;
+    request->rootOrigin = rootOrigin;
     {
         QMutexLocker locker(&m_mutex);
         m_forwardRequests.append(request);
@@ -122,6 +139,54 @@ int SshSessionStack::openForwardSocket(const QString &layerId,
         *errorMessage = request->error;
     }
     return request->clientFd;
+}
+
+bool SshSessionStack::startRemoteForward(const QString &ruleId,
+                                         const QString &bindHost,
+                                         const quint16 bindPort,
+                                         QString *errorMessage)
+{
+    if (!isRunning() || shouldStop()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = tr("根 SSH 会话已经结束");
+        }
+        return false;
+    }
+    auto request = QSharedPointer<RemoteListenRequest>::create();
+    request->ruleId = ruleId;
+    request->bindHost = bindHost;
+    request->bindPort = bindPort;
+    {
+        QMutexLocker locker(&m_mutex);
+        m_remoteListenRequests.append(request);
+    }
+
+    QMutexLocker requestLocker(&request->mutex);
+    if (!request->condition.wait(&request->mutex, 20000) || !request->completed) {
+        request->cancelled = true;
+        if (errorMessage != nullptr) {
+            *errorMessage = tr("等待服务器建立远程监听超时");
+        }
+        // 排队停止保证晚到的成功结果不会留下无人管理的远程监听。
+        requestLocker.unlock();
+        stopRemoteForward(ruleId);
+        return false;
+    }
+    if (errorMessage != nullptr) {
+        *errorMessage = request->error;
+    }
+    return request->succeeded;
+}
+
+void SshSessionStack::stopRemoteForward(const QString &ruleId)
+{
+    if (ruleId.trimmed().isEmpty()) {
+        return;
+    }
+    QMutexLocker locker(&m_mutex);
+    if (!m_pendingRemoteStops.contains(ruleId)) {
+        m_pendingRemoteStops.append(ruleId);
+    }
 }
 
 void SshSessionStack::run()
@@ -187,10 +252,19 @@ bool SshSessionStack::pumpLoop()
         for (const std::unique_ptr<SshSessionNode> &layer : m_layers) {
             layer->pumpExec();
             bool installed = false;
-            if (layer->takeExecResult(&installed) && installed) {
-                // 脚本已经落盘，现在才把那条极短的 source 命令写进交互式终端。
-                layer->queueOutgoing(
-                    ShellShim::sourceCommand(shimPathFor(*layer)) + "\n");
+            QString installError;
+            if (layer->takeExecResult(&installed, &installError)) {
+                if (installed) {
+                    const QByteArray path = shimPathFor(*layer);
+                    // 只有远端明确返回退出码 0 才加载脚本。先发路径事件再排队 source：两条
+                    // 信号与后续 outputReady 同源有序，GUI 可在回显到达前登记过滤规则。
+                    emit shellIntegrationPathReady(path);
+                    layer->queueOutgoing(ShellShim::sourceCommand(path) + "\n");
+                } else {
+                    emit shellIntegrationFailed(
+                        layer->target(),
+                        installError.isEmpty() ? tr("远端未返回安装结果") : installError);
+                }
             }
         }
 
@@ -221,6 +295,7 @@ bool SshSessionStack::pumpLoop()
         }
 
         serviceForwardRequests();
+        serviceRemoteForwardRequests();
         servicePendingLayerRequests();
         if (m_layers.empty() || !m_layers.back()->isReady()) {
             // 本轮刚压入新层或弹出了旧层，栈顶已经变化；不再沿用变更前的引用搬运终端
@@ -535,22 +610,51 @@ void SshSessionStack::beginShellIntegrationInstall(SshSessionNode &node)
 {
     const QByteArray path = shimPathFor(node);
     if (!node.beginDetachedExec(ShellShim::installCommand(path))) {
-        // 发起失败不影响会话本身，只是这一层退回命令解析的降级路径。
+        // 发起失败不影响会话本身，只是这一层退回命令解析的降级路径；显式上报可避免用户
+        // 误以为随后识别出的推测层仍具有自持层同等的确定性。
+        emit shellIntegrationFailed(node.target(), tr("无法创建远端脚本安装通道"));
         return;
     }
-    emit shellIntegrationPathReady(path);
 }
 
 void SshSessionStack::pumpAllForwards()
 {
     QList<SshSessionNode::ForwardOutcome> outcomes;
+    QList<SshSessionNode::RemoteListenOutcome> remoteListenOutcomes;
+    QList<SshSessionNode::RemoteAcceptedConnection> remoteAcceptedConnections;
     for (const std::unique_ptr<SshSessionNode> &layer : m_layers) {
         outcomes.append(layer->pumpForwards());
+        layer->pumpRemoteForwarding(remoteListenOutcomes, remoteAcceptedConnections);
     }
     // 派发必须在遍历之后：handleForwardOutcome 可能压入新层，而 std::vector 的 push_back
     // 会让上面正在使用的迭代器失效。
     for (const SshSessionNode::ForwardOutcome &outcome : outcomes) {
         handleForwardOutcome(outcome);
+    }
+    for (const SshSessionNode::RemoteListenOutcome &outcome : remoteListenOutcomes) {
+        const QSharedPointer<RemoteListenRequest> request =
+            m_remoteListensInFlight.take(outcome.requestId);
+        if (request.isNull()) {
+            if (outcome.ok && !m_layers.empty()) {
+                // 发起方已超时或取消；立即撤销晚到的成功监听，不能在服务器上留下孤儿端口。
+                m_layers.front()->cancelRemoteListen(outcome.ruleId);
+            }
+            continue;
+        }
+        QMutexLocker requestLocker(&request->mutex);
+        request->completed = true;
+        request->succeeded = outcome.ok && !request->cancelled;
+        request->error = request->succeeded
+            ? QString()
+            : (request->cancelled ? tr("远程监听申请已取消") : outcome.error);
+        request->condition.wakeAll();
+        if (outcome.ok && request->cancelled && !m_layers.empty()) {
+            m_layers.front()->cancelRemoteListen(outcome.ruleId);
+        }
+    }
+    for (const SshSessionNode::RemoteAcceptedConnection &connection
+         : remoteAcceptedConnections) {
+        emit remoteForwardConnection(connection.ruleId, connection.callerFd);
     }
 }
 
@@ -584,7 +688,9 @@ void SshSessionStack::serviceForwardRequests()
     for (const QSharedPointer<ForwardRequest> &request : requests) {
         QString error;
         quint64 forwardId = 0;
-        SshSessionNode *origin = originLayerFor(request->layerId);
+        SshSessionNode *origin = request->rootOrigin
+            ? (m_layers.empty() ? nullptr : m_layers.front().get())
+            : originLayerFor(request->layerId);
         if (origin != nullptr && origin->isReady()) {
             // SFTP 侧调用方自身有 15 秒等待上限，这里略短以便先返回结构化错误而非超时。
             constexpr int kSftpForwardTimeoutMs = 12000;
@@ -604,6 +710,69 @@ void SshSessionStack::serviceForwardRequests()
         request->clientFd = -1;
         request->completed = true;
         request->condition.wakeAll();
+    }
+}
+
+void SshSessionStack::serviceRemoteForwardRequests()
+{
+    QList<QSharedPointer<RemoteListenRequest>> starts;
+    QStringList stops;
+    {
+        QMutexLocker locker(&m_mutex);
+        starts.swap(m_remoteListenRequests);
+        stops.swap(m_pendingRemoteStops);
+    }
+
+    SshSessionNode *root = m_layers.empty() ? nullptr : m_layers.front().get();
+    for (const QString &ruleId : std::as_const(stops)) {
+        if (root != nullptr) {
+            root->cancelRemoteListen(ruleId);
+        }
+        // 停止可能与尚在途的启动并发；先唤醒调用方，再让晚到 outcome 走无人认领清理分支。
+        QList<quint64> cancelledIds;
+        for (auto iterator = m_remoteListensInFlight.cbegin();
+             iterator != m_remoteListensInFlight.cend(); ++iterator) {
+            if (iterator.value()->ruleId == ruleId) {
+                cancelledIds.append(iterator.key());
+            }
+        }
+        for (const quint64 requestId : cancelledIds) {
+            const QSharedPointer<RemoteListenRequest> request =
+                m_remoteListensInFlight.take(requestId);
+            QMutexLocker requestLocker(&request->mutex);
+            request->cancelled = true;
+            request->completed = true;
+            request->error = tr("远程监听申请已停止");
+            request->condition.wakeAll();
+        }
+    }
+
+    for (const QSharedPointer<RemoteListenRequest> &request : std::as_const(starts)) {
+        QMutexLocker requestLocker(&request->mutex);
+        if (request->cancelled) {
+            request->completed = true;
+            request->error = tr("远程监听申请已取消");
+            request->condition.wakeAll();
+            continue;
+        }
+        if (root == nullptr || !root->isReady()) {
+            request->completed = true;
+            request->error = tr("根 SSH 会话尚未就绪");
+            request->condition.wakeAll();
+            continue;
+        }
+        QString error;
+        const quint64 requestId = root->beginRemoteListen(request->ruleId,
+                                                          request->bindHost,
+                                                          request->bindPort,
+                                                          &error);
+        if (requestId == 0) {
+            request->completed = true;
+            request->error = error;
+            request->condition.wakeAll();
+            continue;
+        }
+        m_remoteListensInFlight.insert(requestId, request);
     }
 }
 
@@ -630,6 +799,23 @@ void SshSessionStack::abortInFlightForwards(const QString &reason)
         request->error = reason;
         request->clientFd = -1;
         request->completed = true;
+        request->condition.wakeAll();
+    }
+
+    QList<QSharedPointer<RemoteListenRequest>> remoteRequests =
+        m_remoteListensInFlight.values();
+    m_remoteListensInFlight.clear();
+    {
+        QMutexLocker locker(&m_mutex);
+        remoteRequests.append(m_remoteListenRequests);
+        m_remoteListenRequests.clear();
+        m_pendingRemoteStops.clear();
+    }
+    for (const QSharedPointer<RemoteListenRequest> &request : std::as_const(remoteRequests)) {
+        QMutexLocker requestLocker(&request->mutex);
+        request->completed = true;
+        request->succeeded = false;
+        request->error = reason;
         request->condition.wakeAll();
     }
 }

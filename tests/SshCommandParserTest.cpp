@@ -5,12 +5,19 @@
 #include "terminal/TerminalView.h"
 #include "terminal/LocalShellWorker.h"
 #include "security/Vault.h"
+#include "settings/TerminalSettings.h"
 #include "storage/ApplicationDatabase.h"
 
 #include <QClipboard>
+#include <QApplication>
+#include <QFile>
 #include <QGuiApplication>
 #include <QSignalSpy>
 #include <QInputMethodEvent>
+#include <QMenu>
+#include <QProcess>
+#include <QProcessEnvironment>
+#include <QSqlError>
 #include <QSqlQuery>
 #include <QTemporaryDir>
 #include <QTest>
@@ -45,6 +52,9 @@ private slots:
     /** @brief 当前 libssh 构建必须实际包含并接受 hmac-sha1 兼容配置。 */
     void libsshSupportsOptInLegacyHmac();
 
+    /** @brief 自动重连策略必须限制危险数值并完整持久化。 */
+    void terminalSettingsPersistReconnectPolicy();
+
     /** @brief 普通字符与回车必须从终端视图完整发送，并产生可解析的整行命令。 */
     void terminalViewForwardsKeyboardInput();
 
@@ -56,6 +66,9 @@ private slots:
 
     /** @brief macOS 输入法提交的字符必须发送到远端而不能被只读文本控件吞掉。 */
     void terminalViewForwardsInputMethodText();
+
+    /** @brief 终端右键菜单必须发出当前目录上传请求。 */
+    void terminalViewContextMenuRequestsCurrentDirectoryUpload();
 
     /** @brief 分块到达的标准 SSH password 提示必须被识别且不泄露任何输入。 */
     void terminalViewDetectsSplitAuthenticationPrompt();
@@ -79,6 +92,9 @@ private slots:
     /** @brief 密码常从密码管理器粘贴，捕获期间必须接受粘贴而不是把按键吞掉。 */
     void terminalViewAcceptsPasteDuringCapture();
 
+    /** @brief 普通粘贴必须保留多行能力，同时移除可注入终端状态的危险控制字符。 */
+    void terminalViewPreparesClipboardTextSafely();
+
     /** @brief 回显过滤器要能扣掉整段、跨块的期望串，并在匹配不上时如数放行。 */
     void echoFilterRemovesExpectedEcho();
 
@@ -93,6 +109,12 @@ private slots:
 
     /** @brief 无法忠实复现的 ssh 用法必须拒绝接管，交还给原生 ssh。 */
     void shellShimDeclinesUnsupportedInvocations();
+
+    /** @brief shim 追加历史策略时必须保留用户已有的 HISTCONTROL 选项。 */
+    void shellShimPreservesExistingHistoryPolicy();
+
+    /** @brief 安装命令必须拒绝不兼容 Shell，且只在成功时落下权限受限的脚本。 */
+    void shellShimInstallGuardsUnsupportedShells();
 
     /** @brief -i 指向远端私钥，绝不能被本机 libssh 当作本地路径使用。 */
     void neverUsesRemoteIdentityFileLocally();
@@ -131,6 +153,15 @@ private slots:
 
     /** @brief 保险库应正确往返加密，并拒绝被篡改的密文。 */
     void vaultEncryptsAndAuthenticatesCredentials();
+
+    /** @brief 首次创建后应只持久化公开配置和密文，并能在新服务实例中重新解锁。 */
+    void credentialVaultPersistsEncryptedSecretsAcrossUnlocks();
+
+    /** @brief 错误主密码、空校验块与被篡改的凭据都必须安全失败且保持锁定。 */
+    void credentialVaultRejectsWrongPasswordAndCorruptData();
+
+    /** @brief 闲置计时达到阈值才应清除密钥，禁用超时后不得自动锁定。 */
+    void credentialVaultLocksAfterIdleTimeout();
 };
 
 namespace {
@@ -315,6 +346,27 @@ void SshCommandParserTest::terminalViewForwardsInputMethodText()
 
     QCOMPARE(byteSpy.size(), 1);
     QCOMPARE(byteSpy.at(0).at(0).toByteArray(), QByteArrayLiteral("ls -la"));
+}
+
+void SshCommandParserTest::terminalViewContextMenuRequestsCurrentDirectoryUpload()
+{
+    TerminalView view;
+    QSignalSpy uploadSpy(&view, &TerminalView::uploadToCurrentDirectoryRequested);
+    bool foundUploadAction = false;
+    QMenu *menu = view.createTerminalContextMenu();
+    QVERIFY(menu != nullptr);
+    for (QAction *action : menu->actions()) {
+        if (action->text().contains(QStringLiteral("上传到当前远程目录"))) {
+            foundUploadAction = true;
+            action->trigger();
+            break;
+        }
+    }
+    // createTerminalContextMenu 明确把所有权交给调用方，测试也必须覆盖这条释放契约。
+    delete menu;
+
+    QVERIFY2(foundUploadAction, "终端右键菜单没有提供当前远程目录上传动作");
+    QCOMPARE(uploadSpy.count(), 1);
 }
 
 void SshCommandParserTest::terminalViewDetectsSplitAuthenticationPrompt()
@@ -521,6 +573,35 @@ void SshCommandParserTest::terminalViewAcceptsPasteDuringCapture()
     QCOMPARE(lineSpy.at(1).at(0).toString(), QStringLiteral("abc123"));
 }
 
+void SshCommandParserTest::terminalViewPreparesClipboardTextSafely()
+{
+    const QString raw = QStringLiteral("echo first\r\necho second\targ")
+        + QChar(0x001b)
+        + QChar::Null
+        + QChar(0x009b);
+    const TerminalView::PastePreparation prepared = TerminalView::prepareClipboardPaste(raw);
+
+    // CRLF 规范化后，多行脚本仍保持两行；Tab 是有意义的终端输入，也必须保留。
+    QCOMPARE(prepared.text, QStringLiteral("echo first\necho second\targ"));
+    QVERIFY(prepared.containsLineBreak);
+    QCOMPARE(prepared.removedControlCharacters, qsizetype(3));
+    QVERIFY(prepared.requiresConfirmation());
+
+    // 普通单行文本无需打断用户；该快速路径也是最常见的复制命令使用方式。
+    const TerminalView::PastePreparation ordinary =
+        TerminalView::prepareClipboardPaste(QStringLiteral("ls -la /srv/app"));
+    QCOMPARE(ordinary.text, QStringLiteral("ls -la /srv/app"));
+    QVERIFY(!ordinary.containsLineBreak);
+    QCOMPARE(ordinary.removedControlCharacters, qsizetype(0));
+    QVERIFY(!ordinary.requiresConfirmation());
+
+    // 裸 CR 同样代表换行，不能因来源平台不同而悄悄变成普通字符或重复两次换行。
+    const TerminalView::PastePreparation legacyMac =
+        TerminalView::prepareClipboardPaste(QStringLiteral("one\rtwo"));
+    QCOMPARE(legacyMac.text, QStringLiteral("one\ntwo"));
+    QVERIFY(legacyMac.requiresConfirmation());
+}
+
 void SshCommandParserTest::echoFilterRemovesExpectedEcho()
 {
     // 无登记时原样放行，且不应产生额外拷贝路径上的差异。
@@ -673,6 +754,74 @@ void SshCommandParserTest::shellShimDeclinesUnsupportedInvocations()
         // 必须给出原因：远端 shim 正阻塞等待回执，界面也要能解释为什么没接管。
         QVERIFY2(!reason.isEmpty(), qPrintable(arguments.join(QLatin1Char(' '))));
     }
+}
+
+void SshCommandParserTest::shellShimPreservesExistingHistoryPolicy()
+{
+    const QByteArray script = ShellShim::scriptBody();
+
+    // 先做结构断言，直接锁住曾经覆盖用户设置的危险写法。仅验证最终输出还不够：未来若
+    // 恰好由 Bash 自身合并变量，测试可能误绿，而源码仍在无条件赋值。
+    QVERIFY(!script.contains("export HISTCONTROL=ignorespace"));
+    QVERIFY(script.contains("${HISTCONTROL:+$HISTCONTROL:}ignorespace"));
+
+    const auto evaluateHistoryControl = [&script](const QByteArray &initialValue) {
+        QProcess bash;
+        const QByteArray command = "HISTCONTROL=" + initialValue
+            + "; export HISTCONTROL; " + script
+            + "; printf '%s' \"$HISTCONTROL\"";
+        bash.start(QStringLiteral("/bin/bash"),
+                   {QStringLiteral("--noprofile"), QStringLiteral("--norc"),
+                    QStringLiteral("-c"), QString::fromUtf8(command)});
+        if (!bash.waitForStarted(5000) || !bash.waitForFinished(5000)
+            || bash.exitStatus() != QProcess::NormalExit || bash.exitCode() != 0) {
+            return QByteArrayLiteral("<process-failed>") + bash.readAllStandardError();
+        }
+        return bash.readAllStandardOutput();
+    };
+
+    // 原有去重策略必须保留，并在其后追加 ignorespace；已经包含 ignoreboth 时不重复追加。
+    QCOMPARE(evaluateHistoryControl(QByteArrayLiteral("erasedups")),
+             QByteArrayLiteral("erasedups:ignorespace"));
+    QCOMPARE(evaluateHistoryControl(QByteArrayLiteral("ignoreboth")),
+             QByteArrayLiteral("ignoreboth"));
+}
+
+void SshCommandParserTest::shellShimInstallGuardsUnsupportedShells()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString scriptPath = directory.filePath(QStringLiteral(".shellium-shim"));
+    const QByteArray install = ShellShim::installCommand(scriptPath.toUtf8());
+
+    const auto runInstall = [&install](const QString &loginShell) {
+        QProcess process;
+        QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
+        environment.insert(QStringLiteral("SHELL"), loginShell);
+        process.setProcessEnvironment(environment);
+        process.start(QStringLiteral("/bin/sh"),
+                      {QStringLiteral("-c"), QString::fromUtf8(install)});
+        if (!process.waitForStarted(5000) || !process.waitForFinished(5000)
+            || process.exitStatus() != QProcess::NormalExit) {
+            return -1;
+        }
+        return process.exitCode();
+    };
+
+    // fish/csh 不能解析 `. path` 与 POSIX 函数体；安装阶段必须明确失败且绝不能留下文件，
+    // 这样 SshSessionStack 才不会继续向用户的交互终端发送不兼容语法。
+    QCOMPARE(runInstall(QStringLiteral("/usr/bin/fish")), 64);
+    QVERIFY(!QFile::exists(scriptPath));
+
+    // bash 环境正常落盘；umask 077 是安全边界，临时脚本不得被同机其他用户读取或修改。
+    QCOMPARE(runInstall(QStringLiteral("/bin/bash")), 0);
+    QFile scriptFile(scriptPath);
+    QVERIFY(scriptFile.open(QIODevice::ReadOnly));
+    QCOMPARE(scriptFile.readAll().trimmed(),
+             (ShellShim::scriptBody() + "\nrm -f " + scriptPath.toUtf8()).trimmed());
+    const QFile::Permissions permissions = scriptFile.permissions();
+    QVERIFY(!(permissions & (QFileDevice::ReadGroup | QFileDevice::WriteGroup
+                             | QFileDevice::ReadOther | QFileDevice::WriteOther)));
 }
 
 void SshCommandParserTest::terminalViewDetectsFinalAuthenticationFailure()
@@ -869,7 +1018,7 @@ void SshCommandParserTest::databaseCreatesCoreSchema()
         QStringLiteral("snippets"), QStringLiteral("command_history"),
         QStringLiteral("connection_history"), QStringLiteral("port_forwards"),
         QStringLiteral("workspaces"), QStringLiteral("settings"),
-        QStringLiteral("plugin_state")
+        QStringLiteral("plugin_state"), QStringLiteral("vault_metadata")
     };
     const QStringList actualTables = database.connection().tables();
     for (const QString &table : requiredTables) {
@@ -900,6 +1049,202 @@ void SshCommandParserTest::vaultEncryptsAndAuthenticatesCredentials()
     QVERIFY(!error.isEmpty());
     vault.lock();
     QVERIFY(!vault.isUnlocked());
+}
+
+void SshCommandParserTest::credentialVaultPersistsEncryptedSecretsAcrossUnlocks()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+    ApplicationDatabase database(
+        temporaryDirectory.filePath(QStringLiteral("credential-vault.db")));
+    QString error;
+    QVERIFY2(database.initialize(&error), qPrintable(error));
+
+    CredentialVault firstSession(database);
+    QCOMPARE(firstSession.state(&error), CredentialVault::State::Uninitialized);
+    QVERIFY2(error.isEmpty(), qPrintable(error));
+    QVERIFY2(firstSession.initialize(QStringLiteral("一条足够长的主密码-2026"), &error),
+             qPrintable(error));
+    QCOMPARE(firstSession.state(&error), CredentialVault::State::Unlocked);
+
+    QByteArray secret = QByteArrayLiteral("database-root-password");
+    HostRecord host;
+    host.id = QStringLiteral("host-db");
+    host.name = QStringLiteral("生产数据库");
+    host.host = QStringLiteral("db.internal");
+    ConnectionTarget configuredTarget = host.toConnectionTarget();
+    configuredTarget.password = QString::fromUtf8(secret);
+    QVERIFY2(firstSession.saveConnectionPassword(host,
+                                                 configuredTarget,
+                                                 QStringLiteral("数据库 root"),
+                                                 &error),
+             qPrintable(error));
+    QVERIFY2(!host.credentialId.isEmpty(), "新凭据没有回写到主机 credentialId");
+    QCOMPARE(database.findHost(host.id, &error)->credentialId, host.credentialId);
+
+    // 直接检查数据库，确保磁盘列中不存在明文；nonce 与 payload 分开存储便于明确验证格式。
+    const std::optional<CredentialRecord> stored =
+        database.findCredential(host.credentialId, &error);
+    QVERIFY2(stored.has_value(), qPrintable(error));
+    QVERIFY(!stored->encryptedPayload.contains(secret));
+    QCOMPARE(stored->cipher, Vault::cipherAlgorithm());
+    QCOMPARE(stored->nonce.size(), Vault::nonceSize());
+    QCOMPARE(stored->kdfSalt.size(), qsizetype(16));
+
+    firstSession.lock();
+    QVERIFY(!firstSession.loadSecret(host.credentialId, &error).has_value());
+    QVERIFY(!error.isEmpty());
+
+    // 新服务对象模拟应用重启：它只能从公开 salt/verifier 恢复状态，绝不会继承上一对象的密钥。
+    CredentialVault secondSession(database);
+    QCOMPARE(secondSession.state(&error), CredentialVault::State::Locked);
+    error.clear();
+    QVERIFY2(secondSession.unlock(QStringLiteral("一条足够长的主密码-2026"), &error),
+             qPrintable(error));
+    std::optional<QByteArray> loaded = secondSession.loadSecret(host.credentialId, &error);
+    QVERIFY2(loaded.has_value(), qPrintable(error));
+    QCOMPARE(*loaded, secret);
+
+    ConnectionTarget restoredTarget = host.toConnectionTarget();
+    QVERIFY2(secondSession.applyHostCredential(host, restoredTarget, &error), qPrintable(error));
+    QCOMPARE(restoredTarget.password, QString::fromUtf8(secret));
+
+    // 主机引用写入失败时，前一步插入的凭据必须随外层事务回滚，不能留下无人引用的密文。
+    HostRecord invalidHost;
+    invalidHost.id = QStringLiteral("host-with-missing-parent");
+    invalidHost.parentId = QStringLiteral("missing-parent");
+    invalidHost.name = QStringLiteral("无法保存的主机");
+    invalidHost.host = QStringLiteral("invalid.internal");
+    ConnectionTarget invalidTarget = invalidHost.toConnectionTarget();
+    invalidTarget.password = QStringLiteral("must-be-rolled-back");
+    error.clear();
+    QVERIFY(!secondSession.saveConnectionPassword(invalidHost, invalidTarget, {}, &error));
+    QVERIFY2(!error.isEmpty(), "主机外键失败没有向 UI 返回原因");
+    QVERIFY(invalidHost.credentialId.isEmpty());
+    bool credentialsReadable = false;
+    QCOMPARE(database.listCredentials(&credentialsReadable, &error).size(), 1);
+    QVERIFY2(credentialsReadable, qPrintable(error));
+
+    // 测试也遵守生产约束：使用完的明文副本都主动清零，而不是等待分配器未来覆盖内存。
+    Vault::secureErase(*loaded);
+    QVERIFY(loaded->isEmpty());
+    Vault::secureErase(secret);
+}
+
+void SshCommandParserTest::credentialVaultRejectsWrongPasswordAndCorruptData()
+{
+    ApplicationDatabase database(ApplicationDatabase::inMemoryPath());
+    QString error;
+    QVERIFY2(database.initialize(&error), qPrintable(error));
+    CredentialVault vault(database);
+    QVERIFY2(vault.initialize(QStringLiteral("correct-master-password"), &error), qPrintable(error));
+    QVERIFY2(vault.saveSecret(QStringLiteral("cred-1"),
+                              QStringLiteral("生产密码"),
+                              CredentialType::Password,
+                              QByteArrayLiteral("top-secret"),
+                              &error),
+             qPrintable(error));
+    vault.lock();
+
+    QVERIFY(!vault.unlock(QStringLiteral("wrong-master-password"), &error));
+    QVERIFY(!vault.isUnlocked());
+    QVERIFY2(!error.isEmpty(), "错误主密码没有返回可诊断信息");
+
+    error.clear();
+    QVERIFY2(vault.unlock(QStringLiteral("correct-master-password"), &error), qPrintable(error));
+    QSqlQuery corruptCredential(database.connection());
+    QVERIFY2(corruptCredential.exec(QStringLiteral(
+                 "UPDATE credentials SET encrypted_payload = zeroblob(length(encrypted_payload)) "
+                 "WHERE id = 'cred-1'")),
+             qPrintable(corruptCredential.lastError().text()));
+    QVERIFY(!vault.loadSecret(QStringLiteral("cred-1"), &error).has_value());
+    QVERIFY2(!error.isEmpty(), "被篡改的认证密文被当成了正常凭据");
+
+    vault.lock();
+    QSqlQuery corruptVerifier(database.connection());
+    QVERIFY2(corruptVerifier.exec(QStringLiteral("UPDATE vault_metadata SET verifier = X'' WHERE id = 1")),
+             qPrintable(corruptVerifier.lastError().text()));
+    error.clear();
+    QCOMPARE(vault.state(&error), CredentialVault::State::Corrupt);
+    QVERIFY2(!error.isEmpty(), "空校验块没有被识别为损坏状态");
+    QVERIFY(!vault.unlock(QStringLiteral("correct-master-password"), &error));
+    QVERIFY(!vault.isUnlocked());
+
+    // 损坏配置绝不能被 initialize 当成首次启动覆盖，否则原有凭据会永久失去解密密钥。
+    QVERIFY(!vault.initialize(QStringLiteral("replacement-password"), &error));
+
+    // “没有 vault_metadata 行”只有在凭据表也为空时才是真正首次启动。旧库若已有密文却
+    // 丢失全局配置，必须停在损坏状态，否则新建主密码会让旧密文永久不可恢复。
+    ApplicationDatabase orphanedDatabase(ApplicationDatabase::inMemoryPath());
+    QVERIFY2(orphanedDatabase.initialize(&error), qPrintable(error));
+    CredentialRecord orphaned;
+    orphaned.id = QStringLiteral("orphaned-credential");
+    orphaned.name = QStringLiteral("缺少保险库配置的旧凭据");
+    orphaned.encryptedPayload = QByteArray(16, '\x51');
+    orphaned.cipher = Vault::cipherAlgorithm();
+    orphaned.nonce = QByteArray(Vault::nonceSize(), '\x52');
+    orphaned.kdfAlgorithm = Vault::kdfAlgorithm();
+    orphaned.kdfSalt = QByteArray(16, '\x53');
+    orphaned.kdfIterations = Vault::kdfOperationsLimit();
+    orphaned.kdfMemoryKib = Vault::kdfMemoryKib();
+    orphaned.kdfParallelism = 1;
+    QVERIFY2(orphanedDatabase.saveCredential(orphaned, &error), qPrintable(error));
+    CredentialVault orphanedVault(orphanedDatabase);
+    error.clear();
+    QCOMPARE(orphanedVault.state(&error), CredentialVault::State::Corrupt);
+    QVERIFY2(!error.isEmpty(), "已有凭据但缺少校验块的数据库被误判为首次启动");
+    QVERIFY(!orphanedVault.initialize(QStringLiteral("must-not-overwrite"), &error));
+}
+
+void SshCommandParserTest::credentialVaultLocksAfterIdleTimeout()
+{
+    ApplicationDatabase database(ApplicationDatabase::inMemoryPath());
+    QString error;
+    QVERIFY2(database.initialize(&error), qPrintable(error));
+    CredentialVault vault(database);
+    QVERIFY2(vault.initialize(QStringLiteral("idle-timeout-master-password"), &error),
+             qPrintable(error));
+
+    vault.setIdleTimeoutMs(500);
+    vault.recordActivity(1000);
+    QVERIFY(!vault.hasIdleTimedOut(1499));
+    QVERIFY(!vault.lockIfIdle(1499));
+    QVERIFY(vault.isUnlocked());
+    QVERIFY(vault.hasIdleTimedOut(1500));
+    QVERIFY(vault.lockIfIdle(1500));
+    QVERIFY(!vault.isUnlocked());
+
+    QVERIFY2(vault.unlock(QStringLiteral("idle-timeout-master-password"), &error),
+             qPrintable(error));
+    vault.setIdleTimeoutMs(0); // 用户明确禁用自动锁定时，再大的时间差也不能清除密钥。
+    vault.recordActivity(2000);
+    QVERIFY(!vault.lockIfIdle(2000000));
+    QVERIFY(vault.isUnlocked());
+}
+
+void SshCommandParserTest::terminalSettingsPersistReconnectPolicy()
+{
+    ApplicationDatabase database(ApplicationDatabase::inMemoryPath());
+    QString error;
+    QVERIFY2(database.initialize(&error), qPrintable(error));
+    TerminalSettingsService service(&database);
+    QVERIFY2(service.load(&error), qPrintable(error));
+
+    TerminalSettings settings = service.currentSettings();
+    settings.automaticReconnect = true;
+    settings.reconnectMaxAttempts = 99;
+    settings.reconnectBaseDelaySeconds = 0;
+    QVERIFY2(service.save(settings, &error), qPrintable(error));
+    QCOMPARE(service.currentSettings().reconnectMaxAttempts, 10);
+    QCOMPARE(service.currentSettings().reconnectBaseDelaySeconds, 1);
+
+    TerminalSettingsService reloaded(&database);
+    QVERIFY2(reloaded.load(&error), qPrintable(error));
+    QVERIFY(reloaded.currentSettings().automaticReconnect);
+    QCOMPARE(reloaded.currentSettings().reconnectMaxAttempts, 10);
+    QCOMPARE(reloaded.currentSettings().reconnectBaseDelaySeconds, 1);
+    QCOMPARE(reloaded.shortcut(QStringLiteral("command.palette")),
+             QKeySequence(QStringLiteral("Ctrl+Shift+P")));
 }
 
 QTEST_MAIN(SshCommandParserTest)
