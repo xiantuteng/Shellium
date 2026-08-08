@@ -50,6 +50,21 @@ public:
     explicit TerminalView(QWidget *parent = nullptr);
 
     /**
+     * @brief 返回最近一次已提交的终端字符列数。
+     * @return 至少为 1；视图尚未完成首次布局时返回标准初始值 80。
+     *
+     * 新建 PTY 工作线程必须在 start() 前读取该值，否则视图早已完成布局、但连接建立后
+     * 没有新的 resizeEvent 时，远端会一直停留在默认 80 列直到用户再次拖动窗口。
+     */
+    [[nodiscard]] int terminalColumns() const { return m_terminalColumns; }
+
+    /**
+     * @brief 返回最近一次已提交的终端字符行数。
+     * @return 至少为 1；视图尚未完成首次布局时返回标准初始值 24。
+     */
+    [[nodiscard]] int terminalRows() const { return m_terminalRows; }
+
+    /**
      * @brief 清理剪贴板文本并计算粘贴风险，不访问剪贴板或弹出界面。
      * @param clipboardText 剪贴板提供的原始 Unicode 文本。
      * @return 可发送文本、被移除控制字符数量以及是否含换行。
@@ -205,7 +220,7 @@ protected:
     /** @brief 将 Qt 键盘事件编码为常见的 xterm/VT 控制序列。 */
     void keyPressEvent(QKeyEvent *event) override;
 
-        /** @brief 根据当前等宽字体度量计算 PTY 尺寸并通知 SSH 通道。 */
+    /** @brief 记录视图像素变化，并在拖动稳定后统一提交终端字符尺寸。 */
     void resizeEvent(QResizeEvent *event) override;
 
     /**
@@ -275,6 +290,15 @@ private:
     /** @brief 光标闪烁定时器；关闭闪烁时停止，避免隐藏窗口仍持续唤醒 GUI 线程。 */
     QTimer *m_cursorBlinkTimer = nullptr;
 
+    /**
+     * @brief 连续窗口尺寸事件的防抖定时器。
+     *
+     * 分隔条拖动时 Qt 会产生高频 resizeEvent。若每次都立即向 PTY 发送尺寸，远端 readline
+     * 会连续处理 SIGWINCH 并重绘提示符，而这些旧尺寸重绘字节到达时本地网格可能已经再次
+     * 改变，最终出现重复提示符和大段空格。定时器只在拖动短暂停顿后提交最终尺寸。
+     */
+    QTimer *m_resizeDebounceTimer = nullptr;
+
     /** @brief 当前光标闪烁相位和形态，供 paintEvent 与 VtermBridge 同步使用。 */
     bool m_cursorPhaseVisible = true;
     int m_cursorShape = 0;
@@ -286,8 +310,35 @@ private:
     /** @brief 最近一次 applySettings 中配置的基准字号，Cmd+0 重置缩放时回到该值。 */
     int m_basePointSize = 13;
 
-    /** @brief 依据当前 viewport 尺寸重算列/行数并通知远端 PTY，缩放和 resizeEvent 共用。 */
+    /** @brief 最近一次已提交给 libvterm 和 PTY 的字符列数，用于过滤等价像素 resize。 */
+    int m_terminalColumns = 80;
+
+    /** @brief 最近一次已提交给 libvterm 和 PTY 的字符行数，用于过滤等价像素 resize。 */
+    int m_terminalRows = 24;
+
+    /**
+     * @brief 视图是否至少收到过一次由 Qt 布局系统产生的 resizeEvent。
+     *
+     * QWidget 构造期间的默认 viewport 尺寸不是最终布局尺寸，若过早据此覆盖标准 80×24，
+     * 隐藏标签或尚未 show 的测试视图会得到几十列的伪尺寸。首次真实布局前保持标准值。
+     */
+    bool m_hasReceivedResizeEvent = false;
+
+    /**
+     * @brief 依据当前 viewport 尺寸重算列/行数，并同步更新 libvterm 与远端 PTY。
+     *
+     * 只有字符行列实际变化时才发出 terminalSizeChanged，避免像素宽度变化但仍落在同一字符
+     * 网格时产生无意义的 PTY resize 和 SIGWINCH。
+     */
     void recalculateTerminalGeometry();
+
+    /**
+     * @brief 提交当前稳定的字符尺寸并重绘文档，同时保持用户原有滚动位置。
+     *
+     * resize 防抖到期、字体缩放和终端设置变化都走该入口，保证 libvterm 重排后不会遗漏
+     * 文档重建，也不会把正在阅读历史输出的用户强制拉回底部。
+     */
+    void commitTerminalGeometry();
 
     /**
      * @brief 重建终端文档，并保持重建前的滚动意图。

@@ -5,6 +5,7 @@
 #include "terminal/TerminalView.h"
 
 #include <QCheckBox>
+#include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QPushButton>
@@ -41,6 +42,14 @@ private slots:
 
     /** @brief Widget 应发出多主机执行、广播模式和一次性原始输入信号。 */
     void widgetExposesMultiTargetExecutionAndBroadcastContracts();
+
+    /**
+     * @brief 会话状态栏的瞬时提示必须紧邻服务器名，且到期后自动清空。
+     *
+     * 这条消息此前会被送到窗口标题栏的全局提示区，与产生它的标签页在视觉上脱节；
+     * 现在它必须落在 TerminalPane 自己的状态栏里，因此本用例直接检查该控件。
+     */
+    void terminalPaneShowsAndExpiresTransientStatus();
 
 private:
     /** @brief 递归查找树中保存指定稳定 id 的节点。 */
@@ -266,6 +275,23 @@ void ProductivityTest::widgetExposesMultiTargetExecutionAndBroadcastContracts()
     QCOMPARE(inputSpy.count(), 1);
     QCOMPARE(inputSpy.constFirst().at(0).toByteArray(), QByteArrayLiteral("hostname\r"));
     QCOMPARE(inputSpy.constFirst().at(1).toStringList(), QStringList({QStringLiteral("host-b")}));
+}
+
+void ProductivityTest::terminalPaneShowsAndExpiresTransientStatus()
+{
+    TerminalPane pane;
+    auto *statusLabel = pane.findChild<QLabel *>(
+        QStringLiteral("terminalSessionTransientStatus"));
+    QVERIFY2(statusLabel != nullptr,
+             "会话状态栏必须存在一个专门承载瞬时提示的 QLabel，紧邻服务器名之后");
+    QVERIFY(statusLabel->text().isEmpty());
+
+    pane.showTransientStatus(QStringLiteral("正在读取主目录…"));
+    QVERIFY2(statusLabel->text().contains(QStringLiteral("正在读取主目录…")),
+             "调用后必须立即显示传入的消息文字");
+
+    // 到期后必须自动清空，不能永久占用状态栏空间——这条提示本质上是转瞬即逝的操作反馈。
+    QTRY_VERIFY_WITH_TIMEOUT(statusLabel->text().isEmpty(), 9000);
 }
 
 QTEST_MAIN(ProductivityTest)

@@ -34,6 +34,14 @@
 namespace {
 
 /**
+ * @brief 连续分隔条拖动停止后，等待多少毫秒再提交最终 PTY 尺寸。
+ *
+ * 80ms 足以合并常见 60/120Hz 鼠标拖动事件，同时结束拖动后的主观延迟仍低于一次普通
+ * 网络往返。使用单次防抖而非固定频率节流，是为了不向远端发送任何已经过期的中间尺寸。
+ */
+constexpr int kTerminalResizeDebounceMilliseconds = 80;
+
+/**
  * @brief 认证接线的按需诊断通道。
  *
  * 默认关闭。真实 macOS 键盘与输入法的行为无法用 QTest 合成按键覆盖，出问题时只能靠
@@ -92,6 +100,7 @@ TerminalView::TerminalView(QWidget *parent)
     , m_commandCompleter(new QCompleter(this))
     , m_completionModel(new QStringListModel(this))
     , m_cursorBlinkTimer(new QTimer(this))
+    , m_resizeDebounceTimer(new QTimer(this))
 {
     // 主窗口会统一装饰表单中的 QPlainTextEdit。终端必须有稳定对象名供 QSS 排除通用表单
     // 背景，否则父级卡片色会覆盖本控件按终端主题设置的 QPalette::Base。
@@ -155,6 +164,15 @@ TerminalView::TerminalView(QWidget *parent)
         renderPreservingScroll();
         viewport()->update();
     });
+
+    // 定时器每次 start() 都会重新计时，因此拖动期间不会提交中间值；只有最后一个
+    // resizeEvent 之后安静 80ms，libvterm 与 PTY 才会一起切换到最终字符网格。
+    m_resizeDebounceTimer->setSingleShot(true);
+    m_resizeDebounceTimer->setInterval(kTerminalResizeDebounceMilliseconds);
+    connect(m_resizeDebounceTimer,
+            &QTimer::timeout,
+            this,
+            &TerminalView::commitTerminalGeometry);
 
     // 即使设置服务尚未接入，终端也使用同一份规范化默认值，避免构造路径与设置路径出现
     // 两套字体、颜色或铃声行为。
@@ -228,12 +246,11 @@ void TerminalView::applySettings(const TerminalSettings &settings)
     } else {
         m_cursorBlinkTimer->stop();
     }
-    renderPreservingScroll();
-    viewport()->update();
-
     // 字体或行高变化会改变 PTY 的字符尺寸；主动重新计算，让远端及时收到 SIGWINCH，
     // 而不是必须等用户再拖动一次窗口。
-    recalculateTerminalGeometry();
+    m_resizeDebounceTimer->stop();
+    commitTerminalGeometry();
+    viewport()->update();
 }
 
 void TerminalView::zoomFont(const int deltaPoints)
@@ -245,9 +262,10 @@ void TerminalView::zoomFont(const int deltaPoints)
     }
     terminalFont.setPointSize(clamped);
     setFont(terminalFont);
-    renderPreservingScroll();
+    // 字号调整是离散操作，不需要等待窗口拖动防抖；立即同步字符网格可让缩放反馈更直接。
+    m_resizeDebounceTimer->stop();
+    commitTerminalGeometry();
     viewport()->update();
-    recalculateTerminalGeometry();
 }
 
 void TerminalView::resetZoom()
@@ -278,14 +296,36 @@ void TerminalView::renderPreservingScroll(const bool followBottom, const int pre
 
 void TerminalView::recalculateTerminalGeometry()
 {
+    if (!m_hasReceivedResizeEvent) {
+        // 构造函数中的 QWidget 默认大小只是 Qt 的临时值，并不代表标签页最终可用空间。
+        // 等待首次 resizeEvent 后再提交，可避免会话先收到一个错误的狭窄字符网格。
+        return;
+    }
     const QFontMetrics metrics(font());
     const int cellWidth = std::max(metrics.horizontalAdvance(QLatin1Char('M')), 1);
     const int baseHeight = std::max(metrics.lineSpacing(), 1);
     const int cellHeight = std::max(baseHeight * m_lineHeightPercent / 100, 1);
     const int columns = std::max(viewport()->width() / cellWidth, 1);
     const int rows = std::max(viewport()->height() / cellHeight, 1);
+    if (columns == m_terminalColumns && rows == m_terminalRows) {
+        // resizeEvent 以像素为单位触发，同一个字符列宽内可能产生多次事件；这些事件不能
+        // 继续向 PTY 传播，否则只会制造无意义的 SIGWINCH 和远端提示符重绘。
+        return;
+    }
+    m_terminalColumns = columns;
+    m_terminalRows = rows;
     m_vtermBridge->resize(rows, columns);
     emit terminalSizeChanged(columns, rows);
+}
+
+void TerminalView::commitTerminalGeometry()
+{
+    // libvterm resize 可能回流屏幕或改变滚动历史长度，必须在重排前采样滚动意图，再在
+    // 文档整体重建后恢复。这样防抖修复不会引入拖动结束后跳回顶部的新问题。
+    const bool followBottom = isScrolledToBottom();
+    const int previousValue = verticalScrollBar()->value();
+    recalculateTerminalGeometry();
+    renderPreservingScroll(followBottom, previousValue);
 }
 
 bool TerminalView::findTerminalText(const QString &text, const bool backward)
@@ -732,9 +772,11 @@ void TerminalView::keyPressEvent(QKeyEvent *event)
 void TerminalView::resizeEvent(QResizeEvent *event)
 {
     QPlainTextEdit::resizeEvent(event);
-    // viewport 排除了滚动条和边框，得到的行列数比直接使用 QWidget::size 更接近实际绘制区域。
-    recalculateTerminalGeometry();
-    renderPreservingScroll();
+    m_hasReceivedResizeEvent = true;
+    // 不在高频 resizeEvent 中立刻改变字符网格。远端 Shell 对每次 PTY 尺寸变化都可能重绘
+    // 当前输入行，而 GUI 仍在继续变化；延迟到拖动稳定后一次提交，可保证重绘序列对应
+    // 本地最终网格。QPlainTextEdit 已完成自身布局，等待期间旧网格只会短暂被裁切或留白。
+    m_resizeDebounceTimer->start();
 }
 
 void TerminalView::paintEvent(QPaintEvent *event)

@@ -31,6 +31,8 @@ TerminalPane::TerminalPane(QWidget *parent)
     : QWidget(parent)
     , m_headerBar(new QWidget(this))
     , m_headerLabel(new QLabel(tr("未连接"), this))
+    , m_statusMessageLabel(new QLabel(this))
+    , m_statusMessageTimer(new QTimer(this))
     , m_terminalMetaLabel(new QLabel(tr("UTF-8 · 80×24"), this))
     , m_fileManagerButton(new QToolButton(this))
     , m_terminalView(new TerminalView(this))
@@ -47,6 +49,13 @@ TerminalPane::TerminalPane(QWidget *parent)
     headerLayout->setSpacing(8);
     m_headerLabel->setObjectName(QStringLiteral("terminalSessionServer"));
     m_headerLabel->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+    // 与服务器名同一行、紧随其后：SFTP 目录读取、命令历史写入这类瞬时提示只与当前标签页
+    // 有关，放在这里比塞进窗口标题栏的全局提示区更贴近用户正在看的上下文。
+    m_statusMessageLabel->setObjectName(QStringLiteral("terminalSessionTransientStatus"));
+    m_statusMessageLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    m_statusMessageTimer->setSingleShot(true);
+    connect(m_statusMessageTimer, &QTimer::timeout,
+            this, [this]() { m_statusMessageLabel->clear(); });
     m_terminalMetaLabel->setObjectName(QStringLiteral("terminalSessionMeta"));
     m_terminalMetaLabel->setToolTip(tr("当前终端编码和列×行尺寸"));
     m_fileManagerButton->setObjectName(QStringLiteral("terminalFileManagerToggle"));
@@ -60,6 +69,7 @@ TerminalPane::TerminalPane(QWidget *parent)
     m_fileManagerButton->setAccessibleName(tr("远程文件管理"));
     updateFileManagerButtonIcon();
     headerLayout->addWidget(m_headerLabel, 1);
+    headerLayout->addWidget(m_statusMessageLabel);
     headerLayout->addWidget(m_terminalMetaLabel);
     headerLayout->addWidget(m_fileManagerButton);
     layout->addWidget(m_headerBar);
@@ -249,6 +259,10 @@ void TerminalPane::openLocalShell(const QString &shellPath)
             &TerminalView::terminalSizeChanged,
             m_localWorker,
             &LocalShellWorker::updateTerminalSize);
+    // TerminalView 可能在本地 Shell 创建前就完成了布局，此时不会为了新 worker 人为再发
+    // 一次 resize 信号。启动前显式注入当前稳定尺寸，确保 forkpty 从第一帧就使用正确网格。
+    m_localWorker->updateTerminalSize(m_terminalView->terminalColumns(),
+                                      m_terminalView->terminalRows());
     m_localWorker->start();
     focusTerminal();
 }
@@ -557,6 +571,10 @@ void TerminalPane::connectToHost(const ConnectionTarget &target)
             &TerminalView::terminalSizeChanged,
             m_sessionStack,
             &SshSessionStack::updateTerminalSize);
+    // 连接建立期间 beginEstablish 会直接读取栈内缓存尺寸；必须在 start() 前写入当前值，
+    // 否则稳定窗口中打开的新会话会以默认 80×24 请求 PTY，直到下一次人为改变界面尺寸。
+    m_sessionStack->updateTerminalSize(m_terminalView->terminalColumns(),
+                                       m_terminalView->terminalRows());
     m_sessionStack->start();
     emit statusMessage(tr("正在连接 %1").arg(target.connectionSpecifier()));
     focusTerminal();
@@ -662,6 +680,7 @@ void TerminalPane::applyTerminalSettings(const TerminalSettings &settings)
         QStringLiteral(
             "QWidget#terminalSessionStatusBar { background: %1; color: %2; }"
             "QLabel#terminalSessionServer { color: %2; font-weight: 600; }"
+            "QLabel#terminalSessionTransientStatus { color: %2; }"
             "QLabel#terminalSessionMeta { color: %2; }"
             "QToolButton#terminalFileManagerToggle { border: 1px solid transparent; "
             "border-radius: 5px; padding: 3px; }"
@@ -689,6 +708,17 @@ void TerminalPane::setFileManagerVisible(const bool visible)
             : tr("显示当前会话的远程文件管理（Ctrl+Shift+F）"));
     // 阻断 toggled 的同时也阻断了图标刷新，这里必须显式补上。
     updateFileManagerButtonIcon();
+}
+
+void TerminalPane::showTransientStatus(const QString &message)
+{
+    m_statusMessageLabel->setText(message.isEmpty() ? message : QStringLiteral("· %1").arg(message));
+    m_statusMessageLabel->setToolTip(message);
+    m_statusMessageTimer->stop();
+    if (!message.isEmpty()) {
+        // 8 秒与窗口标题栏原有的全局提示区一致，不给用户带来新的等待时长预期。
+        m_statusMessageTimer->start(8000);
+    }
 }
 
 void TerminalPane::updateFileManagerButtonIcon()

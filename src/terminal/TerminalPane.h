@@ -14,6 +14,7 @@ class QLabel;
 class LocalShellWorker;
 class SshSessionStack;
 class TerminalView;
+class QTimer;
 class QToolButton;
 struct TerminalSettings;
 
@@ -96,6 +97,16 @@ public:
      * TerminalWorkspace 持有，从而保证每个标签页互不干扰。
      */
     void setFileManagerVisible(bool visible);
+
+    /**
+     * @brief 在会话状态栏、紧邻服务器名之后，短暂展示一条状态文字。
+     * @param message 待展示的文字；空字符串立即清空当前显示。
+     *
+     * 这条消息只与本标签页有关（如"正在读取主目录…"），因此展示位置就在产生它的会话
+     * 旁边，而不是窗口标题栏的全局提示区——后者用于设置、保险库这类与具体标签页无关的
+     * 应用级消息，两者混在一起会让用户分不清一条提示到底说的是哪个会话。
+     */
+    void showTransientStatus(const QString &message);
 
 public slots:
     /**
@@ -252,6 +263,18 @@ private:
 
     /** @brief 当前会话或连接阶段说明，位于状态栏左侧。 */
     QLabel *m_headerLabel = nullptr;
+
+    /**
+     * @brief 紧邻服务器名之后的短暂状态文字，如"正在读取主目录…"。
+     *
+     * 与 m_headerLabel 分开是因为两者生命周期不同：后者反映当前连接阶段，只在阶段真正
+     * 变化时更新；前者是转瞬即逝的操作提示，需要独立的清空定时器，不能覆盖或打断
+     * 连接状态文字。
+     */
+    QLabel *m_statusMessageLabel = nullptr;
+
+    /** @brief 清空 m_statusMessageLabel 的定时器；每次新消息到达都会重新启动。 */
+    QTimer *m_statusMessageTimer = nullptr;
 
     /** @brief 当前终端编码和列×行尺寸，随 PTY 尺寸信号实时更新。 */
     QLabel *m_terminalMetaLabel = nullptr;

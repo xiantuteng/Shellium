@@ -148,6 +148,9 @@ private slots:
     /** @brief PTY 的 CRLF 必须形成新行，不能让 Shell 提示符横向堆叠。 */
     void terminalViewRendersCarriageReturnAndLineFeed();
 
+    /** @brief 连续拖动宽度时只提交最终 PTY 尺寸，并保持 Shell 提示符文本不变。 */
+    void terminalResizeDebouncesPtyUpdates();
+
     /** @brief 本地 zsh 必须在真实 PTY 中接收命令、返回输出并正常退出。 */
     void localZshExecutesInteractiveCommand();
 
@@ -971,6 +974,35 @@ void SshCommandParserTest::terminalViewRendersCarriageReturnAndLineFeed()
     QCOMPARE(renderedLines.size(), 2);
     QCOMPARE(renderedLines.at(0).trimmed(), QStringLiteral("[root@server ~]#"));
     QCOMPARE(renderedLines.at(1).trimmed(), QStringLiteral("[root@server ~]#"));
+}
+
+void SshCommandParserTest::terminalResizeDebouncesPtyUpdates()
+{
+    TerminalView view;
+    view.resize(900, 360);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    // 等待首次布局的防抖提交完成，再把它从本用例关注的拖动信号中排除。
+    QTest::qWait(120);
+    QSignalSpy sizeSpy(&view, &TerminalView::terminalSizeChanged);
+    view.appendTerminalOutput(QByteArrayLiteral("[root@tidb01 ~]# "));
+    const QString originalText = view.toPlainText();
+
+    // 31 次交替 resize 模拟持续拖动分隔条。每次事件间隔显著小于 80ms 防抖窗口，最终
+    // 宽度与初始宽度不同，因而稳定后必须恰好产生一次有效字符尺寸提交。
+    for (int iteration = 0; iteration < 31; ++iteration) {
+        view.resize(iteration % 2 == 0 ? 620 : 840, 360);
+        QCoreApplication::processEvents();
+        QTest::qWait(2);
+    }
+    QCOMPARE(sizeSpy.size(), 0);
+    QTRY_COMPARE_WITH_TIMEOUT(sizeSpy.size(), 1, 500);
+
+    const QList<QVariant> finalSize = sizeSpy.constFirst();
+    QVERIFY(finalSize.at(0).toInt() > 0);
+    QVERIFY(finalSize.at(1).toInt() > 0);
+    QCOMPARE(view.toPlainText(), originalText);
+    QCOMPARE(view.toPlainText().count(QStringLiteral("[root@tidb01 ~]#")), 1);
 }
 
 void SshCommandParserTest::localZshExecutesInteractiveCommand()

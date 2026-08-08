@@ -28,10 +28,14 @@ TerminalWorkspace::TerminalWorkspace(QWidget *parent)
     m_pageSplitter->setStretchFactor(1, 1);
     m_pageSplitter->setSizes({920, 460});
 
+    // 文件管理产生的提示（"正在读取主目录…"之类）只与本标签页有关，因此直接显示在本
+    // 标签会话状态栏、服务器名旁边，不再经窗口标题栏的全局提示区绕一圈——那个位置离
+    // 用户正在看的内容太远，容易被当成与当前标签无关的系统消息而忽略。终端本身的连接
+    // 生命周期消息（"正在连接…""已连接"等）继续走原有的全局提示区，未作改动。
     connect(m_fileManager,
             &RemoteFileManagerWidget::statusMessage,
-            this,
-            &TerminalWorkspace::statusMessage);
+            m_pane,
+            &TerminalPane::showTransientStatus);
     // 全屏时让终端整体让出空间，由分隔器把宽度全部交给文件管理；终端进程和滚动缓冲
     // 都不受影响，退出全屏即原样恢复。
     connect(m_fileManager,
