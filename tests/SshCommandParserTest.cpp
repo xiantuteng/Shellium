@@ -180,6 +180,9 @@ private slots:
 
     /** @brief 解锁模式下不得有游离在布局之外的可见子控件。 */
     void vaultDialogHasNoStrayWidgets();
+
+    /** @brief 光标闪烁重建文档时不得丢失滚动位置，跟随底部必须持续有效。 */
+    void terminalKeepsBottomAcrossCursorBlink();
 };
 
 namespace {
@@ -1397,9 +1400,15 @@ void SshCommandParserTest::vaultDialogHasNoStrayWidgets()
         collectLayoutWidgets(dialog->layout(), &managed);
         const QList<QWidget *> directChildren =
             dialog->findChildren<QWidget *>(Qt::FindDirectChildrenOnly);
+        // QFocusFrame（macOS 焦点环）和 QSizeGrip 由 Qt 自行创建并围绕目标控件浮动定位，
+        // 本就不该进入布局；把它们计入会让本用例随焦点时序随机失败。
+        static const QSet<QString> qtFloatingHelpers = {
+            QStringLiteral("QFocusFrame"), QStringLiteral("QSizeGrip")};
         for (QWidget *child : directChildren) {
+            const QString className = QString::fromLatin1(child->metaObject()->className());
             // 显式隐藏的控件不绘制、也不参与 Tab 顺序，是可接受的"备用控件"形态。
-            if (child->isHidden() || managed.contains(child)) {
+            if (child->isHidden() || managed.contains(child)
+                || qtFloatingHelpers.contains(className)) {
                 continue;
             }
             failure = QStringLiteral("控件 %1 可见但不在任何布局中，会浮在对话框左上角")
@@ -1414,6 +1423,35 @@ void SshCommandParserTest::vaultDialogHasNoStrayWidgets()
     // 左上角出现一个盖住说明文字的空白输入框，而且还能被 Tab 选中。
     VaultDialog::ensureUnlocked(&vault, nullptr, true);
     QVERIFY2(failure.isEmpty(), qPrintable(failure));
+}
+
+void SshCommandParserTest::terminalKeepsBottomAcrossCursorBlink()
+{
+    TerminalView view;
+    view.resize(600, 220);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+
+    for (int line = 0; line < 200; ++line) {
+        view.appendTerminalOutput(QStringLiteral("line %1\r\n").arg(line).toUtf8());
+    }
+    QScrollBar *bar = view.verticalScrollBar();
+    QVERIFY2(bar->maximum() > 0, "输出必须超过一屏，否则本用例无法覆盖滚动行为");
+    bar->setValue(bar->maximum());
+    QCOMPARE(bar->value(), bar->maximum());
+
+    // 光标闪烁定时器每 600ms 触发一次 VtermBridge::render，而 render 会 document->clear()
+    // 后整体重建，滚动条随之归零。用户什么都不做，视图也会自己跳回顶部——正是"输入命令
+    // 时看不到自己输入内容"的成因。这里等待足够长的时间，让闪烁至少发生一次。
+    QTest::qWait(800);
+    QCOMPARE(bar->value(), bar->maximum());
+
+    // 停在历史位置时同样不能被闪烁重建弹走。
+    const int middle = bar->maximum() / 2;
+    QVERIFY(middle > 0);
+    bar->setValue(middle);
+    QTest::qWait(800);
+    QCOMPARE(bar->value(), middle);
 }
 
 QTEST_MAIN(SshCommandParserTest)

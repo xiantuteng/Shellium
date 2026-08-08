@@ -150,7 +150,9 @@ TerminalView::TerminalView(QWidget *parent)
         m_cursorPhaseVisible = !m_cursorPhaseVisible;
         m_vtermBridge->setCursorPresentation(
             static_cast<VtermBridge::CursorShape>(m_cursorShape), m_cursorPhaseVisible);
-        m_vtermBridge->render(document());
+        // 闪烁只改变光标单元格，却同样会整体重建文档。这里必须保持滚动位置，否则用户
+        // 什么都不做，视图每 600ms 就自己跳回顶部一次。
+        renderPreservingScroll();
         viewport()->update();
     });
 
@@ -226,7 +228,7 @@ void TerminalView::applySettings(const TerminalSettings &settings)
     } else {
         m_cursorBlinkTimer->stop();
     }
-    m_vtermBridge->render(document());
+    renderPreservingScroll();
     viewport()->update();
 
     // 字体或行高变化会改变 PTY 的字符尺寸；主动重新计算，让远端及时收到 SIGWINCH，
@@ -243,7 +245,7 @@ void TerminalView::zoomFont(const int deltaPoints)
     }
     terminalFont.setPointSize(clamped);
     setFont(terminalFont);
-    m_vtermBridge->render(document());
+    renderPreservingScroll();
     viewport()->update();
     recalculateTerminalGeometry();
 }
@@ -251,6 +253,27 @@ void TerminalView::zoomFont(const int deltaPoints)
 void TerminalView::resetZoom()
 {
     zoomFont(m_basePointSize - font().pointSize());
+}
+
+bool TerminalView::isScrolledToBottom() const
+{
+    const QScrollBar *bar = verticalScrollBar();
+    // QPlainTextEdit 的垂直滚动条以"块"（行）为单位。留 1 行余量吸收重建带来的取整差异，
+    // 但不能再放宽：阈值一旦覆盖大段历史，用户上翻阅读时的新输出又会把他强行拉回底部。
+    return bar->maximum() - bar->value() <= 1;
+}
+
+void TerminalView::renderPreservingScroll()
+{
+    renderPreservingScroll(isScrolledToBottom(), verticalScrollBar()->value());
+}
+
+void TerminalView::renderPreservingScroll(const bool followBottom, const int previousValue)
+{
+    m_vtermBridge->render(document());
+    QScrollBar *bar = verticalScrollBar();
+    bar->setValue(followBottom ? bar->maximum()
+                               : std::clamp(previousValue, bar->minimum(), bar->maximum()));
 }
 
 void TerminalView::recalculateTerminalGeometry()
@@ -450,12 +473,12 @@ void TerminalView::appendTerminalOutput(const QByteArray &bytes)
         emit nestedSshFailed();
     }
 
-    QScrollBar *bar = verticalScrollBar();
-    // QPlainTextEdit 的垂直滚动条以"块"（行）为单位，因此阈值也是行数而不是像素。
-    const bool wasNearBottom = bar->maximum() - bar->value() < 2;
-    const int previousValue = bar->value();
+    // 必须在 feed() 之前采样：feed 之后文档已经变长，再判断"是否在底部"得到的是新文档的
+    // 结论，用户原本贴底的状态会被误判成停在历史位置。
+    const bool wasAtBottom = isScrolledToBottom();
+    const int previousValue = verticalScrollBar()->value();
     m_vtermBridge->feed(bytes);
-    m_vtermBridge->render(document());
+    renderPreservingScroll(wasAtBottom, previousValue);
 
     // 密码正确后，OpenSSH 只有在认证、会话创建和远端 Shell 启动完成后才会绘制提示符。
     // 必须读取 libvterm 的真实光标行，不能使用 QTextDocument 最后一段：全屏输出或光标移动
@@ -468,16 +491,6 @@ void TerminalView::appendTerminalOutput(const QByteArray &bytes)
         emit shellPromptDetected();
     }
 
-    // VtermBridge::render 每次都会 document->clear() 后整体重建，滚动条随之归零。若不在
-    // 这里还原，任何一次输出都会把正在翻阅历史的用户弹回文档顶部——这不是"没有跟随底部"，
-    // 而是视图直接跳走。跟随底部与保持原位必须都显式处理。
-    if (wasNearBottom) {
-        bar->setValue(bar->maximum());
-        return;
-    }
-    // 在底部之外时原样还原滚动位置。新行追加在文档末尾，不会移动上方已有内容，因此无需
-    // 按新增行数补偿；只有滚动缓冲写满、旧行被逐出时内容才会上移，那与主流终端的行为一致。
-    bar->setValue(std::clamp(previousValue, bar->minimum(), bar->maximum()));
 }
 
 void TerminalView::beginLocalLineCapture()
@@ -721,7 +734,7 @@ void TerminalView::resizeEvent(QResizeEvent *event)
     QPlainTextEdit::resizeEvent(event);
     // viewport 排除了滚动条和边框，得到的行列数比直接使用 QWidget::size 更接近实际绘制区域。
     recalculateTerminalGeometry();
-    m_vtermBridge->render(document());
+    renderPreservingScroll();
 }
 
 void TerminalView::paintEvent(QPaintEvent *event)

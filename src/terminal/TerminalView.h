@@ -288,4 +288,26 @@ private:
 
     /** @brief 依据当前 viewport 尺寸重算列/行数并通知远端 PTY，缩放和 resizeEvent 共用。 */
     void recalculateTerminalGeometry();
+
+    /**
+     * @brief 重建终端文档，并保持重建前的滚动意图。
+     *
+     * VtermBridge::render 每次都会 document->clear() 后整体重建，滚动条随之归零。任何直接
+     * 调用 render 的路径都必须经过本方法，否则该路径就会把视图弹回顶部——光标闪烁每 600ms
+     * 触发一次重建，漏掉它意味着用户什么都不做也会被反复拉走。
+     */
+    void renderPreservingScroll();
+
+    /**
+     * @brief 使用预先采样的滚动意图重建终端文档。
+     * @param followBottom 重建前是否停在底部；true 表示重建后继续贴底。
+     * @param previousValue 重建前的滚动值，非贴底时原样还原。
+     *
+     * 追加输出必须在 feed() 之前采样：feed 之后文档已经变长，此时再判断"是否在底部"
+     * 得到的是新文档的结论，用户原本贴底的状态会被误判成停在历史位置。
+     */
+    void renderPreservingScroll(bool followBottom, int previousValue);
+
+    /** @brief 判断当前是否停在文档底部，作为重建后是否继续贴底的依据。 */
+    [[nodiscard]] bool isScrolledToBottom() const;
 };
