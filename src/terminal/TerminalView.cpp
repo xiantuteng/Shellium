@@ -69,6 +69,49 @@ bool hasTerminalControlModifier(const QKeyEvent *event)
 }
 
 /**
+ * @brief 判断按键是否是“把终端选区复制到剪贴板”的快捷键。
+ *
+ * 终端不能沿用普通文本框的单一约定：Ctrl+C 在终端里必须作为 SIGINT 发给远端，因此
+ * Windows/Linux 的复制键是 Ctrl+Insert，macOS 才是 Command+C（Qt 把 Command 映射为
+ * ControlModifier，QKeySequence::Copy 已经覆盖）。Insert 组合在这里显式判断而不是依赖
+ * QKeySequence 的平台表，是因为它必须早于“Insert 当作导航键交给 libvterm 编码”生效。
+ */
+bool isClipboardCopyShortcut(const QKeyEvent *event)
+{
+    if (event->key() == Qt::Key_Insert) {
+        return event->modifiers().testFlag(Qt::ControlModifier)
+            && !event->modifiers().testFlag(Qt::ShiftModifier);
+    }
+#if defined(Q_OS_MACOS)
+    return event->matches(QKeySequence::Copy);
+#else
+    // 非 macOS 不能用 QKeySequence::Copy：它在这些平台等于 Ctrl+C，会把中断前台程序的
+    // 唯一按键变成复制，`while true` 之类的循环再也停不下来。
+    return false;
+#endif
+}
+
+/**
+ * @brief 判断按键是否是“把剪贴板文本粘贴进终端”的快捷键。
+ *
+ * 与 isClipboardCopyShortcut 对称：Windows/Linux 用 Shift+Insert，macOS 用 Command+V。
+ */
+bool isClipboardPasteShortcut(const QKeyEvent *event)
+{
+    if (event->key() == Qt::Key_Insert) {
+        return event->modifiers().testFlag(Qt::ShiftModifier)
+            && !event->modifiers().testFlag(Qt::ControlModifier);
+    }
+#if defined(Q_OS_MACOS)
+    return event->matches(QKeySequence::Paste);
+#else
+    // 与复制同理：Ctrl+V 在 Shell 里是 literal-next（bash/zsh 的 quoted-insert），
+    // 拦下来当粘贴会让用户无法输入原始控制字符。
+    return false;
+#endif
+}
+
+/**
  * @brief 把 Qt 修饰键映射为 libvterm 的修饰掩码。
  *
  * 只翻译 Shift/Control/Alt 三种终端协议认识的修饰。macOS 的 Command 不参与：它是应用级
@@ -401,7 +444,27 @@ void TerminalView::renderPreservingScroll()
 
 void TerminalView::renderPreservingScroll(const bool followBottom, const int previousValue)
 {
+    // 渲染会 document->clear() 后整体重建，QTextCursor 的选区随之消失。光标闪烁每 600ms
+    // 就渲染一次，用户刚用鼠标选中的文本活不过一个闪烁周期，随后按 Cmd+C 复制到的是空
+    // 内容——现象正是"终端里复制不了文本"。这里按字符偏移保存并在重建后恢复。
+    const QTextCursor previousCursor = textCursor();
+    const bool hadSelection = previousCursor.hasSelection();
+    const int selectionAnchor = previousCursor.anchor();
+    const int selectionPosition = previousCursor.position();
+
     m_vtermBridge->render(document());
+
+    if (hadSelection) {
+        // 新输出会让文档变长或把最旧的行挤出滚动历史，偏移未必仍然有效；夹取到当前文档
+        // 长度即可，宁可让选区略微偏移，也不能让它整个消失。
+        const int lastPosition = document()->characterCount() - 1;
+        QTextCursor restored(document());
+        restored.setPosition(std::clamp(selectionAnchor, 0, lastPosition));
+        restored.setPosition(std::clamp(selectionPosition, 0, lastPosition),
+                             QTextCursor::KeepAnchor);
+        setTextCursor(restored);
+    }
+
     QScrollBar *bar = verticalScrollBar();
     if (m_vtermBridge->isAlternateScreen()) {
         // 备用屏的文档就是整块网格，第 0 行必须落在视口顶部。这里不能沿用主屏的"贴底"
@@ -731,7 +794,7 @@ void TerminalView::keyPressEvent(QKeyEvent *event)
             event->accept();
             return;
         }
-        if (event->matches(QKeySequence::Paste)) {
+        if (isClipboardPasteShortcut(event)) {
             // 密码通常是从密码管理器粘贴进来的，必须在这里显式处理：macOS 上 Cmd+V 携带
             // Qt::ControlModifier，会被下面的"追加普通字符"分支排除，进而被整个吞掉；
             // 用户随后按回车就提交了空密码。现象是"粘贴密码永远连不上，手打就正常"。
@@ -774,8 +837,14 @@ void TerminalView::keyPressEvent(QKeyEvent *event)
 
     // 方向键、翻页、Insert/Delete 和功能键的字节形式取决于远端当前的 DECCKM/DECPAM 模式，
     // 必须由保存着这些模式的 libvterm 编码；它生成的字节经 protocolResponse 转成 inputBytes。
+    // Ctrl+Insert / Shift+Insert 是终端上唯一不与 SIGINT 冲突的复制粘贴键位，必须在
+    // Insert 被当作导航键编码成 VTERM_KEY_INS 之前放行，否则它们只会作为普通 Insert
+    // 发给远端，用户看到的现象是这两个键完全没有反应。
+    const bool clipboardInsert = event->key() == Qt::Key_Insert
+        && (isClipboardCopyShortcut(event) || isClipboardPasteShortcut(event));
+
     if (const std::optional<VTermKey> navigationKey = terminalNavigationKey(event->key());
-        navigationKey.has_value()) {
+        navigationKey.has_value() && !clipboardInsert) {
         if (m_commandCompleter->popup()->isVisible()
             && (event->key() == Qt::Key_Up || event->key() == Qt::Key_Down)) {
             // 补全浮层可见时上下键用于选择候选，交给 Qt 的默认处理。
@@ -804,7 +873,7 @@ void TerminalView::keyPressEvent(QKeyEvent *event)
         }
     }
 
-    if (event->matches(QKeySequence::Paste)) {
+    if (isClipboardPasteShortcut(event)) {
         const PastePreparation prepared = prepareClipboardPaste(
             QGuiApplication::clipboard()->text());
         if (prepared.text.isEmpty()) {
@@ -855,7 +924,7 @@ void TerminalView::keyPressEvent(QKeyEvent *event)
         }
         event->accept();
         return;
-    } else if (event->matches(QKeySequence::Copy)) {
+    } else if (isClipboardCopyShortcut(event)) {
         copy();
         event->accept();
         return;

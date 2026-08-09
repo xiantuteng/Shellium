@@ -55,6 +55,31 @@ void fillScrollback(TerminalView &view, const int lines)
     }
 }
 
+/**
+ * @brief 在当前平台上按下"粘贴"快捷键。
+ *
+ * macOS 是 Command+V（Qt 映射为 ControlModifier），其余平台是 Shift+Insert——那里的
+ * Ctrl+V 必须留给 Shell 的 literal-next。
+ */
+void pressPasteShortcut(TerminalView &view)
+{
+#if defined(Q_OS_MACOS)
+    QTest::keyClick(&view, Qt::Key_V, Qt::ControlModifier);
+#else
+    QTest::keyClick(&view, Qt::Key_Insert, Qt::ShiftModifier);
+#endif
+}
+
+/** @brief 在当前平台上按下"复制"快捷键；非 macOS 上 Ctrl+C 必须留给 SIGINT。 */
+void pressCopyShortcut(TerminalView &view)
+{
+#if defined(Q_OS_MACOS)
+    QTest::keyClick(&view, Qt::Key_C, Qt::ControlModifier);
+#else
+    QTest::keyClick(&view, Qt::Key_Insert, Qt::ControlModifier);
+#endif
+}
+
 /** @brief 显示视图并等待首次真实布局，使 terminalRows() 反映实际网格。 */
 bool showAndSettle(TerminalView &view)
 {
@@ -83,7 +108,67 @@ private slots:
     void fullScreenApplicationDoesNotSubmitShellCommands();
     void wheelScrollsFullScreenApplicationWithArrowKeys();
     void pasteIsBracketedWhenRemoteEnablesIt();
+    void selectionSurvivesCursorBlinkRepaint();
+    void insertClipboardShortcutsBypassRemoteInsertKey();
 };
+
+void TerminalAltScreenTest::selectionSurvivesCursorBlinkRepaint()
+{
+    TerminalView view;
+    QVERIFY(showAndSettle(view));
+    view.appendTerminalOutput(QByteArrayLiteral("copy me\r\n"));
+    QTest::qWait(50);
+
+    QTextCursor selection = view.textCursor();
+    selection.movePosition(QTextCursor::Start);
+    selection.movePosition(QTextCursor::Right, QTextCursor::KeepAnchor, 7);
+    view.setTextCursor(selection);
+    QCOMPARE(view.textCursor().selectedText(), QStringLiteral("copy me"));
+
+    // 光标每 600ms 闪烁一次，而每次闪烁都会整体重建文档。选区若不跨渲染保留，用户刚
+    // 选中的文本活不过一个闪烁周期，复制键拿到的只会是空字符串。
+    QTest::qWait(1500);
+    QCOMPARE(view.textCursor().selectedText(), QStringLiteral("copy me"));
+
+    QGuiApplication::clipboard()->setText(QStringLiteral("stale clipboard"));
+    QSignalSpy inputSpy(&view, &TerminalView::inputBytes);
+    pressCopyShortcut(view);
+    QCOMPARE(QGuiApplication::clipboard()->text(), QStringLiteral("copy me"));
+    // 复制不是终端输入，一个字节都不该发给远端。
+    QCOMPARE(inputSpy.count(), 0);
+}
+
+void TerminalAltScreenTest::insertClipboardShortcutsBypassRemoteInsertKey()
+{
+    TerminalView view;
+    QVERIFY(showAndSettle(view));
+    view.appendTerminalOutput(QByteArrayLiteral("copy me\r\n"));
+    QTest::qWait(50);
+
+    QTextCursor selection = view.textCursor();
+    selection.movePosition(QTextCursor::Start);
+    selection.movePosition(QTextCursor::Right, QTextCursor::KeepAnchor, 7);
+    view.setTextCursor(selection);
+    QGuiApplication::clipboard()->setText(QStringLiteral("stale clipboard"));
+
+    // Insert 本身是导航键，会被 libvterm 编码成 CSI 2~。带 Ctrl/Shift 的两个组合必须在
+    // 那之前被认成复制/粘贴，否则在 Windows 上这两个键按下去只会给远端发一个 Insert。
+    QSignalSpy inputSpy(&view, &TerminalView::inputBytes);
+    QTest::keyClick(&view, Qt::Key_Insert, Qt::ControlModifier);
+    QCOMPARE(QGuiApplication::clipboard()->text(), QStringLiteral("copy me"));
+    QCOMPARE(inputSpy.count(), 0);
+
+    QGuiApplication::clipboard()->setText(QStringLiteral("pasted"));
+    QTest::keyClick(&view, Qt::Key_Insert, Qt::ShiftModifier);
+    QCOMPARE(inputSpy.count(), 1);
+    QCOMPARE(inputSpy.at(0).at(0).toByteArray(), QByteArrayLiteral("pasted"));
+
+    // 不带修饰的 Insert 仍然属于远端：全屏编辑器靠它切换插入/改写模式。
+    inputSpy.clear();
+    QTest::keyClick(&view, Qt::Key_Insert);
+    QCOMPARE(inputSpy.count(), 1);
+    QCOMPARE(inputSpy.at(0).at(0).toByteArray(), QByteArrayLiteral("\x1b[2~"));
+}
 
 void TerminalAltScreenTest::pasteIsBracketedWhenRemoteEnablesIt()
 {
@@ -93,7 +178,7 @@ void TerminalAltScreenTest::pasteIsBracketedWhenRemoteEnablesIt()
 
     // 远端尚未开启括号粘贴：不能凭空多发标记字节。
     QSignalSpy inputSpy(&view, &TerminalView::inputBytes);
-    QTest::keyClick(&view, Qt::Key_V, QKeySequence(QKeySequence::Paste)[0].keyboardModifiers());
+    pressPasteShortcut(view);
     QCOMPARE(inputSpy.count(), 1);
     QCOMPARE(inputSpy.at(0).at(0).toByteArray(), QByteArrayLiteral("indented"));
 
@@ -101,7 +186,7 @@ void TerminalAltScreenTest::pasteIsBracketedWhenRemoteEnablesIt()
     // autoindent 会把每一行再缩进一层。
     view.appendTerminalOutput(QByteArrayLiteral("\x1b[?2004h"));
     inputSpy.clear();
-    QTest::keyClick(&view, Qt::Key_V, QKeySequence(QKeySequence::Paste)[0].keyboardModifiers());
+    pressPasteShortcut(view);
     QCOMPARE(inputSpy.count(), 3);
     QCOMPARE(inputSpy.at(0).at(0).toByteArray(), QByteArrayLiteral("\x1b[200~"));
     QCOMPARE(inputSpy.at(1).at(0).toByteArray(), QByteArrayLiteral("indented"));

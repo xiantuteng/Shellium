@@ -5,6 +5,7 @@
 #include "ui/SettingsWidgets.h"
 
 #include <QAbstractSpinBox>
+#include <QApplication>
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QFontDatabase>
@@ -40,6 +41,7 @@ private slots:
     void everyThemePresetGetsUniqueSwatchAndPalette();
     void colorSchemeFilterKeepsVisibleSwatchesPacked();
     void unknownColorSchemeIdFallsBackToDefault();
+    void colorSchemeSwitchKeepsApplicationTextColors();
     void fontComboOffersRecommendedFamiliesAndKeepsMissingOne();
 
 private:
@@ -363,6 +365,40 @@ void SettingsUiTest::unknownColorSchemeIdFallsBackToDefault()
     SettingsDialog dialog(service.get());
     QVERIFY(dialog.findChild<ThemeSwatchButton *>(QStringLiteral("colorSchemeSwatch_default"))
                 ->isChecked());
+}
+
+void SettingsUiTest::colorSchemeSwitchKeepsApplicationTextColors()
+{
+    auto service = makeService();
+    const QPalette originalApplicationPalette = QApplication::palette();
+    service->bindApplicationTheme(qApp);
+
+    TerminalSettings light;
+    light.themeMode = ThemeMode::Light;
+    light.colorSchemeId = QStringLiteral("default");
+    service->applyTransient(light);
+    const QPalette before = QApplication::palette();
+
+    TerminalSettings switched = light;
+    switched.colorSchemeId = QStringLiteral("hacker_green");
+    service->applyTransient(switched);
+    const QPalette after = QApplication::palette();
+
+    // 前提：这两套终端配色的前景色确实不同，否则下面的断言恒成立、测不到任何东西。
+    QVERIFY(light.normalized().effectivePalette().foreground
+            != switched.normalized().effectivePalette().foreground);
+
+    // 终端配色只作用于终端网格。一旦它被掺进应用 QPalette，换配色就会连带改掉设置界面里
+    // 所有文字（包括配色卡自己的名称）的颜色，深色终端配色 + 浅色界面会直接看不清。
+    QCOMPARE(after.color(QPalette::WindowText), before.color(QPalette::WindowText));
+    QCOMPARE(after.color(QPalette::Text), before.color(QPalette::Text));
+    QCOMPARE(after.color(QPalette::ButtonText), before.color(QPalette::ButtonText));
+    QCOMPARE(after.color(QPalette::Highlight), before.color(QPalette::Highlight));
+    QCOMPARE(after.color(QPalette::Link), before.color(QPalette::Link));
+    // 浅色界面下的正文必须是深色：这条挡住“文字色跟着深色终端配色变浅”的回归。
+    QVERIFY(after.color(QPalette::WindowText).lightnessF() < 0.5);
+
+    QApplication::setPalette(originalApplicationPalette);
 }
 
 void SettingsUiTest::fontComboOffersRecommendedFamiliesAndKeepsMissingOne()

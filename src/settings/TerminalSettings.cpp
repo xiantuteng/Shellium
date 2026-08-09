@@ -111,10 +111,11 @@ QString serializeBool(const bool value)
 
 /**
  * @brief 构造一套覆盖常见 QWidget 角色的应用调色板。
- * @param terminalPalette 当前主题的终端基础色。
- * @param dark 是否为深色主题；菜单和禁用文字据此选择对比度。
+ * @param dark 是否为深色主题；文字、菜单与禁用态据此选择对比度。
  */
-QPalette createApplicationPalette(const TerminalPalette &terminalPalette, const bool dark)
+// 应用级配色只由界面外观（浅色/深色）决定：终端配色仅作用于终端网格，若把它掺进 QPalette，
+// 换一个终端主题就会顺带改掉设置界面、配色卡名称等所有控件的文字色，导致文字看不清。
+QPalette createApplicationPalette(const bool dark)
 {
     QPalette palette;
     const QColor window = dark ? QColor(QStringLiteral("#20232a"))
@@ -125,20 +126,26 @@ QPalette createApplicationPalette(const TerminalPalette &terminalPalette, const 
                                   : QColor(QStringLiteral("#e9edf3"));
     const QColor disabled = dark ? QColor(QStringLiteral("#858b98"))
                                  : QColor(QStringLiteral("#7a808a"));
+    const QColor text = dark ? QColor(QStringLiteral("#e6e9ef"))
+                             : QColor(QStringLiteral("#1c1f26"));
+    const QColor highlight = dark ? QColor(QStringLiteral("#33507a"))
+                                  : QColor(QStringLiteral("#cfe0f7"));
+    const QColor link = dark ? QColor(QStringLiteral("#6fb4ff"))
+                             : QColor(QStringLiteral("#1a6dd6"));
 
     palette.setColor(QPalette::Window, window);
-    palette.setColor(QPalette::WindowText, terminalPalette.foreground);
+    palette.setColor(QPalette::WindowText, text);
     palette.setColor(QPalette::Base, base);
     palette.setColor(QPalette::AlternateBase, alternate);
-    palette.setColor(QPalette::Text, terminalPalette.foreground);
+    palette.setColor(QPalette::Text, text);
     palette.setColor(QPalette::Button, window);
-    palette.setColor(QPalette::ButtonText, terminalPalette.foreground);
+    palette.setColor(QPalette::ButtonText, text);
     palette.setColor(QPalette::ToolTipBase, base);
-    palette.setColor(QPalette::ToolTipText, terminalPalette.foreground);
-    palette.setColor(QPalette::Highlight, terminalPalette.selection);
+    palette.setColor(QPalette::ToolTipText, text);
+    palette.setColor(QPalette::Highlight, highlight);
     palette.setColor(QPalette::HighlightedText,
                      dark ? QColor(Qt::white) : QColor(QStringLiteral("#111318")));
-    palette.setColor(QPalette::Link, terminalPalette.link);
+    palette.setColor(QPalette::Link, link);
     palette.setColor(QPalette::Disabled, QPalette::WindowText, disabled);
     palette.setColor(QPalette::Disabled, QPalette::Text, disabled);
     palette.setColor(QPalette::Disabled, QPalette::ButtonText, disabled);
@@ -1047,7 +1054,6 @@ void TerminalSettingsService::applyApplicationPalette()
     if (m_boundApplication == nullptr) {
         return;
     }
-    const TerminalPalette terminalPalette = m_currentSettings.effectivePalette();
-    m_boundApplication->setPalette(createApplicationPalette(
-        terminalPalette, m_currentSettings.effectiveThemeMode() == ThemeMode::Dark));
+    m_boundApplication->setPalette(
+        createApplicationPalette(m_currentSettings.effectiveThemeMode() == ThemeMode::Dark));
 }
