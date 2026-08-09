@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QColor>
+#include <QElapsedTimer>
 #include <QPlainTextEdit>
 #include <QStringList>
 
@@ -272,6 +273,29 @@ private:
      */
     QRect visualCursorRect() const;
 
+    /**
+     * @brief 由插入符矩形换算出光标覆盖的整个单元格矩形。
+     * @param caretRect visualCursorRect() 给出的插入符矩形。
+     *
+     * cursorRect() 只给出一两像素宽的插入符，块状与下划线光标需要真实格宽，双宽字符还要
+     * 占满两格。
+     */
+    QRect cursorCellRect(const QRect &caretRect) const;
+
+    /** @brief 只失效光标所在的一小块区域；闪烁不再触碰 QTextDocument。 */
+    void updateCursorArea();
+
+    /** @brief 标记欠一帧渲染；已经排队时不重复排队，保证持续输出下的稳定帧率。 */
+    void scheduleRender();
+
+    /**
+     * @brief 若还欠着一帧渲染则立即补上。
+     *
+     * 任何要读取 QTextDocument 内容的调用（查找、导出全文）都必须先调用它，否则读到的是
+     * 上一帧的文档，最后一屏输出会凭空消失。
+     */
+    void flushPendingRender();
+
     /** @brief 接受补全候选，只向 PTY 发送尚未输入的后缀。 */
     void acceptCompletion(const QString &completion);
 
@@ -313,6 +337,18 @@ private:
      * 改变，最终出现重复提示符和大段空格。定时器只在拖动短暂停顿后提交最终尺寸。
      */
     QTimer *m_resizeDebounceTimer = nullptr;
+
+    /**
+     * @brief 渲染合帧定时器。
+     *
+     * 远端一次大输出会被切成成百上千个分片。逐片同步重绘会让文档编辑与重排乘以分片数，
+     * 界面被自己的输出压死。这里刻意用"欠帧才排队、排队后不续期"的语义而不是防抖：持续
+     * 输出时必须以固定帧率持续出帧，防抖则会一直推迟到输出停止才画出第一帧。
+     */
+    QTimer *m_renderCoalesceTimer = nullptr;
+
+    /** @brief 距上一次真正渲染的时间；用于判断当前是"空闲后首帧"还是"持续输出中"。 */
+    QElapsedTimer m_lastRenderElapsed;
 
     /** @brief 备用屏滚轮增量的累加值；触控板的小增量攒够一行才发一次方向键。 */
     int m_wheelAccumulator = 0;

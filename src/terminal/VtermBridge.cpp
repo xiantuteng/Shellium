@@ -1,5 +1,6 @@
 #include "terminal/VtermBridge.h"
 
+#include <QTextBlock>
 #include <QTextBlockFormat>
 #include <QTextCharFormat>
 #include <QTextCursor>
@@ -122,15 +123,14 @@ void VtermBridge::resize(const int rows, const int columns)
     m_columns = normalizedColumns;
     vterm_set_size(m_vterm, m_rows, m_columns);
     vterm_screen_flush_damage(m_screen);
+    // 改变网格会让 libvterm 回流当前屏幕，已经写进文档的段与新的行列不再对应。
+    invalidateDocument();
 }
 
-void VtermBridge::setDefaultColors(const QColor &foreground,
-                                   const QColor &background,
-                                   const QColor &cursorColor)
+void VtermBridge::setDefaultColors(const QColor &foreground, const QColor &background)
 {
     const QColor safeForeground = foreground.isValid() ? foreground : QColor(Qt::white);
     const QColor safeBackground = background.isValid() ? background : QColor(Qt::black);
-    m_cursorColor = cursorColor.isValid() ? cursorColor : safeForeground;
 
     VTermColor nativeForeground;
     VTermColor nativeBackground;
@@ -143,6 +143,8 @@ void VtermBridge::setDefaultColors(const QColor &foreground,
                     static_cast<uint8_t>(safeBackground.green()),
                     static_cast<uint8_t>(safeBackground.blue()));
     vterm_screen_set_default_colors(m_screen, &nativeForeground, &nativeBackground);
+    // 默认色变化会改写每一格未显式着色的文本，已渲染的段全部过期。
+    invalidateDocument();
 }
 
 void VtermBridge::setScrollbackLimit(const int lineCount)
@@ -150,19 +152,25 @@ void VtermBridge::setScrollbackLimit(const int lineCount)
     m_scrollbackLimit = std::clamp(lineCount, 100, 1000000);
     if (m_scrollback.size() > m_scrollbackLimit) {
         // 从头部批量删除比逐行 removeFirst 更高效；设置调小时可能一次裁掉数万行。
+        // 这里不必标记文档失效：增量同步靠全局行号识别被淘汰的段，会自行从头部删除。
         m_scrollback.remove(0, m_scrollback.size() - m_scrollbackLimit);
     }
 }
 
 void VtermBridge::setLineHeightPercent(const int percent)
 {
-    m_lineHeightPercent = std::clamp(percent, 80, 250);
+    const int normalized = std::clamp(percent, 80, 250);
+    if (normalized == m_lineHeightPercent) {
+        return;
+    }
+    m_lineHeightPercent = normalized;
+    // 行高写在每一段的 QTextBlockFormat 上，只能整体重建。
+    invalidateDocument();
 }
 
-void VtermBridge::setCursorPresentation(const CursorShape shape, const bool phaseVisible)
+void VtermBridge::invalidateDocument()
 {
-    m_cursorShape = shape;
-    m_cursorPhaseVisible = phaseVisible;
+    m_documentDirty = true;
 }
 
 void VtermBridge::sendKey(const VTermKey key, const VTermModifier modifiers)
@@ -200,100 +208,333 @@ QString VtermBridge::cursorLineText() const
     return text.trimmed();
 }
 
-void VtermBridge::render(QTextDocument *document) const
+bool VtermBridge::isBlankCell(const Cell &cell)
 {
-    if (document == nullptr) {
-        return;
+    for (const QChar character : cell.text) {
+        if (!character.isSpace()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool VtermBridge::hasSameStyle(const Cell &left, const Cell &right)
+{
+    return left.foreground == right.foreground && left.background == right.background
+        && left.bold == right.bold && left.italic == right.italic
+        && left.underline == right.underline && left.strike == right.strike
+        && left.reverse == right.reverse && left.conceal == right.conceal;
+}
+
+QTextCharFormat VtermBridge::charFormatForCell(const Cell &cell)
+{
+    QColor foreground = cell.foreground;
+    QColor background = cell.background;
+    if (cell.reverse) {
+        std::swap(foreground, background);
+    }
+    if (cell.conceal) {
+        foreground = background;
     }
 
+    QTextCharFormat format;
+    format.setForeground(foreground);
+    format.setBackground(background);
+    format.setFontWeight(cell.bold ? QFont::Bold : QFont::Normal);
+    format.setFontItalic(cell.italic);
+    format.setFontUnderline(cell.underline);
+    format.setFontStrikeOut(cell.strike);
+    return format;
+}
+
+void VtermBridge::removeLeadingBlocks(QTextDocument *document, const int count)
+{
+    if (count <= 0) {
+        return;
+    }
+    if (count >= document->blockCount()) {
+        document->clear();
+        return;
+    }
+    // 选区 [0, 第 count 段起点) 覆盖前 count 段的正文以及它们各自的段分隔符，删除后段数
+    // 恰好减少 count；少算那一个分隔符会残留一个空段，整篇内容随之下移一行。
+    QTextCursor cursor(document);
+    cursor.setPosition(document->findBlockByNumber(count).position(), QTextCursor::KeepAnchor);
+    cursor.removeSelectedText();
+}
+
+void VtermBridge::removeTrailingBlocks(QTextDocument *document, const int count)
+{
+    if (count <= 0) {
+        return;
+    }
+    if (count >= document->blockCount()) {
+        document->clear();
+        return;
+    }
+    // 与删除头部相反：从最后 count 段之前的那个分隔符开始选到文档末尾。若从段首开始选，
+    // 分隔符会留下来，尾部多出一个空段，下一次同步的段计数就全错位了。
+    const QTextBlock firstRemoved = document->findBlockByNumber(document->blockCount() - count);
+    QTextCursor cursor(document);
+    cursor.setPosition(firstRemoved.position() - 1);
+    cursor.movePosition(QTextCursor::End, QTextCursor::KeepAnchor);
+    cursor.removeSelectedText();
+}
+
+VtermBridge::RenderedLine VtermBridge::buildRenderedLine(const Line &line, const int screenRow) const
+{
+    RenderedLine rendered;
+    rendered.cells = line;
+    rendered.cursorColumn = (screenRow >= 0 && screenRow == m_cursorRow
+                             && m_cursorColumn >= 0 && m_cursorColumn < line.size())
+        ? m_cursorColumn
+        : -1;
+    for (int column = 0; column < line.size(); ++column) {
+        // 行尾空白不写进文档；但光标所在列必须保留，否则光标停在行尾时定位不到任何字符。
+        if (!isBlankCell(line.at(column))
+            || (rendered.cursorColumn >= 0 && column <= rendered.cursorColumn)) {
+            rendered.lastColumn = column;
+        }
+    }
+    return rendered;
+}
+
+bool VtermBridge::isSameRenderedLine(const RenderedLine &left, const RenderedLine &right)
+{
+    if (left.lastColumn != right.lastColumn || left.cursorColumn != right.cursorColumn) {
+        return false;
+    }
+    for (int column = 0; column <= left.lastColumn; ++column) {
+        const Cell &leftCell = left.cells.at(column);
+        const Cell &rightCell = right.cells.at(column);
+        if (leftCell.width != rightCell.width || leftCell.text != rightCell.text
+            || !hasSameStyle(leftCell, rightCell)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void VtermBridge::writeRenderedLine(QTextCursor &cursor, const RenderedLine &line)
+{
+    QTextBlockFormat blockFormat;
+    blockFormat.setLineHeight(m_lineHeightPercent, QTextBlockFormat::ProportionalHeight);
+    cursor.setBlockFormat(blockFormat);
+
+    // 相邻同属性单元格合并成一次 insertText：终端一行通常只有一两种属性，逐格插入会把
+    // QTextCharFormat 构造和文档写入放大到列数倍，正是全量渲染慢的主要常数因子。
+    QString run;
+    run.reserve(line.lastColumn + 1);
+    const Cell *runStyle = nullptr;
+    const auto flushRun = [&cursor, &run, &runStyle]() {
+        if (run.isEmpty() || runStyle == nullptr) {
+            return;
+        }
+        cursor.insertText(run, charFormatForCell(*runStyle));
+        run.clear();
+    };
+
+    for (int column = 0; column <= line.lastColumn; ++column) {
+        const Cell &cell = line.cells.at(column);
+        // 宽度为 0 的格是双宽字符的右半格，内容已由左半格一并写入。
+        if (cell.width == 0) {
+            continue;
+        }
+        if (column == line.cursorColumn) {
+            // 光标位置在合并写入前先落定：run 里还没提交的字符也要计入偏移。
+            flushRun();
+            m_renderedCursorPosition = cursor.position();
+            m_renderedCursorText = cell.text;
+            m_renderedCursorBackground = cell.reverse ? cell.foreground : cell.background;
+        }
+        if (runStyle == nullptr || !hasSameStyle(*runStyle, cell)) {
+            flushRun();
+            runStyle = &cell;
+        }
+        run.append(cell.text.isEmpty() ? QStringLiteral(" ") : cell.text);
+    }
+    flushRun();
+}
+
+void VtermBridge::locateCursorInBlock(const QTextBlock &block, const RenderedLine &line)
+{
+    if (line.cursorColumn < 0 || !block.isValid()) {
+        return;
+    }
+    // 列号不等于字符偏移：双宽字符占两列却只有一个字符，右半格根本没写进文档。必须按
+    // writeRenderedLine 的同一套规则数一遍，否则中文行里的光标会越画越偏。
+    int offset = 0;
+    for (int column = 0; column < line.cursorColumn; ++column) {
+        const Cell &cell = line.cells.at(column);
+        if (cell.width == 0) {
+            continue;
+        }
+        offset += cell.text.isEmpty() ? 1 : static_cast<int>(cell.text.size());
+    }
+    const Cell &cursorCell = line.cells.at(line.cursorColumn);
+    m_renderedCursorPosition = block.position() + offset;
+    m_renderedCursorText = cursorCell.text;
+    m_renderedCursorBackground = cursorCell.reverse ? cursorCell.foreground
+                                                    : cursorCell.background;
+}
+
+int VtermBridge::lastVisibleScreenRow() const
+{
+    // 备用屏是一块尺寸恰好等于 PTY 网格的画布，全屏程序按绝对行列自绘，必须固定渲染
+    // 全部 m_rows 行：少一行就会让整块画布上移一行，vim 的第 0 行连同光标一起被推出视口。
+    if (m_alternateScreen) {
+        return m_rows - 1;
+    }
+    int lastRow = std::clamp(m_cursorRow, 0, m_rows - 1);
+    for (int row = m_rows - 1; row > lastRow; --row) {
+        const Line candidate = screenLine(row);
+        const bool hasContent = std::any_of(candidate.cbegin(),
+                                            candidate.cend(),
+                                            [](const Cell &cell) { return !isBlankCell(cell); });
+        if (hasContent) {
+            return row;
+        }
+    }
+    return lastRow;
+}
+
+void VtermBridge::rebuildDocument(QTextDocument *document)
+{
     document->clear();
-    m_renderedCursorPosition = -1;
     QTextCursor cursor(document);
     cursor.beginEditBlock();
 
-    const auto insertLine = [this, &cursor](const Line &line,
-                                            const int visualRow,
-                                            const bool currentScreen) {
-        QTextBlockFormat blockFormat;
-        blockFormat.setLineHeight(m_lineHeightPercent, QTextBlockFormat::ProportionalHeight);
-        cursor.setBlockFormat(blockFormat);
-        int lastContentColumn = -1;
-        for (int column = 0; column < line.size(); ++column) {
-            if (!line.at(column).text.trimmed().isEmpty()
-                || (currentScreen && visualRow == m_cursorRow && column <= m_cursorColumn)) {
-                lastContentColumn = column;
-            }
-        }
-
-        for (int column = 0; column <= lastContentColumn; ++column) {
-            const Cell &cell = line.at(column);
-            if (cell.width == 0) {
-                continue;
-            }
-            QColor foreground = cell.foreground;
-            QColor background = cell.background;
-            const bool cursorCell = currentScreen && m_cursorVisible && m_cursorPhaseVisible
-                && visualRow == m_cursorRow && column == m_cursorColumn;
-            if (cell.reverse) {
-                std::swap(foreground, background);
-            }
-            if (cursorCell) {
-                m_renderedCursorPosition = cursor.position();
-                if (m_cursorShape == CursorShape::Block) {
-                    // 块状光标使用可配置光标色；文本采用该单元格原背景色以保证深浅主题下
-                    // 都有对比度，同时不修改 libvterm 的真实屏幕状态。
-                    foreground = background;
-                    background = m_cursorColor;
-                }
-            }
-            if (cell.conceal) {
-                foreground = background;
-            }
-
-            QTextCharFormat format;
-            format.setForeground(foreground);
-            format.setBackground(background);
-            format.setFontWeight(cell.bold ? QFont::Bold : QFont::Normal);
-            format.setFontItalic(cell.italic);
-            format.setFontUnderline(cell.underline);
-            if (cursorCell && m_cursorShape == CursorShape::Underline) {
-                format.setFontUnderline(true);
-                format.setUnderlineColor(m_cursorColor);
-                format.setUnderlineStyle(QTextCharFormat::SingleUnderline);
-            }
-            format.setFontStrikeOut(cell.strike);
-            cursor.insertText(cell.text.isEmpty() ? QStringLiteral(" ") : cell.text, format);
-        }
-    };
-
-    // 备用屏是一块尺寸恰好等于 PTY 网格的画布，全屏程序按绝对行列自绘。滚动历史不能参与
-    // 渲染：文档一旦比视口高，QPlainTextEdit 就会按底部对齐，被推出顶部的正是网格第 0 行
-    // ——vim 打开文件时光标就停在那里，用户看到的现象是"光标消失、文件从中间开始显示"。
-    // 同理这里必须固定渲染全部 m_rows 行，不能按内容裁剪：少一行就会让整块画布上移一行。
-    if (!m_alternateScreen) {
-        for (const Line &line : m_scrollback) {
-            insertLine(line, -1, false);
+    // 备用屏下滚动历史不参与渲染：文档一旦比视口高，QPlainTextEdit 会按底部对齐，被推出
+    // 顶部的正是网格第 0 行——用户看到的现象是"光标消失、文件从中间开始显示"。
+    const int scrollbackBlocks = m_alternateScreen ? 0 : static_cast<int>(m_scrollback.size());
+    for (int index = 0; index < scrollbackBlocks; ++index) {
+        if (index > 0) {
             cursor.insertBlock();
         }
+        writeRenderedLine(cursor, buildRenderedLine(m_scrollback.at(index), -1));
     }
-    int lastScreenRow = m_alternateScreen ? m_rows - 1
-                                          : std::clamp(m_cursorRow, 0, m_rows - 1);
-    for (int row = lastScreenRow + 1; row < m_rows; ++row) {
-        const Line candidate = screenLine(row);
-        const bool hasContent = std::any_of(candidate.cbegin(), candidate.cend(), [](const Cell &cell) {
-            return !cell.text.trimmed().isEmpty();
-        });
-        if (hasContent) {
-            lastScreenRow = row;
-        }
-    }
+
+    const int lastScreenRow = lastVisibleScreenRow();
+    m_documentScreenLines.clear();
+    m_documentScreenLines.reserve(lastScreenRow + 1);
     for (int row = 0; row <= lastScreenRow; ++row) {
-        insertLine(screenLine(row), row, true);
-        if (row < lastScreenRow) {
+        if (scrollbackBlocks > 0 || row > 0) {
             cursor.insertBlock();
+        }
+        m_documentScreenLines.append(buildRenderedLine(screenLine(row), row));
+        writeRenderedLine(cursor, m_documentScreenLines.last());
+    }
+    cursor.endEditBlock();
+
+    m_documentTarget = document;
+    m_documentScrollbackFirst = m_scrollbackPushed - scrollbackBlocks;
+    m_documentScrollbackCount = scrollbackBlocks;
+    m_documentDirty = false;
+}
+
+bool VtermBridge::render(QTextDocument *document)
+{
+    if (document == nullptr) {
+        return false;
+    }
+
+    m_renderedCursorPosition = -1;
+    m_renderedCursorText.clear();
+    m_renderedCursorBackground = QColor();
+
+    if (m_documentDirty || document != m_documentTarget) {
+        rebuildDocument(document);
+        return true;
+    }
+
+    // 增量路径：滚动历史一旦推入就是只读的，文档里对应的段可以原样保留。可能变化的只有
+    // 头部被上限淘汰的几段，和尾部那一屏。
+    const int scrollbackBlocks = m_alternateScreen ? 0 : static_cast<int>(m_scrollback.size());
+    const qint64 firstRetained = m_scrollbackPushed - scrollbackBlocks;
+    const qint64 documentEnd = m_documentScrollbackFirst + m_documentScrollbackCount;
+    const qint64 droppedFromFront = firstRetained - m_documentScrollbackFirst;
+    const qint64 appendCount = firstRetained + scrollbackBlocks - documentEnd;
+
+    // 一次淘汰掉的历史比文档里现存的还多（例如一条命令直接刷了十万行），增量已无优势，
+    // 中间那段历史谁都没见过，整体重建反而更简单可靠。
+    if (droppedFromFront < 0 || appendCount < 0 || droppedFromFront > m_documentScrollbackCount) {
+        rebuildDocument(document);
+        return true;
+    }
+
+    // 尾部区间的目标内容 = 本次新进历史的几行 + 当前这一屏。把两者放在一起比对是关键：
+    // 一行从屏幕滚进历史时内容并没有变，逐段比对会发现它和上次写的那一段完全一样，于是
+    // 原地保留——文档里那一段既不重写也不移动，用户压在上面的选区自然不会被抹掉。
+    QVector<RenderedLine> desiredTail;
+    desiredTail.reserve(static_cast<qsizetype>(appendCount) + m_rows);
+    for (qint64 index = scrollbackBlocks - appendCount; index < scrollbackBlocks; ++index) {
+        desiredTail.append(buildRenderedLine(m_scrollback.at(static_cast<qsizetype>(index)), -1));
+    }
+    const int lastScreenRow = lastVisibleScreenRow();
+    for (int row = 0; row <= lastScreenRow; ++row) {
+        desiredTail.append(buildRenderedLine(screenLine(row), row));
+    }
+
+    QTextCursor cursor(document);
+    cursor.beginEditBlock();
+
+    if (droppedFromFront > 0) {
+        removeLeadingBlocks(document, static_cast<int>(droppedFromFront));
+    }
+    const int scrollbackPrefix = static_cast<int>(m_documentScrollbackCount - droppedFromFront);
+
+    // 逐段比对，找出从头开始有多少段可以原样保留。
+    const qsizetype comparableCount = std::min(m_documentScreenLines.size(), desiredTail.size());
+    qsizetype unchanged = 0;
+    while (unchanged < comparableCount
+           && isSameRenderedLine(m_documentScreenLines.at(unchanged), desiredTail.at(unchanged))) {
+        ++unchanged;
+    }
+
+    // 被跳过的段里可能就有光标行（例如用户只是移动了光标而没有改动文本），它的文档位置
+    // 无人计算，补全弹层和光标绘制会失去锚点。
+    for (qsizetype index = 0; index < unchanged; ++index) {
+        if (desiredTail.at(index).cursorColumn >= 0) {
+            locateCursorInBlock(document->findBlockByNumber(scrollbackPrefix
+                                                            + static_cast<int>(index)),
+                                desiredTail.at(index));
+        }
+    }
+
+    // 两侧都存在的段就地换正文，不删段也不动段边界。这一点很要紧：如果改成"整段删掉再
+    // 插回来"，紧贴着段尾的选区端点会被插入操作吸走，用户选中最后一行后每来一批输出，
+    // 高亮就会一路蔓延到新内容上。
+    const qsizetype overlap = std::min(m_documentScreenLines.size(), desiredTail.size());
+    for (qsizetype index = unchanged; index < overlap; ++index) {
+        const QTextBlock block = document->findBlockByNumber(scrollbackPrefix
+                                                             + static_cast<int>(index));
+        QTextCursor blockCursor(document);
+        blockCursor.setPosition(block.position());
+        blockCursor.movePosition(QTextCursor::EndOfBlock, QTextCursor::KeepAnchor);
+        blockCursor.removeSelectedText();
+        writeRenderedLine(blockCursor, desiredTail.at(index));
+    }
+
+    if (m_documentScreenLines.size() > desiredTail.size()) {
+        removeTrailingBlocks(document,
+                             static_cast<int>(m_documentScreenLines.size() - desiredTail.size()));
+    } else {
+        cursor.movePosition(QTextCursor::End);
+        for (qsizetype index = overlap; index < desiredTail.size(); ++index) {
+            // 文档此刻已有 scrollbackPrefix + index 段；只有非空文档才需要先起新段。
+            if (scrollbackPrefix + index > 0) {
+                cursor.insertBlock();
+            }
+            writeRenderedLine(cursor, desiredTail.at(index));
         }
     }
     cursor.endEditBlock();
+
+    m_documentScrollbackFirst = firstRetained;
+    m_documentScrollbackCount = scrollbackPrefix + static_cast<int>(appendCount);
+    // 新进历史的那几行已经归入历史区间，尾部区间只剩当前这一屏。
+    m_documentScreenLines = desiredTail.mid(static_cast<qsizetype>(appendCount));
+    return false;
 }
 
 VtermBridge::Cell VtermBridge::convertCell(const VTermScreenCell &cell) const
@@ -384,6 +625,8 @@ int VtermBridge::termPropertyCallback(const VTermProp property, VTermValue *valu
         const bool active = value->boolean != 0;
         if (active != bridge->m_alternateScreen) {
             bridge->m_alternateScreen = active;
+            // 主备屏的文档构成完全不同（备用屏不含滚动历史），必须整体重建。
+            bridge->invalidateDocument();
             emit bridge->alternateScreenChanged(active);
         }
     }
@@ -401,6 +644,7 @@ int VtermBridge::resizeCallback(const int rows, const int columns, void *user)
     auto *bridge = static_cast<VtermBridge *>(user);
     bridge->m_rows = rows;
     bridge->m_columns = columns;
+    bridge->invalidateDocument();
     return 1;
 }
 
@@ -415,6 +659,9 @@ int VtermBridge::pushScrollbackCallback(const int columns,
         line.append(bridge->convertCell(cells[column]));
     }
     bridge->m_scrollback.append(std::move(line));
+    // 只增不减的全局行号是增量同步的坐标系：文档里存的是哪几行、该从头部删几段、该从
+    // 尾部补几段，全部由它推算。
+    ++bridge->m_scrollbackPushed;
     if (bridge->m_scrollback.size() > bridge->m_scrollbackLimit) {
         bridge->m_scrollback.remove(0,
             bridge->m_scrollback.size() - bridge->m_scrollbackLimit);
@@ -439,6 +686,9 @@ int VtermBridge::popScrollbackCallback(const int columns,
 
 int VtermBridge::clearScrollbackCallback(void *user)
 {
-    static_cast<VtermBridge *>(user)->m_scrollback.clear();
+    auto *bridge = static_cast<VtermBridge *>(user);
+    bridge->m_scrollback.clear();
+    // 历史被整体丢弃，文档里现存的段无一对应得上，只能整体重建。
+    bridge->invalidateDocument();
     return 1;
 }

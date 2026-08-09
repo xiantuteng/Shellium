@@ -46,13 +46,19 @@ QByteArray fullScreenApplicationFrame(const int rows, const int cursorRow)
     return bytes;
 }
 
-/** @brief 造出一屏以上的普通 Shell 输出，让 libvterm 把旧行推进滚动历史。 */
+/**
+ * @brief 造出一屏以上的普通 Shell 输出，让 libvterm 把旧行推进滚动历史。
+ *
+ * 末尾必须等一帧：渲染是合帧的，appendTerminalOutput 只把字节喂给 libvterm 并排队一次
+ * 渲染，文档与滚动条要到下一帧才更新。
+ */
 void fillScrollback(TerminalView &view, const int lines)
 {
     for (int index = 0; index < lines; ++index) {
         view.appendTerminalOutput(QByteArray("history line ")
                                   + QByteArray::number(index) + "\r\n");
     }
+    QTest::qWait(50);
 }
 
 /**
@@ -110,7 +116,108 @@ private slots:
     void pasteIsBracketedWhenRemoteEnablesIt();
     void selectionSurvivesCursorBlinkRepaint();
     void insertClipboardShortcutsBypassRemoteInsertKey();
+    void incrementalRenderMatchesFullRebuild();
+    void cursorBlinkLeavesDocumentUntouched();
+    void cursorBlinkRepaintsCursorPixels();
+    void selectionAndScrollbackBlocksSurviveNewOutput();
 };
+
+void TerminalAltScreenTest::incrementalRenderMatchesFullRebuild()
+{
+    // 增量渲染唯一不能出错的地方，就是它必须和"从头重建一遍"的结果一模一样。这里让两个
+    // 桥接层吃下完全相同的字节：一个逐行渲染（走增量），一个最后只渲染一次（走全量）。
+    // 行数刻意超过滚动历史上限，把"从文档头部删除被淘汰的段"这条最容易错位的路径也覆盖到。
+    VtermBridge incremental;
+    VtermBridge oneShot;
+    incremental.resize(10, 40);
+    oneShot.resize(10, 40);
+    incremental.setScrollbackLimit(100);
+    oneShot.setScrollbackLimit(100);
+
+    QTextDocument incrementalDocument;
+    QTextDocument oneShotDocument;
+    bool sawIncrementalUpdate = false;
+    for (int index = 0; index < 400; ++index) {
+        const QByteArray line = QByteArray("line ") + QByteArray::number(index)
+            + " \x1b[31mred\x1b[0m tail\r\n";
+        incremental.feed(line);
+        if (!incremental.render(&incrementalDocument)) {
+            sawIncrementalUpdate = true;
+        }
+        oneShot.feed(line);
+    }
+    QVERIFY2(sawIncrementalUpdate, "逐行渲染必须真的走增量，否则这个用例什么都没验证");
+    QVERIFY2(oneShot.render(&oneShotDocument), "首次渲染必然是整体重建");
+
+    QCOMPARE(incrementalDocument.blockCount(), oneShotDocument.blockCount());
+    QCOMPARE(incrementalDocument.toPlainText(), oneShotDocument.toPlainText());
+    QCOMPARE(incremental.renderedCursorPosition(), oneShot.renderedCursorPosition());
+
+    // 颜色也必须一致：增量路径若把段落格式或字符格式漏掉，纯文本比较是发现不了的。
+    QTextCursor incrementalCursor(&incrementalDocument);
+    QTextCursor oneShotCursor(&oneShotDocument);
+    incrementalCursor.setPosition(incrementalDocument.characterCount() / 2);
+    oneShotCursor.setPosition(oneShotDocument.characterCount() / 2);
+    QCOMPARE(incrementalCursor.charFormat().foreground().color(),
+             oneShotCursor.charFormat().foreground().color());
+}
+
+void TerminalAltScreenTest::cursorBlinkLeavesDocumentUntouched()
+{
+    TerminalView view;
+    QVERIFY(showAndSettle(view));
+    fillScrollback(view, 200);
+
+    // 输出让滚动条出现，viewport 随之变窄并触发一次防抖后的网格重算；等它安定下来再采样，
+    // 否则测到的是这次一次性重排，而不是闪烁本身。
+    QTest::qWait(300);
+
+    // QTextDocument::revision() 每次编辑都会自增。闪烁若还在重建文档，它必然一路上涨——
+    // 一万行历史时那正是每 600ms 半秒的开销，界面等于长期满负荷，用户什么都不做也卡。
+    const int revisionBeforeBlink = view.document()->revision();
+    QTest::qWait(1500);
+    QCOMPARE(view.document()->revision(), revisionBeforeBlink);
+}
+
+void TerminalAltScreenTest::cursorBlinkRepaintsCursorPixels()
+{
+    TerminalView view;
+    QVERIFY(showAndSettle(view));
+    view.appendTerminalOutput(QByteArrayLiteral("[root@server ~]# "));
+    QTest::qWait(300);
+
+    // 光标现在完全由 paintEvent 叠加绘制。文档不再变化，闪烁若也没有真的重绘像素，光标
+    // 就彻底不见了——这一条正是"不许碰文档"改动最容易掉进去的坑。
+    const QImage firstPhase = view.viewport()->grab().toImage();
+    bool sawDifferentPhase = false;
+    for (int attempt = 0; attempt < 30 && !sawDifferentPhase; ++attempt) {
+        QTest::qWait(50);
+        sawDifferentPhase = view.viewport()->grab().toImage() != firstPhase;
+    }
+    QVERIFY2(sawDifferentPhase, "光标必须仍在闪，即画面在两个相位之间发生像素变化");
+}
+
+void TerminalAltScreenTest::selectionAndScrollbackBlocksSurviveNewOutput()
+{
+    TerminalView view;
+    QVERIFY(showAndSettle(view));
+    view.appendTerminalOutput(QByteArrayLiteral("keep this line\r\n"));
+    QTest::qWait(50);
+
+    QTextCursor selection = view.textCursor();
+    selection.movePosition(QTextCursor::Start);
+    selection.movePosition(QTextCursor::Right, QTextCursor::KeepAnchor, 14);
+    view.setTextCursor(selection);
+    QCOMPARE(view.textCursor().selectedText(), QStringLiteral("keep this line"));
+
+    // 滚动历史里的段是只读的，新输出只会在尾部追加。用户一边看输出一边选文本时，选区
+    // 必须一直在——旧实现每来一个网络分片就重建整份文档，选区活不过一次输出。
+    for (int index = 0; index < 50; ++index) {
+        view.appendTerminalOutput(QByteArray("noise ") + QByteArray::number(index) + "\r\n");
+    }
+    QTest::qWait(80);
+    QCOMPARE(view.textCursor().selectedText(), QStringLiteral("keep this line"));
+}
 
 void TerminalAltScreenTest::selectionSurvivesCursorBlinkRepaint()
 {
@@ -239,13 +346,10 @@ void TerminalAltScreenTest::cursorStaysVisibleAfterScrollbackThenFullScreenAppli
 
 void TerminalAltScreenTest::cursorCellIsPaintedInsideFullScreenApplication()
 {
-    const QColor cursorColor(QStringLiteral("#ff00ff"));
+    const QColor cellBackground(QStringLiteral("#111318"));
     VtermBridge bridge;
     bridge.resize(10, 40);
-    bridge.setDefaultColors(QColor(QStringLiteral("#e6e6e6")),
-                            QColor(QStringLiteral("#111318")),
-                            cursorColor);
-    bridge.setCursorPresentation(VtermBridge::CursorShape::Block, true);
+    bridge.setDefaultColors(QColor(QStringLiteral("#e6e6e6")), cellBackground);
 
     // 先让普通输出把旧行推进滚动历史：真实会话进 vim 时历史一定是非空的，而备用屏一旦
     // 把历史一起渲染，网格就会整体沉到文档底部。
@@ -262,12 +366,17 @@ void TerminalAltScreenTest::cursorCellIsPaintedInsideFullScreenApplication()
     QCOMPARE(document.blockCount(), 10);
 
     const int position = bridge.renderedCursorPosition();
-    QVERIFY2(position >= 0, "备用屏下必须渲染出光标单元格");
+    QVERIFY2(position >= 0, "备用屏下必须定位出光标单元格");
     QTextCursor cursor(&document);
     cursor.setPosition(position);
     cursor.movePosition(QTextCursor::NextCharacter, QTextCursor::KeepAnchor);
     QCOMPARE(cursor.selectedText(), QStringLiteral("f"));
-    QCOMPARE(cursor.charFormat().background().color(), cursorColor);
+
+    // 光标不能写进字符格式：一旦写进去，每次闪烁都要重建整份文档，一万行历史时单次重建
+    // 就要几百毫秒。它现在只提供定位信息，由 TerminalView 叠加绘制。
+    QCOMPARE(cursor.charFormat().background().color(), cellBackground);
+    QCOMPARE(bridge.renderedCursorText(), QStringLiteral("f"));
+    QCOMPARE(bridge.renderedCursorBackground(), cellBackground);
 }
 
 void TerminalAltScreenTest::navigationKeysFollowApplicationCursorKeyMode()

@@ -196,6 +196,15 @@ private slots:
 
 namespace {
 
+/**
+ * @brief 等待终端渲染出帧的宽限时间（毫秒）。
+ *
+ * TerminalView 把渲染按帧合并：appendTerminalOutput 只把字节喂给 libvterm，同一帧内到达的
+ * 多段输出攒在一起画。因此凡是要断言"文档里出现了什么"或"滚动条到了哪里"的用例，都必须先
+ * 放行一帧，否则测到的是上一帧的旧状态。
+ */
+constexpr int kRenderFrameMilliseconds = 60;
+
 /** @brief 创建测试使用的外层服务器，集中维护默认字段。 */
 ConnectionTarget outerTarget()
 {
@@ -975,6 +984,8 @@ void SshCommandParserTest::terminalViewRendersCarriageReturnAndLineFeed()
     TerminalView view;
     view.appendTerminalOutput(QByteArrayLiteral("[root@server ~]# "));
     view.appendTerminalOutput(QByteArrayLiteral("\r\n[root@server ~]# "));
+    // 渲染按帧合并：同一帧内到达的多段输出攒在一起画，断言前必须放行一帧。
+    QTest::qWait(kRenderFrameMilliseconds);
 
     const QStringList renderedLines = view.toPlainText().split(QLatin1Char('\n'));
     QCOMPARE(renderedLines.size(), 2);
@@ -1318,6 +1329,7 @@ void SshCommandParserTest::terminalViewKeepsScrollPositionAcrossRender()
         view.appendTerminalOutput(
             QStringLiteral("history line %1\r\n").arg(line).toUtf8());
     }
+    QTest::qWait(kRenderFrameMilliseconds);
     QScrollBar *bar = view.verticalScrollBar();
     QVERIFY2(bar->maximum() > 0, "输出必须超过一屏，否则本用例无法覆盖滚动行为");
 
@@ -1325,6 +1337,7 @@ void SshCommandParserTest::terminalViewKeepsScrollPositionAcrossRender()
     // QTextDocument，滚动条随之归零；若实现依赖重建后尚未刷新的 maximum()，这里会掉到顶部。
     bar->setValue(bar->maximum());
     view.appendTerminalOutput(QByteArrayLiteral("tail follows\r\n"));
+    QTest::qWait(kRenderFrameMilliseconds);
     QCOMPARE(bar->value(), bar->maximum());
 
     // 场景二：用户上翻查看历史时新输出到达，位置必须保持，不得被重建文档弹回顶部。
@@ -1332,6 +1345,7 @@ void SshCommandParserTest::terminalViewKeepsScrollPositionAcrossRender()
     QVERIFY2(middle > 0, "滚动范围过小，无法区分'保持原位'与'跳到顶部'");
     bar->setValue(middle);
     view.appendTerminalOutput(QByteArrayLiteral("more output\r\n"));
+    QTest::qWait(kRenderFrameMilliseconds);
     QVERIFY2(bar->value() > 0,
              "阅读历史时收到新输出后被重置到了文档顶部");
     QCOMPARE(bar->value(), middle);
@@ -1344,6 +1358,7 @@ void SshCommandParserTest::localNoticeEndsWithCarriageReturn()
     // 列继续绘制，表现为"Last login 前面有一大段空格"。
     view.appendTerminalOutput(QStringLiteral("正在连接 root@10.0.0.1…\r\n").toUtf8());
     view.appendTerminalOutput(QByteArrayLiteral("Last login: Sat Aug  8"));
+    QTest::qWait(kRenderFrameMilliseconds);
 
     const QStringList renderedLines = view.toPlainText().split(QLatin1Char('\n'));
     QCOMPARE(renderedLines.size(), 2);
@@ -1550,6 +1565,7 @@ void SshCommandParserTest::terminalKeepsBottomAcrossCursorBlink()
     for (int line = 0; line < 200; ++line) {
         view.appendTerminalOutput(QStringLiteral("line %1\r\n").arg(line).toUtf8());
     }
+    QTest::qWait(kRenderFrameMilliseconds);
     QScrollBar *bar = view.verticalScrollBar();
     QVERIFY2(bar->maximum() > 0, "输出必须超过一屏，否则本用例无法覆盖滚动行为");
     bar->setValue(bar->maximum());

@@ -6,6 +6,9 @@
 
 #include <vterm.h>
 
+class QTextBlock;
+class QTextCharFormat;
+class QTextCursor;
 class QTextDocument;
 
 /**
@@ -19,13 +22,6 @@ class VtermBridge final : public QObject {
     Q_OBJECT
 
 public:
-    /** @brief 终端光标的绘制形态；桥接层使用独立枚举以避免依赖设置 UI。 */
-    enum class CursorShape {
-        Block,     ///< 使用高亮背景覆盖当前单元格。
-        Underline, ///< 在当前单元格底部绘制横线。
-        IBeam      ///< 由 TerminalView 在当前单元格左侧绘制竖线。
-    };
-
     explicit VtermBridge(QObject *parent = nullptr);
     ~VtermBridge() override;
 
@@ -39,23 +35,19 @@ public:
     void resize(int rows, int columns);
 
     /**
-     * @brief 更新终端默认色与光标颜色。
+     * @brief 更新终端默认前景与背景色，并让已渲染文档整体失效。
      * @param foreground 未显式指定 ANSI 颜色的文本颜色。
      * @param background 未显式指定 ANSI 颜色的背景颜色。
-     * @param cursorColor 光标绘制颜色。
+     *
+     * 光标颜色不在这里：光标由 TerminalView 叠加绘制，不参与文档内容。
      */
-    void setDefaultColors(const QColor &foreground,
-                          const QColor &background,
-                          const QColor &cursorColor);
+    void setDefaultColors(const QColor &foreground, const QColor &background);
 
     /** @brief 设置滚动历史上限，并立即丢弃超过新上限的最旧行。 */
     void setScrollbackLimit(int lineCount);
 
     /** @brief 设置行高百分比；异常值会限制在 80% 到 250%。 */
     void setLineHeightPercent(int percent);
-
-    /** @brief 设置光标形态和闪烁相位；不会覆盖远端要求隐藏光标的状态。 */
-    void setCursorPresentation(CursorShape shape, bool phaseVisible);
 
     /**
      * @brief 当前是否处于备用屏（vim、top、less 等全屏程序会切换到该屏）。
@@ -93,9 +85,23 @@ public:
      * @brief 返回最近一次 render() 中光标对应的 QTextDocument 字符位置。
      * @return 光标没有进入已渲染区域时返回 -1。
      *
-     * IBeam 无法仅靠 QTextCharFormat 表达，因此 TerminalView 使用该位置叠加竖线。
+     * 三种光标形态全部由 TerminalView 在 paintEvent 中叠加绘制，这个位置是它们唯一的
+     * 定位依据。光标不写进 QTextCharFormat 是刻意的：闪烁一旦需要改文档格式，就必须为
+     * 每次相位翻转重建整份文档，而那正是长会话卡死的根源。
      */
     [[nodiscard]] int renderedCursorPosition() const { return m_renderedCursorPosition; }
+
+    /**
+     * @brief 光标所在单元格的字符；块状光标反色绘制时需要把它重新画在色块上。
+     * @return 该格为空时返回空字符串，调用方按空格处理。
+     */
+    [[nodiscard]] QString renderedCursorText() const { return m_renderedCursorText; }
+
+    /** @brief 光标所在单元格的原始背景色；块状光标用它作为字符颜色以保证对比度。 */
+    [[nodiscard]] QColor renderedCursorBackground() const { return m_renderedCursorBackground; }
+
+    /** @brief 远端是否要求显示光标（DECTCEM）；全屏程序绘制期间会临时隐藏。 */
+    [[nodiscard]] bool isCursorVisible() const { return m_cursorVisible; }
 
     /**
      * @brief 返回终端光标当前所在屏幕行的可见文本。
@@ -107,10 +113,26 @@ public:
     [[nodiscard]] QString cursorLineText() const;
 
     /**
-     * @brief 将滚动历史和当前屏幕完整渲染到 QTextDocument。
-     * @param document 终端视图持有的文档，调用期间会整体重建。
+     * @brief 把滚动历史与当前屏幕同步到 QTextDocument。
+     * @param document 终端视图持有的文档。
+     * @return true 表示本次是整体重建，false 表示只做了增量更新。
+     *
+     * 默认走增量：滚动历史一旦推入就不再变化，文档里对应的段可以原样留着，只需要删掉
+     * 被上限淘汰的最旧几段、补上新推入的几段，再重建尾部那一屏。代价从 O(全部历史)
+     * 降到 O(本次新增行 + 一屏)——这是 `tail -f` 之类持续输出不再卡死界面的关键。
+     *
+     * 只有在字号、行高、配色、网格尺寸或主备屏切换等会让既有段全部失效的场景，才由
+     * invalidateDocument() 标记为整体重建。返回值让视图知道是否需要恢复选区：增量更新
+     * 时 QTextCursor 会自行随编辑调整，整体重建则必须按偏移重新夹取。
      */
-    void render(QTextDocument *document) const;
+    bool render(QTextDocument *document);
+
+    /**
+     * @brief 标记文档已全部失效，下一次 render() 整体重建。
+     *
+     * 字号、行高、配色这类改动会让已经写进文档的每一段都过期，增量更新无法表达。
+     */
+    void invalidateDocument();
 
 signals:
     /** @brief libvterm 为设备状态查询、光标位置查询等生成的协议响应。 */
@@ -156,11 +178,74 @@ private:
 
     using Line = QVector<Cell>;
 
+    /**
+     * @brief 一行内容在文档中的最终形态。
+     *
+     * 增量同步靠"这一段和上次写进去的完全一样吗"来决定跳过还是重写，因此比较的必须是
+     * 真正会落到文档里的东西：末尾空白裁到哪一列、光标停在哪一列（光标列会强制保留空格）
+     * 都会改变结果，只比较单元格是不够的。
+     */
+    struct RenderedLine {
+        Line cells;
+        int lastColumn = -1;   ///< 需要写入文档的最后一列；-1 表示空行。
+        int cursorColumn = -1; ///< 该行是光标行时的光标列，否则为 -1。
+    };
+
     /** @brief 将 libvterm 单元格转换为可长期保存的 Qt 值对象。 */
     [[nodiscard]] Cell convertCell(const VTermScreenCell &cell) const;
 
     /** @brief 读取当前屏幕指定行。 */
     [[nodiscard]] Line screenLine(int row) const;
+
+    /**
+     * @brief 把一行单元格整理成最终写入形态。
+     * @param line 待渲染的单元格。
+     * @param screenRow 该行在当前屏幕中的行号；滚动历史传 -1。
+     */
+    [[nodiscard]] RenderedLine buildRenderedLine(const Line &line, int screenRow) const;
+
+    /**
+     * @brief 把一行写入光标所在段，并在遇到光标列时记录光标位置。
+     *
+     * 相邻且属性完全相同的单元格会合并成一次 insertText。终端里绝大多数行只有一到两种
+     * 属性，逐格插入等于把每行的 QTextCharFormat 构造和文档写入放大几十倍。
+     */
+    void writeRenderedLine(QTextCursor &cursor, const RenderedLine &line);
+
+    /**
+     * @brief 为一段没有被重写的段落补记光标位置。
+     * @param block 文档中对应的段。
+     * @param line 该段的渲染描述；cursorColumn 为 -1 时什么都不做。
+     *
+     * 段落被判定为"和上次一样"而跳过重写时，光标位置无人计算，补全弹层和光标绘制会失去
+     * 锚点。这里按列换算字符偏移补上——双宽字符占两列一个字符，不能直接拿列号当偏移。
+     */
+    void locateCursorInBlock(const QTextBlock &block, const RenderedLine &line);
+
+    /** @brief 两行的最终写入形态是否完全一致；一致即可跳过重写，选区也随之保住。 */
+    [[nodiscard]] static bool isSameRenderedLine(const RenderedLine &left,
+                                                 const RenderedLine &right);
+
+    /** @brief 当前屏幕需要渲染的最后一行行号；下方全是空行时按光标行截断。 */
+    [[nodiscard]] int lastVisibleScreenRow() const;
+
+    /** @brief 把整份文档清空重建，并重置增量同步状态。 */
+    void rebuildDocument(QTextDocument *document);
+
+    /** @brief 单元格是否只有空白；不构造临时 QString，渲染热路径每格都要判断一次。 */
+    [[nodiscard]] static bool isBlankCell(const Cell &cell);
+
+    /** @brief 两个单元格的显示属性是否完全一致，可合并为同一次 insertText。 */
+    [[nodiscard]] static bool hasSameStyle(const Cell &left, const Cell &right);
+
+    /** @brief 由单元格属性构造字符格式。 */
+    [[nodiscard]] static QTextCharFormat charFormatForCell(const Cell &cell);
+
+    /** @brief 删除文档开头的 count 段，用于丢弃被上限淘汰的滚动历史。 */
+    static void removeLeadingBlocks(QTextDocument *document, int count);
+
+    /** @brief 删除文档末尾的 count 段，用于替换上一次渲染留下的那一屏。 */
+    static void removeTrailingBlocks(QTextDocument *document, int count);
 
     /** @brief libvterm 输出协议响应时调用。 */
     static void outputCallback(const char *bytes, size_t length, void *user);
@@ -199,10 +284,41 @@ private:
     bool m_alternateScreen = false;
     int m_scrollbackLimit = 10000;
     int m_lineHeightPercent = 100;
-    CursorShape m_cursorShape = CursorShape::Block;
-    bool m_cursorPhaseVisible = true;
-    QColor m_cursorColor = QColor(QStringLiteral("#e6e6e6"));
 
-    /** @brief 最近一次渲染得到的光标文档位置；render() 为 const，因此缓存声明为 mutable。 */
-    mutable int m_renderedCursorPosition = -1;
+    /** @brief 最近一次渲染得到的光标文档位置。 */
+    int m_renderedCursorPosition = -1;
+
+    /** @brief 最近一次渲染时光标所在格的字符与背景色，供叠加绘制反色块使用。 */
+    QString m_renderedCursorText;
+    QColor m_renderedCursorBackground;
+
+    /**
+     * @brief 累计推入过滚动历史的行数，含已被上限淘汰的部分。
+     *
+     * m_scrollback 只保留最近 m_scrollbackLimit 行，光看它的下标无法判断"文档里那几段
+     * 到底对应哪几行"。用一个只增不减的全局行号，增量同步才能算出该从头部删几段、
+     * 从尾部补几段。
+     */
+    qint64 m_scrollbackPushed = 0;
+
+    /** @brief 上次同步的文档；换了文档对象必须整体重建。 */
+    QTextDocument *m_documentTarget = nullptr;
+
+    /** @brief 文档首段对应的全局历史行号。 */
+    qint64 m_documentScrollbackFirst = 0;
+
+    /** @brief 文档中来自滚动历史的段数。 */
+    int m_documentScrollbackCount = 0;
+
+    /**
+     * @brief 文档尾部那一屏上次写进去的内容。
+     *
+     * 增量同步只允许改动尾部这一段区间，而这份缓存让它能进一步做到"逐段比对、只重写真正
+     * 变了的段"。这不只是省事：一行从屏幕滚进历史时内容并没有变，跳过重写等于让那一段
+     * 在文档里原地保留，用户正在上面拖选的高亮才不会被下一波输出抹掉。
+     */
+    QVector<RenderedLine> m_documentScreenLines;
+
+    /** @brief 下一次 render() 是否必须整体重建。 */
+    bool m_documentDirty = true;
 };

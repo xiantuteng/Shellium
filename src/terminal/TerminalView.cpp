@@ -44,6 +44,15 @@ namespace {
 constexpr int kTerminalResizeDebounceMilliseconds = 80;
 
 /**
+ * @brief 渲染合帧间隔（毫秒），约等于 60fps 一帧。
+ *
+ * 远端一次 `cat 大文件` 会被切成成百上千个网络分片。每个分片都同步重绘，代价不是"多画
+ * 几次"而是把文档编辑、重排和重绘全部乘以分片数，界面因此被自己的输出压死。攒够一帧再
+ * 画既保证了肉眼流畅度，也让事件循环在两帧之间有机会处理用户的按键与滚动。
+ */
+constexpr int kRenderCoalesceMilliseconds = 16;
+
+/**
  * @brief 认证接线的按需诊断通道。
  *
  * 默认关闭。真实 macOS 键盘与输入法的行为无法用 QTest 合成按键覆盖，出问题时只能靠
@@ -222,6 +231,7 @@ TerminalView::TerminalView(QWidget *parent)
     , m_completionModel(new QStringListModel(this))
     , m_cursorBlinkTimer(new QTimer(this))
     , m_resizeDebounceTimer(new QTimer(this))
+    , m_renderCoalesceTimer(new QTimer(this))
 {
     // 主窗口会统一装饰表单中的 QPlainTextEdit。终端必须有稳定对象名供 QSS 排除通用表单
     // 背景，否则父级卡片色会覆盖本控件按终端主题设置的 QPalette::Base。
@@ -312,12 +322,20 @@ TerminalView::TerminalView(QWidget *parent)
     m_cursorBlinkTimer->setInterval(600);
     connect(m_cursorBlinkTimer, &QTimer::timeout, this, [this]() {
         m_cursorPhaseVisible = !m_cursorPhaseVisible;
-        m_vtermBridge->setCursorPresentation(
-            static_cast<VtermBridge::CursorShape>(m_cursorShape), m_cursorPhaseVisible);
-        // 闪烁只改变光标单元格，却同样会整体重建文档。这里必须保持滚动位置，否则用户
-        // 什么都不做，视图每 600ms 就自己跳回顶部一次。
+        // 闪烁绝不能触碰 QTextDocument。光标此前被写进单元格的 QTextCharFormat，于是每次
+        // 相位翻转都要整体重建文档：一万行历史时单次重建约半秒，而定时器每 600ms 就来一次
+        // ——界面等于长期满负荷，用户什么都不做也卡。现在三种形态全部由 paintEvent 叠加，
+        // 闪烁只需要让光标所在的那一小块重绘。
+        updateCursorArea();
+    });
+
+    // 合帧定时器只在"欠一次渲染"时启动，且不会被后续输出续期：持续输出下它以固定帧率
+    // 稳定出帧，而不是像防抖那样一直被推迟到输出停下来才画第一帧。
+    m_renderCoalesceTimer->setSingleShot(true);
+    m_renderCoalesceTimer->setInterval(kRenderCoalesceMilliseconds);
+    connect(m_renderCoalesceTimer, &QTimer::timeout, this, [this]() {
+        m_lastRenderElapsed.restart();
         renderPreservingScroll();
-        viewport()->update();
     });
 
     // 定时器每次 start() 都会重新计时，因此拖动期间不会提交中间值；只有最后一个
@@ -372,13 +390,11 @@ void TerminalView::applySettings(const TerminalSettings &settings)
     m_cursorShape = static_cast<int>(normalized.cursorShape);
     m_cursorColor = terminalPalette.cursor;
     m_cursorPhaseVisible = true;
-    m_vtermBridge->setDefaultColors(terminalPalette.foreground,
-                                    terminalPalette.background,
-                                    terminalPalette.cursor);
+    m_vtermBridge->setDefaultColors(terminalPalette.foreground, terminalPalette.background);
     m_vtermBridge->setScrollbackLimit(normalized.scrollbackLines);
     m_vtermBridge->setLineHeightPercent(normalized.lineHeightPercent);
-    m_vtermBridge->setCursorPresentation(
-        static_cast<VtermBridge::CursorShape>(m_cursorShape), true);
+    // 字号、字距和默认色都会改变每一段的排版结果，已渲染的段无法复用。
+    m_vtermBridge->invalidateDocument();
 
     // 使用控件调色板而非固定背景样式，选择颜色与主题可在设置实时预览时同步更新。终端
     // 单元格的显式 ANSI 色仍由 libvterm 提供，不会被这里覆盖。
@@ -442,21 +458,52 @@ void TerminalView::renderPreservingScroll()
     renderPreservingScroll(isScrolledToBottom(), verticalScrollBar()->value());
 }
 
+void TerminalView::scheduleRender()
+{
+    if (m_renderCoalesceTimer->isActive()) {
+        return;
+    }
+    // 空闲之后的第一次输出立刻画出来，不进合帧队列：键盘回显、提示符、单行命令结果都属于
+    // 这一类，压一帧会让打字变"黏"。只有上一帧刚画完不久（说明正处于持续输出）才排队，
+    // 这样合帧只在真正需要限流的时候生效。
+    // 这个计时器只跟踪"由输出触发的渲染"。改字号、改配色同样会渲染，但它们不代表远端正在
+    // 刷屏；把它们算进来会让紧随其后的第一段输出白白压一帧。
+    const qint64 sinceLastRender = m_lastRenderElapsed.isValid()
+        ? m_lastRenderElapsed.elapsed()
+        : kRenderCoalesceMilliseconds;
+    if (sinceLastRender >= kRenderCoalesceMilliseconds) {
+        m_lastRenderElapsed.restart();
+        renderPreservingScroll();
+        return;
+    }
+    m_renderCoalesceTimer->start(static_cast<int>(kRenderCoalesceMilliseconds - sinceLastRender));
+}
+
+void TerminalView::flushPendingRender()
+{
+    if (m_renderCoalesceTimer->isActive()) {
+        renderPreservingScroll();
+    }
+}
+
 void TerminalView::renderPreservingScroll(const bool followBottom, const int previousValue)
 {
-    // 渲染会 document->clear() 后整体重建，QTextCursor 的选区随之消失。光标闪烁每 600ms
-    // 就渲染一次，用户刚用鼠标选中的文本活不过一个闪烁周期，随后按 Cmd+C 复制到的是空
-    // 内容——现象正是"终端里复制不了文本"。这里按字符偏移保存并在重建后恢复。
+    // 已经落到这里就不再欠一次渲染，否则合帧定时器还会多跑一轮空转。
+    m_renderCoalesceTimer->stop();
+
+    // 增量同步不会动到滚动历史那些段，QTextCursor 会随文档编辑自行调整，选区天然保留。
+    // 但整体重建（改字号、改配色、切备用屏）仍会清空文档，选区必须按偏移救回来——否则
+    // 用户刚选中的文本瞬间消失，按下复制键拿到的是空字符串。
     const QTextCursor previousCursor = textCursor();
     const bool hadSelection = previousCursor.hasSelection();
     const int selectionAnchor = previousCursor.anchor();
     const int selectionPosition = previousCursor.position();
 
-    m_vtermBridge->render(document());
+    const bool rebuilt = m_vtermBridge->render(document());
 
-    if (hadSelection) {
-        // 新输出会让文档变长或把最旧的行挤出滚动历史，偏移未必仍然有效；夹取到当前文档
-        // 长度即可，宁可让选区略微偏移，也不能让它整个消失。
+    if (rebuilt && hadSelection) {
+        // 重建后的文档长度未必和之前一致，夹取到当前长度即可：宁可让选区略微偏移，也不
+        // 能让它整个消失。
         const int lastPosition = document()->characterCount() - 1;
         QTextCursor restored(document());
         restored.setPosition(std::clamp(selectionAnchor, 0, lastPosition));
@@ -522,6 +569,8 @@ bool TerminalView::findTerminalText(const QString &text, const bool backward)
     if (text.isEmpty()) {
         return false;
     }
+    // 查找必须看到最新内容：合帧可能还欠着一次渲染，刚刷出来的那一屏还不在文档里。
+    flushPendingRender();
     const QTextDocument::FindFlags flags = backward ? QTextDocument::FindBackward
                                                      : QTextDocument::FindFlags{};
     if (find(text, flags)) {
@@ -537,6 +586,8 @@ bool TerminalView::findTerminalText(const QString &text, const bool backward)
 
 QString TerminalView::terminalPlainText() const
 {
+    // 导出与日志读取的是文档全文，欠着的那一帧必须先落进文档，否则会漏掉最后一屏输出。
+    const_cast<TerminalView *>(this)->flushPendingRender();
     return document()->toPlainText();
 }
 
@@ -718,12 +769,12 @@ void TerminalView::appendTerminalOutput(const QByteArray &bytes)
         emit nestedSshFailed();
     }
 
-    // 必须在 feed() 之前采样：feed 之后文档已经变长，再判断"是否在底部"得到的是新文档的
-    // 结论，用户原本贴底的状态会被误判成停在历史位置。
-    const bool wasAtBottom = isScrolledToBottom();
-    const int previousValue = verticalScrollBar()->value();
     m_vtermBridge->feed(bytes);
-    renderPreservingScroll(wasAtBottom, previousValue);
+    // 渲染合帧：`tail -f`、`cat 大文件` 会把输出切成成百上千个网络分片，每片都同步重绘等于
+    // 一秒钟做上千次文档编辑和布局，界面就是这样被自己的输出压死的。libvterm 已经吃下全部
+    // 字节，屏幕状态是最新的；真正需要保证的只是"用户眼睛能看到的帧率"，因此攒够一帧再画。
+    // 滚动意图在真正渲染前采样即可：feed() 只改 libvterm，不动 QTextDocument。
+    scheduleRender();
 
     // 密码正确后，OpenSSH 只有在认证、会话创建和远端 Shell 启动完成后才会绘制提示符。
     // 必须读取 libvterm 的真实光标行，不能使用 QTextDocument 最后一段：全屏输出或光标移动
@@ -1062,17 +1113,70 @@ void TerminalView::resizeEvent(QResizeEvent *event)
 void TerminalView::paintEvent(QPaintEvent *event)
 {
     QPlainTextEdit::paintEvent(event);
-    if (!m_cursorPhaseVisible
-        || static_cast<TerminalCursorShape>(m_cursorShape) != TerminalCursorShape::IBeam) {
+    // 三种光标形态全部在这里叠加绘制。把光标画进 QTextCharFormat 看似省事，代价却是每次
+    // 闪烁都要重建整份文档；改成叠加后，闪烁只是一次局部重绘，与历史长度完全无关。
+    if (!m_cursorPhaseVisible || !m_vtermBridge->isCursorVisible()) {
         return;
     }
     const QRect cursorArea = visualCursorRect();
-    if (cursorArea.isNull()) {
+    if (cursorArea.isNull() || !cursorArea.intersects(event->rect())) {
         return;
     }
+
     QPainter painter(viewport());
-    painter.setPen(QPen(m_cursorColor, 2.0));
-    painter.drawLine(cursorArea.topLeft(), cursorArea.bottomLeft());
+    const auto shape = static_cast<TerminalCursorShape>(m_cursorShape);
+    if (shape == TerminalCursorShape::IBeam) {
+        painter.setPen(QPen(m_cursorColor, 2.0));
+        painter.drawLine(cursorArea.topLeft(), cursorArea.bottomLeft());
+        return;
+    }
+
+    const QRect cellArea = cursorCellRect(cursorArea);
+    if (shape == TerminalCursorShape::Underline) {
+        constexpr int kUnderlineThickness = 2;
+        painter.fillRect(QRect(cellArea.left(),
+                               cellArea.bottom() - kUnderlineThickness + 1,
+                               cellArea.width(),
+                               kUnderlineThickness),
+                         m_cursorColor);
+        return;
+    }
+
+    // 块状光标反色绘制：色块盖住整格后，必须把该格原来的字符重新画上去，否则光标停在
+    // 哪个字符上，哪个字符就看不见了。字符颜色取该格原背景色，深浅主题下都有对比度。
+    painter.fillRect(cellArea, m_cursorColor);
+    const QString cursorText = m_vtermBridge->renderedCursorText();
+    if (!cursorText.trimmed().isEmpty()) {
+        const QColor textColor = m_vtermBridge->renderedCursorBackground();
+        painter.setPen(textColor.isValid() ? textColor : palette().color(QPalette::Base));
+        painter.setFont(font());
+        painter.drawText(cellArea, Qt::AlignLeft | Qt::AlignVCenter, cursorText);
+    }
+}
+
+QRect TerminalView::cursorCellRect(const QRect &caretRect) const
+{
+    // cursorRect() 给的是插入符：宽度只有一两个像素，无法表达"一整个单元格"。块状与下划线
+    // 光标都需要真实格宽，双宽字符还要占满两格，因此按该格实际字符的字宽换算。
+    const QFontMetrics metrics(font());
+    const QString cursorText = m_vtermBridge->renderedCursorText();
+    const int cellWidth = std::max(
+        cursorText.trimmed().isEmpty() ? metrics.horizontalAdvance(QLatin1Char('M'))
+                                       : metrics.horizontalAdvance(cursorText),
+        1);
+    return QRect(caretRect.left(), caretRect.top(), cellWidth, caretRect.height());
+}
+
+void TerminalView::updateCursorArea()
+{
+    const QRect cursorArea = visualCursorRect();
+    if (cursorArea.isNull()) {
+        // 光标不在已渲染区域（例如远端隐藏了光标）时无处可重绘，整块视口刷新也没有意义。
+        return;
+    }
+    // 只失效光标所在的一小块：一次闪烁的代价从"重建上万段文档"降到"重画一个字符"。
+    // 外扩两像素覆盖抗锯齿边缘与两像素粗的竖线。
+    viewport()->update(cursorCellRect(cursorArea).adjusted(-2, -2, 2, 2));
 }
 
 bool TerminalView::focusNextPrevChild(const bool next)
