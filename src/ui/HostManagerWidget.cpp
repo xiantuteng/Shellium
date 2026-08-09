@@ -483,6 +483,7 @@ HostManagerWidget::HostManagerWidget(ApplicationDatabase *database,
         }
 
         QMenu menu(this);
+                UiIcons::modernizePopup(&menu);
         const bool isHost = item != nullptr
             && static_cast<HostNodeKind>(item->data(0, HostKindRole).toInt())
                 == HostNodeKind::Host;
@@ -531,6 +532,7 @@ HostManagerWidget::HostManagerWidget(ApplicationDatabase *database,
                 }
                 m_recentList->setCurrentItem(item);
                 QMenu menu(this);
+                UiIcons::modernizePopup(&menu);
                 QAction *connectAction = menu.addAction(
                     UiIcons::themed(this, QStringLiteral("network-connect"),
                                     QStyle::SP_DriveNetIcon),

@@ -309,6 +309,7 @@ PortForwardManagerWidget::PortForwardManagerWidget(ApplicationDatabase *database
                 }
 
                 QMenu menu(this);
+                UiIcons::modernizePopup(&menu);
                 QAction *addAction = menu.addAction(
                     UiIcons::themed(this, QStringLiteral("list-add"),
                                     QStyle::SP_FileDialogNewFolder),

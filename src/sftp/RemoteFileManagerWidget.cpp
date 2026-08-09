@@ -613,6 +613,7 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
                     m_localTree->setCurrentIndex(index);
                 }
                 QMenu menu(this);
+                UiIcons::modernizePopup(&menu);
                 if (index.isValid()) {
                     const QString localPath = m_localModel->filePath(index);
                     if (m_localModel->isDir(index)) {
@@ -678,6 +679,7 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
                     item->setSelected(true);
                 }
                 QMenu menu(this);
+                UiIcons::modernizePopup(&menu);
                 QAction *uploadFileAction = menu.addAction(
                     UiIcons::themed(this, QStringLiteral("document-send"), QStyle::SP_ArrowUp),
                     tr("上传文件到当前目录"));
@@ -762,6 +764,7 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
                     return;
                 }
                 QMenu menu(this);
+                UiIcons::modernizePopup(&menu);
                 if (m_activeQueuedTransfer.has_value()) {
                     QAction *pauseAction = menu.addAction(
                         UiIcons::themed(this, QStringLiteral("media-playback-pause"),

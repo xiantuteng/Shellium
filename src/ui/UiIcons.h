@@ -3,6 +3,7 @@
 #include <QAbstractButton>
 #include <QColor>
 #include <QIcon>
+#include <QMenu>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPixmap>
@@ -234,6 +235,21 @@ enum class Symbol {
  * 统一使用 16 像素图标可避免不同主题的原始尺寸撑高紧凑工具区，同时保留按钮文字，
  * 让不熟悉图标含义的用户无需猜测。
  */
+/**
+ * @brief 让右键菜单/下拉弹出菜单真正呈现圆角，而不是圆角内容叠在方形窗口背景上。
+ * @param menu 尚未 exec()/popup() 过的菜单；不得为 nullptr。
+ *
+ * QMenu 的圆角完全由样式表的 border-radius 画在内容区域内，但顶层弹出窗口默认背景
+ * 不透明，圆角以外的四个角仍会露出方形背景，看起来像多了一层直角外框。必须在原生
+ * 窗口创建之前（即 exec/popup/show 之前）设置该属性才会生效，因此调用方须在构造
+ * 菜单后、真正弹出前调用本函数。
+ */
+inline void modernizePopup(QMenu *menu)
+{
+    Q_ASSERT(menu != nullptr);
+    menu->setAttribute(Qt::WA_TranslucentBackground);
+}
+
 inline void decorateButton(QAbstractButton *button,
                            const QIcon &icon,
                            const QString &toolTip = {})

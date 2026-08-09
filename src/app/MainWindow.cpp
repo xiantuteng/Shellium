@@ -221,7 +221,7 @@ MainWindow::MainWindow(ApplicationDatabase *database,
 #else
     titleLayout->setContentsMargins(10, 5, 10, 5);
 #endif
-    titleLayout->setSpacing(6);
+    titleLayout->setSpacing(4);
     rootLayout->addWidget(m_titleChrome);
 
     auto *workspaceBody = new QWidget(root);
@@ -396,7 +396,7 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     scrollLeftButton->setProperty("chromeButton", true);
     scrollLeftButton->setProperty("chromeRole", QStringLiteral("scrollLeft"));
     scrollLeftButton->setToolButtonStyle(Qt::ToolButtonIconOnly);
-    scrollLeftButton->setFixedSize(30, 38);
+    scrollLeftButton->setFixedSize(18, 38);
     scrollLeftButton->setToolTip(tr("向左滚动标签"));
     scrollLeftButton->setAccessibleName(tr("向左滚动标签"));
     // 显隐若改变布局宽度，就会反过来改变标签是否溢出的判定，形成显示→不溢出→隐藏→
@@ -423,7 +423,7 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     scrollRightButton->setProperty("chromeButton", true);
     scrollRightButton->setProperty("chromeRole", QStringLiteral("scrollRight"));
     scrollRightButton->setToolButtonStyle(Qt::ToolButtonIconOnly);
-    scrollRightButton->setFixedSize(30, 38);
+    scrollRightButton->setFixedSize(18, 38);
     scrollRightButton->setToolTip(tr("向右滚动标签"));
     scrollRightButton->setAccessibleName(tr("向右滚动标签"));
     scrollRightButton->setSizePolicy(scrollPolicy);
@@ -1150,6 +1150,23 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
         QTableView::item:hover {
             background: @RAISED@;
         }
+        QTreeView::item:selected,
+        QListView::item:selected,
+        QTableView::item:selected,
+        QTreeView::item:selected:active,
+        QListView::item:selected:active,
+        QTableView::item:selected:active,
+        QTreeView::item:selected:!active,
+        QListView::item:selected:!active,
+        QTableView::item:selected:!active {
+            background: @SELECTION@;
+            color: @TEXT@;
+        }
+        QTreeView::item:selected:hover,
+        QListView::item:selected:hover,
+        QTableView::item:selected:hover {
+            background: @SELECTION@;
+        }
         QHeaderView::section {
             color: @MUTED@;
             background: @SIDEBAR@;
@@ -1359,6 +1376,7 @@ void MainWindow::showSessionTabContextMenu(const QPoint &position)
     }
     const int index = m_titleTabBar->tabAt(position);
     QMenu menu(this);
+    UiIcons::modernizePopup(&menu);
     QAction *newAction = menu.addAction(
         UiIcons::themed(this, QStringLiteral("tab-new"), QStyle::SP_FileDialogNewFolder),
         tr("新建终端标签"));

@@ -2,6 +2,7 @@
 
 #include "settings/TerminalSettings.h"
 #include "terminal/VtermBridge.h"
+#include "ui/UiIcons.h"
 
 #include <QApplication>
 #include <QFocusEvent>
@@ -215,6 +216,7 @@ QMenu *TerminalView::createTerminalContextMenu()
     // createStandardContextMenu() 返回由调用方负责销毁的菜单。继续使用 Qt 的标准
     // 复制/全选动作，只在末尾追加 SFTP 入口，保证平台原生文本操作不因业务菜单被替换。
     QMenu *menu = createStandardContextMenu();
+    UiIcons::modernizePopup(menu);
     menu->addSeparator();
     QAction *uploadAction = menu->addAction(tr("上传到当前远程目录…"));
     connect(uploadAction, &QAction::triggered,

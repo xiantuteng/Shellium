@@ -203,6 +203,7 @@ void ProductivityWidget::buildUi()
                     m_snippetTree->setCurrentItem(item);
                 }
                 QMenu menu(this);
+                UiIcons::modernizePopup(&menu);
                 QAction *newGroupAction = menu.addAction(
                     UiIcons::themed(this, QStringLiteral("folder-new"),
                                     QStyle::SP_FileDialogNewFolder),
@@ -310,6 +311,7 @@ void ProductivityWidget::buildUi()
                 m_historyList->setCurrentItem(item);
                 const QString command = item->data(Qt::UserRole).toString();
                 QMenu menu(this);
+                UiIcons::modernizePopup(&menu);
                 QAction *executeAction = menu.addAction(
                     UiIcons::themed(this, QStringLiteral("media-playback-start"),
                                     QStyle::SP_MediaPlay),
