@@ -36,11 +36,15 @@ QByteArray ShellShim::scriptBody()
     //   * base64 不可用时直接执行原生 ssh，绝不发出无人应答的 OSC——那会让 shim 永远
     //     阻塞在 read 上，把用户的终端挂死。
     //   * read 从 /dev/tty 读取回执，因此即使 stdout 被重定向也能收到 Shellium 的答复。
-    //     回执文本 take/pass 会被 PTY 回显到屏幕上，这是已知的外观瑕疵。两种消除办法都
-    //     被否决了：`read -s` 并非 POSIX，不支持时返回非零，再用 `||` 回退就会吃掉用户
-    //     的下一行输入；`stty -echo` 多数实现走 TCSAFLUSH，会丢弃已在缓冲区里的输入，
-    //     回执若先于 stty 抵达就被吞掉，shim 将永久阻塞。宁可留下一行噪音，也不能冒
-    //     丢输入或死锁的风险。
+    //     回执文本 take/pass 连同其换行都会被 PTY 回显，由本地的 TerminalEchoFilter 精确
+    //     扣掉。不在远端消除回显：`read -s` 并非 POSIX，不支持时返回非零，再用 `||` 回退
+    //     就会吃掉用户的下一行输入；`stty -echo` 多数实现走 TCSAFLUSH，会丢弃已在缓冲区
+    //     里的输入，回执若先于 stty 抵达就被吞掉，shim 将永久阻塞。
+    //   * take 之后再阻塞读一行，直到 Shellium 在内层会话结束时放行。这一步是外观正确的
+    //     关键：函数若立刻返回，外层 Shell 会当场重画一遍提示符，于是 Shellium 紧接着写出
+    //     的 password 提示前面凭空多出一段"[root@outer ~]# "。行为上这也与真正的 ssh 一致
+    //     ——外层 Shell 本就应当在内层会话期间挂起。即使 Shellium 意外退出也不会卡死：
+    //     用户敲一次回车就能让 read 返回。
     return QByteArrayLiteral(
         "if [ -n \"${BASH_VERSION-}${ZSH_VERSION-}\" ]; then"
         " if [ -n \"${BASH_VERSION-}\" ]; then"
@@ -62,7 +66,9 @@ QByteArray ShellShim::scriptBody()
         ";connect;%s\\007' \"$_shellium_b\" > /dev/tty;"
         " unset _shellium_b;"
         " IFS= read -r _shellium_r < /dev/tty;"
-        " if [ \"$_shellium_r\" = \"take\" ]; then unset _shellium_r; return 0; fi;"
+        " if [ \"$_shellium_r\" = \"take\" ]; then"
+        " IFS= read -r _shellium_r < /dev/tty;"
+        " unset _shellium_r; return 0; fi;"
         " unset _shellium_r; command ssh \"$@\";"
         " };"
         " fi");
@@ -94,6 +100,12 @@ QByteArray ShellShim::acceptResponse()
 QByteArray ShellShim::declineResponse()
 {
     return QByteArrayLiteral("pass\n");
+}
+
+QByteArray ShellShim::resumeResponse()
+{
+    // 挂起的 shim 只等一个行结束符，内容无关紧要；空行让远端不必回显任何可见字符。
+    return QByteArrayLiteral("\n");
 }
 
 ShellShim::Event ShellShim::parseEvent(const QByteArray &payload)

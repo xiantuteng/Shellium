@@ -40,8 +40,11 @@ public:
      *
      * 与用户在终端里手打 ssh 不同，这条路径建立的层是确定事实：层数、身份、退出时机
      * 都由本程序掌握，不依赖对终端输出的任何解析。
+     *
+     * @param outerShimSuspended 该层是否来自接管用户手打的 ssh。为真时外层 Shell 里的 shim
+     *        正挂起等待，本层结束时必须放行它；从菜单发起的建层没有这样的等待方。
      */
-    void connectNestedHost(const ConnectionTarget &target);
+    void connectNestedHost(const ConnectionTarget &target, bool outerShimSuspended = false);
 
     /** @brief 是否已有可用于承载嵌套连接的已就绪远程会话。 */
     [[nodiscard]] bool canPushNestedLayer() const;

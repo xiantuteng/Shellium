@@ -86,9 +86,23 @@ public:
                                                         const ConnectionTarget &currentTarget,
                                                         QString *declineReason);
 
-    /** @brief 告知远端 shim 由 Shellium 接管，函数应直接返回。 */
+    /**
+     * @brief 告知远端 shim 由 Shellium 接管；shim 随后挂起，等待 resumeResponse()。
+     *
+     * shim 不能立即返回：外层 Shell 会当场重画提示符，用户看到的就是 password 提示前
+     * 凭空多出一段旧提示符。挂起也与真正的 ssh 行为一致——外层 Shell 本就该在内层会话
+     * 期间等待。
+     */
     [[nodiscard]] static QByteArray acceptResponse();
 
     /** @brief 告知远端 shim 自行执行真正的 ssh。 */
     [[nodiscard]] static QByteArray declineResponse();
+
+    /**
+     * @brief 放行因 acceptResponse() 而挂起的 shim，让外层 Shell 重新取得提示符。
+     *
+     * 内层会话结束（用户 exit、远端断开）或接管失败时必须发出，否则外层终端会一直停在
+     * 一个不再有意义的等待上。
+     */
+    [[nodiscard]] static QByteArray resumeResponse();
 };

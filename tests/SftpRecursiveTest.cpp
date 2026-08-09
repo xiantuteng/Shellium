@@ -13,6 +13,10 @@ class SftpRecursiveTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    /** @brief 权限的符号形式必须与 ls -l 一致，包括 setuid/setgid/sticky 位的大小写切换。 */
+    void formatsPermissionsAsSymbolicTextLikeLs_data();
+    void formatsPermissionsAsSymbolicTextLikeLs();
+
     /** @brief 远端路径拼接必须使用 POSIX 分隔符，且不能在根目录上产生 "//"。 */
     void joinsRemotePathsWithoutDoubledSeparators();
 
@@ -89,6 +93,44 @@ QStringList destinationPaths(const SftpRecursive::TransferPlan &plan)
 }
 
 } // namespace
+
+void SftpRecursiveTest::formatsPermissionsAsSymbolicTextLikeLs_data()
+{
+    QTest::addColumn<quint32>("permissions");
+    QTest::addColumn<bool>("isDirectory");
+    QTest::addColumn<bool>("isSymbolicLink");
+    QTest::addColumn<QString>("expected");
+
+    QTest::newRow("0644 regular file") << quint32(0644) << false << false
+                                       << QStringLiteral("-rw-r--r--");
+    QTest::newRow("0755 directory") << quint32(0755) << true << false
+                                    << QStringLiteral("drwxr-xr-x");
+    QTest::newRow("0777 symlink") << quint32(0777) << false << true
+                                  << QStringLiteral("lrwxrwxrwx");
+    // 1777（/tmp 的典型权限）：sticky 位配合其他人有执行权限，显示为小写 t。
+    QTest::newRow("1777 sticky with execute") << quint32(01777) << true << false
+                                              << QStringLiteral("drwxrwxrwt");
+    // 4750：setuid 位配合属主有执行权限，显示为小写 s；没有执行权限的位置仍是短横线。
+    QTest::newRow("4750 setuid with execute") << quint32(04750) << false << false
+                                              << QStringLiteral("-rwsr-x---");
+    // 4600：setuid 位但属主没有执行权限，显示为大写 S，信息不能因此丢失。
+    QTest::newRow("4600 setuid without execute") << quint32(04600) << false << false
+                                                 << QStringLiteral("-rwS------");
+}
+
+void SftpRecursiveTest::formatsPermissionsAsSymbolicTextLikeLs()
+{
+    QFETCH(quint32, permissions);
+    QFETCH(bool, isDirectory);
+    QFETCH(bool, isSymbolicLink);
+    QFETCH(QString, expected);
+
+    RemoteFileInfo entry;
+    entry.permissions = permissions;
+    entry.isDirectory = isDirectory;
+    entry.isSymbolicLink = isSymbolicLink;
+    QCOMPARE(entry.permissionText(), expected);
+}
 
 void SftpRecursiveTest::joinsRemotePathsWithoutDoubledSeparators()
 {

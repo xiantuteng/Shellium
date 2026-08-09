@@ -27,6 +27,52 @@ struct RemoteFileInfo {
     QDateTime modifiedAt;
     bool isDirectory = false;
     bool isSymbolicLink = false;
+
+    /**
+     * @brief 权限的 `ls -l` 符号形式，例如 `drwxr-xr-x`。
+     *
+     * 八进制看起来紧凑，但要判断"同组的人能不能写"得先在脑子里做一次进制换算；符号形式是
+     * 所有 Unix 工具的通用写法，一眼就能读。首字符取自条目类型，与远端 ls 完全一致。
+     *
+     * setuid/setgid/sticky 位按惯例覆盖在对应的 x 位上：有执行权限时写 s/s/t，没有时写
+     * 大写的 S/S/T，因此不会丢失信息。
+     */
+    [[nodiscard]] QString permissionText() const
+    {
+        QString text;
+        text.reserve(10);
+        // 类型位由服务器的 SSH_FILEXFER_TYPE_* 提供，比从 mode 里猜 S_IFMT 可靠：部分
+        // 服务器在 permissions 中根本不带类型位。
+        text.append(isSymbolicLink ? QLatin1Char('l')
+                                   : (isDirectory ? QLatin1Char('d') : QLatin1Char('-')));
+
+        struct Triplet {
+            quint32 readBit;
+            quint32 writeBit;
+            quint32 executeBit;
+            quint32 specialBit;
+            char specialChar;
+        };
+        static constexpr Triplet triplets[] = {
+            {0400U, 0200U, 0100U, 04000U, 's'},
+            {0040U, 0020U, 0010U, 02000U, 's'},
+            {0004U, 0002U, 0001U, 01000U, 't'},
+        };
+        for (const Triplet &triplet : triplets) {
+            text.append((permissions & triplet.readBit) != 0U ? QLatin1Char('r')
+                                                              : QLatin1Char('-'));
+            text.append((permissions & triplet.writeBit) != 0U ? QLatin1Char('w')
+                                                               : QLatin1Char('-'));
+            const bool executable = (permissions & triplet.executeBit) != 0U;
+            if ((permissions & triplet.specialBit) != 0U) {
+                const QChar special = QLatin1Char(triplet.specialChar);
+                text.append(executable ? special : special.toUpper());
+            } else {
+                text.append(executable ? QLatin1Char('x') : QLatin1Char('-'));
+            }
+        }
+        return text;
+    }
 };
 
 Q_DECLARE_METATYPE(RemoteFileInfo)

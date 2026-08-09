@@ -234,7 +234,10 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     m_navigationRail->setObjectName(QStringLiteral("NavigationRail"));
     m_navigationRail->setFixedWidth(72);
     auto *railLayout = new QVBoxLayout(m_navigationRail);
-    railLayout->setContentsMargins(10, 20, 10, 12);
+    // 顶部留白原为 20px，比侧栏标题行的实际视觉顶部低了一截——标题行的高度由里面的按钮
+    // （QPushButton min-height 28 + padding）撑起，比纯文字行高，图标却仍按纯文字的位置
+    // 起算，看起来像是往下错位。收紧到 12px，让导航图标与"主机"标题顶部对齐。
+    railLayout->setContentsMargins(10, 12, 10, 12);
     railLayout->setSpacing(8);
 
     auto *navigationGroup = new QButtonGroup(this);

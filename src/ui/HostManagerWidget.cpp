@@ -510,6 +510,10 @@ HostManagerWidget::HostManagerWidget(ApplicationDatabase *database,
 
     m_tree->setHeaderHidden(true);
     m_tree->setRootIsDecorated(true);
+    // Qt 默认每级缩进 20px；侧栏本来就窄，默认值加上分支箭头的留白会把顶层主机名推到
+    // 视觉中线右侧，左边留下一整条无意义的空白。收紧到 12px 后箭头依然点得中，但整棵树
+    // 明显靠左。
+    m_tree->setIndentation(12);
     m_tree->setSelectionMode(QAbstractItemView::SingleSelection);
     m_tree->setContextMenuPolicy(Qt::CustomContextMenu);
     m_tree->setItemDelegate(new HostItemDelegate(m_tree));
@@ -560,9 +564,8 @@ HostManagerWidget::HostManagerWidget(ApplicationDatabase *database,
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(8);
     layout->addWidget(m_searchEdit);
-    auto *hostsCaption = new QLabel(tr("主机与分组"), this);
-    hostsCaption->setProperty("sectionCaption", true);
-    layout->addWidget(hostsCaption);
+    // 不再放"主机与分组"小标题：侧栏顶部已经写着"主机"，树里除了主机和分组也没有别的东西，
+    // 这一行只是在挤占本就紧张的纵向空间。
     layout->addWidget(m_tree, 1);
 
     connect(m_searchEdit, &QLineEdit::textChanged, this, [this]() { applyFilter(); });

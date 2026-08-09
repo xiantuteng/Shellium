@@ -7,6 +7,7 @@
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QFontDatabase>
+#include <QFontMetrics>
 #include <QFrame>
 #include <QGridLayout>
 #include <QHBoxLayout>
@@ -24,6 +25,24 @@
 #include <algorithm>
 
 namespace {
+
+/**
+ * @brief 判断某个字体族是否等宽。
+ *
+ * QFontDatabase::isFixedPitch() 在 macOS 上对不少真实等宽字体（尤其是用户自行安装、
+ * 打了 Nerd Font 补丁的变体）会返回 false，导致“本机其余等宽字体”分组漏掉它们。这里
+ * 用字符宽度实测兜底：同一字体里 'i' 与 'W' 的前进宽度相等，基本可以判定为等宽。
+ */
+bool isLikelyMonospaceFamily(const QString &family)
+{
+    if (QFontDatabase::isFixedPitch(family)) {
+        return true;
+    }
+    const QFont font(family);
+    const QFontMetricsF metrics(font);
+    return qFuzzyCompare(metrics.horizontalAdvance(QLatin1Char('i')),
+                          metrics.horizontalAdvance(QLatin1Char('W')));
+}
 
 /** @brief 左侧导航的分类顺序，索引与页面栈严格一致。 */
 enum SettingsPage {
@@ -248,7 +267,7 @@ void SettingsDialog::populateFontCombo()
 
     QStringList others;
     for (const QString &family : installed) {
-        if (!recommended.contains(family) && QFontDatabase::isFixedPitch(family)) {
+        if (!recommended.contains(family) && isLikelyMonospaceFamily(family)) {
             others.append(family);
         }
     }

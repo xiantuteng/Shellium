@@ -74,13 +74,14 @@ void SshSessionStack::provideLayerCredential(const QString &secret)
     m_hasPendingCredential = true;
 }
 
-void SshSessionStack::requestPushLayer(const ConnectionTarget &target)
+void SshSessionStack::requestPushLayer(const ConnectionTarget &target,
+                                       const bool outerShimSuspended)
 {
     if (!target.isValid()) {
         return;
     }
     QMutexLocker locker(&m_mutex);
-    m_pendingPushes.append(target);
+    m_pendingPushes.append(PendingPush{target, outerShimSuspended});
 }
 
 void SshSessionStack::requestPopLayer()
@@ -442,8 +443,14 @@ bool SshSessionStack::advanceEstablishingLayers()
     // 用户白白丢掉外层的工作现场。只有栈底失败才是致命的。
     if (m_layers.size() > 1) {
         const ConnectionTarget failedTarget = node.target();
+        const bool releaseOuterShim = node.outerShimSuspended();
         m_layers.pop_back();
         discardPendingCredential();
+        if (releaseOuterShim && !m_layers.empty()) {
+            // 接管失败后外层 Shell 必须重新取得提示符：用户接下来还要在那里继续操作，
+            // 而 TerminalPane 也要把原始 ssh 命令交还给它执行。
+            m_layers.back()->queueOutgoing(ShellShim::resumeResponse());
+        }
         emit layerFailed(failedTarget, step.message);
         emit layersChanged(layerTargets());
         return true;
@@ -479,7 +486,7 @@ SshSessionNode *SshSessionStack::originLayerFor(const QString &layerId)
 void SshSessionStack::servicePendingLayerRequests()
 {
     int pops = 0;
-    ConnectionTarget push;
+    PendingPush push;
     bool hasPush = false;
     {
         QMutexLocker locker(&m_mutex);
@@ -508,7 +515,7 @@ void SshSessionStack::servicePendingLayerRequests()
         return;
     }
     if (m_layers.empty() || !m_layers.back()->isReady()) {
-        emit layerFailed(push, tr("当前没有可用于建立内层连接的已就绪会话"));
+        emit layerFailed(push.target, tr("当前没有可用于建立内层连接的已就绪会话"));
         return;
     }
 
@@ -517,24 +524,27 @@ void SshSessionStack::servicePendingLayerRequests()
     constexpr int kNestedForwardTimeoutMs = 10000;
     QString error;
     const quint64 forwardId = m_layers.back()->beginForward(
-        push.host, push.port, true, kNestedForwardTimeoutMs, &error);
+        push.target.host, push.target.port, true, kNestedForwardTimeoutMs, &error);
     if (forwardId == 0) {
-        emit layerFailed(push, error);
+        releaseSuspendedOuterShim(push);
+        emit layerFailed(push.target, error);
         return;
     }
 
-    m_layerPushTarget = push;
+    m_layerPush = push;
     m_layerPushForwardId = forwardId;
 }
 
 void SshSessionStack::handleForwardOutcome(const SshSessionNode::ForwardOutcome &outcome)
 {
     if (outcome.id == m_layerPushForwardId && m_layerPushForwardId != 0) {
-        ConnectionTarget target = m_layerPushTarget;
+        const PendingPush push = m_layerPush;
+        ConnectionTarget target = push.target;
         m_layerPushForwardId = 0;
-        m_layerPushTarget = {};
+        m_layerPush = {};
 
         if (!outcome.ok) {
+            releaseSuspendedOuterShim(push);
             emit layerFailed(target, outcome.error);
             return;
         }
@@ -559,11 +569,13 @@ void SshSessionStack::handleForwardOutcome(const SshSessionNode::ForwardOutcome 
         // 新层从干净状态开始：任何为上一层输入、却没来得及被消费的凭据都必须作废。
         discardPendingCredential();
         auto node = std::make_unique<SshSessionNode>(target);
+        node->setOuterShimSuspended(push.outerShimSuspended);
         const SshSessionNode::StepResult start =
             node->beginEstablish(outcome.callerFd, columns, rows);
         if (!start.ok) {
             // 不手工关闭 callerFd：它已经交给 libssh 会话，由节点析构中的 ssh_free 统一
             // 释放，重复关闭会误伤后续复用同一编号的 fd。
+            releaseSuspendedOuterShim(push);
             emit layerFailed(target, start.message);
             return;
         }
@@ -790,7 +802,7 @@ void SshSessionStack::discardPendingCredential()
 void SshSessionStack::abortInFlightForwards(const QString &reason)
 {
     m_layerPushForwardId = 0;
-    m_layerPushTarget = {};
+    m_layerPush = {};
 
     const QList<QSharedPointer<ForwardRequest>> orphans = m_forwardsInFlight.values();
     m_forwardsInFlight.clear();
@@ -826,9 +838,25 @@ ConnectionTarget SshSessionStack::popTopLayer()
         return {};
     }
     ConnectionTarget target = m_layers.back()->target();
+    const bool releaseOuterShim = m_layers.back()->outerShimSuspended();
     m_layers.back()->closeShell();
     m_layers.pop_back();
+    if (releaseOuterShim && !m_layers.empty()) {
+        // 接管期间外层的 shim 一直挂在 read 上，正是它替代了原生 ssh 的"外层挂起"语义。
+        // 内层结束后必须放行，外层 Shell 才会重新画出提示符。
+        m_layers.back()->queueOutgoing(ShellShim::resumeResponse());
+    }
     return target;
+}
+
+void SshSessionStack::releaseSuspendedOuterShim(const PendingPush &push)
+{
+    if (!push.outerShimSuspended || m_layers.empty()) {
+        return;
+    }
+    // 建层在真正压栈之前就失败了，没有节点可以携带这个标志；外层的 shim 却已经挂起，
+    // 必须就地放行，否则那个终端再也回不到提示符。
+    m_layers.back()->queueOutgoing(ShellShim::resumeResponse());
 }
 
 QList<ConnectionTarget> SshSessionStack::layerTargets() const

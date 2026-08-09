@@ -703,9 +703,11 @@ QStringList TerminalSettings::recommendedFontFamilies()
     // 安装由设置界面与 QFontDatabase 求交集后决定。
     return {
         QStringLiteral("Source Code Pro"),
+        QStringLiteral("Source Code Pro Medium"),
         QStringLiteral("JetBrains Mono"),
         QStringLiteral("Fira Code"),
         QStringLiteral("Fira Mono"),
+        QStringLiteral("Fira Mono Medium"),
         QStringLiteral("Cascadia Code"),
         QStringLiteral("Cascadia Mono"),
         QStringLiteral("IBM Plex Mono"),
@@ -724,6 +726,7 @@ QStringList TerminalSettings::recommendedFontFamilies()
         QStringLiteral("Iosevka"),
         QStringLiteral("Space Mono"),
         QStringLiteral("Victor Mono"),
+        QStringLiteral("Meslo"),
         QStringLiteral("Meslo LG S"),
         QStringLiteral("MesloLGS NF"),
         QStringLiteral("Menlo"),

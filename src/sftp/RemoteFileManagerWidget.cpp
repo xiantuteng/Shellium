@@ -12,6 +12,7 @@
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFileSystemModel>
+#include <QFontMetrics>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QImage>
@@ -36,6 +37,7 @@
 #include <QUrl>
 #include <QVBoxLayout>
 
+#include <algorithm>
 #include <functional>
 #include <optional>
 #include <utility>
@@ -423,12 +425,32 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     m_localTree->setAlternatingRowColors(false);
     m_localTree->setSelectionMode(QAbstractItemView::SingleSelection);
     m_localTree->setContextMenuPolicy(Qt::CustomContextMenu);
-    m_localTree->setColumnWidth(0, 230);
-    // 本地树的大小、类型、时间列在窄双栏中会挤掉最重要的文件名；完整信息仍可通过系统
-    // 文件属性查看，本区域优先承担“选中上传目标”的任务。
-    for (int column = 1; column < m_localModel->columnCount(); ++column) {
-        m_localTree->setColumnHidden(column, true);
+    // 双栏对拷时，本地侧和远程侧要回答同一个问题——"这两边是不是同一个文件"。只有名称就
+    // 只能靠猜，因此大小与修改时间必须同样可见。类型列仍然隐藏：名称列的图标已经区分了
+    // 目录与文件，"文档""文件夹"这类描述性文字只会白占宽度。
+    // QFileSystemModel 的列序固定为 0=名称 1=大小 2=类型 3=修改时间，未以具名枚举暴露。
+    constexpr int kNameColumn = 0;
+    constexpr int kSizeColumn = 1;
+    constexpr int kTypeColumn = 2;
+    constexpr int kLastModifiedColumn = 3;
+    m_localTree->setColumnHidden(kTypeColumn, true);
+    const QFontMetrics localMetrics(m_localTree->font());
+    constexpr int kLocalCellPadding = 18;
+    m_localTree->setColumnWidth(kNameColumn, 200);
+    m_localTree->setColumnWidth(
+        kSizeColumn,
+        localMetrics.horizontalAdvance(QStringLiteral("1023.9 MiB")) + kLocalCellPadding);
+    m_localTree->setColumnWidth(
+        kLastModifiedColumn,
+        localMetrics.horizontalAdvance(QStringLiteral("2026-08-09 23:56:28"))
+            + kLocalCellPadding);
+    m_localTree->header()->setMinimumSectionSize(40);
+    m_localTree->header()->setStretchLastSection(false);
+    for (int column = 0; column < m_localModel->columnCount(); ++column) {
+        m_localTree->header()->setSectionResizeMode(column, QHeaderView::Interactive);
     }
+    m_localTree->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    m_localTree->setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
     localLayout->addWidget(m_localTree, 1);
 
     auto *remotePanel = new QWidget(contentSplitter);
@@ -471,8 +493,26 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     for (int column = 0; column < m_fileTree->columnCount(); ++column) {
         m_fileTree->header()->setSectionResizeMode(column, QHeaderView::Interactive);
     }
-    m_fileTree->header()->setMinimumSectionSize(56);
-    const QList<int> defaultColumnWidths = {240, 96, 168, 92, 116};
+    m_fileTree->header()->setMinimumSectionSize(40);
+    // 除名称外的每一列都按"最长的真实内容"取宽，而不是拍脑袋给一个整数：面板本来就只占
+    // 窗口的三分之一，多给出去的每一像素都是从文件名那里抢来的。名称列吃掉剩余空间，因为
+    // 它是唯一无法预估长度、也最需要看全的一列。
+    const QFontMetrics columnMetrics(m_fileTree->font());
+    const auto columnWidthFor = [&columnMetrics](const QString &widestContent,
+                                                 const QString &header) {
+        // 单元格左右内边距各 5px（见全局样式表），再给排序指示与边框留出余量。
+        constexpr int kCellPadding = 18;
+        return std::max(columnMetrics.horizontalAdvance(widestContent),
+                        columnMetrics.horizontalAdvance(header))
+            + kCellPadding;
+    };
+    const QList<int> defaultColumnWidths = {
+        200,
+        columnWidthFor(QStringLiteral("1023.9 MiB"), tr("大小")),
+        columnWidthFor(QStringLiteral("2026-08-09 23:56:28"), tr("修改时间")),
+        columnWidthFor(QStringLiteral("drwxrwxrwt"), tr("权限")),
+        columnWidthFor(QStringLiteral("root"), tr("所有者")),
+    };
     for (int column = 0; column < defaultColumnWidths.size(); ++column) {
         m_fileTree->setColumnWidth(column, defaultColumnWidths.at(column));
     }
@@ -829,7 +869,7 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
                                              m_fileTree->palette().color(QPalette::WindowText)));
                     item->setText(1, entry.isDirectory ? QStringLiteral("—") : formatSize(entry.size));
                     item->setText(2, entry.modifiedAt.toString(QStringLiteral("yyyy-MM-dd HH:mm:ss")));
-                    item->setText(3, formatPermissions(entry.permissions));
+                    item->setText(3, entry.permissionText());
                     item->setText(4, entry.owner);
                     item->setData(0, Qt::UserRole, entry.path);
                     item->setData(0, Qt::UserRole + 1, entry.isDirectory);

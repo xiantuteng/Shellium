@@ -361,8 +361,9 @@ void TerminalPane::connectToHost(const ConnectionTarget &target)
             return;
         }
         // 脚本正文走独立 exec 通道，不经过终端；交互式 Shell 里只会出现这条极短的 source
-        // 命令，登记后由过滤器扣掉，用户什么也看不到。
-        m_echoFilter.expect(ShellShim::sourceCommand(path));
+        // 命令，登记后由过滤器扣掉，用户什么也看不到。回车的回显 \r\n 一并登记，否则会在
+        // 登录横幅和第一个提示符之间留下一个来路不明的空行。
+        m_echoFilter.expect(ShellShim::sourceCommand(path) + QByteArrayLiteral("\r\n"));
     });
     connect(m_sessionStack,
             &SshSessionStack::shellIntegrationFailed,
@@ -597,14 +598,15 @@ ConnectionTarget TerminalPane::activeTarget() const
     return m_ownedTargets.isEmpty() ? ConnectionTarget{} : m_ownedTargets.constLast();
 }
 
-void TerminalPane::connectNestedHost(const ConnectionTarget &target)
+void TerminalPane::connectNestedHost(const ConnectionTarget &target,
+                                     const bool outerShimSuspended)
 {
     if (!canPushNestedLayer() || !target.isValid()) {
         return;
     }
     // 推测层是对"终端当前在哪台机器"的猜测；一旦由本程序亲自建层，这些猜测的依据就没了。
     m_inferredTargets.clear();
-    m_sessionStack->requestPushLayer(target);
+    m_sessionStack->requestPushLayer(target, outerShimSuspended);
     emit statusMessage(tr("正在经当前服务器建立到 %1 的嵌套连接…")
                            .arg(target.connectionSpecifier()));
 }
@@ -1009,8 +1011,9 @@ void TerminalPane::handleShellIntegrationEvent(const QByteArray &payload)
     // shim 正阻塞在 read 上等回执，任何分支都必须给出答复，否则用户的终端会挂住。
     const auto respond = [this](const QByteArray &response) {
         // 回执由远端的 read 消费，但 PTY 会先把它原样回显出来。登记后由过滤器扣掉，
-        // 用户不该在屏幕上看到 take/pass 这种内部协议文本。
-        m_echoFilter.expect(response.trimmed());
+        // 用户不该在屏幕上看到 take/pass 这种内部协议文本。换行也必须一并登记：PTY 把
+        // 发出去的 \n 回显成 \r\n，漏掉它就会在用户敲的 ssh 命令下方留下一个空行。
+        m_echoFilter.expect(response.trimmed() + QByteArrayLiteral("\r\n"));
         m_sessionStack->enqueueInput(response);
     };
 
@@ -1042,7 +1045,8 @@ void TerminalPane::handleShellIntegrationEvent(const QByteArray &payload)
     m_takeoverOuterKey = outerKey;
 
     respond(ShellShim::acceptResponse());
-    connectNestedHost(target);
+    // take 之后 shim 会一直挂在第二次 read 上；层结束时由会话栈负责放行。
+    connectNestedHost(target, true);
 }
 
 void TerminalPane::registerOwnedLayerRoutes()
@@ -1092,7 +1096,7 @@ void TerminalPane::runTakeoverFallback(const QString &reason)
             .arg(reason)
             .toUtf8());
     // 登记回显：这条命令是本程序补发的，用户已经敲过一次，不该在屏幕上看到第二遍。
-    m_echoFilter.expect(command);
+    m_echoFilter.expect(command + QByteArrayLiteral("\r\n"));
     m_sessionStack->enqueueInput(command + "\n");
 }
 

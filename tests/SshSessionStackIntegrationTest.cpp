@@ -58,6 +58,15 @@ private slots:
     void shellShimReportsSshInvocationFromRealShell();
 
     /**
+     * @brief 接管之后 shim 必须继续挂起，直到被显式放行。
+     *
+     * shim 若在收到 take 后立刻返回，外层 Shell 会当场重画提示符，Shellium 紧接着写出的
+     * password 提示前面就凭空多出一段旧提示符；行为上外层也不该在内层会话期间继续执行
+     * 命令。这两点只有在真实 Shell 里才谈得上验证。
+     */
+    void shellShimSuspendsOuterShellUntilResumed();
+
+    /**
      * @brief 服务器禁用 TCP 转发时，必须自动改用 exec 中继并照常建立内层会话。
      *
      * 只有真实的 AllowTcpForwarding no 服务器才能验证这条路径：桩替身无法复现
@@ -526,6 +535,60 @@ void SshSessionStackIntegrationTest::shellShimReportsSshInvocationFromRealShell(
     QVERIFY(stack.wait(10000));
 }
 
+void SshSessionStackIntegrationTest::shellShimSuspendsOuterShellUntilResumed()
+{
+    SshSessionStack stack(firstLayerTarget());
+    QSignalSpy connected(&stack, &SshSessionStack::shellConnected);
+    QSignalSpy failed(&stack, &SshSessionStack::connectionError);
+
+    QByteArray output;
+    connect(&stack, &SshSessionStack::outputReady, this,
+            [&output](const QByteArray &bytes) { output.append(bytes); });
+
+    stack.start();
+    QVERIFY(waitFor([&]() { return connected.count() > 0 || failed.count() > 0; }));
+    QVERIFY2(failed.isEmpty(), "第一层连接失败");
+    QVERIFY(waitFor([&]() { return !output.isEmpty(); }, 15000));
+
+    stack.enqueueInput(ShellShim::scriptBody() + "\n");
+    output.clear();
+    stack.enqueueInput("type ssh | head -1\n");
+    QVERIFY2(waitFor([&]() { return output.contains("function"); }, 15000),
+             "shim 未能在远端 Shell 中定义成 ssh 函数");
+
+    // 第一轮：接管之后不放行，外层必须一直挂起。
+    output.clear();
+    stack.enqueueInput("ssh deploy@10.0.0.222\n");
+    QVERIFY2(waitFor([&]() { return output.contains("\033]6773;connect;"); }, 15000),
+             "shim 未上报 OSC 事件");
+    output.clear();
+    stack.enqueueInput(ShellShim::acceptResponse());
+
+    // 这一行会被仍然阻塞的 read 当成普通输入吃掉，Shell 绝不会执行它。shim 若在 take 之后
+    // 立刻返回，Shell 就会执行并打印出 SHIM_ASLEEP —— 那正是提示符被提前重画的病根。
+    // 断言的是展开后的结果，命令自身的回显里不含该字符串。
+    stack.enqueueInput("printf 'SHIM_%s\\n' ASLEEP\n");
+    QTest::qWait(4000);
+    QVERIFY2(!output.contains("SHIM_ASLEEP"),
+             "take 之后外层 Shell 仍在执行命令：shim 没有挂起，提示符会被提前重画");
+
+    // 第二轮：验证放行确实能让 shim 返回，外层重新取得提示符。
+    output.clear();
+    stack.enqueueInput("ssh deploy@10.0.0.222\n");
+    QVERIFY2(waitFor([&]() { return output.contains("\033]6773;connect;"); }, 15000),
+             "第二次 ssh 未上报 OSC 事件（上一轮的 shim 可能没能返回）");
+    stack.enqueueInput(ShellShim::acceptResponse());
+    QTest::qWait(500);
+    stack.enqueueInput(ShellShim::resumeResponse());
+    output.clear();
+    stack.enqueueInput("printf 'SHIM_%s\\n' RESUMED\n");
+    QVERIFY2(waitFor([&]() { return output.contains("SHIM_RESUMED"); }, 15000),
+             "放行后外层 Shell 未恢复：shim 仍阻塞在 read 上");
+
+    stack.requestStop();
+    QVERIFY(stack.wait(10000));
+}
+
 void SshSessionStackIntegrationTest::reusesPooledSftpConnectionAcrossRequests()
 {
     SftpService service;
@@ -868,6 +931,25 @@ void SshSessionStackIntegrationTest::suppressesOwnEchoInTerminal()
     // 真正的远端输出必须完好——过滤不能把用户内容一起吞掉。
     QVERIFY2(screen.contains(QStringLiteral("ssh root@") + m_secondLayerHost),
              "用户自己敲的命令被过滤掉了");
+
+    // 密码提示必须紧贴用户敲的那一行。中间若冒出空行，说明 take 回执的换行没被扣掉；
+    // 若冒出一段外层提示符，说明 shim 在接管后立刻返回、Shell 重画了提示符。
+    const QStringList lines = screen.split(QLatin1Char('\n'));
+    const QString command = QStringLiteral("ssh root@") + m_secondLayerHost;
+    const qsizetype commandLine = [&]() {
+        for (qsizetype index = 0; index < lines.size(); ++index) {
+            if (lines.at(index).contains(command)) {
+                return index;
+            }
+        }
+        return qsizetype(-1);
+    }();
+    QVERIFY(commandLine >= 0 && commandLine + 1 < lines.size());
+    const QString promptLine = lines.at(commandLine + 1);
+    QVERIFY2(promptLine.startsWith(QStringLiteral("root@") + m_secondLayerHost
+                                   + QStringLiteral("'s password:")),
+             qPrintable(QStringLiteral("ssh 命令下一行不是密码提示，而是：[%1]")
+                            .arg(promptLine)));
 }
 
 void SshSessionStackIntegrationTest::resolvesHomeDirectoryForEmptyPath()

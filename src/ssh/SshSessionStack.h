@@ -64,8 +64,12 @@ public:
      *
      * 新层的传输经栈顶会话的 direct-tcpip 通道建立，因此不需要内层服务器从本机可达，
      * 也不会把中间跳板的凭据暴露给内层。结果通过 layersChanged 或 layerFailed 返回。
+     *
+     * @param outerShimSuspended 该层是否源于接管用户手打的 ssh。为真时外层 Shell 里有一个
+     *        shim 正挂起等待，本栈会在该层结束或建立失败时向外层写入放行行；否则外层 Shell
+     *        本就停在提示符上，不能凭空多发一个换行。
      */
-    void requestPushLayer(const ConnectionTarget &target);
+    void requestPushLayer(const ConnectionTarget &target, bool outerShimSuspended = false);
 
     /**
      * @brief 请求关闭栈顶层并把终端交还外层；栈内只剩一层时忽略。
@@ -211,6 +215,12 @@ private:
     /** @brief GUI 线程对未知主机指纹的作答，由工作线程在下一轮推进时消费。 */
     enum class HostKeyDecision { None, Trusted, Rejected };
 
+    /** @brief 一次建层请求：目标，外加"外层是否有 shim 正为它挂起"。 */
+    struct PendingPush {
+        ConnectionTarget target;
+        bool outerShimSuspended = false;
+    };
+
     /** @brief 一个跨线程等待 direct-tcpip 通道创建结果的请求。 */
     struct ForwardRequest {
         QString layerId;
@@ -256,8 +266,19 @@ private:
     /** @brief 处理 GUI 排队的建层与退层请求。 */
     void servicePendingLayerRequests();
 
-    /** @brief 关闭并弹出栈顶层，返回被弹出层的目标描述。 */
+    /**
+     * @brief 关闭并弹出栈顶层，返回被弹出层的目标描述。
+     *
+     * 被弹出的层若源于接管用户手打的 ssh，会顺带向新的栈顶写入放行行，让外层挂起的 shim
+     * 返回、Shell 重新画出提示符。
+     */
     ConnectionTarget popTopLayer();
+
+    /**
+     * @brief 建层在压栈之前就失败时，放行外层那个已经挂起的 shim。
+     * @param push 失败的建层请求。
+     */
+    void releaseSuspendedOuterShim(const PendingPush &push);
 
     /** @brief 当前层栈从外层到内层的目标快照。 */
     [[nodiscard]] QList<ConnectionTarget> layerTargets() const;
@@ -342,14 +363,14 @@ private:
     bool m_hasPendingCredential = false;
 
     /** @brief GUI 排队的建层请求，按提交顺序在工作线程中逐个处理。 */
-    QList<ConnectionTarget> m_pendingPushes;
+    QList<PendingPush> m_pendingPushes;
 
     /**
      * @brief 正在等待隧道就绪的建层请求；同一时刻至多一个。
      *
      * 新层必须先建成才能承载下一层，因此建层天然串行；forwardId 为 0 表示当前没有在途请求。
      */
-    ConnectionTarget m_layerPushTarget;
+    PendingPush m_layerPush;
     quint64 m_layerPushForwardId = 0;
 
     /** @brief 已发起但尚未得出结论的 SFTP 隧道请求，按转发编号索引。 */

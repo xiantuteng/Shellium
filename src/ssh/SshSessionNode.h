@@ -358,6 +358,17 @@ public:
     /** @brief 底层 libssh 会话；供同线程内的 SFTP 子系统复用已认证连接。 */
     [[nodiscard]] ssh_session rawSession() const { return m_session; }
 
+    /**
+     * @brief 标记这一层的外层 Shell 里有一个 shim 正挂起等待放行。
+     *
+     * 只有用户在外层手打 ssh、由 Shellium 接管的层才为真。本层结束时必须据此向外层写入
+     * ShellShim::resumeResponse()，否则外层终端会永远停在一次不再有意义的 read 上。
+     */
+    void setOuterShimSuspended(const bool suspended) { m_outerShimSuspended = suspended; }
+
+    /** @brief 外层 Shell 是否有一个因本层而挂起、仍需放行的 shim。 */
+    [[nodiscard]] bool outerShimSuspended() const { return m_outerShimSuspended; }
+
 private:
     /** @brief 建立过程所处的阶段。 */
     enum class Stage {
@@ -465,6 +476,10 @@ private:
     static void discardPending(PendingForward &pending);
 
     ConnectionTarget m_target;
+
+    /** @brief 外层 Shell 中是否有一个 shim 因本层而挂起，等待本层结束后放行。 */
+    bool m_outerShimSuspended = false;
+
     ssh_session m_session = nullptr;
     ssh_channel m_shell = nullptr;
     QList<ActiveForward> m_forwards;
