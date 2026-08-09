@@ -402,11 +402,11 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     auto *localRefreshButton = new QToolButton(localPanel);
     configureCompactFileButton(
         localUpButton,
-        UiIcons::themed(this, QStringLiteral("go-up"), QStyle::SP_ArrowUp),
+        UiIcons::symbol(this, UiIcons::Symbol::ArrowUp, this->palette().color(QPalette::WindowText)),
         tr("返回本地父目录"));
     configureCompactFileButton(
         localRefreshButton,
-        UiIcons::themed(this, QStringLiteral("view-refresh"), QStyle::SP_BrowserReload),
+        UiIcons::symbol(this, UiIcons::Symbol::Refresh, this->palette().color(QPalette::WindowText)),
         tr("刷新本地目录"));
     localPathRow->addWidget(localUpButton);
     localPathRow->addWidget(m_localPathEdit, 1);
@@ -444,11 +444,11 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     auto *refreshButton = new QToolButton(this);
     configureCompactFileButton(
         upButton,
-        UiIcons::themed(this, QStringLiteral("go-up"), QStyle::SP_ArrowUp),
+        UiIcons::symbol(this, UiIcons::Symbol::ArrowUp, this->palette().color(QPalette::WindowText)),
         tr("返回远程父目录"));
     configureCompactFileButton(
         refreshButton,
-        UiIcons::themed(this, QStringLiteral("view-refresh"), QStyle::SP_BrowserReload),
+        UiIcons::symbol(this, UiIcons::Symbol::Refresh, this->palette().color(QPalette::WindowText)),
         tr("刷新当前远程目录"));
     pathRow->addWidget(upButton);
     pathRow->addWidget(m_pathEdit, 1);
@@ -518,41 +518,39 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     auto *deleteButton = new QToolButton(this);
     configureCompactFileButton(
         uploadButton,
-        UiIcons::themed(this, QStringLiteral("document-send"), QStyle::SP_ArrowUp),
+        UiIcons::symbol(this, UiIcons::Symbol::Send, this->palette().color(QPalette::WindowText)),
         tr("上传文件到当前远程目录"));
     configureCompactFileButton(
         uploadDirectoryButton,
-        UiIcons::themed(this, QStringLiteral("folder-upload"), QStyle::SP_DirOpenIcon),
+        UiIcons::symbol(this, UiIcons::Symbol::Upload, this->palette().color(QPalette::WindowText)),
         tr("递归上传目录到当前远程目录"));
     configureCompactFileButton(
         downloadButton,
-        UiIcons::themed(this, QStringLiteral("document-save"), QStyle::SP_ArrowDown),
+        UiIcons::symbol(this, UiIcons::Symbol::Download, this->palette().color(QPalette::WindowText)),
         tr("下载选中的远程文件或目录"));
     configureCompactFileButton(
         previewButton,
-        UiIcons::themed(this, QStringLiteral("document-preview"),
-                        QStyle::SP_FileDialogContentsView),
+        UiIcons::symbol(this, UiIcons::Symbol::Eye, this->palette().color(QPalette::WindowText)),
         tr("安全预览选中的文本或图片"));
     configureCompactFileButton(
         chmodButton,
-        UiIcons::themed(this, QStringLiteral("document-properties"),
-                        QStyle::SP_MessageBoxInformation),
+        UiIcons::symbol(this, UiIcons::Symbol::Info, this->palette().color(QPalette::WindowText)),
         tr("修改选中远程条目的 POSIX 权限"));
     configureCompactFileButton(
         renameButton,
-        UiIcons::themed(this, QStringLiteral("document-edit"), QStyle::SP_FileDialogDetailedView),
+        UiIcons::symbol(this, UiIcons::Symbol::Edit, this->palette().color(QPalette::WindowText)),
         tr("重命名选中的远程条目"));
     configureCompactFileButton(
         deleteButton,
-        UiIcons::themed(this, QStringLiteral("edit-delete"), QStyle::SP_TrashIcon),
+        UiIcons::symbol(this, UiIcons::Symbol::Trash, this->palette().color(QPalette::WindowText)),
         tr("删除选中的远程文件或空目录"));
     configureCompactFileButton(
         m_pauseButton,
-        UiIcons::themed(this, QStringLiteral("media-playback-pause"), QStyle::SP_MediaPause),
+        UiIcons::symbol(this, UiIcons::Symbol::Pause, this->palette().color(QPalette::WindowText)),
         tr("暂停或恢复当前传输"));
     configureCompactFileButton(
         m_cancelButton,
-        UiIcons::themed(this, QStringLiteral("process-stop"), QStyle::SP_DialogCancelButton),
+        UiIcons::symbol(this, UiIcons::Symbol::Cancel, this->palette().color(QPalette::WindowText)),
         tr("取消当前传输或选中的等待任务"));
     m_cancelButton->setEnabled(false);
     m_pauseButton->setEnabled(false);
@@ -618,14 +616,13 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
                     const QString localPath = m_localModel->filePath(index);
                     if (m_localModel->isDir(index)) {
                         QAction *openAction = menu.addAction(
-                            UiIcons::themed(this, QStringLiteral("folder-open"),
-                                            QStyle::SP_DirOpenIcon),
+                            UiIcons::symbol(this, UiIcons::Symbol::Folder, this->palette().color(QPalette::WindowText)),
                             tr("打开目录"));
                         connect(openAction, &QAction::triggered,
                                 this, [this, localPath]() { setLocalDirectory(localPath); });
                     }
                     QAction *uploadAction = menu.addAction(
-                        UiIcons::themed(this, QStringLiteral("document-send"), QStyle::SP_ArrowUp),
+                        UiIcons::symbol(this, UiIcons::Symbol::Send, this->palette().color(QPalette::WindowText)),
                         tr("上传到当前远程目录"));
                     connect(uploadAction, &QAction::triggered, this, [this, localPath]() {
                         uploadLocalPaths({localPath}, m_pathEdit->text().trimmed());
@@ -633,7 +630,7 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
                     menu.addSeparator();
                 }
                 QAction *refreshAction = menu.addAction(
-                    UiIcons::themed(this, QStringLiteral("view-refresh"), QStyle::SP_BrowserReload),
+                    UiIcons::symbol(this, UiIcons::Symbol::Refresh, this->palette().color(QPalette::WindowText)),
                     tr("刷新本地目录"));
                 connect(refreshAction, &QAction::triggered, this, [this]() {
                     setLocalDirectory(m_localPathEdit->text().trimmed());
@@ -681,10 +678,10 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
                 QMenu menu(this);
                 UiIcons::modernizePopup(&menu);
                 QAction *uploadFileAction = menu.addAction(
-                    UiIcons::themed(this, QStringLiteral("document-send"), QStyle::SP_ArrowUp),
+                    UiIcons::symbol(this, UiIcons::Symbol::Send, this->palette().color(QPalette::WindowText)),
                     tr("上传文件到当前目录"));
                 QAction *uploadDirectoryAction = menu.addAction(
-                    UiIcons::themed(this, QStringLiteral("folder-upload"), QStyle::SP_DirOpenIcon),
+                    UiIcons::symbol(this, UiIcons::Symbol::Upload, this->palette().color(QPalette::WindowText)),
                     tr("上传目录到当前目录"));
                 connect(uploadFileAction,
                         &QAction::triggered,
@@ -697,23 +694,19 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
                 if (item != nullptr) {
                     menu.addSeparator();
                     QAction *downloadAction = menu.addAction(
-                        UiIcons::themed(this, QStringLiteral("document-save"),
-                                        QStyle::SP_ArrowDown),
+                        UiIcons::symbol(this, UiIcons::Symbol::Download, this->palette().color(QPalette::WindowText)),
                         tr("下载"));
                     QAction *previewAction = menu.addAction(
-                        UiIcons::themed(this, QStringLiteral("document-preview"),
-                                        QStyle::SP_FileDialogContentsView),
+                        UiIcons::symbol(this, UiIcons::Symbol::Eye, this->palette().color(QPalette::WindowText)),
                         tr("预览"));
                     QAction *chmodAction = menu.addAction(
-                        UiIcons::themed(this, QStringLiteral("document-properties"),
-                                        QStyle::SP_MessageBoxInformation),
+                        UiIcons::symbol(this, UiIcons::Symbol::Info, this->palette().color(QPalette::WindowText)),
                         tr("修改权限"));
                     QAction *renameAction = menu.addAction(
-                        UiIcons::themed(this, QStringLiteral("document-edit"),
-                                        QStyle::SP_FileDialogDetailedView),
+                        UiIcons::symbol(this, UiIcons::Symbol::Edit, this->palette().color(QPalette::WindowText)),
                         tr("重命名"));
                     QAction *deleteAction = menu.addAction(
-                        UiIcons::themed(this, QStringLiteral("edit-delete"), QStyle::SP_TrashIcon),
+                        UiIcons::symbol(this, UiIcons::Symbol::Trash, this->palette().color(QPalette::WindowText)),
                         tr("删除"));
                     connect(downloadAction, &QAction::triggered,
                             this, &RemoteFileManagerWidget::downloadSelectedFile);
@@ -728,7 +721,7 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
                 }
                 menu.addSeparator();
                 QAction *refreshAction = menu.addAction(
-                    UiIcons::themed(this, QStringLiteral("view-refresh"), QStyle::SP_BrowserReload),
+                    UiIcons::symbol(this, UiIcons::Symbol::Refresh, this->palette().color(QPalette::WindowText)),
                     tr("刷新远程目录"));
                 connect(refreshAction, &QAction::triggered,
                         this, &RemoteFileManagerWidget::refreshDirectory);
@@ -767,8 +760,7 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
                 UiIcons::modernizePopup(&menu);
                 if (m_activeQueuedTransfer.has_value()) {
                     QAction *pauseAction = menu.addAction(
-                        UiIcons::themed(this, QStringLiteral("media-playback-pause"),
-                                        QStyle::SP_MediaPause),
+                        UiIcons::symbol(this, UiIcons::Symbol::Pause, this->palette().color(QPalette::WindowText)),
                         m_activeTransferPaused ? tr("继续当前传输") : tr("暂停当前传输"));
                     connect(pauseAction,
                             &QAction::triggered,
@@ -776,8 +768,7 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
                             &RemoteFileManagerWidget::toggleActiveTransferPause);
                 }
                 QAction *cancelAction = menu.addAction(
-                    UiIcons::themed(this, QStringLiteral("process-stop"),
-                                    QStyle::SP_DialogCancelButton),
+                    UiIcons::symbol(this, UiIcons::Symbol::Cancel, this->palette().color(QPalette::WindowText)),
                     tr("取消选中任务"));
                 connect(cancelAction,
                         &QAction::triggered,
@@ -825,14 +816,12 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
                     item->setIcon(
                         0,
                         entry.isDirectory
-                            ? UiIcons::themed(m_fileTree,
-                                              QStringLiteral("folder"),
-                                              entry.isSymbolicLink ? QStyle::SP_DirLinkIcon
-                                                                   : QStyle::SP_DirIcon)
-                            : UiIcons::themed(m_fileTree,
-                                              QStringLiteral("text-x-generic"),
-                                              entry.isSymbolicLink ? QStyle::SP_FileLinkIcon
-                                                                   : QStyle::SP_FileIcon));
+                            ? UiIcons::symbol(m_fileTree,
+                                             UiIcons::Symbol::Folder,
+                                             m_fileTree->palette().color(QPalette::WindowText))
+                            : UiIcons::symbol(m_fileTree,
+                                             UiIcons::Symbol::File,
+                                             m_fileTree->palette().color(QPalette::WindowText)));
                     item->setText(1, entry.isDirectory ? QStringLiteral("—") : formatSize(entry.size));
                     item->setText(2, entry.modifiedAt.toString(QStringLiteral("yyyy-MM-dd HH:mm:ss")));
                     item->setText(3, formatPermissions(entry.permissions));
@@ -1003,8 +992,8 @@ void RemoteFileManagerWidget::updateFullScreenIcon()
 {
     m_fullScreenButton->setIcon(
         m_fullScreenButton->isChecked()
-            ? UiIcons::themed(this, QStringLiteral("view-restore"), QStyle::SP_TitleBarNormalButton)
-            : UiIcons::themed(this, QStringLiteral("view-fullscreen"), QStyle::SP_TitleBarMaxButton));
+            ? UiIcons::symbol(this, UiIcons::Symbol::FullscreenExit, this->palette().color(QPalette::WindowText))
+            : UiIcons::symbol(this, UiIcons::Symbol::FullscreenEnter, this->palette().color(QPalette::WindowText)));
 }
 
 void RemoteFileManagerWidget::cycleRemoteSort(const int column)
@@ -1262,7 +1251,7 @@ void RemoteFileManagerWidget::startNextQueuedTransfer()
     m_pauseButton->setToolTip(tr("暂停当前传输"));
     m_pauseButton->setAccessibleName(tr("暂停当前传输"));
     m_pauseButton->setIcon(
-        UiIcons::themed(this, QStringLiteral("media-playback-pause"), QStyle::SP_MediaPause));
+        UiIcons::symbol(this, UiIcons::Symbol::Pause, this->palette().color(QPalette::WindowText)));
     setBusy(true, tr("正在执行：%1").arg(transfer.description));
     // 每个传输独立计速：沿用上一次的样本会让新任务开头显示出前一个任务的速度。
     resetTransferSpeed();
@@ -1308,7 +1297,7 @@ void RemoteFileManagerWidget::finishQueuedTransfer(const quint64 requestId)
     m_pauseButton->setToolTip(tr("暂停当前传输"));
     m_pauseButton->setAccessibleName(tr("暂停当前传输"));
     m_pauseButton->setIcon(
-        UiIcons::themed(this, QStringLiteral("media-playback-pause"), QStyle::SP_MediaPause));
+        UiIcons::symbol(this, UiIcons::Symbol::Pause, this->palette().color(QPalette::WindowText)));
     rebuildTransferQueueView();
 
     // 信号处理函数可能仍在展示失败或汇总对话框；把下一项放到事件循环末尾启动，避免前一项
@@ -1336,19 +1325,15 @@ void RemoteFileManagerWidget::rebuildTransferQueueView()
     if (m_activeQueuedTransfer.has_value()) {
         appendItem(*m_activeQueuedTransfer,
                    m_activeTransferPaused ? tr("已暂停 · ") : tr("进行中 · "),
-                   UiIcons::themed(m_transferQueueList,
-                                   m_activeTransferPaused
-                                       ? QStringLiteral("media-playback-pause")
-                                       : QStringLiteral("media-playback-start"),
-                                   m_activeTransferPaused ? QStyle::SP_MediaPause
-                                                          : QStyle::SP_MediaPlay));
+                   UiIcons::symbol(m_transferQueueList,
+                                  m_activeTransferPaused ? UiIcons::Symbol::Pause
+                                                          : UiIcons::Symbol::Play,
+                                  m_transferQueueList->palette().color(QPalette::WindowText)));
     }
     for (const QueuedTransfer &transfer : std::as_const(m_pendingTransfers)) {
         appendItem(transfer,
                    tr("等待 · "),
-                   UiIcons::themed(m_transferQueueList,
-                                   QStringLiteral("appointment-soon"),
-                                   QStyle::SP_BrowserReload));
+                   UiIcons::symbol(m_transferQueueList, UiIcons::Symbol::Clock, m_transferQueueList->palette().color(QPalette::WindowText)));
     }
 
     const bool hasActive = m_activeQueuedTransfer.has_value();
@@ -1596,9 +1581,7 @@ void RemoteFileManagerWidget::toggleActiveTransferPause()
         m_pauseButton->setToolTip(tr("恢复当前传输"));
         m_pauseButton->setAccessibleName(tr("恢复当前传输"));
         m_pauseButton->setIcon(
-            UiIcons::themed(this,
-                            QStringLiteral("media-playback-start"),
-                            QStyle::SP_MediaPlay));
+            UiIcons::symbol(this, UiIcons::Symbol::Play, this->palette().color(QPalette::WindowText)));
         emit statusMessage(tr("传输将在下一个 64 KiB 分块边界暂停"));
     } else {
         m_service->resumeRequest(m_activeTransferRequest);
@@ -1606,9 +1589,7 @@ void RemoteFileManagerWidget::toggleActiveTransferPause()
         m_pauseButton->setToolTip(tr("暂停当前传输"));
         m_pauseButton->setAccessibleName(tr("暂停当前传输"));
         m_pauseButton->setIcon(
-            UiIcons::themed(this,
-                            QStringLiteral("media-playback-pause"),
-                            QStyle::SP_MediaPause));
+            UiIcons::symbol(this, UiIcons::Symbol::Pause, this->palette().color(QPalette::WindowText)));
         emit statusMessage(tr("传输已恢复"));
     }
     rebuildTransferQueueView();

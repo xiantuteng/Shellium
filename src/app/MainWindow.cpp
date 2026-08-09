@@ -345,34 +345,33 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     // 动作图标同时服务菜单、命令面板和标题栏；优先使用桌面主题的语义图标，缺失时由
     // UiIcons 回退到 Qt 标准资源，避免在 macOS/Linux 之间出现空白动作。
     connectAction->setIcon(
-        UiIcons::themed(this, QStringLiteral("network-connect"), QStyle::SP_DriveNetIcon));
+        UiIcons::symbol(this, UiIcons::Symbol::Connect, this->palette().color(QPalette::WindowText)));
     nestedConnectAction->setIcon(
-        UiIcons::themed(this, QStringLiteral("go-next"), QStyle::SP_ArrowForward));
+        UiIcons::symbol(this, UiIcons::Symbol::Connect, this->palette().color(QPalette::WindowText)));
     localShellAction->setIcon(
-        UiIcons::themed(this, QStringLiteral("utilities-terminal"), QStyle::SP_ComputerIcon));
+        UiIcons::symbol(this, UiIcons::Symbol::Terminal, this->palette().color(QPalette::WindowText)));
     newTabAction->setIcon(
-        UiIcons::themed(this, QStringLiteral("tab-new"), QStyle::SP_FileDialogNewFolder));
+        UiIcons::symbol(this, UiIcons::Symbol::Plus, this->palette().color(QPalette::WindowText)));
     closeTabAction->setIcon(
-        UiIcons::themed(this, QStringLiteral("window-close"), QStyle::SP_TitleBarCloseButton));
+        UiIcons::symbol(this, UiIcons::Symbol::Close, this->palette().color(QPalette::WindowText)));
     renameTabAction->setIcon(
-        UiIcons::themed(this, QStringLiteral("document-edit"), QStyle::SP_FileDialogDetailedView));
+        UiIcons::symbol(this, UiIcons::Symbol::Edit, this->palette().color(QPalette::WindowText)));
     toggleFilesAction->setIcon(
-        UiIcons::themed(this, QStringLiteral("folder-remote"), QStyle::SP_DirIcon));
+        UiIcons::symbol(this, UiIcons::Symbol::Folder, this->palette().color(QPalette::WindowText)));
     searchTerminalAction->setIcon(
-        UiIcons::themed(this, QStringLiteral("edit-find"), QStyle::SP_FileDialogContentsView));
+        UiIcons::symbol(this, UiIcons::Symbol::Search, this->palette().color(QPalette::WindowText)));
     exportTerminalAction->setIcon(
-        UiIcons::themed(this, QStringLiteral("document-save"), QStyle::SP_DialogSaveButton));
+        UiIcons::symbol(this, UiIcons::Symbol::Download, this->palette().color(QPalette::WindowText)));
     settingsAction->setIcon(
-        UiIcons::themed(this, QStringLiteral("preferences-system"),
-                        QStyle::SP_FileDialogDetailedView));
+        UiIcons::symbol(this, UiIcons::Symbol::Settings, this->palette().color(QPalette::WindowText)));
     commandPaletteAction->setIcon(
-        UiIcons::themed(this, QStringLiteral("system-run"), QStyle::SP_CommandLink));
+        UiIcons::symbol(this, UiIcons::Symbol::Command, this->palette().color(QPalette::WindowText)));
     saveWorkspaceAction->setIcon(
-        UiIcons::themed(this, QStringLiteral("document-save-as"), QStyle::SP_DialogSaveButton));
+        UiIcons::symbol(this, UiIcons::Symbol::Download, this->palette().color(QPalette::WindowText)));
     openWorkspaceAction->setIcon(
-        UiIcons::themed(this, QStringLiteral("document-open"), QStyle::SP_DialogOpenButton));
+        UiIcons::symbol(this, UiIcons::Symbol::Upload, this->palette().color(QPalette::WindowText)));
     removeWorkspaceAction->setIcon(
-        UiIcons::themed(this, QStringLiteral("edit-delete"), QStyle::SP_TrashIcon));
+        UiIcons::symbol(this, UiIcons::Symbol::Trash, this->palette().color(QPalette::WindowText)));
 
     // 标题区不是 QToolBar，而是中央内容树的第一行。macOS 原生标题栏透明后，这一行会
     // 真正延伸到交通灯背后；因此会话标签与窗口标题只占一次高度，不会再上下叠两层。
@@ -502,15 +501,13 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     viewMenu->addAction(m_sidebarToggleAction);
     viewMenu->addSeparator();
     QAction *showHostsAction = viewMenu->addAction(
-        UiIcons::themed(this, QStringLiteral("network-server"), QStyle::SP_DriveNetIcon),
+        UiIcons::symbol(this, UiIcons::Symbol::Hosts, this->palette().color(QPalette::WindowText)),
         tr("主机"));
     QAction *showProductivityAction = viewMenu->addAction(
-        UiIcons::themed(this, QStringLiteral("system-run"), QStyle::SP_CommandLink),
+        UiIcons::symbol(this, UiIcons::Symbol::Command, this->palette().color(QPalette::WindowText)),
         tr("效率工具"));
     QAction *showForwardingAction = viewMenu->addAction(
-        UiIcons::themed(this,
-                        QStringLiteral("network-transmit-receive"),
-                        QStyle::SP_ArrowForward),
+        UiIcons::symbol(this, UiIcons::Symbol::Forwarding, this->palette().color(QPalette::WindowText)),
         tr("端口转发"));
     // 视图菜单与导航轨都只切换同一个 QStackedWidget，防止出现菜单显示某个 Dock、导航轨
     // 却高亮另一个页面的双重状态。
@@ -538,11 +535,11 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     auto *lockVaultAction = new QAction(tr("锁定凭据保险库"), this);
     auto *sshKeyManagerAction = new QAction(tr("SSH 密钥管理…"), this);
     unlockVaultAction->setIcon(
-        UiIcons::themed(this, QStringLiteral("changes-allow"), QStyle::SP_DialogApplyButton));
+        UiIcons::symbol(this, UiIcons::Symbol::Check, this->palette().color(QPalette::WindowText)));
     lockVaultAction->setIcon(
-        UiIcons::themed(this, QStringLiteral("system-lock-screen"), QStyle::SP_MessageBoxWarning));
+        UiIcons::symbol(this, UiIcons::Symbol::Lock, this->palette().color(QPalette::WindowText)));
     sshKeyManagerAction->setIcon(
-        UiIcons::themed(this, QStringLiteral("dialog-password"), QStyle::SP_FileDialogDetailedView));
+        UiIcons::symbol(this, UiIcons::Symbol::Key, this->palette().color(QPalette::WindowText)));
     lockVaultAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+K")));
     QMenu *securityMenu = menuBar()->addMenu(tr("安全"));
     securityMenu->addAction(unlockVaultAction);
@@ -1378,7 +1375,7 @@ void MainWindow::showSessionTabContextMenu(const QPoint &position)
     QMenu menu(this);
     UiIcons::modernizePopup(&menu);
     QAction *newAction = menu.addAction(
-        UiIcons::themed(this, QStringLiteral("tab-new"), QStyle::SP_FileDialogNewFolder),
+        UiIcons::symbol(this, UiIcons::Symbol::Plus, this->palette().color(QPalette::WindowText)),
         tr("新建终端标签"));
     connect(newAction, &QAction::triggered, this, [this]() {
         TerminalWorkspace *workspace = createWorkspaceTab(
@@ -1390,12 +1387,10 @@ void MainWindow::showSessionTabContextMenu(const QPoint &position)
         m_titleTabBar->setCurrentIndex(index);
         menu.addSeparator();
         QAction *renameAction = menu.addAction(
-            UiIcons::themed(this, QStringLiteral("document-edit"),
-                            QStyle::SP_FileDialogDetailedView),
+            UiIcons::symbol(this, UiIcons::Symbol::Edit, this->palette().color(QPalette::WindowText)),
             tr("重命名"));
         QAction *closeAction = menu.addAction(
-            UiIcons::themed(this, QStringLiteral("window-close"),
-                            QStyle::SP_TitleBarCloseButton),
+            UiIcons::symbol(this, UiIcons::Symbol::Close, this->palette().color(QPalette::WindowText)),
             tr("关闭标签"));
         QAction *closeOthersAction = menu.addAction(tr("关闭其他标签"));
         closeAction->setEnabled(m_tabs->count() > 1);
@@ -1632,8 +1627,7 @@ void MainWindow::recordConnectionDisconnected(TerminalPane *pane,
 TerminalWorkspace *MainWindow::createWorkspaceTab(const QString &title)
 {
     auto *workspace = new TerminalWorkspace(m_tabs);
-    const QIcon terminalIcon = UiIcons::themed(
-        this, QStringLiteral("utilities-terminal"), QStyle::SP_ComputerIcon);
+    const QIcon terminalIcon = UiIcons::symbol(this, UiIcons::Symbol::Terminal, this->palette().color(QPalette::WindowText));
     const int index = m_tabs->addTab(workspace, terminalIcon, title);
     // QTabWidget 在从零恢复到第一个页面时可能重新计算标签栏可见性；每次新增后再次隐藏，
     // 保证中央区域永远只显示标题栏中的那一套会话标签。

@@ -244,23 +244,23 @@ PortForwardManagerWidget::PortForwardManagerWidget(ApplicationDatabase *database
     stopButton->setText(tr("停止"));
     UiIcons::decorateButton(
         addButton,
-        UiIcons::themed(this, QStringLiteral("list-add"), QStyle::SP_FileDialogNewFolder),
+        UiIcons::symbol(this, UiIcons::Symbol::Plus, this->palette().color(QPalette::WindowText)),
         tr("新建端口转发规则"));
     UiIcons::decorateButton(
         editButton,
-        UiIcons::themed(this, QStringLiteral("document-edit"), QStyle::SP_FileDialogDetailedView),
+        UiIcons::symbol(this, UiIcons::Symbol::Edit, this->palette().color(QPalette::WindowText)),
         tr("编辑当前选中的端口转发规则"));
     UiIcons::decorateButton(
         deleteButton,
-        UiIcons::themed(this, QStringLiteral("edit-delete"), QStyle::SP_TrashIcon),
+        UiIcons::symbol(this, UiIcons::Symbol::Trash, this->palette().color(QPalette::WindowText)),
         tr("停止并删除当前规则"));
     UiIcons::decorateButton(
         startButton,
-        UiIcons::themed(this, QStringLiteral("media-playback-start"), QStyle::SP_MediaPlay),
+        UiIcons::symbol(this, UiIcons::Symbol::Play, this->palette().color(QPalette::WindowText)),
         tr("在当前主机 SSH 会话上启动规则"));
     UiIcons::decorateButton(
         stopButton,
-        UiIcons::themed(this, QStringLiteral("media-playback-stop"), QStyle::SP_MediaStop),
+        UiIcons::symbol(this, UiIcons::Symbol::Stop, this->palette().color(QPalette::WindowText)),
         tr("停止当前规则并关闭活动转发连接"));
     configureForwardingIconButton(editButton, tr("编辑当前选中的端口转发规则"));
     configureForwardingIconButton(deleteButton, tr("停止并删除当前规则"));
@@ -311,26 +311,22 @@ PortForwardManagerWidget::PortForwardManagerWidget(ApplicationDatabase *database
                 QMenu menu(this);
                 UiIcons::modernizePopup(&menu);
                 QAction *addAction = menu.addAction(
-                    UiIcons::themed(this, QStringLiteral("list-add"),
-                                    QStyle::SP_FileDialogNewFolder),
+                    UiIcons::symbol(this, UiIcons::Symbol::Plus, this->palette().color(QPalette::WindowText)),
                     tr("新建规则"));
                 connect(addAction, &QAction::triggered, addButton, &QPushButton::click);
                 if (index.isValid()) {
                     menu.addSeparator();
                     QAction *startAction = menu.addAction(
-                        UiIcons::themed(this, QStringLiteral("media-playback-start"),
-                                        QStyle::SP_MediaPlay),
+                        UiIcons::symbol(this, UiIcons::Symbol::Play, this->palette().color(QPalette::WindowText)),
                         tr("启动"));
                     QAction *stopAction = menu.addAction(
-                        UiIcons::themed(this, QStringLiteral("media-playback-stop"),
-                                        QStyle::SP_MediaStop),
+                        UiIcons::symbol(this, UiIcons::Symbol::Stop, this->palette().color(QPalette::WindowText)),
                         tr("停止"));
                     QAction *editAction = menu.addAction(
-                        UiIcons::themed(this, QStringLiteral("document-edit"),
-                                        QStyle::SP_FileDialogDetailedView),
+                        UiIcons::symbol(this, UiIcons::Symbol::Edit, this->palette().color(QPalette::WindowText)),
                         tr("编辑"));
                     QAction *deleteAction = menu.addAction(
-                        UiIcons::themed(this, QStringLiteral("edit-delete"), QStyle::SP_TrashIcon),
+                        UiIcons::symbol(this, UiIcons::Symbol::Trash, this->palette().color(QPalette::WindowText)),
                         tr("删除"));
                     connect(startAction, &QAction::triggered,
                             startButton, &QToolButton::click);

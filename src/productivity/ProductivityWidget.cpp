@@ -112,15 +112,15 @@ void ProductivityWidget::buildUi()
     removeButton->setText(tr("删除"));
     UiIcons::decorateButton(
         newGroupButton,
-        UiIcons::themed(this, QStringLiteral("folder-new"), QStyle::SP_FileDialogNewFolder),
+        UiIcons::symbol(this, UiIcons::Symbol::FolderAdd, this->palette().color(QPalette::WindowText)),
         tr("新建 Snippet 分组"));
     UiIcons::decorateButton(
         newSnippetButton,
-        UiIcons::themed(this, QStringLiteral("list-add"), QStyle::SP_FileIcon),
+        UiIcons::symbol(this, UiIcons::Symbol::Plus, this->palette().color(QPalette::WindowText)),
         tr("新建可执行命令片段"));
     UiIcons::decorateButton(
         removeButton,
-        UiIcons::themed(this, QStringLiteral("edit-delete"), QStyle::SP_TrashIcon),
+        UiIcons::symbol(this, UiIcons::Symbol::Trash, this->palette().color(QPalette::WindowText)),
         tr("删除当前选中的分组或片段"));
     configureProductivityIconButton(newGroupButton, tr("新建 Snippet 分组"));
     configureProductivityIconButton(removeButton, tr("删除当前选中的分组或片段"));
@@ -149,7 +149,7 @@ void ProductivityWidget::buildUi()
     m_saveButton->setProperty("primaryAction", true);
     UiIcons::decorateButton(
         m_saveButton,
-        UiIcons::themed(this, QStringLiteral("document-save"), QStyle::SP_DialogSaveButton),
+        UiIcons::symbol(this, UiIcons::Symbol::Download, this->palette().color(QPalette::WindowText)),
         tr("保存当前片段或分组修改"));
     editorLayout->addRow(tr("名称"), m_nameEdit);
     editorLayout->addRow(tr("所属分组"), m_parentGroupCombo);
@@ -171,7 +171,7 @@ void ProductivityWidget::buildUi()
     executeButton->setProperty("primaryAction", true);
     UiIcons::decorateButton(
         executeButton,
-        UiIcons::themed(this, QStringLiteral("media-playback-start"), QStyle::SP_MediaPlay),
+        UiIcons::symbol(this, UiIcons::Symbol::Play, this->palette().color(QPalette::WindowText)),
         tr("在明确选择的目标终端执行片段"));
     executeButton->setObjectName(QStringLiteral("productivityExecuteSnippet"));
     executionLayout->addWidget(m_executionTargets);
@@ -205,11 +205,10 @@ void ProductivityWidget::buildUi()
                 QMenu menu(this);
                 UiIcons::modernizePopup(&menu);
                 QAction *newGroupAction = menu.addAction(
-                    UiIcons::themed(this, QStringLiteral("folder-new"),
-                                    QStyle::SP_FileDialogNewFolder),
+                    UiIcons::symbol(this, UiIcons::Symbol::FolderAdd, this->palette().color(QPalette::WindowText)),
                     tr("新建分组"));
                 QAction *newSnippetAction = menu.addAction(
-                    UiIcons::themed(this, QStringLiteral("list-add"), QStyle::SP_FileIcon),
+                    UiIcons::symbol(this, UiIcons::Symbol::Plus, this->palette().color(QPalette::WindowText)),
                     tr("新建片段"));
                 connect(newGroupAction, &QAction::triggered,
                         this, [this]() { beginNewRecord(SnippetNodeKind::Folder); });
@@ -222,9 +221,7 @@ void ProductivityWidget::buildUi()
                         == SnippetNodeKind::Snippet;
                     if (isSnippet) {
                         QAction *executeAction = menu.addAction(
-                            UiIcons::themed(this,
-                                            QStringLiteral("media-playback-start"),
-                                            QStyle::SP_MediaPlay),
+                            UiIcons::symbol(this, UiIcons::Symbol::Play, this->palette().color(QPalette::WindowText)),
                             tr("执行"));
                         connect(executeAction,
                                 &QAction::triggered,
@@ -232,11 +229,10 @@ void ProductivityWidget::buildUi()
                                 &ProductivityWidget::executeSelectedSnippet);
                     }
                     QAction *editAction = menu.addAction(
-                        UiIcons::themed(this, QStringLiteral("document-edit"),
-                                        QStyle::SP_FileDialogDetailedView),
+                        UiIcons::symbol(this, UiIcons::Symbol::Edit, this->palette().color(QPalette::WindowText)),
                         tr("编辑"));
                     QAction *deleteAction = menu.addAction(
-                        UiIcons::themed(this, QStringLiteral("edit-delete"), QStyle::SP_TrashIcon),
+                        UiIcons::symbol(this, UiIcons::Symbol::Trash, this->palette().color(QPalette::WindowText)),
                         tr("删除"));
                     connect(editAction, &QAction::triggered, this, [this, item]() {
                         editTreeItem(item);
@@ -270,7 +266,7 @@ void ProductivityWidget::buildUi()
     historyExecuteButton->setProperty("primaryAction", true);
     UiIcons::decorateButton(
         historyExecuteButton,
-        UiIcons::themed(this, QStringLiteral("media-playback-start"), QStyle::SP_MediaPlay),
+        UiIcons::symbol(this, UiIcons::Symbol::Play, this->palette().color(QPalette::WindowText)),
         tr("在历史筛选器选中的主机上重新执行命令"));
     historyLayout->addWidget(historyExecuteButton);
     m_tabs->addTab(historyPage, tr("命令历史"));
@@ -313,11 +309,10 @@ void ProductivityWidget::buildUi()
                 QMenu menu(this);
                 UiIcons::modernizePopup(&menu);
                 QAction *executeAction = menu.addAction(
-                    UiIcons::themed(this, QStringLiteral("media-playback-start"),
-                                    QStyle::SP_MediaPlay),
+                    UiIcons::symbol(this, UiIcons::Symbol::Play, this->palette().color(QPalette::WindowText)),
                     tr("执行"));
                 QAction *copyAction = menu.addAction(
-                    UiIcons::themed(this, QStringLiteral("edit-copy"), QStyle::SP_FileIcon),
+                    UiIcons::symbol(this, UiIcons::Symbol::Copy, this->palette().color(QPalette::WindowText)),
                     tr("复制命令"));
                 connect(executeAction, &QAction::triggered, this, [this, command]() {
                     const QString hostId = m_historyHostCombo->currentData().toString();
@@ -353,7 +348,7 @@ void ProductivityWidget::buildUi()
     broadcastSendButton->setProperty("primaryAction", true);
     UiIcons::decorateButton(
         broadcastSendButton,
-        UiIcons::themed(this, QStringLiteral("mail-send"), QStyle::SP_ArrowForward),
+        UiIcons::symbol(this, UiIcons::Symbol::Send, this->palette().color(QPalette::WindowText)),
         tr("向明确勾选的多个终端发送一次命令"));
     broadcastSendButton->setObjectName(QStringLiteral("productivityBroadcastSend"));
     broadcastInputLayout->addWidget(m_broadcastInput, 1);
@@ -460,9 +455,8 @@ bool ProductivityWidget::appendSnippetChildren(QTreeWidgetItem *parentItem,
         item->setIcon(
             0,
             record.kind == SnippetNodeKind::Folder
-                ? UiIcons::themed(m_snippetTree, QStringLiteral("folder"), QStyle::SP_DirIcon)
-                : UiIcons::themed(m_snippetTree, QStringLiteral("text-x-script"),
-                                  QStyle::SP_FileIcon));
+                ? UiIcons::symbol(m_snippetTree, UiIcons::Symbol::Folder, m_snippetTree->palette().color(QPalette::WindowText))
+                : UiIcons::symbol(m_snippetTree, UiIcons::Symbol::File, m_snippetTree->palette().color(QPalette::WindowText)));
         item->setText(1, record.description);
         item->setData(0, kIdRole, record.id);
         item->setData(0, kKindRole, static_cast<int>(record.kind));

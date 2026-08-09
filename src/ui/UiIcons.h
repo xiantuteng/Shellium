@@ -46,7 +46,30 @@ enum class Symbol {
     Lock,
     Bell,
     ChevronLeft,
-    ChevronRight
+    ChevronRight,
+    Edit,
+    Trash,
+    Refresh,
+    FolderAdd,
+    Connect,
+    Close,
+    Key,
+    Check,
+    Play,
+    Stop,
+    Pause,
+    Cancel,
+    ArrowUp,
+    Send,
+    Upload,
+    Download,
+    Eye,
+    Info,
+    FullscreenEnter,
+    FullscreenExit,
+    Copy,
+    File,
+    Clock
 };
 
 /**
@@ -201,6 +224,185 @@ enum class Symbol {
         painter.drawLine(QPointF(4.5, 17.0), QPointF(19.5, 17.0));
         painter.drawLine(QPointF(19.5, 17.0), QPointF(18.0, 11.0));
         painter.drawArc(QRectF(9.0, 15.0, 6.0, 6.0), 180 * 16, 180 * 16);
+        break;
+    case Symbol::Edit: {
+        QPainterPath pencil;
+        pencil.moveTo(15.0, 4.5);
+        pencil.lineTo(19.5, 9.0);
+        pencil.lineTo(9.0, 19.5);
+        pencil.lineTo(4.5, 20.5);
+        pencil.lineTo(5.5, 16.0);
+        pencil.closeSubpath();
+        painter.drawPath(pencil);
+        painter.drawLine(QPointF(13.0, 6.5), QPointF(17.5, 11.0));
+        break;
+    }
+    case Symbol::Trash: {
+        painter.drawLine(QPointF(4.0, 7.0), QPointF(20.0, 7.0));
+        painter.drawRoundedRect(QRectF(9.0, 3.0, 6.0, 3.2), 1.0, 1.0);
+        QPainterPath body;
+        body.moveTo(6.0, 7.0);
+        body.lineTo(7.0, 20.5);
+        body.quadTo(7.0, 21.5, 8.0, 21.5);
+        body.lineTo(16.0, 21.5);
+        body.quadTo(17.0, 21.5, 17.0, 20.5);
+        body.lineTo(18.0, 7.0);
+        painter.drawPath(body);
+        painter.drawLine(QPointF(10.0, 10.0), QPointF(10.0, 18.0));
+        painter.drawLine(QPointF(14.0, 10.0), QPointF(14.0, 18.0));
+        break;
+    }
+    case Symbol::Refresh: {
+        painter.drawArc(QRectF(4.5, 4.5, 15.0, 15.0), 40 * 16, 300 * 16);
+        painter.drawLine(QPointF(17.7, 7.2), QPointF(19.7, 5.3));
+        painter.drawLine(QPointF(17.7, 7.2), QPointF(15.5, 6.3));
+        break;
+    }
+    case Symbol::FolderAdd: {
+        QPainterPath folder;
+        folder.moveTo(3.0, 7.0);
+        folder.lineTo(3.0, 18.5);
+        folder.quadTo(3.0, 20.5, 5.0, 20.5);
+        folder.lineTo(19.0, 20.5);
+        folder.quadTo(21.0, 20.5, 21.0, 18.5);
+        folder.lineTo(21.0, 8.5);
+        folder.quadTo(21.0, 6.5, 19.0, 6.5);
+        folder.lineTo(12.0, 6.5);
+        folder.lineTo(9.5, 3.8);
+        folder.lineTo(5.0, 3.8);
+        folder.quadTo(3.0, 3.8, 3.0, 5.8);
+        folder.closeSubpath();
+        painter.drawPath(folder);
+        painter.drawLine(QPointF(12.0, 11.5), QPointF(12.0, 17.0));
+        painter.drawLine(QPointF(9.2, 14.3), QPointF(14.8, 14.3));
+        break;
+    }
+    case Symbol::Connect:
+        painter.drawLine(QPointF(4.0, 12.0), QPointF(15.0, 12.0));
+        painter.drawLine(QPointF(10.5, 6.0), QPointF(16.5, 12.0));
+        painter.drawLine(QPointF(10.5, 18.0), QPointF(16.5, 12.0));
+        painter.drawLine(QPointF(19.5, 5.0), QPointF(19.5, 19.0));
+        break;
+    case Symbol::Close:
+        painter.drawLine(QPointF(6.0, 6.0), QPointF(18.0, 18.0));
+        painter.drawLine(QPointF(18.0, 6.0), QPointF(6.0, 18.0));
+        break;
+    case Symbol::Key:
+        painter.drawEllipse(QRectF(3.5, 9.5, 7.0, 7.0));
+        painter.drawLine(QPointF(10.3, 13.0), QPointF(20.0, 13.0));
+        painter.drawLine(QPointF(16.0, 13.0), QPointF(16.0, 16.0));
+        painter.drawLine(QPointF(19.0, 13.0), QPointF(19.0, 15.5));
+        break;
+    case Symbol::Check:
+        painter.drawLine(QPointF(5.0, 12.5), QPointF(10.0, 17.5));
+        painter.drawLine(QPointF(10.0, 17.5), QPointF(19.0, 6.5));
+        break;
+    case Symbol::Play: {
+        QPainterPath triangle;
+        triangle.moveTo(8.0, 5.5);
+        triangle.lineTo(19.0, 12.0);
+        triangle.lineTo(8.0, 18.5);
+        triangle.closeSubpath();
+        painter.drawPath(triangle);
+        break;
+    }
+    case Symbol::Stop:
+        painter.drawRoundedRect(QRectF(6.5, 6.5, 11.0, 11.0), 1.5, 1.5);
+        break;
+    case Symbol::Pause:
+        painter.drawLine(QPointF(9.0, 5.5), QPointF(9.0, 18.5));
+        painter.drawLine(QPointF(15.0, 5.5), QPointF(15.0, 18.5));
+        break;
+    case Symbol::Cancel:
+        painter.drawEllipse(QRectF(4.0, 4.0, 16.0, 16.0));
+        painter.drawLine(QPointF(7.5, 7.5), QPointF(16.5, 16.5));
+        break;
+    case Symbol::ArrowUp:
+        painter.drawLine(QPointF(12.0, 19.0), QPointF(12.0, 6.0));
+        painter.drawLine(QPointF(6.5, 11.5), QPointF(12.0, 6.0));
+        painter.drawLine(QPointF(17.5, 11.5), QPointF(12.0, 6.0));
+        break;
+    case Symbol::Send: {
+        QPainterPath plane;
+        plane.moveTo(4.0, 12.5);
+        plane.lineTo(20.0, 4.5);
+        plane.lineTo(13.5, 20.0);
+        plane.lineTo(11.0, 13.5);
+        plane.closeSubpath();
+        painter.drawPath(plane);
+        painter.drawLine(QPointF(11.0, 13.5), QPointF(20.0, 4.5));
+        break;
+    }
+    case Symbol::Upload:
+        painter.drawLine(QPointF(12.0, 17.0), QPointF(12.0, 5.0));
+        painter.drawLine(QPointF(7.0, 10.0), QPointF(12.0, 5.0));
+        painter.drawLine(QPointF(17.0, 10.0), QPointF(12.0, 5.0));
+        painter.drawLine(QPointF(5.0, 19.0), QPointF(19.0, 19.0));
+        break;
+    case Symbol::Download:
+        painter.drawLine(QPointF(12.0, 5.0), QPointF(12.0, 17.0));
+        painter.drawLine(QPointF(7.0, 12.0), QPointF(12.0, 17.0));
+        painter.drawLine(QPointF(17.0, 12.0), QPointF(12.0, 17.0));
+        painter.drawLine(QPointF(5.0, 19.0), QPointF(19.0, 19.0));
+        break;
+    case Symbol::Eye: {
+        QPainterPath eye;
+        eye.moveTo(3.5, 12.0);
+        eye.quadTo(12.0, 4.5, 20.5, 12.0);
+        eye.quadTo(12.0, 19.5, 3.5, 12.0);
+        eye.closeSubpath();
+        painter.drawPath(eye);
+        painter.drawEllipse(QPointF(12.0, 12.0), 2.2, 2.2);
+        break;
+    }
+    case Symbol::Info:
+        painter.drawEllipse(QRectF(4.0, 4.0, 16.0, 16.0));
+        painter.drawLine(QPointF(12.0, 10.5), QPointF(12.0, 17.0));
+        painter.drawEllipse(QPointF(12.0, 7.3), 0.9, 0.9);
+        break;
+    case Symbol::FullscreenEnter:
+        painter.drawLine(QPointF(5.0, 9.0), QPointF(5.0, 5.0));
+        painter.drawLine(QPointF(5.0, 5.0), QPointF(9.0, 5.0));
+        painter.drawLine(QPointF(15.0, 5.0), QPointF(19.0, 5.0));
+        painter.drawLine(QPointF(19.0, 5.0), QPointF(19.0, 9.0));
+        painter.drawLine(QPointF(5.0, 15.0), QPointF(5.0, 19.0));
+        painter.drawLine(QPointF(5.0, 19.0), QPointF(9.0, 19.0));
+        painter.drawLine(QPointF(19.0, 15.0), QPointF(19.0, 19.0));
+        painter.drawLine(QPointF(19.0, 19.0), QPointF(15.0, 19.0));
+        break;
+    case Symbol::FullscreenExit:
+        painter.drawLine(QPointF(9.0, 5.0), QPointF(9.0, 9.0));
+        painter.drawLine(QPointF(9.0, 9.0), QPointF(5.0, 9.0));
+        painter.drawLine(QPointF(15.0, 5.0), QPointF(15.0, 9.0));
+        painter.drawLine(QPointF(15.0, 9.0), QPointF(19.0, 9.0));
+        painter.drawLine(QPointF(9.0, 19.0), QPointF(9.0, 15.0));
+        painter.drawLine(QPointF(9.0, 15.0), QPointF(5.0, 15.0));
+        painter.drawLine(QPointF(15.0, 19.0), QPointF(15.0, 15.0));
+        painter.drawLine(QPointF(15.0, 15.0), QPointF(19.0, 15.0));
+        break;
+    case Symbol::Copy:
+        painter.drawRoundedRect(QRectF(8.0, 3.5, 12.0, 12.0), 2.0, 2.0);
+        painter.drawRoundedRect(QRectF(3.5, 8.5, 12.0, 12.0), 2.0, 2.0);
+        break;
+    case Symbol::File: {
+        QPainterPath file;
+        file.moveTo(6.0, 3.5);
+        file.lineTo(14.5, 3.5);
+        file.lineTo(19.0, 8.0);
+        file.lineTo(19.0, 20.5);
+        file.lineTo(6.0, 20.5);
+        file.closeSubpath();
+        painter.drawPath(file);
+        painter.drawLine(QPointF(14.5, 3.5), QPointF(14.5, 8.0));
+        painter.drawLine(QPointF(14.5, 8.0), QPointF(19.0, 8.0));
+        painter.drawLine(QPointF(9.0, 12.0), QPointF(16.0, 12.0));
+        painter.drawLine(QPointF(9.0, 16.0), QPointF(14.0, 16.0));
+        break;
+    }
+    case Symbol::Clock:
+        painter.drawEllipse(QRectF(4.0, 4.0, 16.0, 16.0));
+        painter.drawLine(QPointF(12.0, 12.0), QPointF(12.0, 7.5));
+        painter.drawLine(QPointF(12.0, 12.0), QPointF(16.0, 14.0));
         break;
     }
     painter.end();

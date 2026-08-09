@@ -213,7 +213,7 @@ public:
         auto *browseButton = new QPushButton(tr("浏览…"), identityContainer);
         UiIcons::decorateButton(
             browseButton,
-            UiIcons::themed(this, QStringLiteral("document-open"), QStyle::SP_DialogOpenButton),
+            UiIcons::symbol(this, UiIcons::Symbol::Upload, this->palette().color(QPalette::WindowText)),
             tr("选择 SSH 私钥文件"));
         identityLayout->addWidget(m_identityEdit, 1);
         identityLayout->addWidget(browseButton);
@@ -362,9 +362,7 @@ HostManagerWidget::HostManagerWidget(ApplicationDatabase *database,
     m_searchEdit->setPlaceholderText(tr("搜索名称/地址；输入 #标签 精确筛选"));
     m_searchEdit->setClearButtonEnabled(true);
     m_searchEdit->addAction(
-        UiIcons::themed(this,
-                        QStringLiteral("edit-find"),
-                        QStyle::SP_FileDialogContentsView),
+        UiIcons::symbol(this, UiIcons::Symbol::Search, this->palette().color(QPalette::WindowText)),
         QLineEdit::LeadingPosition);
 
     m_tree->setHeaderHidden(true);
@@ -401,31 +399,31 @@ HostManagerWidget::HostManagerWidget(ApplicationDatabase *database,
     exportButton->setText(tr("导出"));
     UiIcons::decorateButton(
         addGroupButton,
-        UiIcons::themed(this, QStringLiteral("folder-new"), QStyle::SP_FileDialogNewFolder),
+        UiIcons::symbol(this, UiIcons::Symbol::FolderAdd, this->palette().color(QPalette::WindowText)),
         tr("在当前层级新建主机分组"));
     UiIcons::decorateButton(
         addHostButton,
-        UiIcons::themed(this, QStringLiteral("list-add"), QStyle::SP_DriveNetIcon),
+        UiIcons::symbol(this, UiIcons::Symbol::Plus, this->palette().color(QPalette::WindowText)),
         tr("在当前分组中新建 SSH 主机"));
     UiIcons::decorateButton(
         editButton,
-        UiIcons::themed(this, QStringLiteral("document-edit"), QStyle::SP_FileDialogDetailedView),
+        UiIcons::symbol(this, UiIcons::Symbol::Edit, this->palette().color(QPalette::WindowText)),
         tr("编辑当前选中的主机或分组"));
     UiIcons::decorateButton(
         deleteButton,
-        UiIcons::themed(this, QStringLiteral("edit-delete"), QStyle::SP_TrashIcon),
+        UiIcons::symbol(this, UiIcons::Symbol::Trash, this->palette().color(QPalette::WindowText)),
         tr("删除当前选中的主机或分组"));
     UiIcons::decorateButton(
         refreshButton,
-        UiIcons::themed(this, QStringLiteral("view-refresh"), QStyle::SP_BrowserReload),
+        UiIcons::symbol(this, UiIcons::Symbol::Refresh, this->palette().color(QPalette::WindowText)),
         tr("重新读取主机与最近连接"));
     UiIcons::decorateButton(
         importButton,
-        UiIcons::themed(this, QStringLiteral("document-open"), QStyle::SP_DialogOpenButton),
+        UiIcons::symbol(this, UiIcons::Symbol::Upload, this->palette().color(QPalette::WindowText)),
         tr("从 OpenSSH 配置或 Shellium JSON 导入"));
     UiIcons::decorateButton(
         exportButton,
-        UiIcons::themed(this, QStringLiteral("document-save"), QStyle::SP_DialogSaveButton),
+        UiIcons::symbol(this, UiIcons::Symbol::Download, this->palette().color(QPalette::WindowText)),
         tr("导出不含凭据的主机配置"));
     configureSidebarIconButton(addGroupButton, tr("在当前层级新建主机分组"));
     configureSidebarIconButton(editButton, tr("编辑当前选中的主机或分组"));
@@ -489,35 +487,34 @@ HostManagerWidget::HostManagerWidget(ApplicationDatabase *database,
                 == HostNodeKind::Host;
         if (isHost) {
             QAction *connectAction = menu.addAction(
-                UiIcons::themed(this, QStringLiteral("network-connect"), QStyle::SP_DriveNetIcon),
+                UiIcons::symbol(this, UiIcons::Symbol::Connect, this->palette().color(QPalette::WindowText)),
                 tr("连接"));
             connect(connectAction, &QAction::triggered,
                     this, [this, item]() { activateTreeItem(item); });
             menu.addSeparator();
         }
         QAction *addGroupAction = menu.addAction(
-            UiIcons::themed(this, QStringLiteral("folder-new"), QStyle::SP_FileDialogNewFolder),
+            UiIcons::symbol(this, UiIcons::Symbol::FolderAdd, this->palette().color(QPalette::WindowText)),
             tr("新建分组"));
         QAction *addHostAction = menu.addAction(
-            UiIcons::themed(this, QStringLiteral("list-add"), QStyle::SP_DriveNetIcon),
+            UiIcons::symbol(this, UiIcons::Symbol::Plus, this->palette().color(QPalette::WindowText)),
             tr("新建主机"));
         connect(addGroupAction, &QAction::triggered, this, &HostManagerWidget::addGroup);
         connect(addHostAction, &QAction::triggered, this, &HostManagerWidget::addHost);
         if (item != nullptr) {
             menu.addSeparator();
             QAction *editAction = menu.addAction(
-                UiIcons::themed(this, QStringLiteral("document-edit"),
-                                QStyle::SP_FileDialogDetailedView),
+                UiIcons::symbol(this, UiIcons::Symbol::Edit, this->palette().color(QPalette::WindowText)),
                 tr("编辑"));
             QAction *deleteAction = menu.addAction(
-                UiIcons::themed(this, QStringLiteral("edit-delete"), QStyle::SP_TrashIcon),
+                UiIcons::symbol(this, UiIcons::Symbol::Trash, this->palette().color(QPalette::WindowText)),
                 tr("删除"));
             connect(editAction, &QAction::triggered, this, &HostManagerWidget::editSelected);
             connect(deleteAction, &QAction::triggered, this, &HostManagerWidget::removeSelected);
         }
         menu.addSeparator();
         QAction *refreshAction = menu.addAction(
-            UiIcons::themed(this, QStringLiteral("view-refresh"), QStyle::SP_BrowserReload),
+            UiIcons::symbol(this, UiIcons::Symbol::Refresh, this->palette().color(QPalette::WindowText)),
             tr("刷新"));
         connect(refreshAction, &QAction::triggered, this, &HostManagerWidget::refresh);
         menu.exec(m_tree->viewport()->mapToGlobal(position));
@@ -534,12 +531,10 @@ HostManagerWidget::HostManagerWidget(ApplicationDatabase *database,
                 QMenu menu(this);
                 UiIcons::modernizePopup(&menu);
                 QAction *connectAction = menu.addAction(
-                    UiIcons::themed(this, QStringLiteral("network-connect"),
-                                    QStyle::SP_DriveNetIcon),
+                    UiIcons::symbol(this, UiIcons::Symbol::Connect, this->palette().color(QPalette::WindowText)),
                     tr("重新连接"));
                 QAction *refreshAction = menu.addAction(
-                    UiIcons::themed(this, QStringLiteral("view-refresh"),
-                                    QStyle::SP_BrowserReload),
+                    UiIcons::symbol(this, UiIcons::Symbol::Refresh, this->palette().color(QPalette::WindowText)),
                     tr("刷新最近连接"));
                 connect(connectAction, &QAction::triggered,
                         this, [this, item]() { activateRecentItem(item); });
@@ -1004,8 +999,8 @@ QTreeWidgetItem *HostManagerWidget::createTreeItem(const HostRecord &record) con
     item->setIcon(
         0,
         record.kind == HostNodeKind::Folder
-            ? UiIcons::themed(m_tree, QStringLiteral("folder"), QStyle::SP_DirIcon)
-            : UiIcons::themed(m_tree, QStringLiteral("network-server"), QStyle::SP_DriveNetIcon));
+            ? UiIcons::symbol(m_tree, UiIcons::Symbol::Folder, m_tree->palette().color(QPalette::WindowText))
+            : UiIcons::symbol(m_tree, UiIcons::Symbol::Hosts, m_tree->palette().color(QPalette::WindowText)));
     item->setData(0, HostIdRole, record.id);
     item->setData(0, HostKindRole, static_cast<int>(record.kind));
     if (record.kind == HostNodeKind::Host) {
