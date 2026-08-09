@@ -60,6 +60,9 @@ macOS 可执行文件位于：
 build/Shellium.app/Contents/MacOS/Shellium
 ~~~
 
+Apple Silicon 站外发布使用 Developer ID 签名、公证与 DMG 一键脚本。证书准备、最低系统
+兼容性和完整命令见 [macOS DMG 发布指南](docs/MACOS_DMG_RELEASE.md)。
+
 ## 首次使用
 
 1. 首次启动先创建凭据保险库主密码；后续启动必须解锁。主密码不会写入数据库。

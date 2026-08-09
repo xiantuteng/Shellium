@@ -2,6 +2,12 @@ cmake_minimum_required(VERSION 3.21)
 
 project(Shellium VERSION 0.1.0 LANGUAGES CXX)
 
+# 正式 macOS 安装包必须使用稳定且可配置的 Bundle Identifier。这里提供一个可直接构建的
+# 默认值，同时允许发布脚本通过 -DSHELLIUM_BUNDLE_IDENTIFIER=... 覆盖；这样企业或个人发布者
+# 可以在不修改源码的情况下换成自己控制的反向域名，并保证后续版本升级时应用身份保持稳定。
+set(SHELLIUM_BUNDLE_IDENTIFIER "com.shellium.Shellium" CACHE STRING
+    "Shellium macOS App Bundle 的唯一标识符")
+
 # Qt 的元对象编译器负责生成信号、槽以及属性系统所需代码。开启这些自动化选项后，
 # 新增 QObject 子类时无需手工维护 moc 文件列表，可减少跨平台构建差异。
 set(CMAKE_AUTOMOC ON)
@@ -121,8 +127,16 @@ if(APPLE)
     )
     target_link_libraries(Shellium PRIVATE "-framework AppKit")
 
-    # 生成标准 macOS App Bundle，后续可以直接补充图标、签名和公证配置。
-    set_target_properties(Shellium PROPERTIES MACOSX_BUNDLE TRUE)
+    # 生成具有稳定版本信息的标准 macOS App Bundle。签名身份和公证凭据属于发布者私密配置，
+    # 因此不固化在 CMake 工程中，而是由 scripts/package_macos_dmg.sh 在部署阶段安全注入。
+    set_target_properties(Shellium PROPERTIES
+        MACOSX_BUNDLE TRUE
+        MACOSX_BUNDLE_BUNDLE_NAME "Shellium"
+        MACOSX_BUNDLE_GUI_IDENTIFIER "${SHELLIUM_BUNDLE_IDENTIFIER}"
+        MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
+        MACOSX_BUNDLE_COPYRIGHT "Copyright © 2026 Shellium contributors"
+    )
 endif()
 
 install(TARGETS Shellium
