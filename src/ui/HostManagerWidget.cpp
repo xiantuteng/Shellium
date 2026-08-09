@@ -11,6 +11,8 @@
 #include <QDateTime>
 #include <QDialog>
 #include <QDialogButtonBox>
+#include <QDragMoveEvent>
+#include <QDropEvent>
 #include <QFileDialog>
 #include <QFile>
 #include <QFormLayout>
@@ -31,6 +33,8 @@
 #include <QUuid>
 #include <QVBoxLayout>
 
+#include <functional>
+
 namespace {
 
 /** @brief 树节点保存数据库主键的角色，避开 Qt 内置显示和图标角色。 */
@@ -41,6 +45,100 @@ constexpr int HostKindRole = Qt::UserRole + 1;
 
 /** @brief 最近连接列表保存稳定主机 id 的角色。 */
 constexpr int RecentHostIdRole = Qt::UserRole;
+
+/**
+ * @brief 支持"主机与分组"拖拽排序/移动的树控件。
+ *
+ * 选用 QAbstractItemView::InternalMove 让 Qt 完成节点的实际挪动，本类只负责在挪动前
+ * 校验合法性（主机不能收留子节点；分组不能被拖进自己的子孙里形成环），以及在挪动完成
+ * 后通过 onDropped 回调通知外部把新的 parentId/sortOrder 写回数据库。之所以不用信号，
+ * 是因为这个类只在 HostManagerWidget.cpp 内部使用，避免为了一个回调再引入 moc。
+ */
+class HostTreeWidget final : public QTreeWidget {
+public:
+    using QTreeWidget::QTreeWidget;
+
+    /** @brief 拖放合法且 Qt 内部移动完成后触发；oldParentItem 为空表示原先在根层级。 */
+    std::function<void(QTreeWidgetItem *movedItem, QTreeWidgetItem *oldParentItem)> onDropped;
+
+protected:
+    void dragMoveEvent(QDragMoveEvent *event) override
+    {
+        QTreeWidgetItem *draggedItem = currentItem();
+        QTreeWidgetItem *candidateParent = nullptr;
+        if (draggedItem == nullptr
+            || !computeLegalDrop(event->position().toPoint(), draggedItem, &candidateParent)) {
+            event->ignore();
+            return;
+        }
+        QTreeWidget::dragMoveEvent(event);
+    }
+
+    void dropEvent(QDropEvent *event) override
+    {
+        QTreeWidgetItem *draggedItem = currentItem();
+        QTreeWidgetItem *candidateParent = nullptr;
+        if (draggedItem == nullptr
+            || !computeLegalDrop(event->position().toPoint(), draggedItem, &candidateParent)) {
+            event->ignore();
+            return;
+        }
+
+        QTreeWidgetItem *oldParentItem = draggedItem->parent();
+        QTreeWidget::dropEvent(event);
+        if (onDropped) {
+            onDropped(draggedItem, oldParentItem);
+        }
+    }
+
+private:
+    /** @brief node 是否等于 ancestor，或者是 ancestor 的任意层级子孙。 */
+    [[nodiscard]] static bool isSameOrDescendant(QTreeWidgetItem *node, QTreeWidgetItem *ancestor)
+    {
+        for (QTreeWidgetItem *cursor = node; cursor != nullptr; cursor = cursor->parent()) {
+            if (cursor == ancestor) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * @brief 判断把 draggedItem 放到 pos 处是否合法，并给出目标父节点。
+     * @param outNewParent 合法时写入目标父节点；根层级为空指针。
+     * @return 目标父节点必须是分组（或根层级），且不能是被拖动节点自身或其子孙。
+     */
+    [[nodiscard]] bool computeLegalDrop(const QPoint &pos,
+                                        QTreeWidgetItem *draggedItem,
+                                        QTreeWidgetItem **outNewParent) const
+    {
+        QTreeWidgetItem *targetItem = itemAt(pos);
+        QTreeWidgetItem *candidateParent = nullptr;
+        if (targetItem != nullptr) {
+            candidateParent = dropIndicatorPosition() == QAbstractItemView::OnItem
+                ? targetItem
+                : targetItem->parent();
+        }
+
+        if (candidateParent != nullptr) {
+            const auto kind = static_cast<HostNodeKind>(candidateParent->data(0, HostKindRole).toInt());
+            if (kind != HostNodeKind::Folder) {
+                // 主机不是容器，不能收留任何子节点。
+                return false;
+            }
+        }
+
+        if (isSameOrDescendant(candidateParent, draggedItem)) {
+            // 目标是被拖动节点自己，或者是它的子孙：会形成环，拒绝。
+            return false;
+        }
+
+        if (outNewParent != nullptr) {
+            *outNewParent = candidateParent;
+        }
+        return true;
+    }
+};
 
 /**
  * @brief 把侧栏次要动作配置成紧凑图标按钮。
@@ -255,7 +353,7 @@ HostManagerWidget::HostManagerWidget(ApplicationDatabase *database,
     , m_database(database)
     , m_credentialVault(credentialVault)
     , m_searchEdit(new QLineEdit(this))
-    , m_tree(new QTreeWidget(this))
+    , m_tree(new HostTreeWidget(this))
     , m_recentList(new QListWidget(this))
 {
     Q_ASSERT(m_database != nullptr);
@@ -274,6 +372,18 @@ HostManagerWidget::HostManagerWidget(ApplicationDatabase *database,
     m_tree->setSelectionMode(QAbstractItemView::SingleSelection);
     m_tree->setContextMenuPolicy(Qt::CustomContextMenu);
     m_recentList->setContextMenuPolicy(Qt::CustomContextMenu);
+
+    // 拖拽排序/跨分组移动：Qt 负责实际挪动 QTreeWidgetItem，HostTreeWidget 只负责合法性
+    // 校验，真正的持久化在下面的 onDropped 回调里完成。搜索结果是扁平视图，与真实父子
+    // 关系无关，applyFilter() 会在搜索时临时关闭拖放，避免把搜索命中的顺序误写回数据库。
+    m_tree->setDragEnabled(true);
+    m_tree->setAcceptDrops(true);
+    m_tree->setDropIndicatorShown(true);
+    m_tree->setDragDropMode(QAbstractItemView::InternalMove);
+    static_cast<HostTreeWidget *>(m_tree)->onDropped =
+        [this](QTreeWidgetItem *movedItem, QTreeWidgetItem *oldParentItem) {
+            persistTreeReorder(movedItem, oldParentItem);
+        };
 
     auto *addGroupButton = new QToolButton(this);
     addGroupButton->setText(tr("新建分组"));
@@ -508,6 +618,11 @@ void HostManagerWidget::applyFilter()
     m_tree->clear();
     const QString query = m_searchEdit->text().trimmed();
     QString error;
+
+    // 搜索结果是按命中排序的扁平列表，节点的 QTreeWidgetItem 父子关系与数据库里真实的
+    // parentId 无关；如果这时还允许拖拽，drop 完成后会把搜索排序误当成真实排序写库。
+    m_tree->setDragEnabled(query.isEmpty());
+    m_tree->setAcceptDrops(query.isEmpty());
 
     if (query.isEmpty()) {
         if (!appendChildren(nullptr, {}, &error)) {
@@ -894,7 +1009,66 @@ QTreeWidgetItem *HostManagerWidget::createTreeItem(const HostRecord &record) con
     if (record.kind == HostNodeKind::Host) {
         item->setToolTip(0, record.toConnectionTarget().connectionSpecifier(true));
     }
+    // 两种节点都能被拖动；只有分组能接收拖放（成为其他节点的父分组），主机不是容器。
+    Qt::ItemFlags flags = item->flags() | Qt::ItemIsDragEnabled;
+    if (record.kind == HostNodeKind::Folder) {
+        flags |= Qt::ItemIsDropEnabled;
+    } else {
+        flags &= ~Qt::ItemIsDropEnabled;
+    }
+    item->setFlags(flags);
     return item;
+}
+
+void HostManagerWidget::persistTreeReorder(QTreeWidgetItem *movedItem, QTreeWidgetItem *oldParentItem)
+{
+    if (movedItem == nullptr) {
+        return;
+    }
+
+    QString error;
+    QTreeWidgetItem *newParentItem = movedItem->parent();
+    bool ok = reindexChildren(newParentItem, &error);
+    if (ok && oldParentItem != newParentItem) {
+        // 被拖走的旧父节点剩余的兄弟也要重新编号，避免 sortOrder 出现意义不明的空洞。
+        ok = reindexChildren(oldParentItem, &error);
+    }
+    if (!ok) {
+        showDatabaseError(tr("保存拖放顺序"), error);
+    }
+    // 无论成功与否都刷新：成功时让内存树与刚写入的数据库状态严格对齐；失败时把树还原成
+    // 数据库里真实的样子，避免用户以为拖放生效了，重启后才发现顺序没变。
+    refresh();
+}
+
+bool HostManagerWidget::reindexChildren(QTreeWidgetItem *parentItem, QString *errorMessage)
+{
+    const QString parentId = parentItem != nullptr
+        ? parentItem->data(0, HostIdRole).toString()
+        : QString();
+    const int childCount = parentItem != nullptr
+        ? parentItem->childCount()
+        : m_tree->topLevelItemCount();
+
+    for (int i = 0; i < childCount; ++i) {
+        QTreeWidgetItem *child = parentItem != nullptr
+            ? parentItem->child(i)
+            : m_tree->topLevelItem(i);
+        const QString childId = child->data(0, HostIdRole).toString();
+        std::optional<HostRecord> record = m_database->findHost(childId, errorMessage);
+        if (!record.has_value()) {
+            if (errorMessage != nullptr && errorMessage->isEmpty()) {
+                *errorMessage = tr("找不到节点 %1").arg(childId);
+            }
+            return false;
+        }
+        record->parentId = parentId;
+        record->sortOrder = i;
+        if (!m_database->saveHost(*record, errorMessage)) {
+            return false;
+        }
+    }
+    return true;
 }
 
 void HostManagerWidget::showDatabaseError(const QString &operation, const QString &details) const

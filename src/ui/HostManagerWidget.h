@@ -105,6 +105,19 @@ private:
     /** @brief 统一展示数据库错误，避免失败被误当作空列表。 */
     void showDatabaseError(const QString &operation, const QString &details) const;
 
+    /**
+     * @brief 拖放完成后持久化受影响节点的 parentId 与 sortOrder。
+     * @param movedItem 被拖动的节点，此时已经挂在 Qt 内部完成移动后的新位置。
+     * @param oldParentItem 拖动前的父节点；根层级为空指针。
+     */
+    void persistTreeReorder(QTreeWidgetItem *movedItem, QTreeWidgetItem *oldParentItem);
+
+    /**
+     * @brief 把某个父节点（或根层级，parentItem 为空）下的直接子节点顺序写回数据库。
+     * @return 全部子节点写入成功返回 true；中途失败时终止并通过 errorMessage 返回原因。
+     */
+    bool reindexChildren(QTreeWidgetItem *parentItem, QString *errorMessage);
+
     ApplicationDatabase *m_database = nullptr;
     CredentialVault *m_credentialVault = nullptr;
     QLineEdit *m_searchEdit = nullptr;

@@ -234,18 +234,8 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     m_navigationRail->setObjectName(QStringLiteral("NavigationRail"));
     m_navigationRail->setFixedWidth(72);
     auto *railLayout = new QVBoxLayout(m_navigationRail);
-    railLayout->setContentsMargins(10, 14, 10, 12);
+    railLayout->setContentsMargins(10, 20, 10, 12);
     railLayout->setSpacing(8);
-
-    auto *brandBadge = new QToolButton(m_navigationRail);
-    brandBadge->setObjectName(QStringLiteral("BrandBadge"));
-    brandBadge->setProperty("brandBadge", true);
-    brandBadge->setAutoRaise(false);
-    brandBadge->setEnabled(false);
-    brandBadge->setFixedSize(44, 44);
-    brandBadge->setAccessibleName(tr("Shellium"));
-    railLayout->addWidget(brandBadge, 0, Qt::AlignHCenter);
-    railLayout->addSpacing(12);
 
     auto *navigationGroup = new QButtonGroup(this);
     navigationGroup->setExclusive(true);
@@ -1008,32 +998,23 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
         }
         QToolButton[navButton="true"]:checked {
             background: @SELECTION@;
-            border-left: 2px solid @ACCENT@;
-        }
-        QToolButton#BrandBadge {
-            background: @ACCENT@;
-            border: 0;
-            border-radius: 13px;
-            padding: 10px;
         }
         QToolButton[compactIconButton="true"] {
             color: @TEXT@;
-            background: @SURFACE@;
-            border: 1px solid @BORDER@;
+            background: transparent;
+            border: 0;
             border-radius: 8px;
             padding: 7px;
         }
         QToolButton[compactIconButton="true"]:hover {
             background: @RAISED@;
-            border-color: @MUTED@;
         }
         QToolButton[compactIconButton="true"]:pressed {
             background: @SELECTION@;
-            border-color: @ACCENT@;
         }
         QToolButton[compactIconButton="true"]:disabled {
-            background: @SIDEBAR@;
-            border-color: @BORDER@;
+            color: @MUTED@;
+            background: transparent;
         }
         QTabBar#SessionTitleTabs {
             background: transparent;
@@ -1081,6 +1062,23 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
         QComboBox:focus,
         QSpinBox:focus {
             border: 1px solid @ACCENT@;
+        }
+        QComboBox::drop-down {
+            border: 0;
+            width: 26px;
+            subcontrol-origin: padding;
+            subcontrol-position: center right;
+        }
+        QComboBox::down-arrow {
+            width: 0;
+            height: 0;
+            border-left: 4px solid transparent;
+            border-right: 4px solid transparent;
+            border-top: 5px solid @MUTED@;
+            margin-right: 10px;
+        }
+        QComboBox::down-arrow:hover {
+            border-top-color: @TEXT@;
         }
         QPlainTextEdit#TerminalView {
             color: palette(text);
@@ -1177,21 +1175,35 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
         QLabel {
             color: @TEXT@;
         }
-        QMenuBar,
-        QMenu {
+        QMenuBar {
             color: @TEXT@;
             background: @SURFACE@;
             border: 1px solid @BORDER@;
         }
-        QMenuBar::item,
-        QMenu::item {
+        QMenu {
+            color: @TEXT@;
+            background: @SURFACE@;
+            border: 1px solid @BORDER@;
+            border-radius: 10px;
+            padding: 6px;
+        }
+        QMenuBar::item {
             background: transparent;
             border-radius: 6px;
             padding: 5px 9px;
         }
+        QMenu::item {
+            background: transparent;
+            border-radius: 7px;
+            min-height: 22px;
+            padding: 6px 12px;
+        }
         QMenuBar::item:selected,
         QMenu::item:selected {
             background: @SELECTION@;
+        }
+        QMenu::icon {
+            padding-left: 4px;
         }
         QMenu::separator {
             height: 1px;
@@ -1218,6 +1230,27 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
             background: transparent;
             border: 0;
             height: 0;
+        }
+        QScrollBar:horizontal {
+            background: transparent;
+            height: 10px;
+            margin: 2px;
+        }
+        QScrollBar::handle:horizontal {
+            background: @BORDER@;
+            border-radius: 4px;
+            min-width: 28px;
+        }
+        QScrollBar::handle:horizontal:hover {
+            background: @MUTED@;
+        }
+        QScrollBar::add-line:horizontal,
+        QScrollBar::sub-line:horizontal,
+        QScrollBar::add-page:horizontal,
+        QScrollBar::sub-page:horizontal {
+            background: transparent;
+            border: 0;
+            width: 0;
         }
         QSplitter::handle {
             background: @BORDER@;
@@ -1252,7 +1285,10 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
     styleSheet.replace(QStringLiteral("@MUTED@"), mutedTextColor);
     styleSheet.replace(QStringLiteral("@ACCENT@"), accentColor);
     styleSheet.replace(QStringLiteral("@SELECTION@"), selectionBackground);
-    setStyleSheet(styleSheet);
+    // 顶层 QMenu / QComboBox 弹出层等不是 MainWindow 的子控件，
+    // this->setStyleSheet(...) 只对 MainWindow 子树生效，右键菜单等
+    // 顶层部件会吃不到这份样式，因此改为通过 qApp 应用到整个应用。
+    qApp->setStyleSheet(styleSheet);
 
     if (auto *sessionTabs = dynamic_cast<SessionTabBar *>(m_titleTabBar)) {
         sessionTabs->setVisualColors(QColor(QStringLiteral("#aeb6cc")),
@@ -1313,14 +1349,6 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
                                         navigationSymbols.at(index),
                                         navigationIconColor));
         button->setIconSize(QSize(21, 21));
-    }
-    if (auto *brandBadge = m_navigationRail->findChild<QToolButton *>(
-            QStringLiteral("BrandBadge"))) {
-        brandBadge->setIcon(UiIcons::symbol(this,
-                                            UiIcons::Symbol::Terminal,
-                                            QColor(QStringLiteral("#0f3a2d")),
-                                            QSize(22, 22)));
-        brandBadge->setIconSize(QSize(22, 22));
     }
 }
 

@@ -1,16 +1,19 @@
 #include "ui/SessionTabBar.h"
 
 #include <QAbstractButton>
+#include <QCursor>
+#include <QImage>
 #include <QSignalSpy>
 #include <QTest>
+#include <QWheelEvent>
+#include <QWidget>
 
 /**
- * @brief 覆盖标题栏会话标签控件的滚动接线与关闭按钮命中判定。
+ * @brief 覆盖标题栏会话标签控件的滚动接线、关闭按钮命中判定与悬停反馈。
  *
- * 这两处行为都依赖 QTabBar 的内部实现细节：滚动偏移量没有公开接口，只能通过 Qt 为内置
- * 滚动按钮设置的稳定对象名驱动。一旦 Qt 更名或改变布局策略，标题栏的左右滚动按钮会静默
- * 失效——外部按钮仍然显示，点击却毫无反应。纯人工点击很难发现这种"看起来正常"的退化，
- * 因此必须由自动化用例守住。
+ * 这些行为都依赖 QTabBar 的内部实现细节，或者是"信号发出时机早于监听者存在"这类容易被
+ * 人工测试忽略的时序问题。纯人工点击很难发现这种"看起来正常"的退化，因此必须由自动化
+ * 用例守住。
  */
 class SessionTabBarTest final : public QObject {
     Q_OBJECT
@@ -26,6 +29,25 @@ private slots:
 
     /** @brief 未溢出时不得报告可滚动，否则标题栏会常驻两个无效箭头。 */
     void doesNotReportScrollableWhenTabsFit();
+
+    /**
+     * @brief 晚于状态稳定才连接 scrollStateChanged 的监听者也必须学到当前真实状态。
+     *
+     * 复现 MainWindow 的真实顺序：先在标签栏尚未参与真实布局（宽度还是构造期临时值）时
+     * 连续 addTab，再连接信号，最后单跳 resize 到最终宽度。如果最终宽度算出的溢出结论
+     * 与临时宽度算出的结论恰好相同，旧实现里 syncScrollButtons() 因"值未变化"不会重新
+     * 发出信号，新监听者就永远学不到当前真实状态——外部箭头会卡在错误的初始显隐上。
+     */
+    void lateListenerLearnsCurrentScrollStateOnConnect();
+
+    /** @brief 溢出时滚轮应驱动标签左右滚动，且每格滚轮只滚动一步。 */
+    void wheelScrollsTabsWhenOverflowing();
+
+    /** @brief 未溢出时滚轮不应被标签栏吞掉。 */
+    void wheelDoesNothingWhenTabsFit();
+
+    /** @brief 精确悬停在关闭按钮上时，叉号线条颜色必须与仅悬停标签时不同。 */
+    void closeButtonStrokeChangesColorOnPreciseHover();
 };
 
 void SessionTabBarTest::reportsScrollStateAndScrollsTabs()
@@ -83,6 +105,142 @@ void SessionTabBarTest::doesNotReportScrollableWhenTabsFit()
     for (const QList<QVariant> &state : std::as_const(scrollSpy)) {
         QVERIFY2(!state.at(0).toBool(), "标签未溢出时不得报告可滚动");
     }
+}
+
+void SessionTabBarTest::lateListenerLearnsCurrentScrollStateOnConnect()
+{
+    auto *parent = new QWidget();
+    auto *tabBar = new SessionTabBar(parent);
+    // 40 个标签在构造期的临时宽度（未参与任何布局，通常是 QWidget 的默认宽度）和后面
+    // 单跳 resize 到的 1200 像素下都必然溢出，因此两次判定结论都是 true，不会自然发生
+    // "值变化"来触发信号——这正是复现该缺陷所需要的条件。
+    for (int index = 0; index < 40; ++index) {
+        tabBar->addTab(QStringLiteral("终端 %1").arg(index + 1));
+    }
+
+    QSignalSpy lateSpy(tabBar, &SessionTabBar::scrollStateChanged);
+    QVERIFY2(!lateSpy.isEmpty(),
+             "connect() 建立的同一时刻就应补发一次当前状态，哪怕状态早已稳定");
+    QVERIFY2(lateSpy.last().at(0).toBool(),
+             "补发的状态必须反映真实的当前溢出结论（此时已有 40 个标签，理应可滚动）");
+
+    // 单跳 resize（不 show()，避免窗口系统插入多次中间尺寸的 resizeEvent，令状态在中途
+    // 先翻转再翻回来，从而掩盖"从未变化"这种最危险的情形）。
+    tabBar->resize(1200, 42);
+    QCoreApplication::processEvents();
+
+    QVERIFY2(!lateSpy.isEmpty(),
+             "晚连接的监听者必须能学到当前真实的可滚动状态");
+    QVERIFY2(lateSpy.last().at(0).toBool(),
+             "40 个标签在 1200 像素宽度下依然溢出，晚连接的监听者不能收到 false");
+
+    delete parent;
+}
+
+void SessionTabBarTest::wheelScrollsTabsWhenOverflowing()
+{
+    SessionTabBar tabBar;
+    tabBar.resize(420, 42);
+    tabBar.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&tabBar));
+
+    for (int index = 0; index < 12; ++index) {
+        tabBar.addTab(QStringLiteral("终端 %1").arg(index + 1));
+    }
+    tabBar.setCurrentIndex(0);
+    QCoreApplication::processEvents();
+
+    const int firstTabLeftBefore = tabBar.tabRect(0).left();
+
+    // 向下/向右滚滚轮（angleDelta 为负）应该让标签向右滚动。
+    QWheelEvent rightEvent(QPointF(tabBar.width() / 2.0, tabBar.height() / 2.0),
+                           tabBar.mapToGlobal(QPoint(tabBar.width() / 2, tabBar.height() / 2)),
+                           QPoint(0, 0),
+                           QPoint(0, -120),
+                           Qt::NoButton,
+                           Qt::NoModifier,
+                           Qt::NoScrollPhase,
+                           false);
+    QCoreApplication::sendEvent(&tabBar, &rightEvent);
+    QCoreApplication::processEvents();
+
+    const int firstTabLeftAfterScrollRight = tabBar.tabRect(0).left();
+    QVERIFY2(firstTabLeftAfterScrollRight < firstTabLeftBefore,
+             "向下/向右滚动滚轮时标签必须向右滚动（更早的标签被卷出可视区）");
+
+    // 向上/向左滚滚轮（angleDelta 为正）应该让标签向左滚回去。
+    QWheelEvent leftEvent(QPointF(tabBar.width() / 2.0, tabBar.height() / 2.0),
+                          tabBar.mapToGlobal(QPoint(tabBar.width() / 2, tabBar.height() / 2)),
+                          QPoint(0, 0),
+                          QPoint(0, 120),
+                          Qt::NoButton,
+                          Qt::NoModifier,
+                          Qt::NoScrollPhase,
+                          false);
+    QCoreApplication::sendEvent(&tabBar, &leftEvent);
+    QCoreApplication::processEvents();
+
+    QCOMPARE(tabBar.tabRect(0).left(), firstTabLeftBefore);
+}
+
+void SessionTabBarTest::wheelDoesNothingWhenTabsFit()
+{
+    SessionTabBar tabBar;
+    tabBar.resize(900, 42);
+    tabBar.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&tabBar));
+
+    tabBar.addTab(QStringLiteral("终端 1"));
+    tabBar.addTab(QStringLiteral("终端 2"));
+    QCoreApplication::processEvents();
+
+    const int firstTabLeftBefore = tabBar.tabRect(0).left();
+    QWheelEvent event(QPointF(tabBar.width() / 2.0, tabBar.height() / 2.0),
+                      tabBar.mapToGlobal(QPoint(tabBar.width() / 2, tabBar.height() / 2)),
+                      QPoint(0, 0),
+                      QPoint(0, -120),
+                      Qt::NoButton,
+                      Qt::NoModifier,
+                      Qt::NoScrollPhase,
+                      false);
+    QCoreApplication::sendEvent(&tabBar, &event);
+    QCoreApplication::processEvents();
+
+    QCOMPARE(tabBar.tabRect(0).left(), firstTabLeftBefore);
+}
+
+void SessionTabBarTest::closeButtonStrokeChangesColorOnPreciseHover()
+{
+    SessionTabBar tabBar;
+    tabBar.resize(400, 42);
+    tabBar.addTab(QStringLiteral("终端 1"));
+    tabBar.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&tabBar));
+
+    const QRect tabRect = tabBar.tabRect(0);
+    // 关闭按钮固定在标签右侧 29~11 像素处（见 SessionTabBar::closeButtonRect），叉号左上到
+    // 右下的对角线端点落在该矩形内、且不与背景圆的边缘重叠，是采样描边颜色的稳定位置。
+    const QPoint closeButtonCenter(tabRect.right() - 20, tabRect.top() + tabRect.height() / 2);
+    const QPoint strokeSamplePoint = closeButtonCenter + QPoint(-3, -3);
+
+    // 只悬停在标签上（远离关闭按钮的位置），触发默认前景色叉号。
+    const QPoint plainHoverPoint(tabRect.left() + 20, tabRect.top() + tabRect.height() / 2);
+    QCursor::setPos(tabBar.mapToGlobal(plainHoverPoint));
+    QTest::mouseMove(&tabBar, plainHoverPoint);
+    QCoreApplication::processEvents();
+    const QImage plainHoverImage = tabBar.grab().toImage();
+    const QColor plainHoverStrokeColor = plainHoverImage.pixelColor(strokeSamplePoint);
+
+    // 精确悬停到关闭按钮命中区内，叉号必须换成醒目的悬停色。
+    QCursor::setPos(tabBar.mapToGlobal(closeButtonCenter));
+    QTest::mouseMove(&tabBar, closeButtonCenter);
+    QCoreApplication::processEvents();
+    const QImage preciseHoverImage = tabBar.grab().toImage();
+    const QColor preciseHoverStrokeColor = preciseHoverImage.pixelColor(strokeSamplePoint);
+
+    QVERIFY2(plainHoverStrokeColor != preciseHoverStrokeColor,
+             "精确悬停在关闭按钮上时叉号线条颜色必须与仅悬停标签时不同，否则用户看不出"
+             "鼠标真的移到了关闭按钮上");
 }
 
 QTEST_MAIN(SessionTabBarTest)

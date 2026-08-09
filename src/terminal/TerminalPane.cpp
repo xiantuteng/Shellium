@@ -38,7 +38,7 @@ TerminalPane::TerminalPane(QWidget *parent)
     , m_terminalView(new TerminalView(this))
 {
     auto *layout = new QVBoxLayout(this);
-    layout->setContentsMargins(1, 1, 1, 1);
+    layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(0);
 
     // 会话顶部使用单独的状态栏容器：左侧服务器信息可伸缩，编码/尺寸和文件开关始终停靠

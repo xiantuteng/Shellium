@@ -149,6 +149,29 @@ TerminalView::TerminalView(QWidget *parent)
     m_commandCompleter->setModelSorting(QCompleter::UnsortedModel);
     m_commandCompleter->setFilterMode(Qt::MatchStartsWith);
     m_commandCompleter->setMaxVisibleItems(10);
+    // 补全弹层是独立的顶层 QListView，不会继承 MainWindow/TerminalView 的样式表，
+    // 需要单独硬编码一份深色配色（参考 Termius 的浮层观感），避免沿用系统默认的
+    // 陈旧方框样式。
+    m_commandCompleter->popup()->setStyleSheet(QStringLiteral(
+        "QListView {"
+        "    background-color: #1c2333;"
+        "    color: #e4e8f5;"
+        "    border: 1px solid #2e3650;"
+        "    border-radius: 8px;"
+        "    padding: 4px;"
+        "    outline: 0;"
+        "}"
+        "QListView::item {"
+        "    padding: 6px 10px;"
+        "    border-radius: 6px;"
+        "}"
+        "QListView::item:hover {"
+        "    background-color: #2a3148;"
+        "}"
+        "QListView::item:selected {"
+        "    background-color: #39415d;"
+        "    color: #ffffff;"
+        "}"));
     connect(m_commandCompleter,
             qOverload<const QString &>(&QCompleter::activated),
             this,
@@ -380,6 +403,17 @@ void TerminalView::submitCommand(const QString &command)
     m_commandCompleter->popup()->hide();
 }
 
+QRect TerminalView::visualCursorRect() const
+{
+    const int position = m_vtermBridge->renderedCursorPosition();
+    if (position < 0 || position >= document()->characterCount()) {
+        return {};
+    }
+    QTextCursor cursor(document());
+    cursor.setPosition(position);
+    return cursorRect(cursor);
+}
+
 void TerminalView::updateCompletionPopup()
 {
     if (m_localCapture || m_currentCommand.size() < 2 || m_completionModel->rowCount() == 0) {
@@ -392,9 +426,13 @@ void TerminalView::updateCompletionPopup()
         return;
     }
 
-    // 终端文档的文本光标不等于远端 PTY 光标，但它始终位于视图末尾附近；以此作为弹层
-    // 锚点比固定在左上角更自然，也不会尝试从终端输出反推 Shell 的行编辑状态。
-    QRect popupRect = cursorRect();
+    // 弹层锚点必须使用 libvterm 换算出的视觉光标位置（与 paintEvent 绘制光标的方式一致），
+    // 而不是 QPlainTextEdit 自带的 textCursor()：后者的位置未必跟随远端 PTY 的真实输入位置
+    // 同步更新，会导致弹层遮挡正在输入的命令。取不到有效位置时退回原生 cursorRect() 保底。
+    QRect popupRect = visualCursorRect();
+    if (popupRect.isNull()) {
+        popupRect = cursorRect();
+    }
     popupRect.setWidth(qMax(320, m_commandCompleter->popup()->sizeHintForColumn(0)
                                     + m_commandCompleter->popup()->verticalScrollBar()->sizeHint().width()));
     m_commandCompleter->complete(popupRect);
@@ -786,14 +824,10 @@ void TerminalView::paintEvent(QPaintEvent *event)
         || static_cast<TerminalCursorShape>(m_cursorShape) != TerminalCursorShape::IBeam) {
         return;
     }
-    const int position = m_vtermBridge->renderedCursorPosition();
-    if (position < 0 || position >= document()->characterCount()) {
+    const QRect cursorArea = visualCursorRect();
+    if (cursorArea.isNull()) {
         return;
     }
-
-    QTextCursor cursor(document());
-    cursor.setPosition(position);
-    const QRect cursorArea = cursorRect(cursor);
     QPainter painter(viewport());
     painter.setPen(QPen(m_cursorColor, 2.0));
     painter.drawLine(cursorArea.topLeft(), cursorArea.bottomLeft());

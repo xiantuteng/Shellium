@@ -5,11 +5,13 @@
 #include <QAbstractButton>
 #include <QEvent>
 #include <QFontMetrics>
+#include <QMetaMethod>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPaintEvent>
 #include <QResizeEvent>
 #include <QStyleOptionTab>
+#include <QWheelEvent>
 #include <QWidget>
 #include <QWindow>
 
@@ -118,6 +120,51 @@ void SessionTabBar::syncScrollButtons()
     emit scrollStateChanged(scrollable, canScrollLeft, canScrollRight);
 }
 
+void SessionTabBar::connectNotify(const QMetaMethod &signal)
+{
+    QTabBar::connectNotify(signal);
+    if (signal == QMetaMethod::fromSignal(&SessionTabBar::scrollStateChanged)) {
+        // 见头文件中的说明：状态可能早于本次连接就已经稳定，之后不会再有变化触发
+        // syncScrollButtons() 重新发出信号，新监听者会永远学不到当前真实状态。补发一次
+        // 缓存值即可，对已连接的旧监听者只是收到一次数值相同的重复信号。
+        emit scrollStateChanged(m_scrollable, m_canScrollLeft, m_canScrollRight);
+    }
+}
+
+void SessionTabBar::wheelEvent(QWheelEvent *event)
+{
+    if (!m_scrollable) {
+        // 没有溢出内容可滚时把事件交还基类/父级，避免吞掉本该继续传递的滚轮事件。
+        QTabBar::wheelEvent(event);
+        return;
+    }
+
+    // 触控板的横向滚动优先：angleDelta().x() 非零时说明用户在做水平手势，此时纵向分量
+    // 通常为 0 或噪声，不能相加，否则同一次手势会被同时按两个方向计入累加器。
+    const QPoint delta = event->angleDelta();
+    const int primaryDelta = delta.x() != 0 ? delta.x() : delta.y();
+    if (primaryDelta == 0) {
+        event->accept();
+        return;
+    }
+
+    // 累积到一整格（120，Qt 定义的标准滚轮单位）才触发一次滚动，效果等同于点击一次
+    // 外部箭头按钮；直接按 delta 数值滚动会在触控板惯性滚动时让标签"飞"过去。
+    m_wheelDeltaAccumulator += primaryDelta;
+    constexpr int kWheelStepThreshold = 120;
+    while (m_wheelDeltaAccumulator >= kWheelStepThreshold) {
+        // 向上滚 / 向左滚（正值）在人类直觉里是把内容往左带，即让更靠左的标签出现，
+        // 也就是向左滚动标签。
+        scrollTabsLeft();
+        m_wheelDeltaAccumulator -= kWheelStepThreshold;
+    }
+    while (m_wheelDeltaAccumulator <= -kWheelStepThreshold) {
+        scrollTabsRight();
+        m_wheelDeltaAccumulator += kWheelStepThreshold;
+    }
+    event->accept();
+}
+
 void SessionTabBar::setVisualColors(const QColor &textColor,
                                     const QColor &selectedTextColor,
                                     const QColor &hoverColor,
@@ -220,7 +267,11 @@ void SessionTabBar::paintEvent(QPaintEvent *event)
 
         if (showCloseButton) {
             const QRectF closeRect(closeButtonRect(index));
-            if (closeRect.contains(mapFromGlobal(QCursor::pos()))) {
+            // "悬停整个标签"（叉号出现）和"精确悬停在叉号上"（即将点击关闭）是两种不同
+            // 强度的反馈：前者只让图标出现，后者除了背景圆还要让线条本身变色，否则用户
+            // 反馈的"看不出鼠标真的移到关闭按钮上了"就无法成立。
+            const bool preciseHover = closeRect.contains(mapFromGlobal(QCursor::pos()));
+            if (preciseHover) {
                 QColor closeBackground = foreground;
                 closeBackground.setAlpha(30);
                 painter.setPen(Qt::NoPen);
@@ -230,7 +281,8 @@ void SessionTabBar::paintEvent(QPaintEvent *event)
             // 叉号同样按浮点中心绘制：QRect::center() 会再次向下取整，把已经居中的命中区
             // 与实际画出的图形错开一像素。
             const QPointF closeCenter = closeRect.center();
-            painter.setPen(QPen(foreground, 1.7, Qt::SolidLine, Qt::RoundCap));
+            const QColor closeStrokeColor = preciseHover ? m_closeHoverColor : foreground;
+            painter.setPen(QPen(closeStrokeColor, 1.7, Qt::SolidLine, Qt::RoundCap));
             painter.drawLine(closeCenter + QPointF(-3.0, -3.0),
                              closeCenter + QPointF(3.0, 3.0));
             painter.drawLine(closeCenter + QPointF(3.0, -3.0),

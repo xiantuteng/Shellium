@@ -4,9 +4,11 @@
 #include <QTabBar>
 
 class QAbstractButton;
+class QMetaMethod;
 class QMouseEvent;
 class QPaintEvent;
 class QResizeEvent;
+class QWheelEvent;
 class QWidget;
 
 /**
@@ -87,6 +89,28 @@ protected:
      */
     bool eventFilter(QObject *watched, QEvent *event) override;
 
+    /**
+     * @brief 新监听者连接 scrollStateChanged 时补发一次当前状态。
+     * @param signal 本次被连接（或断开）的信号。
+     *
+     * syncScrollButtons() 只在状态真正变化时才发出信号：如果监听者是在状态已经稳定之后
+     * 才 connect() 上来的（例如外部按钮的连接语句写在初始 addTab 循环之后，而此时标签栏
+     * 尚未参与真实布局、宽度还是构造期的临时值), 且后续真实布局算出的溢出结论恰好与临时
+     * 值算出的结论相同，就再也不会有变化触发新的信号——新监听者会永远拿不到当前真实状态，
+     * 外部箭头因而卡在错误的初始显隐上。这里在连接建立后补发一次缓存值弥补这个空窗，对
+     * 已经连接的旧监听者只是重复一次相同数值，不会产生副作用。
+     */
+    void connectNotify(const QMetaMethod &signal) override;
+
+    /**
+     * @brief 标签溢出时，让横向/纵向滚轮驱动标签左右滚动。
+     * @param event 当前滚轮事件。
+     *
+     * QTabBar 默认不处理滚轮；只有 m_scrollable 为 true（确实有内容被遮挡）时才消费事件，
+     * 否则交还基类，避免在标签没有溢出时吞掉本该继续向上传递的滚轮事件。
+     */
+    void wheelEvent(QWheelEvent *event) override;
+
     /** @brief 返回包含胶囊留白和按需关闭按钮空间的标签建议尺寸。 */
     QSize tabSizeHint(int index) const override;
 
@@ -156,4 +180,13 @@ private:
     QColor m_selectedColor = QColor(QStringLiteral("#424b68"));
     /** @brief 当前标签终端图标与微型状态点的强调色。 */
     QColor m_accentColor = QColor(QStringLiteral("#2bd981"));
+    /**
+     * @brief 鼠标精确悬停在关闭按钮上时叉号线条的颜色。
+     *
+     * 悬停整个标签只让叉号"出现"（仍用默认前景色）；只有鼠标坐标真正落在关闭按钮命中
+     * 区内才需要额外的强反馈，否则用户区分不出"标签悬停"和"即将点击关闭"这两种状态。
+     */
+    QColor m_closeHoverColor = QColor(QStringLiteral("#ff6b6b"));
+    /** @brief 滚轮横向/纵向 delta 的累积值，凑够一格（120）才触发一次滚动，避免跳跃。 */
+    int m_wheelDeltaAccumulator = 0;
 };

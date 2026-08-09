@@ -257,6 +257,12 @@ private:
     /** @brief 根据当前输入前缀显示或隐藏历史补全弹层。 */
     void updateCompletionPopup();
 
+    /**
+     * @brief 计算 libvterm 视觉光标对应的文档光标矩形，供 paintEvent 与补全弹层共用。
+     * @return 有效位置时返回对应矩形；无法取得有效位置（vterm 尚未渲染或位置越界）时返回空 QRect。
+     */
+    QRect visualCursorRect() const;
+
     /** @brief 接受补全候选，只向 PTY 发送尚未输入的后缀。 */
     void acceptCompletion(const QString &completion);
 
