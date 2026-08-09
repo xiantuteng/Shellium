@@ -2,6 +2,7 @@
 
 #include <QColor>
 #include <QHash>
+#include <QList>
 #include <QKeySequence>
 #include <QObject>
 #include <QString>
@@ -35,20 +36,6 @@ enum class ThemeMode {
 };
 
 /**
- * @brief 终端配色风格。
- *
- * Default 沿用 ThemeMode 解析出的浅色/深色两套内置配色；其余选项各自是一套固定配色，
- * 不再随浅色/深色主题切换而改变，效果与主流终端模拟器的预设主题一致。
- */
-enum class TerminalColorScheme {
-    Default,
-    SolarizedDark,
-    Dracula,
-    Monokai,
-    Nord
-};
-
-/**
  * @brief 一套终端主题使用的关键颜色。
  *
  * 颜色集中为值对象是为了让终端、设置预览和应用级 QPalette 使用同一来源，避免多个控件
@@ -63,6 +50,21 @@ struct TerminalPalette {
 };
 
 /**
+ * @brief 一套内置终端配色预设。
+ *
+ * 配色数量已达数十套，用枚举逐一列举会让序列化、界面构建和新增主题三处同时膨胀，因此改用
+ * 数据表：id 是持久化用的稳定标识（不受显示名称与本地化影响），name 是界面显示名，dark 只
+ * 用于界面分组和对比度判断。唯一的特例是 id "default"，它没有固定颜色，跟随 ThemeMode
+ * 解析出的浅色/深色内置配色。
+ */
+struct TerminalThemePreset {
+    QString id;
+    QString name;
+    bool dark = true;
+    TerminalPalette palette;
+};
+
+/**
  * @brief 可持久化的外观、终端行为和快捷键设置快照。
  *
  * 该结构只包含值，不持有数据库或 QWidget，可安全复制给每个 TerminalWorkspace。所有公开
@@ -73,8 +75,13 @@ struct TerminalSettings {
     /** @brief 主题选择，默认深色，与大多数终端模拟器的开箱体验一致。 */
     ThemeMode themeMode = ThemeMode::Dark;
 
-    /** @brief 终端配色风格，默认使用 ThemeMode 对应的内置浅色/深色配色。 */
-    TerminalColorScheme colorScheme = TerminalColorScheme::Default;
+    /**
+     * @brief 终端配色预设 id，默认 "default" 表示跟随 ThemeMode 的内置浅色/深色配色。
+     *
+     * 未知 id（旧版本、手工改库或插件写入）会在 normalized() 中回退为 "default"，不会让终端
+     * 拿到一套没有颜色的空调色板。
+     */
+    QString colorSchemeId = QStringLiteral("default");
 
     /** @brief 等宽字体族；空字符串表示使用 Qt 平台默认等宽字体。 */
     QString fontFamily;
@@ -122,6 +129,29 @@ struct TerminalSettings {
      */
     QHash<QString, QKeySequence> shortcuts;
 
+    /**
+     * @brief 返回全部内置配色预设，顺序即设置界面的展示顺序。
+     *
+     * 第一项固定是 id 为 "default" 的跟随主题项；其余按“深浅成对、系列相邻”排列，方便用户在
+     * 长列表里对比同一系列的明暗版本。
+     */
+    [[nodiscard]] static const QList<TerminalThemePreset> &themePresets();
+
+    /**
+     * @brief 查找配色预设。
+     * @param id 预设 id。
+     * @return 命中的预设指针；未知 id 返回 nullptr，返回值指向静态表，可长期持有。
+     */
+    [[nodiscard]] static const TerminalThemePreset *themePreset(const QString &id);
+
+    /**
+     * @brief 返回推荐的等宽/编程字体族名列表，顺序即推荐优先级。
+     *
+     * 列表是纯建议数据，不代表本机一定安装；设置界面负责与 QFontDatabase 求交集，只展示真实
+     * 可用的字体，避免用户选到一个会被静默替换成其它字体的名字。
+     */
+    [[nodiscard]] static QStringList recommendedFontFamilies();
+
     /** @brief 返回包含全部内置动作的默认快捷键表。 */
     [[nodiscard]] static QHash<QString, QKeySequence> defaultShortcuts();
 
@@ -159,7 +189,6 @@ struct TerminalSettings {
 
 Q_DECLARE_METATYPE(TerminalSettings)
 Q_DECLARE_METATYPE(ThemeMode)
-Q_DECLARE_METATYPE(TerminalColorScheme)
 
 /**
  * @brief 负责加载、校验、原子保存并广播终端设置的应用级服务。

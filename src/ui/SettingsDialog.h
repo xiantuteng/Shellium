@@ -6,8 +6,10 @@
 #include <QHash>
 #include <QList>
 
+class QComboBox;
 class QDoubleSpinBox;
-class QFontComboBox;
+class QGridLayout;
+class QLineEdit;
 class QKeySequenceEdit;
 class QLabel;
 class QListWidget;
@@ -55,6 +57,18 @@ private:
     /** @brief 构建左侧分类导航，并与右侧页面栈双向同步。 */
     void buildNavigation();
 
+    /**
+     * @brief 按关键词过滤配色色板，并把可见卡片重新排成两列。
+     * @param filter 关键词；为空表示展示全部配色。
+     *
+     * 直接隐藏网格里的卡片会在原位留下空洞（QGridLayout 不会自动收拢隐藏项），因此每次过滤
+     * 都重新分配行列，让可见卡片始终紧密排列。
+     */
+    void relayoutColorSchemeGrid(const QString &filter);
+
+    /** @brief 用推荐编程字体 + 本机全部等宽字体填充字体下拉框。 */
+    void populateFontCombo();
+
     /** @brief 构建“外观”页：应用主题、终端配色色板与实时预览。 */
     QWidget *buildAppearancePage();
 
@@ -90,9 +104,15 @@ private:
     QStackedWidget *m_pages = nullptr;
 
     SegmentedControl *m_themeSelector = nullptr;
-    /** @brief 终端配色色板卡，按 TerminalColorScheme 的整数值索引。 */
-    QHash<int, ThemeSwatchButton *> m_colorSchemeSwatches;
-    QFontComboBox *m_fontCombo = nullptr;
+    /** @brief 终端配色色板卡，按配色预设 id 索引。 */
+    QHash<QString, ThemeSwatchButton *> m_colorSchemeSwatches;
+    /** @brief 配色 id 的展示顺序，过滤后重排网格时据此保持稳定次序。 */
+    QStringList m_colorSchemeOrder;
+    QWidget *m_colorSchemeGrid = nullptr;
+    QLineEdit *m_colorSchemeFilter = nullptr;
+    /** @brief 过滤结果为空时显示的提示，避免只留下一块空白区域。 */
+    QLabel *m_colorSchemeEmptyLabel = nullptr;
+    QComboBox *m_fontCombo = nullptr;
     QSpinBox *m_fontSizeSpin = nullptr;
     QSpinBox *m_lineHeightSpin = nullptr;
     QDoubleSpinBox *m_letterSpacingSpin = nullptr;

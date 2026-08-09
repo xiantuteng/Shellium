@@ -155,6 +155,8 @@ if(BUILD_TESTING)
         src/terminal/VtermBridge.h
         src/terminal/LocalShellWorker.cpp
         src/terminal/LocalShellWorker.h
+        src/ui/SettingsWidgets.cpp
+        src/ui/SettingsWidgets.h
         src/ui/VaultDialog.cpp
         src/ui/VaultDialog.h
     )

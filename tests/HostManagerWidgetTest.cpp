@@ -4,8 +4,12 @@
 #include "ui/HostManagerWidget.h"
 
 #include <QAbstractButton>
+#include <QApplication>
+#include <QLayout>
 #include <QListWidget>
+#include <QSet>
 #include <QTest>
+#include <QTimer>
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
 
@@ -32,6 +36,9 @@ private slots:
 
     /** @brief 侧栏标题行只暴露新建主机、新建分组与刷新三个动作。 */
     void headerExposesOnlyThreePrimaryActions();
+
+    /** @brief 分组配置窗口不得让主机专属控件浮在左上角盖住卡片顶部。 */
+    void groupDialogHasNoStrayWidgets();
 
 private:
     [[nodiscard]] QTreeWidgetItem *findItem(const HostManagerWidget &widget,
@@ -136,6 +143,73 @@ void HostManagerWidgetTest::headerExposesOnlyThreePrimaryActions()
 
     // "最近连接"整块已移除，面板里不应再残留任何列表控件。
     QVERIFY(widget.findChild<QListWidget *>() == nullptr);
+}
+
+namespace {
+
+/** @brief 递归收集某个布局（含嵌套子布局）直接管理的全部控件。 */
+void collectLayoutWidgets(QLayout *layout, QSet<QWidget *> *managed)
+{
+    if (layout == nullptr) {
+        return;
+    }
+    for (int index = 0; index < layout->count(); ++index) {
+        QLayoutItem *item = layout->itemAt(index);
+        if (QWidget *widget = item->widget()) {
+            managed->insert(widget);
+        }
+        collectLayoutWidgets(item->layout(), managed);
+    }
+}
+
+} // namespace
+
+void HostManagerWidgetTest::groupDialogHasNoStrayWidgets()
+{
+    HostManagerWidget widget(m_database.get(), m_vault.get());
+
+    // 编辑对话框是 HostManagerWidget.cpp 内部类型，只能经"新建分组"动作弹出；它是模态的，
+    // 所以在事件循环里取当前模态窗口来检查，再关掉它让 addGroup() 返回。
+    QAbstractButton *addGroupButton = nullptr;
+    for (QAbstractButton *button : widget.headerActionsWidget()->findChildren<QAbstractButton *>()) {
+        if (button->text() == QStringLiteral("新建分组")) {
+            addGroupButton = button;
+        }
+    }
+    QVERIFY2(addGroupButton != nullptr, "侧栏没有新建分组按钮");
+
+    QString failure;
+    QTimer::singleShot(0, [&failure]() {
+        QWidget *dialog = QApplication::activeModalWidget();
+        if (dialog == nullptr) {
+            failure = QStringLiteral("分组配置对话框未能弹出");
+            return;
+        }
+        QSet<QWidget *> managed;
+        collectLayoutWidgets(dialog->layout(), &managed);
+        // QFocusFrame（macOS 焦点环）和 QSizeGrip 由 Qt 自行创建并围绕目标控件浮动定位，
+        // 本就不该进入布局；把它们计入会让本用例随焦点时序随机失败。
+        static const QSet<QString> qtFloatingHelpers = {
+            QStringLiteral("QFocusFrame"), QStringLiteral("QSizeGrip")};
+        for (QWidget *child : dialog->findChildren<QWidget *>(Qt::FindDirectChildrenOnly)) {
+            const QString className = QString::fromLatin1(child->metaObject()->className());
+            // 显式隐藏的控件不绘制、也不参与 Tab 顺序，是可接受的"备用控件"形态。
+            if (child->isHidden() || managed.contains(child)
+                || qtFloatingHelpers.contains(className)) {
+                continue;
+            }
+            failure = QStringLiteral("控件 %1 可见但不在任何布局中，会浮在分组配置窗口左上角")
+                          .arg(className);
+            break;
+        }
+        dialog->close();
+    });
+
+    // 分组不展示主机地址、会话密码与旧版兼容开关，但这些控件仍以对话框为父对象被创建。
+    // 父子关系只决定归属、不决定位置：没有被任何布局接管的控件会停在 (0,0) 按 sizeHint
+    // 绘制，于是窗口顶部浮出一个空白输入框、一段密码占位文字和一个开关，盖住卡片标题。
+    addGroupButton->click();
+    QVERIFY2(failure.isEmpty(), qPrintable(failure));
 }
 
 QTEST_MAIN(HostManagerWidgetTest)

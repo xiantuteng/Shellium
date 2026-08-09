@@ -29,6 +29,26 @@ namespace ShelliumUi {
 /** @brief 返回全应用统一的强调色，与 MainWindow 全局样式表使用同一常量。 */
 [[nodiscard]] QColor accentColor();
 
+/**
+ * @brief 返回可脱离主窗口独立使用的对话框样式表。
+ * @param dark true 取深色配色，false 取浅色配色。
+ *
+ * MainWindow 的视觉系统是在窗口构造时通过 qApp->setStyleSheet() 一次性铺开的，而保险库
+ * 解锁框在启动阶段先于 MainWindow 弹出，那时全局样式表还是空的，对话框只会拿到 Fusion
+ * 默认外观——与进入应用后的界面完全是两种风格。本函数提供同一套颜色下的卡片、输入框、
+ * 按钮与页脚规则，供这类"主窗口之前"的对话框自行套用。
+ */
+[[nodiscard]] QString standaloneDialogStyleSheet(bool dark);
+
+/**
+ * @brief 在没有全局样式表时给对话框套上 standaloneDialogStyleSheet()。
+ * @param dialog 目标对话框，不可为空。
+ *
+ * 一旦 MainWindow 铺好 qApp 样式表，就以它为准：那份样式表用的是用户选择的主题，而独立
+ * 样式只能按系统外观猜测明暗，两者在"用户手动选浅色但系统是深色"时会给出相反答案。
+ */
+void applyStandaloneDialogStyle(QWidget *dialog);
+
 } // namespace ShelliumUi
 
 /**

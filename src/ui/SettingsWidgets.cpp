@@ -1,6 +1,7 @@
 #include "ui/SettingsWidgets.h"
 
 #include <QAbstractSpinBox>
+#include <QApplication>
 #include <QButtonGroup>
 #include <QEvent>
 #include <QFont>
@@ -11,6 +12,7 @@
 #include <QPainterPath>
 #include <QPropertyAnimation>
 #include <QPushButton>
+#include <QStyleHints>
 #include <QToolButton>
 #include <QVBoxLayout>
 
@@ -39,6 +41,118 @@ QColor accentColor()
     // 与 MainWindow::applyModernAppearance() 的 @ACCENT@ 保持同一取值。这里重复声明而不是
     // 反向依赖 MainWindow，是为了让设置控件族可以被不含主窗口的测试目标单独构建。
     return QColor(QStringLiteral("#2bd981"));
+}
+
+QString standaloneDialogStyleSheet(const bool dark)
+{
+    // 颜色取值逐条对应 MainWindow::applyModernAppearance() 里的同名占位符；这里是那份
+    // 全局样式表面向单个对话框的最小子集，只保留卡片、输入控件、按钮与页脚这几类。
+    QString styleSheet = QStringLiteral(R"QSS(
+        QDialog {
+            background: @WORKSPACE@;
+            color: @TEXT@;
+        }
+        QLabel {
+            color: @TEXT@;
+        }
+        QLineEdit {
+            color: @TEXT@;
+            background: @SURFACE@;
+            selection-color: @TEXT@;
+            selection-background-color: @SELECTION@;
+            border: 1px solid @BORDER@;
+            border-radius: 8px;
+            min-height: 28px;
+            padding: 3px 8px;
+        }
+        QLineEdit:focus {
+            border: 1px solid @ACCENT@;
+        }
+        QPushButton {
+            color: @TEXT@;
+            background: @SURFACE@;
+            border: 1px solid @BORDER@;
+            border-radius: 8px;
+            min-height: 28px;
+            padding: 4px 11px;
+        }
+        QPushButton:hover {
+            background: @RAISED@;
+            border-color: @MUTED@;
+        }
+        QPushButton:pressed {
+            background: @SELECTION@;
+            border-color: @ACCENT@;
+        }
+        QPushButton[primaryAction="true"] {
+            color: #0c2f24;
+            background: @ACCENT@;
+            border-color: @ACCENT@;
+            font-weight: 700;
+        }
+        QPushButton[primaryAction="true"]:hover {
+            background: #45e394;
+            border-color: #45e394;
+        }
+        QFrame#SettingsCard {
+            background: @SURFACE@;
+            border: 1px solid @BORDER@;
+            border-radius: 14px;
+        }
+        QLabel#SettingsCardTitle {
+            color: @TEXT@;
+            font-size: 14px;
+            font-weight: 700;
+        }
+        QLabel#SettingsRowLabel {
+            color: @TEXT@;
+        }
+        QLabel#SettingsRowHint {
+            color: @MUTED@;
+            font-size: 12px;
+        }
+        QWidget#SettingsFooter {
+            background: @SIDEBAR@;
+            border-top: 1px solid @BORDER@;
+        }
+    )QSS");
+    styleSheet.replace(QStringLiteral("@WORKSPACE@"),
+                       dark ? QStringLiteral("#101525") : QStringLiteral("#edf1f4"));
+    styleSheet.replace(QStringLiteral("@SIDEBAR@"),
+                       dark ? QStringLiteral("#191f31") : QStringLiteral("#f5f7f8"));
+    styleSheet.replace(QStringLiteral("@SURFACE@"),
+                       dark ? QStringLiteral("#21283b") : QStringLiteral("#ffffff"));
+    styleSheet.replace(QStringLiteral("@RAISED@"),
+                       dark ? QStringLiteral("#293147") : QStringLiteral("#f0f3f5"));
+    styleSheet.replace(QStringLiteral("@BORDER@"),
+                       dark ? QStringLiteral("#30384f") : QStringLiteral("#d9e0e4"));
+    styleSheet.replace(QStringLiteral("@TEXT@"),
+                       dark ? QStringLiteral("#f0f3fa") : QStringLiteral("#1b2230"));
+    styleSheet.replace(QStringLiteral("@MUTED@"),
+                       dark ? QStringLiteral("#929bb3") : QStringLiteral("#71808d"));
+    styleSheet.replace(QStringLiteral("@SELECTION@"),
+                       dark ? QStringLiteral("#24413d") : QStringLiteral("#dff6ec"));
+    styleSheet.replace(QStringLiteral("@ACCENT@"), accentColor().name());
+    return styleSheet;
+}
+
+void applyStandaloneDialogStyle(QWidget *dialog)
+{
+    Q_ASSERT(dialog != nullptr);
+    if (qApp == nullptr || !qApp->styleSheet().isEmpty()) {
+        return;
+    }
+
+    // 全局样式表为空说明 MainWindow 还没建立视觉系统，此时只能按系统外观选明暗；Qt 未
+    // 声明配色方案的平台再退回调色板亮度，与 TerminalSettings::effectiveThemeMode() 的
+    // "跟随系统"判定同源。
+    Qt::ColorScheme scheme = Qt::ColorScheme::Unknown;
+    if (QGuiApplication::instance() != nullptr) {
+        scheme = QGuiApplication::styleHints()->colorScheme();
+    }
+    const bool dark = scheme == Qt::ColorScheme::Dark
+        || (scheme == Qt::ColorScheme::Unknown && isDarkPalette(QGuiApplication::palette()));
+    dialog->setStyleSheet(standaloneDialogStyleSheet(dark));
 }
 
 } // namespace ShelliumUi

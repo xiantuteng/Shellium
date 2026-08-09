@@ -45,9 +45,16 @@ private:
                          bool allowCancel,
                          QWidget *parent = nullptr);
 
+    /**
+     * @brief 在卡片内联展示一条错误，并把焦点交回需要重新输入的控件。
+     * @param message 错误说明；为空表示清除当前错误。
+     * @param focusTarget 需要重新获得焦点的输入框，可为空。
+     */
+    void showInlineError(const QString &message, QLineEdit *focusTarget = nullptr);
+
     CredentialVault *m_vault = nullptr;
     bool m_creating = false;
-    QLabel *m_messageLabel = nullptr;
+    QLabel *m_errorLabel = nullptr;
     QLineEdit *m_passwordEdit = nullptr;
     QLineEdit *m_confirmationEdit = nullptr;
 };

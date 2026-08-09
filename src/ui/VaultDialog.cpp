@@ -1,9 +1,9 @@
 #include "ui/VaultDialog.h"
 
 #include "security/Vault.h"
+#include "ui/SettingsWidgets.h"
 
-#include <QDialogButtonBox>
-#include <QFormLayout>
+#include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
@@ -49,26 +49,40 @@ VaultDialog::VaultDialog(CredentialVault *vault,
     : QDialog(parent)
     , m_vault(vault)
     , m_creating(creating)
-    , m_messageLabel(new QLabel(this))
+    , m_errorLabel(new QLabel(this))
     , m_passwordEdit(new QLineEdit(this))
     , m_confirmationEdit(new QLineEdit(this))
 {
+    // 版式与连接对话框、设置窗口一致：卡片承载“左说明右控件”的行，底部是一条独立页脚。
+    // 启动阶段本对话框先于 MainWindow 出现，全局样式表还没铺开，因此这里补一份等效样式。
+    setObjectName(QStringLiteral("VaultDialog"));
     setWindowTitle(creating ? tr("创建 Shellium 保险库") : tr("解锁 Shellium 保险库"));
-    setMinimumWidth(440);
+    setMinimumWidth(480);
     setWindowFlag(Qt::WindowContextHelpButtonHint, false);
+    ShelliumUi::applyStandaloneDialogStyle(this);
 
-    m_messageLabel->setWordWrap(true);
-    m_messageLabel->setText(creating
+    const QString introduction = creating
         ? tr("请设置主密码。Shellium 使用 Argon2id 派生密钥，并以 XChaCha20-Poly1305 "
              "加密保存的 SSH 凭据。主密码无法找回，请妥善保管。")
-        : tr("保险库已锁定。请输入主密码以使用已保存的 SSH 凭据。"));
+        : tr("保险库已锁定。请输入主密码以使用已保存的 SSH 凭据。");
     m_passwordEdit->setEchoMode(QLineEdit::Password);
+    m_passwordEdit->setPlaceholderText(tr("输入主密码"));
+    m_passwordEdit->setMinimumWidth(240);
     m_confirmationEdit->setEchoMode(QLineEdit::Password);
+    m_confirmationEdit->setPlaceholderText(tr("再次输入以确认"));
+    m_confirmationEdit->setMinimumWidth(240);
 
-    auto *form = new QFormLayout;
-    form->addRow(tr("主密码："), m_passwordEdit);
+    // 校验失败与解密失败都在卡片内联提示：再叠一层 QMessageBox 会遮住刚输错的那个输入框，
+    // 用户还得先关掉弹窗才能重试。
+    m_errorLabel->setWordWrap(true);
+    m_errorLabel->setVisible(false);
+    m_errorLabel->setStyleSheet(QStringLiteral("color: #e5484d; font-size: 12px;"));
+
+    auto *card = new SettingsCard(creating ? tr("创建保险库") : tr("解锁保险库"), this);
+    card->addNote(introduction);
+    card->addRow(tr("主密码"), m_passwordEdit);
     if (creating) {
-        form->addRow(tr("确认主密码："), m_confirmationEdit);
+        card->addRow(tr("确认主密码"), m_confirmationEdit);
     } else {
         // 解锁模式不需要确认框，但它已经以本对话框为父对象创建。父子关系只决定归属，
         // 不决定位置：未被任何布局接管的控件会停在 (0,0) 并按 sizeHint 绘制，表现为左上角
@@ -76,44 +90,70 @@ VaultDialog::VaultDialog(CredentialVault *vault,
         // 显式隐藏即可让它退出绘制与焦点链，同时保持 accept() 中的无条件 clear() 有效。
         m_confirmationEdit->setVisible(false);
     }
+    card->addFullWidthWidget(m_errorLabel);
 
-    const QDialogButtonBox::StandardButtons buttons = allowCancel
-        ? QDialogButtonBox::Ok | QDialogButtonBox::Cancel
-        : QDialogButtonBox::Ok;
-    auto *buttonBox = new QDialogButtonBox(buttons, this);
-    buttonBox->button(QDialogButtonBox::Ok)->setText(creating ? tr("创建保险库") : tr("解锁"));
+    auto *footer = new QWidget(this);
+    footer->setObjectName(QStringLiteral("SettingsFooter"));
+    auto *footerLayout = new QHBoxLayout(footer);
+    footerLayout->setContentsMargins(20, 12, 20, 12);
+    footerLayout->setSpacing(10);
+    auto *confirmButton = new QPushButton(creating ? tr("创建保险库") : tr("解锁"), footer);
+    confirmButton->setProperty("primaryAction", true);
+    confirmButton->setDefault(true);
+    footerLayout->addStretch(1);
+    if (allowCancel) {
+        auto *cancelButton = new QPushButton(tr("取消"), footer);
+        footerLayout->addWidget(cancelButton);
+        connect(cancelButton, &QPushButton::clicked, this, &VaultDialog::reject);
+    }
+    footerLayout->addWidget(confirmButton);
+
+    auto *body = new QWidget(this);
+    auto *bodyLayout = new QVBoxLayout(body);
+    bodyLayout->setContentsMargins(22, 20, 22, 18);
+    bodyLayout->setSpacing(16);
+    bodyLayout->addWidget(card);
+    bodyLayout->addStretch(1);
 
     auto *layout = new QVBoxLayout(this);
-    layout->addWidget(m_messageLabel);
-    layout->addLayout(form);
-    layout->addWidget(buttonBox);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(0);
+    layout->addWidget(body, 1);
+    layout->addWidget(footer);
 
-    connect(buttonBox, &QDialogButtonBox::accepted, this, &VaultDialog::accept);
-    connect(buttonBox, &QDialogButtonBox::rejected, this, &VaultDialog::reject);
+    connect(confirmButton, &QPushButton::clicked, this, &VaultDialog::accept);
+    connect(m_passwordEdit, &QLineEdit::returnPressed, this, &VaultDialog::accept);
+    connect(m_confirmationEdit, &QLineEdit::returnPressed, this, &VaultDialog::accept);
     m_passwordEdit->setFocus();
+}
+
+void VaultDialog::showInlineError(const QString &message, QLineEdit *focusTarget)
+{
+    m_errorLabel->setText(message);
+    m_errorLabel->setVisible(!message.isEmpty());
+    if (focusTarget != nullptr) {
+        focusTarget->setFocus();
+        focusTarget->selectAll();
+    }
 }
 
 void VaultDialog::accept()
 {
     const QString password = m_passwordEdit->text();
     if (password.isEmpty()) {
-        QMessageBox::warning(this, tr("主密码为空"), tr("请输入主密码。"));
-        m_passwordEdit->setFocus();
+        showInlineError(tr("请输入主密码。"), m_passwordEdit);
         return;
     }
     if (m_creating && password.size() < 8) {
-        QMessageBox::warning(this,
-                             tr("主密码过短"),
-                             tr("主密码至少需要 8 个字符，以降低离线猜测风险。"));
-        m_passwordEdit->setFocus();
+        showInlineError(tr("主密码至少需要 8 个字符，以降低离线猜测风险。"), m_passwordEdit);
         return;
     }
     if (m_creating && password != m_confirmationEdit->text()) {
-        QMessageBox::warning(this, tr("两次输入不一致"), tr("请重新确认主密码。"));
         m_confirmationEdit->clear();
-        m_confirmationEdit->setFocus();
+        showInlineError(tr("两次输入的主密码不一致，请重新确认。"), m_confirmationEdit);
         return;
     }
+    showInlineError(QString());
 
     QString error;
     const bool succeeded = m_creating ? m_vault->initialize(password, &error)
@@ -123,10 +163,9 @@ void VaultDialog::accept()
     m_passwordEdit->clear();
     m_confirmationEdit->clear();
     if (!succeeded) {
-        QMessageBox::warning(this,
-                             m_creating ? tr("创建保险库失败") : tr("无法解锁保险库"),
-                             error);
-        m_passwordEdit->setFocus();
+        showInlineError(m_creating ? tr("创建保险库失败：%1").arg(error)
+                                   : tr("无法解锁保险库：%1").arg(error),
+                        m_passwordEdit);
         return;
     }
 

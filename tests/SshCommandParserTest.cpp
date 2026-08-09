@@ -9,9 +9,12 @@
 #include "settings/TerminalSettings.h"
 #include "storage/ApplicationDatabase.h"
 
+#include <QAbstractButton>
 #include <QClipboard>
 #include <QApplication>
 #include <QFile>
+#include <QLabel>
+#include <QLineEdit>
 #include <QGuiApplication>
 #include <QSignalSpy>
 #include <QInputMethodEvent>
@@ -183,6 +186,9 @@ private slots:
 
     /** @brief 解锁模式下不得有游离在布局之外的可见子控件。 */
     void vaultDialogHasNoStrayWidgets();
+
+    /** @brief 主密码错误要在对话框里内联提示，不能再叠一层需要先关掉的弹窗。 */
+    void vaultDialogReportsWrongPasswordInline();
 
     /** @brief 光标闪烁重建文档时不得丢失滚动位置，跟随底部必须持续有效。 */
     void terminalKeepsBottomAcrossCursorBlink();
@@ -1367,7 +1373,7 @@ void SshCommandParserTest::terminalBackgroundIgnoresApplicationStyleSheet()
 
     TerminalSettings settings;
     settings.themeMode = ThemeMode::Dark;
-    settings.colorScheme = TerminalColorScheme::Default;
+    settings.colorSchemeId = QStringLiteral("default");
     const QColor expectedBackground = settings.normalized().effectivePalette().background;
 
     TerminalView view;
@@ -1455,6 +1461,83 @@ void SshCommandParserTest::vaultDialogHasNoStrayWidgets()
     // 左上角出现一个盖住说明文字的空白输入框，而且还能被 Tab 选中。
     VaultDialog::ensureUnlocked(&vault, nullptr, true);
     QVERIFY2(failure.isEmpty(), qPrintable(failure));
+}
+
+void SshCommandParserTest::vaultDialogReportsWrongPasswordInline()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+    ApplicationDatabase database(
+        temporaryDirectory.filePath(QStringLiteral("vault-dialog-error.db")));
+    QString error;
+    QVERIFY2(database.initialize(&error), qPrintable(error));
+
+    CredentialVault vault(database);
+    QVERIFY2(vault.initialize(QStringLiteral("一条足够长的主密码-2026"), &error), qPrintable(error));
+    vault.lock();
+
+    QString failure;
+    QTimer::singleShot(0, [&failure]() {
+        QWidget *dialog = QApplication::activeModalWidget();
+        if (dialog == nullptr) {
+            failure = QStringLiteral("解锁对话框未能弹出");
+            return;
+        }
+        // 解锁模式下"确认主密码"框仍以对话框为父对象存在，只是被隐藏；取第一个可见的
+        // 输入框才能保证键入的是真正参与解锁的那个。
+        QLineEdit *passwordEdit = nullptr;
+        for (QLineEdit *edit : dialog->findChildren<QLineEdit *>()) {
+            if (passwordEdit == nullptr && !edit->isHidden()) {
+                passwordEdit = edit;
+            }
+        }
+        QAbstractButton *unlockButton = nullptr;
+        for (QAbstractButton *button : dialog->findChildren<QAbstractButton *>()) {
+            if (button->text() == QStringLiteral("解锁")) {
+                unlockButton = button;
+            }
+        }
+        if (passwordEdit == nullptr || unlockButton == nullptr) {
+            failure = QStringLiteral("解锁对话框缺少密码框或解锁按钮");
+            dialog->close();
+            return;
+        }
+
+        passwordEdit->setText(QStringLiteral("错误的主密码"));
+
+        // 用 QMessageBox 报错会在解锁框之上再弹一个模态窗口：它挡住刚输错的密码框，用户
+        // 必须先关掉它才能重试。这类弹窗自带事件循环，click() 会一直卡在里面，所以先挂一个
+        // 单次定时器：它在弹窗的事件循环里执行，既记录违规也把弹窗关掉让 click() 返回。
+        bool blockedByPopup = false;
+        QTimer::singleShot(0, [dialog, &blockedByPopup]() {
+            QWidget *popup = QApplication::activeModalWidget();
+            if (popup != nullptr && popup != dialog) {
+                blockedByPopup = true;
+                popup->close();
+            }
+        });
+        unlockButton->click();
+
+        if (blockedByPopup) {
+            failure = QStringLiteral("解锁失败后弹出了额外的模态窗口");
+        } else {
+            bool reported = false;
+            for (const QLabel *label : dialog->findChildren<QLabel *>()) {
+                if (label->isVisible() && label->text().contains(QStringLiteral("无法解锁保险库"))) {
+                    reported = true;
+                }
+            }
+            if (!reported) {
+                failure = QStringLiteral("解锁失败后对话框内没有可见的错误说明");
+            }
+        }
+        dialog->close();
+    });
+
+    VaultDialog::ensureUnlocked(&vault, nullptr, true);
+    QVERIFY2(failure.isEmpty(), qPrintable(failure));
+    // 密码错误绝不能被当成解锁成功。
+    QCOMPARE(vault.state(&error), CredentialVault::State::Locked);
 }
 
 void SshCommandParserTest::terminalKeepsBottomAcrossCursorBlink()

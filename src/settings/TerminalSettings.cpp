@@ -60,46 +60,6 @@ std::optional<ThemeMode> parseTheme(const QString &value)
     return std::nullopt;
 }
 
-/** @brief 把终端配色风格序列化为不受本地化影响的稳定字符串。 */
-QString serializeColorScheme(const TerminalColorScheme scheme)
-{
-    switch (scheme) {
-    case TerminalColorScheme::SolarizedDark:
-        return QStringLiteral("solarized_dark");
-    case TerminalColorScheme::Dracula:
-        return QStringLiteral("dracula");
-    case TerminalColorScheme::Monokai:
-        return QStringLiteral("monokai");
-    case TerminalColorScheme::Nord:
-        return QStringLiteral("nord");
-    case TerminalColorScheme::Default:
-    default:
-        return QStringLiteral("default");
-    }
-}
-
-/** @brief 解析终端配色风格字符串；未知值返回空，调用方据此回退默认值并报告警告。 */
-std::optional<TerminalColorScheme> parseColorScheme(const QString &value)
-{
-    const QString normalized = value.trimmed().toLower();
-    if (normalized == QLatin1String("default")) {
-        return TerminalColorScheme::Default;
-    }
-    if (normalized == QLatin1String("solarized_dark")) {
-        return TerminalColorScheme::SolarizedDark;
-    }
-    if (normalized == QLatin1String("dracula")) {
-        return TerminalColorScheme::Dracula;
-    }
-    if (normalized == QLatin1String("monokai")) {
-        return TerminalColorScheme::Monokai;
-    }
-    if (normalized == QLatin1String("nord")) {
-        return TerminalColorScheme::Nord;
-    }
-    return std::nullopt;
-}
-
 /** @brief 把光标形态序列化为稳定字符串。 */
 QString serializeCursorShape(const TerminalCursorShape shape)
 {
@@ -241,6 +201,11 @@ TerminalSettings TerminalSettings::normalized() const
 {
     TerminalSettings result = *this;
     result.fontFamily = result.fontFamily.trimmed();
+    // 未知配色 id 一律回退默认，避免旧版本、手工改库或插件写入的值让终端拿到空调色板。
+    result.colorSchemeId = result.colorSchemeId.trimmed();
+    if (themePreset(result.colorSchemeId) == nullptr) {
+        result.colorSchemeId = QStringLiteral("default");
+    }
     result.fontPointSize = std::clamp(result.fontPointSize, 6, 72);
     result.lineHeightPercent = std::clamp(result.lineHeightPercent, 80, 250);
     result.letterSpacing = std::clamp(result.letterSpacing, -2.0, 10.0);
@@ -313,46 +278,466 @@ ThemeMode TerminalSettings::effectiveThemeMode() const
     return ThemeMode::Light;
 }
 
+const QList<TerminalThemePreset> &TerminalSettings::themePresets()
+{
+    // 静态数据表：新增一套配色只需在这里加一行，序列化、设置界面与终端渲染会自动跟上。
+    // 第一项的颜色只是列表里的占位（真正的取值由 effectivePalette() 按主题解析），因此填的是
+    // 内置深色配色，保证任何直接读取该项 palette 的调用方也能拿到一套可用颜色。
+    static const QList<TerminalThemePreset> presets = {
+        {QStringLiteral("default"),
+         QObject::tr("默认"),
+         true,
+         {QColor(QStringLiteral("#111318")), QColor(QStringLiteral("#e6e6e6")),
+          QColor(QStringLiteral("#f6c85f")), QColor(QStringLiteral("#34598a")),
+          QColor(QStringLiteral("#66b3ff"))}},
+        {QStringLiteral("termius_dark"),
+         QStringLiteral("Termius Dark"),
+         true,
+         {QColor(QStringLiteral("#131a24")), QColor(QStringLiteral("#d5dae1")),
+          QColor(QStringLiteral("#2bd981")), QColor(QStringLiteral("#26303f")),
+          QColor(QStringLiteral("#4aa3ff"))}},
+        {QStringLiteral("termius_light"),
+         QStringLiteral("Termius Light"),
+         false,
+         {QColor(QStringLiteral("#c9d0d7")), QColor(QStringLiteral("#2c3542")),
+          QColor(QStringLiteral("#1f8f56")), QColor(QStringLiteral("#b3bcc6")),
+          QColor(QStringLiteral("#0b57d0"))}},
+        {QStringLiteral("flexoki_dark"),
+         QStringLiteral("Flexoki Dark"),
+         true,
+         {QColor(QStringLiteral("#100f0f")), QColor(QStringLiteral("#cecdc3")),
+          QColor(QStringLiteral("#879a39")), QColor(QStringLiteral("#282726")),
+          QColor(QStringLiteral("#4385be"))}},
+        {QStringLiteral("flexoki_light"),
+         QStringLiteral("Flexoki Light"),
+         false,
+         {QColor(QStringLiteral("#fffcf0")), QColor(QStringLiteral("#100f0f")),
+          QColor(QStringLiteral("#879a39")), QColor(QStringLiteral("#e6e4d9")),
+          QColor(QStringLiteral("#205ea6"))}},
+        {QStringLiteral("kanagawa_wave"),
+         QStringLiteral("Kanagawa Wave"),
+         true,
+         {QColor(QStringLiteral("#1f1f28")), QColor(QStringLiteral("#dcd7ba")),
+          QColor(QStringLiteral("#c8c093")), QColor(QStringLiteral("#2d4f67")),
+          QColor(QStringLiteral("#7e9cd8"))}},
+        {QStringLiteral("kanagawa_dragon"),
+         QStringLiteral("Kanagawa Dragon"),
+         true,
+         {QColor(QStringLiteral("#181616")), QColor(QStringLiteral("#c5c9c5")),
+          QColor(QStringLiteral("#c8c093")), QColor(QStringLiteral("#2d4f67")),
+          QColor(QStringLiteral("#8ba4b0"))}},
+        {QStringLiteral("kanagawa_lotus"),
+         QStringLiteral("Kanagawa Lotus"),
+         false,
+         {QColor(QStringLiteral("#f2ecbc")), QColor(QStringLiteral("#545464")),
+          QColor(QStringLiteral("#43436c")), QColor(QStringLiteral("#dcd7ba")),
+          QColor(QStringLiteral("#4d699b"))}},
+        {QStringLiteral("hacker_blue"),
+         QStringLiteral("Hacker Blue"),
+         true,
+         {QColor(QStringLiteral("#030814")), QColor(QStringLiteral("#29b6ff")),
+          QColor(QStringLiteral("#29b6ff")), QColor(QStringLiteral("#0b2a44")),
+          QColor(QStringLiteral("#7fdcff"))}},
+        {QStringLiteral("hacker_green"),
+         QStringLiteral("Hacker Green"),
+         true,
+         {QColor(QStringLiteral("#001400")), QColor(QStringLiteral("#22dd22")),
+          QColor(QStringLiteral("#33ff33")), QColor(QStringLiteral("#0b3d0b")),
+          QColor(QStringLiteral("#66ff88"))}},
+        {QStringLiteral("hacker_red"),
+         QStringLiteral("Hacker Red"),
+         true,
+         {QColor(QStringLiteral("#150000")), QColor(QStringLiteral("#d22b2b")),
+          QColor(QStringLiteral("#ff3b3b")), QColor(QStringLiteral("#3d0b0b")),
+          QColor(QStringLiteral("#ff7a7a"))}},
+        {QStringLiteral("everforest_dark"),
+         QStringLiteral("Everforest Dark"),
+         true,
+         {QColor(QStringLiteral("#2d353b")), QColor(QStringLiteral("#d3c6aa")),
+          QColor(QStringLiteral("#d3c6aa")), QColor(QStringLiteral("#475258")),
+          QColor(QStringLiteral("#7fbbb3"))}},
+        {QStringLiteral("everforest_light"),
+         QStringLiteral("Everforest Light"),
+         false,
+         {QColor(QStringLiteral("#fdf6e3")), QColor(QStringLiteral("#5c6a72")),
+          QColor(QStringLiteral("#5c6a72")), QColor(QStringLiteral("#edeada")),
+          QColor(QStringLiteral("#3a94c5"))}},
+        {QStringLiteral("night_owl"),
+         QStringLiteral("Night Owl"),
+         true,
+         {QColor(QStringLiteral("#011627")), QColor(QStringLiteral("#d6deeb")),
+          QColor(QStringLiteral("#80a4c2")), QColor(QStringLiteral("#1d3b53")),
+          QColor(QStringLiteral("#82aaff"))}},
+        {QStringLiteral("light_owl"),
+         QStringLiteral("Light Owl"),
+         false,
+         {QColor(QStringLiteral("#fbfbfb")), QColor(QStringLiteral("#403f53")),
+          QColor(QStringLiteral("#403f53")), QColor(QStringLiteral("#e0e0e0")),
+          QColor(QStringLiteral("#4876d6"))}},
+        {QStringLiteral("aura"),
+         QStringLiteral("Aura"),
+         true,
+         {QColor(QStringLiteral("#15141b")), QColor(QStringLiteral("#edecee")),
+          QColor(QStringLiteral("#a277ff")), QColor(QStringLiteral("#29263b")),
+          QColor(QStringLiteral("#61ffca"))}},
+        {QStringLiteral("rose_pine"),
+         QStringLiteral("Rosé Pine"),
+         true,
+         {QColor(QStringLiteral("#191724")), QColor(QStringLiteral("#e0def4")),
+          QColor(QStringLiteral("#524f67")), QColor(QStringLiteral("#26233a")),
+          QColor(QStringLiteral("#9ccfd8"))}},
+        {QStringLiteral("rose_pine_moon"),
+         QStringLiteral("Rosé Pine Moon"),
+         true,
+         {QColor(QStringLiteral("#232136")), QColor(QStringLiteral("#e0def4")),
+          QColor(QStringLiteral("#59546d")), QColor(QStringLiteral("#2a273f")),
+          QColor(QStringLiteral("#9ccfd8"))}},
+        {QStringLiteral("rose_pine_dawn"),
+         QStringLiteral("Rosé Pine Dawn"),
+         false,
+         {QColor(QStringLiteral("#faf4ed")), QColor(QStringLiteral("#575279")),
+          QColor(QStringLiteral("#575279")), QColor(QStringLiteral("#f2e9e1")),
+          QColor(QStringLiteral("#56949f"))}},
+        {QStringLiteral("cobalt2"),
+         QStringLiteral("Cobalt2"),
+         true,
+         {QColor(QStringLiteral("#193549")), QColor(QStringLiteral("#ffffff")),
+          QColor(QStringLiteral("#ffc600")), QColor(QStringLiteral("#0d3a58")),
+          QColor(QStringLiteral("#ff9d00"))}},
+        {QStringLiteral("octocat_dark"),
+         QStringLiteral("Octocat Dark"),
+         true,
+         {QColor(QStringLiteral("#0d1117")), QColor(QStringLiteral("#c9d1d9")),
+          QColor(QStringLiteral("#58a6ff")), QColor(QStringLiteral("#21262d")),
+          QColor(QStringLiteral("#58a6ff"))}},
+        {QStringLiteral("octocat_light"),
+         QStringLiteral("Octocat Light"),
+         false,
+         {QColor(QStringLiteral("#ffffff")), QColor(QStringLiteral("#24292f")),
+          QColor(QStringLiteral("#0969da")), QColor(QStringLiteral("#eaeef2")),
+          QColor(QStringLiteral("#0969da"))}},
+        {QStringLiteral("ayu_dark"),
+         QStringLiteral("Ayu Dark"),
+         true,
+         {QColor(QStringLiteral("#0b0e14")), QColor(QStringLiteral("#bfbdb6")),
+          QColor(QStringLiteral("#ffb454")), QColor(QStringLiteral("#1b2733")),
+          QColor(QStringLiteral("#59c2ff"))}},
+        {QStringLiteral("ayu_light"),
+         QStringLiteral("Ayu Light"),
+         false,
+         {QColor(QStringLiteral("#fcfcfc")), QColor(QStringLiteral("#5c6166")),
+          QColor(QStringLiteral("#ff9940")), QColor(QStringLiteral("#e7e8e9")),
+          QColor(QStringLiteral("#399ee6"))}},
+        {QStringLiteral("cyberpunk"),
+         QStringLiteral("Cyberpunk"),
+         true,
+         {QColor(QStringLiteral("#241734")), QColor(QStringLiteral("#e6e1ff")),
+          QColor(QStringLiteral("#00f0b5")), QColor(QStringLiteral("#3b2a57")),
+          QColor(QStringLiteral("#00e5ff"))}},
+        {QStringLiteral("cyberpunk_scarlet"),
+         QStringLiteral("Cyberpunk Scarlet"),
+         true,
+         {QColor(QStringLiteral("#0d0208")), QColor(QStringLiteral("#ff2e63")),
+          QColor(QStringLiteral("#00ffb3")), QColor(QStringLiteral("#33091a")),
+          QColor(QStringLiteral("#ff5c8a"))}},
+        {QStringLiteral("romania_night"),
+         QStringLiteral("Romania Night"),
+         true,
+         {QColor(QStringLiteral("#10222b")), QColor(QStringLiteral("#f2e8cf")),
+          QColor(QStringLiteral("#fcbf49")), QColor(QStringLiteral("#1d3d4a")),
+          QColor(QStringLiteral("#77bfa3"))}},
+        {QStringLiteral("romania_day"),
+         QStringLiteral("Romania Day"),
+         false,
+         {QColor(QStringLiteral("#f7e7e4")), QColor(QStringLiteral("#7a2e2e")),
+          QColor(QStringLiteral("#c8553d")), QColor(QStringLiteral("#efd3ce")),
+          QColor(QStringLiteral("#1f7a8c"))}},
+        {QStringLiteral("aubergine"),
+         QStringLiteral("Aubergine"),
+         true,
+         {QColor(QStringLiteral("#2b0b2b")), QColor(QStringLiteral("#efe1f0")),
+          QColor(QStringLiteral("#7fe1a1")), QColor(QStringLiteral("#43164a")),
+          QColor(QStringLiteral("#c58af9"))}},
+        {QStringLiteral("peach_fresh"),
+         QStringLiteral("Peach Fresh"),
+         false,
+         {QColor(QStringLiteral("#f7b490")), QColor(QStringLiteral("#5a2a16")),
+          QColor(QStringLiteral("#b3502b")), QColor(QStringLiteral("#eda07a")),
+          QColor(QStringLiteral("#2e6e7e"))}},
+        {QStringLiteral("nineteen84_dark"),
+         QStringLiteral("1984 Dark"),
+         true,
+         {QColor(QStringLiteral("#101033")), QColor(QStringLiteral("#d8d8e8")),
+          QColor(QStringLiteral("#8ae234")), QColor(QStringLiteral("#22224a")),
+          QColor(QStringLiteral("#7a88ff"))}},
+        {QStringLiteral("nineteen84_light"),
+         QStringLiteral("1984 Light"),
+         false,
+         {QColor(QStringLiteral("#dde4f0")), QColor(QStringLiteral("#2b2f45")),
+          QColor(QStringLiteral("#2f8f4e")), QColor(QStringLiteral("#c7d1e6")),
+          QColor(QStringLiteral("#3355cc"))}},
+        {QStringLiteral("winter_night"),
+         QStringLiteral("Winter Night"),
+         true,
+         {QColor(QStringLiteral("#0e2233")), QColor(QStringLiteral("#e8e2cf")),
+          QColor(QStringLiteral("#f0c674")), QColor(QStringLiteral("#1b3a4f")),
+          QColor(QStringLiteral("#8fc1e3"))}},
+        {QStringLiteral("winter_day"),
+         QStringLiteral("Winter Day"),
+         false,
+         {QColor(QStringLiteral("#ede6d6")), QColor(QStringLiteral("#33403a")),
+          QColor(QStringLiteral("#4e7a63")), QColor(QStringLiteral("#dcd3be")),
+          QColor(QStringLiteral("#2f6690"))}},
+        {QStringLiteral("tokyo_night"),
+         QStringLiteral("Tokyo Night"),
+         true,
+         {QColor(QStringLiteral("#1a1b26")), QColor(QStringLiteral("#c0caf5")),
+          QColor(QStringLiteral("#c0caf5")), QColor(QStringLiteral("#33467c")),
+          QColor(QStringLiteral("#7aa2f7"))}},
+        {QStringLiteral("tokyo_day"),
+         QStringLiteral("Tokyo Day"),
+         false,
+         {QColor(QStringLiteral("#e1e2e7")), QColor(QStringLiteral("#3760bf")),
+          QColor(QStringLiteral("#3760bf")), QColor(QStringLiteral("#c4c8da")),
+          QColor(QStringLiteral("#2e7de9"))}},
+        {QStringLiteral("catppuccin_latte"),
+         QStringLiteral("Catppuccin Latte"),
+         false,
+         {QColor(QStringLiteral("#eff1f5")), QColor(QStringLiteral("#4c4f69")),
+          QColor(QStringLiteral("#dc8a78")), QColor(QStringLiteral("#dce0e8")),
+          QColor(QStringLiteral("#1e66f5"))}},
+        {QStringLiteral("catppuccin_mocha"),
+         QStringLiteral("Catppuccin Mocha"),
+         true,
+         {QColor(QStringLiteral("#1e1e2e")), QColor(QStringLiteral("#cdd6f4")),
+          QColor(QStringLiteral("#f5e0dc")), QColor(QStringLiteral("#313244")),
+          QColor(QStringLiteral("#89b4fa"))}},
+        {QStringLiteral("diwali"),
+         QStringLiteral("Diwali"),
+         true,
+         {QColor(QStringLiteral("#2b1046")), QColor(QStringLiteral("#ffe8c2")),
+          QColor(QStringLiteral("#ffb300")), QColor(QStringLiteral("#43206b")),
+          QColor(QStringLiteral("#ff7043"))}},
+        {QStringLiteral("movember"),
+         QStringLiteral("Movember"),
+         true,
+         {QColor(QStringLiteral("#241206")), QColor(QStringLiteral("#f3d9b1")),
+          QColor(QStringLiteral("#e0a356")), QColor(QStringLiteral("#3d2110")),
+          QColor(QStringLiteral("#7fb069"))}},
+        {QStringLiteral("atom_one_dark"),
+         QStringLiteral("Atom One Dark"),
+         true,
+         {QColor(QStringLiteral("#282c34")), QColor(QStringLiteral("#abb2bf")),
+          QColor(QStringLiteral("#528bff")), QColor(QStringLiteral("#3e4451")),
+          QColor(QStringLiteral("#61afef"))}},
+        {QStringLiteral("atom_one_light"),
+         QStringLiteral("Atom One Light"),
+         false,
+         {QColor(QStringLiteral("#fafafa")), QColor(QStringLiteral("#383a42")),
+          QColor(QStringLiteral("#526fff")), QColor(QStringLiteral("#e5e5e6")),
+          QColor(QStringLiteral("#4078f2"))}},
+        {QStringLiteral("halloween"),
+         QStringLiteral("Halloween"),
+         true,
+         {QColor(QStringLiteral("#1b0a20")), QColor(QStringLiteral("#f2b25b")),
+          QColor(QStringLiteral("#ff7518")), QColor(QStringLiteral("#35132f")),
+          QColor(QStringLiteral("#a3e048"))}},
+        {QStringLiteral("dia_de_muertos"),
+         QStringLiteral("Dia De Muertos"),
+         false,
+         {QColor(QStringLiteral("#fff6e6")), QColor(QStringLiteral("#2e1a47")),
+          QColor(QStringLiteral("#e4572e")), QColor(QStringLiteral("#f6e3c5")),
+          QColor(QStringLiteral("#17696a"))}},
+        {QStringLiteral("gruvbox_dark"),
+         QStringLiteral("Gruvbox Dark"),
+         true,
+         {QColor(QStringLiteral("#282828")), QColor(QStringLiteral("#ebdbb2")),
+          QColor(QStringLiteral("#ebdbb2")), QColor(QStringLiteral("#504945")),
+          QColor(QStringLiteral("#83a598"))}},
+        {QStringLiteral("gruvbox_light"),
+         QStringLiteral("Gruvbox Light"),
+         false,
+         {QColor(QStringLiteral("#fbf1c7")), QColor(QStringLiteral("#3c3836")),
+          QColor(QStringLiteral("#3c3836")), QColor(QStringLiteral("#ebdbb2")),
+          QColor(QStringLiteral("#076678"))}},
+        {QStringLiteral("material_dark"),
+         QStringLiteral("Material Dark"),
+         true,
+         {QColor(QStringLiteral("#263238")), QColor(QStringLiteral("#eeffff")),
+          QColor(QStringLiteral("#ffcc00")), QColor(QStringLiteral("#314549")),
+          QColor(QStringLiteral("#80cbc4"))}},
+        {QStringLiteral("material_light"),
+         QStringLiteral("Material Light"),
+         false,
+         {QColor(QStringLiteral("#fafafa")), QColor(QStringLiteral("#546e7a")),
+          QColor(QStringLiteral("#272727")), QColor(QStringLiteral("#e7e7e8")),
+          QColor(QStringLiteral("#39adb5"))}},
+        {QStringLiteral("manhattan"),
+         QStringLiteral("Manhattan"),
+         true,
+         {QColor(QStringLiteral("#0a0a0a")), QColor(QStringLiteral("#d6d6d6")),
+          QColor(QStringLiteral("#ffffff")), QColor(QStringLiteral("#2a2a2a")),
+          QColor(QStringLiteral("#9e9e9e"))}},
+        {QStringLiteral("plastic_world"),
+         QStringLiteral("Plastic World"),
+         false,
+         {QColor(QStringLiteral("#ff4fd8")), QColor(QStringLiteral("#ffffff")),
+          QColor(QStringLiteral("#fff176")), QColor(QStringLiteral("#e23fbf")),
+          QColor(QStringLiteral("#9cff57"))}},
+        {QStringLiteral("basic"),
+         QStringLiteral("Basic"),
+         false,
+         {QColor(QStringLiteral("#ffffff")), QColor(QStringLiteral("#000000")),
+          QColor(QStringLiteral("#000000")), QColor(QStringLiteral("#b5d5ff")),
+          QColor(QStringLiteral("#007700"))}},
+        {QStringLiteral("homebrew"),
+         QStringLiteral("Homebrew"),
+         true,
+         {QColor(QStringLiteral("#000000")), QColor(QStringLiteral("#00ff00")),
+          QColor(QStringLiteral("#00ff00")), QColor(QStringLiteral("#003300")),
+          QColor(QStringLiteral("#33ff66"))}},
+        {QStringLiteral("grass"),
+         QStringLiteral("Grass"),
+         true,
+         {QColor(QStringLiteral("#13773d")), QColor(QStringLiteral("#fff0a5")),
+          QColor(QStringLiteral("#8ae234")), QColor(QStringLiteral("#0b5a2c")),
+          QColor(QStringLiteral("#ffd54f"))}},
+        {QStringLiteral("man_page"),
+         QStringLiteral("Man Page"),
+         false,
+         {QColor(QStringLiteral("#fef49c")), QColor(QStringLiteral("#000000")),
+          QColor(QStringLiteral("#7f7f7f")), QColor(QStringLiteral("#f2de7a")),
+          QColor(QStringLiteral("#0645ad"))}},
+        {QStringLiteral("novel"),
+         QStringLiteral("Novel"),
+         false,
+         {QColor(QStringLiteral("#dfdbc3")), QColor(QStringLiteral("#3b2322")),
+          QColor(QStringLiteral("#73635a")), QColor(QStringLiteral("#cfc9ae")),
+          QColor(QStringLiteral("#0d6a8c"))}},
+        {QStringLiteral("ocean"),
+         QStringLiteral("Ocean"),
+         true,
+         {QColor(QStringLiteral("#224fbc")), QColor(QStringLiteral("#ffffff")),
+          QColor(QStringLiteral("#ffffff")), QColor(QStringLiteral("#1a3c8f")),
+          QColor(QStringLiteral("#b3e5fc"))}},
+        {QStringLiteral("pro"),
+         QStringLiteral("Pro"),
+         true,
+         {QColor(QStringLiteral("#000000")), QColor(QStringLiteral("#f2f2f2")),
+          QColor(QStringLiteral("#4d4d4d")), QColor(QStringLiteral("#414141")),
+          QColor(QStringLiteral("#00c400"))}},
+        {QStringLiteral("red_sands"),
+         QStringLiteral("Red Sands"),
+         true,
+         {QColor(QStringLiteral("#7a251e")), QColor(QStringLiteral("#d7c9a7")),
+          QColor(QStringLiteral("#ffffff")), QColor(QStringLiteral("#5a1a14")),
+          QColor(QStringLiteral("#e8b87a"))}},
+        {QStringLiteral("solarized_dark"),
+         QStringLiteral("Solarized Dark"),
+         true,
+         {QColor(QStringLiteral("#002b36")), QColor(QStringLiteral("#839496")),
+          QColor(QStringLiteral("#d33682")), QColor(QStringLiteral("#073642")),
+          QColor(QStringLiteral("#268bd2"))}},
+        {QStringLiteral("solarized_light"),
+         QStringLiteral("Solarized Light"),
+         false,
+         {QColor(QStringLiteral("#fdf6e3")), QColor(QStringLiteral("#657b83")),
+          QColor(QStringLiteral("#586e75")), QColor(QStringLiteral("#eee8d5")),
+          QColor(QStringLiteral("#268bd2"))}},
+        {QStringLiteral("silver_aerogel"),
+         QStringLiteral("Silver Aerogel"),
+         false,
+         {QColor(QStringLiteral("#929292")), QColor(QStringLiteral("#000000")),
+          QColor(QStringLiteral("#4d4d4d")), QColor(QStringLiteral("#b0b0b0")),
+          QColor(QStringLiteral("#003c8f"))}},
+        {QStringLiteral("dracula"),
+         QStringLiteral("Dracula"),
+         true,
+         {QColor(QStringLiteral("#282a36")), QColor(QStringLiteral("#f8f8f2")),
+          QColor(QStringLiteral("#ff79c6")), QColor(QStringLiteral("#44475a")),
+          QColor(QStringLiteral("#8be9fd"))}},
+        {QStringLiteral("monokai"),
+         QStringLiteral("Monokai"),
+         true,
+         {QColor(QStringLiteral("#272822")), QColor(QStringLiteral("#f8f8f2")),
+          QColor(QStringLiteral("#f92672")), QColor(QStringLiteral("#49483e")),
+          QColor(QStringLiteral("#66d9ef"))}},
+        {QStringLiteral("nord"),
+         QStringLiteral("Nord Dark"),
+         true,
+         {QColor(QStringLiteral("#2e3440")), QColor(QStringLiteral("#d8dee9")),
+          QColor(QStringLiteral("#88c0d0")), QColor(QStringLiteral("#434c5e")),
+          QColor(QStringLiteral("#81a1c1"))}},
+        {QStringLiteral("nord_light"),
+         QStringLiteral("Nord Light"),
+         false,
+         {QColor(QStringLiteral("#e5e9f0")), QColor(QStringLiteral("#2e3440")),
+          QColor(QStringLiteral("#5e81ac")), QColor(QStringLiteral("#d8dee9")),
+          QColor(QStringLiteral("#5e81ac"))}},
+    };
+    return presets;
+}
+
+const TerminalThemePreset *TerminalSettings::themePreset(const QString &id)
+{
+    const QList<TerminalThemePreset> &presets = themePresets();
+    // 线性查找足够：表只有几十项，且调用点是设置界面构建与主题解析，都不在渲染热路径上。
+    for (const TerminalThemePreset &preset : presets) {
+        if (preset.id == id) {
+            return &preset;
+        }
+    }
+    return nullptr;
+}
+
+QStringList TerminalSettings::recommendedFontFamilies()
+{
+    // 编程字体列表按“终端客户端常见预置 + 各平台自带等宽字体”排列。这里只给名字，是否真的
+    // 安装由设置界面与 QFontDatabase 求交集后决定。
+    return {
+        QStringLiteral("Source Code Pro"),
+        QStringLiteral("JetBrains Mono"),
+        QStringLiteral("Fira Code"),
+        QStringLiteral("Fira Mono"),
+        QStringLiteral("Cascadia Code"),
+        QStringLiteral("Cascadia Mono"),
+        QStringLiteral("IBM Plex Mono"),
+        QStringLiteral("Roboto Mono"),
+        QStringLiteral("Inconsolata"),
+        QStringLiteral("Inconsolata-g"),
+        QStringLiteral("Anonymous Pro"),
+        QStringLiteral("Ubuntu Mono"),
+        QStringLiteral("Ubuntu Sans Mono"),
+        QStringLiteral("Droid Sans Mono"),
+        QStringLiteral("DejaVu Sans Mono"),
+        QStringLiteral("Liberation Mono"),
+        QStringLiteral("Noto Sans Mono"),
+        QStringLiteral("PT Mono"),
+        QStringLiteral("Hack"),
+        QStringLiteral("Iosevka"),
+        QStringLiteral("Space Mono"),
+        QStringLiteral("Victor Mono"),
+        QStringLiteral("Meslo LG S"),
+        QStringLiteral("MesloLGS NF"),
+        QStringLiteral("Menlo"),
+        QStringLiteral("Monaco"),
+        QStringLiteral("SF Mono"),
+        QStringLiteral("Andale Mono"),
+        QStringLiteral("Consolas"),
+        QStringLiteral("Courier New"),
+        QStringLiteral("Sarasa Mono SC"),
+        QStringLiteral("Maple Mono"),
+    };
+}
+
 TerminalPalette TerminalSettings::effectivePalette() const
 {
-    // 除 Default 外的配色风格都是固定搭配好的一整套主题（对应主流终端模拟器的同名预设），
-    // 不再随浅色/深色切换而改变，因此在这里直接短路，不看 effectiveThemeMode()。
-    switch (colorScheme) {
-    case TerminalColorScheme::SolarizedDark:
-        return {
-            QColor(QStringLiteral("#002b36")),
-            QColor(QStringLiteral("#839496")),
-            QColor(QStringLiteral("#d33682")),
-            QColor(QStringLiteral("#073642")),
-            QColor(QStringLiteral("#268bd2")),
-        };
-    case TerminalColorScheme::Dracula:
-        return {
-            QColor(QStringLiteral("#282a36")),
-            QColor(QStringLiteral("#f8f8f2")),
-            QColor(QStringLiteral("#ff79c6")),
-            QColor(QStringLiteral("#44475a")),
-            QColor(QStringLiteral("#8be9fd")),
-        };
-    case TerminalColorScheme::Monokai:
-        return {
-            QColor(QStringLiteral("#272822")),
-            QColor(QStringLiteral("#f8f8f2")),
-            QColor(QStringLiteral("#f92672")),
-            QColor(QStringLiteral("#49483e")),
-            QColor(QStringLiteral("#66d9ef")),
-        };
-    case TerminalColorScheme::Nord:
-        return {
-            QColor(QStringLiteral("#2e3440")),
-            QColor(QStringLiteral("#d8dee9")),
-            QColor(QStringLiteral("#88c0d0")),
-            QColor(QStringLiteral("#434c5e")),
-            QColor(QStringLiteral("#81a1c1")),
-        };
-    case TerminalColorScheme::Default:
-    default:
-        break;
+    // "default" 之外的配色都是搭配好的一整套固定主题（对应主流终端模拟器的同名预设），不随
+    // 浅色/深色切换而改变，因此命中预设后直接返回，不看 effectiveThemeMode()。
+    if (colorSchemeId != QLatin1String("default")) {
+        if (const TerminalThemePreset *preset = themePreset(colorSchemeId)) {
+            return preset->palette;
+        }
     }
 
     if (effectiveThemeMode() == ThemeMode::Dark) {
@@ -376,7 +761,7 @@ TerminalPalette TerminalSettings::effectivePalette() const
 bool TerminalSettings::operator==(const TerminalSettings &other) const
 {
     return themeMode == other.themeMode
-        && colorScheme == other.colorScheme
+        && colorSchemeId == other.colorSchemeId
         && fontFamily == other.fontFamily
         && fontPointSize == other.fontPointSize
         && lineHeightPercent == other.lineHeightPercent
@@ -483,9 +868,9 @@ bool TerminalSettingsService::load(QString *errorMessage)
 
     if (const std::optional<QString> raw = readValue(kColorSchemeKey, &queryFailed);
         raw.has_value() && !queryFailed) {
-        const std::optional<TerminalColorScheme> parsed = parseColorScheme(*raw);
-        if (parsed.has_value()) {
-            loaded.colorScheme = *parsed;
+        const QString candidate = raw->trimmed();
+        if (TerminalSettings::themePreset(candidate) != nullptr) {
+            loaded.colorSchemeId = candidate;
         } else {
             warnings.append(tr("未知终端配色“%1”，已恢复默认配色").arg(*raw));
         }
@@ -592,7 +977,7 @@ bool TerminalSettingsService::save(const TerminalSettings &settings, QString *er
                 return m_database->setSetting(key, value, transactionError);
             };
             if (!write(kThemeKey, serializeTheme(normalizedSettings.themeMode))
-                || !write(kColorSchemeKey, serializeColorScheme(normalizedSettings.colorScheme))
+                || !write(kColorSchemeKey, normalizedSettings.colorSchemeId)
                 || !write(kFontFamilyKey, normalizedSettings.fontFamily)
                 || !write(kFontSizeKey, QString::number(normalizedSettings.fontPointSize))
                 || !write(kLineHeightKey, QString::number(normalizedSettings.lineHeightPercent))

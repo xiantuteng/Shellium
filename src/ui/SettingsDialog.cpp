@@ -4,14 +4,15 @@
 #include "ui/SettingsWidgets.h"
 
 #include <QApplication>
+#include <QComboBox>
 #include <QDoubleSpinBox>
-#include <QFontComboBox>
 #include <QFontDatabase>
 #include <QFrame>
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QKeySequenceEdit>
 #include <QLabel>
+#include <QLineEdit>
 #include <QListWidget>
 #include <QMessageBox>
 #include <QPushButton>
@@ -19,6 +20,8 @@
 #include <QSpinBox>
 #include <QStackedWidget>
 #include <QVBoxLayout>
+
+#include <algorithm>
 
 namespace {
 
@@ -31,10 +34,10 @@ enum SettingsPage {
 };
 
 /** @brief 返回指定终端配色在当前主题下的实际颜色，供色板卡真实预览。 */
-TerminalPalette paletteForScheme(const TerminalSettings &base, const TerminalColorScheme scheme)
+TerminalPalette paletteForScheme(const TerminalSettings &base, const QString &colorSchemeId)
 {
     TerminalSettings probe = base;
-    probe.colorScheme = scheme;
+    probe.colorSchemeId = colorSchemeId;
     return probe.effectivePalette();
 }
 
@@ -48,7 +51,7 @@ SettingsDialog::SettingsDialog(TerminalSettingsService *service, QWidget *parent
     , m_navigationList(new QListWidget(this))
     , m_pages(new QStackedWidget(this))
     , m_themeSelector(new SegmentedControl(this))
-    , m_fontCombo(new QFontComboBox(this))
+    , m_fontCombo(new QComboBox(this))
     , m_fontSizeSpin(new QSpinBox(this))
     , m_lineHeightSpin(new QSpinBox(this))
     , m_letterSpacingSpin(new QDoubleSpinBox(this))
@@ -134,8 +137,8 @@ SettingsDialog::SettingsDialog(TerminalSettingsService *service, QWidget *parent
             this, [this](int) { previewChanges(); });
     connect(m_cursorShapeSelector, &SegmentedControl::currentDataChanged,
             this, [this](int) { previewChanges(); });
-    connect(m_fontCombo, &QFontComboBox::currentFontChanged,
-            this, [this](const QFont &) { previewChanges(); });
+    connect(m_fontCombo, &QComboBox::currentTextChanged,
+            this, [this](const QString &) { previewChanges(); });
     connect(m_fontSizeSpin, &QSpinBox::valueChanged, this, [this](int) { previewChanges(); });
     connect(m_lineHeightSpin, &QSpinBox::valueChanged, this, [this](int) { previewChanges(); });
     connect(m_letterSpacingSpin, &QDoubleSpinBox::valueChanged,
@@ -195,6 +198,70 @@ QWidget *SettingsDialog::wrapInScrollArea(QWidget *page)
     return scroll;
 }
 
+void SettingsDialog::relayoutColorSchemeGrid(const QString &filter)
+{
+    auto *gridLayout = qobject_cast<QGridLayout *>(m_colorSchemeGrid->layout());
+    Q_ASSERT(gridLayout != nullptr);
+    const QString needle = filter.trimmed();
+    int visibleIndex = 0;
+    for (const QString &id : std::as_const(m_colorSchemeOrder)) {
+        ThemeSwatchButton *swatch = m_colorSchemeSwatches.value(id);
+        if (swatch == nullptr) {
+            continue;
+        }
+        const bool matches = needle.isEmpty()
+            || swatch->text().contains(needle, Qt::CaseInsensitive)
+            || id.contains(needle, Qt::CaseInsensitive);
+        gridLayout->removeWidget(swatch);
+        swatch->setVisible(matches);
+        if (matches) {
+            gridLayout->addWidget(swatch, visibleIndex / 2, visibleIndex % 2);
+            ++visibleIndex;
+        }
+    }
+    if (m_colorSchemeEmptyLabel != nullptr) {
+        m_colorSchemeEmptyLabel->setVisible(visibleIndex == 0);
+    }
+}
+
+void SettingsDialog::populateFontCombo()
+{
+    // 每个条目都用它自己的字体渲染，用户不必逐个选中试看效果；data 里存纯字体族名，与显示
+    // 文本解耦，因此“（本机未安装）”一类后缀不会写进设置。
+    const QStringList installed = QFontDatabase::families();
+    const auto appendFamily = [this](const QString &family) {
+        QFont itemFont(family);
+        itemFont.setPointSize(12);
+        m_fontCombo->addItem(family, family);
+        m_fontCombo->setItemData(m_fontCombo->count() - 1, itemFont, Qt::FontRole);
+    };
+
+    QStringList recommended;
+    for (const QString &family : TerminalSettings::recommendedFontFamilies()) {
+        if (installed.contains(family)) {
+            recommended.append(family);
+        }
+    }
+    for (const QString &family : std::as_const(recommended)) {
+        appendFamily(family);
+    }
+
+    QStringList others;
+    for (const QString &family : installed) {
+        if (!recommended.contains(family) && QFontDatabase::isFixedPitch(family)) {
+            others.append(family);
+        }
+    }
+    others.sort(Qt::CaseInsensitive);
+    if (!others.isEmpty() && !recommended.isEmpty()) {
+        // 分隔条目：不可选，只用来区分“推荐编程字体”和本机其余等宽字体。
+        m_fontCombo->insertSeparator(m_fontCombo->count());
+    }
+    for (const QString &family : std::as_const(others)) {
+        appendFamily(family);
+    }
+}
+
 QWidget *SettingsDialog::buildAppearancePage()
 {
     auto *page = new QWidget(m_pages);
@@ -215,50 +282,51 @@ QWidget *SettingsDialog::buildAppearancePage()
     layout->addWidget(themeCard);
 
     auto *schemeCard = new SettingsCard(tr("终端配色"), page);
-    auto *swatchGrid = new QWidget(schemeCard);
-    auto *gridLayout = new QGridLayout(swatchGrid);
+    m_colorSchemeFilter = new QLineEdit(schemeCard);
+    m_colorSchemeFilter->setObjectName(QStringLiteral("colorSchemeFilter"));
+    m_colorSchemeFilter->setClearButtonEnabled(true);
+    m_colorSchemeFilter->setPlaceholderText(tr("搜索配色，例如 Nord、Dark、Gruvbox"));
+    schemeCard->addFullWidthWidget(m_colorSchemeFilter);
+
+    m_colorSchemeGrid = new QWidget(schemeCard);
+    auto *gridLayout = new QGridLayout(m_colorSchemeGrid);
     gridLayout->setContentsMargins(0, 0, 0, 0);
     gridLayout->setHorizontalSpacing(12);
     gridLayout->setVerticalSpacing(10);
 
-    struct SwatchSpec {
-        TerminalColorScheme scheme;
-        QString title;
-        QString subtitle;
-    };
-    const QList<SwatchSpec> swatchSpecs{
-        {TerminalColorScheme::Default, tr("默认"), tr("跟随应用主题")},
-        {TerminalColorScheme::SolarizedDark, QStringLiteral("Solarized Dark"), QString()},
-        {TerminalColorScheme::Dracula, QStringLiteral("Dracula"), QString()},
-        {TerminalColorScheme::Monokai, QStringLiteral("Monokai"), QString()},
-        {TerminalColorScheme::Nord, QStringLiteral("Nord"), QString()},
-    };
-    for (int index = 0; index < swatchSpecs.size(); ++index) {
-        const SwatchSpec &spec = swatchSpecs.at(index);
-        const TerminalPalette palette = paletteForScheme(m_originalSettings, spec.scheme);
-        auto *swatch = new ThemeSwatchButton(spec.title,
-                                            spec.subtitle,
+    for (const TerminalThemePreset &preset : TerminalSettings::themePresets()) {
+        const bool isDefault = preset.id == QLatin1String("default");
+        const TerminalPalette palette = isDefault
+            ? paletteForScheme(m_originalSettings, preset.id)
+            : preset.palette;
+        auto *swatch = new ThemeSwatchButton(preset.name,
+                                            isDefault ? tr("跟随应用主题")
+                                                      : (preset.dark ? tr("深色") : tr("浅色")),
                                             palette.background,
                                             palette.foreground,
                                             palette.cursor,
                                             palette.link,
-                                            swatchGrid);
-        swatch->setObjectName(
-            QStringLiteral("colorSchemeSwatch_%1").arg(static_cast<int>(spec.scheme)));
-        gridLayout->addWidget(swatch, index / 2, index % 2);
-        m_colorSchemeSwatches.insert(static_cast<int>(spec.scheme), swatch);
-        // 色板卡之间互斥但不属于同一个 QButtonGroup：Default 卡需要在主题变化时单独重绘，
+                                            m_colorSchemeGrid);
+        swatch->setObjectName(QStringLiteral("colorSchemeSwatch_%1").arg(preset.id));
+        m_colorSchemeSwatches.insert(preset.id, swatch);
+        m_colorSchemeOrder.append(preset.id);
+        // 色板卡之间互斥但不属于同一个 QButtonGroup：“默认”卡需要在主题变化时单独重绘，
         // 因此这里显式管理选中态，同时避免 QButtonGroup 吃掉“再次点击已选项”的空操作。
-        connect(swatch, &ThemeSwatchButton::clicked, this, [this, scheme = spec.scheme]() {
+        connect(swatch, &ThemeSwatchButton::clicked, this, [this, id = preset.id]() {
             for (auto iterator = m_colorSchemeSwatches.cbegin();
                  iterator != m_colorSchemeSwatches.cend();
                  ++iterator) {
-                iterator.value()->setChecked(iterator.key() == static_cast<int>(scheme));
+                iterator.value()->setChecked(iterator.key() == id);
             }
             previewChanges();
         });
     }
-    schemeCard->addFullWidthWidget(swatchGrid);
+    relayoutColorSchemeGrid(QString());
+    schemeCard->addFullWidthWidget(m_colorSchemeGrid);
+    m_colorSchemeEmptyLabel = schemeCard->addNote(tr("没有匹配的配色。"));
+    m_colorSchemeEmptyLabel->setVisible(false);
+    connect(m_colorSchemeFilter, &QLineEdit::textChanged,
+            this, [this](const QString &text) { relayoutColorSchemeGrid(text); });
     layout->addWidget(schemeCard);
 
     auto *previewCard = new SettingsCard(tr("实时预览"), page);
@@ -286,8 +354,9 @@ QWidget *SettingsDialog::buildTerminalPage()
     layout->setSpacing(16);
 
     m_fontCombo->setObjectName(QStringLiteral("terminalFontCombo"));
-    m_fontCombo->setFontFilters(QFontComboBox::MonospacedFonts);
-    m_fontCombo->setMinimumWidth(240);
+    m_fontCombo->setMinimumWidth(260);
+    m_fontCombo->setMaxVisibleItems(18);
+    populateFontCombo();
     m_fontSizeSpin->setObjectName(QStringLiteral("terminalFontSizeSpin"));
     m_fontSizeSpin->setRange(6, 72);
     m_lineHeightSpin->setObjectName(QStringLiteral("terminalLineHeightSpin"));
@@ -402,16 +471,15 @@ TerminalSettings SettingsDialog::editedSettings() const
 {
     TerminalSettings settings;
     settings.themeMode = static_cast<ThemeMode>(m_themeSelector->currentData());
-    settings.colorScheme = TerminalColorScheme::Default;
-    for (auto iterator = m_colorSchemeSwatches.cbegin();
-         iterator != m_colorSchemeSwatches.cend();
-         ++iterator) {
-        if (iterator.value()->isChecked()) {
-            settings.colorScheme = static_cast<TerminalColorScheme>(iterator.key());
+    settings.colorSchemeId = QStringLiteral("default");
+    for (const QString &id : m_colorSchemeOrder) {
+        ThemeSwatchButton *swatch = m_colorSchemeSwatches.value(id);
+        if (swatch != nullptr && swatch->isChecked()) {
+            settings.colorSchemeId = id;
             break;
         }
     }
-    settings.fontFamily = m_fontCombo->currentFont().family();
+    settings.fontFamily = m_fontCombo->currentData().toString();
     settings.fontPointSize = m_fontSizeSpin->value();
     settings.lineHeightPercent = m_lineHeightSpin->value();
     settings.letterSpacing = m_letterSpacingSpin->value();
@@ -456,14 +524,24 @@ void SettingsDialog::populateControls(const TerminalSettings &settings)
     for (auto iterator = m_colorSchemeSwatches.cbegin();
          iterator != m_colorSchemeSwatches.cend();
          ++iterator) {
-        iterator.value()->setChecked(iterator.key() == static_cast<int>(normalized.colorScheme));
+        iterator.value()->setChecked(iterator.key() == normalized.colorSchemeId);
     }
     refreshDefaultSwatchPreview(normalized);
 
-    const QFont font = normalized.fontFamily.isEmpty()
-        ? QFontDatabase::systemFont(QFontDatabase::FixedFont)
-        : QFont(normalized.fontFamily);
-    m_fontCombo->setCurrentFont(font);
+    // 用户显式选过的字体可能已被卸载，或来自另一台机器：此时不静默改成别的字体，而是补一条
+    // 标注条目，让用户看到自己选的名字仍然生效（Qt 会按字体回退渲染），也能主动换成本机已有
+    // 字体。反之，尚未选过字体（空值）时不该凭空冒出“未安装”——某些平台的默认等宽字体名
+    // （如 "monospace"）只是一个别名，本来就不会出现在字体族列表里，直接选第一个可用条目。
+    const bool explicitFamily = !normalized.fontFamily.isEmpty();
+    const QString desiredFamily = explicitFamily
+        ? normalized.fontFamily
+        : QFontDatabase::systemFont(QFontDatabase::FixedFont).family();
+    int fontIndex = m_fontCombo->findData(desiredFamily);
+    if (fontIndex < 0 && explicitFamily) {
+        m_fontCombo->addItem(tr("%1（本机未安装）").arg(desiredFamily), desiredFamily);
+        fontIndex = m_fontCombo->count() - 1;
+    }
+    m_fontCombo->setCurrentIndex(std::max(fontIndex, 0));
     m_fontSizeSpin->setValue(normalized.fontPointSize);
     m_lineHeightSpin->setValue(normalized.lineHeightPercent);
     m_letterSpacingSpin->setValue(normalized.letterSpacing);
@@ -496,13 +574,12 @@ void SettingsDialog::previewChanges()
 
 void SettingsDialog::refreshDefaultSwatchPreview(const TerminalSettings &settings)
 {
-    ThemeSwatchButton *defaultSwatch =
-        m_colorSchemeSwatches.value(static_cast<int>(TerminalColorScheme::Default));
+    ThemeSwatchButton *defaultSwatch = m_colorSchemeSwatches.value(QStringLiteral("default"));
     if (defaultSwatch == nullptr) {
         return;
     }
     // “默认”配色是主题模式的函数，切换浅色/深色后必须重绘，否则色板会长期显示另一套颜色。
-    const TerminalPalette palette = paletteForScheme(settings, TerminalColorScheme::Default);
+    const TerminalPalette palette = paletteForScheme(settings, QStringLiteral("default"));
     defaultSwatch->setPreviewColors(palette.background,
                                     palette.foreground,
                                     palette.cursor,

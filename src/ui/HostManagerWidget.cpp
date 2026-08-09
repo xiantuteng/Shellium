@@ -349,6 +349,18 @@ public:
             authCard->addRow(tr("旧版兼容"),
                              m_legacyHmacToggle,
                              tr("仅为该主机允许 hmac-sha1（不继承）。"));
+        } else {
+            // 分组不展示主机地址、密码与旧版兼容这几行，但这些控件已经以对话框为父对象
+            // 创建好了。父子关系只决定归属、不决定位置：没有被任何布局接管的控件会停在
+            // (0,0) 并按 sizeHint 绘制，于是分组配置窗口左上角会浮出一个空白地址框、一段
+            // 密码占位文字和一个开关，盖住卡片顶部；它们还能被 Tab 选中并接收键入。
+            // 显式隐藏即可让它们退出绘制与焦点链，record() 里读取它们的取值仍然有效。
+            for (QWidget *hostOnlyField : {static_cast<QWidget *>(m_hostEdit),
+                                           static_cast<QWidget *>(m_passwordEdit),
+                                           static_cast<QWidget *>(m_savePasswordToggle),
+                                           static_cast<QWidget *>(m_legacyHmacToggle)}) {
+                hostOnlyField->setVisible(false);
+            }
         }
 
         auto *footer = new QWidget(this);
