@@ -165,6 +165,24 @@ void VtermBridge::setCursorPresentation(const CursorShape shape, const bool phas
     m_cursorPhaseVisible = phaseVisible;
 }
 
+void VtermBridge::sendKey(const VTermKey key, const VTermModifier modifiers)
+{
+    // vterm_keyboard_key 会读取自己保存的 DECCKM/DECPAM 状态并把编码结果交给
+    // outputCallback，因此这些字节和 libvterm 生成的 DSR/DA 应答走同一条 protocolResponse
+    // 通路，最终由 TerminalView 转成 inputBytes 发往 PTY。
+    vterm_keyboard_key(m_vterm, key, modifiers);
+}
+
+void VtermBridge::beginPaste()
+{
+    vterm_keyboard_start_paste(m_vterm);
+}
+
+void VtermBridge::endPaste()
+{
+    vterm_keyboard_end_paste(m_vterm);
+}
+
 QString VtermBridge::cursorLineText() const
 {
     if (m_cursorRow < 0 || m_cursorRow >= m_rows) {
@@ -248,11 +266,18 @@ void VtermBridge::render(QTextDocument *document) const
         }
     };
 
-    for (const Line &line : m_scrollback) {
-        insertLine(line, -1, false);
-        cursor.insertBlock();
+    // 备用屏是一块尺寸恰好等于 PTY 网格的画布，全屏程序按绝对行列自绘。滚动历史不能参与
+    // 渲染：文档一旦比视口高，QPlainTextEdit 就会按底部对齐，被推出顶部的正是网格第 0 行
+    // ——vim 打开文件时光标就停在那里，用户看到的现象是"光标消失、文件从中间开始显示"。
+    // 同理这里必须固定渲染全部 m_rows 行，不能按内容裁剪：少一行就会让整块画布上移一行。
+    if (!m_alternateScreen) {
+        for (const Line &line : m_scrollback) {
+            insertLine(line, -1, false);
+            cursor.insertBlock();
+        }
     }
-    int lastScreenRow = std::clamp(m_cursorRow, 0, m_rows - 1);
+    int lastScreenRow = m_alternateScreen ? m_rows - 1
+                                          : std::clamp(m_cursorRow, 0, m_rows - 1);
     for (int row = lastScreenRow + 1; row < m_rows; ++row) {
         const Line candidate = screenLine(row);
         const bool hasContent = std::any_of(candidate.cbegin(), candidate.cend(), [](const Cell &cell) {
@@ -355,6 +380,12 @@ int VtermBridge::termPropertyCallback(const VTermProp property, VTermValue *valu
                                                     static_cast<qsizetype>(value->string.len)));
     } else if (property == VTERM_PROP_CURSORVISIBLE && value != nullptr) {
         bridge->m_cursorVisible = value->boolean != 0;
+    } else if (property == VTERM_PROP_ALTSCREEN && value != nullptr) {
+        const bool active = value->boolean != 0;
+        if (active != bridge->m_alternateScreen) {
+            bridge->m_alternateScreen = active;
+            emit bridge->alternateScreenChanged(active);
+        }
     }
     return 1;
 }

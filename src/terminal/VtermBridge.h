@@ -58,6 +58,38 @@ public:
     void setCursorPresentation(CursorShape shape, bool phaseVisible);
 
     /**
+     * @brief 当前是否处于备用屏（vim、top、less 等全屏程序会切换到该屏）。
+     *
+     * 备用屏与主屏的显示契约完全不同：主屏是一条不断向下增长的历史，用户按底部对齐阅读；
+     * 备用屏则是一块尺寸恰好等于 PTY 网格的画布，程序按绝对行列坐标自行绘制，行 0 必须
+     * 落在视口顶部。两者混在一起渲染会让网格整体下沉到滚动历史之下，被顶部裁掉的正是
+     * 光标最常停留的前几行。
+     */
+    [[nodiscard]] bool isAlternateScreen() const { return m_alternateScreen; }
+
+    /**
+     * @brief 按 libvterm 的键盘模型编码一个特殊键，并通过 protocolResponse 发出字节。
+     * @param key libvterm 键枚举，例如 VTERM_KEY_UP、VTERM_KEY_PAGEUP。
+     * @param modifiers libvterm 修饰键掩码。
+     *
+     * 方向键、Home/End 和小键盘的字节形式取决于远端是否开启了 DECCKM（应用光标键）与
+     * DECPAM（应用小键盘）——vim 进入全屏后就会开启。硬编码 CSI 形式会让 vim 在插入模式
+     * 下把方向键读成 ESC 加一个普通字母，表现为方向键不动光标反而插入乱码。libvterm 自己
+     * 保存着这些模式，交给它编码是唯一不会随远端模式漂移的做法。
+     */
+    void sendKey(VTermKey key, VTermModifier modifiers = VTERM_MOD_NONE);
+
+    /**
+     * @brief 发出括号粘贴的起止标记，仅在远端开启了 DECSET 2004 时才真正产生字节。
+     *
+     * vim 进入插入模式后会把粘贴内容当成逐个按键处理，autoindent 于是给每一行叠加一层
+     * 缩进，十行代码粘完变成阶梯状。括号粘贴让远端知道这段内容来自剪贴板而非键盘。
+     * libvterm 保存着远端是否开启该模式，未开启时这两个调用不产生任何输出。
+     */
+    void beginPaste();
+    void endPaste();
+
+    /**
      * @brief 返回最近一次 render() 中光标对应的 QTextDocument 字符位置。
      * @return 光标没有进入已渲染区域时返回 -1。
      *
@@ -98,6 +130,14 @@ signals:
      * 展开好的真实 argv，alias、变量、历史记录调用、输入法都不会再造成偏差。
      */
     void shellIntegrationEvent(const QByteArray &payload);
+
+    /**
+     * @brief 远端进入或退出备用屏。
+     * @param active true 表示 vim 之类的全屏程序已接管屏幕。
+     *
+     * TerminalView 据此切换到"网格即视口"的显示方式，并停止把按键当作 Shell 命令行解析。
+     */
+    void alternateScreenChanged(bool active);
 
 private:
     /** @brief 与 VTermScreenCell 解耦的滚动历史单元格。 */
@@ -156,6 +196,7 @@ private:
     int m_cursorRow = 0;
     int m_cursorColumn = 0;
     bool m_cursorVisible = true;
+    bool m_alternateScreen = false;
     int m_scrollbackLimit = 10000;
     int m_lineHeightPercent = 100;
     CursorShape m_cursorShape = CursorShape::Block;

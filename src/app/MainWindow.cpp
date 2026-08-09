@@ -286,7 +286,12 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     sidebarLayout->setSpacing(12);
     m_sidebarTitle = new QLabel(tr("主机"), m_sidebarPanel);
     m_sidebarTitle->setObjectName(QStringLiteral("SidebarHeader"));
-    sidebarLayout->addWidget(m_sidebarTitle);
+    auto *sidebarHeaderLayout = new QHBoxLayout;
+    sidebarHeaderLayout->setContentsMargins(0, 0, 0, 0);
+    sidebarHeaderLayout->setSpacing(6);
+    sidebarHeaderLayout->addWidget(m_sidebarTitle);
+    sidebarHeaderLayout->addStretch(1);
+    sidebarLayout->addLayout(sidebarHeaderLayout);
 
     m_sidebarStack = new QStackedWidget(m_sidebarPanel);
     m_sidebarStack->setObjectName(QStringLiteral("SidebarStack"));
@@ -299,6 +304,11 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     m_sidebarStack->addWidget(m_productivityWidget);
     m_sidebarStack->addWidget(m_portForwardManager);
     sidebarLayout->addWidget(m_sidebarStack, 1);
+
+    // 主机页的高频动作与侧栏标题同排右对齐。标题归 MainWindow 所有，因此动作条由主机页
+    // 提供、在这里改挂到标题行；切到其他页面时隐藏，避免动作与页面内容对不上。
+    m_hostHeaderActions = m_hostManager->headerActionsWidget();
+    sidebarHeaderLayout->addWidget(m_hostHeaderActions);
 
     bodyLayout->addWidget(m_navigationRail);
     bodyLayout->addWidget(m_sidebarPanel);
@@ -890,6 +900,9 @@ void MainWindow::showSidebarPage(const int pageIndex)
     m_sidebarStack->setCurrentIndex(pageIndex);
     if (m_sidebarTitle != nullptr) {
         m_sidebarTitle->setText(pageTitles.value(pageIndex));
+    }
+    if (m_hostHeaderActions != nullptr) {
+        m_hostHeaderActions->setVisible(pageIndex == HostsPage);
     }
 
     // QButtonGroup 已设置互斥，但菜单触发并不会自动点击按钮，因此这里显式同步选中态。

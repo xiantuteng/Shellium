@@ -309,14 +309,36 @@ void postRecursiveFinished(const QPointer<SftpService> &service,
 /**
  * @brief 一条按目标缓存、可跨请求复用的 SFTP 连接。
  *
- * libssh 会话不是线程安全的，因此同一条连接上的操作由 mutex 串行化；不同目标的请求仍然
- * 并行。串行化是可接受的代价：用户在一台服务器上的文件操作本来就是顺序发生的。
+ * libssh 会话不是线程安全的，因此同一条连接上的操作由 mutex 串行化；不同目标、以及同一
+ * 目标的不同通道（传输 / 目录浏览）仍然并行。
  */
 struct PooledConnection {
     QMutex mutex;
     std::unique_ptr<SftpConnection> connection;
     QElapsedTimer idleTimer;
 };
+
+/**
+ * @brief 传输与远程改动共用的连接池键。
+ *
+ * 同一台服务器上的写操作串行执行是合理的：用户的复制、改名、删除本来就有先后语义。
+ */
+QString transferPoolKey(const ConnectionTarget &target)
+{
+    return target.stableKey();
+}
+
+/**
+ * @brief 目录浏览专用的连接池键。
+ *
+ * 浏览若与传输共用一条连接，就要排在传输的 mutex 后面，于是"上传一个大文件期间无法切换
+ * 目录"。浏览是只读且短暂的，单独占一条连接不会与传输产生任何一致性问题，代价只是每台
+ * 服务器多一次登录，而它同样会被连接池缓存复用。
+ */
+QString browsePoolKey(const ConnectionTarget &target)
+{
+    return target.stableKey() + QStringLiteral("|lane=browse");
+}
 
 } // namespace
 
@@ -468,6 +490,7 @@ namespace {
  * 调用方必须已持有该条目的 mutex：libssh 会话不是线程安全的。
  */
 SftpConnection *ensureConnected(PooledConnection *entry,
+                                const QString &poolKey,
                                 const ConnectionTarget &target,
                                 const bool allowUnknownHost,
                                 const QPointer<SftpService> &service,
@@ -485,7 +508,7 @@ SftpConnection *ensureConnected(PooledConnection *entry,
     const ConnectResult opened = entry->connection->open(target, allowUnknownHost);
     if (!opened.success) {
         entry->connection.reset();
-        pool->invalidate(target.stableKey());
+        pool->invalidate(poolKey);
         deliverConnectionFailure(service, requestId, target, opened);
         return nullptr;
     }
@@ -853,10 +876,11 @@ quint64 SftpService::listDirectory(const ConnectionTarget &target, const QString
     const QPointer<SftpService> service(this);
 
     (void)QtConcurrent::run([service, pool = m_pool, requestId, target, path, allowUnknown]() {
-        const QSharedPointer<PooledConnection> entry = pool->acquire(target.stableKey());
+        const QString poolKey = browsePoolKey(target);
+        const QSharedPointer<PooledConnection> entry = pool->acquire(poolKey);
         QMutexLocker locker(&entry->mutex);
         SftpConnection *connection = ensureConnected(
-            entry.data(), target, allowUnknown, service, requestId, pool.get());
+            entry.data(), poolKey, target, allowUnknown, service, requestId, pool.get());
         if (connection == nullptr) {
             return;
         }
@@ -954,10 +978,11 @@ quint64 SftpService::uploadFile(const ConnectionTarget &target,
     (void)QtConcurrent::run([service, pool = m_pool, requestId, target, localPath,
                              remotePath, allowUnknown, policy]() {
         const quint64 total = static_cast<quint64>(QFileInfo(localPath).size());
-        const QSharedPointer<PooledConnection> entry = pool->acquire(target.stableKey());
+        const QString poolKey = transferPoolKey(target);
+        const QSharedPointer<PooledConnection> entry = pool->acquire(poolKey);
         QMutexLocker locker(&entry->mutex);
         SftpConnection *connection = ensureConnected(
-            entry.data(), target, allowUnknown, service, requestId, pool.get());
+            entry.data(), poolKey, target, allowUnknown, service, requestId, pool.get());
         if (connection == nullptr) {
             return;
         }
@@ -1011,10 +1036,11 @@ quint64 SftpService::downloadFile(const ConnectionTarget &target,
 
     (void)QtConcurrent::run([service, pool = m_pool, requestId, target, remotePath,
                              localPath, allowUnknown, policy]() {
-        const QSharedPointer<PooledConnection> entry = pool->acquire(target.stableKey());
+        const QString poolKey = transferPoolKey(target);
+        const QSharedPointer<PooledConnection> entry = pool->acquire(poolKey);
         QMutexLocker locker(&entry->mutex);
         SftpConnection *connection = ensureConnected(
-            entry.data(), target, allowUnknown, service, requestId, pool.get());
+            entry.data(), poolKey, target, allowUnknown, service, requestId, pool.get());
         if (connection == nullptr) {
             return;
         }
@@ -1079,13 +1105,14 @@ quint64 SftpService::uploadDirectory(const ConnectionTarget &target,
         summary.skipped = plan.skipped;
         summary.fileTotal = plan.fileCount;
 
-        // 整棵树的传输全程持有同一条池化连接的 mutex：libssh 会话不是线程安全的，而在一条
-        // 会话上交错多个传输只会让所有操作都变慢。代价是同服务器的目录浏览要等传输结束，
-        // 因此取消标志刻意不走这把锁，随时都能生效。
-        const QSharedPointer<PooledConnection> entry = pool->acquire(target.stableKey());
+        // 整棵树的传输全程持有传输通道那条池化连接的 mutex：libssh 会话不是线程安全的，
+        // 而在一条会话上交错多个传输只会让所有操作都变慢。目录浏览走独立通道，不受此锁
+        // 阻塞；取消标志同样刻意不走这把锁，随时都能生效。
+        const QString poolKey = transferPoolKey(target);
+        const QSharedPointer<PooledConnection> entry = pool->acquire(poolKey);
         QMutexLocker locker(&entry->mutex);
         SftpConnection *connection = ensureConnected(
-            entry.data(), target, allowUnknown, service, requestId, pool.get());
+            entry.data(), poolKey, target, allowUnknown, service, requestId, pool.get());
         if (connection == nullptr) {
             pool->clearCancel(requestId);
             return;
@@ -1170,10 +1197,11 @@ quint64 SftpService::downloadDirectory(const ConnectionTarget &target,
         SftpRecursive::TransferSummary summary;
         summary.rootDescription = localRoot;
 
-        const QSharedPointer<PooledConnection> entry = pool->acquire(target.stableKey());
+        const QString poolKey = transferPoolKey(target);
+        const QSharedPointer<PooledConnection> entry = pool->acquire(poolKey);
         QMutexLocker locker(&entry->mutex);
         SftpConnection *connection = ensureConnected(
-            entry.data(), target, allowUnknown, service, requestId, pool.get());
+            entry.data(), poolKey, target, allowUnknown, service, requestId, pool.get());
         if (connection == nullptr) {
             pool->clearCancel(requestId);
             return;
@@ -1281,10 +1309,11 @@ quint64 SftpService::previewFile(const ConnectionTarget &target,
     const QPointer<SftpService> service(this);
     (void)QtConcurrent::run([service, pool = m_pool, requestId, target, remotePath,
                              safeLimit, allowUnknown]() {
-        const QSharedPointer<PooledConnection> entry = pool->acquire(target.stableKey());
+        const QString poolKey = transferPoolKey(target);
+        const QSharedPointer<PooledConnection> entry = pool->acquire(poolKey);
         QMutexLocker locker(&entry->mutex);
         SftpConnection *connection = ensureConnected(
-            entry.data(), target, allowUnknown, service, requestId, pool.get());
+            entry.data(), poolKey, target, allowUnknown, service, requestId, pool.get());
         if (connection == nullptr) {
             return;
         }
@@ -1376,10 +1405,11 @@ quint64 SftpService::chmodPath(const ConnectionTarget &target,
     const QPointer<SftpService> service(this);
     (void)QtConcurrent::run([service, pool = m_pool, requestId, target, remotePath,
                              permissions, allowUnknown]() {
-        const QSharedPointer<PooledConnection> entry = pool->acquire(target.stableKey());
+        const QString poolKey = transferPoolKey(target);
+        const QSharedPointer<PooledConnection> entry = pool->acquire(poolKey);
         QMutexLocker locker(&entry->mutex);
         SftpConnection *connection = ensureConnected(
-            entry.data(), target, allowUnknown, service, requestId, pool.get());
+            entry.data(), poolKey, target, allowUnknown, service, requestId, pool.get());
         if (connection == nullptr) {
             return;
         }
@@ -1422,10 +1452,11 @@ quint64 SftpService::renamePath(const ConnectionTarget &target,
     const bool allowUnknown = isTemporarilyTrusted(target);
     const QPointer<SftpService> service(this);
     (void)QtConcurrent::run([service, pool = m_pool, requestId, target, oldPath, newPath, allowUnknown]() {
-        const QSharedPointer<PooledConnection> entry = pool->acquire(target.stableKey());
+        const QString poolKey = transferPoolKey(target);
+        const QSharedPointer<PooledConnection> entry = pool->acquire(poolKey);
         QMutexLocker locker(&entry->mutex);
         SftpConnection *connection = ensureConnected(
-            entry.data(), target, allowUnknown, service, requestId, pool.get());
+            entry.data(), poolKey, target, allowUnknown, service, requestId, pool.get());
         if (connection == nullptr) {
             return;
         }
@@ -1457,10 +1488,11 @@ quint64 SftpService::removePath(const ConnectionTarget &target,
     const bool allowUnknown = isTemporarilyTrusted(target);
     const QPointer<SftpService> service(this);
     (void)QtConcurrent::run([service, pool = m_pool, requestId, target, path, directory, allowUnknown]() {
-        const QSharedPointer<PooledConnection> entry = pool->acquire(target.stableKey());
+        const QString poolKey = transferPoolKey(target);
+        const QSharedPointer<PooledConnection> entry = pool->acquire(poolKey);
         QMutexLocker locker(&entry->mutex);
         SftpConnection *connection = ensureConnected(
-            entry.data(), target, allowUnknown, service, requestId, pool.get());
+            entry.data(), poolKey, target, allowUnknown, service, requestId, pool.get());
         if (connection == nullptr) {
             return;
         }

@@ -7,15 +7,13 @@
 class ApplicationDatabase;
 class CredentialVault;
 class QLineEdit;
-class QListWidget;
-class QListWidgetItem;
 class QTreeWidget;
 class QTreeWidgetItem;
 
 /**
  * @brief Shellium 左侧的持久化主机管理面板。
  *
- * 本控件把 ApplicationDatabase 已有的主机、分组、搜索和最近连接能力组成一个完整的
+ * 本控件把 ApplicationDatabase 已有的主机、分组与搜索能力组成一个完整的
  * 用户界面。控件只负责编辑与选择，不直接持有终端或凭据明文；真正的连接由 MainWindow
  * 收到 hostConnectionRequested 信号后发起，从而避免主机树与某个标签页耦合。
  */
@@ -24,7 +22,7 @@ class HostManagerWidget final : public QWidget {
 
 public:
     /**
-     * @brief 创建主机管理面板并立即从数据库加载树和最近连接。
+     * @brief 创建主机管理面板并立即从数据库加载主机树。
      * @param database 已初始化的应用数据库；生命周期必须覆盖本控件。
      * @param parent Qt 父对象。
      */
@@ -32,8 +30,16 @@ public:
                                CredentialVault *credentialVault,
                                QWidget *parent = nullptr);
 
-    /** @brief 重新读取主机树和最近连接，供连接历史变化后主动刷新。 */
+    /** @brief 重新读取主机树，供连接历史变化后主动刷新。 */
     void refresh();
+
+    /**
+     * @brief 返回承载新建主机/新建分组/刷新的动作条。
+     *
+     * 侧栏标题由 MainWindow 统一渲染，主机页的主要动作需要与标题同排右对齐。把动作条作为
+     * 独立控件交出去，标题栏就不必知道主机页内部有哪些动作。
+     */
+    [[nodiscard]] QWidget *headerActionsWidget() const;
 
 signals:
     /** @brief 主机或分组列表已重新加载，依赖 hostId 的其他侧栏应同步刷新。 */
@@ -74,9 +80,8 @@ private:
     /** @brief 把全部主机和分组导出为不含凭据的 Shellium JSON。 */
     void exportHosts();
 
-    /** @brief 处理树或最近列表双击，只允许可连接的 Host 节点发出请求；双击总是新开标签页。 */
+    /** @brief 处理树双击，只允许可连接的 Host 节点发出请求；双击总是新开标签页。 */
     void activateTreeItem(QTreeWidgetItem *item);
-    void activateRecentItem(QListWidgetItem *item);
 
     /**
      * @brief 解析持久化主机并发出连接请求。
@@ -122,5 +127,5 @@ private:
     CredentialVault *m_credentialVault = nullptr;
     QLineEdit *m_searchEdit = nullptr;
     QTreeWidget *m_tree = nullptr;
-    QListWidget *m_recentList = nullptr;
+    QWidget *m_headerActions = nullptr;
 };

@@ -7,6 +7,7 @@
 #include "ui/VaultDialog.h"
 
 #include <QAction>
+#include <QApplication>
 #include <QCheckBox>
 #include <QDateTime>
 #include <QDialog>
@@ -20,19 +21,22 @@
 #include <QInputDialog>
 #include <QLabel>
 #include <QLineEdit>
-#include <QListWidget>
 #include <QMenu>
 #include <QMessageBox>
+#include <QPainter>
 #include <QPushButton>
 #include <QSet>
 #include <QSaveFile>
 #include <QSpinBox>
+#include <QStyle>
+#include <QStyledItemDelegate>
 #include <QToolButton>
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
 #include <QUuid>
 #include <QVBoxLayout>
 
+#include <algorithm>
 #include <functional>
 
 namespace {
@@ -43,8 +47,107 @@ constexpr int HostIdRole = Qt::UserRole;
 /** @brief 树节点保存 HostNodeKind 数值的角色，用于阻止分组被误连接。 */
 constexpr int HostKindRole = Qt::UserRole + 1;
 
-/** @brief 最近连接列表保存稳定主机 id 的角色。 */
-constexpr int RecentHostIdRole = Qt::UserRole;
+/** @brief 主机节点保存“账号@地址:端口”副标题的角色；分组节点不设置该角色。 */
+constexpr int HostDetailRole = Qt::UserRole + 2;
+
+/** @brief 在保持像素/点两种字号语义的前提下缩放字体，避免 pointSizeF 为 -1 时算出 0 号字。 */
+QFont scaledFont(QFont font, const double deltaPoints, const bool bold)
+{
+    font.setBold(bold);
+    if (font.pointSizeF() > 0.0) {
+        font.setPointSizeF(std::max(7.0, font.pointSizeF() + deltaPoints));
+    } else if (font.pixelSize() > 0) {
+        font.setPixelSize(std::max(9, font.pixelSize() + qRound(deltaPoints * 4.0 / 3.0)));
+    }
+    return font;
+}
+
+/**
+ * @brief 把主机节点画成“大号名称 + 小号连接信息”两行的委托。
+ *
+ * 单行只显示名称时，用户必须逐个悬停才知道某条记录连的是哪个账号和端口，同名不同环境的
+ * 主机因此极易连错。分组没有连接信息，仍按 Qt 默认单行绘制。
+ */
+class HostItemDelegate final : public QStyledItemDelegate {
+public:
+    using QStyledItemDelegate::QStyledItemDelegate;
+
+protected:
+    void paint(QPainter *painter,
+               const QStyleOptionViewItem &option,
+               const QModelIndex &index) const override
+    {
+        const QString detail = index.data(HostDetailRole).toString();
+        if (detail.isEmpty()) {
+            QStyledItemDelegate::paint(painter, option, index);
+            return;
+        }
+
+        // 背景、选中态与焦点框仍由样式绘制，本委托只替换文字部分，避免自绘出一套与其余
+        // 列表不一致的选中色。
+        QStyleOptionViewItem background = option;
+        initStyleOption(&background, index);
+        background.text.clear();
+        const QWidget *widget = option.widget;
+        QStyle *style = widget != nullptr ? widget->style() : QApplication::style();
+        style->drawControl(QStyle::CE_ItemViewItem, &background, painter, widget);
+
+        const QRect contentRect =
+            style->subElementRect(QStyle::SE_ItemViewItemText, &background, widget);
+        const QRect iconRect =
+            style->subElementRect(QStyle::SE_ItemViewItemDecoration, &background, widget);
+        if (!iconRect.isEmpty()) {
+            qvariant_cast<QIcon>(index.data(Qt::DecorationRole))
+                .paint(painter, iconRect, Qt::AlignCenter);
+        }
+
+        const QFont nameFont = scaledFont(option.font, 1.0, true);
+        const QFont detailFont = scaledFont(option.font, -1.5, false);
+        const QFontMetrics nameMetrics(nameFont);
+        const QFontMetrics detailMetrics(detailFont);
+        const bool selected = (background.state & QStyle::State_Selected) != 0;
+        const QColor baseColor = background.palette.color(
+            selected ? QPalette::HighlightedText : QPalette::Text);
+
+        painter->save();
+        const QRect nameRect(contentRect.left(),
+                             contentRect.top(),
+                             contentRect.width(),
+                             nameMetrics.height());
+        painter->setFont(nameFont);
+        painter->setPen(baseColor);
+        painter->drawText(nameRect,
+                          Qt::AlignLeft | Qt::AlignVCenter,
+                          nameMetrics.elidedText(index.data(Qt::DisplayRole).toString(),
+                                                 Qt::ElideRight,
+                                                 nameRect.width()));
+
+        QColor detailColor = baseColor;
+        detailColor.setAlphaF(0.62F);
+        const QRect detailRect(contentRect.left(),
+                               nameRect.bottom() + 1,
+                               contentRect.width(),
+                               detailMetrics.height());
+        painter->setFont(detailFont);
+        painter->setPen(detailColor);
+        painter->drawText(detailRect,
+                          Qt::AlignLeft | Qt::AlignVCenter,
+                          detailMetrics.elidedText(detail, Qt::ElideMiddle, detailRect.width()));
+        painter->restore();
+    }
+
+    QSize sizeHint(const QStyleOptionViewItem &option, const QModelIndex &index) const override
+    {
+        QSize hint = QStyledItemDelegate::sizeHint(option, index);
+        if (index.data(HostDetailRole).toString().isEmpty()) {
+            return hint;
+        }
+        const int textHeight = QFontMetrics(scaledFont(option.font, 1.0, true)).height()
+            + QFontMetrics(scaledFont(option.font, -1.5, false)).height() + 1;
+        hint.setHeight(std::max(hint.height(), textHeight + 8));
+        return hint;
+    }
+};
 
 /**
  * @brief 支持"主机与分组"拖拽排序/移动的树控件。
@@ -354,7 +457,7 @@ HostManagerWidget::HostManagerWidget(ApplicationDatabase *database,
     , m_credentialVault(credentialVault)
     , m_searchEdit(new QLineEdit(this))
     , m_tree(new HostTreeWidget(this))
-    , m_recentList(new QListWidget(this))
+    , m_headerActions(new QWidget(this))
 {
     Q_ASSERT(m_database != nullptr);
     Q_ASSERT(m_credentialVault != nullptr);
@@ -369,7 +472,7 @@ HostManagerWidget::HostManagerWidget(ApplicationDatabase *database,
     m_tree->setRootIsDecorated(true);
     m_tree->setSelectionMode(QAbstractItemView::SingleSelection);
     m_tree->setContextMenuPolicy(Qt::CustomContextMenu);
-    m_recentList->setContextMenuPolicy(Qt::CustomContextMenu);
+    m_tree->setItemDelegate(new HostItemDelegate(m_tree));
 
     // 拖拽排序/跨分组移动：Qt 负责实际挪动 QTreeWidgetItem，HostTreeWidget 只负责合法性
     // 校验，真正的持久化在下面的 onDropped 回调里完成。搜索结果是扁平视图，与真实父子
@@ -383,20 +486,14 @@ HostManagerWidget::HostManagerWidget(ApplicationDatabase *database,
             persistTreeReorder(movedItem, oldParentItem);
         };
 
-    auto *addGroupButton = new QToolButton(this);
+    // 侧栏标题行只保留三个最高频动作；编辑/删除/导入/导出都能在树的右键菜单里找到，
+    // 而它们都需要先选中一个节点，本来就更适合右键这条“先选中再操作”的路径。
+    auto *addGroupButton = new QToolButton(m_headerActions);
     addGroupButton->setText(tr("新建分组"));
-    auto *addHostButton = new QPushButton(tr("新建主机"), this);
+    auto *addHostButton = new QPushButton(tr("新建主机"), m_headerActions);
     addHostButton->setProperty("primaryAction", true);
-    auto *editButton = new QToolButton(this);
-    editButton->setText(tr("编辑"));
-    auto *deleteButton = new QToolButton(this);
-    deleteButton->setText(tr("删除"));
-    auto *refreshButton = new QToolButton(this);
+    auto *refreshButton = new QToolButton(m_headerActions);
     refreshButton->setText(tr("刷新"));
-    auto *importButton = new QToolButton(this);
-    importButton->setText(tr("导入"));
-    auto *exportButton = new QToolButton(this);
-    exportButton->setText(tr("导出"));
     UiIcons::decorateButton(
         addGroupButton,
         UiIcons::symbol(this, UiIcons::Symbol::FolderAdd, this->palette().color(QPalette::WindowText)),
@@ -406,74 +503,34 @@ HostManagerWidget::HostManagerWidget(ApplicationDatabase *database,
         UiIcons::symbol(this, UiIcons::Symbol::Plus, this->palette().color(QPalette::WindowText)),
         tr("在当前分组中新建 SSH 主机"));
     UiIcons::decorateButton(
-        editButton,
-        UiIcons::symbol(this, UiIcons::Symbol::Edit, this->palette().color(QPalette::WindowText)),
-        tr("编辑当前选中的主机或分组"));
-    UiIcons::decorateButton(
-        deleteButton,
-        UiIcons::symbol(this, UiIcons::Symbol::Trash, this->palette().color(QPalette::WindowText)),
-        tr("删除当前选中的主机或分组"));
-    UiIcons::decorateButton(
         refreshButton,
         UiIcons::symbol(this, UiIcons::Symbol::Refresh, this->palette().color(QPalette::WindowText)),
-        tr("重新读取主机与最近连接"));
-    UiIcons::decorateButton(
-        importButton,
-        UiIcons::symbol(this, UiIcons::Symbol::Upload, this->palette().color(QPalette::WindowText)),
-        tr("从 OpenSSH 配置或 Shellium JSON 导入"));
-    UiIcons::decorateButton(
-        exportButton,
-        UiIcons::symbol(this, UiIcons::Symbol::Download, this->palette().color(QPalette::WindowText)),
-        tr("导出不含凭据的主机配置"));
+        tr("重新读取主机与分组"));
     configureSidebarIconButton(addGroupButton, tr("在当前层级新建主机分组"));
-    configureSidebarIconButton(editButton, tr("编辑当前选中的主机或分组"));
-    configureSidebarIconButton(deleteButton, tr("删除当前选中的主机或分组"));
-    configureSidebarIconButton(refreshButton, tr("重新读取主机与最近连接"));
-    configureSidebarIconButton(importButton, tr("从 OpenSSH 配置或 Shellium JSON 导入"));
-    configureSidebarIconButton(exportButton, tr("导出不含凭据的主机配置"));
+    configureSidebarIconButton(refreshButton, tr("重新读取主机与分组"));
 
-    auto *buttonLayout = new QHBoxLayout;
-    buttonLayout->setContentsMargins(0, 0, 0, 0);
-    buttonLayout->addWidget(addHostButton);
-    buttonLayout->addWidget(addGroupButton);
-    buttonLayout->addWidget(editButton);
-    buttonLayout->addWidget(deleteButton);
-    buttonLayout->addWidget(refreshButton);
-
-    auto *transferLayout = new QHBoxLayout;
-    transferLayout->setContentsMargins(0, 0, 0, 0);
-    transferLayout->addWidget(importButton);
-    transferLayout->addWidget(exportButton);
-    transferLayout->addStretch(1);
+    auto *headerLayout = new QHBoxLayout(m_headerActions);
+    headerLayout->setContentsMargins(0, 0, 0, 0);
+    headerLayout->setSpacing(6);
+    headerLayout->addWidget(addHostButton);
+    headerLayout->addWidget(addGroupButton);
+    headerLayout->addWidget(refreshButton);
 
     auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(8);
     layout->addWidget(m_searchEdit);
-    layout->addLayout(buttonLayout);
-    layout->addLayout(transferLayout);
     auto *hostsCaption = new QLabel(tr("主机与分组"), this);
     hostsCaption->setProperty("sectionCaption", true);
     layout->addWidget(hostsCaption);
     layout->addWidget(m_tree, 1);
-    auto *recentCaption = new QLabel(tr("最近连接"), this);
-    recentCaption->setProperty("sectionCaption", true);
-    layout->addWidget(recentCaption);
-    m_recentList->setMaximumHeight(150);
-    layout->addWidget(m_recentList);
 
     connect(m_searchEdit, &QLineEdit::textChanged, this, [this]() { applyFilter(); });
     connect(addGroupButton, &QToolButton::clicked, this, &HostManagerWidget::addGroup);
     connect(addHostButton, &QPushButton::clicked, this, &HostManagerWidget::addHost);
-    connect(editButton, &QToolButton::clicked, this, &HostManagerWidget::editSelected);
-    connect(deleteButton, &QToolButton::clicked, this, &HostManagerWidget::removeSelected);
     connect(refreshButton, &QToolButton::clicked, this, &HostManagerWidget::refresh);
-    connect(importButton, &QToolButton::clicked, this, &HostManagerWidget::importHosts);
-    connect(exportButton, &QToolButton::clicked, this, &HostManagerWidget::exportHosts);
     connect(m_tree, &QTreeWidget::itemDoubleClicked,
             this, [this](QTreeWidgetItem *item, const int) { activateTreeItem(item); });
-    connect(m_recentList, &QListWidget::itemDoubleClicked,
-            this, [this](QListWidgetItem *item) { activateRecentItem(item); });
     connect(m_tree, &QWidget::customContextMenuRequested, this, [this](const QPoint &position) {
         QTreeWidgetItem *item = m_tree->itemAt(position);
         if (item != nullptr) {
@@ -513,74 +570,34 @@ HostManagerWidget::HostManagerWidget(ApplicationDatabase *database,
             connect(deleteAction, &QAction::triggered, this, &HostManagerWidget::removeSelected);
         }
         menu.addSeparator();
+        QAction *importAction = menu.addAction(
+            UiIcons::symbol(this, UiIcons::Symbol::Upload, this->palette().color(QPalette::WindowText)),
+            tr("导入主机…"));
+        QAction *exportAction = menu.addAction(
+            UiIcons::symbol(this, UiIcons::Symbol::Download, this->palette().color(QPalette::WindowText)),
+            tr("导出主机…"));
+        connect(importAction, &QAction::triggered, this, &HostManagerWidget::importHosts);
+        connect(exportAction, &QAction::triggered, this, &HostManagerWidget::exportHosts);
+        menu.addSeparator();
         QAction *refreshAction = menu.addAction(
             UiIcons::symbol(this, UiIcons::Symbol::Refresh, this->palette().color(QPalette::WindowText)),
             tr("刷新"));
         connect(refreshAction, &QAction::triggered, this, &HostManagerWidget::refresh);
         menu.exec(m_tree->viewport()->mapToGlobal(position));
     });
-    connect(m_recentList,
-            &QWidget::customContextMenuRequested,
-            this,
-            [this](const QPoint &position) {
-                QListWidgetItem *item = m_recentList->itemAt(position);
-                if (item == nullptr) {
-                    return;
-                }
-                m_recentList->setCurrentItem(item);
-                QMenu menu(this);
-                UiIcons::modernizePopup(&menu);
-                QAction *connectAction = menu.addAction(
-                    UiIcons::symbol(this, UiIcons::Symbol::Connect, this->palette().color(QPalette::WindowText)),
-                    tr("重新连接"));
-                QAction *refreshAction = menu.addAction(
-                    UiIcons::symbol(this, UiIcons::Symbol::Refresh, this->palette().color(QPalette::WindowText)),
-                    tr("刷新最近连接"));
-                connect(connectAction, &QAction::triggered,
-                        this, [this, item]() { activateRecentItem(item); });
-                connect(refreshAction, &QAction::triggered, this, &HostManagerWidget::refresh);
-                menu.exec(m_recentList->viewport()->mapToGlobal(position));
-            });
 
     refresh();
+}
+
+QWidget *HostManagerWidget::headerActionsWidget() const
+{
+    return m_headerActions;
 }
 
 void HostManagerWidget::refresh()
 {
     applyFilter();
-
-    m_recentList->clear();
-    bool ok = false;
-    QString error;
-    const QList<ConnectionHistoryEntry> history =
-        m_database->recentConnections(30, {}, &ok, &error);
-    if (!ok) {
-        showDatabaseError(tr("读取最近连接"), error);
-        return;
-    }
-
-    // 同一主机可能连续重连多次。最近列表按主机去重，只保留最新一次，既节省空间也符合
-    // “快速重连”的使用目的；完整历史仍然保留在数据库中供后续历史页面展示。
-    QSet<QString> appendedHostIds;
-    for (const ConnectionHistoryEntry &entry : history) {
-        if (entry.hostId.isEmpty() || appendedHostIds.contains(entry.hostId)) {
-            continue;
-        }
-        const std::optional<HostRecord> record = m_database->findHost(entry.hostId, &error);
-        if (!record.has_value()) {
-            // 主机已删除时历史记录仍可作为审计信息存在，但不能用于重连，因此不显示在快捷列表。
-            continue;
-        }
-        appendedHostIds.insert(entry.hostId);
-        auto *item = new QListWidgetItem(
-            tr("%1  ·  %2")
-                .arg(record->name,
-                     entry.connectedAt.toLocalTime().toString(QStringLiteral("MM-dd HH:mm"))),
-            m_recentList);
-        item->setData(RecentHostIdRole, entry.hostId);
-        item->setToolTip(record->host);
-    }
-    // 该信号放在整棵树和最近列表都成功刷新之后，订阅方不会读到一半旧、一半新的主机集。
+    // 该信号放在整棵树刷新之后，订阅方不会读到一半旧、一半新的主机集。
     emit hostsChanged();
 }
 
@@ -935,13 +952,6 @@ void HostManagerWidget::activateTreeItem(QTreeWidgetItem *item)
     requestConnection(item->data(0, HostIdRole).toString(), ConnectionTarget{}, true);
 }
 
-void HostManagerWidget::activateRecentItem(QListWidgetItem *item)
-{
-    if (item != nullptr) {
-        requestConnection(item->data(RecentHostIdRole).toString(), ConnectionTarget{}, true);
-    }
-}
-
 void HostManagerWidget::requestConnection(const QString &hostId,
                                           const ConnectionTarget &sessionTarget,
                                           const bool openInNewTab)
@@ -1004,7 +1014,13 @@ QTreeWidgetItem *HostManagerWidget::createTreeItem(const HostRecord &record) con
     item->setData(0, HostIdRole, record.id);
     item->setData(0, HostKindRole, static_cast<int>(record.kind));
     if (record.kind == HostNodeKind::Host) {
-        item->setToolTip(0, record.toConnectionTarget().connectionSpecifier(true));
+        // 副标题必须展示"实际会连上哪里"，因此用 resolveHost 补齐从父分组继承来的账号和
+        // 端口；记录自身的字段为空只代表"继承"，直接显示会漏掉最关键的信息。
+        const std::optional<HostRecord> resolved = m_database->resolveHost(record.id);
+        const QString detail =
+            (resolved.has_value() ? *resolved : record).toConnectionTarget().connectionSpecifier(true);
+        item->setData(0, HostDetailRole, detail);
+        item->setToolTip(0, detail);
     }
     // 两种节点都能被拖动；只有分组能接收拖放（成为其他节点的父分组），主机不是容器。
     Qt::ItemFlags flags = item->flags() | Qt::ItemIsDragEnabled;

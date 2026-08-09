@@ -283,6 +283,30 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME ShelliumSessionTabBarTests COMMAND ShelliumSessionTabBarTests)
 
+    # 主机侧栏的两行渲染与标题动作条：副标题必须补齐分组继承的账号/端口，动作条只保留三个
+    # 主动作。这些是用户直接看到的行为，靠 Widgets 真实构树验证，不需要网络或 GUI 交互。
+    qt_add_executable(ShelliumHostManagerTests
+        tests/HostManagerWidgetTest.cpp
+        src/core/ConnectionConfigCodec.cpp
+        src/core/ConnectionConfigCodec.h
+        src/core/ConnectionTarget.cpp
+        src/core/ConnectionTarget.h
+        src/core/HostRecord.h
+        src/security/Vault.cpp
+        src/security/Vault.h
+        src/storage/ApplicationDatabase.cpp
+        src/storage/ApplicationDatabase.h
+        src/ui/HostManagerWidget.cpp
+        src/ui/HostManagerWidget.h
+        src/ui/UiIcons.h
+        src/ui/VaultDialog.cpp
+        src/ui/VaultDialog.h
+    )
+    target_include_directories(ShelliumHostManagerTests PRIVATE src)
+    target_link_libraries(ShelliumHostManagerTests PRIVATE
+        Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Sql Qt6::Test PkgConfig::LIBSODIUM)
+    add_test(NAME ShelliumHostManagerTests COMMAND ShelliumHostManagerTests)
+
     # 保活判定同样是内联纯逻辑，不需要 libssh 会话即可覆盖。独立成目标而不是并进
     # ShelliumCoreTests：一个可执行文件只能有一个 main，共用 main 还会让按名过滤测试时
     # 另一套报 "Unknown test function" 并返回非零，破坏单独复现某个用例的工作流。
@@ -299,6 +323,27 @@ if(BUILD_TESTING)
     target_include_directories(ShelliumSftpRecursiveTests PRIVATE src)
     target_link_libraries(ShelliumSftpRecursiveTests PRIVATE Qt6::Core Qt6::Test)
     add_test(NAME ShelliumSftpRecursiveTests COMMAND ShelliumSftpRecursiveTests)
+
+    # 备用屏（vim/top/less 等全屏程序）下的渲染与按键编码回归。只需要 libvterm 与
+    # Widgets，不涉及 SSH 会话；单独成目标同样是为了避开重复 main。
+    qt_add_executable(ShelliumTerminalAltScreenTests
+        tests/TerminalAltScreenTest.cpp
+        src/core/ConnectionTarget.cpp
+        src/core/ConnectionTarget.h
+        src/core/HostRecord.h
+        src/settings/TerminalSettings.cpp
+        src/settings/TerminalSettings.h
+        src/storage/ApplicationDatabase.cpp
+        src/storage/ApplicationDatabase.h
+        src/terminal/TerminalView.cpp
+        src/terminal/TerminalView.h
+        src/terminal/VtermBridge.cpp
+        src/terminal/VtermBridge.h
+    )
+    target_include_directories(ShelliumTerminalAltScreenTests PRIVATE src)
+    target_link_libraries(ShelliumTerminalAltScreenTests PRIVATE
+        Qt6::Core Qt6::Gui Qt6::Sql Qt6::Widgets Qt6::Test PkgConfig::LIBVTERM)
+    add_test(NAME ShelliumTerminalAltScreenTests COMMAND ShelliumTerminalAltScreenTests)
 
     # 针对真实服务器的连接路径回归。非阻塞握手状态机的价值就在于与真实 libssh 和真实
     # 服务器的时序交互，无法用桩替身覆盖；缺少 SHELLIUM_IT_* 环境变量时测试自行跳过。

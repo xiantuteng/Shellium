@@ -241,6 +241,8 @@ private:
     QStackedWidget *m_sidebarStack = nullptr;
     /** @brief 当前侧栏页面标题。 */
     QLabel *m_sidebarTitle = nullptr;
+    /** @brief 主机页提供、挂在侧栏标题行右侧的动作条；仅在主机页可见。 */
+    QWidget *m_hostHeaderActions = nullptr;
     /** @brief 导航轨上与三个侧栏页面一一对应的互斥按钮。 */
     QList<QToolButton *> m_navigationButtons;
     /** @brief 标题区及导航轨中需要随主题重新着色的图标按钮。 */

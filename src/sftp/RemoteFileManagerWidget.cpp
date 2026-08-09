@@ -510,7 +510,6 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     auto *operationRow = new QHBoxLayout;
     operationRow->setSpacing(5);
     auto *uploadButton = new QToolButton(this);
-    auto *uploadDirectoryButton = new QToolButton(this);
     auto *downloadButton = new QToolButton(this);
     auto *previewButton = new QToolButton(this);
     auto *chmodButton = new QToolButton(this);
@@ -518,12 +517,24 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     auto *deleteButton = new QToolButton(this);
     configureCompactFileButton(
         uploadButton,
-        UiIcons::symbol(this, UiIcons::Symbol::Send, this->palette().color(QPalette::WindowText)),
-        tr("上传文件到当前远程目录"));
-    configureCompactFileButton(
-        uploadDirectoryButton,
         UiIcons::symbol(this, UiIcons::Symbol::Upload, this->palette().color(QPalette::WindowText)),
-        tr("递归上传目录到当前远程目录"));
+        tr("上传文件或目录到当前远程目录"));
+    // 文件与目录合成一个按钮。系统文件选择器无法在一次会话里同时接受文件和目录，因此按钮
+    // 展开一个二选一菜单，而不是让用户在两个外观相近的图标之间猜。
+    auto *uploadMenu = new QMenu(uploadButton);
+    UiIcons::modernizePopup(uploadMenu);
+    QAction *uploadFilesAction = uploadMenu->addAction(
+        UiIcons::symbol(this, UiIcons::Symbol::Send, this->palette().color(QPalette::WindowText)),
+        tr("上传文件…"));
+    QAction *uploadDirectoryAction = uploadMenu->addAction(
+        UiIcons::symbol(this, UiIcons::Symbol::Folder, this->palette().color(QPalette::WindowText)),
+        tr("上传目录…"));
+    connect(uploadFilesAction, &QAction::triggered,
+            this, &RemoteFileManagerWidget::uploadSelectedFile);
+    connect(uploadDirectoryAction, &QAction::triggered,
+            this, &RemoteFileManagerWidget::uploadSelectedDirectory);
+    uploadButton->setMenu(uploadMenu);
+    uploadButton->setPopupMode(QToolButton::InstantPopup);
     configureCompactFileButton(
         downloadButton,
         UiIcons::symbol(this, UiIcons::Symbol::Download, this->palette().color(QPalette::WindowText)),
@@ -561,7 +572,6 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     m_resumeTransfersCheck->setToolTip(
         tr("开启时从已有较小文件继续；关闭时始终截断并覆盖重传。"));
     operationRow->addWidget(uploadButton);
-    operationRow->addWidget(uploadDirectoryButton);
     operationRow->addWidget(downloadButton);
     operationRow->addWidget(previewButton);
     operationRow->addWidget(chmodButton);
@@ -727,11 +737,6 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
                         this, &RemoteFileManagerWidget::refreshDirectory);
                 menu.exec(m_fileTree->viewport()->mapToGlobal(position));
             });
-    connect(uploadButton, &QToolButton::clicked, this, &RemoteFileManagerWidget::uploadSelectedFile);
-    connect(uploadDirectoryButton,
-            &QToolButton::clicked,
-            this,
-            &RemoteFileManagerWidget::uploadSelectedDirectory);
     connect(m_cancelButton,
             &QToolButton::clicked,
             this,
@@ -1513,6 +1518,22 @@ void RemoteFileManagerWidget::uploadSelectedDirectory()
     if (remoteParent.isEmpty()) {
         QMessageBox::warning(this, tr("路径未知"),
                              tr("请先进入一个远程目录，再上传本地目录。"));
+        return;
+    }
+
+    // 目录上传是递归写入：一次点击可能覆盖远端成百上千个文件，且规模在选择器里完全看不出
+    // 来。因此在入队前明确复述"哪个目录写到哪里"，让用户有机会发现选错了目录。
+    const QString remoteRoot = remoteParent.endsWith(QLatin1Char('/'))
+        ? remoteParent + QDir(localDirectory).dirName()
+        : remoteParent + QLatin1Char('/') + QDir(localDirectory).dirName();
+    const QMessageBox::StandardButton choice = QMessageBox::question(
+        this,
+        tr("确认上传目录"),
+        tr("将递归上传本地目录：\n%1\n\n到远程位置：\n%2\n\n同名文件会按当前的断点续传设置处理。是否继续？")
+            .arg(QDir::toNativeSeparators(localDirectory), remoteRoot),
+        QMessageBox::Yes | QMessageBox::No,
+        QMessageBox::No);
+    if (choice != QMessageBox::Yes) {
         return;
     }
     uploadLocalPaths({localDirectory}, remoteParent);

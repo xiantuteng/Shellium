@@ -10,6 +10,7 @@ class QCompleter;
 class QContextMenuEvent;
 class QMenu;
 class QPaintEvent;
+class QWheelEvent;
 class QStringListModel;
 class QTimer;
 class VtermBridge;
@@ -241,6 +242,14 @@ protected:
     /** @brief 在基础文本绘制后叠加 IBeam 光标；块状与下划线由桥接层格式化。 */
     void paintEvent(QPaintEvent *event) override;
 
+    /**
+     * @brief 备用屏下把滚轮转换为方向键发往远端，其余情况沿用文档滚动。
+     *
+     * vim、less、man 的"历史"保存在程序自己手里，本地文档只有一屏，滚轮滚不动任何东西。
+     * xterm 的 alternateScroll 行为是把滚轮翻译成上下键，用户因此能用触控板翻阅内容。
+     */
+    void wheelEvent(QWheelEvent *event) override;
+
     /** @brief 告知系统输入法终端仍可接收文本，并提供候选窗口定位信息。 */
     QVariant inputMethodQuery(Qt::InputMethodQuery query) const override;
 
@@ -304,6 +313,9 @@ private:
      * 改变，最终出现重复提示符和大段空格。定时器只在拖动短暂停顿后提交最终尺寸。
      */
     QTimer *m_resizeDebounceTimer = nullptr;
+
+    /** @brief 备用屏滚轮增量的累加值；触控板的小增量攒够一行才发一次方向键。 */
+    int m_wheelAccumulator = 0;
 
     /** @brief 当前光标闪烁相位和形态，供 paintEvent 与 VtermBridge 同步使用。 */
     bool m_cursorPhaseVisible = true;

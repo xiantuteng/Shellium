@@ -31,6 +31,7 @@
 #include <QTimer>
 
 #include <algorithm>
+#include <optional>
 
 namespace {
 
@@ -65,6 +66,82 @@ bool hasTerminalControlModifier(const QKeyEvent *event)
 #else
     return event->modifiers().testFlag(Qt::ControlModifier);
 #endif
+}
+
+/**
+ * @brief 把 Qt 修饰键映射为 libvterm 的修饰掩码。
+ *
+ * 只翻译 Shift/Control/Alt 三种终端协议认识的修饰。macOS 的 Command 不参与：它是应用级
+ * 快捷键，不该出现在发往 PTY 的字节里。
+ */
+VTermModifier toVtermModifiers(const QKeyEvent *event)
+{
+    unsigned int modifiers = VTERM_MOD_NONE;
+    if (event->modifiers().testFlag(Qt::ShiftModifier)) {
+        modifiers |= VTERM_MOD_SHIFT;
+    }
+    if (hasTerminalControlModifier(event)) {
+        modifiers |= VTERM_MOD_CTRL;
+    }
+    if (event->modifiers().testFlag(Qt::AltModifier)) {
+        modifiers |= VTERM_MOD_ALT;
+    }
+    return static_cast<VTermModifier>(modifiers);
+}
+
+/**
+ * @brief 把 Qt 键码映射为 libvterm 键枚举。
+ * @return 该键需要由 libvterm 按当前终端模式编码时返回对应枚举，否则返回 std::nullopt。
+ *
+ * 这些键的字节形式不是固定的：DECCKM（应用光标键）开启后方向键从 `CSI A` 变成 `SS3 A`，
+ * 而 vim、less、htop 进入全屏时都会开启它。硬编码 CSI 形式会让 vim 在插入模式下把方向键
+ * 读成 ESC 加一个普通字母——按上箭头不是移动光标，而是退出插入模式并执行一条编辑命令。
+ */
+std::optional<VTermKey> terminalNavigationKey(const int key)
+{
+    switch (key) {
+    case Qt::Key_Up: return VTERM_KEY_UP;
+    case Qt::Key_Down: return VTERM_KEY_DOWN;
+    case Qt::Key_Left: return VTERM_KEY_LEFT;
+    case Qt::Key_Right: return VTERM_KEY_RIGHT;
+    case Qt::Key_Home: return VTERM_KEY_HOME;
+    case Qt::Key_End: return VTERM_KEY_END;
+    case Qt::Key_PageUp: return VTERM_KEY_PAGEUP;
+    case Qt::Key_PageDown: return VTERM_KEY_PAGEDOWN;
+    case Qt::Key_Insert: return VTERM_KEY_INS;
+    case Qt::Key_Delete: return VTERM_KEY_DEL;
+    default:
+        break;
+    }
+    if (key >= Qt::Key_F1 && key <= Qt::Key_F12) {
+        return static_cast<VTermKey>(VTERM_KEY_FUNCTION_0 + 1 + (key - Qt::Key_F1));
+    }
+    return std::nullopt;
+}
+
+/**
+ * @brief 返回 Ctrl 与非字母键组合对应的 ASCII 控制码。
+ * @return 该组合有标准控制码时返回 0x00~0x1f 的字符，否则返回 std::nullopt。
+ *
+ * Ctrl+[ 就是 ESC，是 vim 用户退出插入模式最常用的按法之一；Ctrl+\ 和 Ctrl+_ 分别是
+ * 退出信号和 readline 撤销。只处理 A~Z 会让这些键被整个吞掉，用户按下去毫无反应。
+ */
+std::optional<char> controlCodeForNonLetterKey(const int key)
+{
+    switch (key) {
+    case Qt::Key_At:
+    case Qt::Key_2: return '\x00';        // Ctrl+@ / Ctrl+2 → NUL
+    case Qt::Key_BracketLeft: return '\x1b';   // Ctrl+[ → ESC
+    case Qt::Key_Backslash: return '\x1c';     // Ctrl+\ → FS
+    case Qt::Key_BracketRight: return '\x1d';  // Ctrl+] → GS
+    case Qt::Key_AsciiCircum:
+    case Qt::Key_6: return '\x1e';        // Ctrl+^ / Ctrl+6 → RS
+    case Qt::Key_Underscore:
+    case Qt::Key_Minus: return '\x1f';    // Ctrl+_ / Ctrl+- → US
+    case Qt::Key_Space: return '\x00';    // Ctrl+Space → NUL
+    default:
+        return std::nullopt;
+    }
 }
 
 /**
@@ -140,6 +217,17 @@ TerminalView::TerminalView(QWidget *parent)
             &VtermBridge::shellIntegrationEvent,
             this,
             &TerminalView::shellIntegrationEvent);
+    connect(m_vtermBridge, &VtermBridge::alternateScreenChanged, this, [this](const bool active) {
+        // 全屏程序接管屏幕后就不存在"当前正在输入的命令"了：vim 里敲的 i、d、w 都是编辑
+        // 命令。继续累积前缀会弹出历史补全浮层，而浮层随后会抢走 Tab、回车和 Esc——那正是
+        // vim 最关键的三个键，表现为"进了 vim 就没法编辑"。
+        m_currentCommand.clear();
+        m_commandCompleter->popup()->hide();
+        // 备用屏没有可回溯的历史，滚动条只会误导用户去滚动一块固定画布。
+        setVerticalScrollBarPolicy(active ? Qt::ScrollBarAlwaysOff : Qt::ScrollBarAsNeeded);
+        renderPreservingScroll();
+        viewport()->update();
+    });
 
     // 补全只做前缀匹配并保持模型传入的最近使用顺序。UnsortedModel 可以避免 QCompleter
     // 为二分查找重新排序，从而把多年未用但字典序靠前的命令放到最近命令之前。
@@ -315,6 +403,12 @@ void TerminalView::renderPreservingScroll(const bool followBottom, const int pre
 {
     m_vtermBridge->render(document());
     QScrollBar *bar = verticalScrollBar();
+    if (m_vtermBridge->isAlternateScreen()) {
+        // 备用屏的文档就是整块网格，第 0 行必须落在视口顶部。这里不能沿用主屏的"贴底"
+        // 语义：网格哪怕只比可显示段数多一行，贴底也会把第 0 行连同光标推出视口。
+        bar->setValue(bar->minimum());
+        return;
+    }
     bar->setValue(followBottom ? bar->maximum()
                                : std::clamp(previousValue, bar->minimum(), bar->maximum()));
 }
@@ -331,7 +425,14 @@ void TerminalView::recalculateTerminalGeometry()
     const int baseHeight = std::max(metrics.lineSpacing(), 1);
     const int cellHeight = std::max(baseHeight * m_lineHeightPercent / 100, 1);
     const int columns = std::max(viewport()->width() / cellWidth, 1);
-    const int rows = std::max(viewport()->height() / cellHeight, 1);
+    // 行数必须等于 QPlainTextEdit 真正能完整显示的段数，而不是"视口高度能塞下几行"。
+    // 控件在 viewport 上下各留一份 documentMargin，并且只有严格小于视口高度的累计高度才算
+    // 一行可见（等于视口高度的那一行会被判定放不下）。按前者计算会比控件多报一行：告诉
+    // PTY 的网格比画得出来的多一行，主屏上只是最旧一行被顶掉，看不出来；备用屏下整块画布
+    // 被推高一行，vim 的第 0 行连同停在那里的光标一起消失在视口上方。
+    const int documentMargin = static_cast<int>(document()->documentMargin());
+    const int usableHeight = viewport()->height() - 2 * documentMargin - 1;
+    const int rows = std::max(usableHeight / cellHeight, 1);
     if (columns == m_terminalColumns && rows == m_terminalRows) {
         // resizeEvent 以像素为单位触发，同一个字符列宽内可能产生多次事件；这些事件不能
         // 继续向 PTY 传播，否则只会制造无意义的 SIGWINCH 和远端提示符重绘。
@@ -418,7 +519,8 @@ QRect TerminalView::visualCursorRect() const
 
 void TerminalView::updateCompletionPopup()
 {
-    if (m_localCapture || m_currentCommand.size() < 2 || m_completionModel->rowCount() == 0) {
+    if (m_localCapture || m_vtermBridge->isAlternateScreen()
+        || m_currentCommand.size() < 2 || m_completionModel->rowCount() == 0) {
         m_commandCompleter->popup()->hide();
         return;
     }
@@ -564,10 +666,13 @@ void TerminalView::appendTerminalOutput(const QByteArray &bytes)
     // 必须读取 libvterm 的真实光标行，不能使用 QTextDocument 最后一段：全屏输出或光标移动
     // 可能在光标下方保留一个旧的 "#" 提示符，后者会把尚未输入密码误判成认证成功。
     // 这里只发出候选信号，TerminalPane 还会用认证状态和是否已有密码做二次限定。
+    // 备用屏里光标行是 vim 的状态行或 htop 的表头，同样可能以 $ 或 % 结尾。把它当成 Shell
+    // 提示符会让等待认证的上层误判内层 Shell 已就绪。
     static const QRegularExpression shellPromptPattern(
         QStringLiteral(R"((?:[#>$%]|➜|❯)\s*$)"));
     const QString cursorLine = m_vtermBridge->cursorLineText();
-    if (shellPromptPattern.match(cursorLine).hasMatch()) {
+    if (!m_vtermBridge->isAlternateScreen()
+        && shellPromptPattern.match(cursorLine).hasMatch()) {
         emit shellPromptDetected();
     }
 
@@ -663,6 +768,25 @@ void TerminalView::keyPressEvent(QKeyEvent *event)
         return;
     }
 
+    // 备用屏下每一个按键都属于全屏程序自己的键位表，视图不能再把它当作 Shell 命令行的
+    // 一部分：既不做历史补全，也不发出会改动连接链的 commandSubmitted / Ctrl-D / Ctrl+C。
+    const bool alternateScreen = m_vtermBridge->isAlternateScreen();
+
+    // 方向键、翻页、Insert/Delete 和功能键的字节形式取决于远端当前的 DECCKM/DECPAM 模式，
+    // 必须由保存着这些模式的 libvterm 编码；它生成的字节经 protocolResponse 转成 inputBytes。
+    if (const std::optional<VTermKey> navigationKey = terminalNavigationKey(event->key());
+        navigationKey.has_value()) {
+        if (m_commandCompleter->popup()->isVisible()
+            && (event->key() == Qt::Key_Up || event->key() == Qt::Key_Down)) {
+            // 补全浮层可见时上下键用于选择候选，交给 Qt 的默认处理。
+            QPlainTextEdit::keyPressEvent(event);
+            return;
+        }
+        m_vtermBridge->sendKey(*navigationKey, toVtermModifiers(event));
+        event->accept();
+        return;
+    }
+
     if (m_commandCompleter->popup()->isVisible()) {
         if (event->key() == Qt::Key_Escape) {
             m_commandCompleter->popup()->hide();
@@ -716,13 +840,37 @@ void TerminalView::keyPressEvent(QKeyEvent *event)
         // 多行能力仍然保留，但只有用户看见风险并明确确认后才会进入 PTY。命令缓冲只保留
         // 最后一个尚未换行的片段；已经包含换行的部分已由 PTY 提交，不能再次上报。
         encoded = prepared.text.toUtf8();
-        m_currentCommand.append(prepared.text.section(QLatin1Char('\n'), -1));
+        if (!alternateScreen) {
+            m_currentCommand.append(prepared.text.section(QLatin1Char('\n'), -1));
+        }
+
+        // 远端开启括号粘贴时，内容必须夹在 CSI 200~ / CSI 201~ 之间，否则 vim 会把粘贴
+        // 当成逐个按键：autoindent 给每一行再叠一层缩进，十行代码粘完成阶梯状。远端未
+        // 开启该模式时 libvterm 不会产生任何标记字节，行为与此前完全一致。
+        m_vtermBridge->beginPaste();
+        emit inputBytes(encoded);
+        m_vtermBridge->endPaste();
+        if (!alternateScreen) {
+            updateCompletionPopup();
+        }
+        event->accept();
+        return;
     } else if (event->matches(QKeySequence::Copy)) {
         copy();
         event->accept();
         return;
     } else if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) {
         encoded = QByteArrayLiteral("\r");
+        if (alternateScreen) {
+            // vim 里的回车是换行或执行 ex 命令，既不是 Shell 命令提交，也不可能开启新的
+            // SSH 层。照常上报会把编辑内容写进命令历史，还会让嵌套解析器认错服务器。
+            if (event->modifiers().testFlag(Qt::AltModifier)) {
+                encoded.prepend('\x1b');
+            }
+            emit inputBytes(encoded);
+            event->accept();
+            return;
+        }
         const QString submittedCommand = recoverEchoedSshCommand(
             m_currentCommand, m_vtermBridge->cursorLineText());
         m_currentCommand.clear();
@@ -755,25 +903,14 @@ void TerminalView::keyPressEvent(QKeyEvent *event)
         if (!m_currentCommand.isEmpty()) {
             m_currentCommand.chop(1);
         }
-    } else if (event->key() == Qt::Key_Up) {
-        encoded = QByteArrayLiteral("\x1b[A");
-    } else if (event->key() == Qt::Key_Down) {
-        encoded = QByteArrayLiteral("\x1b[B");
-    } else if (event->key() == Qt::Key_Right) {
-        encoded = QByteArrayLiteral("\x1b[C");
-    } else if (event->key() == Qt::Key_Left) {
-        encoded = QByteArrayLiteral("\x1b[D");
-    } else if (event->key() == Qt::Key_Home) {
-        encoded = QByteArrayLiteral("\x1b[H");
-    } else if (event->key() == Qt::Key_End) {
-        encoded = QByteArrayLiteral("\x1b[F");
-    } else if (event->key() == Qt::Key_Delete) {
-        encoded = QByteArrayLiteral("\x1b[3~");
     } else if (terminalControl
                && event->key() >= Qt::Key_A && event->key() <= Qt::Key_Z) {
         // ASCII 控制字符使用字母序号 1..26；这覆盖 Ctrl+C、Ctrl+D、Ctrl+Z 等 Shell 操作。
         encoded = QByteArray(1, static_cast<char>(event->key() - Qt::Key_A + 1));
-        if (event->key() == Qt::Key_D) {
+        if (alternateScreen) {
+            // vim 的 Ctrl-D/Ctrl-F 是翻页，htop 的 Ctrl+C 只结束前台程序，都不代表用户
+            // 退出了一层 SSH。在备用屏里发出这些信号会凭空弹掉一层真实存在的服务器。
+        } else if (event->key() == Qt::Key_D) {
             // Ctrl-D 只有在当前输入行为空时才是 EOF；行中是 delete-char-forward，而在
             // cat/python/mysql 里退出的也是那个程序而非 Shell。误判会弹掉一层真实存在的
             // 服务器，导致文件管理器少一层。
@@ -788,11 +925,18 @@ void TerminalView::keyPressEvent(QKeyEvent *event)
             m_currentCommand.clear();
             m_commandCompleter->popup()->hide();
         }
+    } else if (const std::optional<char> controlCode =
+                   terminalControl ? controlCodeForNonLetterKey(event->key()) : std::nullopt;
+               controlCode.has_value()) {
+        // Ctrl+[ 是 vim 用户退出插入模式最常用的按法；只处理 A~Z 会让它被整个吞掉。
+        encoded = QByteArray(1, *controlCode);
     } else if (!event->text().isEmpty()
                && !event->modifiers().testFlag(Qt::ControlModifier)
                && !event->modifiers().testFlag(Qt::MetaModifier)) {
         encoded = event->text().toUtf8();
-        m_currentCommand.append(event->text());
+        if (!alternateScreen) {
+            m_currentCommand.append(event->text());
+        }
     } else {
         // 复制、查找等标准只读文本操作仍交给 QPlainTextEdit 处理。
         QPlainTextEdit::keyPressEvent(event);
@@ -803,9 +947,36 @@ void TerminalView::keyPressEvent(QKeyEvent *event)
         encoded.prepend('\x1b');
     }
     emit inputBytes(encoded);
-    // 普通字符、粘贴和退格会改变前缀；方向键等不会改变 m_currentCommand，重复计算只涉及
-    // 很小的内存模型，可换来所有输入路径的一致行为并避免漏掉输入法或未来新增按键分支。
-    updateCompletionPopup();
+    // 普通字符、粘贴和退格会改变前缀；重复计算只涉及很小的内存模型，可换来所有输入路径的
+    // 一致行为并避免漏掉输入法或未来新增按键分支。备用屏下没有命令行可补全。
+    if (!alternateScreen) {
+        updateCompletionPopup();
+    }
+    event->accept();
+}
+
+void TerminalView::wheelEvent(QWheelEvent *event)
+{
+    if (!m_vtermBridge->isAlternateScreen()
+        || event->modifiers().testFlag(Qt::ControlModifier)) {
+        // Ctrl+滚轮是缩放手势，不能被翻译成方向键送进全屏程序。
+        QPlainTextEdit::wheelEvent(event);
+        return;
+    }
+
+    // 一个标准滚轮档位是 120 个 1/8 度；按 xterm 惯例换算成 3 行。触控板会发出更小的
+    // 增量，累加后不足一行时直接吞掉，避免每个像素都发一次方向键。
+    m_wheelAccumulator += event->angleDelta().y();
+    constexpr int kStepsPerNotch = 3;
+    constexpr int kUnitsPerNotch = 120;
+    const int lines = m_wheelAccumulator * kStepsPerNotch / kUnitsPerNotch;
+    if (lines != 0) {
+        m_wheelAccumulator -= lines * kUnitsPerNotch / kStepsPerNotch;
+        const VTermKey key = lines > 0 ? VTERM_KEY_UP : VTERM_KEY_DOWN;
+        for (int step = 0; step < std::abs(lines); ++step) {
+            m_vtermBridge->sendKey(key);
+        }
+    }
     event->accept();
 }
 

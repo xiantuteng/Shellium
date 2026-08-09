@@ -7,6 +7,8 @@
 
 #include <QCoreApplication>
 #include <QElapsedTimer>
+#include <QFile>
+#include <QTemporaryDir>
 #include <QSignalSpy>
 #include <QTest>
 
@@ -71,6 +73,9 @@ private slots:
 
     /** @brief SFTP 连接池必须让后续操作免去重复握手，而不只是"看起来能用"。 */
     void reusesPooledSftpConnectionAcrossRequests();
+
+    /** @brief 传输占用连接期间，目录浏览必须照常返回，否则用户在上传期间无法切换目录。 */
+    void listsDirectoryWhileTransferHoldsConnection();
 
     /** @brief 无密码的嵌套目标必须索要凭据而非直接失败，且凭据要能传给 SFTP。 */
     void requestsCredentialForNestedLayerWithoutPassword();
@@ -561,6 +566,73 @@ void SshSessionStackIntegrationTest::reusesPooledSftpConnectionAcrossRequests()
              qPrintable(QStringLiteral("热请求未显著快于冷请求（冷 %1ms，热最快 %2ms），"
                                        "连接池可能没有生效")
                             .arg(coldMs).arg(warmBestMs)));
+}
+
+void SshSessionStackIntegrationTest::listsDirectoryWhileTransferHoldsConnection()
+{
+    SftpService service;
+    const ConnectionTarget target = firstLayerTarget();
+
+    QSignalSpy listed(&service, &SftpService::directoryListed);
+    QSignalSpy failed(&service, &SftpService::operationFailed);
+    QSignalSpy succeeded(&service, &SftpService::operationSucceeded);
+    QSignalSpy progressed(&service, &SftpService::transferProgress);
+
+    service.listDirectory(target, QString());
+    QVERIFY2(waitFor([&]() { return listed.count() > 0 || failed.count() > 0; }, 30000),
+             "主目录读取未返回");
+    QVERIFY2(failed.isEmpty(),
+             qPrintable(QStringLiteral("主目录读取失败：%1")
+                            .arg(failed.value(0).value(3).toString())));
+    const QString home = listed.at(0).at(2).toString();
+
+    // 文件必须大到能在传输途中被暂停：单块写完就结束的小文件根本走不到暂停边界。
+    QTemporaryDir localDir;
+    QVERIFY(localDir.isValid());
+    const QString localPath = localDir.filePath(QStringLiteral("shellium-concurrency-probe.bin"));
+    {
+        QFile payload(localPath);
+        QVERIFY(payload.open(QIODevice::WriteOnly));
+        const QByteArray block(1 << 20, '\0');
+        for (int index = 0; index < 64; ++index) {
+            QCOMPARE(payload.write(block), static_cast<qint64>(block.size()));
+        }
+    }
+    const QString remotePath = home.endsWith(QLatin1Char('/'))
+        ? home + QStringLiteral("shellium-concurrency-probe.bin")
+        : home + QStringLiteral("/shellium-concurrency-probe.bin");
+
+    const quint64 uploadId =
+        service.uploadFile(target, localPath, remotePath, SftpTransfer::ExistingFilePolicy::Overwrite);
+    QVERIFY2(waitFor([&]() { return progressed.count() > 0 || failed.count() > 0; }, 60000),
+             "上传未开始");
+    QVERIFY2(failed.isEmpty(),
+             qPrintable(QStringLiteral("上传失败：%1").arg(failed.value(0).value(3).toString())));
+
+    // 暂停会让传输线程停在分块边界上，并持续占用它那条池化连接。用户在上传期间切换目录
+    // 时遇到的正是这种"连接被占住"的状态，只不过那时占用它的是仍在写字节的循环。
+    service.pauseRequest(uploadId);
+    QVERIFY2(!waitFor([&]() { return succeeded.count() > 0; }, 3000),
+             "上传在暂停前就已完成，用例无法覆盖传输占用连接的场景");
+
+    const int listedBefore = listed.count();
+    QElapsedTimer browseTimer;
+    browseTimer.start();
+    service.listDirectory(target, home);
+    const bool browsed = waitFor(
+        [&]() { return listed.count() > listedBefore || failed.count() > 0; }, 30000);
+
+    // 先恢复并取消，避免断言失败时把暂停中的传输线程留在后台。
+    service.resumeRequest(uploadId);
+    service.cancelRequest(uploadId);
+    waitFor([&]() { return succeeded.count() > 0 || failed.count() > 0; }, 30000);
+    const int succeededBeforeCleanup = succeeded.count();
+    service.removePath(target, remotePath, false);
+    waitFor([&]() { return succeeded.count() > succeededBeforeCleanup; }, 30000);
+
+    QVERIFY2(browsed,
+             "传输占用连接期间目录浏览没有返回：浏览与传输必须走各自独立的连接");
+    qInfo("传输占用连接期间的目录浏览耗时：%lldms", browseTimer.elapsed());
 }
 
 void SshSessionStackIntegrationTest::requestsCredentialForNestedLayerWithoutPassword()
