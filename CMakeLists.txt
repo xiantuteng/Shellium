@@ -25,6 +25,8 @@ qt_add_executable(Shellium
     src/main.cpp
     src/app/MainWindow.cpp
     src/app/MainWindow.h
+    src/core/ActivityLog.cpp
+    src/core/ActivityLog.h
     src/core/ConnectionTarget.cpp
     src/core/ConnectionTarget.h
     src/forwarding/PortForwardManagerWidget.cpp
@@ -336,6 +338,17 @@ if(BUILD_TESTING)
     target_link_libraries(ShelliumSettingsUiTests PRIVATE
         Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Sql Qt6::Test)
     add_test(NAME ShelliumSettingsUiTests COMMAND ShelliumSettingsUiTests)
+
+    # 运行日志是界面提示条移除后唯一的消息去路：写入一旦静默失败，用户既看不到提示也查
+    # 不到记录。只依赖 Core/Test，单独成目标同样是为了避开重复 main。
+    qt_add_executable(ShelliumActivityLogTests
+        tests/ActivityLogTest.cpp
+        src/core/ActivityLog.cpp
+        src/core/ActivityLog.h
+    )
+    target_include_directories(ShelliumActivityLogTests PRIVATE src)
+    target_link_libraries(ShelliumActivityLogTests PRIVATE Qt6::Core Qt6::Test)
+    add_test(NAME ShelliumActivityLogTests COMMAND ShelliumActivityLogTests)
 
     # 保活判定同样是内联纯逻辑，不需要 libssh 会话即可覆盖。独立成目标而不是并进
     # ShelliumCoreTests：一个可执行文件只能有一个 main，共用 main 还会让按名过滤测试时

@@ -1,5 +1,6 @@
 #include "app/MainWindow.h"
 
+#include "core/ActivityLog.h"
 #include "forwarding/PortForwardManagerWidget.h"
 #include "productivity/ProductivityModel.h"
 #include "productivity/ProductivityWidget.h"
@@ -158,13 +159,12 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     , m_database(database)
     , m_credentialVault(credentialVault)
     , m_vaultIdleTimer(new QTimer(this))
-    , m_messageClearTimer(new QTimer(this))
 {
     Q_ASSERT(m_database != nullptr);
     Q_ASSERT(m_credentialVault != nullptr);
 
     // 设置服务要在创建终端控件前加载并绑定应用主题，避免窗口先按默认深色绘制一帧再跳到
-    // 用户配置；顶部会话栏此时尚未创建，警告由 showTransientMessage 暂存后再展示。
+    // 用户配置；此时界面尚未建立，但 showTransientMessage 只写日志，不依赖任何控件。
     m_settingsService = new TerminalSettingsService(m_database, this);
     m_settingsService->bindApplicationTheme(qApp);
     connect(m_settingsService,
@@ -465,13 +465,8 @@ MainWindow::MainWindow(ApplicationDatabase *database,
                 scrollRightButton->setEnabled(canScrollRight);
             });
 
-    m_transientMessageLabel = new QLabel(m_titleChrome);
-    m_transientMessageLabel->setObjectName(QStringLiteral("TitleTransientMessage"));
-    m_transientMessageLabel->setMinimumWidth(0);
-    m_transientMessageLabel->setMaximumWidth(260);
-    m_transientMessageLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    m_transientMessageLabel->setVisible(false);
-    titleLayout->addWidget(m_transientMessageLabel);
+    // 标题栏不再放置瞬时消息标签：它会遮挡标签页、在用户读完之前消失，而这些消息真正
+    // 的用途是事后排查。全部改由 ActivityLog 落盘，界面不为其保留位置。
 
     // 命令面板与设置属于全局工具，归入导航轨底部；标题行因此只保留与当前会话直接相关
     // 的标签、滚动和新建入口，符合"上方是内容域、下方是全局工具"的稳定空间模型。
@@ -572,19 +567,8 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     applyConfiguredShortcuts();
     applyModernAppearance(m_settingsService->currentSettings());
 
-    // 底部状态栏已按新布局移除。短消息在标题栏自动消失，服务器、编码和尺寸则由每个
-    // TerminalPane 自己的顶部状态栏持久展示，两类信息不再互相覆盖。
-    m_messageClearTimer->setSingleShot(true);
-    connect(m_messageClearTimer, &QTimer::timeout, this, [this]() {
-        if (m_transientMessageLabel != nullptr) {
-            m_transientMessageLabel->clear();
-            m_transientMessageLabel->setVisible(false);
-        }
-    });
-    if (!m_pendingTransientMessage.isEmpty()) {
-        showTransientMessage(m_pendingTransientMessage, 0);
-        m_pendingTransientMessage.clear();
-    }
+    // 底部状态栏与标题栏消息条都已移除：服务器、编码和尺寸由每个 TerminalPane 自己的
+    // 顶部状态栏持久展示，其余运行信息只进日志文件，不再抢占任何界面位置。
 
     connect(connectAction, &QAction::triggered, this, &MainWindow::connectCurrentPane);
     connect(nestedConnectAction, &QAction::triggered,
@@ -966,12 +950,6 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
             font-size: 18px;
             font-weight: 700;
             padding: 2px 4px 7px 4px;
-        }
-        QLabel#TitleTransientMessage {
-            color: #c2c9da;
-            background: rgba(255, 255, 255, 18);
-            border-radius: 8px;
-            padding: 5px 9px;
         }
         QToolButton[chromeButton="true"] {
             background: transparent;
@@ -1527,23 +1505,11 @@ void MainWindow::showSessionTabContextMenu(const QPoint &position)
     menu.exec(m_titleTabBar->mapToGlobal(position));
 }
 
-void MainWindow::showTransientMessage(const QString &message,
-                                      const int timeoutMilliseconds)
+void MainWindow::showTransientMessage(const QString &message, int)
 {
-    if (m_transientMessageLabel == nullptr) {
-        // 设置服务在标题栏创建之前就可能报告数据库损坏；暂存最后一条最相关信息，待界面
-        // 建立后再展示，而不是为了显示错误重新创建已经要求移除的 QStatusBar。
-        m_pendingTransientMessage = message;
-        return;
-    }
-
-    m_messageClearTimer->stop();
-    m_transientMessageLabel->setText(message);
-    m_transientMessageLabel->setToolTip(message);
-    m_transientMessageLabel->setVisible(!message.isEmpty());
-    if (!message.isEmpty() && timeoutMilliseconds > 0) {
-        m_messageClearTimer->start(timeoutMilliseconds);
-    }
+    // 这些消息一律只落日志：界面上曾经的标题栏提示条已被移除，超时参数因此失去意义，
+    // 保留在签名里只是为了不让几十处调用点跟着改动。
+    ActivityLog::instance().append(message);
 }
 
 void MainWindow::connectCurrentPane()

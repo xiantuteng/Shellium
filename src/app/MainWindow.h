@@ -173,9 +173,11 @@ private:
     void showSessionTabContextMenu(const QPoint &position);
 
     /**
-     * @brief 在顶部会话栏展示非阻塞提示，替代已经移除的底部状态栏。
-     * @param message 面向用户的简短说明；空文本会立即隐藏提示区。
-     * @param timeoutMilliseconds 自动清除毫秒数；0 表示保持到下一条提示。
+     * @brief 记录一条运行信息。
+     *
+     * 界面上不再有任何对应的提示区：消息只写入 ActivityLog 的日志文件，供事后排查。
+     * @param message 面向用户的简短说明；空文本无操作。
+     * @param timeoutMilliseconds 历史参数，界面提示条移除后已被忽略，仅保留调用点兼容。
      */
     void showTransientMessage(const QString &message, int timeoutMilliseconds = 5000);
 
@@ -255,12 +257,6 @@ private:
     ProductivityWidget *m_productivityWidget = nullptr;
     TerminalSettingsService *m_settingsService = nullptr;
     QTimer *m_vaultIdleTimer = nullptr;
-    /** @brief 顶部非阻塞消息标签，替代占用垂直空间的窗口底部状态栏。 */
-    QLabel *m_transientMessageLabel = nullptr;
-    /** @brief 到期后清除顶部瞬时消息；持久错误不会启动该定时器。 */
-    QTimer *m_messageClearTimer = nullptr;
-    /** @brief 顶部会话栏尚未创建时暂存的设置加载警告。 */
-    QString m_pendingTransientMessage;
 
     /** @brief 标题栏最左侧的侧栏显隐动作。 */
     QAction *m_sidebarToggleAction = nullptr;
