@@ -6,7 +6,7 @@
 
 class QLineEdit;
 class QSpinBox;
-class QCheckBox;
+class ToggleSwitch;
 
 /**
  * @brief 收集一次 SSH 终端及其 SFTP 文件管理所需的连接参数。
@@ -39,6 +39,7 @@ private:
     QSpinBox *m_portSpin = nullptr;
     QLineEdit *m_passwordEdit = nullptr;
     QLineEdit *m_identityEdit = nullptr;
-    QCheckBox *m_legacyHmacCheck = nullptr;
+    /** @brief 旧服务器 hmac-sha1 兼容开关；语义与旧版复选框完全一致。 */
+    ToggleSwitch *m_legacyHmacToggle = nullptr;
     ConnectionTarget m_baseTarget;
 };

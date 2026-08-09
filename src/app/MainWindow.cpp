@@ -1056,7 +1056,7 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
         QTextEdit,
         QPlainTextEdit,
         QComboBox,
-        QSpinBox {
+        QAbstractSpinBox {
             color: @TEXT@;
             background: @SURFACE@;
             selection-color: @TEXT@;
@@ -1070,7 +1070,7 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
         QTextEdit:focus,
         QPlainTextEdit:focus,
         QComboBox:focus,
-        QSpinBox:focus {
+        QAbstractSpinBox:focus {
             border: 1px solid @ACCENT@;
         }
         QComboBox::drop-down {
@@ -1300,6 +1300,95 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
             background: @SURFACE@;
             border: 1px solid @BORDER@;
             padding: 5px;
+        }
+        /* 设置类窗口的分栏版式：左侧导航贴合侧栏底色，右侧内容区用工作区底色托起卡片，
+           这样卡片本身的 @SURFACE@ 才能形成清晰的层次，而不是与背景糊成一块。 */
+        QDialog#SettingsDialog,
+        QDialog#ConnectionDialog {
+            background: @WORKSPACE@;
+        }
+        QWidget#SettingsSidebar {
+            background: @SIDEBAR@;
+            border-right: 1px solid @BORDER@;
+        }
+        QLabel#SettingsSidebarTitle {
+            color: @TEXT@;
+            font-size: 17px;
+            font-weight: 700;
+            padding: 2px 6px 4px 6px;
+        }
+        QListWidget#SettingsNav {
+            background: transparent;
+            border: 0;
+        }
+        QListWidget#SettingsNav::item {
+            color: @TEXT@;
+            border-radius: 9px;
+            padding: 6px 10px;
+        }
+        QListWidget#SettingsNav::item:selected {
+            background: @RAISED@;
+            font-weight: 600;
+        }
+        QScrollArea#SettingsScroll,
+        QScrollArea#SettingsScroll > QWidget > QWidget,
+        QWidget#SettingsPage,
+        QStackedWidget#SettingsPages {
+            background: @WORKSPACE@;
+        }
+        QFrame#SettingsCard {
+            background: @SURFACE@;
+            border: 1px solid @BORDER@;
+            border-radius: 14px;
+        }
+        QLabel#SettingsCardTitle {
+            color: @TEXT@;
+            font-size: 14px;
+            font-weight: 700;
+        }
+        QLabel#SettingsRowLabel {
+            color: @TEXT@;
+        }
+        QLabel#SettingsRowHint {
+            color: @MUTED@;
+            font-size: 12px;
+        }
+        QWidget#SettingsFooter {
+            background: @SIDEBAR@;
+            border-top: 1px solid @BORDER@;
+        }
+        QToolButton[stepperButton="true"] {
+            color: @TEXT@;
+            background: @RAISED@;
+            border: 1px solid @BORDER@;
+            border-radius: 9px;
+            font-size: 15px;
+            font-weight: 700;
+        }
+        QToolButton[stepperButton="true"]:hover {
+            background: @SELECTION@;
+            border-color: @ACCENT@;
+        }
+        QToolButton[stepperButton="true"]:disabled {
+            color: @MUTED@;
+            background: @SIDEBAR@;
+        }
+        QPushButton[segmentButton="true"] {
+            color: @MUTED@;
+            background: transparent;
+            border: 1px solid @BORDER@;
+            border-radius: 9px;
+            padding: 4px 13px;
+        }
+        QPushButton[segmentButton="true"]:hover {
+            color: @TEXT@;
+            background: @RAISED@;
+        }
+        QPushButton[segmentButton="true"]:checked {
+            color: @TEXT@;
+            background: @SELECTION@;
+            border-color: @ACCENT@;
+            font-weight: 600;
         }
     )QSS");
     styleSheet.replace(QStringLiteral("@WORKSPACE@"), workspaceBackground);

@@ -1,206 +1,158 @@
 #include "ui/SettingsDialog.h"
 
 #include "settings/TerminalSettings.h"
+#include "ui/SettingsWidgets.h"
 
-#include <QCheckBox>
-#include <QComboBox>
-#include <QDialogButtonBox>
+#include <QApplication>
 #include <QDoubleSpinBox>
 #include <QFontComboBox>
 #include <QFontDatabase>
-#include <QFormLayout>
-#include <QGroupBox>
+#include <QFrame>
+#include <QGridLayout>
+#include <QHBoxLayout>
 #include <QKeySequenceEdit>
 #include <QLabel>
+#include <QListWidget>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSpinBox>
-#include <QTabWidget>
+#include <QStackedWidget>
 #include <QVBoxLayout>
+
+namespace {
+
+/** @brief 左侧导航的分类顺序，索引与页面栈严格一致。 */
+enum SettingsPage {
+    AppearancePage = 0,
+    TerminalPage,
+    ConnectionPage,
+    ShortcutPage
+};
+
+/** @brief 返回指定终端配色在当前主题下的实际颜色，供色板卡真实预览。 */
+TerminalPalette paletteForScheme(const TerminalSettings &base, const TerminalColorScheme scheme)
+{
+    TerminalSettings probe = base;
+    probe.colorScheme = scheme;
+    return probe.effectivePalette();
+}
+
+} // namespace
 
 SettingsDialog::SettingsDialog(TerminalSettingsService *service, QWidget *parent)
     : QDialog(parent)
     , m_service(service)
     , m_originalSettings(service == nullptr ? TerminalSettings{}.normalized()
                                             : service->currentSettings())
-    , m_themeCombo(new QComboBox(this))
-    , m_colorSchemeCombo(new QComboBox(this))
+    , m_navigationList(new QListWidget(this))
+    , m_pages(new QStackedWidget(this))
+    , m_themeSelector(new SegmentedControl(this))
     , m_fontCombo(new QFontComboBox(this))
     , m_fontSizeSpin(new QSpinBox(this))
     , m_lineHeightSpin(new QSpinBox(this))
     , m_letterSpacingSpin(new QDoubleSpinBox(this))
-    , m_cursorShapeCombo(new QComboBox(this))
-    , m_cursorBlinkCheck(new QCheckBox(tr("闪烁光标"), this))
+    , m_cursorShapeSelector(new SegmentedControl(this))
+    , m_cursorBlinkToggle(new ToggleSwitch(this))
     , m_scrollbackSpin(new QSpinBox(this))
-    , m_audibleBellCheck(new QCheckBox(tr("收到 BEL 时播放系统提示音"), this))
-    , m_automaticReconnectCheck(
-          new QCheckBox(tr("已建立 SSH 会话因网络异常断开时自动重连"), this))
+    , m_audibleBellToggle(new ToggleSwitch(this))
+    , m_automaticReconnectToggle(new ToggleSwitch(this))
     , m_reconnectMaxAttemptsSpin(new QSpinBox(this))
     , m_reconnectBaseDelaySpin(new QSpinBox(this))
     , m_previewLabel(new QLabel(this))
 {
     Q_ASSERT(m_service != nullptr);
-    setWindowTitle(tr("Shellium 设置"));
-    resize(660, 640);
+    setObjectName(QStringLiteral("SettingsDialog"));
+    setWindowTitle(tr("设置"));
+    resize(880, 660);
 
     auto *rootLayout = new QVBoxLayout(this);
-    auto *tabs = new QTabWidget(this);
-    rootLayout->addWidget(tabs, 1);
+    rootLayout->setContentsMargins(0, 0, 0, 0);
+    rootLayout->setSpacing(0);
 
-    auto *appearancePage = new QWidget(tabs);
-    auto *appearanceLayout = new QVBoxLayout(appearancePage);
-    auto *appearanceForm = new QFormLayout;
+    auto *bodyRow = new QWidget(this);
+    bodyRow->setObjectName(QStringLiteral("SettingsBody"));
+    auto *bodyLayout = new QHBoxLayout(bodyRow);
+    bodyLayout->setContentsMargins(0, 0, 0, 0);
+    bodyLayout->setSpacing(0);
 
-    m_themeCombo->setObjectName(QStringLiteral("themeCombo"));
-    m_themeCombo->addItem(tr("跟随系统"), static_cast<int>(ThemeMode::FollowSystem));
-    m_themeCombo->addItem(tr("浅色"), static_cast<int>(ThemeMode::Light));
-    m_themeCombo->addItem(tr("深色"), static_cast<int>(ThemeMode::Dark));
+    auto *sidebar = new QWidget(bodyRow);
+    sidebar->setObjectName(QStringLiteral("SettingsSidebar"));
+    sidebar->setFixedWidth(212);
+    auto *sidebarLayout = new QVBoxLayout(sidebar);
+    sidebarLayout->setContentsMargins(12, 18, 12, 14);
+    sidebarLayout->setSpacing(10);
+    auto *sidebarTitle = new QLabel(tr("设置"), sidebar);
+    sidebarTitle->setObjectName(QStringLiteral("SettingsSidebarTitle"));
+    sidebarLayout->addWidget(sidebarTitle);
+    sidebarLayout->addWidget(m_navigationList, 1);
+    // 版本号由 main() 设置；测试或裸 QApplication 下为空，此时只显示产品名，不留孤零零的空格。
+    const QString version = QApplication::applicationVersion();
+    auto *versionLabel = new QLabel(
+        version.isEmpty() ? tr("Shellium") : tr("Shellium %1").arg(version), sidebar);
+    versionLabel->setObjectName(QStringLiteral("SettingsRowHint"));
+    sidebarLayout->addWidget(versionLabel);
 
-    m_colorSchemeCombo->setObjectName(QStringLiteral("colorSchemeCombo"));
-    m_colorSchemeCombo->addItem(tr("默认（跟随主题）"),
-                                static_cast<int>(TerminalColorScheme::Default));
-    m_colorSchemeCombo->addItem(QStringLiteral("Solarized Dark"),
-                                static_cast<int>(TerminalColorScheme::SolarizedDark));
-    m_colorSchemeCombo->addItem(QStringLiteral("Dracula"),
-                                static_cast<int>(TerminalColorScheme::Dracula));
-    m_colorSchemeCombo->addItem(QStringLiteral("Monokai"),
-                                static_cast<int>(TerminalColorScheme::Monokai));
-    m_colorSchemeCombo->addItem(QStringLiteral("Nord"),
-                                static_cast<int>(TerminalColorScheme::Nord));
+    bodyLayout->addWidget(sidebar);
+    bodyLayout->addWidget(m_pages, 1);
+    rootLayout->addWidget(bodyRow, 1);
 
-    m_fontCombo->setObjectName(QStringLiteral("terminalFontCombo"));
-    m_fontCombo->setFontFilters(QFontComboBox::MonospacedFonts);
-    m_fontSizeSpin->setObjectName(QStringLiteral("terminalFontSizeSpin"));
-    m_fontSizeSpin->setRange(6, 72);
-    m_fontSizeSpin->setSuffix(tr(" pt"));
-    m_lineHeightSpin->setRange(80, 250);
-    m_lineHeightSpin->setSuffix(QStringLiteral("%"));
-    m_letterSpacingSpin->setRange(-2.0, 10.0);
-    m_letterSpacingSpin->setDecimals(1);
-    m_letterSpacingSpin->setSingleStep(0.5);
-    m_letterSpacingSpin->setSuffix(tr(" px"));
+    m_pages->setObjectName(QStringLiteral("SettingsPages"));
+    m_pages->addWidget(wrapInScrollArea(buildAppearancePage()));
+    m_pages->addWidget(wrapInScrollArea(buildTerminalPage()));
+    m_pages->addWidget(wrapInScrollArea(buildConnectionPage()));
+    m_pages->addWidget(wrapInScrollArea(buildShortcutPage()));
+    buildNavigation();
 
-    m_cursorShapeCombo->addItem(tr("块状"), static_cast<int>(TerminalCursorShape::Block));
-    m_cursorShapeCombo->addItem(tr("下划线"),
-                                static_cast<int>(TerminalCursorShape::Underline));
-    m_cursorShapeCombo->addItem(tr("竖线"), static_cast<int>(TerminalCursorShape::IBeam));
+    auto *footer = new QWidget(this);
+    footer->setObjectName(QStringLiteral("SettingsFooter"));
+    auto *footerLayout = new QHBoxLayout(footer);
+    footerLayout->setContentsMargins(20, 12, 20, 12);
+    footerLayout->setSpacing(10);
+    auto *restoreButton = new QPushButton(tr("恢复默认"), footer);
+    restoreButton->setObjectName(QStringLiteral("settingsRestoreDefaults"));
+    auto *cancelButton = new QPushButton(tr("取消"), footer);
+    cancelButton->setObjectName(QStringLiteral("settingsCancel"));
+    auto *saveButton = new QPushButton(tr("保存"), footer);
+    saveButton->setObjectName(QStringLiteral("settingsSave"));
+    saveButton->setProperty("primaryAction", true);
+    saveButton->setDefault(true);
+    footerLayout->addWidget(restoreButton);
+    footerLayout->addStretch(1);
+    footerLayout->addWidget(cancelButton);
+    footerLayout->addWidget(saveButton);
+    rootLayout->addWidget(footer);
 
-    m_scrollbackSpin->setRange(100, 1000000);
-    m_scrollbackSpin->setSingleStep(1000);
-    m_scrollbackSpin->setSuffix(tr(" 行"));
-    m_scrollbackSpin->setToolTip(
-        tr("减小该值会立即丢弃超过上限的最旧历史；已经丢弃的内容无法恢复。"));
+    connect(saveButton, &QPushButton::clicked, this, &SettingsDialog::accept);
+    connect(cancelButton, &QPushButton::clicked, this, &SettingsDialog::reject);
+    connect(restoreButton, &QPushButton::clicked, this, [this]() {
+        populateControls(TerminalSettings{}.normalized());
+        previewChanges();
+    });
 
-    appearanceForm->addRow(tr("主题："), m_themeCombo);
-    appearanceForm->addRow(tr("终端配色："), m_colorSchemeCombo);
-    appearanceForm->addRow(tr("等宽字体："), m_fontCombo);
-    appearanceForm->addRow(tr("字号："), m_fontSizeSpin);
-    appearanceForm->addRow(tr("行高："), m_lineHeightSpin);
-    appearanceForm->addRow(tr("字符间距："), m_letterSpacingSpin);
-    appearanceForm->addRow(tr("光标形态："), m_cursorShapeCombo);
-    appearanceForm->addRow(QString(), m_cursorBlinkCheck);
-    appearanceForm->addRow(tr("滚动缓冲："), m_scrollbackSpin);
-    appearanceForm->addRow(QString(), m_audibleBellCheck);
-    appearanceLayout->addLayout(appearanceForm);
-
-    auto *previewGroup = new QGroupBox(tr("实时预览"), appearancePage);
-    auto *previewLayout = new QVBoxLayout(previewGroup);
-    m_previewLabel->setObjectName(QStringLiteral("terminalSettingsPreview"));
-    m_previewLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    m_previewLabel->setMinimumHeight(130);
-    m_previewLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-    m_previewLabel->setText(QStringLiteral(
-        "deploy@server:~$ ssh app@10.0.0.8\n"
-        "Shellium · UTF-8 · 256 色 / TrueColor\n"
-        "https://shellium.example/docs"));
-    previewLayout->addWidget(m_previewLabel);
-    appearanceLayout->addWidget(previewGroup);
-    appearanceLayout->addStretch(1);
-    tabs->addTab(appearancePage, tr("外观与终端"));
-
-    auto *connectionPage = new QWidget(tabs);
-    auto *connectionLayout = new QVBoxLayout(connectionPage);
-    auto *connectionForm = new QFormLayout;
-    m_reconnectMaxAttemptsSpin->setRange(0, 10);
-    m_reconnectMaxAttemptsSpin->setSuffix(tr(" 次"));
-    m_reconnectMaxAttemptsSpin->setToolTip(
-        tr("仅重试已经成功建立过、且未收到远端退出状态的异常断线；0 表示不重试。"));
-    m_reconnectBaseDelaySpin->setRange(1, 60);
-    m_reconnectBaseDelaySpin->setSuffix(tr(" 秒"));
-    m_reconnectBaseDelaySpin->setToolTip(
-        tr("后续尝试使用 2 倍指数退避，最长等待 60 秒，避免网络故障时高频重连。"));
-    connectionForm->addRow(QString(), m_automaticReconnectCheck);
-    connectionForm->addRow(tr("最多重试："), m_reconnectMaxAttemptsSpin);
-    connectionForm->addRow(tr("首轮等待："), m_reconnectBaseDelaySpin);
-    connectionLayout->addLayout(connectionForm);
-    auto *reconnectNotice = new QLabel(
-        tr("正常执行 exit、主动切换连接、首次认证失败或主机密钥拒绝均不会自动重连。"),
-        connectionPage);
-    reconnectNotice->setWordWrap(true);
-    connectionLayout->addWidget(reconnectNotice);
-    connectionLayout->addStretch(1);
-    tabs->addTab(connectionPage, tr("连接恢复"));
-
-    // 快捷键数量可能继续增加，放进滚动区避免小屏幕上确定/取消按钮被挤出窗口。
-    auto *shortcutPage = new QWidget(tabs);
-    auto *shortcutPageLayout = new QVBoxLayout(shortcutPage);
-    auto *shortcutScroll = new QScrollArea(shortcutPage);
-    shortcutScroll->setWidgetResizable(true);
-    auto *shortcutContent = new QWidget(shortcutScroll);
-    auto *shortcutForm = new QFormLayout(shortcutContent);
-    for (const QString &id : TerminalSettings::shortcutIds()) {
-        auto *editor = new QKeySequenceEdit(shortcutContent);
-        editor->setObjectName(QStringLiteral("shortcut_%1").arg(id));
-        editor->setClearButtonEnabled(true);
-        editor->setMaximumSequenceLength(1);
-        editor->setToolTip(tr("留空表示取消该动作的快捷键；同一快捷键不能分配给两个动作。"));
-        shortcutForm->addRow(TerminalSettings::shortcutDisplayName(id) + tr("："), editor);
-        m_shortcutEditors.insert(id, editor);
+    connect(m_themeSelector, &SegmentedControl::currentDataChanged,
+            this, [this](int) { previewChanges(); });
+    connect(m_cursorShapeSelector, &SegmentedControl::currentDataChanged,
+            this, [this](int) { previewChanges(); });
+    connect(m_fontCombo, &QFontComboBox::currentFontChanged,
+            this, [this](const QFont &) { previewChanges(); });
+    connect(m_fontSizeSpin, &QSpinBox::valueChanged, this, [this](int) { previewChanges(); });
+    connect(m_lineHeightSpin, &QSpinBox::valueChanged, this, [this](int) { previewChanges(); });
+    connect(m_letterSpacingSpin, &QDoubleSpinBox::valueChanged,
+            this, [this](double) { previewChanges(); });
+    connect(m_scrollbackSpin, &QSpinBox::valueChanged, this, [this](int) { previewChanges(); });
+    connect(m_reconnectMaxAttemptsSpin, &QSpinBox::valueChanged,
+            this, [this](int) { previewChanges(); });
+    connect(m_reconnectBaseDelaySpin, &QSpinBox::valueChanged,
+            this, [this](int) { previewChanges(); });
+    for (ToggleSwitch *toggle :
+         {m_cursorBlinkToggle, m_audibleBellToggle, m_automaticReconnectToggle}) {
+        connect(toggle, &ToggleSwitch::toggled, this, [this](bool) { previewChanges(); });
     }
-    shortcutScroll->setWidget(shortcutContent);
-    shortcutPageLayout->addWidget(shortcutScroll);
-    tabs->addTab(shortcutPage, tr("快捷键"));
-
-    auto *buttonBox = new QDialogButtonBox(
-        QDialogButtonBox::Ok | QDialogButtonBox::Cancel | QDialogButtonBox::RestoreDefaults,
-        this);
-    buttonBox->button(QDialogButtonBox::Ok)->setText(tr("保存"));
-    buttonBox->button(QDialogButtonBox::Cancel)->setText(tr("取消"));
-    buttonBox->button(QDialogButtonBox::RestoreDefaults)->setText(tr("恢复默认"));
-    rootLayout->addWidget(buttonBox);
-
-    connect(buttonBox, &QDialogButtonBox::accepted, this, &SettingsDialog::accept);
-    connect(buttonBox, &QDialogButtonBox::rejected, this, &SettingsDialog::reject);
-    connect(buttonBox->button(QDialogButtonBox::RestoreDefaults),
-            &QPushButton::clicked,
-            this,
-            [this]() {
-                populateControls(TerminalSettings{}.normalized());
-                previewChanges();
-            });
-
-    const auto connectPreview = [this](QObject *control, const char *signal) {
-        // 旧式字符串连接仅用于把不同控件签名统一路由到无参数预览方法；所有信号均是 Qt
-        // 公共 API，并在连接失败时由调试构建输出明确告警。
-        connect(control, signal, this, SLOT(previewChanges()));
-    };
-    connectPreview(m_themeCombo, SIGNAL(currentIndexChanged(int)));
-    connectPreview(m_colorSchemeCombo, SIGNAL(currentIndexChanged(int)));
-    connectPreview(m_fontCombo, SIGNAL(currentFontChanged(QFont)));
-    connectPreview(m_fontSizeSpin, SIGNAL(valueChanged(int)));
-    connectPreview(m_lineHeightSpin, SIGNAL(valueChanged(int)));
-    connectPreview(m_letterSpacingSpin, SIGNAL(valueChanged(double)));
-    connectPreview(m_cursorShapeCombo, SIGNAL(currentIndexChanged(int)));
-    connectPreview(m_cursorBlinkCheck, SIGNAL(toggled(bool)));
-    connectPreview(m_scrollbackSpin, SIGNAL(valueChanged(int)));
-    connectPreview(m_audibleBellCheck, SIGNAL(toggled(bool)));
-    connectPreview(m_automaticReconnectCheck, SIGNAL(toggled(bool)));
-    connectPreview(m_reconnectMaxAttemptsSpin, SIGNAL(valueChanged(int)));
-    connectPreview(m_reconnectBaseDelaySpin, SIGNAL(valueChanged(int)));
-    connect(m_automaticReconnectCheck, &QCheckBox::toggled, this, [this](const bool enabled) {
-        m_reconnectMaxAttemptsSpin->setEnabled(enabled);
-        m_reconnectBaseDelaySpin->setEnabled(enabled);
+    connect(m_automaticReconnectToggle, &ToggleSwitch::toggled, this, [this](const bool enabled) {
+        for (QWidget *row : std::as_const(m_reconnectDependentRows)) {
+            row->setEnabled(enabled);
+        }
     });
     for (QKeySequenceEdit *editor : std::as_const(m_shortcutEditors)) {
         connect(editor, &QKeySequenceEdit::keySequenceChanged,
@@ -211,22 +163,264 @@ SettingsDialog::SettingsDialog(TerminalSettingsService *service, QWidget *parent
     updatePreviewCard(m_originalSettings);
 }
 
+void SettingsDialog::buildNavigation()
+{
+    m_navigationList->setObjectName(QStringLiteral("SettingsNav"));
+    m_navigationList->setFrameShape(QFrame::NoFrame);
+    m_navigationList->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_navigationList->setUniformItemSizes(true);
+    m_navigationList->addItem(tr("外观"));
+    m_navigationList->addItem(tr("终端"));
+    m_navigationList->addItem(tr("连接恢复"));
+    m_navigationList->addItem(tr("快捷键"));
+    for (int row = 0; row < m_navigationList->count(); ++row) {
+        m_navigationList->item(row)->setSizeHint(QSize(0, 38));
+    }
+    m_navigationList->setCurrentRow(AppearancePage);
+    connect(m_navigationList, &QListWidget::currentRowChanged, m_pages, [this](const int row) {
+        if (row >= 0) {
+            m_pages->setCurrentIndex(row);
+        }
+    });
+}
+
+QWidget *SettingsDialog::wrapInScrollArea(QWidget *page)
+{
+    auto *scroll = new QScrollArea(m_pages);
+    scroll->setObjectName(QStringLiteral("SettingsScroll"));
+    scroll->setFrameShape(QFrame::NoFrame);
+    scroll->setWidgetResizable(true);
+    scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    scroll->setWidget(page);
+    return scroll;
+}
+
+QWidget *SettingsDialog::buildAppearancePage()
+{
+    auto *page = new QWidget(m_pages);
+    page->setObjectName(QStringLiteral("SettingsPage"));
+    auto *layout = new QVBoxLayout(page);
+    layout->setContentsMargins(24, 22, 24, 22);
+    layout->setSpacing(16);
+
+    m_themeSelector->setObjectName(QStringLiteral("themeSelector"));
+    m_themeSelector->addSegment(tr("跟随系统"), static_cast<int>(ThemeMode::FollowSystem));
+    m_themeSelector->addSegment(tr("浅色"), static_cast<int>(ThemeMode::Light));
+    m_themeSelector->addSegment(tr("深色"), static_cast<int>(ThemeMode::Dark));
+
+    auto *themeCard = new SettingsCard(tr("应用主题"), page);
+    themeCard->addRow(tr("界面外观"),
+                      m_themeSelector,
+                      tr("“跟随系统”会在操作系统切换深浅外观时自动同步。"));
+    layout->addWidget(themeCard);
+
+    auto *schemeCard = new SettingsCard(tr("终端配色"), page);
+    auto *swatchGrid = new QWidget(schemeCard);
+    auto *gridLayout = new QGridLayout(swatchGrid);
+    gridLayout->setContentsMargins(0, 0, 0, 0);
+    gridLayout->setHorizontalSpacing(12);
+    gridLayout->setVerticalSpacing(10);
+
+    struct SwatchSpec {
+        TerminalColorScheme scheme;
+        QString title;
+        QString subtitle;
+    };
+    const QList<SwatchSpec> swatchSpecs{
+        {TerminalColorScheme::Default, tr("默认"), tr("跟随应用主题")},
+        {TerminalColorScheme::SolarizedDark, QStringLiteral("Solarized Dark"), QString()},
+        {TerminalColorScheme::Dracula, QStringLiteral("Dracula"), QString()},
+        {TerminalColorScheme::Monokai, QStringLiteral("Monokai"), QString()},
+        {TerminalColorScheme::Nord, QStringLiteral("Nord"), QString()},
+    };
+    for (int index = 0; index < swatchSpecs.size(); ++index) {
+        const SwatchSpec &spec = swatchSpecs.at(index);
+        const TerminalPalette palette = paletteForScheme(m_originalSettings, spec.scheme);
+        auto *swatch = new ThemeSwatchButton(spec.title,
+                                            spec.subtitle,
+                                            palette.background,
+                                            palette.foreground,
+                                            palette.cursor,
+                                            palette.link,
+                                            swatchGrid);
+        swatch->setObjectName(
+            QStringLiteral("colorSchemeSwatch_%1").arg(static_cast<int>(spec.scheme)));
+        gridLayout->addWidget(swatch, index / 2, index % 2);
+        m_colorSchemeSwatches.insert(static_cast<int>(spec.scheme), swatch);
+        // 色板卡之间互斥但不属于同一个 QButtonGroup：Default 卡需要在主题变化时单独重绘，
+        // 因此这里显式管理选中态，同时避免 QButtonGroup 吃掉“再次点击已选项”的空操作。
+        connect(swatch, &ThemeSwatchButton::clicked, this, [this, scheme = spec.scheme]() {
+            for (auto iterator = m_colorSchemeSwatches.cbegin();
+                 iterator != m_colorSchemeSwatches.cend();
+                 ++iterator) {
+                iterator.value()->setChecked(iterator.key() == static_cast<int>(scheme));
+            }
+            previewChanges();
+        });
+    }
+    schemeCard->addFullWidthWidget(swatchGrid);
+    layout->addWidget(schemeCard);
+
+    auto *previewCard = new SettingsCard(tr("实时预览"), page);
+    m_previewLabel->setObjectName(QStringLiteral("terminalSettingsPreview"));
+    m_previewLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    m_previewLabel->setMinimumHeight(130);
+    m_previewLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    m_previewLabel->setText(QStringLiteral(
+        "deploy@server:~$ ssh app@10.0.0.8\n"
+        "Shellium · UTF-8 · 256 色 / TrueColor\n"
+        "https://shellium.example/docs"));
+    previewCard->addFullWidthWidget(m_previewLabel);
+    layout->addWidget(previewCard);
+
+    layout->addStretch(1);
+    return page;
+}
+
+QWidget *SettingsDialog::buildTerminalPage()
+{
+    auto *page = new QWidget(m_pages);
+    page->setObjectName(QStringLiteral("SettingsPage"));
+    auto *layout = new QVBoxLayout(page);
+    layout->setContentsMargins(24, 22, 24, 22);
+    layout->setSpacing(16);
+
+    m_fontCombo->setObjectName(QStringLiteral("terminalFontCombo"));
+    m_fontCombo->setFontFilters(QFontComboBox::MonospacedFonts);
+    m_fontCombo->setMinimumWidth(240);
+    m_fontSizeSpin->setObjectName(QStringLiteral("terminalFontSizeSpin"));
+    m_fontSizeSpin->setRange(6, 72);
+    m_lineHeightSpin->setObjectName(QStringLiteral("terminalLineHeightSpin"));
+    m_lineHeightSpin->setRange(80, 250);
+    m_lineHeightSpin->setSuffix(QStringLiteral("%"));
+    m_letterSpacingSpin->setObjectName(QStringLiteral("terminalLetterSpacingSpin"));
+    m_letterSpacingSpin->setRange(-2.0, 10.0);
+    m_letterSpacingSpin->setDecimals(1);
+    m_letterSpacingSpin->setSingleStep(0.5);
+    m_letterSpacingSpin->setSuffix(tr(" px"));
+
+    auto *fontCard = new SettingsCard(tr("字体"), page);
+    fontCard->addRow(tr("等宽字体"), m_fontCombo);
+    fontCard->addRow(tr("字号"), new SettingsStepper(m_fontSizeSpin, fontCard));
+    fontCard->addRow(tr("行高"), new SettingsStepper(m_lineHeightSpin, fontCard));
+    fontCard->addRow(tr("字符间距"), new SettingsStepper(m_letterSpacingSpin, fontCard));
+    layout->addWidget(fontCard);
+
+    m_cursorShapeSelector->setObjectName(QStringLiteral("cursorShapeSelector"));
+    m_cursorShapeSelector->addSegment(tr("块状"), static_cast<int>(TerminalCursorShape::Block));
+    m_cursorShapeSelector->addSegment(tr("下划线"),
+                                      static_cast<int>(TerminalCursorShape::Underline));
+    m_cursorShapeSelector->addSegment(tr("竖线"), static_cast<int>(TerminalCursorShape::IBeam));
+    m_cursorBlinkToggle->setObjectName(QStringLiteral("cursorBlinkToggle"));
+
+    auto *cursorCard = new SettingsCard(tr("光标"), page);
+    cursorCard->addRow(tr("形态"), m_cursorShapeSelector);
+    cursorCard->addRow(tr("闪烁光标"), m_cursorBlinkToggle);
+    layout->addWidget(cursorCard);
+
+    m_scrollbackSpin->setObjectName(QStringLiteral("scrollbackSpin"));
+    m_scrollbackSpin->setRange(100, 1000000);
+    m_scrollbackSpin->setSingleStep(1000);
+    m_scrollbackSpin->setSuffix(tr(" 行"));
+    m_scrollbackSpin->setMinimumWidth(120);
+    m_audibleBellToggle->setObjectName(QStringLiteral("audibleBellToggle"));
+
+    auto *sessionCard = new SettingsCard(tr("会话"), page);
+    sessionCard->addRow(tr("滚动缓冲"),
+                        new SettingsStepper(m_scrollbackSpin, sessionCard),
+                        tr("减小该值会立即丢弃超过上限的最旧历史；已经丢弃的内容无法恢复。"));
+    sessionCard->addRow(tr("提示音"),
+                        m_audibleBellToggle,
+                        tr("收到终端 BEL 字节时播放系统提示音。"));
+    layout->addWidget(sessionCard);
+
+    layout->addStretch(1);
+    return page;
+}
+
+QWidget *SettingsDialog::buildConnectionPage()
+{
+    auto *page = new QWidget(m_pages);
+    page->setObjectName(QStringLiteral("SettingsPage"));
+    auto *layout = new QVBoxLayout(page);
+    layout->setContentsMargins(24, 22, 24, 22);
+    layout->setSpacing(16);
+
+    m_automaticReconnectToggle->setObjectName(QStringLiteral("automaticReconnectToggle"));
+    m_reconnectMaxAttemptsSpin->setObjectName(QStringLiteral("reconnectMaxAttemptsSpin"));
+    m_reconnectMaxAttemptsSpin->setRange(0, 10);
+    m_reconnectMaxAttemptsSpin->setSuffix(tr(" 次"));
+    m_reconnectBaseDelaySpin->setObjectName(QStringLiteral("reconnectBaseDelaySpin"));
+    m_reconnectBaseDelaySpin->setRange(1, 60);
+    m_reconnectBaseDelaySpin->setSuffix(tr(" 秒"));
+
+    auto *card = new SettingsCard(tr("自动重连"), page);
+    card->addRow(tr("网络异常时自动重连"),
+                 m_automaticReconnectToggle,
+                 tr("仅重试已经成功建立过、且未收到远端退出状态的异常断线。"));
+    // 步进器容器需要整行置灰，因此记录 addRow 返回的控件而不是内部 spin box。
+    m_reconnectDependentRows.append(
+        card->addRow(tr("最多重试"), new SettingsStepper(m_reconnectMaxAttemptsSpin, card)));
+    m_reconnectDependentRows.append(
+        card->addRow(tr("首轮等待"),
+                     new SettingsStepper(m_reconnectBaseDelaySpin, card),
+                     tr("后续尝试使用 2 倍指数退避，最长等待 60 秒。")));
+    card->addNote(tr("正常执行 exit、主动切换连接、首次认证失败或主机密钥拒绝均不会自动重连。"));
+    layout->addWidget(card);
+
+    layout->addStretch(1);
+    return page;
+}
+
+QWidget *SettingsDialog::buildShortcutPage()
+{
+    auto *page = new QWidget(m_pages);
+    page->setObjectName(QStringLiteral("SettingsPage"));
+    auto *layout = new QVBoxLayout(page);
+    layout->setContentsMargins(24, 22, 24, 22);
+    layout->setSpacing(16);
+
+    auto *card = new SettingsCard(tr("全局快捷键"), page);
+    for (const QString &id : TerminalSettings::shortcutIds()) {
+        auto *editor = new QKeySequenceEdit(card);
+        editor->setObjectName(QStringLiteral("shortcut_%1").arg(id));
+        editor->setClearButtonEnabled(true);
+        editor->setMaximumSequenceLength(1);
+        editor->setMinimumWidth(180);
+        editor->setMaximumWidth(220);
+        card->addRow(TerminalSettings::shortcutDisplayName(id), editor);
+        m_shortcutEditors.insert(id, editor);
+    }
+    card->addNote(tr("留空表示取消该动作的快捷键；同一快捷键不能分配给两个动作。"));
+    layout->addWidget(card);
+
+    layout->addStretch(1);
+    return page;
+}
+
 TerminalSettings SettingsDialog::editedSettings() const
 {
     TerminalSettings settings;
-    settings.themeMode = static_cast<ThemeMode>(m_themeCombo->currentData().toInt());
-    settings.colorScheme =
-        static_cast<TerminalColorScheme>(m_colorSchemeCombo->currentData().toInt());
+    settings.themeMode = static_cast<ThemeMode>(m_themeSelector->currentData());
+    settings.colorScheme = TerminalColorScheme::Default;
+    for (auto iterator = m_colorSchemeSwatches.cbegin();
+         iterator != m_colorSchemeSwatches.cend();
+         ++iterator) {
+        if (iterator.value()->isChecked()) {
+            settings.colorScheme = static_cast<TerminalColorScheme>(iterator.key());
+            break;
+        }
+    }
     settings.fontFamily = m_fontCombo->currentFont().family();
     settings.fontPointSize = m_fontSizeSpin->value();
     settings.lineHeightPercent = m_lineHeightSpin->value();
     settings.letterSpacing = m_letterSpacingSpin->value();
-    settings.cursorShape = static_cast<TerminalCursorShape>(
-        m_cursorShapeCombo->currentData().toInt());
-    settings.cursorBlink = m_cursorBlinkCheck->isChecked();
+    settings.cursorShape =
+        static_cast<TerminalCursorShape>(m_cursorShapeSelector->currentData());
+    settings.cursorBlink = m_cursorBlinkToggle->isChecked();
     settings.scrollbackLines = m_scrollbackSpin->value();
-    settings.audibleBell = m_audibleBellCheck->isChecked();
-    settings.automaticReconnect = m_automaticReconnectCheck->isChecked();
+    settings.audibleBell = m_audibleBellToggle->isChecked();
+    settings.automaticReconnect = m_automaticReconnectToggle->isChecked();
     settings.reconnectMaxAttempts = m_reconnectMaxAttemptsSpin->value();
     settings.reconnectBaseDelaySeconds = m_reconnectBaseDelaySpin->value();
     for (auto iterator = m_shortcutEditors.cbegin(); iterator != m_shortcutEditors.cend(); ++iterator) {
@@ -258,9 +452,13 @@ void SettingsDialog::populateControls(const TerminalSettings &settings)
 {
     m_populating = true;
     const TerminalSettings normalized = settings.normalized();
-    m_themeCombo->setCurrentIndex(m_themeCombo->findData(static_cast<int>(normalized.themeMode)));
-    m_colorSchemeCombo->setCurrentIndex(
-        m_colorSchemeCombo->findData(static_cast<int>(normalized.colorScheme)));
+    m_themeSelector->setCurrentData(static_cast<int>(normalized.themeMode));
+    for (auto iterator = m_colorSchemeSwatches.cbegin();
+         iterator != m_colorSchemeSwatches.cend();
+         ++iterator) {
+        iterator.value()->setChecked(iterator.key() == static_cast<int>(normalized.colorScheme));
+    }
+    refreshDefaultSwatchPreview(normalized);
 
     const QFont font = normalized.fontFamily.isEmpty()
         ? QFontDatabase::systemFont(QFontDatabase::FixedFont)
@@ -269,16 +467,16 @@ void SettingsDialog::populateControls(const TerminalSettings &settings)
     m_fontSizeSpin->setValue(normalized.fontPointSize);
     m_lineHeightSpin->setValue(normalized.lineHeightPercent);
     m_letterSpacingSpin->setValue(normalized.letterSpacing);
-    m_cursorShapeCombo->setCurrentIndex(
-        m_cursorShapeCombo->findData(static_cast<int>(normalized.cursorShape)));
-    m_cursorBlinkCheck->setChecked(normalized.cursorBlink);
+    m_cursorShapeSelector->setCurrentData(static_cast<int>(normalized.cursorShape));
+    m_cursorBlinkToggle->setChecked(normalized.cursorBlink);
     m_scrollbackSpin->setValue(normalized.scrollbackLines);
-    m_audibleBellCheck->setChecked(normalized.audibleBell);
-    m_automaticReconnectCheck->setChecked(normalized.automaticReconnect);
+    m_audibleBellToggle->setChecked(normalized.audibleBell);
+    m_automaticReconnectToggle->setChecked(normalized.automaticReconnect);
     m_reconnectMaxAttemptsSpin->setValue(normalized.reconnectMaxAttempts);
     m_reconnectBaseDelaySpin->setValue(normalized.reconnectBaseDelaySeconds);
-    m_reconnectMaxAttemptsSpin->setEnabled(normalized.automaticReconnect);
-    m_reconnectBaseDelaySpin->setEnabled(normalized.automaticReconnect);
+    for (QWidget *row : std::as_const(m_reconnectDependentRows)) {
+        row->setEnabled(normalized.automaticReconnect);
+    }
     for (auto iterator = m_shortcutEditors.cbegin(); iterator != m_shortcutEditors.cend(); ++iterator) {
         iterator.value()->setKeySequence(normalized.shortcuts.value(iterator.key()));
     }
@@ -292,7 +490,23 @@ void SettingsDialog::previewChanges()
     }
     const TerminalSettings settings = editedSettings();
     m_service->applyTransient(settings);
+    refreshDefaultSwatchPreview(settings);
     updatePreviewCard(settings);
+}
+
+void SettingsDialog::refreshDefaultSwatchPreview(const TerminalSettings &settings)
+{
+    ThemeSwatchButton *defaultSwatch =
+        m_colorSchemeSwatches.value(static_cast<int>(TerminalColorScheme::Default));
+    if (defaultSwatch == nullptr) {
+        return;
+    }
+    // “默认”配色是主题模式的函数，切换浅色/深色后必须重绘，否则色板会长期显示另一套颜色。
+    const TerminalPalette palette = paletteForScheme(settings, TerminalColorScheme::Default);
+    defaultSwatch->setPreviewColors(palette.background,
+                                    palette.foreground,
+                                    palette.cursor,
+                                    palette.link);
 }
 
 void SettingsDialog::updatePreviewCard(const TerminalSettings &settings)
@@ -306,8 +520,8 @@ void SettingsDialog::updatePreviewCard(const TerminalSettings &settings)
     font.setLetterSpacing(QFont::AbsoluteSpacing, normalized.letterSpacing);
     m_previewLabel->setFont(font);
     m_previewLabel->setStyleSheet(
-        QStringLiteral("QLabel { background: %1; color: %2; padding: 12px; "
-                       "line-height: %3%; border: 1px solid %4; }")
+        QStringLiteral("QLabel#terminalSettingsPreview { background: %1; color: %2; padding: 14px; "
+                       "line-height: %3%; border: 1px solid %4; border-radius: 10px; }")
             .arg(palette.background.name(),
                  palette.foreground.name(),
                  QString::number(normalized.lineHeightPercent),

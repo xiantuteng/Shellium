@@ -80,6 +80,8 @@ qt_add_executable(Shellium
     src/ui/HostManagerWidget.h
     src/ui/SettingsDialog.cpp
     src/ui/SettingsDialog.h
+    src/ui/SettingsWidgets.cpp
+    src/ui/SettingsWidgets.h
     src/ui/SessionTabBar.cpp
     src/ui/SessionTabBar.h
     src/ui/SshKeyManagerDialog.cpp
@@ -298,6 +300,8 @@ if(BUILD_TESTING)
         src/storage/ApplicationDatabase.h
         src/ui/HostManagerWidget.cpp
         src/ui/HostManagerWidget.h
+        src/ui/SettingsWidgets.cpp
+        src/ui/SettingsWidgets.h
         src/ui/UiIcons.h
         src/ui/VaultDialog.cpp
         src/ui/VaultDialog.h
@@ -306,6 +310,30 @@ if(BUILD_TESTING)
     target_link_libraries(ShelliumHostManagerTests PRIVATE
         Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Sql Qt6::Test PkgConfig::LIBSODIUM)
     add_test(NAME ShelliumHostManagerTests COMMAND ShelliumHostManagerTests)
+
+    # 设置界面改版后的控件接线回归：步进器、滑动开关、配色色板与分类导航都是自绘控件，
+    # 只有真实构树才能验证“操作控件 → editedSettings() → SQLite”这条链路没有断。需要
+    # Widgets 与 Sql，不涉及 libssh/libvterm 与网络。
+    qt_add_executable(ShelliumSettingsUiTests
+        tests/SettingsUiTest.cpp
+        src/core/ConnectionTarget.cpp
+        src/core/ConnectionTarget.h
+        src/core/HostRecord.h
+        src/settings/TerminalSettings.cpp
+        src/settings/TerminalSettings.h
+        src/storage/ApplicationDatabase.cpp
+        src/storage/ApplicationDatabase.h
+        src/ui/ConnectionDialog.cpp
+        src/ui/ConnectionDialog.h
+        src/ui/SettingsDialog.cpp
+        src/ui/SettingsDialog.h
+        src/ui/SettingsWidgets.cpp
+        src/ui/SettingsWidgets.h
+    )
+    target_include_directories(ShelliumSettingsUiTests PRIVATE src)
+    target_link_libraries(ShelliumSettingsUiTests PRIVATE
+        Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Sql Qt6::Test)
+    add_test(NAME ShelliumSettingsUiTests COMMAND ShelliumSettingsUiTests)
 
     # 保活判定同样是内联纯逻辑，不需要 libssh 会话即可覆盖。独立成目标而不是并进
     # ShelliumCoreTests：一个可执行文件只能有一个 main，共用 main 还会让按名过滤测试时

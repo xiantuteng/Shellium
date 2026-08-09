@@ -3,20 +3,18 @@
 #include "core/ConnectionConfigCodec.h"
 #include "security/Vault.h"
 #include "storage/ApplicationDatabase.h"
+#include "ui/SettingsWidgets.h"
 #include "ui/UiIcons.h"
 #include "ui/VaultDialog.h"
 
 #include <QAction>
 #include <QApplication>
-#include <QCheckBox>
 #include <QDateTime>
 #include <QDialog>
-#include <QDialogButtonBox>
 #include <QDragMoveEvent>
 #include <QDropEvent>
 #include <QFileDialog>
 #include <QFile>
-#include <QFormLayout>
 #include <QHBoxLayout>
 #include <QInputDialog>
 #include <QLabel>
@@ -284,22 +282,24 @@ public:
         , m_nameEdit(new QLineEdit(initial.name, this))
         , m_hostEdit(new QLineEdit(initial.host, this))
         , m_portSpin(new QSpinBox(this))
-        , m_inheritPortCheck(new QCheckBox(tr("继承父分组端口"), this))
+        , m_inheritPortToggle(new ToggleSwitch(this))
         , m_usernameEdit(new QLineEdit(initial.username, this))
         , m_identityEdit(new QLineEdit(initial.identityFile, this))
         , m_proxyJumpsEdit(new QLineEdit(initial.proxyJumps.join(QLatin1Char(',')), this))
         , m_tagsEdit(new QLineEdit(initial.tags.join(QLatin1Char(',')), this))
         , m_passwordEdit(new QLineEdit(this))
-        , m_savePasswordCheck(new QCheckBox(tr("加密保存到本地保险库"), this))
-        , m_legacyHmacCheck(new QCheckBox(tr("仅为该主机允许 hmac-sha1（不继承）"), this))
+        , m_savePasswordToggle(new ToggleSwitch(this))
+        , m_legacyHmacToggle(new ToggleSwitch(this))
     {
+        // 字段版式与设置窗口、连接对话框统一：分组卡片 + “左说明右控件”的行 + 滑动开关。
         const bool isHost = initial.kind == HostNodeKind::Host;
+        setObjectName(QStringLiteral("ConnectionDialog"));
         setWindowTitle(isHost ? tr("主机配置") : tr("分组配置"));
-        setMinimumWidth(500);
+        setMinimumWidth(580);
 
         m_portSpin->setRange(1, 65535);
         m_portSpin->setValue(initial.port.value_or(quint16{22}));
-        m_inheritPortCheck->setChecked(!initial.port.has_value());
+        m_inheritPortToggle->setChecked(!initial.port.has_value());
         m_portSpin->setEnabled(initial.port.has_value());
         m_usernameEdit->setPlaceholderText(tr("留空则继承父分组"));
         m_identityEdit->setPlaceholderText(tr("留空则继承父分组或使用 Agent/默认密钥"));
@@ -307,57 +307,86 @@ public:
         m_tagsEdit->setPlaceholderText(tr("逗号分隔；会与祖先分组标签合并"));
         m_passwordEdit->setEchoMode(QLineEdit::Password);
         m_passwordEdit->setPlaceholderText(tr("仅用于本次立即连接；保存由保险库负责"));
-        m_savePasswordCheck->setChecked(!initial.credentialId.isEmpty());
-        m_legacyHmacCheck->setChecked(initial.allowLegacyHmacSha1);
+        m_savePasswordToggle->setChecked(!initial.credentialId.isEmpty());
+        m_legacyHmacToggle->setChecked(initial.allowLegacyHmacSha1);
+        for (QLineEdit *edit : {m_nameEdit, m_hostEdit, m_usernameEdit, m_proxyJumpsEdit,
+                                m_tagsEdit, m_passwordEdit}) {
+            edit->setMinimumWidth(260);
+        }
 
         auto *identityContainer = new QWidget(this);
         auto *identityLayout = new QHBoxLayout(identityContainer);
         identityLayout->setContentsMargins(0, 0, 0, 0);
+        identityLayout->setSpacing(8);
         auto *browseButton = new QPushButton(tr("浏览…"), identityContainer);
         UiIcons::decorateButton(
             browseButton,
             UiIcons::symbol(this, UiIcons::Symbol::Upload, this->palette().color(QPalette::WindowText)),
             tr("选择 SSH 私钥文件"));
+        m_identityEdit->setMinimumWidth(200);
         identityLayout->addWidget(m_identityEdit, 1);
         identityLayout->addWidget(browseButton);
 
-        auto *portContainer = new QWidget(this);
-        auto *portLayout = new QHBoxLayout(portContainer);
-        portLayout->setContentsMargins(0, 0, 0, 0);
-        portLayout->addWidget(m_portSpin);
-        portLayout->addWidget(m_inheritPortCheck, 1);
-
-        auto *form = new QFormLayout;
-        form->addRow(tr("名称："), m_nameEdit);
+        auto *basicsCard = new SettingsCard(isHost ? tr("主机") : tr("分组"), this);
+        basicsCard->addRow(tr("名称"), m_nameEdit);
         if (isHost) {
-            form->addRow(tr("主机地址："), m_hostEdit);
+            basicsCard->addRow(tr("主机地址"), m_hostEdit);
         }
-        form->addRow(tr("端口："), portContainer);
-        form->addRow(tr("用户名："), m_usernameEdit);
-        form->addRow(tr("私钥文件："), identityContainer);
-        form->addRow(tr("ProxyJump："), m_proxyJumpsEdit);
-        form->addRow(tr("标签："), m_tagsEdit);
+        basicsCard->addRow(tr("继承父分组端口"),
+                           m_inheritPortToggle,
+                           tr("关闭后才会使用下方端口，开启表示沿用父分组取值。"));
+        QWidget *portRow = basicsCard->addRow(tr("端口"), new SettingsStepper(m_portSpin, basicsCard));
+        portRow->setEnabled(initial.port.has_value());
+        basicsCard->addRow(tr("用户名"), m_usernameEdit);
+        basicsCard->addRow(tr("标签"), m_tagsEdit);
+
+        auto *authCard = new SettingsCard(tr("认证与跳板"), this);
+        authCard->addRow(tr("私钥文件"), identityContainer);
+        authCard->addRow(tr("ProxyJump"), m_proxyJumpsEdit);
         if (isHost) {
-            form->addRow(tr("会话密码/口令："), m_passwordEdit);
-            form->addRow(tr("凭据存储："), m_savePasswordCheck);
-            form->addRow(tr("旧版兼容："), m_legacyHmacCheck);
+            authCard->addRow(tr("会话密码/口令"), m_passwordEdit);
+            authCard->addRow(tr("加密保存到本地保险库"), m_savePasswordToggle);
+            authCard->addRow(tr("旧版兼容"),
+                             m_legacyHmacToggle,
+                             tr("仅为该主机允许 hmac-sha1（不继承）。"));
         }
 
-        auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel,
-                                             this);
+        auto *footer = new QWidget(this);
+        footer->setObjectName(QStringLiteral("SettingsFooter"));
+        auto *footerLayout = new QHBoxLayout(footer);
+        footerLayout->setContentsMargins(20, 12, 20, 12);
+        footerLayout->setSpacing(10);
+        auto *cancelButton = new QPushButton(tr("取消"), footer);
+        auto *saveButton = new QPushButton(tr("保存"), footer);
+        saveButton->setProperty("primaryAction", true);
+        saveButton->setDefault(true);
+        footerLayout->addStretch(1);
+        footerLayout->addWidget(cancelButton);
+        footerLayout->addWidget(saveButton);
+
         auto *layout = new QVBoxLayout(this);
-        layout->addLayout(form);
-        layout->addWidget(buttons);
+        layout->setContentsMargins(0, 0, 0, 0);
+        layout->setSpacing(0);
+        auto *body = new QWidget(this);
+        auto *bodyLayout = new QVBoxLayout(body);
+        bodyLayout->setContentsMargins(22, 20, 22, 18);
+        bodyLayout->setSpacing(16);
+        bodyLayout->addWidget(basicsCard);
+        bodyLayout->addWidget(authCard);
+        bodyLayout->addStretch(1);
+        layout->addWidget(body, 1);
+        layout->addWidget(footer);
 
-        connect(m_inheritPortCheck, &QCheckBox::toggled,
-                m_portSpin, [this](const bool inherit) { m_portSpin->setEnabled(!inherit); });
+        connect(m_inheritPortToggle, &ToggleSwitch::toggled,
+                portRow, [portRow](const bool inherit) { portRow->setEnabled(!inherit); });
         connect(browseButton, &QPushButton::clicked, this, [this]() {
             const QString path = QFileDialog::getOpenFileName(this, tr("选择 SSH 私钥文件"));
             if (!path.isEmpty()) {
                 m_identityEdit->setText(path);
             }
         });
-        connect(buttons, &QDialogButtonBox::accepted, this, [this, isHost]() {
+        connect(cancelButton, &QPushButton::clicked, this, &QDialog::reject);
+        connect(saveButton, &QPushButton::clicked, this, [this, isHost]() {
             if (m_nameEdit->text().trimmed().isEmpty()) {
                 QMessageBox::warning(this, tr("配置不完整"), tr("请输入名称。"));
                 m_nameEdit->setFocus();
@@ -370,7 +399,6 @@ public:
             }
             QDialog::accept();
         });
-        connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
     }
 
     /** @brief 返回用户确认后的记录；id、kind、parentId、排序和创建时间保持不变。 */
@@ -379,7 +407,7 @@ public:
         HostRecord result = m_initial;
         result.name = m_nameEdit->text().trimmed();
         result.host = m_hostEdit->text().trimmed();
-        result.port = m_inheritPortCheck->isChecked()
+        result.port = m_inheritPortToggle->isChecked()
             ? std::optional<quint16>{}
             : std::optional<quint16>{static_cast<quint16>(m_portSpin->value())};
         result.username = m_usernameEdit->text().trimmed();
@@ -387,7 +415,7 @@ public:
         result.proxyJumps = splitList(m_proxyJumpsEdit->text());
         result.tags = splitList(m_tagsEdit->text());
         result.allowLegacyHmacSha1 = result.kind == HostNodeKind::Host
-            && m_legacyHmacCheck->isChecked();
+            && m_legacyHmacToggle->isChecked();
         return result;
     }
 
@@ -403,7 +431,7 @@ public:
      */
     [[nodiscard]] bool shouldSavePassword() const
     {
-        return m_initial.kind == HostNodeKind::Host && m_savePasswordCheck->isChecked();
+        return m_initial.kind == HostNodeKind::Host && m_savePasswordToggle->isChecked();
     }
 
     /**
@@ -412,7 +440,7 @@ public:
      */
     [[nodiscard]] bool shouldDetachCredential() const
     {
-        return !m_initial.credentialId.isEmpty() && !m_savePasswordCheck->isChecked();
+        return !m_initial.credentialId.isEmpty() && !m_savePasswordToggle->isChecked();
     }
 
 private:
@@ -437,14 +465,14 @@ private:
     QLineEdit *m_nameEdit = nullptr;
     QLineEdit *m_hostEdit = nullptr;
     QSpinBox *m_portSpin = nullptr;
-    QCheckBox *m_inheritPortCheck = nullptr;
+    ToggleSwitch *m_inheritPortToggle = nullptr;
     QLineEdit *m_usernameEdit = nullptr;
     QLineEdit *m_identityEdit = nullptr;
     QLineEdit *m_proxyJumpsEdit = nullptr;
     QLineEdit *m_tagsEdit = nullptr;
     QLineEdit *m_passwordEdit = nullptr;
-    QCheckBox *m_savePasswordCheck = nullptr;
-    QCheckBox *m_legacyHmacCheck = nullptr;
+    ToggleSwitch *m_savePasswordToggle = nullptr;
+    ToggleSwitch *m_legacyHmacToggle = nullptr;
 };
 
 } // namespace

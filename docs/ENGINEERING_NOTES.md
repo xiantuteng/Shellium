@@ -218,6 +218,7 @@ SSH 会话尚未认证完成，远端还不存在。
 | `ShelliumSftpRecursiveTests` | 递归传输纯逻辑 | Core |
 | `ShelliumConnectionToolsTests` | 配置导入导出、SSH 密钥、SOCKS5 协议 | Core + Network + Sql + libssh |
 | `ShelliumProductivityTests` | Snippet、历史、补全、多目标与广播接线 | GUI + Sql + SSH/终端依赖 |
+| `ShelliumSettingsUiTests` | 设置界面自绘控件接线（步进器、开关、配色色板、分类导航） | GUI + Sql |
 | `ShelliumSshIntegrationTests` | **真实服务器**连接路径 | 全部；缺 `SHELLIUM_IT_*` 时自动跳过 |
 
 ### 必须验证测试真的抓得住

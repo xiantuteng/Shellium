@@ -4,22 +4,31 @@
 
 #include <QDialog>
 #include <QHash>
+#include <QList>
 
-class QCheckBox;
-class QComboBox;
 class QDoubleSpinBox;
 class QFontComboBox;
 class QKeySequenceEdit;
 class QLabel;
+class QListWidget;
 class QSpinBox;
+class QStackedWidget;
+class SegmentedControl;
+class SettingsCard;
 class TerminalSettingsService;
+class ThemeSwatchButton;
+class ToggleSwitch;
 
 /**
- * @brief 编辑主题、终端外观、滚动行为、铃声和全局快捷键的设置对话框。
+ * @brief 编辑主题、终端外观、滚动行为、铃声和全局快捷键的设置窗口。
  *
- * 用户调整任一控件时会调用 TerminalSettingsService::applyTransient()，所有已订阅工作区立即
- * 预览效果；取消对话框会恢复打开前快照，确定则通过服务的单事务 save() 持久化。这样既有
- * 实时反馈，也不会让“取消”意外改写 SQLite。
+ * 版式沿用主流终端客户端的设置形态：左侧是固定的分类导航，右侧是可滚动的分组卡片，每张
+ * 卡片内部是“左侧说明 + 右侧控件”的行。布尔项用滑动开关、数值项用加减步进器、少量互斥项
+ * 用分段控件、终端配色用可直接看出底色的色板卡，避免整页都是尺寸不一的原生表单控件。
+ *
+ * 交互契约与旧版一致：用户调整任一控件即调用 TerminalSettingsService::applyTransient()，所有
+ * 已订阅工作区立即预览效果；取消对话框会恢复打开前快照，保存则通过服务的单事务 save()
+ * 持久化。这样既有实时反馈，也不会让“取消”意外改写 SQLite。
  */
 class SettingsDialog final : public QDialog {
     Q_OBJECT
@@ -43,6 +52,24 @@ public slots:
     void reject() override;
 
 private:
+    /** @brief 构建左侧分类导航，并与右侧页面栈双向同步。 */
+    void buildNavigation();
+
+    /** @brief 构建“外观”页：应用主题、终端配色色板与实时预览。 */
+    QWidget *buildAppearancePage();
+
+    /** @brief 构建“终端”页：字体度量、光标与会话行为。 */
+    QWidget *buildTerminalPage();
+
+    /** @brief 构建“连接恢复”页：异常断线自动重连策略。 */
+    QWidget *buildConnectionPage();
+
+    /** @brief 构建“快捷键”页：按稳定动作 ID 列出全部可配置动作。 */
+    QWidget *buildShortcutPage();
+
+    /** @brief 把页面包进滚动区，保证小屏幕上底部按钮不会被卡片挤出窗口。 */
+    QWidget *wrapInScrollArea(QWidget *page);
+
     /** @brief 从设置快照刷新全部控件；刷新期间不会触发瞬态应用。 */
     void populateControls(const TerminalSettings &settings);
 
@@ -52,28 +79,36 @@ private:
     /** @brief 根据当前有效主题与字体刷新对话框内的示例终端。 */
     void updatePreviewCard(const TerminalSettings &settings);
 
+    /** @brief 让“默认（跟随主题）”色板卡跟随当前主题模式重绘。 */
+    void refreshDefaultSwatchPreview(const TerminalSettings &settings);
+
     TerminalSettingsService *m_service = nullptr;
     TerminalSettings m_originalSettings;
     bool m_populating = false;
 
-    QComboBox *m_themeCombo = nullptr;
-    /** @brief 终端配色风格选择；Default 之外的选项各自是一套固定的内置预设主题。 */
-    QComboBox *m_colorSchemeCombo = nullptr;
+    QListWidget *m_navigationList = nullptr;
+    QStackedWidget *m_pages = nullptr;
+
+    SegmentedControl *m_themeSelector = nullptr;
+    /** @brief 终端配色色板卡，按 TerminalColorScheme 的整数值索引。 */
+    QHash<int, ThemeSwatchButton *> m_colorSchemeSwatches;
     QFontComboBox *m_fontCombo = nullptr;
     QSpinBox *m_fontSizeSpin = nullptr;
     QSpinBox *m_lineHeightSpin = nullptr;
     QDoubleSpinBox *m_letterSpacingSpin = nullptr;
-    QComboBox *m_cursorShapeCombo = nullptr;
-    QCheckBox *m_cursorBlinkCheck = nullptr;
+    SegmentedControl *m_cursorShapeSelector = nullptr;
+    ToggleSwitch *m_cursorBlinkToggle = nullptr;
     QSpinBox *m_scrollbackSpin = nullptr;
-    QCheckBox *m_audibleBellCheck = nullptr;
+    ToggleSwitch *m_audibleBellToggle = nullptr;
     /** @brief 是否对已建立会话的异常网络断线启用有限自动重连。 */
-    QCheckBox *m_automaticReconnectCheck = nullptr;
+    ToggleSwitch *m_automaticReconnectToggle = nullptr;
     /** @brief 每次异常断线周期的最大尝试次数。 */
     QSpinBox *m_reconnectMaxAttemptsSpin = nullptr;
     /** @brief 指数退避首轮延迟秒数。 */
     QSpinBox *m_reconnectBaseDelaySpin = nullptr;
     QLabel *m_previewLabel = nullptr;
+    /** @brief 重连相关行的容器，关闭自动重连时整体置灰。 */
+    QList<QWidget *> m_reconnectDependentRows;
 
     /** @brief 以稳定动作 ID 索引快捷键编辑器，保存时无需依赖界面显示文本。 */
     QHash<QString, QKeySequenceEdit *> m_shortcutEditors;
