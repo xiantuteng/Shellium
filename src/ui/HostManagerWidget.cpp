@@ -77,6 +77,14 @@ constexpr int kToggleArrowMargin = 6;
 /** @brief 分组名称右端与展开箭头之间至少要留出的空隙。 */
 constexpr int kToggleArrowSpacing = 6;
 
+/**
+ * @brief 分组展开按钮的最小横向点击宽度（像素）。
+ *
+ * 箭头本身只有 8 像素，若直接用绘制矩形做命中区，用户必须精确点击三角形。36 像素与
+ * 当前分组行高度接近，可形成完整、易点击的右侧按钮区域，同时不会占用大段名称区域。
+ */
+constexpr int kToggleHitAreaWidth = 36;
+
 /** @brief 判断索引指向的是否为分组节点。 */
 [[nodiscard]] bool isFolderIndex(const QModelIndex &index)
 {
@@ -94,15 +102,15 @@ class HostItemDelegate final : public QStyledItemDelegate {
 public:
     using QStyledItemDelegate::QStyledItemDelegate;
 
-    /** @brief 点中分组展开箭头时触发；由外部接上真正的展开/收起。 */
+    /** @brief 点中分组右侧展开按钮区域时触发；由外部接上真正的展开/收起。 */
     std::function<void(const QModelIndex &)> onToggleRequested;
 
     /**
-     * @brief 分组展开箭头的绘制与点击热区。
+     * @brief 计算分组展开箭头的实际绘制矩形。
      * @return 非分组节点、或没有子节点的空分组返回空矩形（不画也点不中）。
      */
-    [[nodiscard]] QRect toggleRect(const QStyleOptionViewItem &option,
-                                   const QModelIndex &index) const
+    [[nodiscard]] QRect toggleArrowRect(const QStyleOptionViewItem &option,
+                                        const QModelIndex &index) const
     {
         if (!isFolderIndex(index) || index.model() == nullptr
             || index.model()->rowCount(index) == 0) {
@@ -118,6 +126,36 @@ public:
                      opt.rect.center().y() - (kToggleArrowSize / 2),
                      kToggleArrowSize,
                      kToggleArrowSize);
+    }
+
+    /**
+     * @brief 计算分组右侧展开按钮的完整鼠标命中区域。
+     * @param option 当前树节点的样式与几何信息。
+     * @param index 当前树节点索引。
+     * @return 覆盖行右侧完整高度、且至少包含箭头的矩形；不可展开节点返回空矩形。
+     *
+     * 点击热区与绘制矩形必须分开：视觉上保留轻量小箭头，交互上则让箭头周围的整块区域
+     * 都可点击。使用整行高度还能避免用户在箭头上方或下方几像素处点击却没有响应。
+     */
+    [[nodiscard]] QRect toggleHitRect(const QStyleOptionViewItem &option,
+                                      const QModelIndex &index) const
+    {
+        const QRect arrowRect = toggleArrowRect(option, index);
+        if (arrowRect.isNull()) {
+            return {};
+        }
+
+        QStyleOptionViewItem opt = option;
+        initStyleOption(&opt, index);
+        const int hitLeft = std::max(opt.rect.left(),
+                                     opt.rect.right() - kToggleHitAreaWidth + 1);
+        QRect hitRect(hitLeft,
+                      opt.rect.top(),
+                      opt.rect.right() - hitLeft + 1,
+                      opt.rect.height());
+        // 不同平台样式可能给文字区配置不同的右侧内边距。合并箭头矩形可保证无论主题如何
+        // 调整，视觉箭头永远完全落在热区内；最后裁回当前行，避免抢占相邻节点的事件。
+        return hitRect.united(arrowRect).intersected(opt.rect);
     }
 
 protected:
@@ -210,11 +248,12 @@ protected:
                      const QModelIndex &index) override
     {
         // 箭头已不在 Qt 的分支装饰列里，QTreeView 自带的“点击分支即展开”对它无效，必须由
-        // 委托自己做命中判断。与复选框一致地取释放事件，按下后移开鼠标就不会误触发。
+        // 委托自己做命中判断。热区使用右侧完整按钮区域而不是 8×8 的三角形；与复选框一致
+        // 地取释放事件，按下后移开鼠标就不会误触发。
         if (event != nullptr && event->type() == QEvent::MouseButtonRelease && onToggleRequested) {
             auto *mouseEvent = static_cast<QMouseEvent *>(event);
             if (mouseEvent->button() == Qt::LeftButton
-                && toggleRect(option, index).contains(mouseEvent->position().toPoint())) {
+                && toggleHitRect(option, index).contains(mouseEvent->position().toPoint())) {
                 onToggleRequested(index);
                 return true;
             }
@@ -231,11 +270,22 @@ private:
         return style->subElementRect(QStyle::SE_ItemViewItemText, &option, option.widget);
     }
 
-    /** @brief 扣掉右端箭头及其左右留白后，留给分组名称的宽度。 */
-    [[nodiscard]] static int availableNameWidth(const QRect &textRect)
+    /**
+     * @brief 扣掉右侧按钮热区及安全间距后，计算分组名称可用宽度。
+     * @param textRect 样式为节点文字提供的完整矩形。
+     * @param hitRect 展开按钮的鼠标命中矩形。
+     * @return 名称可绘制宽度；空间不足时返回 0。
+     *
+     * 名称必须避开完整热区而不只是小箭头，否则长名称会画进可点击区域，用户点击文字末尾
+     * 时就会意外展开或收起分组。
+     */
+    [[nodiscard]] static int availableNameWidth(const QRect &textRect, const QRect &hitRect)
     {
-        return std::max(
-            0, textRect.width() - kToggleArrowMargin - kToggleArrowSize - kToggleArrowSpacing);
+        if (hitRect.isNull()) {
+            return textRect.width();
+        }
+        const int nameRight = std::min(textRect.right(), hitRect.left() - kToggleArrowSpacing);
+        return std::max(0, nameRight - textRect.left() + 1);
     }
 
     /** @brief 画分组：一行名称，紧跟其后的是展开/收起箭头。 */
@@ -259,9 +309,11 @@ private:
         }
 
         const QRect textRect = itemTextRect(background);
-        const QRect arrowRect = toggleRect(option, index);
-        // 名称区始终扣掉箭头宽度：否则长分组名省略后正好铺满文字区，箭头会压在名字上。
-        const int nameWidth = arrowRect.isNull() ? textRect.width() : availableNameWidth(textRect);
+        const QRect arrowRect = toggleArrowRect(option, index);
+        const QRect hitRect = toggleHitRect(option, index);
+        // 名称区始终扣掉完整按钮热区：否则长分组名会进入可点击区域，既会压住箭头，也会
+        // 造成“点名称却展开”的交互歧义。
+        const int nameWidth = availableNameWidth(textRect, hitRect);
         const QColor baseColor = background.palette.color(
             (background.state & QStyle::State_Selected) != 0 ? QPalette::HighlightedText
                                                              : QPalette::Text);

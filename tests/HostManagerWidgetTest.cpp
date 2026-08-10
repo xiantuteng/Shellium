@@ -46,7 +46,7 @@ private slots:
     /** @brief 顶层节点顶格、分组下的主机右缩进，二者不能再被分支装饰列推乱。 */
     void topLevelNodesShareLeftEdgeAndChildHostsIndent();
 
-    /** @brief 展开箭头必须右对齐贴在行末并纵向居中，且点得动、点得回。 */
+    /** @brief 展开箭头必须右对齐，且整个右侧图标区域都能展开、收起。 */
     void groupToggleIsRightAlignedVerticallyCenteredAndClickable();
 
     /** @brief 分组名与主机名必须用同一套字体：同一串文字画出来的墨迹宽度要相等。 */
@@ -329,7 +329,8 @@ void HostManagerWidgetTest::groupToggleIsRightAlignedVerticallyCenteredAndClicka
     // 行首现在只有分组图标和名称，点它不该再展开收起。
     QVERIFY2(!togglesAt(QPoint(groupRect.left() + 2, groupRect.center().y())), "行首被当成展开按钮");
 
-    // 横向：热区必须右对齐贴在行末，而不是跟在名字后面。
+    // 横向：热区必须覆盖行末完整图标区域，而不是只有 8 像素宽的箭头图形。逐像素探测既
+    // 验证它右对齐，也防止后续重构又把可点击范围缩回三角形本身。
     int leftmostHit = -1;
     int rightmostHit = -1;
     for (int x = groupRect.left(); x < groupRect.right(); ++x) {
@@ -347,8 +348,12 @@ void HostManagerWidgetTest::groupToggleIsRightAlignedVerticallyCenteredAndClicka
     QVERIFY2(groupRect.right() - rightmostHit <= 12,
              qPrintable(QStringLiteral("箭头右缘距行末 %1 像素，没有右对齐")
                             .arg(groupRect.right() - rightmostHit)));
+    QVERIFY2(rightmostHit - leftmostHit + 1 >= 28,
+             qPrintable(QStringLiteral("右侧展开按钮热区只有 %1 像素宽，仍然过小")
+                            .arg(rightmostHit - leftmostHit + 1)));
 
-    // 纵向：热区中心必须落在行的中线上，允许 1 像素的取整误差。
+    // 纵向：右侧图标区域应覆盖当前分组行的完整高度。循环没有探测 QRect::bottom() 这一
+    // 个边界像素，因此上下各允许 1 像素取整误差。
     const int probeX = (leftmostHit + rightmostHit) / 2;
     int topHit = -1;
     int bottomHit = -1;
@@ -359,10 +364,12 @@ void HostManagerWidgetTest::groupToggleIsRightAlignedVerticallyCenteredAndClicka
         }
     }
     QVERIFY(topHit >= 0);
-    QVERIFY2(std::abs(((topHit + bottomHit) / 2) - groupRect.center().y()) <= 1,
-             qPrintable(QStringLiteral("箭头纵向中心 %1 偏离行中线 %2")
-                            .arg((topHit + bottomHit) / 2)
-                            .arg(groupRect.center().y())));
+    QVERIFY2(topHit <= groupRect.top() + 1,
+             qPrintable(QStringLiteral("右侧展开按钮热区顶部留出了 %1 像素死区")
+                            .arg(topHit - groupRect.top())));
+    QVERIFY2(bottomHit >= groupRect.bottom() - 2,
+             qPrintable(QStringLiteral("右侧展开按钮热区底部留出了 %1 像素死区")
+                            .arg(groupRect.bottom() - bottomHit)));
 
     // 收起后再点同一个位置必须能重新展开，避免做成“单向收起”。
     const QPoint arrowCenter(probeX, (topHit + bottomHit) / 2);
