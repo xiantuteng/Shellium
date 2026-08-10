@@ -92,6 +92,11 @@ QByteArray ShellShim::sourceCommand(const QByteArray &path)
     return " . " + path;
 }
 
+QByteArray ShellShim::sourceCommandEchoReplacement()
+{
+    return QByteArrayLiteral("\r\x1b[2K");
+}
+
 QByteArray ShellShim::acceptResponse()
 {
     return QByteArrayLiteral("take\n");

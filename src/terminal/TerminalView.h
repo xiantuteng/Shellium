@@ -2,6 +2,7 @@
 
 #include <QColor>
 #include <QElapsedTimer>
+#include <QFont>
 #include <QPlainTextEdit>
 #include <QStringList>
 
@@ -10,6 +11,7 @@ class QInputMethodEvent;
 class QCompleter;
 class QContextMenuEvent;
 class QMenu;
+class QMimeData;
 class QPaintEvent;
 class QWheelEvent;
 class QStringListModel;
@@ -370,6 +372,9 @@ private:
     /** @brief 最近一次已提交给 libvterm 和 PTY 的字符行数，用于过滤等价像素 resize。 */
     int m_terminalRows = 24;
 
+    /** @brief 最近一次从真实文档量到的行高像素值；0 表示尚未量过。 */
+    int m_lastMeasuredCellHeight = 0;
+
     /**
      * @brief 视图是否至少收到过一次由 Qt 布局系统产生的 resizeEvent。
      *
@@ -385,6 +390,46 @@ private:
      * 网格时产生无意义的 PTY resize 和 SIGWINCH。
      */
     void recalculateTerminalGeometry();
+
+    /**
+     * @brief 按当前字体和行高百分比算出每个字符格应占的像素高度。
+     *
+     * 必须只用 ASCII 基准字体的行距，绝不能读某一段渲染后的实际高度：CJK/emoji 等宽
+     * 字符缺字时 Qt 会换用系统后备字体，其行距往往比基准字体更高。若某几行恰好夹了
+     * 中文字符，那几行的"实际高度"就会比其余行高出一截，同样 44 行文本的总像素高度
+     * 就会超出 44 行本该占的高度，最后一行——通常是 vim 状态行——因此被推出可视区域。
+     * 这个值算出来后要经 VtermBridge::setLineHeightPixels() 转成 FixedHeight 写进每一
+     * 段的 QTextBlockFormat，把行高钉死为常数，不再受该行实际内容影响。
+     */
+    int computeCellHeight() const;
+
+    /**
+     * @brief 构造统一行高用的锚点：本机实际渲染 CJK 与 emoji 的那几个后备字体。
+     *
+     * 行高是"该行用到的所有字体里 ascent 最大值加 descent 最大值"，只能抬高不能压低，
+     * 所以统一后的高度下限就是这几个字体合起来的最大值。具体族名随平台与用户装的字体
+     * 而变，必须真实排一个汉字/emoji 问 Qt，不能写死族名。
+     */
+    [[nodiscard]] QVector<QPair<QChar, QFont>> buildLineAnchors() const;
+
+    /** @brief 按行剔除行尾的锚点后缀；正文中间同样的字符必须保留。 */
+    [[nodiscard]] static QString stripLineAnchors(const QString &text);
+
+    /**
+     * @brief 渲染后复核真实行高，与当前网格不符时纠正一次。
+     *
+     * 行高必须等文档真的排过一次版才知道（脱离窗口的探针文档在 Retina 上会量错），而
+     * 行数又依赖行高，所以只能"先渲染、再纠正"。锚点保证行高与内容无关，纠正后量到的
+     * 仍是同一个值，因此该过程收敛，不会反复触发 SIGWINCH。
+     */
+    void noteRenderedCellHeight();
+
+    /**
+     * @brief 提供复制/拖拽用的选区数据，并剔除统一行高用的零宽锚点字符。
+     *
+     * 复制、右键菜单和拖拽全都走这个虚函数，覆盖它一处即可让三条路径都拿到干净文本。
+     */
+    [[nodiscard]] QMimeData *createMimeDataFromSelection() const override;
 
     /**
      * @brief 提交当前稳定的字符尺寸并重绘文档，同时保持用户原有滚动位置。

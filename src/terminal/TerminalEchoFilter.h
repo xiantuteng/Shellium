@@ -20,10 +20,16 @@ public:
     /**
      * @brief 登记一段预期会被远端回显的字节。
      * @param text 期望扣除的内容；按登记顺序依次匹配。
+     * @param replacement 命中后代替它送进终端的字节，默认什么也不送。
      *
      * 不应包含结尾换行：发送的 `\n` 会被回显成 `\r\n`，形式并不一致。
+     *
+     * replacement 的用处是收拾**远端因为这条命令而多画出来的东西**。注入行是本程序凭空
+     * 塞进交互式 Shell 的，远端执行完必然再打印一个提示符；只扣掉回显的话，屏幕上就会
+     * 留下登录时那个提示符和它两个并排。登记 `\r\x1b[2K` 把光标退回并擦掉旧提示符所在
+     * 行，随后到达的新提示符正好补在原位，用户只会看到一个。
      */
-    void expect(const QByteArray &text);
+    void expect(const QByteArray &text, const QByteArray &replacement = QByteArray());
 
     /**
      * @brief 过滤一段远端输出。
@@ -48,8 +54,14 @@ private:
     /** @brief 尚未判定、可能是期望串前缀的尾部。 */
     QByteArray m_held;
 
+    /** @brief 一条待匹配的期望串及其命中后的替代输出。 */
+    struct Expectation {
+        QByteArray needle;
+        QByteArray replacement;
+    };
+
     /** @brief 按登记顺序待匹配的期望串。 */
-    QList<QByteArray> m_expected;
+    QList<Expectation> m_expected;
 
     /** @brief 当前期望串已经扫过的字节数，用于在回显被改写时及时放弃。 */
     qsizetype m_scanned = 0;

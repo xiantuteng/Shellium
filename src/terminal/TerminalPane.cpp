@@ -363,7 +363,12 @@ void TerminalPane::connectToHost(const ConnectionTarget &target)
         // 脚本正文走独立 exec 通道，不经过终端；交互式 Shell 里只会出现这条极短的 source
         // 命令，登记后由过滤器扣掉，用户什么也看不到。回车的回显 \r\n 一并登记，否则会在
         // 登录横幅和第一个提示符之间留下一个来路不明的空行。
-        m_echoFilter.expect(ShellShim::sourceCommand(path) + QByteArrayLiteral("\r\n"));
+        //
+        // 但只扣回显还不够：远端执行完这条命令必然再打印一个提示符，于是登录时的提示符和
+        // 它并排出现，用户看到的就是两个 `[root@host ~]#`。用擦行序列替换被扣掉的回显，让
+        // 新提示符补在旧提示符原位，净效果仍是一个。
+        m_echoFilter.expect(ShellShim::sourceCommand(path) + QByteArrayLiteral("\r\n"),
+                            ShellShim::sourceCommandEchoReplacement());
     });
     connect(m_sessionStack,
             &SshSessionStack::shellIntegrationFailed,

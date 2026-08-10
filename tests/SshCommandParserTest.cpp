@@ -107,6 +107,9 @@ private slots:
     /** @brief 回显过滤器要能扣掉整段、跨块的期望串，并在匹配不上时如数放行。 */
     void echoFilterRemovesExpectedEcho();
 
+    /** @brief 注入 shim 后屏幕上只能留下一个提示符，不能新旧两个并排。 */
+    void shellIntegrationInjectionLeavesSinglePrompt();
+
     /** @brief 双宽字符（中日韩）不得在每个字后面多渲染一个占位字符。 */
     void terminalViewRendersWideCharacters();
 
@@ -693,6 +696,22 @@ void SshCommandParserTest::echoFilterRemovesExpectedEcho()
         QCOMPARE(produced.size(), 12 * 1024);
     }
 
+    // 命中后要送出替代串，且必须落在命中位置，而不是被挪到本段末尾——替代串是光标控制
+    // 序列，它与后面那段远端输出的先后次序就是全部意义所在。
+    {
+        TerminalEchoFilter filter;
+        filter.expect(QByteArrayLiteral("take"), QByteArrayLiteral("<erase>"));
+        QCOMPARE(filter.filter(QByteArrayLiteral("abc take def")),
+                 QByteArrayLiteral("abc <erase> def"));
+    }
+
+    // 替代串默认为空：未登记替代串的老调用点行为不得改变。
+    {
+        TerminalEchoFilter filter;
+        filter.expect(QByteArrayLiteral("take"));
+        QCOMPARE(filter.filter(QByteArrayLiteral("[take]")), QByteArrayLiteral("[]"));
+    }
+
     // reset 必须交出扣留的字节：会话切换后旧期望串永远不会再出现。
     {
         TerminalEchoFilter filter;
@@ -703,11 +722,47 @@ void SshCommandParserTest::echoFilterRemovesExpectedEcho()
     }
 }
 
+void SshCommandParserTest::shellIntegrationInjectionLeavesSinglePrompt()
+{
+    const QByteArray path = QByteArrayLiteral("/tmp/.shellium-shim-42");
+    const QByteArray injection = ShellShim::sourceCommand(path);
+    const QByteArray prompt = QByteArrayLiteral("[root@tidb01 ~]# ");
+
+    TerminalEchoFilter filter;
+    // 与 TerminalPane 收到 shellIntegrationPathReady 时的登记完全一致。
+    filter.expect(injection + QByteArrayLiteral("\r\n"),
+                  ShellShim::sourceCommandEchoReplacement());
+
+    TerminalView view;
+    // 真实远端的字节顺序：登录横幅 → 第一个提示符 → 注入行回显 → 回车 → 脚本静默执行
+    // → Shell 因为刚执行完一条命令再画一个提示符。
+    view.appendTerminalOutput(
+        filter.filter(QByteArrayLiteral("Last login: Mon Aug 10 09:01:14 2026\r\n")));
+    view.appendTerminalOutput(filter.filter(prompt));
+    view.appendTerminalOutput(filter.filter(injection + QByteArrayLiteral("\r\n")));
+    view.appendTerminalOutput(filter.filter(prompt));
+
+    // 连续几段输出会被合帧压到一次重绘里，直接读文档会读到上一帧。等合帧定时器落地。
+    QTest::qWait(80);
+
+    const QString rendered = view.terminalPlainText();
+    QVERIFY2(!rendered.contains(QStringLiteral("shellium-shim")),
+             qPrintable(QStringLiteral("注入行泄漏到屏幕：[%1]").arg(rendered)));
+    QVERIFY2(rendered.count(QStringLiteral("[root@tidb01 ~]#")) == 1,
+             qPrintable(QStringLiteral("提示符出现了 %1 次：[%2]")
+                            .arg(rendered.count(QStringLiteral("[root@tidb01 ~]#")))
+                            .arg(rendered)));
+
+    // 擦掉的必须只是提示符那一行：登录横幅是远端的正常输出，一个字也不能被连带清掉。
+    QVERIFY2(rendered.contains(QStringLiteral("Last login: Mon Aug 10 09:01:14 2026")),
+             qPrintable(QStringLiteral("登录横幅被误擦：[%1]").arg(rendered)));
+}
+
 void SshCommandParserTest::terminalViewRendersWideCharacters()
 {
     TerminalView view;
     view.appendTerminalOutput(QStringLiteral("正在连接 ok").toUtf8());
-    const QString rendered = view.toPlainText().trimmed();
+    const QString rendered = view.terminalPlainText().trimmed();
     QVERIFY2(rendered == QStringLiteral("正在连接 ok"),
              qPrintable(QStringLiteral("实际渲染为：[%1]").arg(rendered)));
 }
@@ -987,7 +1042,7 @@ void SshCommandParserTest::terminalViewRendersCarriageReturnAndLineFeed()
     // 渲染按帧合并：同一帧内到达的多段输出攒在一起画，断言前必须放行一帧。
     QTest::qWait(kRenderFrameMilliseconds);
 
-    const QStringList renderedLines = view.toPlainText().split(QLatin1Char('\n'));
+    const QStringList renderedLines = view.terminalPlainText().split(QLatin1Char('\n'));
     QCOMPARE(renderedLines.size(), 2);
     QCOMPARE(renderedLines.at(0).trimmed(), QStringLiteral("[root@server ~]#"));
     QCOMPARE(renderedLines.at(1).trimmed(), QStringLiteral("[root@server ~]#"));
@@ -1003,7 +1058,7 @@ void SshCommandParserTest::terminalResizeDebouncesPtyUpdates()
     QTest::qWait(120);
     QSignalSpy sizeSpy(&view, &TerminalView::terminalSizeChanged);
     view.appendTerminalOutput(QByteArrayLiteral("[root@tidb01 ~]# "));
-    const QString originalText = view.toPlainText();
+    const QString originalText = view.terminalPlainText();
 
     // 31 次交替 resize 模拟持续拖动分隔条。每次事件间隔显著小于 80ms 防抖窗口，最终
     // 宽度与初始宽度不同，因而稳定后必须恰好产生一次有效字符尺寸提交。
@@ -1018,8 +1073,8 @@ void SshCommandParserTest::terminalResizeDebouncesPtyUpdates()
     const QList<QVariant> finalSize = sizeSpy.constFirst();
     QVERIFY(finalSize.at(0).toInt() > 0);
     QVERIFY(finalSize.at(1).toInt() > 0);
-    QCOMPARE(view.toPlainText(), originalText);
-    QCOMPARE(view.toPlainText().count(QStringLiteral("[root@tidb01 ~]#")), 1);
+    QCOMPARE(view.terminalPlainText(), originalText);
+    QCOMPARE(view.terminalPlainText().count(QStringLiteral("[root@tidb01 ~]#")), 1);
 }
 
 void SshCommandParserTest::localZshExecutesInteractiveCommand()
@@ -1360,7 +1415,7 @@ void SshCommandParserTest::localNoticeEndsWithCarriageReturn()
     view.appendTerminalOutput(QByteArrayLiteral("Last login: Sat Aug  8"));
     QTest::qWait(kRenderFrameMilliseconds);
 
-    const QStringList renderedLines = view.toPlainText().split(QLatin1Char('\n'));
+    const QStringList renderedLines = view.terminalPlainText().split(QLatin1Char('\n'));
     QCOMPARE(renderedLines.size(), 2);
     // 只断言"不被推到光标列"，不比较整行：光标所在单元格会额外渲染出一个尾随空格，
     // 那是光标绘制的固有产物，与本用例要守住的行首对齐无关。
@@ -1372,7 +1427,7 @@ void SshCommandParserTest::localNoticeEndsWithCarriageReturn()
     TerminalView staircase;
     staircase.appendTerminalOutput(QStringLiteral("正在连接 root@10.0.0.1…\n").toUtf8());
     staircase.appendTerminalOutput(QByteArrayLiteral("Last login: Sat Aug  8"));
-    const QStringList staircaseLines = staircase.toPlainText().split(QLatin1Char('\n'));
+    const QStringList staircaseLines = staircase.terminalPlainText().split(QLatin1Char('\n'));
     QVERIFY2(staircaseLines.size() == 2 && staircaseLines.at(1).startsWith(QLatin1Char(' ')),
              "该断言固化 LF 的阶梯效应；若 libvterm 行为改变，说明上面的 CRLF 断言需要重新评估");
 }

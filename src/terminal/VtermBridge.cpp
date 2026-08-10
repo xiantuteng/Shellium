@@ -168,6 +168,26 @@ void VtermBridge::setLineHeightPercent(const int percent)
     invalidateDocument();
 }
 
+void VtermBridge::setLineAnchors(const QVector<QPair<QChar, QFont>> &anchors)
+{
+    if (anchors == m_lineAnchors) {
+        return;
+    }
+    m_lineAnchors = anchors;
+    // 锚点写在每一段的正文里，只能整体重建才能让已渲染的段跟着变。
+    invalidateDocument();
+}
+
+QString VtermBridge::lineAnchorSuffix()
+{
+    // 顺序必须和 writeRenderedLine() 的追加顺序完全一致，剔除时才能精确匹配行尾。
+    // U+4E2D 是真实汉字：只有真实汉字才会走到和正文中文完全相同的后备字体，度量才严格
+    // 一致（U+3000/U+200B 这类特殊空白在某些字体里不存在，会被换成另一个字体，差 1px）。
+    // U+200B 取 emoji 字体的度量且不占宽度。两者合起来才覆盖到最高的那种字体。
+    static const QString suffix = QString(QChar(0x4E2D)) + QChar(0x200B);
+    return suffix;
+}
+
 void VtermBridge::invalidateDocument()
 {
     m_documentDirty = true;
@@ -354,6 +374,19 @@ void VtermBridge::writeRenderedLine(QTextCursor &cursor, const RenderedLine &lin
         run.append(cell.text.isEmpty() ? QStringLiteral(" ") : cell.text);
     }
     flushRun();
+
+    // 行高锚点必须落在每一段上，空行也不例外：只要漏掉一段，那一段就会矮几像素，整块
+    // 网格的行距立刻不再均匀，最后一行也就重新开始漂移。零宽字符不占列宽，不会影响
+    // 双宽字符的列对齐；导出与复制路径会把它剔除。
+    for (const auto &anchor : m_lineAnchors) {
+        QTextCharFormat anchorFormat;
+        anchorFormat.setFont(anchor.second);
+        // 锚点只为撑住行高而存在，任何时候都不该被看见：其中的 CJK 锚点是一个真实的
+        // 汉字（只有真实汉字才会走到和正文完全相同的后备字体，度量才对得上），画成
+        // 透明才不会在每行末尾留下一个"中"字。
+        anchorFormat.setForeground(QColor(Qt::transparent));
+        cursor.insertText(QString(anchor.first), anchorFormat);
+    }
 }
 
 void VtermBridge::locateCursorInBlock(const QTextBlock &block, const RenderedLine &line)

@@ -66,6 +66,18 @@ public:
     [[nodiscard]] static QByteArray sourceCommand(const QByteArray &path);
 
     /**
+     * @brief 注入行的回显被扣掉后，应当代替它送进终端的字节。
+     *
+     * 扣掉回显只解决了"看得见的命令"，解决不了"看得见的后果"：这条命令是 Shellium 凭空
+     * 塞进交互式 Shell 的，远端执行完必然再打印一个提示符，于是登录时那个提示符和它并排
+     * 出现——用户看到的就是两个 `[root@host ~]#`。这里返回的擦行序列把光标退回第 0 列并
+     * 清掉旧提示符所在行，随后到达的新提示符正好补在原位，净效果仍是一个提示符。
+     *
+     * 注入行发出时若提示符尚未打印，擦掉的是登录横幅结尾的那一行空行，没有副作用。
+     */
+    [[nodiscard]] static QByteArray sourceCommandEchoReplacement();
+
+    /**
      * @brief 解析一条 OSC 载荷。
      * @param payload VtermBridge 交出的原始载荷。
      * @return 无法识别时返回 Kind::None。

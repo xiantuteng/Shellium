@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QColor>
+#include <QFont>
 #include <QObject>
 #include <QVector>
 
@@ -48,6 +49,35 @@ public:
 
     /** @brief 设置行高百分比；异常值会限制在 80% 到 250%。 */
     void setLineHeightPercent(int percent);
+
+    /**
+     * @brief 设置"行高锚点"，用于把每一段的渲染高度统一成同一个常数。
+     * @param anchors 追加到每段末尾的 (字符, 字体) 序列；为空表示不加锚点。
+     *
+     * QPlainTextEdit 用的 QPlainTextDocumentLayout 完全忽略
+     * QTextBlockFormat::setLineHeight()（试过 FixedHeight，传多大都不生效），一段的高度
+     * 只由 QTextLine 决定，而 QTextLine 的高度是该行用到的所有字体里 ascent 最大值加
+     * descent 最大值。于是纯 ASCII 行、含中文的行、含 emoji 的行天生互不相同（PT Mono
+     * 15pt 实测分别是 27px / 32px / 33px）："30 行"的实际像素高度随内容而变，最后一行
+     * （vim 状态行）时而被挤出视口，编辑时还会上下漂移。
+     *
+     * 行高只能被抬高、不可能被压低，因此统一高度的唯一下限就是最高的那种字体。这里在
+     * 每一段末尾追加锚点字符并分别指定字体，使每一段都必然包含来自这些字体的字形段，
+     * 高度因此恒等于最大值，与该行实际写了什么无关。
+     *
+     * 锚点字符必须真的存在于对应字体里，否则 Qt 会静默换字体、metrics 也就不是想要的
+     * 那个：U+200B 不在 PingFang 里，用它当 CJK 锚点会让含中文的行比别人高 1px。
+     * U+3000（表意空格）在 PingFang 里，才能拿到和真实中文完全一致的度量。
+     */
+    void setLineAnchors(const QVector<QPair<QChar, QFont>> &anchors);
+
+    /**
+     * @brief 每段末尾被追加的锚点字符序列；导出与复制时需要按行剔除这个后缀。
+     *
+     * 不能无差别地删除这些字符：U+3000 是合法的正文字符，用户自己敲的表意空格必须保留。
+     * 只有出现在行尾、且顺序完全吻合的那一段才是渲染锚点。
+     */
+    [[nodiscard]] static QString lineAnchorSuffix();
 
     /**
      * @brief 当前是否处于备用屏（vim、top、less 等全屏程序会切换到该屏）。
@@ -284,6 +314,8 @@ private:
     bool m_alternateScreen = false;
     int m_scrollbackLimit = 10000;
     int m_lineHeightPercent = 100;
+    /** @brief 统一行高的锚点；为空表示不追加（行高退回随内容变化）。 */
+    QVector<QPair<QChar, QFont>> m_lineAnchors;
 
     /** @brief 最近一次渲染得到的光标文档位置。 */
     int m_renderedCursorPosition = -1;

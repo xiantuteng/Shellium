@@ -26,11 +26,21 @@
 #include <QPainter>
 #include <QPaintEvent>
 #include <QAbstractItemView>
+#include <QGlyphRun>
+#include <QMimeData>
+#include <QPlainTextDocumentLayout>
+#include <QRawFont>
 #include <QStringListModel>
+#include <QTextBlock>
 #include <QTextCursor>
+#include <QTextDocument>
+#include <QTextLayout>
 #include <QTimer>
 
+#include <limits>
+
 #include <algorithm>
+#include <cmath>
 #include <optional>
 
 namespace {
@@ -393,6 +403,8 @@ void TerminalView::applySettings(const TerminalSettings &settings)
     m_vtermBridge->setDefaultColors(terminalPalette.foreground, terminalPalette.background);
     m_vtermBridge->setScrollbackLimit(normalized.scrollbackLines);
     m_vtermBridge->setLineHeightPercent(normalized.lineHeightPercent);
+    // 锚点字体依赖当前字体（要取它的 CJK 后备），必须在 setFont() 之后重新求一次。
+    m_vtermBridge->setLineAnchors(buildLineAnchors());
     // 字号、字距和默认色都会改变每一段的排版结果，已渲染的段无法复用。
     m_vtermBridge->invalidateDocument();
 
@@ -434,6 +446,9 @@ void TerminalView::zoomFont(const int deltaPoints)
     }
     terminalFont.setPointSize(clamped);
     setFont(terminalFont);
+    // 锚点字体跟着字号走：字号变了它的像素高度也变，不同步会让行高锚点和 cellHeight
+    // 对不上，网格重新开始溢出或留白。
+    m_vtermBridge->setLineAnchors(buildLineAnchors());
     // 字号调整是离散操作，不需要等待窗口拖动防抖；立即同步字符网格可让缩放反馈更直接。
     m_resizeDebounceTimer->stop();
     commitTerminalGeometry();
@@ -500,6 +515,8 @@ void TerminalView::renderPreservingScroll(const bool followBottom, const int pre
     const int selectionPosition = previousCursor.position();
 
     const bool rebuilt = m_vtermBridge->render(document());
+    // 首帧之后才量得到真实行高；量到变化就纠正一次网格。
+    noteRenderedCellHeight();
 
     if (rebuilt && hadSelection) {
         // 重建后的文档长度未必和之前一致，夹取到当前长度即可：宁可让选区略微偏移，也不
@@ -523,6 +540,115 @@ void TerminalView::renderPreservingScroll(const bool followBottom, const int pre
                                : std::clamp(previousValue, bar->minimum(), bar->maximum()));
 }
 
+namespace {
+
+/** @brief 问 Qt：用这个字体排这段文字时，最终真正画出字形的是哪个字体族。 */
+QString rawFontFamilyFor(const QFont &font, const QString &sample)
+{
+    QTextLayout layout(sample, font);
+    layout.beginLayout();
+    const QTextLine line = layout.createLine();
+    if (line.isValid()) {
+        const_cast<QTextLine &>(line).setLineWidth(std::numeric_limits<qreal>::max());
+    }
+    layout.endLayout();
+    const QList<QGlyphRun> runs = layout.glyphRuns();
+    return runs.isEmpty() ? QString() : runs.first().rawFont().familyName();
+}
+
+} // namespace
+
+QVector<QPair<QChar, QFont>> TerminalView::buildLineAnchors() const
+{
+    // 终端里可能出现的字体不止等宽正文字体一种：中日韩、emoji 都会让 Qt 静默换用系统
+    // 后备字体，而它们比正文字体更高。行高取的是所有字体 ascent 的最大值加 descent 的
+    // 最大值，所以必须把这几类字体各锚一个字符，统一后的高度才真的是最大值；只锚 CJK
+    // 的话，含 emoji 的行仍会比别人高 1px（PT Mono 15pt 实测 32 与 33 之差）。
+    //
+    // 锚点字符必须真的存在于目标字体中，否则 Qt 会再次换字体、拿到的就不是想要的度量：
+    // U+200B 不在 PingFang 里，用它锚 CJK 会差 1px；U+3000 在，才能和真实中文完全一致。
+    // 反过来 emoji 字体里有 U+200B，用它既拿得到度量又不占宽度。
+    QVector<QPair<QChar, QFont>> anchors;
+
+    // CJK 锚点刻意用一个真实汉字、并且不改字体族：让它沿着和正文中文完全相同的后备
+    // 链去匹配字体，度量才严格一致。显式指定族名反而会挑到另一个字体——实测正文中文
+    // 与"指定 PingFang 的 U+3000"之间就差了 1px，足以让最后一行漂移。它由渲染层画成
+    // 透明，不会被看见。
+    anchors.append({QChar(0x4E2D), font()});
+
+    const QString cjkFamily = rawFontFamilyFor(font(), QStringLiteral("中"));
+
+    const QString emojiFamily = rawFontFamilyFor(font(), QStringLiteral("\U0001F600"));
+    if (!emojiFamily.isEmpty() && emojiFamily != cjkFamily) {
+        QFont emojiFont = font();
+        emojiFont.setFamily(emojiFamily);
+        anchors.append({QChar(0x200B), emojiFont});
+    }
+    return anchors;
+}
+
+QString TerminalView::stripLineAnchors(const QString &text)
+{
+    // 只能剥掉行尾那一段完全吻合的后缀：U+3000 是合法正文字符，用户自己敲的表意空格
+    // 必须原样保留，无差别删除会悄悄改掉复制出去的内容。
+    const QString suffix = VtermBridge::lineAnchorSuffix();
+    if (suffix.isEmpty()) {
+        return text;
+    }
+    QStringList lines = text.split(QLatin1Char('\n'));
+    for (QString &line : lines) {
+        if (line.endsWith(suffix)) {
+            line.chop(suffix.size());
+        }
+    }
+    return lines.join(QLatin1Char('\n'));
+}
+
+int TerminalView::computeCellHeight() const
+{
+    // 唯一可信的行高只有一个来源：本控件自己那份文档实际排出来的高度。
+    //
+    // 走过的弯路记在这里，免得再试一次：
+    //   * QFontMetrics::lineSpacing() 是字体的"设计"行距，和实排高度差着 20%
+    //     （PT Mono 15pt：设计 23px，实排 27px），按它算必然多报行数、挤掉状态行。
+    //   * 另建一个 QTextDocument 当探针也不行：那份文档没有依附到任何窗口，量出来的是
+    //     dpr=1 下的结果；Retina 屏上控件自己的文档按 dpr=2 排版，两者能差出 17%，
+    //     表现就是"行数算少了、底部空一大块"。
+    // 锚点已经保证每一段高度完全相同，所以随便取一段量都是同一个值。
+    if (const QTextBlock first = document()->firstBlock(); first.isValid()) {
+        if (auto *layout = document()->documentLayout()) {
+            const int measured = static_cast<int>(
+                std::ceil(layout->blockBoundingRect(first).height()));
+            if (measured > 0) {
+                return std::max(measured, 1);
+            }
+        }
+    }
+
+    // 还没有任何内容、也就无从测量时的兜底：设计行距只是个下限，首帧渲染之后
+    // noteRenderedCellHeight() 会用真实值把网格纠正过来。
+    return std::max(QFontMetrics(font()).lineSpacing() * m_lineHeightPercent / 100, 1);
+}
+
+void TerminalView::noteRenderedCellHeight()
+{
+    // 行高只有在真正排过一次版之后才知道，而网格行数又依赖它——先用兜底值渲染一帧，
+    // 量到真实值后再纠正一次。锚点保证了行高与内容无关，因此这个过程一定收敛：纠正后
+    // 重新渲染量到的还是同一个值，不会来回抖。
+    const int measured = computeCellHeight();
+    if (measured <= 0 || measured == m_lastMeasuredCellHeight) {
+        return;
+    }
+    const bool firstMeasurement = m_lastMeasuredCellHeight == 0;
+    m_lastMeasuredCellHeight = measured;
+    if (firstMeasurement && m_terminalRows <= 0) {
+        return;
+    }
+    // 不能在渲染过程中同步重排：commitTerminalGeometry() 会再次渲染。排到事件队列里
+    // 等这一帧画完再说。
+    QTimer::singleShot(0, this, [this]() { commitTerminalGeometry(); });
+}
+
 void TerminalView::recalculateTerminalGeometry()
 {
     if (!m_hasReceivedResizeEvent) {
@@ -532,9 +658,18 @@ void TerminalView::recalculateTerminalGeometry()
     }
     const QFontMetrics metrics(font());
     const int cellWidth = std::max(metrics.horizontalAdvance(QLatin1Char('M')), 1);
-    const int baseHeight = std::max(metrics.lineSpacing(), 1);
-    const int cellHeight = std::max(baseHeight * m_lineHeightPercent / 100, 1);
-    const int columns = std::max(viewport()->width() / cellWidth, 1);
+    const int cellHeight = computeCellHeight();
+    // 垂直滚动条会在"主屏有滚动历史"和"备用屏没有"之间自动显隐（连同进出备用屏时的
+    // AlwaysOff/AsNeeded 切换），每次显隐都会让 viewport 变宽几个像素、蹭过一次字符列宽的
+    // 边界。全屏程序刚接管屏幕、或刚把屏幕还给主屏的那一刻,恰好正是这类显隐最密集发生的
+    // 时候——多出来的 SIGWINCH 会让 vim/nvi 立即整屏重绘，而"已打开文件"这类只画一次的
+    // 提示行（状态栏）在重绘里不会被重新画出。这里始终按"滚动条已预留出空间"来算列数，
+    // 使列数与它当前是否可见无关，从根上掐掉这次多余的重算。
+    const int scrollbarReserve = verticalScrollBar()->isVisible()
+        ? 0
+        : verticalScrollBar()->sizeHint().width();
+    const int usableWidth = std::max(viewport()->width() - scrollbarReserve, 0);
+    const int columns = std::max(usableWidth / cellWidth, 1);
     // 行数必须等于 QPlainTextEdit 真正能完整显示的段数，而不是"视口高度能塞下几行"。
     // 控件在 viewport 上下各留一份 documentMargin，并且只有严格小于视口高度的累计高度才算
     // 一行可见（等于视口高度的那一行会被判定放不下）。按前者计算会比控件多报一行：告诉
@@ -584,11 +719,26 @@ bool TerminalView::findTerminalText(const QString &text, const bool backward)
     return find(text, flags);
 }
 
+QMimeData *TerminalView::createMimeDataFromSelection() const
+{
+    // 复制、右键菜单的"复制"、拖拽全都经由这个虚函数取数据，在这里剔除统一行高用的零宽
+    // 锚点字符，三条路径就一次性都干净了——否则粘到编辑器或聊天窗口里会多出看不见却真实
+    // 存在的脏字符。
+    auto *mime = new QMimeData;
+    // selectedText() 用 U+2029 表示段落分隔，先换回真正的换行符，再按行剔除锚点后缀。
+    QString text = textCursor().selectedText();
+    text.replace(QChar(QChar::ParagraphSeparator), QLatin1Char('\n'));
+    text = stripLineAnchors(text);
+    mime->setText(text);
+    return mime;
+}
+
 QString TerminalView::terminalPlainText() const
 {
     // 导出与日志读取的是文档全文，欠着的那一帧必须先落进文档，否则会漏掉最后一屏输出。
     const_cast<TerminalView *>(this)->flushPendingRender();
-    return document()->toPlainText();
+    // 行高锚点是渲染用的零宽字符，不属于终端内容，导出前必须剔除。
+    return stripLineAnchors(document()->toPlainText());
 }
 
 void TerminalView::setCommandCompletions(const QStringList &commands)

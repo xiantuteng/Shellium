@@ -34,12 +34,12 @@ qsizetype partialSuffixLength(const QByteArray &buffer, const QByteArray &needle
 
 } // namespace
 
-void TerminalEchoFilter::expect(const QByteArray &text)
+void TerminalEchoFilter::expect(const QByteArray &text, const QByteArray &replacement)
 {
     if (text.isEmpty()) {
         return;
     }
-    m_expected.append(text);
+    m_expected.append(Expectation{text, replacement});
 }
 
 QByteArray TerminalEchoFilter::filter(const QByteArray &incoming)
@@ -65,7 +65,7 @@ QByteArray TerminalEchoFilter::filter(const QByteArray &incoming)
         qsizetype bestAt = -1;
         qsizetype bestIndex = -1;
         for (qsizetype index = 0; index < m_expected.size(); ++index) {
-            const qsizetype at = buffer.indexOf(m_expected.at(index));
+            const qsizetype at = buffer.indexOf(m_expected.at(index).needle);
             if (at >= 0 && (bestAt < 0 || at < bestAt)) {
                 bestAt = at;
                 bestIndex = index;
@@ -73,7 +73,10 @@ QByteArray TerminalEchoFilter::filter(const QByteArray &incoming)
         }
         if (bestAt >= 0) {
             output += buffer.left(bestAt);
-            buffer.remove(0, bestAt + m_expected.at(bestIndex).size());
+            // 替代串必须紧跟在命中位置写出，不能挪到本轮末尾：它多半是光标控制序列，
+            // 与它后面那段远端输出的相对次序就是全部意义所在。
+            output += m_expected.at(bestIndex).replacement;
+            buffer.remove(0, bestAt + m_expected.at(bestIndex).needle.size());
             m_expected.removeAt(bestIndex);
             m_scanned = 0;
             continue;
@@ -81,8 +84,8 @@ QByteArray TerminalEchoFilter::filter(const QByteArray &incoming)
 
         // 没有完整命中：按所有期望串里最长的那个部分后缀扣留，任何一个都不能被截断。
         qsizetype keep = 0;
-        for (const QByteArray &candidate : std::as_const(m_expected)) {
-            keep = std::max(keep, partialSuffixLength(buffer, candidate));
+        for (const Expectation &candidate : std::as_const(m_expected)) {
+            keep = std::max(keep, partialSuffixLength(buffer, candidate.needle));
         }
         const qsizetype releasable = buffer.size() - keep;
         output += buffer.left(releasable);

@@ -1,11 +1,15 @@
 #include <QAbstractTextDocumentLayout>
 #include <QClipboard>
+#include <QFontMetrics>
 #include <QScrollBar>
 #include <QSignalSpy>
 #include <QTextBlock>
 #include <QTextDocument>
 #include <QtTest>
 
+#include <algorithm>
+
+#include "settings/TerminalSettings.h"
 #include "terminal/TerminalView.h"
 #include "terminal/VtermBridge.h"
 
@@ -120,6 +124,14 @@ private slots:
     void cursorBlinkLeavesDocumentUntouched();
     void cursorBlinkRepaintsCursorPixels();
     void selectionAndScrollbackBlocksSurviveNewOutput();
+    void lastRowStaysVisibleInsideFullScreenApplication();
+    void scrollReturnsToBottomAfterLeavingFullScreenApplication();
+    void columnCountStaysReportedAfterScrollbarTogglesOnAltScreenEntry();
+    void realCapturedVimByteStreamShowsStatusLine();
+    void realChunkedSshByteStreamShowsStatusLine();
+    void realChunkedSshByteStreamVisibleInTerminalViewWidget();
+    void everyRenderedLineHasIdenticalHeightRegardlessOfContent();
+    void gridFillsViewportWithoutWastedRows();
 };
 
 void TerminalAltScreenTest::incrementalRenderMatchesFullRebuild()
@@ -306,14 +318,19 @@ void TerminalAltScreenTest::reportedRowsMatchDisplayableRows()
     QVERIFY(showAndSettle(view));
     fillScrollback(view, view.terminalRows() * 3);
 
-    // 告诉 PTY 的行数必须等于控件真正能完整显示的段数。多报一行在主屏只是顶掉最旧一行，
-    // 但备用屏下整块画布会被推出视口顶部，光标随之消失。
+    // 告诉 PTY 的行数绝不能超过控件真正能完整显示的段数。多报一行在主屏只是顶掉最旧
+    // 一行，但备用屏下整块画布会被推出视口顶部，光标随之消失。这里不要求恰好相等：
+    // computeCellHeight() 按最坏情况（探测中文/符号的真实行高）预算，纯 ASCII 内容下会
+    // 比实际能塞下的行数更保守，少报几行是安全的，多报一行都不行。
     for (int height = 380; height <= 460; height += 8) {
         view.resize(640, height);
         QTest::qWait(160);
         const int displayableRows = view.document()->blockCount()
             - view.verticalScrollBar()->maximum();
-        QCOMPARE(view.terminalRows(), displayableRows);
+        QVERIFY2(view.terminalRows() <= displayableRows,
+                 qPrintable(QStringLiteral("terminalRows()=%1 超过了控件实际能显示的 %2 行")
+                                .arg(view.terminalRows())
+                                .arg(displayableRows)));
     }
 }
 
@@ -322,17 +339,25 @@ void TerminalAltScreenTest::cursorStaysVisibleAfterScrollbackThenFullScreenAppli
     TerminalView view;
     QVERIFY(showAndSettle(view));
 
+    fillScrollback(view, view.terminalRows() * 3);
+    // 行高只有排过一次版才量得到，首帧之后网格会自我纠正一次；必须等它稳定下来再取行数，
+    // 否则拿到的是纠正前的旧值，据此生成的绘制序列和最终网格对不上。
+    QTest::qWait(400);
     const int rows = view.terminalRows();
-    fillScrollback(view, rows * 3);
     QVERIFY(view.verticalScrollBar()->maximum() > 0);
 
     view.appendTerminalOutput(fullScreenApplicationFrame(rows, 1));
-    QTest::qWait(50);
+    QTest::qWait(400);
 
     // 备用屏的文档就是整块网格，滚动历史不参与渲染，第 0 行必须落在视口顶部。
-    QCOMPARE(view.document()->blockCount(), rows);
+    QCOMPARE(view.document()->blockCount(), view.terminalRows());
     QCOMPARE(view.verticalScrollBar()->value(), 0);
-    QCOMPARE(view.document()->begin().text(), QStringLiteral("file row 1"));
+    // 段末尾的锚点是统一行高用的渲染字符，不属于终端内容，比对前先剔除。
+    QString firstLine = view.document()->begin().text();
+    if (firstLine.endsWith(VtermBridge::lineAnchorSuffix())) {
+        firstLine.chop(VtermBridge::lineAnchorSuffix().size());
+    }
+    QCOMPARE(firstLine, QStringLiteral("file row 1"));
 
     // 光标停在网格第一行；它必须真的落在可视区域内，而不只是存在于文档里。
     QTextCursor cursor(view.document());
@@ -498,6 +523,346 @@ void TerminalAltScreenTest::wheelScrollsFullScreenApplicationWithArrowKeys()
     QCOMPARE(inputSpy.count(), 3);
     for (int index = 0; index < 3; ++index) {
         QCOMPARE(inputSpy.at(index).at(0).toByteArray(), QByteArrayLiteral("\x1bOA"));
+    }
+}
+
+void TerminalAltScreenTest::lastRowStaysVisibleInsideFullScreenApplication()
+{
+    TerminalView view;
+    QVERIFY(showAndSettle(view));
+    fillScrollback(view, view.terminalRows() * 3);
+
+    for (int height = 380; height <= 460; height += 8) {
+        view.resize(640, height);
+        QTest::qWait(160);
+        const int rows = view.terminalRows();
+        QVERIFY(rows > 1);
+
+        // vim 的状态行画在网格最后一行；光标停在第一行不能掩盖"最后一行被推出视口"这个问题。
+        view.appendTerminalOutput(fullScreenApplicationFrame(rows, 1));
+        QTest::qWait(50);
+
+        QCOMPARE(view.document()->blockCount(), rows);
+        const QTextBlock lastBlock = view.document()->lastBlock();
+        QVERIFY(lastBlock.isValid());
+        QTextCursor lastRowCursor(lastBlock);
+        const QRect lastRowArea = view.cursorRect(lastRowCursor);
+        QVERIFY2(view.viewport()->rect().contains(lastRowArea.topLeft()),
+                 qPrintable(QStringLiteral("高度 %1 时最后一行 %2 落在视口 %3 之外——"
+                                           "状态行/命令行不可见")
+                                .arg(height)
+                                .arg(QDebug::toString(lastRowArea),
+                                     QDebug::toString(view.viewport()->rect()))));
+
+        // 退出全屏程序，回到主屏，为下一轮高度测试做准备。
+        view.appendTerminalOutput(QByteArrayLiteral("\x1b[?1049l"));
+        QTest::qWait(50);
+    }
+}
+
+void TerminalAltScreenTest::scrollReturnsToBottomAfterLeavingFullScreenApplication()
+{
+    TerminalView view;
+    QVERIFY(showAndSettle(view));
+
+    const int rows = view.terminalRows();
+    fillScrollback(view, rows * 3);
+    QVERIFY(view.verticalScrollBar()->maximum() > 0);
+    QCOMPARE(view.verticalScrollBar()->value(), view.verticalScrollBar()->maximum());
+
+    // 打开 vim：备用屏必须贴顶显示。
+    view.appendTerminalOutput(fullScreenApplicationFrame(rows, 1));
+    QTest::qWait(50);
+    QCOMPARE(view.verticalScrollBar()->value(), 0);
+
+    // 退出 vim 回到主屏：exit alternate screen (?1049l)，随后 Shell 重新打印提示符。
+    view.appendTerminalOutput(QByteArrayLiteral("\x1b[?1049l"));
+    view.appendTerminalOutput(QByteArrayLiteral("[root@server ~]# "));
+    QTest::qWait(50);
+
+    QCOMPARE(view.verticalScrollBar()->value(), view.verticalScrollBar()->maximum());
+}
+
+void TerminalAltScreenTest::columnCountStaysReportedAfterScrollbarTogglesOnAltScreenEntry()
+{
+    TerminalView view;
+    QVERIFY(showAndSettle(view));
+
+    // 先堆足够的滚动历史，让主屏垂直滚动条真的出现——只有它出现过，进出备用屏时
+    // "滚动条显隐"才会真的改变 viewport 宽度，复现这条回归路径的前提才成立。
+    fillScrollback(view, view.terminalRows() * 3);
+    QTest::qWait(200);
+    const int columnsBeforeAltScreen = view.terminalColumns();
+    QVERIFY(view.verticalScrollBar()->isVisible());
+
+    QSignalSpy sizeChangedSpy(&view, &TerminalView::terminalSizeChanged);
+
+    // 打开全屏程序：备用屏没有滚动历史，垂直滚动条会自动隐藏，viewport 因此变宽。
+    // 这次几何变化必须被列数计算主动屏蔽——它不代表用户真的调整了窗口，让它触发一次
+    // SIGWINCH 只会让 vim/nvi 在还没把"已打开文件"提示画完之前就整屏重绘,那条提示
+    // 是只画一次的，重绘之后就再也看不到了。
+    view.appendTerminalOutput(fullScreenApplicationFrame(view.terminalRows(), 1));
+    QTest::qWait(200);
+    QVERIFY(!view.verticalScrollBar()->isVisible());
+    QCOMPARE(view.terminalColumns(), columnsBeforeAltScreen);
+
+    // 退出全屏程序回到主屏：滚动历史还在，滚动条重新出现，viewport 变窄。同样不能
+    // 借着这次显隐把列数悄悄改回去——否则主屏内容又要经历一次无意义的 reflow。
+    view.appendTerminalOutput(QByteArrayLiteral("\x1b[?1049l"));
+    QTest::qWait(200);
+    QVERIFY(view.verticalScrollBar()->isVisible());
+    QCOMPARE(view.terminalColumns(), columnsBeforeAltScreen);
+
+    QVERIFY2(sizeChangedSpy.isEmpty(),
+             "进出备用屏时滚动条的显隐不应该触发 terminalSizeChanged——"
+             "它会向远端发送一次跟用户操作无关的 SIGWINCH");
+}
+
+void TerminalAltScreenTest::realCapturedVimByteStreamShowsStatusLine()
+{
+    // 直接从真实远端（10.194.135.11 上的 vim，24x80）抓的原始字节：进入备用屏、开
+    // DECCKM、设滚动区、清屏、在第 24 行打印一次性的 "文件已打开" 状态行，再回到第 1 行
+    // 铺正文。用真实字节而不是手写的模拟帧，排除"手写测试帧凑巧覆盖不到的真实行为"。
+    const QByteArray payload = QByteArray::fromHex(
+        "1b5b3f31303439681b5b3f31681b3d1b5b313b3234721b5b3f31323b3235681b5b3f31326c"
+        "1b5b3f3235681b5b32376d1b5b6d1b5b481b5b324a1b5b3f32356c1b5b32343b3148227e2f"
+        "73616d706c652e747874222034304c2c20343830431b5b313b314868656c6c6f20776f7"
+        "26c640d0a68656c6c6f20776f726c640d0a68656c6c6f20776f726c640d0a68656c6c6f2"
+        "0776f726c640d0a68656c6c6f20776f726c640d0a68656c6c6f20776f726c640d0a68656"
+        "c6c6f20776f726c640d0a68656c6c6f20776f726c640d0a68656c6c6f20776f726c640d0"
+        "a68656c6c6f20776f726c640d0a68656c6c6f20776f726c640d0a68656c6c6f20776f726"
+        "c640d0a68656c6c6f20776f726c640d0a68656c6c6f20776f726c640d0a68656c6c6f207"
+        "76f726c640d0a68656c6c6f20776f726c640d0a68656c6c6f20776f726c640d0a68656c6"
+        "c6f20776f726c640d0a68656c6c6f20776f726c640d0a68656c6c6f20776f726c640d0a6"
+        "8656c6c6f20776f726c640d0a68656c6c6f20776f726c640d0a68656c6c6f20776f726c6"
+        "41b5b313b31481b5b3f31326c1b5b3f323568");
+    QVERIFY(!payload.isEmpty());
+
+    VtermBridge bridge;
+    bridge.resize(24, 80);
+    bridge.feed(payload);
+    QVERIFY(bridge.isAlternateScreen());
+
+    QTextDocument document;
+    bridge.render(&document);
+    QCOMPARE(document.blockCount(), 24);
+
+    const QTextBlock statusBlock = document.findBlockByNumber(23);
+    QVERIFY(statusBlock.isValid());
+    QVERIFY2(statusBlock.text().contains(QStringLiteral("sample.txt")),
+             qPrintable(QStringLiteral("第 24 行本应是 vim 的状态行，实际内容是: \"%1\"")
+                            .arg(statusBlock.text())));
+}
+
+
+void TerminalAltScreenTest::realChunkedSshByteStreamShowsStatusLine()
+{
+    // 同一份真实字节，但按 SshSessionStack 实际收到的 SSH channel 分片边界（1024/1024/
+    // 1024/552 字节）分成四次单独 feed()——而不是拼成一个大缓冲一次性喂。这份抓包直接
+    // 来自 10.194.135.11 上对 readme.txt 执行 vi 时的 107x44 真实终端。如果分片喂养和
+    // 整体喂养结果不同，问题就出在跨 feed() 调用的状态处理上，而不是转义序列本身。
+    const QByteArray chunks[] = {
+        QByteArray::fromHex("1b5b3f31303439681b5b3f31681b3d1b5b313b3434721b5b3f31323b3235681b5b3f31326c1b5b3f3235681b5b32376d1b5b6d1b5b481b5b324a1b5b3f32356c1b5b34343b314822726561646d652e74787422205b6e6f656f6c5d2032314c2c20393434431b5b313b31484c696e7578e5ae89e8a385e6ada5e9aaa40d0ae4b88be8bdbde5ae89e8a385e58c850d0a31e38081e4b88be8bdbde5ae89e8a385e69687e4bbb61b5b343b394861e38081e591bde4bba4e8a18ce696b9e5bc8fe4b88be8bdbd1b5b353b31374877676574202d2d6e6f2d636865636b2d63657274696669636174652068747470733a2f2f256d677264636970252f68746d6c2f6c696e75785f6564725f696e7374616c6c65722e7461722e677a1b5b363b394862e380814d4752e799bbe5bd95e7958ce99da2e4b88be8bdbdefbc8ce68896e88085e7b3bbe7bb9fe7aea1e790862d3ee7bb88e7abafe983a8e7bdb22d3ee4b88be8bdbde5ae89e8a385e58c85e983a8e7bdb2e4b8ade4b88be8bdbd0d0a32e38081e8a7a3e58e8be5ae89e8a385e58c85efbc9a746172202d787a7666206c696e75785f6564725f696e7374616c6c65722e7461722e677a0d0a33e38081e689a7e8a18ce591bde4bba4efbc9a2e2f6167656e745f696e7374616c6c65722e73681b5b393b394861e38081e697a0e58f82e5ae89e8a385efbc88e59ca8e5908ce4b880e79baee5bd95e4b8ade69c896d616e616765725f696e666f2e747874e697b6e4bdbfe794a8efbc891b5b31303b3137482e2f6167656e745f696e7374616c6c65722e73681b5b31313b394862e38081e887aae5ae9ae4b989e5ae89e8a385efbc88e5ae89e8a385e59f9fe5908de38081e7abafe58fa3e38081e8b7afe5be84e59d87e58fafe98089efbc8ce58fafe4bbbbe6848fe887aae794b1e7bb84e59088efbc891b5b31323b3137482e2f6167656e745f696e7374616c6c65722e7368202d661b5b31333b3137482e2f6167656e745f696e7374616c6c65722e7368202d68207777772e6d67722e636f6d1b5b31343b3137482e2f6167656e745f696e7374616c6c65722e7368202d68207777772e6d67722e636f6d202d7020343433202d64202f726f6f742f6564722f202d661b5b31353b313748e58f82e695b0e58897e8a1a8efbc9a1b5b31363b3235482d6820686f73741b5b3743e887aae5ae9ae4b989e59f9fe5908de3808149501b5b31373b3235482d7020706f72741b5b3743e887aae5ae9ae4b989e7abafe58fa31b5b31383b3235482d64206469721b5b3843e887aae5ae9ae4b989e5ae89e8a385e8b7afe5be84efbc88e7bb9de5afb9e8b7afe5be84efbc891b5b31393b3235482d661b5b313243e5bcbae588b6e5ae89e8a3851b5b32303b3235482d2d68656c701b5b3843e698bee7a4bae5b8ae"),
+        QByteArray::fromHex("e58aa9e69687e6a1a30d0a34e38081e5ae89e8a385e5ae8ce68890efbc8c4167656e74e5b086e887aae58aa8e8bf9ee68ea5e7bb88e7abafe6a380e6b58be5938de5ba94e5b9b3e58fb00d0a1b5b39346d7e202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020201b5b32333b31487e202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020201b5b32343b31487e202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020201b5b32353b31487e202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020201b5b32363b31487e202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020201b5b32373b31487e202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020201b5b32383b31487e202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020201b5b32393b31487e202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020201b5b33303b31487e202020202020202020202020202020202020202020202020202020202020"),
+        QByteArray::fromHex("202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020201b5b33313b31487e202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020201b5b33323b31487e202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020201b5b33333b31487e202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020201b5b33343b31487e202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020201b5b33353b31487e202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020201b5b33363b31487e202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020201b5b33373b31487e202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020201b5b33383b31487e202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020201b5b33393b31487e20202020202020202020202020202020202020202020202020202020"),
+        QByteArray::fromHex("2020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020201b5b34303b31487e202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020201b5b34313b31487e202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020201b5b34323b31487e202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020201b5b34333b31487e202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020201b5b313b31481b5b3f31326c1b5b3f323568"),
+    };
+    VtermBridge bridge;
+    bridge.resize(44, 107);
+    for (const QByteArray &chunk : chunks) {
+        bridge.feed(chunk);
+    }
+    QVERIFY(bridge.isAlternateScreen());
+
+    QTextDocument document;
+    bridge.render(&document);
+    QCOMPARE(document.blockCount(), 44);
+
+    const QTextBlock statusBlock = document.findBlockByNumber(43);
+    QVERIFY(statusBlock.isValid());
+    QVERIFY2(statusBlock.text().contains(QStringLiteral("readme.txt")),
+             qPrintable(QStringLiteral("第 44 行本应是 vim 的状态行，实际内容是: \"%1\"")
+                            .arg(statusBlock.text())));
+}
+
+
+void TerminalAltScreenTest::realChunkedSshByteStreamVisibleInTerminalViewWidget()
+{
+    // 同一份真实分片字节，这次喂给完整的 TerminalView（真实 QPlainTextEdit 控件），
+    // 而不是只测 VtermBridge 的文档输出——如果 VtermBridge 层是对的，但问题出在控件
+    // 几何/滚动条这一层，只有跑完整控件才能复现。先把控件精确摆成 107 列 44 行，
+    // 和抓包时远端收到的窗口大小完全一致，转义序列里的绝对定位才有意义。
+    TerminalView view;
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+
+    const QFontMetrics metrics(view.font());
+    const int cellWidth = std::max(metrics.horizontalAdvance(QLatin1Char('M')), 1);
+    const int baseHeight = std::max(metrics.lineSpacing(), 1);
+    const int documentMargin = static_cast<int>(view.document()->documentMargin());
+
+    // 先铺一屏带锚点的内容再收敛尺寸：行高必须等文档真的排过版才量得到，空文档时
+    // terminalRows() 用的还是兜底值，照它收敛出来的窗口尺寸一旦有了内容就会被纠正掉。
+    view.appendTerminalOutput(QByteArrayLiteral("\x1b[?1049h\x1b[H\x1b[2J"));
+    view.appendTerminalOutput(
+        QString::fromUtf8("\x1b[1;1H\xe4\xb8\xad\xe6\x96\x87 warmup").toUtf8());
+    QTest::qWait(300);
+
+    int width = cellWidth * 107 + 40;
+    int height = baseHeight * 44 * 2 + 2 * documentMargin + 80;
+    for (int attempt = 0; attempt < 60; ++attempt) {
+        view.resize(width, height);
+        QTest::qWait(200);
+        if (view.terminalColumns() == 107 && view.terminalRows() == 44) {
+            break;
+        }
+        if (view.terminalColumns() < 107) { width += cellWidth; }
+        if (view.terminalColumns() > 107) { width -= cellWidth; }
+        if (view.terminalRows() < 44) { height += baseHeight; }
+        if (view.terminalRows() > 44) { height -= baseHeight; }
+    }
+    QCOMPARE(view.terminalColumns(), 107);
+    QCOMPARE(view.terminalRows(), 44);
+
+    const QByteArray chunks[] = {
+        QByteArray::fromHex("1b5b3f31303439681b5b3f31681b3d1b5b313b3434721b5b3f31323b3235681b5b3f31326c1b5b3f3235681b5b32376d1b5b6d1b5b481b5b324a1b5b3f32356c1b5b34343b314822726561646d652e74787422205b6e6f656f6c5d2032314c2c20393434431b5b313b31484c696e7578e5ae89e8a385e6ada5e9aaa40d0ae4b88be8bdbde5ae89e8a385e58c850d0a31e38081e4b88be8bdbde5ae89e8a385e69687e4bbb61b5b343b394861e38081e591bde4bba4e8a18ce696b9e5bc8fe4b88be8bdbd1b5b353b31374877676574202d2d6e6f2d636865636b2d63657274696669636174652068747470733a2f2f256d677264636970252f68746d6c2f6c696e75785f6564725f696e7374616c6c65722e7461722e677a1b5b363b394862e380814d4752e799bbe5bd95e7958ce99da2e4b88be8bdbdefbc8ce68896e88085e7b3bbe7bb9fe7aea1e790862d3ee7bb88e7abafe983a8e7bdb22d3ee4b88be8bdbde5ae89e8a385e58c85e983a8e7bdb2e4b8ade4b88be8bdbd0d0a32e38081e8a7a3e58e8be5ae89e8a385e58c85efbc9a746172202d787a7666206c696e75785f6564725f696e7374616c6c65722e7461722e677a0d0a33e38081e689a7e8a18ce591bde4bba4efbc9a2e2f6167656e745f696e7374616c6c65722e73681b5b393b394861e38081e697a0e58f82e5ae89e8a385efbc88e59ca8e5908ce4b880e79baee5bd95e4b8ade69c896d616e616765725f696e666f2e747874e697b6e4bdbfe794a8efbc891b5b31303b3137482e2f6167656e745f696e7374616c6c65722e73681b5b31313b394862e38081e887aae5ae9ae4b989e5ae89e8a385efbc88e5ae89e8a385e59f9fe5908de38081e7abafe58fa3e38081e8b7afe5be84e59d87e58fafe98089efbc8ce58fafe4bbbbe6848fe887aae794b1e7bb84e59088efbc891b5b31323b3137482e2f6167656e745f696e7374616c6c65722e7368202d661b5b31333b3137482e2f6167656e745f696e7374616c6c65722e7368202d68207777772e6d67722e636f6d1b5b31343b3137482e2f6167656e745f696e7374616c6c65722e7368202d68207777772e6d67722e636f6d202d7020343433202d64202f726f6f742f6564722f202d661b5b31353b313748e58f82e695b0e58897e8a1a8efbc9a1b5b31363b3235482d6820686f73741b5b3743e887aae5ae9ae4b989e59f9fe5908de3808149501b5b31373b3235482d7020706f72741b5b3743e887aae5ae9ae4b989e7abafe58fa31b5b31383b3235482d64206469721b5b3843e887aae5ae9ae4b989e5ae89e8a385e8b7afe5be84efbc88e7bb9de5afb9e8b7afe5be84efbc891b5b31393b3235482d661b5b313243e5bcbae588b6e5ae89e8a3851b5b32303b3235482d2d68656c701b5b3843e698bee7a4bae5b8ae"),
+        QByteArray::fromHex("e58aa9e69687e6a1a30d0a34e38081e5ae89e8a385e5ae8ce68890efbc8c4167656e74e5b086e887aae58aa8e8bf9ee68ea5e7bb88e7abafe6a380e6b58be5938de5ba94e5b9b3e58fb00d0a1b5b39346d7e202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020201b5b32333b31487e202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020201b5b32343b31487e202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020201b5b32353b31487e202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020201b5b32363b31487e202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020201b5b32373b31487e202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020201b5b32383b31487e202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020201b5b32393b31487e202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020201b5b33303b31487e202020202020202020202020202020202020202020202020202020202020"),
+        QByteArray::fromHex("202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020201b5b33313b31487e202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020201b5b33323b31487e202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020201b5b33333b31487e202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020201b5b33343b31487e202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020201b5b33353b31487e202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020201b5b33363b31487e202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020201b5b33373b31487e202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020201b5b33383b31487e202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020201b5b33393b31487e20202020202020202020202020202020202020202020202020202020"),
+        QByteArray::fromHex("2020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020201b5b34303b31487e202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020201b5b34313b31487e202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020201b5b34323b31487e202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020201b5b34333b31487e202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020201b5b313b31481b5b3f31326c1b5b3f323568"),
+    };
+    for (const QByteArray &chunk : chunks) {
+        view.appendTerminalOutput(chunk);
+        QTest::qWait(40);
+    }
+    QTest::qWait(200);
+
+    QCOMPARE(view.document()->blockCount(), 44);
+    const QTextBlock statusBlock = view.document()->findBlockByNumber(43);
+    QVERIFY(statusBlock.isValid());
+    QVERIFY2(statusBlock.text().contains(QStringLiteral("readme.txt")),
+             qPrintable(QStringLiteral("第 44 行文档内容是: \"%1\"")
+                            .arg(statusBlock.text())));
+
+    QTextCursor statusCursor(statusBlock);
+    const QRect statusArea = view.cursorRect(statusCursor);
+    QVERIFY2(view.viewport()->rect().contains(statusArea.topLeft()),
+             qPrintable(QStringLiteral("状态行 %1 落在视口 %2 之外")
+                            .arg(QDebug::toString(statusArea),
+                                 QDebug::toString(view.viewport()->rect()))));
+}
+
+
+void TerminalAltScreenTest::everyRenderedLineHasIdenticalHeightRegardlessOfContent()
+{
+    // 网格能不能铺满视口，前提是"每一行都一样高"。QPlainTextDocumentLayout 忽略
+    // setLineHeight()，行高由该行用到的所有字体的 ascent/descent 最大值决定：纯 ASCII、
+    // 中文、emoji 三种行天生互不相同。高度一旦随内容变化，同样的行数、实际像素高度就会
+    // 随用户编辑而变——状态行时而被挤出视口、时而往上漂。
+    //
+    // 字体逐个测：不同字体的后备链不一样，PT Mono 15pt（用户实际配置）暴露过 Menlo 测
+    // 不出来的 1px 偏差——只锚 CJK 时含 emoji 的行仍比别人高 1px。
+    const QVector<QPair<QString, int>> fonts = {
+        {QStringLiteral("PT Mono"), 15},
+        {QStringLiteral("Menlo"), 13},
+    };
+    for (const auto &fontSpec : fonts) {
+        TerminalView view;
+        TerminalSettings settings;
+        settings.fontFamily = fontSpec.first;
+        settings.fontPointSize = fontSpec.second;
+        view.applySettings(settings);
+        view.resize(900, 600);
+        view.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&view));
+        QTest::qWait(200);
+
+        view.appendTerminalOutput(QByteArrayLiteral("\x1b[?1049h\x1b[H\x1b[2J"));
+        view.appendTerminalOutput(QString::fromUtf8(
+            "\x1b[1;1H\xe4\xb8\xad\xe6\x96\x87\xe8\xa1\x8c"
+            "\x1b[2;1Hplain ascii line"
+            "\x1b[3;1H~"
+            "\x1b[4;1HLinux\xe5\xae\x89\xe8\xa3\x85 mixed"
+            "\x1b[5;1H\xF0\x9F\x98\x80 emoji line"
+            "\x1b[6;1H\xe2\x94\x83\xe2\x94\x80 box"
+            "\x1b[7;1H\"readme.txt\" [noeol] 21L, 944C").toUtf8());
+        QTest::qWait(200);
+
+        QVERIFY(view.document()->blockCount() >= 7);
+        QList<double> heights;
+        for (int i = 0; i < 7; ++i) {
+            heights.append(view.document()->documentLayout()
+                               ->blockBoundingRect(view.document()->findBlockByNumber(i))
+                               .height());
+        }
+        for (int i = 1; i < heights.size(); ++i) {
+            QVERIFY2(qFuzzyCompare(heights.at(i), heights.at(0)),
+                     qPrintable(QStringLiteral("%1 %2pt：第 %3 行高 %4，与第 0 行的 %5 不一致"
+                                               "——行高随内容变化，网格无法稳定铺满视口")
+                                    .arg(fontSpec.first)
+                                    .arg(fontSpec.second)
+                                    .arg(i)
+                                    .arg(heights.at(i))
+                                    .arg(heights.at(0))));
+        }
+
+        // 锚点是渲染用的字符，不能出现在导出文本里。
+        QVERIFY(!view.terminalPlainText().contains(VtermBridge::lineAnchorSuffix()));
+
+        // 但正文里合法的 U+3000（用户自己敲的表意空格）必须原样保留，不能被无差别删掉。
+        view.appendTerminalOutput(QString::fromUtf8("\x1b[9;1Ha\xe3\x80\x80" "b").toUtf8());
+        QTest::qWait(150);
+        QVERIFY2(view.terminalPlainText().contains(QString::fromUtf8("a\xe3\x80\x80""b")),
+                 "行内合法的表意空格被误当成锚点删掉了");
+    }
+}
+
+
+void TerminalAltScreenTest::gridFillsViewportWithoutWastedRows()
+{
+    // 行数不但不能多报（多报会把状态行挤出视口），也不能少报：少报一行，备用屏下画布
+    // 顶部对齐后底部就空出一条，用户看到的就是"状态栏浮在半空、下面一大片黑"。
+    //
+    // 这里必须拿像素算，不能用 blockCount - scrollBar()->maximum()：备用屏下滚动条被
+    // 强制隐藏、maximum() 恒为 0，那个式子会退化成 rows == rows 的恒真式，什么都测不到。
+    //
+    // 也必须用真实屏幕跑（Retina 下 dpr=2）：行高只有依附到窗口的文档才量得准，脱离
+    // 窗口的探针文档量的是 dpr=1 的值，Retina 上偏大 17%，正是少报行数的根因。
+    TerminalView view;
+    TerminalSettings settings;
+    settings.fontFamily = QStringLiteral("PT Mono");
+    settings.fontPointSize = 15;
+    view.applySettings(settings);
+    view.resize(900, 700);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QTest::qWait(200);
+
+    view.appendTerminalOutput(QByteArrayLiteral("\x1b[?1049h\x1b[H\x1b[2J"));
+    view.appendTerminalOutput(
+        QString::fromUtf8("\x1b[1;1H\xe4\xb8\xad\xe6\x96\x87 line").toUtf8());
+    QTest::qWait(500);
+
+    for (int height = 600; height <= 720; height += 40) {
+        view.resize(900, height);
+        QTest::qWait(500);
+
+        // 锚点保证每段等高，取第一段就是真实行高。
+        const double lineHeight = view.document()->documentLayout()
+                                      ->blockBoundingRect(view.document()->firstBlock())
+                                      .height();
+        QVERIFY(lineHeight > 0);
+        const int margin = static_cast<int>(view.document()->documentMargin());
+        const int usable = view.viewport()->height() - 2 * margin - 1;
+        const int fits = static_cast<int>(usable / lineHeight);
+
+        QVERIFY2(view.terminalRows() == fits,
+                 qPrintable(QStringLiteral("窗口高 %1：视口能放下 %2 行（行高 %3、可用 %4px），"
+                                           "但汇报给 PTY 的是 %5 行——%6")
+                                .arg(height).arg(fits).arg(lineHeight).arg(usable)
+                                .arg(view.terminalRows())
+                                .arg(view.terminalRows() < fits
+                                         ? QStringLiteral("少报，底部会空出一条")
+                                         : QStringLiteral("多报，最后一行会被挤出视口"))));
     }
 }
 
