@@ -132,7 +132,51 @@ private slots:
     void realChunkedSshByteStreamVisibleInTerminalViewWidget();
     void everyRenderedLineHasIdenticalHeightRegardlessOfContent();
     void gridFillsViewportWithoutWastedRows();
+    void themeBackgroundSurvivesLeavingFullScreenApplication();
 };
+
+void TerminalAltScreenTest::themeBackgroundSurvivesLeavingFullScreenApplication()
+{
+    // 主题背景刻意不等于 VtermBridge 构造期的兜底色：两者相等时这条用例什么都测不到，
+    // 而真实应用里正是"构造时先用兜底色、applySettings() 之后才换成主题色"这个顺序。
+    const QColor themeBackground(QStringLiteral("#1f1f28"));
+    const QColor themeForeground(QStringLiteral("#dcd7ba"));
+
+    VtermBridge bridge;
+    bridge.resize(10, 40);
+    bridge.setDefaultColors(themeForeground, themeBackground);
+
+    const auto backgroundOfLastLine = [&bridge]() {
+        QTextDocument document;
+        bridge.render(&document);
+        return document.lastBlock().begin().fragment().charFormat().background().color();
+    };
+
+    bridge.feed(QByteArrayLiteral("before-vi"));
+    QCOMPARE(backgroundOfLastLine(), themeBackground);
+
+    // vim 进出备用屏用的 CSI ?1049h/l 内含 DECSC/DECRC：libvterm 会把当前画笔存档再回灌。
+    // 画笔里存的是复位那一刻按当时默认色解析好的 RGB，改默认色并不会回头修它，回灌之后
+    // 那份兜底色就被当成"显式指定的背景色"，退出 vim 之后新打印的每一行都会顶着一块比
+    // 终端背景更黑、且与用户所选主题对不上的底色。
+    bridge.feed(QByteArrayLiteral("\x1b[?1049h\x1b[H\x1b[2Jfile line\x1b[?1049l"));
+    QVERIFY(!bridge.isAlternateScreen());
+    bridge.feed(QByteArrayLiteral("\r\n[root@tidb01 ~]# after-vi"));
+    QCOMPARE(backgroundOfLastLine(), themeBackground);
+
+    // 裸的 DECSC/DECRC 走的是同一条回灌路径，任何用它保存光标的程序都会踩到。
+    bridge.feed(QByteArrayLiteral("\r\n\x1b" "7" "\x1b" "8" "after-decrc"));
+    QCOMPARE(backgroundOfLastLine(), themeBackground);
+
+    // 远端显式指定的颜色必须原样保留：修复只允许在画笔当前就是默认色时重新取副本，
+    // 否则改一次主题就会把远端正在使用的颜色一起抹掉。
+    bridge.feed(QByteArrayLiteral("\r\n\x1b[41mexplicit-red-bg"));
+    const QColor explicitRed = backgroundOfLastLine();
+    QVERIFY2(explicitRed != themeBackground, "显式 ANSI 背景色不应回落成主题背景");
+    bridge.setDefaultColors(themeForeground, QColor(QStringLiteral("#101820")));
+    bridge.feed(QByteArrayLiteral("still-red"));
+    QCOMPARE(backgroundOfLastLine(), explicitRed);
+}
 
 void TerminalAltScreenTest::incrementalRenderMatchesFullRebuild()
 {

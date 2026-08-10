@@ -143,8 +143,47 @@ void VtermBridge::setDefaultColors(const QColor &foreground, const QColor &backg
                     static_cast<uint8_t>(safeBackground.green()),
                     static_cast<uint8_t>(safeBackground.blue()));
     vterm_screen_set_default_colors(m_screen, &nativeForeground, &nativeBackground);
+    refreshPenDefaultColors();
     // 默认色变化会改写每一格未显式着色的文本，已渲染的段全部过期。
     invalidateDocument();
+}
+
+void VtermBridge::refreshPenDefaultColors()
+{
+    // libvterm 把"默认色"在两个地方各存了一份：一份是 state 里的 default_fg/default_bg，
+    // vterm_screen_set_default_colors() 改的正是它；另一份是当前画笔 state->pen，它在
+    // 复位时按当时的默认色取了一份**已经解析成 RGB 的副本**。改默认色不会回头去修画笔，
+    // 于是画笔里留着构造期兜底色（#111318）那一份 RGB。
+    //
+    // 平时看不出来：正常输出走的是 screen 自己那份画笔，颜色是对的。但 DECSC/DECRC——
+    // 也就是 vim 进出备用屏用的 CSI ?1049h/l——会把 state->pen 存档再回灌，回灌时那份
+    // 陈旧 RGB 就被当成"显式指定的背景色"推给了 screen。表现为退出 vim 之后，新打印的
+    // 每一行都顶着一块比终端背景更黑的底色，且和用户选的主题对不上。
+    //
+    // 没有公开接口能直接改 state->pen，只能借 SGR 39/49（前景/背景恢复默认）让 libvterm
+    // 按新的默认色重新取一次副本。仅在画笔当前确实是"默认色"时才注入：远端如果正显式
+    // 指定着颜色，它手里的色号本来就与默认色无关，注入只会把远端的颜色抹掉；而远端下一次
+    // 自己发 SGR 0 时，libvterm 就会按此刻这份新的默认色重新解析，不需要我们插手。
+    VTermState *state = vterm_obtain_state(m_vterm);
+    if (state == nullptr) {
+        return;
+    }
+
+    QByteArray resetSequence;
+    VTermValue penValue {};
+    if (vterm_state_get_penattr(state, VTERM_ATTR_FOREGROUND, &penValue) != 0
+        && VTERM_COLOR_IS_DEFAULT_FG(&penValue.color)) {
+        resetSequence += "\x1b[39m";
+    }
+    if (vterm_state_get_penattr(state, VTERM_ATTR_BACKGROUND, &penValue) != 0
+        && VTERM_COLOR_IS_DEFAULT_BG(&penValue.color)) {
+        resetSequence += "\x1b[49m";
+    }
+    if (resetSequence.isEmpty()) {
+        return;
+    }
+    vterm_input_write(m_vterm, resetSequence.constData(),
+                      static_cast<size_t>(resetSequence.size()));
 }
 
 void VtermBridge::setScrollbackLimit(const int lineCount)

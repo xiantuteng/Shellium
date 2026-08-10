@@ -21,7 +21,9 @@
 #include <QLineEdit>
 #include <QMenu>
 #include <QMessageBox>
+#include <QMouseEvent>
 #include <QPainter>
+#include <QPolygonF>
 #include <QPushButton>
 #include <QSet>
 #include <QSaveFile>
@@ -60,21 +62,74 @@ QFont scaledFont(QFont font, const double deltaPoints, const bool bold)
     return font;
 }
 
+/** @brief 节点名称行的字体；分组与主机共用，避免同一棵树里出现两种标题字重。 */
+[[nodiscard]] QFont itemNameFont(const QFont &base)
+{
+    return scaledFont(base, 1.0, true);
+}
+
+/** @brief 分组展开箭头的边长（像素）。 */
+constexpr int kToggleArrowSize = 8;
+
+/** @brief 展开箭头与行右端之间的留白。 */
+constexpr int kToggleArrowMargin = 6;
+
+/** @brief 分组名称右端与展开箭头之间至少要留出的空隙。 */
+constexpr int kToggleArrowSpacing = 6;
+
+/** @brief 判断索引指向的是否为分组节点。 */
+[[nodiscard]] bool isFolderIndex(const QModelIndex &index)
+{
+    return static_cast<HostNodeKind>(index.data(HostKindRole).toInt()) == HostNodeKind::Folder;
+}
+
 /**
  * @brief 把主机节点画成“大号名称 + 小号连接信息”两行的委托。
  *
  * 单行只显示名称时，用户必须逐个悬停才知道某条记录连的是哪个账号和端口，同名不同环境的
- * 主机因此极易连错。分组没有连接信息，仍按 Qt 默认单行绘制。
+ * 主机因此极易连错。分组只有一行名称，但展开箭头由本委托画在行的右端并纵向居中，而不是
+ * Qt 默认的左侧分支装饰位——那条装饰列会在树的左边留下一条只为箭头存在的空白。
  */
 class HostItemDelegate final : public QStyledItemDelegate {
 public:
     using QStyledItemDelegate::QStyledItemDelegate;
+
+    /** @brief 点中分组展开箭头时触发；由外部接上真正的展开/收起。 */
+    std::function<void(const QModelIndex &)> onToggleRequested;
+
+    /**
+     * @brief 分组展开箭头的绘制与点击热区。
+     * @return 非分组节点、或没有子节点的空分组返回空矩形（不画也点不中）。
+     */
+    [[nodiscard]] QRect toggleRect(const QStyleOptionViewItem &option,
+                                   const QModelIndex &index) const
+    {
+        if (!isFolderIndex(index) || index.model() == nullptr
+            || index.model()->rowCount(index) == 0) {
+            return {};
+        }
+
+        QStyleOptionViewItem opt = option;
+        initStyleOption(&opt, index);
+        const QRect textRect = itemTextRect(opt);
+        // 箭头贴着行的右端，而不是跟着名字长度浮动：分组名长短不一时，一列对齐的箭头才
+        // 读得出"这些都是可展开的分组"。纵向以整行为准居中，与名称基线无关。
+        return QRect(textRect.right() - kToggleArrowMargin - kToggleArrowSize + 1,
+                     opt.rect.center().y() - (kToggleArrowSize / 2),
+                     kToggleArrowSize,
+                     kToggleArrowSize);
+    }
 
 protected:
     void paint(QPainter *painter,
                const QStyleOptionViewItem &option,
                const QModelIndex &index) const override
     {
+        if (isFolderIndex(index)) {
+            paintFolder(painter, option, index);
+            return;
+        }
+
         const QString detail = index.data(HostDetailRole).toString();
         if (detail.isEmpty()) {
             QStyledItemDelegate::paint(painter, option, index);
@@ -99,7 +154,7 @@ protected:
                 .paint(painter, iconRect, Qt::AlignCenter);
         }
 
-        const QFont nameFont = scaledFont(option.font, 1.0, true);
+        const QFont nameFont = itemNameFont(option.font);
         const QFont detailFont = scaledFont(option.font, -1.5, false);
         const QFontMetrics nameMetrics(nameFont);
         const QFontMetrics detailMetrics(detailFont);
@@ -138,12 +193,119 @@ protected:
     {
         QSize hint = QStyledItemDelegate::sizeHint(option, index);
         if (index.data(HostDetailRole).toString().isEmpty()) {
+            // 分组行按放大后的名称字体留高，否则 Qt 用基准字体算出的行高会切掉字的上下缘。
+            hint.setHeight(
+                std::max(hint.height(), QFontMetrics(itemNameFont(option.font)).height() + 8));
             return hint;
         }
-        const int textHeight = QFontMetrics(scaledFont(option.font, 1.0, true)).height()
+        const int textHeight = QFontMetrics(itemNameFont(option.font)).height()
             + QFontMetrics(scaledFont(option.font, -1.5, false)).height() + 1;
         hint.setHeight(std::max(hint.height(), textHeight + 8));
         return hint;
+    }
+
+    bool editorEvent(QEvent *event,
+                     QAbstractItemModel *model,
+                     const QStyleOptionViewItem &option,
+                     const QModelIndex &index) override
+    {
+        // 箭头已不在 Qt 的分支装饰列里，QTreeView 自带的“点击分支即展开”对它无效，必须由
+        // 委托自己做命中判断。与复选框一致地取释放事件，按下后移开鼠标就不会误触发。
+        if (event != nullptr && event->type() == QEvent::MouseButtonRelease && onToggleRequested) {
+            auto *mouseEvent = static_cast<QMouseEvent *>(event);
+            if (mouseEvent->button() == Qt::LeftButton
+                && toggleRect(option, index).contains(mouseEvent->position().toPoint())) {
+                onToggleRequested(index);
+                return true;
+            }
+        }
+        return QStyledItemDelegate::editorEvent(event, model, option, index);
+    }
+
+private:
+    /** @brief 样式为文字保留的区域；分组与主机共用同一份计算。 */
+    [[nodiscard]] static QRect itemTextRect(const QStyleOptionViewItem &option)
+    {
+        QStyle *style =
+            option.widget != nullptr ? option.widget->style() : QApplication::style();
+        return style->subElementRect(QStyle::SE_ItemViewItemText, &option, option.widget);
+    }
+
+    /** @brief 扣掉右端箭头及其左右留白后，留给分组名称的宽度。 */
+    [[nodiscard]] static int availableNameWidth(const QRect &textRect)
+    {
+        return std::max(
+            0, textRect.width() - kToggleArrowMargin - kToggleArrowSize - kToggleArrowSpacing);
+    }
+
+    /** @brief 画分组：一行名称，紧跟其后的是展开/收起箭头。 */
+    void paintFolder(QPainter *painter,
+                     const QStyleOptionViewItem &option,
+                     const QModelIndex &index) const
+    {
+        QStyleOptionViewItem background = option;
+        initStyleOption(&background, index);
+        const QString name = background.text;
+        background.text.clear();
+        const QWidget *widget = option.widget;
+        QStyle *style = widget != nullptr ? widget->style() : QApplication::style();
+        style->drawControl(QStyle::CE_ItemViewItem, &background, painter, widget);
+
+        const QRect iconRect =
+            style->subElementRect(QStyle::SE_ItemViewItemDecoration, &background, widget);
+        if (!iconRect.isEmpty()) {
+            qvariant_cast<QIcon>(index.data(Qt::DecorationRole))
+                .paint(painter, iconRect, Qt::AlignCenter);
+        }
+
+        const QRect textRect = itemTextRect(background);
+        const QRect arrowRect = toggleRect(option, index);
+        // 名称区始终扣掉箭头宽度：否则长分组名省略后正好铺满文字区，箭头会压在名字上。
+        const int nameWidth = arrowRect.isNull() ? textRect.width() : availableNameWidth(textRect);
+        const QColor baseColor = background.palette.color(
+            (background.state & QStyle::State_Selected) != 0 ? QPalette::HighlightedText
+                                                             : QPalette::Text);
+
+        painter->save();
+        // 分组名与主机名同字号同字重：两者都是这棵树里的“标题”，字体一旦不同，分组会被
+        // 读成比主机更次一级的说明文字。
+        const QFont nameFont = itemNameFont(background.font);
+        painter->setFont(nameFont);
+        painter->setPen(baseColor);
+        const QFontMetrics metrics(nameFont);
+        painter->drawText(QRect(textRect.left(), textRect.top(), nameWidth, textRect.height()),
+                          Qt::AlignLeft | Qt::AlignVCenter,
+                          metrics.elidedText(name, Qt::ElideRight, nameWidth));
+        if (!arrowRect.isNull()) {
+            drawToggleArrow(painter, arrowRect, (option.state & QStyle::State_Open) != 0, baseColor);
+        }
+        painter->restore();
+    }
+
+    /** @brief 展开时画朝下的实心三角，收起时画朝右的，与常见文件树的方向约定一致。 */
+    static void drawToggleArrow(QPainter *painter,
+                                const QRect &rect,
+                                const bool expanded,
+                                const QColor &color)
+    {
+        QColor arrowColor = color;
+        arrowColor.setAlphaF(0.55F);
+        const QPointF center(rect.center());
+        const double half = rect.width() / 2.0;
+        QPolygonF triangle;
+        if (expanded) {
+            triangle << QPointF(center.x() - half, center.y() - half * 0.6)
+                     << QPointF(center.x() + half, center.y() - half * 0.6)
+                     << QPointF(center.x(), center.y() + half * 0.7);
+        } else {
+            triangle << QPointF(center.x() - half * 0.6, center.y() - half)
+                     << QPointF(center.x() + half * 0.7, center.y())
+                     << QPointF(center.x() - half * 0.6, center.y() + half);
+        }
+        painter->setRenderHint(QPainter::Antialiasing, true);
+        painter->setPen(Qt::NoPen);
+        painter->setBrush(arrowColor);
+        painter->drawPolygon(triangle);
     }
 };
 
@@ -509,14 +671,18 @@ HostManagerWidget::HostManagerWidget(ApplicationDatabase *database,
         QLineEdit::LeadingPosition);
 
     m_tree->setHeaderHidden(true);
-    m_tree->setRootIsDecorated(true);
-    // Qt 默认每级缩进 20px；侧栏本来就窄，默认值加上分支箭头的留白会把顶层主机名推到
-    // 视觉中线右侧，左边留下一整条无意义的空白。收紧到 12px 后箭头依然点得中，但整棵树
-    // 明显靠左。
-    m_tree->setIndentation(12);
+    // 展开箭头改由 HostItemDelegate 画在分组行右端，Qt 自带的左侧分支装饰列必须关掉：
+    // 那一列只为箭头存在，留着会在顶层节点左边压出一条空白。层级缩进则要保留——分组和它
+    // 下面的主机全部顶格时，看不出谁属于谁。
+    m_tree->setRootIsDecorated(false);
+    m_tree->setIndentation(16);
     m_tree->setSelectionMode(QAbstractItemView::SingleSelection);
     m_tree->setContextMenuPolicy(Qt::CustomContextMenu);
-    m_tree->setItemDelegate(new HostItemDelegate(m_tree));
+    auto *itemDelegate = new HostItemDelegate(m_tree);
+    itemDelegate->onToggleRequested = [this](const QModelIndex &index) {
+        m_tree->setExpanded(index, !m_tree->isExpanded(index));
+    };
+    m_tree->setItemDelegate(itemDelegate);
 
     // 拖拽排序/跨分组移动：Qt 负责实际挪动 QTreeWidgetItem，HostTreeWidget 只负责合法性
     // 校验，真正的持久化在下面的 onDropped 回调里完成。搜索结果是扁平视图，与真实父子

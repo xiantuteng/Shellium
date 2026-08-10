@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(Shellium VERSION 0.1.0 LANGUAGES CXX)
+project(Shellium VERSION 0.1.1 LANGUAGES CXX)
 
 # 正式 macOS 安装包必须使用稳定且可配置的 Bundle Identifier。这里提供一个可直接构建的
 # 默认值，同时允许发布脚本通过 -DSHELLIUM_BUNDLE_IDENTIFIER=... 覆盖；这样企业或个人发布者
@@ -99,6 +99,17 @@ qt_add_executable(Shellium
     src/ui/VaultDialog.h
 )
 
+# 将带透明圆角安全区的 512px 主图标编译进 Qt 资源系统，供 QApplication 在所有平台统一
+# 设置窗口主图标。运行时不直接解码 1024px 母图，是因为窗口标题、任务切换器和消息框并不
+# 需要这么高的单张分辨率；512px 足以覆盖高 DPI 显示，同时可把常驻 RGBA 缓冲从约 4 MiB
+# 降到约 1 MiB。资源编译进可执行文件后也不依赖当前工作目录，开发与打包启动路径保持一致。
+qt_add_resources(Shellium "shellium_brand_assets"
+    PREFIX "/"
+    BASE "${CMAKE_CURRENT_SOURCE_DIR}"
+    FILES
+        resources/icons/shellium-app-icon-macos-512.png
+)
+
 target_include_directories(Shellium PRIVATE src)
 target_link_libraries(Shellium PRIVATE
     Qt6::Core
@@ -127,6 +138,17 @@ if(APPLE)
     )
     target_link_libraries(Shellium PRIVATE "-framework AppKit")
 
+    # Finder、Dock 与 LaunchServices 从 App Bundle 的 Info.plist 和 Resources 读取 .icns，
+    # 不会使用 Qt 的 qrc 路径。将平台图标作为 Bundle 资源加入目标，并只在属性中写文件名，
+    # 可让 CMake 同时生成正确的 CFBundleIconFile 条目和最终
+    # Resources/Shellium-macos.icns 文件，避免元数据与磁盘文件名发生偏差。
+    set(SHELLIUM_MACOS_ICON
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/icons/Shellium-macos.icns")
+    set_source_files_properties("${SHELLIUM_MACOS_ICON}" PROPERTIES
+        MACOSX_PACKAGE_LOCATION "Resources"
+    )
+    target_sources(Shellium PRIVATE "${SHELLIUM_MACOS_ICON}")
+
     # 生成具有稳定版本信息的标准 macOS App Bundle。签名身份和公证凭据属于发布者私密配置，
     # 因此不固化在 CMake 工程中，而是由 scripts/package_macos_dmg.sh 在部署阶段安全注入。
     set_target_properties(Shellium PROPERTIES
@@ -136,6 +158,9 @@ if(APPLE)
         MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
         MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
         MACOSX_BUNDLE_COPYRIGHT "Copyright © 2026 Shellium contributors"
+        # 这里必须与 SHELLIUM_MACOS_ICON 的实际文件名完全一致；仅把新资源复制进 Bundle、
+        # 却继续在 Info.plist 中引用旧名称，会让 Finder 与 Dock 回退到旧图标或通用应用图标。
+        MACOSX_BUNDLE_ICON_FILE "Shellium-macos.icns"
     )
 endif()
 

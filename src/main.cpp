@@ -5,6 +5,7 @@
 
 #include <QApplication>
 #include <QCoreApplication>
+#include <QIcon>
 #include <QMessageBox>
 #include <QStyleFactory>
 #include <QUuid>
@@ -19,8 +20,15 @@ int main(int argc, char *argv[])
 {
     QApplication application(argc, argv);
     QCoreApplication::setApplicationName(QStringLiteral("Shellium"));
-    QCoreApplication::setApplicationVersion(QStringLiteral("0.1.0"));
+    QCoreApplication::setApplicationVersion(QStringLiteral("0.1.1"));
     QCoreApplication::setOrganizationName(QStringLiteral("Shellium"));
+
+    // Qt 资源中的 PNG 使用与 macOS Bundle 相同的圆角方形设计，并保留透明外围安全区；它会
+    // 被后续创建的 MainWindow、保险库对话框和错误消息框继承。运行时采用 512px 版本，既能
+    // 覆盖高 DPI 窗口图标，又避免长期持有 1024px RGBA 缓冲；Finder 与 Dock 则继续读取包含
+    // 多分辨率图层的原生 .icns，两条路径在不同展示尺寸下保持同一视觉比例。
+    application.setWindowIcon(
+        QIcon(QStringLiteral(":/resources/icons/shellium-app-icon-macos-512.png")));
 
     // UI 预览模式只供开发和自动化视觉验收使用。最重要的安全边界是：一旦开启就强制
     // 使用内存数据库，后续即使初始化逻辑发生变化，也不能读取或覆盖用户真实主机、凭据

@@ -5,6 +5,8 @@
 
 #include <QAbstractButton>
 #include <QApplication>
+#include <QColor>
+#include <QImage>
 #include <QLayout>
 #include <QListWidget>
 #include <QSet>
@@ -39,6 +41,15 @@ private slots:
 
     /** @brief 分组配置窗口不得让主机专属控件浮在左上角盖住卡片顶部。 */
     void groupDialogHasNoStrayWidgets();
+
+    /** @brief 顶层节点顶格、分组下的主机右缩进，二者不能再被分支装饰列推乱。 */
+    void topLevelNodesShareLeftEdgeAndChildHostsIndent();
+
+    /** @brief 展开箭头必须右对齐贴在行末并纵向居中，且点得动、点得回。 */
+    void groupToggleIsRightAlignedVerticallyCenteredAndClickable();
+
+    /** @brief 分组名与主机名必须用同一套字体：同一串文字画出来的墨迹宽度要相等。 */
+    void groupNameUsesSameFontAsHostName();
 
 private:
     [[nodiscard]] QTreeWidgetItem *findItem(const HostManagerWidget &widget,
@@ -210,6 +221,249 @@ void HostManagerWidgetTest::groupDialogHasNoStrayWidgets()
     // 绘制，于是窗口顶部浮出一个空白输入框、一段密码占位文字和一个开关，盖住卡片标题。
     addGroupButton->click();
     QVERIFY2(failure.isEmpty(), qPrintable(failure));
+}
+
+namespace {
+
+/** @brief 建一个带子主机的分组，外加一台顶层主机，凑出"分组/主机"两种层级关系。 */
+bool seedGroupWithChildAndTopLevelHost(ApplicationDatabase *database, QString *error)
+{
+    HostRecord group;
+    group.id = QStringLiteral("group-3");
+    group.kind = HostNodeKind::Folder;
+    group.name = QStringLiteral("上饶E呼即办");
+    if (!database->saveHost(group, error)) {
+        return false;
+    }
+
+    HostRecord child;
+    child.id = QStringLiteral("host-3");
+    child.parentId = group.id;
+    child.kind = HostNodeKind::Host;
+    child.name = QStringLiteral("中间件");
+    child.host = QStringLiteral("115.159.35.31");
+    if (!database->saveHost(child, error)) {
+        return false;
+    }
+
+    HostRecord topLevel;
+    topLevel.id = QStringLiteral("host-4");
+    topLevel.kind = HostNodeKind::Host;
+    topLevel.name = QStringLiteral("10.38.217.99");
+    topLevel.host = QStringLiteral("10.38.217.99");
+    return database->saveHost(topLevel, error);
+}
+
+} // namespace
+
+void HostManagerWidgetTest::topLevelNodesShareLeftEdgeAndChildHostsIndent()
+{
+    QString error;
+    QVERIFY2(seedGroupWithChildAndTopLevelHost(m_database.get(), &error), qPrintable(error));
+
+    HostManagerWidget widget(m_database.get(), m_vault.get());
+    widget.resize(320, 400);
+    widget.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&widget));
+
+    auto *tree = widget.findChild<QTreeWidget *>();
+    QVERIFY(tree != nullptr);
+    QTreeWidgetItem *groupItem = findItem(widget, QStringLiteral("上饶E呼即办"));
+    QTreeWidgetItem *childItem = findItem(widget, QStringLiteral("中间件"));
+    QTreeWidgetItem *topLevelItem = findItem(widget, QStringLiteral("10.38.217.99"));
+    QVERIFY(groupItem != nullptr);
+    QVERIFY(childItem != nullptr);
+    QVERIFY(topLevelItem != nullptr);
+    QVERIFY(groupItem->isExpanded());
+
+    // 顶层分组与顶层主机必须顶格并对齐：只为箭头存在的分支装饰列一旦还在，这里就会差出
+    // 一整列空白。
+    const QRect groupRect = tree->visualItemRect(groupItem);
+    const QRect topLevelRect = tree->visualItemRect(topLevelItem);
+    QCOMPARE(topLevelRect.left(), groupRect.left());
+    QCOMPARE(groupRect.left(), 0);
+
+    // 分组下的主机必须右缩进一级，否则看不出它属于这个分组。
+    const QRect childRect = tree->visualItemRect(childItem);
+    QCOMPARE(childRect.left() - groupRect.left(), tree->indentation());
+    QVERIFY2(tree->indentation() > 0, "层级缩进被压成 0，分组与主机会顶成一列");
+}
+
+void HostManagerWidgetTest::groupToggleIsRightAlignedVerticallyCenteredAndClickable()
+{
+    QString error;
+    QVERIFY2(seedGroupWithChildAndTopLevelHost(m_database.get(), &error), qPrintable(error));
+
+    HostManagerWidget widget(m_database.get(), m_vault.get());
+    widget.resize(320, 400);
+    widget.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&widget));
+
+    auto *tree = widget.findChild<QTreeWidget *>();
+    QVERIFY(tree != nullptr);
+    QTreeWidgetItem *groupItem = findItem(widget, QStringLiteral("上饶E呼即办"));
+    QVERIFY(groupItem != nullptr);
+    QVERIFY(groupItem->isExpanded());
+    const QRect groupRect = tree->visualItemRect(groupItem);
+
+    // 先在最后一行下方的空白处点一下：窗口刚显示时的第一次点击会被平台层用于激活窗口，
+    // 落在树上会让"这一下到底算不算命中"变得不稳定。空白处没有任何节点，点它不改变状态。
+    QTest::mouseClick(tree->viewport(),
+                      Qt::LeftButton,
+                      {},
+                      QPoint(groupRect.center().x(), tree->viewport()->height() - 4));
+
+    // 点一下再点回来，只用于探测某个点是不是热区，不改变探测前后的展开状态。
+    const auto togglesAt = [&](const QPoint &point) {
+        const bool before = groupItem->isExpanded();
+        QTest::mouseClick(tree->viewport(), Qt::LeftButton, {}, point);
+        const bool changed = groupItem->isExpanded() != before;
+        groupItem->setExpanded(before);
+        return changed;
+    };
+
+    // 行首现在只有分组图标和名称，点它不该再展开收起。
+    QVERIFY2(!togglesAt(QPoint(groupRect.left() + 2, groupRect.center().y())), "行首被当成展开按钮");
+
+    // 横向：热区必须右对齐贴在行末，而不是跟在名字后面。
+    int leftmostHit = -1;
+    int rightmostHit = -1;
+    for (int x = groupRect.left(); x < groupRect.right(); ++x) {
+        if (togglesAt(QPoint(x, groupRect.center().y()))) {
+            leftmostHit = leftmostHit < 0 ? x : leftmostHit;
+            rightmostHit = x;
+        }
+    }
+    QVERIFY2(leftmostHit >= 0, "分组行上找不到能展开收起的箭头");
+    const int nameWidth = tree->fontMetrics().horizontalAdvance(QStringLiteral("上饶E呼即办"));
+    QVERIFY2(leftmostHit > groupRect.left() + nameWidth,
+             qPrintable(QStringLiteral("箭头左缘 x=%1 紧贴着分组名称（名称宽 %2）")
+                            .arg(leftmostHit)
+                            .arg(nameWidth)));
+    QVERIFY2(groupRect.right() - rightmostHit <= 12,
+             qPrintable(QStringLiteral("箭头右缘距行末 %1 像素，没有右对齐")
+                            .arg(groupRect.right() - rightmostHit)));
+
+    // 纵向：热区中心必须落在行的中线上，允许 1 像素的取整误差。
+    const int probeX = (leftmostHit + rightmostHit) / 2;
+    int topHit = -1;
+    int bottomHit = -1;
+    for (int y = groupRect.top(); y < groupRect.bottom(); ++y) {
+        if (togglesAt(QPoint(probeX, y))) {
+            topHit = topHit < 0 ? y : topHit;
+            bottomHit = y;
+        }
+    }
+    QVERIFY(topHit >= 0);
+    QVERIFY2(std::abs(((topHit + bottomHit) / 2) - groupRect.center().y()) <= 1,
+             qPrintable(QStringLiteral("箭头纵向中心 %1 偏离行中线 %2")
+                            .arg((topHit + bottomHit) / 2)
+                            .arg(groupRect.center().y())));
+
+    // 收起后再点同一个位置必须能重新展开，避免做成“单向收起”。
+    const QPoint arrowCenter(probeX, (topHit + bottomHit) / 2);
+    QTest::mouseClick(tree->viewport(), Qt::LeftButton, {}, arrowCenter);
+    QVERIFY2(!groupItem->isExpanded(), "点击箭头没有收起分组");
+    QTest::mouseClick(tree->viewport(), Qt::LeftButton, {}, arrowCenter);
+    QVERIFY2(groupItem->isExpanded(), "再次点击箭头没有重新展开分组");
+}
+
+namespace {
+
+/**
+ * @brief 统计某块区域里"有墨"的最右一列，用来量出一段文字实际画了多宽。
+ * @param background 该行的底色，与之明显不同的像素即视为文字笔画。
+ * @return 相对于 area.left() 的墨迹宽度；整块空白返回 0。
+ */
+int inkWidth(const QImage &image, const QRect &area, const QColor &background)
+{
+    int rightmost = -1;
+    for (int x = area.left(); x <= area.right() && x < image.width(); ++x) {
+        for (int y = area.top(); y <= area.bottom() && y < image.height(); ++y) {
+            const QColor pixel = image.pixelColor(x, y);
+            // 阈值取 24：反锯齿边缘也算墨，但挡得住选中态之类的淡背景过渡。
+            if (std::abs(pixel.red() - background.red()) > 24
+                || std::abs(pixel.green() - background.green()) > 24
+                || std::abs(pixel.blue() - background.blue()) > 24) {
+                rightmost = x;
+                break;
+            }
+        }
+    }
+    return rightmost < 0 ? 0 : rightmost - area.left() + 1;
+}
+
+} // namespace
+
+void HostManagerWidgetTest::groupNameUsesSameFontAsHostName()
+{
+    // 两个节点取同一串名字：字体一致时，画出来的墨迹宽度必然相等；分组一旦退回基准字体
+    // （不加粗、小一号），同样的字就会明显窄一截。
+    const QString sharedName = QStringLiteral("上饶E呼即办");
+
+    HostRecord group;
+    group.id = QStringLiteral("group-5");
+    group.kind = HostNodeKind::Folder;
+    group.name = sharedName;
+    QString error;
+    QVERIFY2(m_database->saveHost(group, &error), qPrintable(error));
+
+    HostRecord host;
+    host.id = QStringLiteral("host-5");
+    host.kind = HostNodeKind::Host;
+    host.name = sharedName;
+    host.host = QStringLiteral("10.38.217.99");
+    QVERIFY2(m_database->saveHost(host, &error), qPrintable(error));
+
+    HostManagerWidget widget(m_database.get(), m_vault.get());
+    widget.resize(320, 400);
+    widget.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&widget));
+
+    auto *tree = widget.findChild<QTreeWidget *>();
+    QVERIFY(tree != nullptr);
+    // 选中态会换掉底色和字色，量墨迹前先清掉，让两行都落在同一种背景上。
+    tree->clearSelection();
+    tree->setCurrentItem(nullptr);
+
+    QTreeWidgetItem *groupItem = nullptr;
+    QTreeWidgetItem *hostItem = nullptr;
+    for (int row = 0; row < tree->topLevelItemCount(); ++row) {
+        QTreeWidgetItem *item = tree->topLevelItem(row);
+        const auto kind = static_cast<HostNodeKind>(item->data(0, Qt::UserRole + 1).toInt());
+        (kind == HostNodeKind::Folder ? groupItem : hostItem) = item;
+    }
+    QVERIFY(groupItem != nullptr);
+    QVERIFY(hostItem != nullptr);
+
+    const QImage rendered = tree->viewport()->grab().toImage();
+    const QRect groupRect = tree->visualItemRect(groupItem);
+    const QRect hostRect = tree->visualItemRect(hostItem);
+    QVERIFY(!groupRect.isEmpty());
+    QVERIFY(!hostRect.isEmpty());
+
+    // visualItemRect 给的是逻辑坐标，grab() 出来的图在 Retina 上是设备像素，取样前要换算。
+    const int scale = std::max(1, qRound(rendered.devicePixelRatio()));
+    const auto toDevice = [scale](const QRect &rect) {
+        return QRect(rect.left() * scale, rect.top() * scale, rect.width() * scale,
+                     rect.height() * scale);
+    };
+
+    // 空分组没有展开箭头，整行右侧只剩名称；主机名在上、连接信息在下，只量上半行。
+    QVERIFY2(groupItem->childCount() == 0, "分组带了子节点，行末的箭头会混进墨迹里");
+    const QRect groupArea = toDevice(groupRect);
+    const QRect hostArea = toDevice(
+        QRect(hostRect.left(), hostRect.top(), hostRect.width(), hostRect.height() / 2));
+    const QColor background = rendered.pixelColor(groupArea.right() - 1, groupArea.top() + 1);
+
+    const int groupInk = inkWidth(rendered, groupArea, background);
+    const int hostInk = inkWidth(rendered, hostArea, background);
+    QVERIFY2(groupInk > 0 && hostInk > 0, "没量到任何文字墨迹，行的取样区域不对");
+    // 容差按逻辑像素折算：字体相同时只剩反锯齿的零头，换一号字/去掉加粗会差出十几个像素。
+    QVERIFY2(std::abs(groupInk - hostInk) <= 2 * scale,
+             qPrintable(QStringLiteral("分组名墨迹宽 %1，主机名墨迹宽 %2（设备像素），两者字体不一致")
+                            .arg(groupInk)
+                            .arg(hostInk)));
 }
 
 QTEST_MAIN(HostManagerWidgetTest)

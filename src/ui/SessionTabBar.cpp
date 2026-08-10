@@ -270,7 +270,7 @@ void SessionTabBar::paintEvent(QPaintEvent *event)
             // "悬停整个标签"（叉号出现）和"精确悬停在叉号上"（即将点击关闭）是两种不同
             // 强度的反馈：前者只让图标出现，后者除了背景圆还要让线条本身变色，否则用户
             // 反馈的"看不出鼠标真的移到关闭按钮上了"就无法成立。
-            const bool preciseHover = closeRect.contains(mapFromGlobal(QCursor::pos()));
+            const bool preciseHover = index == m_closeHoveredIndex;
             if (preciseHover) {
                 QColor closeBackground = foreground;
                 closeBackground.setAlpha(30);
@@ -330,9 +330,15 @@ void SessionTabBar::mouseDoubleClickEvent(QMouseEvent *event)
 
 void SessionTabBar::mouseMoveEvent(QMouseEvent *event)
 {
-    const int hoveredIndex = tabAt(event->position().toPoint());
-    if (m_hoveredIndex != hoveredIndex) {
+    const QPoint position = event->position().toPoint();
+    const int hoveredIndex = tabAt(position);
+    // 关闭按钮只在悬停的标签上画得出来，命中判定因此必须绑在同一个标签上，否则鼠标扫过
+    // 相邻标签右端时会给一个根本没画出叉号的标签点亮"即将关闭"反馈。
+    const int closeHoveredIndex =
+        (hoveredIndex >= 0 && closeButtonRect(hoveredIndex).contains(position)) ? hoveredIndex : -1;
+    if (m_hoveredIndex != hoveredIndex || m_closeHoveredIndex != closeHoveredIndex) {
         m_hoveredIndex = hoveredIndex;
+        m_closeHoveredIndex = closeHoveredIndex;
         update();
     }
     // QTabBar 仍需接收移动事件以维持原生拖动排序和滚动按钮状态。
@@ -342,6 +348,7 @@ void SessionTabBar::mouseMoveEvent(QMouseEvent *event)
 void SessionTabBar::leaveEvent(QEvent *event)
 {
     m_hoveredIndex = -1;
+    m_closeHoveredIndex = -1;
     update();
     QTabBar::leaveEvent(event);
 }

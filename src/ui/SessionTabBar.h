@@ -170,6 +170,14 @@ private:
 
     /** @brief 当前鼠标悬停标签；-1 表示鼠标不位于任何标签。 */
     int m_hoveredIndex = -1;
+    /**
+     * @brief 鼠标精确落在关闭按钮命中区内的标签；-1 表示没有。
+     *
+     * 必须由鼠标事件维护，不能在 paintEvent 里现查 QCursor::pos()：绘制随时可能被别的
+     * 原因触发（窗口激活、grab()、其他控件重叠），那一刻的全局光标位置与控件真正收到的
+     * 事件并不一定一致，反馈就会时有时无。
+     */
+    int m_closeHoveredIndex = -1;
     /** @brief 未选中标签文字色。 */
     QColor m_textColor = QColor(QStringLiteral("#aeb6cc"));
     /** @brief 当前标签文字色。 */

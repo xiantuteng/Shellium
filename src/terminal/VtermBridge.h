@@ -192,6 +192,15 @@ signals:
     void alternateScreenChanged(bool active);
 
 private:
+    /**
+     * @brief 让 libvterm 的当前画笔按刚设置的默认色重新取一次副本。
+     *
+     * 画笔里存的是解析好的 RGB，改默认色不会回头修它；DECSC/DECRC（vim 进出备用屏用的
+     * CSI ?1049h/l）会把这份陈旧 RGB 当成显式背景色回灌，退出 vim 后新打印的每一行都会
+     * 顶着一块与主题不符的底色。
+     */
+    void refreshPenDefaultColors();
+
     /** @brief 与 VTermScreenCell 解耦的滚动历史单元格。 */
     struct Cell {
         QString text;

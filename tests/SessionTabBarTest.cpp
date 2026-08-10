@@ -1,8 +1,8 @@
 #include "ui/SessionTabBar.h"
 
 #include <QAbstractButton>
-#include <QCursor>
 #include <QImage>
+#include <QMouseEvent>
 #include <QSignalSpy>
 #include <QTest>
 #include <QWheelEvent>
@@ -223,20 +223,39 @@ void SessionTabBarTest::closeButtonStrokeChangesColorOnPreciseHover()
     const QPoint closeButtonCenter(tabRect.right() - 20, tabRect.top() + tabRect.height() / 2);
     const QPoint strokeSamplePoint = closeButtonCenter + QPoint(-3, -3);
 
-    // 只悬停在标签上（远离关闭按钮的位置），触发默认前景色叉号。
+    // grab() 返回的是设备像素位图：Retina 上一个逻辑像素对应 2x2 个设备像素，直接拿逻辑
+    // 坐标去 pixelColor() 会采到左上角四分之一处——那里只有胶囊底色，两次采样自然永远
+    // 相等，用例于是恒假地"通过不了"。
+    const auto sampleStroke = [strokeSamplePoint](const QPixmap &frame) {
+        const QImage image = frame.toImage();
+        const qreal ratio = frame.devicePixelRatio();
+        return image.pixelColor(QPoint(qRound(strokeSamplePoint.x() * ratio),
+                                       qRound(strokeSamplePoint.y() * ratio)));
+    };
+
+    // 悬停状态必须完全由控件收到的鼠标事件驱动，这里也就直接投递 QMouseEvent：
+    // QCursor::setPos() 在 macOS 上没有辅助功能授权时是静默失效的，若绘制时现查全局光标，
+    // 两帧量到的只会是同一个画面；QTest::mouseMove() 则要经过窗口系统队列，同一个可执行
+    // 文件里跑过别的用例之后本窗口未必还是活动窗口，第二次移动会被整条丢掉。
+    const auto hoverAt = [&tabBar](const QPoint &point) {
+        QMouseEvent move(QEvent::MouseMove,
+                         QPointF(point),
+                         QPointF(tabBar.mapToGlobal(point)),
+                         Qt::NoButton,
+                         Qt::NoButton,
+                         Qt::NoModifier);
+        QCoreApplication::sendEvent(&tabBar, &move);
+        QCoreApplication::processEvents();
+    };
+
+    // 先只悬停在标签上（远离关闭按钮的位置），触发默认前景色叉号。
     const QPoint plainHoverPoint(tabRect.left() + 20, tabRect.top() + tabRect.height() / 2);
-    QCursor::setPos(tabBar.mapToGlobal(plainHoverPoint));
-    QTest::mouseMove(&tabBar, plainHoverPoint);
-    QCoreApplication::processEvents();
-    const QImage plainHoverImage = tabBar.grab().toImage();
-    const QColor plainHoverStrokeColor = plainHoverImage.pixelColor(strokeSamplePoint);
+    hoverAt(plainHoverPoint);
+    const QColor plainHoverStrokeColor = sampleStroke(tabBar.grab());
 
     // 精确悬停到关闭按钮命中区内，叉号必须换成醒目的悬停色。
-    QCursor::setPos(tabBar.mapToGlobal(closeButtonCenter));
-    QTest::mouseMove(&tabBar, closeButtonCenter);
-    QCoreApplication::processEvents();
-    const QImage preciseHoverImage = tabBar.grab().toImage();
-    const QColor preciseHoverStrokeColor = preciseHoverImage.pixelColor(strokeSamplePoint);
+    hoverAt(closeButtonCenter);
+    const QColor preciseHoverStrokeColor = sampleStroke(tabBar.grab());
 
     QVERIFY2(plainHoverStrokeColor != preciseHoverStrokeColor,
              "精确悬停在关闭按钮上时叉号线条颜色必须与仅悬停标签时不同，否则用户看不出"
