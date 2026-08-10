@@ -29,6 +29,12 @@ namespace ShelliumUi {
 /** @brief 返回全应用统一的强调色，与 MainWindow 全局样式表使用同一常量。 */
 [[nodiscard]] QColor accentColor();
 
+/** @brief 返回警示强调色，用于“推测状态”一类需要与错误区分开的徽章。 */
+[[nodiscard]] QColor warningColor(bool dark);
+
+/** @brief 返回警示强调色的浅色底纹，用于警示徽章背景。 */
+[[nodiscard]] QColor warningTintColor(bool dark);
+
 /**
  * @brief 返回可脱离主窗口独立使用的对话框样式表。
  * @param dark true 取深色配色，false 取浅色配色。

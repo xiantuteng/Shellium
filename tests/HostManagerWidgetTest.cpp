@@ -66,6 +66,12 @@ private slots:
     /** @brief 同一个自绘图标实例必须在主题切换后改用新前景色，显式品牌色则保持不变。 */
     void semanticIconsFollowLightAndDarkPalettes();
 
+    /** @brief 无父分组的主机必须排在全部顶层分组之后，并由一个不可选中的"未分组"标题隔开。 */
+    void ungroupedHostsFollowFoldersBehindSectionHeader();
+
+    /** @brief 没有任何无父分组主机时，树里不应出现"未分组"标题这个多余的空壳分区。 */
+    void sectionHeaderAbsentWhenNoUngroupedHosts();
+
 private:
     [[nodiscard]] QTreeWidgetItem *findItem(const HostManagerWidget &widget,
                                             const QString &name) const;
@@ -754,9 +760,14 @@ void HostManagerWidgetTest::groupNameUsesSameFontAsHostName()
                      rect.height() * scale);
     };
 
-    // 空分组没有展开箭头，整行右侧只剩名称；主机名在上、连接信息在下，只量上半行。
-    QVERIFY2(groupItem->childCount() == 0, "分组带了子节点，行末的箭头会混进墨迹里");
-    const QRect groupArea = toDevice(groupRect);
+    // 空分组没有展开箭头，但行右侧会画一个子节点数量徽章；主机名在上、连接信息在下，
+    // 只量上半行。两种节点行末都留一段右侧装饰边距不参与取样，量的才是纯文字渲染宽度。
+    QVERIFY2(groupItem->childCount() == 0, "分组带了子节点，行末的展开箭头会混进墨迹里");
+    constexpr int kRightDecorationMargin = 40;
+    const QRect groupArea = toDevice(QRect(groupRect.left(),
+                                           groupRect.top(),
+                                           std::max(0, groupRect.width() - kRightDecorationMargin),
+                                           groupRect.height()));
     const QRect hostArea = toDevice(
         QRect(hostRect.left(), hostRect.top(), hostRect.width(), hostRect.height() / 2));
     const QColor background = rendered.pixelColor(groupArea.right() - 1, groupArea.top() + 1);
@@ -769,6 +780,92 @@ void HostManagerWidgetTest::groupNameUsesSameFontAsHostName()
              qPrintable(QStringLiteral("分组名墨迹宽 %1，主机名墨迹宽 %2（设备像素），两者字体不一致")
                             .arg(groupInk)
                             .arg(hostInk)));
+}
+
+void HostManagerWidgetTest::ungroupedHostsFollowFoldersBehindSectionHeader()
+{
+    HostRecord group;
+    group.id = QStringLiteral("group-6");
+    group.kind = HostNodeKind::Folder;
+    group.name = QStringLiteral("武汉");
+    QString error;
+    QVERIFY2(m_database->saveHost(group, &error), qPrintable(error));
+
+    HostRecord groupedHost;
+    groupedHost.id = QStringLiteral("host-6a");
+    groupedHost.parentId = group.id;
+    groupedHost.kind = HostNodeKind::Host;
+    groupedHost.name = QStringLiteral("预发布");
+    groupedHost.host = QStringLiteral("10.194.135.11");
+    QVERIFY2(m_database->saveHost(groupedHost, &error), qPrintable(error));
+
+    // 无父分组，代表"未分组"主机。
+    HostRecord ungroupedHost;
+    ungroupedHost.id = QStringLiteral("host-6b");
+    ungroupedHost.kind = HostNodeKind::Host;
+    ungroupedHost.name = QStringLiteral("10.38.217.99");
+    ungroupedHost.host = QStringLiteral("10.38.217.99");
+    QVERIFY2(m_database->saveHost(ungroupedHost, &error), qPrintable(error));
+
+    HostManagerWidget widget(m_database.get(), m_vault.get());
+    auto *tree = widget.findChild<QTreeWidget *>();
+    QVERIFY(tree != nullptr);
+
+    // 顶层只应有三项：分组、"未分组"分区标题、无父主机；顺序必须是分组在前、主机在后，
+    // 中间用标题隔开，否则两类节点混排会让用户分不清哪些是组织结构、哪些是可连接目标。
+    QCOMPARE(tree->topLevelItemCount(), 3);
+
+    QTreeWidgetItem *folderItem = tree->topLevelItem(0);
+    QCOMPARE(folderItem->text(0), QStringLiteral("武汉"));
+    QCOMPARE(static_cast<HostNodeKind>(folderItem->data(0, Qt::UserRole + 1).toInt()),
+             HostNodeKind::Folder);
+
+    QTreeWidgetItem *headerItem = tree->topLevelItem(1);
+    QCOMPARE(headerItem->text(0), QStringLiteral("未分组"));
+    // 标题的 kind 既不是 Folder 也不是 Host：它不对应任何数据库记录，不能被误当成两者
+    // 之一参与拖拽、编辑或删除。
+    const int headerKind = headerItem->data(0, Qt::UserRole + 1).toInt();
+    QVERIFY(headerKind != static_cast<int>(HostNodeKind::Folder));
+    QVERIFY(headerKind != static_cast<int>(HostNodeKind::Host));
+    QVERIFY2(!(headerItem->flags() & Qt::ItemIsSelectable), "分区标题不能被选中");
+    QVERIFY2(!(headerItem->flags() & Qt::ItemIsDragEnabled), "分区标题不能被拖动");
+    QVERIFY2(!(headerItem->flags() & Qt::ItemIsDropEnabled), "分区标题不能接收拖放");
+
+    QTreeWidgetItem *ungroupedItem = tree->topLevelItem(2);
+    QCOMPARE(ungroupedItem->text(0), QStringLiteral("10.38.217.99"));
+    QCOMPARE(static_cast<HostNodeKind>(ungroupedItem->data(0, Qt::UserRole + 1).toInt()),
+             HostNodeKind::Host);
+    QVERIFY2(ungroupedItem->flags() & Qt::ItemIsSelectable, "无父主机本身仍必须可选中");
+
+    // 分组下的主机仍是子节点，不受"未分组"分区影响。
+    QCOMPARE(folderItem->childCount(), 1);
+    QCOMPARE(folderItem->child(0)->text(0), QStringLiteral("预发布"));
+}
+
+void HostManagerWidgetTest::sectionHeaderAbsentWhenNoUngroupedHosts()
+{
+    HostRecord group;
+    group.id = QStringLiteral("group-7");
+    group.kind = HostNodeKind::Folder;
+    group.name = QStringLiteral("东西湖城运");
+    QString error;
+    QVERIFY2(m_database->saveHost(group, &error), qPrintable(error));
+
+    HostRecord groupedHost;
+    groupedHost.id = QStringLiteral("host-7");
+    groupedHost.parentId = group.id;
+    groupedHost.kind = HostNodeKind::Host;
+    groupedHost.name = QStringLiteral("10.70.165.50");
+    groupedHost.host = QStringLiteral("10.70.165.50");
+    QVERIFY2(m_database->saveHost(groupedHost, &error), qPrintable(error));
+
+    HostManagerWidget widget(m_database.get(), m_vault.get());
+    auto *tree = widget.findChild<QTreeWidget *>();
+    QVERIFY(tree != nullptr);
+
+    // 没有无父主机时不该凭空多出一个"未分组"空壳分区。
+    QCOMPARE(tree->topLevelItemCount(), 1);
+    QCOMPARE(tree->topLevelItem(0)->text(0), QStringLiteral("东西湖城运"));
 }
 
 QTEST_MAIN(HostManagerWidgetTest)

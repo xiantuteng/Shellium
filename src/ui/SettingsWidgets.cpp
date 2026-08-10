@@ -43,6 +43,16 @@ QColor accentColor()
     return QColor(QStringLiteral("#2bd981"));
 }
 
+QColor warningColor(const bool dark)
+{
+    return dark ? QColor(QStringLiteral("#e2a94f")) : QColor(QStringLiteral("#b8791f"));
+}
+
+QColor warningTintColor(const bool dark)
+{
+    return dark ? QColor(QStringLiteral("#3a2f18")) : QColor(QStringLiteral("#faefdc"));
+}
+
 QString standaloneDialogStyleSheet(const bool dark)
 {
     // 颜色取值逐条对应 MainWindow::applyModernAppearance() 里的同名占位符；这里是那份

@@ -59,6 +59,15 @@ private:
                         const QString &parentId,
                         QString *errorMessage);
 
+    /**
+     * @brief 加载根层级：先铺全部顶层分组（及其子树），再铺一个"未分组"分区标题，最后
+     * 铺没有父分组的主机。
+     *
+     * appendChildren() 按数据库原始 sortOrder 把顶层分组和顶层主机混在一起追加，在分组
+     * 较少、主机较多时会让分组散落在主机中间，不利于识别"这是组织结构还是可连接目标"。
+     */
+    bool appendRootLevel(QString *errorMessage);
+
     /** @brief 根据搜索框内容展示完整树、名称地址搜索结果或精确标签结果。 */
     void applyFilter();
 

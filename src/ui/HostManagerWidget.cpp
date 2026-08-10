@@ -49,8 +49,33 @@ constexpr int HostIdRole = Qt::UserRole;
 /** @brief 树节点保存 HostNodeKind 数值的角色，用于阻止分组被误连接。 */
 constexpr int HostKindRole = Qt::UserRole + 1;
 
-/** @brief 主机节点保存“账号@地址:端口”副标题的角色；分组节点不设置该角色。 */
+/** @brief 主机节点保存”账号@地址:端口”副标题的角色；分组节点不设置该角色。 */
 constexpr int HostDetailRole = Qt::UserRole + 2;
+
+/**
+ * @brief “未分组”分区标题伪节点在 HostKindRole 里存放的哨兵值。
+ *
+ * 故意取 HostNodeKind 枚举范围之外的负数，而不是新增 HostNodeKind 取值：这个节点只是树的
+ * 展示结构，不对应任何数据库记录，混进持久化枚举会让 saveHost/resolveHost 等代码被迫处理
+ * 一个不存在的”分组/主机”之外的第三种 kind。
+ */
+constexpr int kSectionHeaderKindValue = -1;
+
+/**
+ * @brief 创建一个不对应任何数据库记录的分区标题伪节点（如"未分组"）。
+ * @param text 分区标题文字。
+ * @return 不可选中、不可编辑、不接受拖放的 QTreeWidgetItem；调用方负责把它加到树里。
+ */
+[[nodiscard]] QTreeWidgetItem *createSectionHeaderItem(const QString &text)
+{
+    auto *item = new QTreeWidgetItem;
+    item->setText(0, text);
+    item->setData(0, HostKindRole, kSectionHeaderKindValue);
+    item->setFlags(item->flags()
+                   & ~(Qt::ItemIsSelectable | Qt::ItemIsDragEnabled | Qt::ItemIsDropEnabled
+                       | Qt::ItemIsEditable));
+    return item;
+}
 
 /**
  * @brief 返回与“本地文件”列表一致的操作系统文件夹图标。
@@ -187,6 +212,10 @@ protected:
                const QStyleOptionViewItem &option,
                const QModelIndex &index) const override
     {
+        if (index.data(HostKindRole).toInt() == kSectionHeaderKindValue) {
+            paintSectionHeader(painter, option, index);
+            return;
+        }
         if (isFolderIndex(index)) {
             paintFolder(painter, option, index);
             return;
@@ -198,14 +227,20 @@ protected:
             return;
         }
 
-        // 背景、选中态与焦点框仍由样式绘制，本委托只替换文字部分，避免自绘出一套与其余
-        // 列表不一致的选中色。
+        // 选中态改为委托自绘的"淡底纹 + 描边 + 左侧强调条"，不再借用样式的高对比选中色；
+        // 焦点框等其余装饰仍交给样式，只是先摘掉 State_Selected，避免样式再叠一层旧背景。
+        const bool selected = (option.state & QStyle::State_Selected) != 0;
         QStyleOptionViewItem background = option;
         initStyleOption(&background, index);
         background.text.clear();
+        background.state &= ~QStyle::State_Selected;
         const QWidget *widget = option.widget;
         QStyle *style = widget != nullptr ? widget->style() : QApplication::style();
         style->drawControl(QStyle::CE_ItemViewItem, &background, painter, widget);
+        if (selected) {
+            paintSelectionBackground(painter, option.rect);
+        }
+        paintGuideLine(painter, option, index);
 
         const QRect contentRect =
             style->subElementRect(QStyle::SE_ItemViewItemText, &background, widget);
@@ -220,9 +255,9 @@ protected:
         const QFont detailFont = scaledFont(option.font, -1.5, false);
         const QFontMetrics nameMetrics(nameFont);
         const QFontMetrics detailMetrics(detailFont);
-        const bool selected = (background.state & QStyle::State_Selected) != 0;
-        const QColor baseColor = background.palette.color(
-            selected ? QPalette::HighlightedText : QPalette::Text);
+        // 选中态不再反相成高亮文字色：底纹很浅，白色高亮文字反而对比不足，正常文字色在
+        // 浅色底纹上已经足够醒目，也让选中前后文字颜色保持一致、不"跳色"。
+        const QColor baseColor = background.palette.color(QPalette::Text);
 
         painter->save();
         const QRect nameRect(contentRect.left(),
@@ -254,6 +289,11 @@ protected:
     QSize sizeHint(const QStyleOptionViewItem &option, const QModelIndex &index) const override
     {
         QSize hint = QStyledItemDelegate::sizeHint(option, index);
+        if (index.data(HostKindRole).toInt() == kSectionHeaderKindValue) {
+            // 分区标题只是一行小字加一条分隔线，不需要按名称字体放大行高。
+            hint.setHeight(std::max(hint.height(), QFontMetrics(option.font).height() + 14));
+            return hint;
+        }
         if (index.data(HostDetailRole).toString().isEmpty()) {
             // 分组行按放大后的名称字体留高，否则 Qt 用基准字体算出的行高会切掉字的上下缘。
             hint.setHeight(
@@ -312,18 +352,24 @@ private:
         return std::max(0, nameRight - textRect.left() + 1);
     }
 
-    /** @brief 画分组：一行名称，紧跟其后的是展开/收起箭头。 */
+    /** @brief 画分组：一行名称，紧跟其后的是展开/收起箭头；没有子节点的分组不画箭头。 */
     void paintFolder(QPainter *painter,
                      const QStyleOptionViewItem &option,
                      const QModelIndex &index) const
     {
+        const bool selected = (option.state & QStyle::State_Selected) != 0;
         QStyleOptionViewItem background = option;
         initStyleOption(&background, index);
         const QString name = background.text;
         background.text.clear();
+        background.state &= ~QStyle::State_Selected;
         const QWidget *widget = option.widget;
         QStyle *style = widget != nullptr ? widget->style() : QApplication::style();
         style->drawControl(QStyle::CE_ItemViewItem, &background, painter, widget);
+        if (selected) {
+            paintSelectionBackground(painter, option.rect);
+        }
+        paintGuideLine(painter, option, index);
 
         const QRect iconRect =
             style->subElementRect(QStyle::SE_ItemViewItemDecoration, &background, widget);
@@ -335,12 +381,10 @@ private:
         const QRect textRect = itemTextRect(background);
         const QRect arrowRect = toggleArrowRect(option, index);
         const QRect hitRect = toggleHitRect(option, index);
-        // 名称区始终扣掉完整按钮热区：否则长分组名会进入可点击区域，既会压住箭头，也会
-        // 造成“点名称却展开”的交互歧义。
+        // 名称区始终扣掉完整按钮热区：否则长分组名会画进可点击区域，也会造成“点名称却
+        // 展开”的交互歧义。没有子节点的分组，toggleHitRect 本就返回空矩形，名称占满全宽。
         const int nameWidth = availableNameWidth(textRect, hitRect);
-        const QColor baseColor = background.palette.color(
-            (background.state & QStyle::State_Selected) != 0 ? QPalette::HighlightedText
-                                                             : QPalette::Text);
+        const QColor baseColor = background.palette.color(QPalette::Text);
 
         painter->save();
         // 分组名与主机名保持同字号、同一常规字重；层级已经由图标、缩进和展开箭头表达，
@@ -354,6 +398,91 @@ private:
                           metrics.elidedText(name, Qt::ElideRight, nameWidth));
         if (!arrowRect.isNull()) {
             drawToggleArrow(painter, arrowRect, (option.state & QStyle::State_Open) != 0, baseColor);
+        }
+        painter->restore();
+    }
+
+    /**
+     * @brief 画选中态的柔和背景：把强调色以低透明度叠在已经画好的行背景上。
+     * @param rect 整行矩形（列宽即树宽，因为分组展开列已关闭）。
+     *
+     * 之前按“深色/浅色主题各一套固定色号”实现，用的是控件的 QPalette 明暗来判断——但
+     * Shellium 的深浅主题是应用自己的样式表选择，并不会同步改写 QPalette，本机系统外观
+     * 和应用内主题不一致时（例如系统深色、应用选了浅色）就会判断反，选中行画出一块几乎
+     * 看不清文字的深底色。改成把强调色叠加在“已经画好的正确背景”之上，就不需要再猜深浅：
+     * 无论背景本身是什么颜色，叠加同一个低透明度的绿都只会让它变浅，不会反转成看不清的
+     * 深色块。
+     */
+    static void paintSelectionBackground(QPainter *painter, const QRect &rect)
+    {
+        painter->save();
+        painter->setRenderHint(QPainter::Antialiasing, true);
+
+        QColor fill = ShelliumUi::accentColor();
+        fill.setAlphaF(0.16F);
+        QColor border = ShelliumUi::accentColor();
+        border.setAlphaF(0.45F);
+
+        const QRect fillRect = rect.adjusted(1, 1, -1, -1);
+        painter->setPen(QPen(border, 1));
+        painter->setBrush(fill);
+        painter->drawRoundedRect(fillRect, 8, 8);
+        painter->restore();
+    }
+
+    /**
+     * @brief 为非顶层节点画一条竖向引导线，纵向贯穿整行，再接一小段横向连接线指向图标。
+     *
+     * 树关闭了 Qt 默认的分支装饰列（setRootIsDecorated(false)），缩进因此纯靠留白表达，
+     * 子节点较多时很难一眼看出"这几行同属一个分组"。引导线画在缩进留白区内，不占用任何
+     * 图标/文字空间，也不需要重新打开分支装饰列（那会在树左侧多出一条只为箭头存在的列）。
+     */
+    static void paintGuideLine(QPainter *painter,
+                               const QStyleOptionViewItem &option,
+                               const QModelIndex &index)
+    {
+        if (!index.parent().isValid()) {
+            return;
+        }
+        QColor lineColor = option.palette.color(QPalette::Text);
+        lineColor.setAlphaF(0.14F);
+        painter->save();
+        painter->setPen(QPen(lineColor, 1));
+        const int x = option.rect.left() - 9;
+        painter->drawLine(x, option.rect.top(), x, option.rect.bottom());
+        const int midY = option.rect.center().y();
+        painter->drawLine(x, midY, option.rect.left() - 2, midY);
+        painter->restore();
+    }
+
+    /** @brief 画"未分组"一类分区标题：灰色小字 + 右侧一条延伸到行尾的分隔线。 */
+    void paintSectionHeader(QPainter *painter,
+                            const QStyleOptionViewItem &option,
+                            const QModelIndex &index) const
+    {
+        const QString text = index.data(Qt::DisplayRole).toString();
+        const QFont font = scaledFont(option.font, -1.0, true);
+        const QFontMetrics metrics(font);
+
+        painter->save();
+        painter->setRenderHint(QPainter::Antialiasing, true);
+        QColor labelColor = option.palette.color(QPalette::Text);
+        labelColor.setAlphaF(0.5F);
+        painter->setFont(font);
+        painter->setPen(labelColor);
+        const QRect textRect(option.rect.left() + 2,
+                             option.rect.top(),
+                             metrics.horizontalAdvance(text) + 4,
+                             option.rect.height());
+        painter->drawText(textRect, Qt::AlignLeft | Qt::AlignVCenter, text);
+
+        QColor lineColor = labelColor;
+        lineColor.setAlphaF(0.22F);
+        painter->setPen(QPen(lineColor, 1));
+        const int lineY = option.rect.center().y();
+        const int lineLeft = textRect.right() + 8;
+        if (lineLeft < option.rect.right() - 2) {
+            painter->drawLine(lineLeft, lineY, option.rect.right() - 2, lineY);
         }
         painter->restore();
     }
@@ -1150,7 +1279,11 @@ HostManagerWidget::HostManagerWidget(ApplicationDatabase *database,
             tr("新建主机"));
         connect(addGroupAction, &QAction::triggered, this, &HostManagerWidget::addGroup);
         connect(addHostAction, &QAction::triggered, this, &HostManagerWidget::addHost);
-        if (item != nullptr) {
+        // “未分组”分区标题不对应任何数据库记录，右键它时不提供编辑/删除——那两个动作
+        // 只会因为没有选中项而静默无效，不如直接不显示。
+        const bool isRecordItem =
+            item != nullptr && item->data(0, HostKindRole).toInt() != kSectionHeaderKindValue;
+        if (isRecordItem) {
             menu.addSeparator();
             QAction *editAction = menu.addAction(
                 UiIcons::symbol(this, UiIcons::Symbol::Edit, this->palette().color(QPalette::WindowText)),
@@ -1219,6 +1352,37 @@ bool HostManagerWidget::appendChildren(QTreeWidgetItem *parentItem,
     return true;
 }
 
+bool HostManagerWidget::appendRootLevel(QString *errorMessage)
+{
+    bool ok = false;
+    const QList<HostRecord> rootRecords = m_database->listHostsInGroup({}, &ok, errorMessage);
+    if (!ok) {
+        return false;
+    }
+
+    QList<HostRecord> folders;
+    QList<HostRecord> ungroupedHosts;
+    for (const HostRecord &record : rootRecords) {
+        (record.kind == HostNodeKind::Folder ? folders : ungroupedHosts).append(record);
+    }
+
+    for (const HostRecord &record : folders) {
+        QTreeWidgetItem *item = createTreeItem(record);
+        m_tree->addTopLevelItem(item);
+        if (!appendChildren(item, record.id, errorMessage)) {
+            return false;
+        }
+    }
+
+    if (!ungroupedHosts.isEmpty()) {
+        m_tree->addTopLevelItem(createSectionHeaderItem(tr("未分组")));
+        for (const HostRecord &record : ungroupedHosts) {
+            m_tree->addTopLevelItem(createTreeItem(record));
+        }
+    }
+    return true;
+}
+
 void HostManagerWidget::applyFilter()
 {
     m_tree->clear();
@@ -1231,7 +1395,7 @@ void HostManagerWidget::applyFilter()
     m_tree->setAcceptDrops(query.isEmpty());
 
     if (query.isEmpty()) {
-        if (!appendChildren(nullptr, {}, &error)) {
+        if (!appendRootLevel(&error)) {
             showDatabaseError(tr("加载主机树"), error);
             return;
         }
