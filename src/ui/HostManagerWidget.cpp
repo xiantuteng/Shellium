@@ -2,6 +2,7 @@
 
 #include "core/ConnectionConfigCodec.h"
 #include "security/Vault.h"
+#include "ssh/SshSessionStack.h"
 #include "storage/ApplicationDatabase.h"
 #include "ui/SettingsWidgets.h"
 #include "ui/UiIcons.h"
@@ -62,10 +63,10 @@ QFont scaledFont(QFont font, const double deltaPoints, const bool bold)
     return font;
 }
 
-/** @brief 节点名称行的字体；分组与主机共用，避免同一棵树里出现两种标题字重。 */
+/** @brief 节点名称行的字体；分组与主机统一放大一号，但保持常规字重以减少视觉压迫。 */
 [[nodiscard]] QFont itemNameFont(const QFont &base)
 {
-    return scaledFont(base, 1.0, true);
+    return scaledFont(base, 1.0, false);
 }
 
 /** @brief 分组展开箭头的边长（像素）。 */
@@ -319,8 +320,8 @@ private:
                                                              : QPalette::Text);
 
         painter->save();
-        // 分组名与主机名同字号同字重：两者都是这棵树里的“标题”，字体一旦不同，分组会被
-        // 读成比主机更次一级的说明文字。
+        // 分组名与主机名保持同字号、同一常规字重；层级已经由图标、缩进和展开箭头表达，
+        // 不再叠加粗体，避免主机较多时整棵树出现过重的黑色文字块。
         const QFont nameFont = itemNameFont(background.font);
         painter->setFont(nameFont);
         painter->setPen(baseColor);
@@ -479,102 +480,128 @@ void configureSidebarIconButton(QToolButton *button, const QString &accessibleNa
 /**
  * @brief 编辑一条持久化主机或分组记录的内部对话框。
  *
- * 主机和分组共用 HostRecord，分组中的端口、用户名、私钥与 ProxyJump 会被子节点继承。
- * 因此不能只让分组编辑名称；本对话框显式提供全部可继承字段，并用“继承父分组端口”复选框
- * 保留 std::optional 端口的三态语义。密码只作为新建后立即连接的会话值返回，绝不写入记录。
+ * 分组编辑器只暴露名称，避免把组织层级与 SSH 连接参数混在一起；主机编辑器则按“基础信息、
+ * 认证与跳板”组织字段。未展示的旧分组配置和主机标签仍保留在 HostRecord 中，编辑名称或其他
+ * 可见字段时不会被静默清空。密码只作为测试连接或保存后立即连接的会话值返回，绝不写入记录。
  */
 class HostRecordDialog final : public QDialog {
 public:
     /**
      * @brief 创建记录编辑器。
      * @param initial 待编辑快照；新建时调用方应先填好 kind、id 和 parentId。
+     * @param inheritedParent 当前父分组解析后的配置；仅用于测试尚未保存主机时补齐继承值。
+     * @param credentialVault 凭据保险库；测试已有主机时可读取已加密保存的密码，不得为空。
      * @param parent Qt 父对象。
      */
-    explicit HostRecordDialog(const HostRecord &initial, QWidget *parent = nullptr)
+    explicit HostRecordDialog(const HostRecord &initial,
+                              const HostRecord &inheritedParent,
+                              CredentialVault *credentialVault,
+                              QWidget *parent = nullptr)
         : QDialog(parent)
         , m_initial(initial)
+        , m_inheritedParent(inheritedParent)
+        , m_credentialVault(credentialVault)
         , m_nameEdit(new QLineEdit(initial.name, this))
-        , m_hostEdit(new QLineEdit(initial.host, this))
-        , m_portSpin(new QSpinBox(this))
-        , m_inheritPortToggle(new ToggleSwitch(this))
-        , m_usernameEdit(new QLineEdit(initial.username, this))
-        , m_identityEdit(new QLineEdit(initial.identityFile, this))
-        , m_proxyJumpsEdit(new QLineEdit(initial.proxyJumps.join(QLatin1Char(',')), this))
-        , m_tagsEdit(new QLineEdit(initial.tags.join(QLatin1Char(',')), this))
-        , m_passwordEdit(new QLineEdit(this))
-        , m_savePasswordToggle(new ToggleSwitch(this))
-        , m_legacyHmacToggle(new ToggleSwitch(this))
     {
+        Q_ASSERT(m_credentialVault != nullptr);
+
         // 字段版式与设置窗口、连接对话框统一：分组卡片 + “左说明右控件”的行 + 滑动开关。
+        // 这里先只创建两种记录都需要的名称输入框；主机专属控件放到 isHost 分支中创建，
+        // 从对象树层面保证分组窗口除名称外不再残留可聚焦或可被辅助技术发现的字段。
         const bool isHost = initial.kind == HostNodeKind::Host;
         setObjectName(QStringLiteral("ConnectionDialog"));
         setWindowTitle(isHost ? tr("主机配置") : tr("分组配置"));
         setMinimumWidth(580);
-
-        m_portSpin->setRange(1, 65535);
-        m_portSpin->setValue(initial.port.value_or(quint16{22}));
-        m_inheritPortToggle->setChecked(!initial.port.has_value());
-        m_portSpin->setEnabled(initial.port.has_value());
-        m_usernameEdit->setPlaceholderText(tr("留空则继承父分组"));
-        m_identityEdit->setPlaceholderText(tr("留空则继承父分组或使用 Agent/默认密钥"));
-        m_proxyJumpsEdit->setPlaceholderText(tr("逗号分隔；留空则继承父分组"));
-        m_tagsEdit->setPlaceholderText(tr("逗号分隔；会与祖先分组标签合并"));
-        m_passwordEdit->setEchoMode(QLineEdit::Password);
-        m_passwordEdit->setPlaceholderText(tr("仅用于本次立即连接；保存由保险库负责"));
-        m_savePasswordToggle->setChecked(!initial.credentialId.isEmpty());
-        m_legacyHmacToggle->setChecked(initial.allowLegacyHmacSha1);
-        for (QLineEdit *edit : {m_nameEdit, m_hostEdit, m_usernameEdit, m_proxyJumpsEdit,
-                                m_tagsEdit, m_passwordEdit}) {
-            edit->setMinimumWidth(260);
-        }
-
-        auto *identityContainer = new QWidget(this);
-        auto *identityLayout = new QHBoxLayout(identityContainer);
-        identityLayout->setContentsMargins(0, 0, 0, 0);
-        identityLayout->setSpacing(8);
-        auto *browseButton = new QPushButton(tr("浏览…"), identityContainer);
-        UiIcons::decorateButton(
-            browseButton,
-            UiIcons::symbol(this, UiIcons::Symbol::Upload, this->palette().color(QPalette::WindowText)),
-            tr("选择 SSH 私钥文件"));
-        m_identityEdit->setMinimumWidth(200);
-        identityLayout->addWidget(m_identityEdit, 1);
-        identityLayout->addWidget(browseButton);
+        m_nameEdit->setObjectName(QStringLiteral("hostRecordNameEdit"));
+        m_nameEdit->setMinimumWidth(260);
 
         auto *basicsCard = new SettingsCard(isHost ? tr("主机") : tr("分组"), this);
+        // SettingsCard 的固定对象名由全局样式表用于绘制白色圆角区域，不能为了测试定位而
+        // 覆盖；一旦改名，QFrame#SettingsCard 选择器就会失效，卡片会退化成透明矩形。
         basicsCard->addRow(tr("名称"), m_nameEdit);
         if (isHost) {
-            basicsCard->addRow(tr("主机地址"), m_hostEdit);
-        }
-        basicsCard->addRow(tr("继承父分组端口"),
-                           m_inheritPortToggle,
-                           tr("关闭后才会使用下方端口，开启表示沿用父分组取值。"));
-        QWidget *portRow = basicsCard->addRow(tr("端口"), new SettingsStepper(m_portSpin, basicsCard));
-        portRow->setEnabled(initial.port.has_value());
-        basicsCard->addRow(tr("用户名"), m_usernameEdit);
-        basicsCard->addRow(tr("标签"), m_tagsEdit);
+            // 主机专属字段只在主机窗口中实例化。端口始终以明确值保存，因此不再提供容易让
+            // 用户混淆“当前值”和“父分组值”的继承开关；已有继承端口在打开时显示其有效值。
+            m_hostEdit = new QLineEdit(initial.host, this);
+            m_hostEdit->setObjectName(QStringLiteral("hostAddressEdit"));
+            m_portSpin = new QSpinBox(this);
+            m_portSpin->setObjectName(QStringLiteral("hostPortSpin"));
+            m_portSpin->setRange(1, 65535);
+            m_portSpin->setValue(initial.port.value_or(
+                inheritedParent.port.value_or(quint16{22})));
 
-        auto *authCard = new SettingsCard(tr("认证与跳板"), this);
-        authCard->addRow(tr("私钥文件"), identityContainer);
-        authCard->addRow(tr("ProxyJump"), m_proxyJumpsEdit);
-        if (isHost) {
-            authCard->addRow(tr("会话密码/口令"), m_passwordEdit);
+            m_usernameEdit = new QLineEdit(initial.username, this);
+            m_usernameEdit->setObjectName(QStringLiteral("hostUsernameEdit"));
+            m_usernameEdit->setPlaceholderText(tr("留空则继承父分组"));
+            m_passwordEdit = new QLineEdit(this);
+            m_passwordEdit->setObjectName(QStringLiteral("hostPasswordEdit"));
+            m_passwordEdit->setEchoMode(QLineEdit::Password);
+            m_passwordEdit->setPlaceholderText(tr("仅用于本次连接；保存由保险库负责"));
+            m_identityEdit = new QLineEdit(initial.identityFile, this);
+            m_identityEdit->setObjectName(QStringLiteral("hostIdentityEdit"));
+            m_identityEdit->setPlaceholderText(
+                tr("留空则继承父分组或使用 Agent/默认密钥"));
+            m_proxyJumpsEdit = new QLineEdit(
+                initial.proxyJumps.join(QLatin1Char(',')), this);
+            m_proxyJumpsEdit->setObjectName(QStringLiteral("hostProxyJumpsEdit"));
+            m_proxyJumpsEdit->setPlaceholderText(tr("逗号分隔；留空则继承父分组"));
+            m_savePasswordToggle = new ToggleSwitch(this);
+            m_savePasswordToggle->setObjectName(QStringLiteral("hostSavePasswordToggle"));
+            m_savePasswordToggle->setChecked(
+                !initial.credentialId.isEmpty() || !inheritedParent.credentialId.isEmpty());
+            m_legacyHmacToggle = new ToggleSwitch(this);
+            m_legacyHmacToggle->setObjectName(QStringLiteral("hostLegacyHmacToggle"));
+            m_legacyHmacToggle->setChecked(initial.allowLegacyHmacSha1);
+
+            for (QLineEdit *edit : {m_hostEdit, m_usernameEdit, m_passwordEdit,
+                                    m_proxyJumpsEdit}) {
+                edit->setMinimumWidth(260);
+            }
+
+            basicsCard->addRow(tr("主机地址"), m_hostEdit);
+            basicsCard->addRow(
+                tr("端口"), new SettingsStepper(m_portSpin, basicsCard));
+
+            auto *identityContainer = new QWidget(this);
+            auto *identityLayout = new QHBoxLayout(identityContainer);
+            identityLayout->setContentsMargins(0, 0, 0, 0);
+            identityLayout->setSpacing(8);
+            auto *browseButton = new QPushButton(tr("浏览…"), identityContainer);
+            browseButton->setObjectName(QStringLiteral("hostIdentityBrowseButton"));
+            UiIcons::decorateButton(
+                browseButton,
+                UiIcons::symbol(
+                    this,
+                    UiIcons::Symbol::Upload,
+                    this->palette().color(QPalette::WindowText)),
+                tr("选择 SSH 私钥文件"));
+            m_identityEdit->setMinimumWidth(200);
+            identityLayout->addWidget(m_identityEdit, 1);
+            identityLayout->addWidget(browseButton);
+
+            // 认证区严格按用户填写路径排列：用户名、密码、私钥、ProxyJump，最后才是保存与
+            // 兼容性开关。账号和凭据相邻能减少来回扫描，也符合 SSH 的认证心智顺序。
+            auto *authCard = new SettingsCard(tr("认证与跳板"), this);
+            authCard->addRow(tr("用户名"), m_usernameEdit);
+            authCard->addRow(tr("密码"), m_passwordEdit);
+            authCard->addRow(tr("私钥文件"), identityContainer);
+            authCard->addRow(tr("ProxyJump"), m_proxyJumpsEdit);
             authCard->addRow(tr("加密保存到本地保险库"), m_savePasswordToggle);
             authCard->addRow(tr("旧版兼容"),
                              m_legacyHmacToggle,
                              tr("仅为该主机允许 hmac-sha1（不继承）。"));
-        } else {
-            // 分组不展示主机地址、密码与旧版兼容这几行，但这些控件已经以对话框为父对象
-            // 创建好了。父子关系只决定归属、不决定位置：没有被任何布局接管的控件会停在
-            // (0,0) 并按 sizeHint 绘制，于是分组配置窗口左上角会浮出一个空白地址框、一段
-            // 密码占位文字和一个开关，盖住卡片顶部；它们还能被 Tab 选中并接收键入。
-            // 显式隐藏即可让它们退出绘制与焦点链，record() 里读取它们的取值仍然有效。
-            for (QWidget *hostOnlyField : {static_cast<QWidget *>(m_hostEdit),
-                                           static_cast<QWidget *>(m_passwordEdit),
-                                           static_cast<QWidget *>(m_savePasswordToggle),
-                                           static_cast<QWidget *>(m_legacyHmacToggle)}) {
-                hostOnlyField->setVisible(false);
-            }
+
+            connect(browseButton, &QPushButton::clicked, this, [this]() {
+                const QString path = QFileDialog::getOpenFileName(
+                    this, tr("选择 SSH 私钥文件"));
+                if (!path.isEmpty()) {
+                    m_identityEdit->setText(path);
+                }
+            });
+
+            // 认证卡只属于主机窗口，先暂存到成员中供下方统一加入正文布局；分组窗口不会
+            // 创建空白认证卡，因此界面视觉和无障碍对象树都真正只剩“名称”。
+            m_authenticationCard = authCard;
         }
 
         auto *footer = new QWidget(this);
@@ -583,9 +610,36 @@ public:
         footerLayout->setContentsMargins(20, 12, 20, 12);
         footerLayout->setSpacing(10);
         auto *cancelButton = new QPushButton(tr("取消"), footer);
+        cancelButton->setObjectName(QStringLiteral("hostRecordCancelButton"));
         auto *saveButton = new QPushButton(tr("保存"), footer);
+        saveButton->setObjectName(QStringLiteral("hostRecordSaveButton"));
         saveButton->setProperty("primaryAction", true);
         saveButton->setDefault(true);
+        UiIcons::decorateButton(
+            cancelButton,
+            UiIcons::symbol(
+                this, UiIcons::Symbol::Cancel, this->palette().color(QPalette::WindowText)),
+            tr("取消本次配置修改"));
+        UiIcons::decorateButton(
+            saveButton,
+            // 保存是绿色主操作，固定深色图标才能同时兼顾浅色与深色主题下的对比度。
+            UiIcons::symbol(
+                this, UiIcons::Symbol::Check, QColor(QStringLiteral("#0c2f24"))),
+            tr("保存当前配置"));
+        if (isHost) {
+            m_testConnectionButton = new QPushButton(tr("测试连接"), footer);
+            m_testConnectionButton->setObjectName(
+                QStringLiteral("hostTestConnectionButton"));
+            UiIcons::decorateButton(
+                m_testConnectionButton,
+                UiIcons::symbol(
+                    this,
+                    UiIcons::Symbol::Connect,
+                    this->palette().color(QPalette::WindowText)),
+                tr("使用当前未保存的配置测试 SSH 连接"));
+            // 测试属于独立的辅助动作，固定在页脚左下角；右侧仍保留取消和保存的标准顺序。
+            footerLayout->addWidget(m_testConnectionButton);
+        }
         footerLayout->addStretch(1);
         footerLayout->addWidget(cancelButton);
         footerLayout->addWidget(saveButton);
@@ -598,19 +652,19 @@ public:
         bodyLayout->setContentsMargins(22, 20, 22, 18);
         bodyLayout->setSpacing(16);
         bodyLayout->addWidget(basicsCard);
-        bodyLayout->addWidget(authCard);
+        if (m_authenticationCard != nullptr) {
+            bodyLayout->addWidget(m_authenticationCard);
+        }
         bodyLayout->addStretch(1);
         layout->addWidget(body, 1);
         layout->addWidget(footer);
 
-        connect(m_inheritPortToggle, &ToggleSwitch::toggled,
-                portRow, [portRow](const bool inherit) { portRow->setEnabled(!inherit); });
-        connect(browseButton, &QPushButton::clicked, this, [this]() {
-            const QString path = QFileDialog::getOpenFileName(this, tr("选择 SSH 私钥文件"));
-            if (!path.isEmpty()) {
-                m_identityEdit->setText(path);
-            }
-        });
+        if (m_testConnectionButton != nullptr) {
+            connect(m_testConnectionButton,
+                    &QPushButton::clicked,
+                    this,
+                    &HostRecordDialog::startConnectionTest);
+        }
         connect(cancelButton, &QPushButton::clicked, this, &QDialog::reject);
         connect(saveButton, &QPushButton::clicked, this, [this, isHost]() {
             if (m_nameEdit->text().trimmed().isEmpty()) {
@@ -627,28 +681,47 @@ public:
         });
     }
 
+    /**
+     * @brief 销毁配置窗口，并安全移交仍在退出中的连接测试线程。
+     *
+     * DNS 解析等系统调用可能短暂阻塞，窗口关闭时不能强行析构仍在运行的 QThread。这里先
+     * 请求停止，再把尚未退出的会话临时交给 QApplication；线程结束后既有 deleteLater
+     * 连接会完成回收，避免崩溃，也不会让关闭窗口被网络超时长时间卡住。
+     */
+    ~HostRecordDialog() override
+    {
+        if (m_testSession == nullptr || !m_testSession->isRunning()) {
+            return;
+        }
+        SshSessionStack *finishingSession = m_testSession;
+        m_testSession = nullptr;
+        finishingSession->requestStop();
+        QObject::disconnect(finishingSession, nullptr, this, nullptr);
+        finishingSession->setParent(QApplication::instance());
+    }
+
     /** @brief 返回用户确认后的记录；id、kind、parentId、排序和创建时间保持不变。 */
     [[nodiscard]] HostRecord record() const
     {
         HostRecord result = m_initial;
         result.name = m_nameEdit->text().trimmed();
-        result.host = m_hostEdit->text().trimmed();
-        result.port = m_inheritPortToggle->isChecked()
-            ? std::optional<quint16>{}
-            : std::optional<quint16>{static_cast<quint16>(m_portSpin->value())};
-        result.username = m_usernameEdit->text().trimmed();
-        result.identityFile = m_identityEdit->text().trimmed();
-        result.proxyJumps = splitList(m_proxyJumpsEdit->text());
-        result.tags = splitList(m_tagsEdit->text());
-        result.allowLegacyHmacSha1 = result.kind == HostNodeKind::Host
-            && m_legacyHmacToggle->isChecked();
+        if (result.kind == HostNodeKind::Host) {
+            // 标签已从界面移除，但不能因此把旧标签清空；只更新用户仍能看见并控制的字段。
+            // 端口不再提供继承开关，保存时始终记录输入框中的明确值。
+            result.host = m_hostEdit->text().trimmed();
+            result.port = static_cast<quint16>(m_portSpin->value());
+            result.username = m_usernameEdit->text().trimmed();
+            result.identityFile = m_identityEdit->text().trimmed();
+            result.proxyJumps = splitList(m_proxyJumpsEdit->text());
+            result.allowLegacyHmacSha1 = m_legacyHmacToggle->isChecked();
+        }
         return result;
     }
 
     /** @brief 返回只用于紧随保存之后首次连接的明文，不属于 HostRecord 持久化数据。 */
     [[nodiscard]] QString sessionPassword() const
     {
-        return m_passwordEdit->text();
+        return m_passwordEdit == nullptr ? QString{} : m_passwordEdit->text();
     }
 
     /**
@@ -657,7 +730,7 @@ public:
      */
     [[nodiscard]] bool shouldSavePassword() const
     {
-        return m_initial.kind == HostNodeKind::Host && m_savePasswordToggle->isChecked();
+        return m_savePasswordToggle != nullptr && m_savePasswordToggle->isChecked();
     }
 
     /**
@@ -666,10 +739,168 @@ public:
      */
     [[nodiscard]] bool shouldDetachCredential() const
     {
-        return !m_initial.credentialId.isEmpty() && !m_savePasswordToggle->isChecked();
+        return m_savePasswordToggle != nullptr
+            && !m_initial.credentialId.isEmpty()
+            && !m_savePasswordToggle->isChecked();
     }
 
 private:
+    /**
+     * @brief 使用当前表单值异步执行一次真实 SSH 握手和认证。
+     *
+     * 测试过程不保存 HostRecord，也不安装 Shell 集成脚本；连接成功后立即主动断开。若当前
+     * 主机引用了保险库凭据且密码框为空，会先经用户解锁授权后读取一次性明文用于本次测试。
+     */
+    void startConnectionTest()
+    {
+        if (m_testInProgress || m_hostEdit == nullptr
+            || m_hostEdit->text().trimmed().isEmpty()) {
+            if (m_hostEdit != nullptr && m_hostEdit->text().trimmed().isEmpty()) {
+                QMessageBox::warning(
+                    this, tr("连接信息不完整"), tr("请输入主机名或 IP 地址。"));
+                m_hostEdit->setFocus();
+            }
+            return;
+        }
+
+        HostRecord effective = record();
+        // 尚未保存的主机无法交给数据库 resolveHost()。在这里按同一套“空值继承父分组”
+        // 规则补齐测试快照，保证测试结果与保存后从主机树发起的真实连接一致。
+        if (effective.username.isEmpty()) {
+            effective.username = m_inheritedParent.username;
+        }
+        if (effective.identityFile.isEmpty()) {
+            effective.identityFile = m_inheritedParent.identityFile;
+        }
+        if (effective.proxyJumps.isEmpty()) {
+            effective.proxyJumps = m_inheritedParent.proxyJumps;
+        }
+        if (effective.credentialId.isEmpty()) {
+            effective.credentialId = m_inheritedParent.credentialId;
+        }
+
+        ConnectionTarget target = effective.toConnectionTarget();
+        target.password = sessionPassword();
+        if (target.password.isEmpty() && !effective.credentialId.isEmpty()
+            && shouldSavePassword()) {
+            if (!VaultDialog::ensureUnlocked(m_credentialVault, this)) {
+                return;
+            }
+            QString credentialError;
+            if (!m_credentialVault->applyHostCredential(
+                    effective, target, &credentialError)) {
+                QMessageBox::warning(
+                    this,
+                    tr("无法测试连接"),
+                    credentialError.isEmpty() ? tr("无法读取已保存的主机凭据。")
+                                              : credentialError);
+                return;
+            }
+        }
+
+        m_testInProgress = true;
+        m_testConnectionButton->setEnabled(false);
+        m_testConnectionButton->setText(tr("测试中…"));
+
+        // 测试连接复用生产 SSH 状态机，才能覆盖 ProxyJump、私钥、密码和旧版 HMAC 等完整
+        // 配置。第二个参数关闭 Shell 集成安装，避免一次只读测试在远端写入临时脚本。
+        const QString testSpecifier = target.connectionSpecifier(true);
+        auto *session = new SshSessionStack(target, false, this);
+        // 工作线程已经复制了测试快照，立即擦除这里的临时密码副本，避免信号闭包再额外持有
+        // 一份明文直到会话销毁；输入框本身仍由用户控制，保存/再次测试行为不会受影响。
+        target.password.fill(QChar::Null);
+        target.password.clear();
+        m_testSession = session;
+        connect(session,
+                &SshSessionStack::shellConnected,
+                this,
+                [this, testSpecifier]() {
+                    finishConnectionTest(
+                        true,
+                        tr("已成功连接 %1。").arg(testSpecifier));
+                });
+        connect(session,
+                &SshSessionStack::connectionError,
+                this,
+                [this](const QString &message) {
+                    finishConnectionTest(false, message);
+                });
+        connect(session,
+                &SshSessionStack::legacyHmacRequired,
+                this,
+                [this](const QString &message) {
+                    finishConnectionTest(
+                        false,
+                        tr("服务器只支持旧版 hmac-sha1。若已确认风险，请开启“旧版兼容”后重试。\n\n%1")
+                            .arg(message));
+                });
+        connect(session,
+                &SshSessionStack::layerCredentialRequired,
+                this,
+                [this](const ConnectionTarget &, const bool retry) {
+                    finishConnectionTest(
+                        false,
+                        retry ? tr("SSH 认证失败，请检查密码或私钥口令后重试。")
+                              : tr("服务器需要密码或私钥口令，请填写“密码”后重试。"));
+                });
+        connect(session,
+                &SshSessionStack::hostKeyVerificationRequired,
+                this,
+                [this, session](const ConnectionTarget &verificationTarget,
+                                const QString &fingerprint) {
+                    // 测试连接与正式连接遵守同一 known_hosts 安全边界：未知指纹必须经用户
+                    // 人工核验，不能为了“测试方便”自动信任并写入本机配置。
+                    const QMessageBox::StandardButton answer = QMessageBox::question(
+                        this,
+                        tr("确认服务器主机密钥"),
+                        tr("首次连接 %1。\n\nSHA-256 指纹：\n%2\n\n"
+                           "请通过可信渠道核对指纹。确认信任并继续测试吗？")
+                            .arg(verificationTarget.connectionSpecifier(true), fingerprint),
+                        QMessageBox::Yes | QMessageBox::No,
+                        QMessageBox::No);
+                    if (m_testSession == session) {
+                        session->confirmUnknownHost(answer == QMessageBox::Yes);
+                    }
+                });
+        connect(session, &QThread::finished, this, [this, session]() {
+            if (m_testSession == session) {
+                m_testSession = nullptr;
+            }
+        });
+        // 回收连接以 session 自身为接收者，不依赖对话框继续存活；用户在测试中关闭窗口时，
+        // 对话框析构会把仍在退出的线程移交给 QApplication，该连接随后仍能正常执行。
+        connect(session, &QThread::finished, session, &QObject::deleteLater);
+        session->start();
+    }
+
+    /**
+     * @brief 结束当前测试、恢复按钮状态并向用户展示结论。
+     * @param succeeded true 表示 SSH Shell 已完成认证并成功打开；false 表示测试失败。
+     * @param message 成功摘要或可诊断的失败原因。
+     */
+    void finishConnectionTest(const bool succeeded, const QString &message)
+    {
+        // 同一次失败可能伴随多个底层信号；用状态门只展示一个结论，避免连续弹出错误框。
+        if (!m_testInProgress) {
+            return;
+        }
+        m_testInProgress = false;
+        m_testConnectionButton->setEnabled(true);
+        m_testConnectionButton->setText(tr("测试连接"));
+        if (m_testSession != nullptr) {
+            m_testSession->requestStop();
+        }
+
+        if (succeeded) {
+            QMessageBox::information(this, tr("测试连接成功"), message);
+        } else {
+            QMessageBox::warning(
+                this,
+                tr("测试连接失败"),
+                message.isEmpty() ? tr("SSH 连接未能建立，请检查当前配置。") : message);
+        }
+    }
+
     /**
      * @brief 把逗号列表规范化为去空白、去空项、去重复的字符串列表。
      * @param text 用户输入文本。
@@ -688,17 +919,25 @@ private:
     }
 
     HostRecord m_initial;
+    /** @brief 父分组的已解析配置，仅用于补齐尚未持久化的测试连接快照。 */
+    HostRecord m_inheritedParent;
+    /** @brief 应用共享凭据保险库，不拥有其生命周期。 */
+    CredentialVault *m_credentialVault = nullptr;
     QLineEdit *m_nameEdit = nullptr;
     QLineEdit *m_hostEdit = nullptr;
     QSpinBox *m_portSpin = nullptr;
-    ToggleSwitch *m_inheritPortToggle = nullptr;
     QLineEdit *m_usernameEdit = nullptr;
     QLineEdit *m_identityEdit = nullptr;
     QLineEdit *m_proxyJumpsEdit = nullptr;
-    QLineEdit *m_tagsEdit = nullptr;
     QLineEdit *m_passwordEdit = nullptr;
     ToggleSwitch *m_savePasswordToggle = nullptr;
     ToggleSwitch *m_legacyHmacToggle = nullptr;
+    SettingsCard *m_authenticationCard = nullptr;
+    QPushButton *m_testConnectionButton = nullptr;
+    /** @brief 当前测试使用的后台 SSH 栈；结束后由 Qt 事件循环安全销毁。 */
+    SshSessionStack *m_testSession = nullptr;
+    /** @brief 防止底层重复完成信号产生多个结果弹窗或并行测试。 */
+    bool m_testInProgress = false;
 };
 
 } // namespace
@@ -940,7 +1179,8 @@ void HostManagerWidget::addGroup()
     record.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
     record.parentId = selectedParentGroupId();
     record.kind = HostNodeKind::Folder;
-    HostRecordDialog dialog(record, this);
+    // 分组窗口只编辑名称，不需要父分组的连接参数；仍传入共享保险库以保持构造契约统一。
+    HostRecordDialog dialog(record, HostRecord{}, m_credentialVault, this);
     if (dialog.exec() != QDialog::Accepted) {
         return;
     }
@@ -962,7 +1202,21 @@ void HostManagerWidget::addHost()
     record.kind = HostNodeKind::Host;
     record.port = quint16{22};
 
-    HostRecordDialog dialog(record, this);
+    HostRecord inheritedParent;
+    if (!record.parentId.isEmpty()) {
+        QString parentError;
+        const std::optional<HostRecord> resolvedParent =
+            m_database->resolveHost(record.parentId, &parentError);
+        if (!resolvedParent.has_value()) {
+            showDatabaseError(
+                tr("读取父分组配置"),
+                parentError.isEmpty() ? tr("父分组不存在") : parentError);
+            return;
+        }
+        inheritedParent = *resolvedParent;
+    }
+
+    HostRecordDialog dialog(record, inheritedParent, m_credentialVault, this);
     if (dialog.exec() != QDialog::Accepted) {
         return;
     }
@@ -1011,7 +1265,20 @@ void HostManagerWidget::editSelected()
         return;
     }
 
-    HostRecordDialog dialog(*existing, this);
+    HostRecord inheritedParent;
+    if (existing->kind == HostNodeKind::Host && !existing->parentId.isEmpty()) {
+        const std::optional<HostRecord> resolvedParent =
+            m_database->resolveHost(existing->parentId, &error);
+        if (!resolvedParent.has_value()) {
+            showDatabaseError(
+                tr("读取父分组配置"),
+                error.isEmpty() ? tr("父分组不存在") : error);
+            return;
+        }
+        inheritedParent = *resolvedParent;
+    }
+
+    HostRecordDialog dialog(*existing, inheritedParent, m_credentialVault, this);
     if (dialog.exec() != QDialog::Accepted) {
         return;
     }
@@ -1274,6 +1541,11 @@ QTreeWidgetItem *HostManagerWidget::createTreeItem(const HostRecord &record) con
 {
     auto *item = new QTreeWidgetItem;
     item->setText(0, record.name);
+    // 在模型层也明确记录常规字重，防止平台主题或后续样式表把树的默认字体改成粗体；委托
+    // 绘制时仍会在此基础上放大字号，但不会改变分组和主机共同的常规字重约定。
+    QFont regularFont = m_tree->font();
+    regularFont.setWeight(QFont::Normal);
+    item->setFont(0, regularFont);
     item->setIcon(
         0,
         record.kind == HostNodeKind::Folder

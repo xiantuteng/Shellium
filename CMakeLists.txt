@@ -328,8 +328,8 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME ShelliumSessionTabBarTests COMMAND ShelliumSessionTabBarTests)
 
-    # 主机侧栏的两行渲染与标题动作条：副标题必须补齐分组继承的账号/端口，动作条只保留三个
-    # 主动作。这些是用户直接看到的行为，靠 Widgets 真实构树验证，不需要网络或 GUI 交互。
+    # 主机侧栏和配置对话框的界面回归。对话框内的“测试连接”复用正式 SSH 状态机，因此测试
+    # 目标也必须链接相关实现；界面用例本身不会点击测试按钮，不会产生任何网络访问。
     qt_add_executable(ShelliumHostManagerTests
         tests/HostManagerWidgetTest.cpp
         src/core/ConnectionConfigCodec.cpp
@@ -339,6 +339,12 @@ if(BUILD_TESTING)
         src/core/HostRecord.h
         src/security/Vault.cpp
         src/security/Vault.h
+        src/ssh/ShellShim.cpp
+        src/ssh/ShellShim.h
+        src/ssh/SshSessionNode.cpp
+        src/ssh/SshSessionNode.h
+        src/ssh/SshSessionStack.cpp
+        src/ssh/SshSessionStack.h
         src/storage/ApplicationDatabase.cpp
         src/storage/ApplicationDatabase.h
         src/ui/HostManagerWidget.cpp
@@ -351,7 +357,8 @@ if(BUILD_TESTING)
     )
     target_include_directories(ShelliumHostManagerTests PRIVATE src)
     target_link_libraries(ShelliumHostManagerTests PRIVATE
-        Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Sql Qt6::Test PkgConfig::LIBSODIUM)
+        Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Sql Qt6::Test
+        PkgConfig::LIBSSH PkgConfig::LIBSODIUM)
     add_test(NAME ShelliumHostManagerTests COMMAND ShelliumHostManagerTests)
 
     # 设置界面改版后的控件接线回归：步进器、滑动开关、配色色板与分类导航都是自绘控件，

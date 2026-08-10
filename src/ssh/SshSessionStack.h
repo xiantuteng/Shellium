@@ -32,8 +32,20 @@ public:
     /**
      * @brief 构造栈并记录栈底目标；连接在 start() 后于工作线程内发起。
      * @param rootTarget 用户直接连接的服务器。
+     * @param parent Qt 父对象；默认交互会话会安装 Shell 集成。
      */
     explicit SshSessionStack(const ConnectionTarget &rootTarget, QObject *parent = nullptr);
+
+    /**
+     * @brief 构造可控制 Shell 集成副作用的 SSH 栈。
+     * @param rootTarget 用户直接连接的服务器。
+     * @param installShellIntegration true 表示认证后安装 Shell 集成；连接测试应传 false，
+     *        保证测试只验证连接能力而不向远端写入临时脚本。
+     * @param parent Qt 父对象。
+     */
+    SshSessionStack(const ConnectionTarget &rootTarget,
+                    bool installShellIntegration,
+                    QObject *parent);
     ~SshSessionStack() override;
 
     /**
@@ -340,6 +352,8 @@ private:
     [[nodiscard]] bool shouldStop() const;
 
     ConnectionTarget m_rootTarget;
+    /** @brief 是否在每层认证完成后安装 Shell 集成；连接测试会显式关闭以保持只读。 */
+    bool m_installShellIntegration = true;
 
     /**
      * @brief 从外层到内层的会话层栈，仅由工作线程访问。

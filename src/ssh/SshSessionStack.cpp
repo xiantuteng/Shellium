@@ -18,8 +18,16 @@ Q_LOGGING_CATEGORY(authLog, "shellium.auth", QtWarningMsg)
 } // namespace
 
 SshSessionStack::SshSessionStack(const ConnectionTarget &rootTarget, QObject *parent)
+    : SshSessionStack(rootTarget, true, parent)
+{
+}
+
+SshSessionStack::SshSessionStack(const ConnectionTarget &rootTarget,
+                                 const bool installShellIntegration,
+                                 QObject *parent)
     : QThread(parent)
     , m_rootTarget(rootTarget)
+    , m_installShellIntegration(installShellIntegration)
 {
 }
 
@@ -430,7 +438,11 @@ bool SshSessionStack::advanceEstablishingLayers()
         return true;
     }
     if (step.ok) {
-        beginShellIntegrationInstall(node);
+        // 交互式终端依赖 Shell 集成获得确定性的目录和嵌套连接事件；连接测试则必须保持
+        // 只读，认证成功本身已足以得出结论，不应为了测试向远端写入临时脚本。
+        if (m_installShellIntegration) {
+            beginShellIntegrationInstall(node);
+        }
         // 该层刚刚就绪。栈底的通知留给 pumpLoop，以便 shellConnected 先于 layersChanged
         // 到达界面，避免文件管理器先收到一份“尚未连接”的空列表再被立刻覆盖。
         if (m_layers.size() > 1) {

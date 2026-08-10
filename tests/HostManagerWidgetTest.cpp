@@ -8,8 +8,11 @@
 #include <QApplication>
 #include <QColor>
 #include <QImage>
+#include <QLabel>
 #include <QLayout>
+#include <QLineEdit>
 #include <QListWidget>
+#include <QPushButton>
 #include <QSet>
 #include <QTest>
 #include <QTimer>
@@ -40,8 +43,11 @@ private slots:
     /** @brief 侧栏标题行只暴露新建主机、新建分组与刷新三个动作。 */
     void headerExposesOnlyThreePrimaryActions();
 
-    /** @brief 分组配置窗口不得让主机专属控件浮在左上角盖住卡片顶部。 */
+    /** @brief 分组配置窗口只能保留名称字段，且页脚按钮必须带语义图标。 */
     void groupDialogHasNoStrayWidgets();
+
+    /** @brief 主机配置字段顺序、移除项、左下角测试按钮和按钮图标必须符合新版交互。 */
+    void hostDialogUsesRequestedFieldOrderAndIcons();
 
     /** @brief 顶层节点顶格、分组下的主机右缩进，二者不能再被分支装饰列推乱。 */
     void topLevelNodesShareLeftEdgeAndChildHostsIndent();
@@ -49,7 +55,7 @@ private slots:
     /** @brief 展开箭头必须右对齐，且整个右侧图标区域都能展开、收起。 */
     void groupToggleIsRightAlignedVerticallyCenteredAndClickable();
 
-    /** @brief 分组名与主机名必须用同一套字体：同一串文字画出来的墨迹宽度要相等。 */
+    /** @brief 分组名与主机名必须使用同一套常规字重字体，不得以粗体争抢视觉注意力。 */
     void groupNameUsesSameFontAsHostName();
 
     /** @brief 同一个自绘图标实例必须在主题切换后改用新前景色，显式品牌色则保持不变。 */
@@ -217,13 +223,135 @@ void HostManagerWidgetTest::groupDialogHasNoStrayWidgets()
                           .arg(className);
             break;
         }
+
+        // “只保留分组名称”不仅意味着其他字段不可见，也意味着它们不应继续以隐藏输入框
+        // 潜伏在对象树中；否则辅助技术和后续维护仍可能误把它们当成可用配置项。
+        const QList<QLineEdit *> lineEdits = dialog->findChildren<QLineEdit *>();
+        if (failure.isEmpty()
+            && (lineEdits.size() != 1
+                || lineEdits.constFirst()->objectName()
+                    != QStringLiteral("hostRecordNameEdit"))) {
+            failure = QStringLiteral("分组配置窗口没有严格只保留名称输入框");
+        }
+
+        // 圆角和卡片底色由 QFrame#SettingsCard 样式选择器提供；业务代码若为了定位控件
+        // 覆盖 objectName，字段虽然还在，承载它的圆角区域却会在视觉上完全消失。
+        const QList<QWidget *> cards = dialog->findChildren<QWidget *>(
+            QStringLiteral("SettingsCard"));
+        if (failure.isEmpty() && cards.size() != 1) {
+            failure = QStringLiteral("分组名称外层的圆角卡片区域未保留");
+        }
+
+        const QList<QPushButton *> buttons = dialog->findChildren<QPushButton *>();
+        if (failure.isEmpty() && buttons.size() != 2) {
+            failure = QStringLiteral("分组配置窗口应只保留取消和保存两个按钮");
+        }
+        for (const QPushButton *button : buttons) {
+            if (failure.isEmpty() && button->icon().isNull()) {
+                failure = QStringLiteral("分组配置按钮“%1”缺少图标").arg(button->text());
+            }
+        }
         dialog->close();
     });
 
-    // 分组不展示主机地址、会话密码与旧版兼容开关，但这些控件仍以对话框为父对象被创建。
-    // 父子关系只决定归属、不决定位置：没有被任何布局接管的控件会停在 (0,0) 按 sizeHint
-    // 绘制，于是窗口顶部浮出一个空白输入框、一段密码占位文字和一个开关，盖住卡片标题。
+    // 分组窗口只创建名称和页脚动作，任何主机地址、认证或跳板控件都不应存在。
     addGroupButton->click();
+    QVERIFY2(failure.isEmpty(), qPrintable(failure));
+}
+
+void HostManagerWidgetTest::hostDialogUsesRequestedFieldOrderAndIcons()
+{
+    HostManagerWidget widget(m_database.get(), m_vault.get());
+
+    QAbstractButton *addHostButton = nullptr;
+    for (QAbstractButton *button : widget.headerActionsWidget()->findChildren<QAbstractButton *>()) {
+        if (button->text() == QStringLiteral("新建主机")) {
+            addHostButton = button;
+            break;
+        }
+    }
+    QVERIFY2(addHostButton != nullptr, "侧栏没有新建主机按钮");
+
+    QString failure;
+    QTimer::singleShot(0, [&failure]() {
+        QWidget *dialog = QApplication::activeModalWidget();
+        if (dialog == nullptr) {
+            failure = QStringLiteral("主机配置对话框未能弹出");
+            return;
+        }
+
+        QStringList labelTexts;
+        for (const QLabel *label : dialog->findChildren<QLabel *>()) {
+            labelTexts.append(label->text());
+        }
+        // 已移除项必须连标签都不存在；只把控件藏起来仍会让可访问性树和布局保留旧语义。
+        for (const QString &removedLabel : {QStringLiteral("继承父分组端口"),
+                                            QStringLiteral("标签"),
+                                            QStringLiteral("会话密码/口令")}) {
+            if (labelTexts.contains(removedLabel)) {
+                failure = QStringLiteral("主机配置仍包含已移除字段“%1”").arg(removedLabel);
+                break;
+            }
+        }
+
+        const QList<QWidget *> cards = dialog->findChildren<QWidget *>(
+            QStringLiteral("SettingsCard"));
+        if (failure.isEmpty() && cards.size() != 2) {
+            failure = QStringLiteral("主机基础信息和认证信息的圆角卡片区域未完整保留");
+        }
+
+        const auto *username = dialog->findChild<QLineEdit *>(
+            QStringLiteral("hostUsernameEdit"));
+        const auto *password = dialog->findChild<QLineEdit *>(
+            QStringLiteral("hostPasswordEdit"));
+        const auto *identity = dialog->findChild<QLineEdit *>(
+            QStringLiteral("hostIdentityEdit"));
+        const auto *proxyJumps = dialog->findChild<QLineEdit *>(
+            QStringLiteral("hostProxyJumpsEdit"));
+        if (failure.isEmpty()
+            && (username == nullptr || password == nullptr || identity == nullptr
+                || proxyJumps == nullptr)) {
+            failure = QStringLiteral("主机配置缺少认证与跳板字段");
+        }
+        if (failure.isEmpty()) {
+            const int usernameTop = username->mapTo(dialog, QPoint{}).y();
+            const int passwordTop = password->mapTo(dialog, QPoint{}).y();
+            const int identityTop = identity->mapTo(dialog, QPoint{}).y();
+            const int proxyTop = proxyJumps->mapTo(dialog, QPoint{}).y();
+            if (!(usernameTop < passwordTop && passwordTop < identityTop
+                  && identityTop < proxyTop)) {
+                failure = QStringLiteral(
+                    "认证字段未按用户名、密码、私钥文件、ProxyJump 的顺序排列");
+            }
+        }
+
+        const auto *testButton = dialog->findChild<QPushButton *>(
+            QStringLiteral("hostTestConnectionButton"));
+        const auto *cancelButton = dialog->findChild<QPushButton *>(
+            QStringLiteral("hostRecordCancelButton"));
+        const auto *saveButton = dialog->findChild<QPushButton *>(
+            QStringLiteral("hostRecordSaveButton"));
+        if (failure.isEmpty()
+            && (testButton == nullptr || cancelButton == nullptr || saveButton == nullptr)) {
+            failure = QStringLiteral("主机配置页脚缺少测试连接、取消或保存按钮");
+        }
+        if (failure.isEmpty()
+            && testButton->mapTo(dialog, QPoint{}).x()
+                >= cancelButton->mapTo(dialog, QPoint{}).x()) {
+            failure = QStringLiteral("测试连接按钮没有位于页脚左侧");
+        }
+
+        // 这里检查所有可见文字按钮，覆盖浏览、测试连接、取消与保存；步进器的加减号本身
+        // 就是约定俗成的图形符号，不属于需要额外前置图标的文字按钮。
+        for (const QPushButton *button : dialog->findChildren<QPushButton *>()) {
+            if (failure.isEmpty() && button->isVisible() && button->icon().isNull()) {
+                failure = QStringLiteral("主机配置按钮“%1”缺少图标").arg(button->text());
+            }
+        }
+        dialog->close();
+    });
+
+    addHostButton->click();
     QVERIFY2(failure.isEmpty(), qPrintable(failure));
 }
 
@@ -455,8 +583,8 @@ void HostManagerWidgetTest::semanticIconsFollowLightAndDarkPalettes()
 
 void HostManagerWidgetTest::groupNameUsesSameFontAsHostName()
 {
-    // 两个节点取同一串名字：字体一致时，画出来的墨迹宽度必然相等；分组一旦退回基准字体
-    // （不加粗、小一号），同样的字就会明显窄一截。
+    // 两个节点取同一串名字：字体一致时，画出来的墨迹宽度必然相等；任一类型擅自改变字号
+    // 或字重，同样的文本都会出现明显不同的渲染结果。
     const QString sharedName = QStringLiteral("上饶E呼即办");
 
     HostRecord group;
@@ -493,6 +621,11 @@ void HostManagerWidgetTest::groupNameUsesSameFontAsHostName()
     }
     QVERIFY(groupItem != nullptr);
     QVERIFY(hostItem != nullptr);
+    // 模型层明确写入 Normal，既表达产品约束，也阻止平台主题把某一种节点默认成粗体。
+    QCOMPARE(groupItem->font(0).weight(), QFont::Normal);
+    QCOMPARE(hostItem->font(0).weight(), QFont::Normal);
+    QVERIFY(!groupItem->font(0).bold());
+    QVERIFY(!hostItem->font(0).bold());
 
     const QImage rendered = tree->viewport()->grab().toImage();
     const QRect groupRect = tree->visualItemRect(groupItem);
@@ -517,7 +650,7 @@ void HostManagerWidgetTest::groupNameUsesSameFontAsHostName()
     const int groupInk = inkWidth(rendered, groupArea, background);
     const int hostInk = inkWidth(rendered, hostArea, background);
     QVERIFY2(groupInk > 0 && hostInk > 0, "没量到任何文字墨迹，行的取样区域不对");
-    // 容差按逻辑像素折算：字体相同时只剩反锯齿的零头，换一号字/去掉加粗会差出十几个像素。
+    // 容差按逻辑像素折算：字体相同时只剩反锯齿的零头，换字号或字重会差出明显像素。
     QVERIFY2(std::abs(groupInk - hostInk) <= 2 * scale,
              qPrintable(QStringLiteral("分组名墨迹宽 %1，主机名墨迹宽 %2（设备像素），两者字体不一致")
                             .arg(groupInk)
