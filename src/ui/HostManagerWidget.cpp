@@ -16,6 +16,7 @@
 #include <QDropEvent>
 #include <QFileDialog>
 #include <QFile>
+#include <QFileIconProvider>
 #include <QHBoxLayout>
 #include <QInputDialog>
 #include <QLabel>
@@ -50,6 +51,28 @@ constexpr int HostKindRole = Qt::UserRole + 1;
 
 /** @brief 主机节点保存“账号@地址:端口”副标题的角色；分组节点不设置该角色。 */
 constexpr int HostDetailRole = Qt::UserRole + 2;
+
+/**
+ * @brief 返回与“本地文件”列表一致的操作系统文件夹图标。
+ * @param context 图标主题缺失时提供自绘回退和调色板颜色的界面控件，不得为空。
+ * @return QFileSystemModel 同源的系统文件夹图标；平台未提供时退回 Shellium 线性文件夹。
+ *
+ * 本地文件树由 QFileSystemModel 驱动，它内部同样通过 QFileIconProvider 获取文件夹图标。
+ * 主机分组直接使用这一来源，才能在 macOS 上呈现相同的蓝色系统文件夹，并在 Windows、
+ * Linux 上自然跟随各自桌面主题，而不是复制一份只在当前平台看起来相近的图形。
+ */
+[[nodiscard]] QIcon localFileFolderIcon(const QWidget *context)
+{
+    Q_ASSERT(context != nullptr);
+    static QFileIconProvider iconProvider;
+    const QIcon platformFolder = iconProvider.icon(QFileIconProvider::Folder);
+    return platformFolder.isNull()
+        ? UiIcons::symbol(
+              context,
+              UiIcons::Symbol::Folder,
+              context->palette().color(QPalette::WindowText))
+        : platformFolder;
+}
 
 /** @brief 在保持像素/点两种字号语义的前提下缩放字体，避免 pointSizeF 为 -1 时算出 0 号字。 */
 QFont scaledFont(QFont font, const double deltaPoints, const bool bold)
@@ -599,6 +622,34 @@ public:
                 }
             });
 
+            // 只有打开窗口时名称为空，或用户后来主动清空名称，才启用自动命名。名称框一旦
+            // 收到非空人工输入便立即退出自动模式，后续修改账号、地址或端口都不能覆盖用户
+            // 赋予主机的业务名称。使用 textEdited 判断人工操作，是为了避免 setText() 写入的
+            // 自动名称反过来被误判成用户定制名称，导致只输入第一个地址字符后便停止同步。
+            m_automaticNameEnabled = initial.name.trimmed().isEmpty();
+            connect(m_nameEdit,
+                    &QLineEdit::textEdited,
+                    this,
+                    [this](const QString &editedName) {
+                        m_automaticNameEnabled = editedName.trimmed().isEmpty();
+                    });
+            connect(m_hostEdit,
+                    &QLineEdit::textChanged,
+                    this,
+                    [this]() { refreshAutomaticName(); });
+            connect(m_usernameEdit,
+                    &QLineEdit::textChanged,
+                    this,
+                    [this]() { refreshAutomaticName(); });
+            connect(m_portSpin,
+                    &QSpinBox::valueChanged,
+                    this,
+                    [this]() { refreshAutomaticName(); });
+
+            // 编辑异常旧数据时可能出现“地址已有值但名称为空”。连接建立在控件初始值全部
+            // 写入之后，因此在这里主动同步一次，让该场景无需再敲击地址框也能得到可保存名称。
+            refreshAutomaticName();
+
             // 认证卡只属于主机窗口，先暂存到成员中供下方统一加入正文布局；分组窗口不会
             // 创建空白认证卡，因此界面视觉和无障碍对象树都真正只剩“名称”。
             m_authenticationCard = authCard;
@@ -745,6 +796,38 @@ public:
     }
 
 private:
+    /**
+     * @brief 用当前有效账号、主机地址和端口刷新自动生成的主机名称。
+     *
+     * 名称自动模式关闭时，本方法不做任何修改，保证人工名称拥有最高优先级。地址为空时清空
+     * 尚未完成的自动名称；地址有效时生成“用户名@主机地址:端口”。用户名输入框为空代表继承，
+     * 因而优先使用父分组解析后的有效用户名；若两处都没有用户名，则沿用 ConnectionTarget 的
+     * 规范格式退化为“主机地址:端口”，避免产生以 `@` 开头的无效、难读名称。
+     */
+    void refreshAutomaticName()
+    {
+        if (!m_automaticNameEnabled || m_hostEdit == nullptr
+            || m_usernameEdit == nullptr || m_portSpin == nullptr) {
+            return;
+        }
+
+        const QString hostAddress = m_hostEdit->text().trimmed();
+        if (hostAddress.isEmpty()) {
+            m_nameEdit->clear();
+            return;
+        }
+
+        ConnectionTarget target;
+        target.host = hostAddress;
+        target.username = m_usernameEdit->text().trimmed();
+        if (target.username.isEmpty()) {
+            target.username = m_inheritedParent.username.trimmed();
+        }
+        target.port = static_cast<quint16>(m_portSpin->value());
+        // 默认 22 端口也必须显示：自动名称承担区分同址不同 SSH 服务的职责，不能省略默认值。
+        m_nameEdit->setText(target.connectionSpecifier(true));
+    }
+
     /**
      * @brief 使用当前表单值异步执行一次真实 SSH 握手和认证。
      *
@@ -927,6 +1010,8 @@ private:
     QLineEdit *m_hostEdit = nullptr;
     QSpinBox *m_portSpin = nullptr;
     QLineEdit *m_usernameEdit = nullptr;
+    /** @brief 是否允许连接字段继续驱动名称；用户输入非空名称后永久关闭至再次清空。 */
+    bool m_automaticNameEnabled = false;
     QLineEdit *m_identityEdit = nullptr;
     QLineEdit *m_proxyJumpsEdit = nullptr;
     QLineEdit *m_passwordEdit = nullptr;
@@ -1549,8 +1634,11 @@ QTreeWidgetItem *HostManagerWidget::createTreeItem(const HostRecord &record) con
     item->setIcon(
         0,
         record.kind == HostNodeKind::Folder
-            ? UiIcons::symbol(m_tree, UiIcons::Symbol::Folder, m_tree->palette().color(QPalette::WindowText))
-            : UiIcons::symbol(m_tree, UiIcons::Symbol::Hosts, m_tree->palette().color(QPalette::WindowText)));
+            ? localFileFolderIcon(m_tree)
+            : UiIcons::symbol(
+                  m_tree,
+                  UiIcons::Symbol::HostItem,
+                  m_tree->palette().color(QPalette::WindowText)));
     item->setData(0, HostIdRole, record.id);
     item->setData(0, HostKindRole, static_cast<int>(record.kind));
     if (record.kind == HostNodeKind::Host) {

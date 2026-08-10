@@ -37,6 +37,8 @@ namespace UiIcons {
 enum class Symbol {
     Sidebar,
     Hosts,
+    /** @brief 主机树节点专用的轻量服务器图标，轮廓比导航栏 Hosts 更细。 */
+    HostItem,
     Snippets,
     Forwarding,
     Terminal,
@@ -112,6 +114,14 @@ enum class Symbol {
         painter.drawLine(QPointF(5.8, 11.0), QPointF(7.0, 11.0));
         break;
     case Symbol::Hosts:
+    case Symbol::HostItem: {
+        if (symbol == Symbol::HostItem) {
+            // 树中每台主机都会重复出现该图标，沿用导航栏的 1.8px 轮廓会形成连续的深色块。
+            // 1.4px 在 16～24px 常用尺寸下仍保持清晰，同时更接近系统文件夹图标的视觉重量。
+            QPen hostItemPen = pen;
+            hostItemPen.setWidthF(1.4);
+            painter.setPen(hostItemPen);
+        }
         for (int row = 0; row < 3; ++row) {
             const qreal top = 4.0 + row * 5.6;
             painter.drawRoundedRect(QRectF(3.5, top, 17.0, 4.2), 1.3, 1.3);
@@ -119,6 +129,7 @@ enum class Symbol {
             painter.drawLine(QPointF(15.0, top + 2.1), QPointF(18.0, top + 2.1));
         }
         break;
+    }
     case Symbol::Snippets: {
         QPainterPath leftBrace;
         leftBrace.moveTo(9.0, 3.5);

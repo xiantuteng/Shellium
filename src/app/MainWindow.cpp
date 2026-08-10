@@ -946,6 +946,10 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
                                            : QStringLiteral("#ffffff");
     const QString raisedBackground = dark ? QStringLiteral("#293147")
                                           : QStringLiteral("#f0f3f5");
+    // 主机树位于接近白色的侧栏上，通用 RAISED 只比背景深几个灰阶，鼠标移入时几乎不可见。
+    // 为高频主机选择单独提供更深的悬停色，避免加深全局按钮、标签页和其他列表的悬停状态。
+    const QString hostTreeHoverBackground = dark ? QStringLiteral("#30394f")
+                                                 : QStringLiteral("#e1e7eb");
     const QString borderColor = dark ? QStringLiteral("#30384f")
                                      : QStringLiteral("#d9e0e4");
     const QString textColor = dark ? QStringLiteral("#f0f3fa")
@@ -1179,6 +1183,10 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
         QListView::item:hover,
         QTableView::item:hover {
             background: @RAISED@;
+        }
+        QTreeView#HostTree::item:hover:!selected {
+            /* 主机与分组行需要比通用列表更明确的悬停反馈；选中行仍由下方绿色规则负责。 */
+            background: @HOST_TREE_HOVER@;
         }
         QTreeView::item:selected,
         QListView::item:selected,
@@ -1427,6 +1435,7 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
     styleSheet.replace(QStringLiteral("@SIDEBAR@"), sidebarBackground);
     styleSheet.replace(QStringLiteral("@SURFACE@"), surfaceBackground);
     styleSheet.replace(QStringLiteral("@RAISED@"), raisedBackground);
+    styleSheet.replace(QStringLiteral("@HOST_TREE_HOVER@"), hostTreeHoverBackground);
     styleSheet.replace(QStringLiteral("@BORDER@"), borderColor);
     styleSheet.replace(QStringLiteral("@TEXT@"), textColor);
     styleSheet.replace(QStringLiteral("@MUTED@"), mutedTextColor);

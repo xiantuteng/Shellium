@@ -7,6 +7,7 @@
 #include <QAbstractButton>
 #include <QApplication>
 #include <QColor>
+#include <QFileIconProvider>
 #include <QImage>
 #include <QLabel>
 #include <QLayout>
@@ -14,6 +15,7 @@
 #include <QListWidget>
 #include <QPushButton>
 #include <QSet>
+#include <QSpinBox>
 #include <QTest>
 #include <QTimer>
 #include <QTreeWidget>
@@ -48,6 +50,9 @@ private slots:
 
     /** @brief 主机配置字段顺序、移除项、左下角测试按钮和按钮图标必须符合新版交互。 */
     void hostDialogUsesRequestedFieldOrderAndIcons();
+
+    /** @brief 名称为空时应根据账号、地址和端口自动命名，且不得覆盖人工名称。 */
+    void emptyHostNameFollowsConnectionFieldsUntilManuallyEdited();
 
     /** @brief 顶层节点顶格、分组下的主机右缩进，二者不能再被分支装饰列推乱。 */
     void topLevelNodesShareLeftEdgeAndChildHostsIndent();
@@ -139,6 +144,20 @@ void HostManagerWidgetTest::groupHasNoSubtitle()
     QTreeWidgetItem *item = findItem(widget, group.name);
     QVERIFY2(item != nullptr, "分组节点未出现在树中");
     QVERIFY(item->data(0, Qt::UserRole + 2).toString().isEmpty());
+
+    // 主机分组应与 QFileSystemModel 驱动的“本地文件”列表使用同源系统文件夹图标。直接
+    // 比较最终位图而不是图标 cacheKey：不同 QIcon 实例可能绘制完全相同，但缓存键不同。
+    QFileIconProvider iconProvider;
+    QIcon expectedIcon = iconProvider.icon(QFileIconProvider::Folder);
+    if (expectedIcon.isNull()) {
+        expectedIcon = UiIcons::symbol(
+            &widget,
+            UiIcons::Symbol::Folder,
+            widget.palette().color(QPalette::WindowText));
+    }
+    const QSize comparisonSize(20, 20);
+    QCOMPARE(item->icon(0).pixmap(comparisonSize).toImage(),
+             expectedIcon.pixmap(comparisonSize).toImage());
 }
 
 void HostManagerWidgetTest::headerExposesOnlyThreePrimaryActions()
@@ -348,6 +367,82 @@ void HostManagerWidgetTest::hostDialogUsesRequestedFieldOrderAndIcons()
                 failure = QStringLiteral("主机配置按钮“%1”缺少图标").arg(button->text());
             }
         }
+        dialog->close();
+    });
+
+    addHostButton->click();
+    QVERIFY2(failure.isEmpty(), qPrintable(failure));
+}
+
+void HostManagerWidgetTest::emptyHostNameFollowsConnectionFieldsUntilManuallyEdited()
+{
+    HostManagerWidget widget(m_database.get(), m_vault.get());
+
+    QAbstractButton *addHostButton = nullptr;
+    for (QAbstractButton *button : widget.headerActionsWidget()->findChildren<QAbstractButton *>()) {
+        if (button->text() == QStringLiteral("新建主机")) {
+            addHostButton = button;
+            break;
+        }
+    }
+    QVERIFY2(addHostButton != nullptr, "侧栏没有新建主机按钮");
+
+    QString failure;
+    QTimer::singleShot(0, [&failure]() {
+        QWidget *dialog = QApplication::activeModalWidget();
+        if (dialog == nullptr) {
+            failure = QStringLiteral("主机配置对话框未能弹出");
+            return;
+        }
+
+        auto *nameEdit = dialog->findChild<QLineEdit *>(
+            QStringLiteral("hostRecordNameEdit"));
+        auto *hostEdit = dialog->findChild<QLineEdit *>(
+            QStringLiteral("hostAddressEdit"));
+        auto *usernameEdit = dialog->findChild<QLineEdit *>(
+            QStringLiteral("hostUsernameEdit"));
+        auto *portSpin = dialog->findChild<QSpinBox *>(
+            QStringLiteral("hostPortSpin"));
+        if (nameEdit == nullptr || hostEdit == nullptr
+            || usernameEdit == nullptr || portSpin == nullptr) {
+            failure = QStringLiteral("主机配置缺少自动命名所需的输入控件");
+            dialog->close();
+            return;
+        }
+
+        // 用户通常先填地址、后填认证信息。地址输入期间名称必须持续同步完整文本，不能在
+        // 第一个字符触发 setText() 后便把自动生成内容误当成人工名称而停止更新。
+        QTest::keyClicks(hostEdit, "server.example.com");
+        if (nameEdit->text() != QStringLiteral("server.example.com:22")) {
+            failure = QStringLiteral("未按主机地址和默认端口自动生成名称");
+        }
+
+        if (failure.isEmpty()) {
+            QTest::keyClicks(usernameEdit, "deploy");
+            if (nameEdit->text() != QStringLiteral("deploy@server.example.com:22")) {
+                failure = QStringLiteral("用户名变化后自动名称未同步");
+            }
+        }
+
+        if (failure.isEmpty()) {
+            portSpin->setValue(2222);
+            if (nameEdit->text() != QStringLiteral("deploy@server.example.com:2222")) {
+                failure = QStringLiteral("端口变化后自动名称未同步");
+            }
+        }
+
+        if (failure.isEmpty()) {
+            // 通过真实键盘事件产生 textEdited，验证业务名称一经人工指定便不会被后续连接参数
+            // 覆盖；直接调用 setText() 不代表用户操作，无法覆盖这条交互边界。
+            nameEdit->selectAll();
+            QTest::keyClicks(nameEdit, "Production API");
+            hostEdit->setText(QStringLiteral("replacement.example.com"));
+            portSpin->setValue(2200);
+            if (nameEdit->text() != QStringLiteral("Production API")) {
+                failure = QStringLiteral("修改连接参数覆盖了用户手动填写的名称");
+            }
+        }
+
         dialog->close();
     });
 
@@ -565,6 +660,16 @@ void HostManagerWidgetTest::semanticIconsFollowLightAndDarkPalettes()
         }
         return result;
     };
+    const auto totalOpacity = [](const QIcon &icon) {
+        const QImage image = icon.pixmap(QSize(64, 64), QIcon::Normal).toImage();
+        qint64 opacity = 0;
+        for (int y = 0; y < image.height(); ++y) {
+            for (int x = 0; x < image.width(); ++x) {
+                opacity += image.pixelColor(x, y).alpha();
+            }
+        }
+        return opacity;
+    };
 
     setWindowText(lightThemeIcon);
     const QIcon adaptive = UiIcons::symbol(
@@ -572,6 +677,15 @@ void HostManagerWidgetTest::semanticIconsFollowLightAndDarkPalettes()
     const QIcon fixed = UiIcons::symbol(&context, UiIcons::Symbol::Plus, fixedBrandIcon);
     QCOMPARE(strongestPixel(adaptive).rgb(), lightThemeIcon.rgb());
     QCOMPARE(strongestPixel(fixed).rgb(), fixedBrandIcon.rgb());
+
+    // 主机树图标与导航栏服务器图标保持同一轮廓，但重复密集出现时必须使用更细笔画。
+    // 以相同尺寸和颜色比较总不透明度，可直接约束实际渲染重量，而不依赖实现中的线宽数字。
+    const QIcon navigationHosts = UiIcons::symbol(
+        &context, UiIcons::Symbol::Hosts, context.palette().color(QPalette::WindowText));
+    const QIcon treeHost = UiIcons::symbol(
+        &context, UiIcons::Symbol::HostItem, context.palette().color(QPalette::WindowText));
+    QVERIFY2(totalOpacity(treeHost) < totalOpacity(navigationHosts),
+             "主机树服务器图标没有比导航栏图标使用更轻的线条");
 
     // 关键回归：不重新创建 QIcon，只切换所属控件的调色板。同一个实例必须立即绘制成深色
     // 主题前景色，否则应用设置页实时切换主题后仍会保留旧位图并消失在新背景上。
