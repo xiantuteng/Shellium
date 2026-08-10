@@ -67,11 +67,26 @@ private:
     /** @brief 删除当前规则；运行中的规则会先停止。 */
     void removeSelectedRule();
 
-    /** @brief 启动当前规则；没有匹配 SSH 会话时明确提示而不是静默失败。 */
+    /** @brief 启动当前选中规则；供双击和单条规则右键菜单使用。 */
     void startSelectedRule();
 
-    /** @brief 停止当前规则并保留统计快照。 */
+    /** @brief 停止当前选中规则并保留统计快照；供单条规则右键菜单使用。 */
     void stopSelectedRule();
+
+    /**
+     * @brief 经用户确认后启动当前下拉主机的全部转发规则。
+     *
+     * 已处于启动中或运行中的规则保持不变；没有可用根 SSH 会话时不弹出无意义确认框，
+     * 而是先提示用户连接对应主机。
+     */
+    void startAllRules();
+
+    /**
+     * @brief 经用户确认后停止当前下拉主机的全部活动转发规则。
+     *
+     * 停止动作会关闭规则的监听器和活动连接，但不会删除规则及其累计统计快照。
+     */
+    void stopAllRules();
 
     /** @brief 返回当前表格选择的规则 id；没有选择时返回空。 */
     [[nodiscard]] QString selectedRuleId() const;
@@ -99,6 +114,13 @@ private:
 
     /** @brief 把运行状态枚举翻译成稳定中文。 */
     [[nodiscard]] static QString stateText(PortForwardState state);
+
+    /**
+     * @brief 生成表格第二列使用的本机与远程端点说明。
+     * @param rule 待展示的完整转发规则。
+     * @return 两行地址映射；远程转发会反转箭头以准确表达连接方向。
+     */
+    [[nodiscard]] static QString endpointMappingText(const PortForwardRule &rule);
 
     /** @brief 把流量字节格式化成紧凑 IEC 单位。 */
     [[nodiscard]] static QString formatBytes(quint64 bytes);

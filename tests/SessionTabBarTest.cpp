@@ -3,10 +3,107 @@
 #include <QAbstractButton>
 #include <QImage>
 #include <QMouseEvent>
+#include <QProxyStyle>
 #include <QSignalSpy>
 #include <QTest>
 #include <QWheelEvent>
 #include <QWidget>
+
+namespace {
+
+/**
+ * @brief 向控件同步投递一条携带指定按键状态的鼠标移动事件。
+ * @param widget 事件接收控件。
+ * @param position 相对于控件的逻辑像素坐标。
+ * @param buttons 移动发生时仍按住的鼠标键集合。
+ *
+ * QTest::mouseMove() 固定生成“不带按键”的移动事件，无法进入 QTabBar 的拖拽重排状态；
+ * 直接构造事件既能精确控制按键，也避免 macOS 测试进程缺少辅助功能权限时全局光标移动
+ * 被系统静默拒绝。
+ */
+void sendMouseMove(QWidget &widget, const QPoint &position, const Qt::MouseButtons buttons)
+{
+    QMouseEvent event(QEvent::MouseMove,
+                      QPointF(position),
+                      QPointF(widget.mapToGlobal(position)),
+                      Qt::NoButton,
+                      buttons,
+                      Qt::NoModifier);
+    QCoreApplication::sendEvent(&widget, &event);
+}
+
+/**
+ * @brief 统计逻辑矩形内与目标颜色接近的设备像素数量。
+ * @param frame QWidget::grab() 得到的高 DPI 位图。
+ * @param logicalRect 相对于控件的逻辑像素采样范围。
+ * @param target 目标颜色。
+ * @param tolerance 每个 RGB 通道允许的抗锯齿误差。
+ * @return 命中颜色的设备像素数量；采样范围无效时返回 0。
+ *
+ * Retina 屏幕上 QPixmap 坐标使用设备像素，测试几何使用逻辑像素。统一乘以 DPR 后再采样，
+ * 才不会把 2x 图像的左上四分之一误当成完整标签；忽略 alpha 是因为 grab() 可能已把透明
+ * 标签栏与父背景完成合成，但胶囊内部的 RGB 仍保持目标颜色。
+ */
+[[nodiscard]] int countPixelsNearColor(const QPixmap &frame,
+                                       const QRect &logicalRect,
+                                       const QColor &target,
+                                       const int tolerance = 3)
+{
+    const QImage image = frame.toImage();
+    const qreal ratio = frame.devicePixelRatio();
+    const QRect deviceBounds = image.rect();
+    const QRect deviceRect(qFloor(logicalRect.left() * ratio),
+                           qFloor(logicalRect.top() * ratio),
+                           qCeil(logicalRect.width() * ratio),
+                           qCeil(logicalRect.height() * ratio));
+    const QRect sampleRect = deviceRect.intersected(deviceBounds);
+    int matchingPixels = 0;
+    for (int y = sampleRect.top(); y <= sampleRect.bottom(); ++y) {
+        for (int x = sampleRect.left(); x <= sampleRect.right(); ++x) {
+            const QColor pixel = image.pixelColor(x, y);
+            if (qAbs(pixel.red() - target.red()) <= tolerance
+                && qAbs(pixel.green() - target.green()) <= tolerance
+                && qAbs(pixel.blue() - target.blue()) <= tolerance) {
+                ++matchingPixels;
+            }
+        }
+    }
+    return matchingPixels;
+}
+
+/**
+ * @brief 为视觉动画用例提供确定的非零系统动画时长。
+ *
+ * QTabBar 生产实现会尊重 SH_Widget_Animation_Duration=0 的“减少动态效果”设置。自动化测试
+ * 不能依赖执行机器的个人辅助功能配置，因此只在该用例的局部代理样式中固定为 180ms；
+ * 其他样式提示全部委托给平台原样式，标签尺寸和字体渲染仍与真实环境一致。
+ */
+class DeterministicAnimationStyle final : public QProxyStyle {
+public:
+    /** @brief 创建委托给应用当前样式的局部代理。 */
+    DeterministicAnimationStyle() = default;
+
+    /**
+     * @brief 返回样式提示；仅覆盖通用控件动画时长。
+     * @param hint 待查询的样式提示枚举。
+     * @param option 可选的绘制状态，原样转交基类。
+     * @param widget 发起查询的控件，原样转交基类。
+     * @param returnData 可选扩展返回结构，原样转交基类。
+     * @return 动画时长查询固定返回 180，其他查询返回基类结果。
+     */
+    int styleHint(StyleHint hint,
+                  const QStyleOption *option = nullptr,
+                  const QWidget *widget = nullptr,
+                  QStyleHintReturn *returnData = nullptr) const override
+    {
+        if (hint == QStyle::SH_Widget_Animation_Duration) {
+            return 180;
+        }
+        return QProxyStyle::styleHint(hint, option, widget, returnData);
+    }
+};
+
+} // namespace
 
 /**
  * @brief 覆盖标题栏会话标签控件的滚动接线、关闭按钮命中判定与悬停反馈。
@@ -48,6 +145,12 @@ private slots:
 
     /** @brief 精确悬停在关闭按钮上时，叉号线条颜色必须与仅悬停标签时不同。 */
     void closeButtonStrokeChangesColorOnPreciseHover();
+
+    /** @brief 拖拽开始后原逻辑位置不得继续绘制第二份选中标签。 */
+    void draggingPaintsOnlyOneTabCopy();
+
+    /** @brief 标签换位时，被让开的相邻标签应从旧位置平滑移动到新位置。 */
+    void reorderedNeighborAnimatesFromPreviousPosition();
 };
 
 void SessionTabBarTest::reportsScrollStateAndScrollsTabs()
@@ -260,6 +363,98 @@ void SessionTabBarTest::closeButtonStrokeChangesColorOnPreciseHover()
     QVERIFY2(plainHoverStrokeColor != preciseHoverStrokeColor,
              "精确悬停在关闭按钮上时叉号线条颜色必须与仅悬停标签时不同，否则用户看不出"
              "鼠标真的移到了关闭按钮上");
+}
+
+void SessionTabBarTest::draggingPaintsOnlyOneTabCopy()
+{
+    SessionTabBar tabBar;
+    tabBar.resize(520, 42);
+    // 使用高饱和纯色可把胶囊主体与字体抗锯齿像素可靠区分；该颜色只作用于测试控件，
+    // 不依赖操作系统当前深浅主题，也不会因父窗口背景变化产生误判。
+    const QColor selectedColor(QStringLiteral("#ff0044"));
+    tabBar.setVisualColors(QColor(QStringLiteral("#00ff66")),
+                           QColor(QStringLiteral("#ffffff")),
+                           QColor(QStringLiteral("#202020")),
+                           selectedColor,
+                           QColor(QStringLiteral("#00ffff")));
+    tabBar.addTab(QStringLiteral("唯一拖拽标签"));
+    tabBar.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&tabBar));
+
+    const QRect originalTabRect = tabBar.tabRect(0);
+    const QPoint pressPosition = originalTabRect.center();
+    // 目标位置与原标签间隔超过一个完整标签宽度，同时仍位于控件内部；这样两份图像若同时
+    // 存在会落在完全分离的采样区，避免重叠部分掩盖“原位置残留”缺陷。
+    const QPoint dragPosition(pressPosition.x() + originalTabRect.width() + 80,
+                              pressPosition.y());
+    QTest::mousePress(&tabBar, Qt::LeftButton, Qt::NoModifier, pressPosition);
+    sendMouseMove(tabBar, dragPosition, Qt::LeftButton);
+
+    const QPixmap draggingFrame = tabBar.grab();
+    const QRect originalPillInterior = originalTabRect.adjusted(8, 8, -8, -8);
+    QRect draggedPillInterior = originalPillInterior;
+    draggedPillInterior.translate(dragPosition.x() - pressPosition.x(), 0);
+
+    const int originalSelectedPixels = countPixelsNearColor(
+        draggingFrame, originalPillInterior, selectedColor);
+    const int draggedSelectedPixels = countPixelsNearColor(
+        draggingFrame, draggedPillInterior, selectedColor);
+    QVERIFY2(originalSelectedPixels < 12,
+             "拖拽开始后原逻辑位置仍存在选中胶囊，说明自绘标签与 Qt 原生快照发生了重叠");
+    QVERIFY2(draggedSelectedPixels > 300,
+             "消除原位置重影时不能让拖拽标签消失；鼠标位置必须保留清晰的胶囊预览");
+
+    QTest::mouseRelease(&tabBar, Qt::LeftButton, Qt::NoModifier, dragPosition);
+}
+
+void SessionTabBarTest::reorderedNeighborAnimatesFromPreviousPosition()
+{
+    DeterministicAnimationStyle animationStyle;
+    SessionTabBar tabBar;
+    // QWidget::setStyle 不接管样式对象；局部变量先于 tabBar 构造、后于 tabBar 析构，既能
+    // 保证整个用例期间指针有效，也不会改变 qApp 的全局样式而污染其他测试。
+    tabBar.setStyle(&animationStyle);
+    tabBar.resize(420, 42);
+    const QColor neighborColor(QStringLiteral("#00ff55"));
+    tabBar.setVisualColors(neighborColor,
+                           QColor(QStringLiteral("#ffffff")),
+                           QColor(QStringLiteral("#303030")),
+                           QColor(QStringLiteral("#4050ff")),
+                           QColor(QStringLiteral("#00ffff")));
+    tabBar.addTab(QStringLiteral("左侧让位标签"));
+    tabBar.addTab(QStringLiteral("右侧拖拽标签"));
+    tabBar.setCurrentIndex(1);
+    tabBar.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&tabBar));
+
+    const QRect oldNeighborRect = tabBar.tabRect(0);
+    const QRect draggedRect = tabBar.tabRect(1);
+    const QPoint pressPosition(draggedRect.left() + 20, draggedRect.center().y());
+    // 向左移动 100 像素已跨过相邻标签中心，足以触发换位；拖拽胶囊的新左边缘为 32，
+    // 不会覆盖旧标签左侧 10~31 区域中的绿色终端图标，便于直接观察让位动画首帧。
+    const QPoint dragPosition(pressPosition.x() - 100, pressPosition.y());
+    QTest::mousePress(&tabBar, Qt::LeftButton, Qt::NoModifier, pressPosition);
+    sendMouseMove(tabBar, dragPosition, Qt::LeftButton);
+
+    QCOMPARE(tabBar.tabText(0), QStringLiteral("右侧拖拽标签"));
+    const QRect oldNeighborIconArea(oldNeighborRect.left() + 10,
+                                    oldNeighborRect.top() + 7,
+                                    22,
+                                    oldNeighborRect.height() - 14);
+    const int greenPixelsAtAnimationStart = countPixelsNearColor(
+        tabBar.grab(), oldNeighborIconArea, neighborColor, 8);
+    QVERIFY2(greenPixelsAtAnimationStart > 4,
+             "逻辑索引换位后，相邻标签应先停留在旧屏幕位置再开始移动，不能瞬间跳到终点");
+
+    // 代理样式固定为 180ms，等待 260ms 可覆盖定时器调度抖动并确保动画 finished 已清理
+    // 偏移；鼠标仍保持按下，所以这里只观察相邻标签动画，不混入松手后的拖拽标签落位。
+    QTest::qWait(260);
+    const int greenPixelsAfterAnimation = countPixelsNearColor(
+        tabBar.grab(), oldNeighborIconArea, neighborColor, 8);
+    QVERIFY2(greenPixelsAfterAnimation < greenPixelsAtAnimationStart / 3,
+             "让位标签动画结束后仍停留在旧位置，说明偏移未收敛到新的 tabRect");
+
+    QTest::mouseRelease(&tabBar, Qt::LeftButton, Qt::NoModifier, dragPosition);
 }
 
 QTEST_MAIN(SessionTabBarTest)

@@ -19,12 +19,14 @@
 #include <QMenu>
 #include <QPushButton>
 #include <QSpinBox>
+#include <QStringList>
 #include <QTableWidget>
 #include <QToolButton>
 #include <QVBoxLayout>
 #include <QUuid>
 
 #include <algorithm>
+#include <utility>
 
 #include <unistd.h>
 
@@ -38,8 +40,9 @@ constexpr int kRuleIdRole = Qt::UserRole + 31;
  * @param button 待配置按钮；不得为空。
  * @param accessibleName 完整动作名称，用于 Tooltip 与辅助技术。
  *
- * 端口转发始终位于 320 像素侧栏，五个文字按钮会造成横向滚动。保留“新建”主操作文字，
- * 编辑、删除、启动和停止使用图标，并在右键菜单中继续提供完整文字入口。
+ * 端口转发默认位于窄侧栏，即使用户可拖动加宽，五个文字按钮在最小宽度下仍会造成横向
+ * 滚动。保留“新建”主操作文字，编辑、删除、启动和停止使用图标，并通过 Tooltip 与右键
+ * 菜单提供完整动作名称。
  */
 void configureForwardingIconButton(QToolButton *button, const QString &accessibleName)
 {
@@ -186,6 +189,31 @@ QString typeText(const PortForwardType type)
     }
 }
 
+/**
+ * @brief 将主机与端口格式化为不会混淆 IPv6 冒号的端点文本。
+ * @param host IP、主机名或特殊监听地址。
+ * @param port TCP 端口。
+ * @return IPv4/主机名形如 host:port，IPv6 形如 [host]:port。
+ */
+QString formatEndpoint(const QString &host, const quint16 port)
+{
+    const QString normalizedHost = host.trimmed();
+    // IPv6 地址本身包含冒号，若继续直接拼接端口会无法判断哪一段是端口；方括号形式与
+    // URL/OpenSSH 的常见表示一致，同时不会改变实际持久化的监听或目标地址。
+    return normalizedHost.contains(QLatin1Char(':'))
+        ? QStringLiteral("[%1]:%2").arg(normalizedHost).arg(port)
+        : QStringLiteral("%1:%2").arg(normalizedHost).arg(port);
+}
+
+/** @brief 端口转发表的可见列顺序；第二列固定用于本机/远程地址映射。 */
+enum RuleTableColumn {
+    RuleNameColumn = 0,
+    EndpointMappingColumn,
+    RuleTypeColumn,
+    RuleStateColumn,
+    RuleTableColumnCount
+};
+
 } // namespace
 
 PortForwardManagerWidget::PortForwardManagerWidget(ApplicationDatabase *database,
@@ -205,9 +233,10 @@ PortForwardManagerWidget::PortForwardManagerWidget(ApplicationDatabase *database
     hostRow->addWidget(m_hostCombo, 1);
     layout->addLayout(hostRow);
 
-    m_ruleTable->setColumnCount(7);
+    m_ruleTable->setObjectName(QStringLiteral("PortForwardRuleTable"));
+    m_ruleTable->setColumnCount(RuleTableColumnCount);
     m_ruleTable->setHorizontalHeaderLabels(
-        {tr("名称"), tr("类型"), tr("监听"), tr("目标"), tr("自动"), tr("状态/连接"), tr("流量")});
+        {tr("名称"), tr("本机 / 远程"), tr("类型"), tr("状态/连接")});
     m_ruleTable->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_ruleTable->setSelectionMode(QAbstractItemView::SingleSelection);
     m_ruleTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -215,18 +244,21 @@ PortForwardManagerWidget::PortForwardManagerWidget(ApplicationDatabase *database
     m_ruleTable->setShowGrid(false);
     m_ruleTable->verticalHeader()->setVisible(false);
     m_ruleTable->verticalHeader()->setDefaultSectionSize(34);
+    // 用户拖动侧栏会实时改变地址列宽；行高采用 ResizeToContents 才能同步增加或收紧，
+    // 否则两行端点在侧栏变窄后可能被旧行高裁掉。转发规则通常数量有限，此处按内容计算
+    // 的成本远低于网络运行时本身，也不会阻塞任何 SSH 或转发线程。
+    m_ruleTable->verticalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
     m_ruleTable->setContextMenuPolicy(Qt::CustomContextMenu);
-    for (int column = 0; column < m_ruleTable->columnCount(); ++column) {
-        m_ruleTable->horizontalHeader()->setSectionResizeMode(column, QHeaderView::Stretch);
-    }
-    // 该控件固定在窄侧栏中，主列表只保留“名称 / 类型 / 状态”。监听与目标地址、自动启动
-    // 和流量仍保存在数据模型中，并可通过编辑对话框或右键操作查看，避免七列压成不可读。
-    m_ruleTable->setColumnHidden(2, true);
-    m_ruleTable->setColumnHidden(3, true);
-    m_ruleTable->setColumnHidden(4, true);
-    m_ruleTable->setColumnHidden(6, true);
-    // 三个可见列全部使用 Stretch 均分宽度，永远填满而不超出侧栏；空间不够时靠自动换行
-    // 显示完整内容，而不是像 ResizeToContents 那样把列撑宽触发横向滚动条。
+    QHeaderView *ruleHeader = m_ruleTable->horizontalHeader();
+    ruleHeader->setMinimumSectionSize(34);
+    // 地址映射承担新增的核心信息并使用剩余宽度；类型与状态按内容收紧，名称允许用户手工
+    // 调整。这样默认窄侧栏中仍能读到全部四列，侧栏加宽后的空间也会优先用于完整地址。
+    ruleHeader->setSectionResizeMode(RuleNameColumn, QHeaderView::Interactive);
+    ruleHeader->setSectionResizeMode(EndpointMappingColumn, QHeaderView::Stretch);
+    ruleHeader->setSectionResizeMode(RuleTypeColumn, QHeaderView::ResizeToContents);
+    ruleHeader->setSectionResizeMode(RuleStateColumn, QHeaderView::ResizeToContents);
+    ruleHeader->resizeSection(RuleNameColumn, 86);
+    // 地址使用两行展示，窄侧栏中通过换行保持可读，避免横向滚动后看不到运行状态。
     m_ruleTable->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     m_ruleTable->setWordWrap(true);
     layout->addWidget(m_ruleTable, 1);
@@ -240,8 +272,10 @@ PortForwardManagerWidget::PortForwardManagerWidget(ApplicationDatabase *database
     deleteButton->setText(tr("删除"));
     auto *startButton = new QToolButton(this);
     startButton->setText(tr("启动"));
+    startButton->setObjectName(QStringLiteral("StartAllPortForwardsButton"));
     auto *stopButton = new QToolButton(this);
     stopButton->setText(tr("停止"));
+    stopButton->setObjectName(QStringLiteral("StopAllPortForwardsButton"));
     UiIcons::decorateButton(
         addButton,
         UiIcons::symbol(this, UiIcons::Symbol::Plus, this->palette().color(QPalette::WindowText)),
@@ -257,15 +291,15 @@ PortForwardManagerWidget::PortForwardManagerWidget(ApplicationDatabase *database
     UiIcons::decorateButton(
         startButton,
         UiIcons::symbol(this, UiIcons::Symbol::Play, this->palette().color(QPalette::WindowText)),
-        tr("在当前主机 SSH 会话上启动规则"));
+        tr("启动当前主机的全部转发规则"));
     UiIcons::decorateButton(
         stopButton,
         UiIcons::symbol(this, UiIcons::Symbol::Stop, this->palette().color(QPalette::WindowText)),
-        tr("停止当前规则并关闭活动转发连接"));
+        tr("停止当前主机的全部转发规则"));
     configureForwardingIconButton(editButton, tr("编辑当前选中的端口转发规则"));
     configureForwardingIconButton(deleteButton, tr("停止并删除当前规则"));
-    configureForwardingIconButton(startButton, tr("在当前主机 SSH 会话上启动规则"));
-    configureForwardingIconButton(stopButton, tr("停止当前规则并关闭活动转发连接"));
+    configureForwardingIconButton(startButton, tr("启动当前主机的全部转发规则"));
+    configureForwardingIconButton(stopButton, tr("停止当前主机的全部转发规则"));
     buttons->addWidget(addButton);
     buttons->addWidget(editButton);
     buttons->addWidget(deleteButton);
@@ -293,16 +327,15 @@ PortForwardManagerWidget::PortForwardManagerWidget(ApplicationDatabase *database
     connect(deleteButton, &QToolButton::clicked,
             this, &PortForwardManagerWidget::removeSelectedRule);
     connect(startButton, &QToolButton::clicked,
-            this, &PortForwardManagerWidget::startSelectedRule);
+            this, &PortForwardManagerWidget::startAllRules);
     connect(stopButton, &QToolButton::clicked,
-            this, &PortForwardManagerWidget::stopSelectedRule);
+            this, &PortForwardManagerWidget::stopAllRules);
     connect(m_ruleTable, &QTableWidget::cellDoubleClicked,
             this, [this](const int, const int) { startSelectedRule(); });
     connect(m_ruleTable,
             &QWidget::customContextMenuRequested,
             this,
-            [this, addButton, editButton, deleteButton, startButton, stopButton](
-                const QPoint &position) {
+            [this, addButton, editButton, deleteButton](const QPoint &position) {
                 const QModelIndex index = m_ruleTable->indexAt(position);
                 if (index.isValid()) {
                     m_ruleTable->setCurrentCell(index.row(), 0);
@@ -328,10 +361,12 @@ PortForwardManagerWidget::PortForwardManagerWidget(ApplicationDatabase *database
                     QAction *deleteAction = menu.addAction(
                         UiIcons::symbol(this, UiIcons::Symbol::Trash, this->palette().color(QPalette::WindowText)),
                         tr("删除"));
+                    // 底部图标现为当前主机的批量动作；右键菜单仍明确针对当前行，必须直接
+                    // 调用单条规则方法，不能再借用底部按钮，否则会意外操作整台主机。
                     connect(startAction, &QAction::triggered,
-                            startButton, &QToolButton::click);
+                            this, &PortForwardManagerWidget::startSelectedRule);
                     connect(stopAction, &QAction::triggered,
-                            stopButton, &QToolButton::click);
+                            this, &PortForwardManagerWidget::stopSelectedRule);
                     connect(editAction, &QAction::triggered,
                             editButton, &QToolButton::click);
                     connect(deleteAction, &QAction::triggered,
@@ -497,21 +532,15 @@ void PortForwardManagerWidget::reloadRules()
         m_ruleTable->insertRow(row);
         auto *nameItem = new QTableWidgetItem(rule.name);
         nameItem->setData(kRuleIdRole, rule.id);
-        m_ruleTable->setItem(row, 0, nameItem);
-        m_ruleTable->setItem(row, 1, new QTableWidgetItem(typeText(rule.type)));
-        m_ruleTable->setItem(row, 2, new QTableWidgetItem(
-            QStringLiteral("%1:%2").arg(rule.bindHost).arg(rule.bindPort)));
-        m_ruleTable->setItem(row, 3, new QTableWidgetItem(
-            rule.type == PortForwardType::Dynamic
-                ? tr("按 SOCKS 请求")
-                : QStringLiteral("%1:%2").arg(rule.targetHost).arg(rule.targetPort)));
-        m_ruleTable->setItem(row, 4, new QTableWidgetItem(rule.autoStart ? tr("是") : tr("否")));
+        m_ruleTable->setItem(row, RuleNameColumn, nameItem);
+        m_ruleTable->setItem(
+            row, EndpointMappingColumn, new QTableWidgetItem(endpointMappingText(rule)));
+        m_ruleTable->setItem(row, RuleTypeColumn, new QTableWidgetItem(typeText(rule.type)));
         const PortForwardStatistics statistics = m_statistics.value(rule.id);
-        m_ruleTable->setItem(row, 5, new QTableWidgetItem(
+        m_ruleTable->setItem(row, RuleStateColumn, new QTableWidgetItem(
             tr("%1 / %2").arg(stateText(statistics.state))
                             .arg(statistics.activeConnections)));
         const quint64 traffic = statistics.bytesToTarget + statistics.bytesFromTarget;
-        m_ruleTable->setItem(row, 6, new QTableWidgetItem(formatBytes(traffic)));
         if (!statistics.lastError.isEmpty()) {
             for (int column = 0; column < m_ruleTable->columnCount(); ++column) {
                 m_ruleTable->item(row, column)->setToolTip(statistics.lastError);
@@ -520,7 +549,7 @@ void PortForwardManagerWidget::reloadRules()
         activeConnections += statistics.activeConnections;
         totalTraffic += traffic;
     }
-    // Stretch 列宽会随侧栏宽度收窄，长文本改用换行而不是隐藏在横向滚动条后面，因此每次
+    // 地址映射列会随侧栏宽度伸缩，长文本改用换行而不是隐藏在横向滚动条后面，因此每次
     // 重新填充数据后都要按新内容重算行高。
     m_ruleTable->resizeRowsToContents();
     m_summaryLabel->setText(
@@ -631,6 +660,132 @@ void PortForwardManagerWidget::stopSelectedRule()
     reloadRules();
 }
 
+void PortForwardManagerWidget::startAllRules()
+{
+    const QString hostId = m_hostCombo->currentData().toString();
+    if (hostId.isEmpty()) {
+        QMessageBox::information(this,
+                                 tr("没有保存主机"),
+                                 tr("请先在主机管理中创建并选择一台主机。"));
+        return;
+    }
+
+    bool ok = false;
+    QString error;
+    const QList<PortForwardRule> rules = m_database->listPortForwards(hostId, &ok, &error);
+    if (!ok) {
+        QMessageBox::critical(this, tr("读取转发规则失败"), error);
+        return;
+    }
+    if (rules.isEmpty()) {
+        QMessageBox::information(this,
+                                 tr("没有转发规则"),
+                                 tr("当前主机还没有可启动的端口转发规则。"));
+        return;
+    }
+
+    SshSessionStack *sessionStack = availableSession(hostId);
+    if (sessionStack == nullptr) {
+        QMessageBox::information(this,
+                                 tr("主机尚未连接"),
+                                 tr("请先从主机树连接“%1”，再启动全部转发规则。")
+                                     .arg(m_hostCombo->currentText()));
+        return;
+    }
+
+    if (QMessageBox::question(
+            this,
+            tr("确认启动全部转发"),
+            tr("将启动主机“%1”下的全部 %2 条转发规则；已在运行的规则会保持不变。是否继续？")
+                .arg(m_hostCombo->currentText())
+                .arg(rules.size()),
+            QMessageBox::Yes | QMessageBox::Cancel,
+            QMessageBox::Cancel) != QMessageBox::Yes) {
+        return;
+    }
+
+    int failedCount = 0;
+    QStringList failedRules;
+    for (const PortForwardRule &rule : rules) {
+        QString startError;
+        if (!startRule(rule, sessionStack, &startError)) {
+            ++failedCount;
+            failedRules.append(tr("%1：%2").arg(rule.name, startError));
+        }
+    }
+    reloadRules();
+
+    // startRule 只负责同步前置校验，真正的监听与 SSH 请求异步执行；异步失败仍会由
+    // statisticsChanged 更新行状态。这里仅汇总在提交阶段就能确定的失败，避免误报成功。
+    if (failedCount > 0) {
+        QMessageBox::warning(
+            this,
+            tr("部分规则未能启动"),
+            tr("%1 条规则未能提交启动：\n%2")
+                .arg(failedCount)
+                .arg(failedRules.join(QLatin1Char('\n'))));
+        return;
+    }
+    emit statusMessage(tr("已提交当前主机的 %1 条端口转发启动任务").arg(rules.size()));
+}
+
+void PortForwardManagerWidget::stopAllRules()
+{
+    const QString hostId = m_hostCombo->currentData().toString();
+    if (hostId.isEmpty()) {
+        QMessageBox::information(this,
+                                 tr("没有保存主机"),
+                                 tr("请先在主机管理中创建并选择一台主机。"));
+        return;
+    }
+
+    bool ok = false;
+    QString error;
+    const QList<PortForwardRule> rules = m_database->listPortForwards(hostId, &ok, &error);
+    if (!ok) {
+        QMessageBox::critical(this, tr("读取转发规则失败"), error);
+        return;
+    }
+
+    QList<PortForwardRuntime *> activeRuntimes;
+    for (const PortForwardRule &rule : rules) {
+        PortForwardRuntime *runtime = m_runtimes.value(rule.id);
+        if (runtime == nullptr) {
+            continue;
+        }
+        const PortForwardState state = runtime->statistics().state;
+        // 新建运行时的异步 Starting 通知可能尚未回到 GUI，此时 m_statistics 中还没有条目；
+        // 把这种对象也视为活动运行时，确保用户紧接着点击“停止全部”不会漏掉排队中的启动。
+        if (!m_statistics.contains(rule.id) || state != PortForwardState::Stopped) {
+            activeRuntimes.append(runtime);
+        }
+    }
+    if (activeRuntimes.isEmpty()) {
+        emit statusMessage(tr("当前主机没有正在运行的端口转发规则"));
+        return;
+    }
+
+    if (QMessageBox::question(
+            this,
+            tr("确认停止全部转发"),
+            tr("将停止主机“%1”下的 %2 条活动转发规则，并关闭相关连接。是否继续？")
+                .arg(m_hostCombo->currentText())
+                .arg(activeRuntimes.size()),
+            QMessageBox::Yes | QMessageBox::Cancel,
+            QMessageBox::Cancel) != QMessageBox::Yes) {
+        return;
+    }
+
+    // 每个 runtime 在自己的网络线程异步收尾；逐一提交 stop 不会阻塞 GUI，也不会改变或
+    // 删除数据库中的规则。统计信号返回后，表格会分别进入“停止中”和“已停止”状态。
+    for (PortForwardRuntime *runtime : std::as_const(activeRuntimes)) {
+        runtime->stop();
+    }
+    reloadRules();
+    emit statusMessage(tr("已提交当前主机的 %1 条端口转发停止任务")
+                           .arg(activeRuntimes.size()));
+}
+
 QString PortForwardManagerWidget::selectedRuleId() const
 {
     const int row = m_ruleTable->currentRow();
@@ -657,6 +812,24 @@ bool PortForwardManagerWidget::startRule(const PortForwardRule &rule,
                                          SshSessionStack *sessionStack,
                                          QString *errorMessage)
 {
+    QString validationError;
+    if (!rule.isValid(&validationError)) {
+        // 数据库通常已保证字段合法，但导入旧版本数据或未来迁移异常时仍可能到达这里；在
+        // 创建网络线程前再次校验，可以让单条和批量启动都得到可定位错误而不是触发断言。
+        if (errorMessage != nullptr) {
+            *errorMessage = validationError;
+        }
+        return false;
+    }
+    if (sessionStack == nullptr || !sessionStack->isRunning()) {
+        // Runtime 构造函数要求非空会话，且异步启动若接到已断开的会话只会稍后失败。这里
+        // 同步拒绝可让批量汇总准确指出前置条件，并关闭会话断开与点击启动之间的竞态窗口。
+        if (errorMessage != nullptr) {
+            *errorMessage = tr("主机 SSH 会话不可用");
+        }
+        return false;
+    }
+
     if (PortForwardRuntime *existing = m_runtimes.value(rule.id); existing != nullptr) {
         const PortForwardState state = existing->statistics().state;
         if (state == PortForwardState::Running || state == PortForwardState::Starting) {
@@ -722,6 +895,25 @@ QString PortForwardManagerWidget::stateText(const PortForwardState state)
     case PortForwardState::Stopped:
     default:
         return tr("已停止");
+    }
+}
+
+QString PortForwardManagerWidget::endpointMappingText(const PortForwardRule &rule)
+{
+    const QString bindEndpoint = formatEndpoint(rule.bindHost, rule.bindPort);
+    switch (rule.type) {
+    case PortForwardType::Remote:
+        // -R 在远程 SSH 服务器监听 bind，在本机连接 target；反向箭头用于避免把两端角色
+        // 错画成本地转发，同时第二列始终保持“本机在前、远程在后”的阅读顺序。
+        return tr("本机 %1\n← 远程 %2")
+            .arg(formatEndpoint(rule.targetHost, rule.targetPort), bindEndpoint);
+    case PortForwardType::Dynamic:
+        // SOCKS5 的远程目标由每个客户端请求动态给出，不能展示一个并不存在的固定端口。
+        return tr("本机 %1\n→ 远程（按 SOCKS 请求）").arg(bindEndpoint);
+    case PortForwardType::Local:
+    default:
+        return tr("本机 %1\n→ 远程 %2")
+            .arg(bindEndpoint, formatEndpoint(rule.targetHost, rule.targetPort));
     }
 }
 

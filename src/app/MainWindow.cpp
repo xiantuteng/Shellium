@@ -47,6 +47,7 @@
 #include <QShowEvent>
 #include <QSignalBlocker>
 #include <QSizePolicy>
+#include <QSplitter>
 #include <QStackedWidget>
 #include <QStyle>
 #include <QTabBar>
@@ -64,6 +65,15 @@ namespace {
 
 /** @brief 一体化标题栏的固定逻辑高度，同时作为 macOS 交通灯垂直对齐的唯一基准。 */
 constexpr int kWindowChromeHeight = 52;
+
+/** @brief 侧栏允许缩小到的宽度，避免表单和动作按钮被挤到无法操作。 */
+constexpr int kSidebarMinimumWidth = 260;
+
+/** @brief 首次启动时沿用的侧栏宽度，保持既有窗口布局和用户视觉习惯。 */
+constexpr int kSidebarDefaultWidth = 320;
+
+/** @brief 终端工作区的最小宽度，确保侧栏拖动后终端仍可进行基本交互。 */
+constexpr int kWorkspaceMinimumWidth = 420;
 
 /**
  * @brief 从标题区事件源启动操作系统级窗口移动。
@@ -281,9 +291,17 @@ MainWindow::MainWindow(ApplicationDatabase *database,
             });
     railLayout->addStretch(1);
 
-    m_sidebarPanel = new QWidget(workspaceBody);
+    // 侧栏和终端区使用水平分隔器承载：把手位于侧栏最右边框，用户可直接拖动调整宽度。
+    // 导航轨不放进分隔器，避免拖动侧栏时改变其固定宽度或图标的稳定屏幕位置。
+    m_sidebarSplitter = new QSplitter(Qt::Horizontal, workspaceBody);
+    m_sidebarSplitter->setObjectName(QStringLiteral("SidebarSplitter"));
+    m_sidebarSplitter->setChildrenCollapsible(false);
+    m_sidebarSplitter->setHandleWidth(6);
+    m_sidebarSplitter->setOpaqueResize(true);
+
+    m_sidebarPanel = new QWidget(m_sidebarSplitter);
     m_sidebarPanel->setObjectName(QStringLiteral("SidebarPanel"));
-    m_sidebarPanel->setFixedWidth(320);
+    m_sidebarPanel->setMinimumWidth(kSidebarMinimumWidth);
     auto *sidebarLayout = new QVBoxLayout(m_sidebarPanel);
     sidebarLayout->setContentsMargins(14, 16, 14, 14);
     sidebarLayout->setSpacing(12);
@@ -313,9 +331,17 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     m_hostHeaderActions = m_hostManager->headerActionsWidget();
     sidebarHeaderLayout->addWidget(m_hostHeaderActions);
 
+    // 终端区保留最小操作宽度；侧栏不参与弹性扩张，只有用户拖动把手时才改变其宽度。
+    // 初始尺寸中的较大第二项只是表达“剩余空间归终端”，QSplitter 会按窗口实际宽度缩放。
+    m_tabs->setMinimumWidth(kWorkspaceMinimumWidth);
+    m_sidebarSplitter->addWidget(m_sidebarPanel);
+    m_sidebarSplitter->addWidget(m_tabs);
+    m_sidebarSplitter->setStretchFactor(0, 0);
+    m_sidebarSplitter->setStretchFactor(1, 1);
+    m_sidebarSplitter->setSizes({kSidebarDefaultWidth, 1000});
+
     bodyLayout->addWidget(m_navigationRail);
-    bodyLayout->addWidget(m_sidebarPanel);
-    bodyLayout->addWidget(m_tabs, 1);
+    bodyLayout->addWidget(m_sidebarSplitter, 1);
     rootLayout->addWidget(workspaceBody, 1);
     setCentralWidget(root);
 
@@ -950,7 +976,16 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
         }
         QWidget#SidebarPanel {
             background: @SIDEBAR@;
-            border-right: 1px solid @BORDER@;
+            border: 0;
+        }
+        QSplitter#SidebarSplitter::handle:horizontal {
+            background: transparent;
+            border-left: 1px solid @BORDER@;
+        }
+        QSplitter#SidebarSplitter::handle:horizontal:hover,
+        QSplitter#SidebarSplitter::handle:horizontal:pressed {
+            background: @SELECTION@;
+            border-left: 1px solid @ACCENT@;
         }
         QLabel#SidebarHeader {
             color: @TEXT@;

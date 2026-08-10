@@ -1,13 +1,18 @@
 #pragma once
 
 #include <QColor>
+#include <QHash>
+#include <QList>
+#include <QPointer>
 #include <QTabBar>
 
 class QAbstractButton;
 class QMetaMethod;
 class QMouseEvent;
+class QPainter;
 class QPaintEvent;
 class QResizeEvent;
+class QVariantAnimation;
 class QWheelEvent;
 class QWidget;
 
@@ -16,7 +21,7 @@ class QWidget;
  *
  * Qt 原生 QTabBar 的外观更接近文档页签，并且关闭按钮会永久占用每个标签的空间。
  * 本控件保留 QTabBar 已验证的索引、拖动和滚动行为，只接管尺寸与绘制：当前标签使用
- * 高对比圆角底色，关闭按钮仅在当前或悬停标签中出现，从而得到接近现代终端客户端的
+ * 高对比圆角底色，关闭按钮仅在悬停标签中出现，从而得到接近现代终端客户端的
  * 紧凑标题栏体验。控件不持有任何终端对象，标签生命周期仍由 MainWindow 统一管理。
  */
 class SessionTabBar final : public QTabBar {
@@ -114,7 +119,14 @@ protected:
     /** @brief 返回包含胶囊留白和按需关闭按钮空间的标签建议尺寸。 */
     QSize tabSizeHint(int index) const override;
 
-    /** @brief 绘制所有可见标签、终端图标、标题和悬停关闭按钮。 */
+    /**
+     * @brief 绘制所有可见标签、拖拽预览、终端图标、标题和悬停关闭按钮。
+     * @param event 当前重绘事件；事件区域用于裁剪无关绘制。
+     *
+     * QTabBar 的原生拖拽偏移属于私有状态，完全自绘后不能再由基类 paintEvent 帮忙应用。
+     * 本实现因此使用稳定标签标识和公开的 tabRect() 自行合成拖拽及换位动画，避免原位置
+     * 标签与 Qt 原生拖拽快照同时出现而形成文字重影。
+     */
     void paintEvent(QPaintEvent *event) override;
 
     /**
@@ -143,6 +155,21 @@ protected:
     /** @brief 命中自绘关闭按钮时发出 QTabBar::tabCloseRequested。 */
     void mouseReleaseEvent(QMouseEvent *event) override;
 
+    /**
+     * @brief 标签插入后为其分配进程内唯一标识。
+     * @param index 新标签插入后的索引。
+     *
+     * 动画不能用索引标识标签，因为拖动换位本身会改变索引；单独维护稳定标识才能在
+     * tabMoved 前后正确匹配同一个可视标签，并且不会占用业务层可能使用的 tabData。
+     */
+    void tabInserted(int index) override;
+
+    /**
+     * @brief 标签删除后同步移除稳定标识并终止对应动画。
+     * @param index 被删除标签原先所在的索引。
+     */
+    void tabRemoved(int index) override;
+
 private:
     /**
      * @brief 计算指定标签内关闭按钮的点击区域。
@@ -150,6 +177,84 @@ private:
      * @return 相对于标签栏的关闭按钮矩形。
      */
     [[nodiscard]] QRect closeButtonRect(int index) const;
+
+    /**
+     * @brief 在给定矩形中绘制一个完整的会话标签。
+     * @param painter 已启用抗锯齿的目标画笔。
+     * @param index 标签当前逻辑索引，用于读取标题和选中状态。
+     * @param rawRect 已叠加动画或拖拽偏移的可视矩形。
+     * @param hovered 是否绘制悬停背景与关闭按钮。
+     *
+     * 静态标签、换位动画标签和鼠标下的拖拽标签必须共用这一条绘制路径，否则拖动时
+     * Qt 的原生快照与自绘外观不一致，会再次出现两套文字轮廓叠加的问题。
+     */
+    void drawSessionTab(QPainter &painter,
+                        int index,
+                        const QRect &rawRect,
+                        bool hovered) const;
+
+    /**
+     * @brief 处理 QTabBar 已完成的索引移动，同步稳定标签标识的顺序。
+     * @param from 移动前索引。
+     * @param to 移动后索引。
+     */
+    void handleTabMoved(int from, int to);
+
+    /**
+     * @brief 返回指定索引对应的稳定标签标识。
+     * @param index 当前标签索引。
+     * @return 有效标识；索引无效或标识尚未同步时返回 0。
+     */
+    [[nodiscard]] quint64 tabIdAt(int index) const;
+
+    /**
+     * @brief 查找稳定标签标识当前所在的逻辑索引。
+     * @param tabId 标签稳定标识。
+     * @return 当前索引；标签已删除时返回 -1。
+     */
+    [[nodiscard]] int indexForTabId(quint64 tabId) const;
+
+    /**
+     * @brief 返回叠加当前动画横向偏移后的标签矩形。
+     * @param index 当前标签索引。
+     * @return 用于本帧绘制的可视矩形；无效索引返回空矩形。
+     */
+    [[nodiscard]] QRect visualTabRect(int index) const;
+
+    /**
+     * @brief 从指定横向偏移平滑回到标签的最终布局位置。
+     * @param tabId 需要移动的稳定标签标识。
+     * @param startOffset 动画首帧相对 tabRect() 的横向像素偏移。
+     * @param duration 动画时长（毫秒）；0 表示尊重系统关闭动画的设置并立即落位。
+     *
+     * 若同一标签尚在上一段动画中，新动画会从它当前的屏幕位置续接，避免用户快速跨越
+     * 多个标签时出现回跳。动画对象由本控件持有并在结束后自动清理。
+     */
+    void startTabMoveAnimation(quint64 tabId, int startOffset, int duration);
+
+    /**
+     * @brief 停止并清理指定标签尚未完成的位移动画。
+     * @param tabId 标签稳定标识；不存在对应动画时安全无操作。
+     */
+    void stopTabMoveAnimation(quint64 tabId);
+
+    /**
+     * @brief 隐藏 Qt 为原生 QTabBar 创建的拖拽快照子控件。
+     * @param childrenBeforeMove 调用基类 mouseMoveEvent 前存在的直属子控件集合。
+     *
+     * 原生快照使用系统 QTabBar 样式，无法复用本类的胶囊绘制，而且本类不调用基类
+     * paintEvent 后它也不会跟随鼠标更新位置。首次拖动时通过“本次新增直属子控件”定位它，
+     * 后续保存弱引用；只隐藏该新增控件，不依赖 Qt 私有类名或对象名。
+     */
+    void hideNativeDragPreview(const QList<QWidget *> &childrenBeforeMove);
+
+    /**
+     * @brief 清空一次鼠标拖拽手势的临时状态，但保留仍在运行的落位动画。
+     *
+     * 该方法用于正常释放、关闭标签以及基类因鼠标按键丢失而取消拖拽的路径，确保下一次
+     * 按下不会沿用旧标签标识或旧坐标。
+     */
+    void resetPointerDragState();
 
     /** @brief 把内置滚动按钮移出可视区域，并在状态变化时发出 scrollStateChanged。 */
     void syncScrollButtons();
@@ -197,4 +302,37 @@ private:
     QColor m_closeHoverColor = QColor(QStringLiteral("#ff6b6b"));
     /** @brief 滚轮横向/纵向 delta 的累积值，凑够一格（120）才触发一次滚动，避免跳跃。 */
     int m_wheelDeltaAccumulator = 0;
+
+    /**
+     * @brief 与当前标签顺序一一对应的稳定标识列表。
+     *
+     * 标识只服务于绘制动画，不参与持久化，也不会写入 tabData，避免与 MainWindow 后续
+     * 可能保存的会话业务数据发生字段冲突。0 被保留为“无效标识”。
+     */
+    QList<quint64> m_tabIds;
+    /** @brief 下一个可分配的稳定标签标识；会话进程内单调递增即可保证唯一。 */
+    quint64 m_nextTabId = 1;
+    /** @brief 各标签当前相对 tabRect() 的横向动画偏移，单位为逻辑像素。 */
+    QHash<quint64, int> m_tabAnimationOffsets;
+    /** @brief 各标签正在运行的动画对象，由本控件负责停止与延迟销毁。 */
+    QHash<quint64, QVariantAnimation *> m_tabMoveAnimations;
+
+    /** @brief 本次左键按下的标签稳定标识；0 表示没有可拖动标签。 */
+    quint64 m_pressedTabId = 0;
+    /** @brief 左键按下时相对于标签栏的坐标，用于复用 Qt 的拖拽启动距离语义。 */
+    QPoint m_dragStartPosition;
+    /** @brief 鼠标按下点到标签左边缘的距离，使拖拽标签始终保持原抓取位置。 */
+    int m_pressedOffsetWithinTab = 0;
+    /** @brief 最近一次带左键的移动坐标，用于绘制随鼠标移动的唯一拖拽标签。 */
+    QPoint m_lastDragPosition;
+    /** @brief 是否已越过系统拖拽阈值并进入标签重排状态。 */
+    bool m_dragActive = false;
+
+    /**
+     * @brief Qt 内部原生拖拽快照的弱引用。
+     *
+     * 该子控件仍由 QTabBar 管理生命周期；这里只在拖动期间将其隐藏，防止系统样式文字与
+     * 本类自绘文字叠加。QPointer 可在 Qt 内部提前销毁它时自动置空，避免悬空访问。
+     */
+    QPointer<QWidget> m_nativeDragPreview;
 };

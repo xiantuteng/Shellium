@@ -20,6 +20,7 @@ class QObject;
 class QPoint;
 class QResizeEvent;
 class QShowEvent;
+class QSplitter;
 class QStackedWidget;
 class QTabWidget;
 class QTimer;
@@ -239,6 +240,13 @@ private:
     QWidget *m_navigationRail = nullptr;
     /** @brief 可整体收起的单一侧栏容器。 */
     QWidget *m_sidebarPanel = nullptr;
+    /**
+     * @brief 连接侧栏与终端工作区的水平分隔器。
+     *
+     * 分隔器把侧栏最右边框变成可拖拽命中区域，同时保留终端区的最小可用宽度；隐藏侧栏
+     * 时 Qt 会自动隐藏对应把手，再次展开时恢复用户上一次拖动后的宽度。
+     */
+    QSplitter *m_sidebarSplitter = nullptr;
     /** @brief 承载主机、效率工具和端口转发三个互斥页面。 */
     QStackedWidget *m_sidebarStack = nullptr;
     /** @brief 当前侧栏页面标题。 */
