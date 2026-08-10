@@ -293,6 +293,8 @@ if(BUILD_TESTING)
         src/terminal/TerminalView.h
         src/terminal/VtermBridge.cpp
         src/terminal/VtermBridge.h
+        src/ui/SettingsWidgets.cpp
+        src/ui/SettingsWidgets.h
     )
     target_include_directories(ShelliumProductivityTests PRIVATE src)
     target_link_libraries(ShelliumProductivityTests PRIVATE
@@ -308,6 +310,37 @@ if(BUILD_TESTING)
         target_link_libraries(ShelliumProductivityTests PRIVATE util)
     endif()
     add_test(NAME ShelliumProductivityTests COMMAND ShelliumProductivityTests)
+
+    # 端口转发侧栏改成卡片式列表后，选中态读取、双击、右键菜单全部换成了 QListWidget
+    # 的 item API；这里之前完全没有界面测试覆盖，新目标只需要数据库和 SSH 栈骨架，
+    # 不需要真正建立网络连接。
+    qt_add_executable(ShelliumPortForwardTests
+        tests/PortForwardManagerWidgetTest.cpp
+        src/core/ConnectionTarget.cpp
+        src/core/ConnectionTarget.h
+        src/core/HostRecord.h
+        src/forwarding/PortForwardManagerWidget.cpp
+        src/forwarding/PortForwardManagerWidget.h
+        src/forwarding/PortForwardRule.h
+        src/forwarding/PortForwardRuntime.cpp
+        src/forwarding/PortForwardRuntime.h
+        src/forwarding/Socks5Protocol.cpp
+        src/forwarding/Socks5Protocol.h
+        src/ssh/ShellShim.cpp
+        src/ssh/ShellShim.h
+        src/ssh/SshSessionNode.cpp
+        src/ssh/SshSessionNode.h
+        src/ssh/SshSessionStack.cpp
+        src/ssh/SshSessionStack.h
+        src/storage/ApplicationDatabase.cpp
+        src/storage/ApplicationDatabase.h
+        src/ui/UiIcons.h
+    )
+    target_include_directories(ShelliumPortForwardTests PRIVATE src)
+    target_link_libraries(ShelliumPortForwardTests PRIVATE
+        Qt6::Core Qt6::Gui Qt6::Network Qt6::Widgets Qt6::Sql Qt6::Test
+        PkgConfig::LIBSSH)
+    add_test(NAME ShelliumPortForwardTests COMMAND ShelliumPortForwardTests)
 
     # 标题栏标签控件测试需要真实的 QTabBar 布局与窗口曝光，因此依赖 Qt6::Widgets 和
     # 平台 GUI；macOS 上还需要 Objective-C++ 的原生标题栏桥接。
@@ -467,6 +500,8 @@ if(BUILD_TESTING)
         src/terminal/LocalShellWorker.h
         src/settings/TerminalSettings.cpp
         src/settings/TerminalSettings.h
+        src/ui/SettingsWidgets.cpp
+        src/ui/SettingsWidgets.h
     )
     target_include_directories(ShelliumSshIntegrationTests PRIVATE src)
     target_link_libraries(ShelliumSshIntegrationTests PRIVATE

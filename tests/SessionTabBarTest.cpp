@@ -151,6 +151,15 @@ private slots:
 
     /** @brief 标签换位时，被让开的相邻标签应从旧位置平滑移动到新位置。 */
     void reorderedNeighborAnimatesFromPreviousPosition();
+
+    /**
+     * @brief 连接状态点必须按每个标签独立显示，且关闭的标签不能把状态漏给复用的新标签。
+     *
+     * 状态点不受"是否为当前选中标签"影响——它回答的是"这个标签的会话是否掉线"，选中态
+     * 已经由胶囊底色单独表达。标签关闭后，稳定标识对应的状态必须一并清理，否则新开的
+     * 标签一插入同一个索引就会平白顶着一个不属于自己的红点或绿点。
+     */
+    void connectionStateDotReflectsPerTabStateAndClearsOnRemoval();
 };
 
 void SessionTabBarTest::reportsScrollStateAndScrollsTabs()
@@ -455,6 +464,57 @@ void SessionTabBarTest::reorderedNeighborAnimatesFromPreviousPosition()
              "让位标签动画结束后仍停留在旧位置，说明偏移未收敛到新的 tabRect");
 
     QTest::mouseRelease(&tabBar, Qt::LeftButton, Qt::NoModifier, dragPosition);
+}
+
+void SessionTabBarTest::connectionStateDotReflectsPerTabStateAndClearsOnRemoval()
+{
+    SessionTabBar tabBar;
+    tabBar.resize(420, 42);
+    tabBar.setVisualColors(QColor(QStringLiteral("#aeb6cc")),
+                           QColor(QStringLiteral("#f8f9fd")),
+                           QColor(QStringLiteral("#353c56")),
+                           QColor(QStringLiteral("#424b68")),
+                           QColor(QStringLiteral("#2bd981")));
+    tabBar.addTab(QStringLiteral("会话一"));
+    tabBar.addTab(QStringLiteral("会话二"));
+    tabBar.setCurrentIndex(0);
+    tabBar.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&tabBar));
+
+    const QColor connectedColor(QStringLiteral("#2bd981"));
+    const QColor failedColor(QStringLiteral("#e5484d"));
+
+    // 状态点画在终端图标右下角：图标矩形是 (tabRect.left()+15, 纵向居中-8, 17, 16)，
+    // 点心落在图标的 (right-1, bottom-1)。采样一个 10×10 的小方块覆盖点本身即可，
+    // 不会碰到左上角"当前标签"专用的强调点或右侧仅悬停时才出现的关闭按钮。
+    const auto dotSampleRect = [&tabBar](const int index) {
+        const QRect tabRect = tabBar.tabRect(index);
+        const int iconRight = tabRect.left() + 15 + 17;
+        const int iconBottom = tabRect.center().y() - 8 + 16;
+        return QRect(iconRight - 5, iconBottom - 5, 10, 10);
+    };
+
+    QPixmap frame = tabBar.grab();
+    QVERIFY2(countPixelsNearColor(frame, dotSampleRect(0), connectedColor) == 0,
+             "没有调用 setTabConnectionState 时不能凭空出现绿色状态点");
+    QVERIFY2(countPixelsNearColor(frame, dotSampleRect(1), failedColor) == 0,
+             "没有调用 setTabConnectionState 时不能凭空出现红色状态点");
+
+    tabBar.setTabConnectionState(0, SessionTabBar::ConnectionState::Connected);
+    tabBar.setTabConnectionState(1, SessionTabBar::ConnectionState::Failed);
+    frame = tabBar.grab();
+    QVERIFY2(countPixelsNearColor(frame, dotSampleRect(0), connectedColor) > 4,
+             "已连接的标签必须显示绿色状态点");
+    QVERIFY2(countPixelsNearColor(frame, dotSampleRect(1), failedColor) > 4,
+             "连接失败的标签必须显示红色状态点，即便它不是当前选中标签");
+
+    // 关闭标签一（Connected）后在同一索引插入一个全新标签；新标签必须是干净的，不能
+    // 顶着旧标签留下的状态——两者的稳定标识不同，state 哈希若忘记清理就会张冠李戴。
+    tabBar.removeTab(0);
+    tabBar.insertTab(0, QStringLiteral("会话三"));
+    frame = tabBar.grab();
+    QVERIFY2(countPixelsNearColor(frame, dotSampleRect(0), connectedColor) == 0,
+             "新插入的标签不能继承已关闭标签残留的连接状态");
 }
 
 QTEST_MAIN(SessionTabBarTest)

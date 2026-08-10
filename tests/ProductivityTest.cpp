@@ -51,6 +51,21 @@ private slots:
      */
     void terminalPaneShowsAndExpiresTransientStatus();
 
+    /**
+     * @brief "推测嵌套目标"徽章默认隐藏，且没有自持层时不会被形似 ssh 的命令误触发。
+     *
+     * 徽章完整的"显示"路径需要一次真实 SSH 根连接（自持层）才能触发，不在本隔离测试
+     * 套件范围内；这里覆盖的是不需要网络也该成立的部分——默认隐藏、守卫没被打开、切回
+     * 本地终端后保持隐藏。
+     */
+    void terminalPaneShowsNestedBadgeOnlyWhileInferredLayerIsActive();
+
+    /**
+     * @brief 320px 侧栏放不下"名称/说明"两列，片段树必须收窄成单列，说明改到第二行角色里；
+     * 没有说明时要退化显示命令，分组节点则完全不设置这个角色。
+     */
+    void snippetTreeIsSingleColumnWithDescriptionFallbackToCommand();
+
 private:
     /** @brief 递归查找树中保存指定稳定 id 的节点。 */
     static QTreeWidgetItem *findTreeItem(QTreeWidgetItem *parent, const QString &id);
@@ -292,6 +307,92 @@ void ProductivityTest::terminalPaneShowsAndExpiresTransientStatus()
 
     // 到期后必须自动清空，不能永久占用状态栏空间——这条提示本质上是转瞬即逝的操作反馈。
     QTRY_VERIFY_WITH_TIMEOUT(statusLabel->text().isEmpty(), 9000);
+}
+
+void ProductivityTest::terminalPaneShowsNestedBadgeOnlyWhileInferredLayerIsActive()
+{
+    // 徽章真正显示的那条路径（推测层建立在一个已认证的自持层之上）需要一次真实 SSH
+    // 根连接才能触发——inspectSubmittedCommand 在 m_ownedTargets 为空时直接短路返回，
+    // 这是刻意的：没有人已经连上任何机器时，解析器不该把终端里出现的字符串当成"进入了
+    // 嵌套服务器"。真实网络连接不在这个隔离测试套件的覆盖范围内（见类注释），因此这里
+    // 只覆盖能在没有网络的前提下验证的部分：徽章存在、默认隐藏，且这个短路守卫本身没有
+    // 被意外打开——传一条形似 ssh 的命令进去，在没有自持层时绝不能让徽章冒出来。
+    TerminalPane pane;
+    pane.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&pane));
+
+    auto *badge = pane.findChild<QLabel *>(QStringLiteral("terminalSessionNestedBadge"));
+    QVERIFY2(badge != nullptr, "状态栏必须有一个专门的推测层徽章控件");
+    QVERIFY2(!badge->isVisibleTo(&pane), "没有任何推测层时徽章不能显示");
+
+    QVERIFY(QMetaObject::invokeMethod(&pane,
+                                      "inspectSubmittedCommand",
+                                      Qt::DirectConnection,
+                                      Q_ARG(QString, QStringLiteral("ssh demo@example.com"))));
+    QVERIFY2(!badge->isVisibleTo(&pane),
+             "还没有任何自持层（从未真正连接过）时，徽章不能因为一条形似 ssh 的命令就冒出来");
+
+    // 本地 Shell 是徽章"必须隐藏"的另一类状态：即便未来某处误把它设成可见，切回本地
+    // 终端也必须把它带回隐藏状态。
+    pane.openLocalShell();
+    QVERIFY2(!badge->isVisibleTo(&pane), "本地终端状态下徽章必须保持隐藏");
+}
+
+void ProductivityTest::snippetTreeIsSingleColumnWithDescriptionFallbackToCommand()
+{
+    SnippetRecord folder;
+    folder.id = QStringLiteral("folder-1");
+    folder.kind = SnippetNodeKind::Folder;
+    folder.name = QStringLiteral("常用运维");
+    QVERIFY(m_model->saveSnippet(folder));
+
+    SnippetRecord withDescription;
+    withDescription.id = QStringLiteral("snippet-with-desc");
+    withDescription.parentId = folder.id;
+    withDescription.kind = SnippetNodeKind::Snippet;
+    withDescription.name = QStringLiteral("查看磁盘占用");
+    withDescription.command = QStringLiteral("df -h | sort -k5 -h -r");
+    withDescription.description = QStringLiteral("按占用从高到低查看各分区使用率");
+    QVERIFY(m_model->saveSnippet(withDescription));
+
+    // 没有说明时必须退化显示命令本身，否则第二行会是空的，用户看不出这条片段做什么。
+    SnippetRecord withoutDescription;
+    withoutDescription.id = QStringLiteral("snippet-without-desc");
+    withoutDescription.parentId = folder.id;
+    withoutDescription.kind = SnippetNodeKind::Snippet;
+    withoutDescription.name = QStringLiteral("重启 nginx");
+    withoutDescription.command = QStringLiteral("systemctl restart nginx");
+    QVERIFY(m_model->saveSnippet(withoutDescription));
+
+    ProductivityWidget widget(m_model.get());
+    QTreeWidget *tree = widget.findChild<QTreeWidget *>(
+        QStringLiteral("productivitySnippetTree"));
+    QVERIFY(tree != nullptr);
+
+    // 320px 侧栏放不下两列表头，树必须是单列且不显示表头。
+    QCOMPARE(tree->columnCount(), 1);
+    QVERIFY(tree->isHeaderHidden());
+
+    constexpr int kPreviewRole = Qt::UserRole + 2;
+
+    QTreeWidgetItem *folderItem = nullptr;
+    for (int index = 0; index < tree->topLevelItemCount(); ++index) {
+        if (tree->topLevelItem(index)->data(0, Qt::UserRole).toString() == folder.id) {
+            folderItem = tree->topLevelItem(index);
+            break;
+        }
+    }
+    QVERIFY(folderItem != nullptr);
+    // 分组行不是"没有说明的片段"，不能拿命令去填第二行——分组本来就没有 command。
+    QVERIFY(!folderItem->data(0, kPreviewRole).isValid());
+
+    QTreeWidgetItem *withDescItem = findTreeItem(folderItem, withDescription.id);
+    QVERIFY(withDescItem != nullptr);
+    QCOMPARE(withDescItem->data(0, kPreviewRole).toString(), withDescription.description);
+
+    QTreeWidgetItem *withoutDescItem = findTreeItem(folderItem, withoutDescription.id);
+    QVERIFY(withoutDescItem != nullptr);
+    QCOMPARE(withoutDescItem->data(0, kPreviewRole).toString(), withoutDescription.command);
 }
 
 QTEST_MAIN(ProductivityTest)

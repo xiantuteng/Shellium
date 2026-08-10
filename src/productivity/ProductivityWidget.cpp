@@ -11,16 +11,18 @@
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
-#include <QHeaderView>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QLocale>
 #include <QMessageBox>
 #include <QMenu>
+#include <QPainter>
 #include <QPushButton>
 #include <QSet>
 #include <QSplitter>
+#include <QStyle>
+#include <QStyledItemDelegate>
 #include <QTabWidget>
 #include <QTextEdit>
 #include <QToolButton>
@@ -28,6 +30,8 @@
 #include <QTreeWidgetItem>
 #include <QUuid>
 #include <QVBoxLayout>
+
+#include <algorithm>
 
 namespace {
 
@@ -37,8 +41,112 @@ constexpr int kIdRole = Qt::UserRole;
 /** @brief QTreeWidgetItem::UserRole+1 中保存的 SnippetNodeKind 整数值。 */
 constexpr int kKindRole = Qt::UserRole + 1;
 
+/**
+ * @brief QTreeWidgetItem::UserRole+2 中保存的第二行预览文案。
+ *
+ * 只有 Snippet 节点会设置：有 description 就显示 description，为空则退化显示 command，
+ * 不引入新数据源。分组节点不设置该角色，委托据此判断要不要多画一行。
+ */
+constexpr int kPreviewRole = Qt::UserRole + 2;
+
 /** @brief 目标列表项 UserRole 中保存的持久化主机 id。 */
 constexpr int kTargetIdRole = Qt::UserRole;
+
+/** @brief 按点/像素两种字号语义缩放字体，避免 pointSizeF 为 -1 时算出 0 号字。 */
+QFont scaledFont(QFont font, const double deltaPoints)
+{
+    if (font.pointSizeF() > 0.0) {
+        font.setPointSizeF(std::max(7.0, font.pointSizeF() + deltaPoints));
+    } else if (font.pixelSize() > 0) {
+        font.setPixelSize(std::max(9, font.pixelSize() + qRound(deltaPoints * 4.0 / 3.0)));
+    }
+    return font;
+}
+
+/**
+ * @brief 把片段行画成"名称 + 命令/说明预览"两行，分组行仍是单行。
+ *
+ * 320px 侧栏放不下"名称/说明"两列表头，两列本身也会把说明挤到几乎看不清的宽度。改成
+ * 单列后第二行复用 kPreviewRole 里已经算好的文案，委托只负责排版，不重新读数据库。
+ */
+class SnippetItemDelegate final : public QStyledItemDelegate {
+public:
+    using QStyledItemDelegate::QStyledItemDelegate;
+
+protected:
+    void paint(QPainter *painter,
+              const QStyleOptionViewItem &option,
+              const QModelIndex &index) const override
+    {
+        const QString preview = index.data(kPreviewRole).toString();
+        if (preview.isEmpty()) {
+            QStyledItemDelegate::paint(painter, option, index);
+            return;
+        }
+
+        // 背景与选中态仍交给样式（generic QTreeView 已有的浅色选中底纹），本委托只接管
+        // 文字排版，不重新实现一套选中视觉。
+        QStyleOptionViewItem background = option;
+        initStyleOption(&background, index);
+        background.text.clear();
+        const QWidget *widget = option.widget;
+        QStyle *style = widget != nullptr ? widget->style() : QApplication::style();
+        style->drawControl(QStyle::CE_ItemViewItem, &background, painter, widget);
+
+        const QRect contentRect =
+            style->subElementRect(QStyle::SE_ItemViewItemText, &background, widget);
+        const QRect iconRect =
+            style->subElementRect(QStyle::SE_ItemViewItemDecoration, &background, widget);
+        if (!iconRect.isEmpty()) {
+            qvariant_cast<QIcon>(index.data(Qt::DecorationRole))
+                .paint(painter, iconRect, Qt::AlignCenter);
+        }
+
+        const QFont nameFont = option.font;
+        const QFont previewFont = scaledFont(option.font, -1.5);
+        const QFontMetrics nameMetrics(nameFont);
+        const QFontMetrics previewMetrics(previewFont);
+        // 选中态下 generic QTreeView 的 QSS 只换背景、不换字色（@TEXT@ 保持不变），这里跟着
+        // 用同一条 Text 角色，选中前后文字颜色才不会“跳色”。
+        const QColor baseColor = background.palette.color(QPalette::Text);
+
+        painter->save();
+        const QRect nameRect(contentRect.left(), contentRect.top(), contentRect.width(),
+                             nameMetrics.height());
+        painter->setFont(nameFont);
+        painter->setPen(baseColor);
+        painter->drawText(nameRect,
+                          Qt::AlignLeft | Qt::AlignVCenter,
+                          nameMetrics.elidedText(index.data(Qt::DisplayRole).toString(),
+                                                 Qt::ElideRight,
+                                                 nameRect.width()));
+
+        QColor previewColor = baseColor;
+        previewColor.setAlphaF(0.62F);
+        const QRect previewRect(contentRect.left(),
+                                nameRect.bottom() + 1,
+                                contentRect.width(),
+                                previewMetrics.height());
+        painter->setFont(previewFont);
+        painter->setPen(previewColor);
+        painter->drawText(previewRect,
+                          Qt::AlignLeft | Qt::AlignVCenter,
+                          previewMetrics.elidedText(preview, Qt::ElideMiddle, previewRect.width()));
+        painter->restore();
+    }
+
+    QSize sizeHint(const QStyleOptionViewItem &option, const QModelIndex &index) const override
+    {
+        QSize hint = QStyledItemDelegate::sizeHint(option, index);
+        if (index.data(kPreviewRole).toString().isEmpty()) {
+            return hint;
+        }
+        const int textHeight = QFontMetrics(option.font).height()
+            + QFontMetrics(scaledFont(option.font, -1.5)).height() + 1;
+        hint.setHeight(std::max(hint.height(), textHeight + 8));
+        return hint;
+    }
+};
 
 /**
  * @brief 将效率侧栏的次要命令配置为紧凑图标按钮。
@@ -133,8 +241,11 @@ void ProductivityWidget::buildUi()
     auto *snippetSplitter = new QSplitter(Qt::Vertical, snippetPage);
     m_snippetTree = new QTreeWidget(snippetSplitter);
     m_snippetTree->setObjectName(QStringLiteral("productivitySnippetTree"));
-    m_snippetTree->setHeaderLabels({tr("名称"), tr("说明")});
-    m_snippetTree->header()->setStretchLastSection(true);
+    // 320px 侧栏放不下"名称/说明"两列表头；说明改由 SnippetItemDelegate 画成名称下方的
+    // 第二行小字，单列就够，也不需要再显示表头。
+    m_snippetTree->setHeaderHidden(true);
+    m_snippetTree->setColumnCount(1);
+    m_snippetTree->setItemDelegate(new SnippetItemDelegate(m_snippetTree));
     m_snippetTree->setSelectionMode(QAbstractItemView::SingleSelection);
     m_snippetTree->setContextMenuPolicy(Qt::CustomContextMenu);
 
@@ -457,7 +568,11 @@ bool ProductivityWidget::appendSnippetChildren(QTreeWidgetItem *parentItem,
             record.kind == SnippetNodeKind::Folder
                 ? UiIcons::symbol(m_snippetTree, UiIcons::Symbol::Folder, m_snippetTree->palette().color(QPalette::WindowText))
                 : UiIcons::symbol(m_snippetTree, UiIcons::Symbol::File, m_snippetTree->palette().color(QPalette::WindowText)));
-        item->setText(1, record.description);
+        if (record.kind == SnippetNodeKind::Snippet) {
+            item->setData(0,
+                         kPreviewRole,
+                         record.description.isEmpty() ? record.command : record.description);
+        }
         item->setData(0, kIdRole, record.id);
         item->setData(0, kKindRole, static_cast<int>(record.kind));
         if (parentItem == nullptr) {

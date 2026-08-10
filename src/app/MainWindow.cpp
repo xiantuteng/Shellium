@@ -1680,6 +1680,10 @@ void MainWindow::connectSavedHost(const QString &hostId,
         setWorkspaceTabText(tabIndex,
                             target.displayName.isEmpty() ? target.connectionSpecifier()
                                                          : target.displayName);
+        if (m_titleTabBar != nullptr) {
+            m_titleTabBar->setTabConnectionState(tabIndex,
+                                                 SessionTabBar::ConnectionState::Connecting);
+        }
     }
 }
 
@@ -1819,8 +1823,12 @@ TerminalWorkspace *MainWindow::createWorkspaceTab(const QString &title)
     connect(pane,
             &TerminalPane::rootConnectionSucceeded,
             this,
-            [this, pane](const ConnectionTarget &target) {
+            [this, pane, workspace](const ConnectionTarget &target) {
                 recordConnectionSucceeded(pane, target);
+                if (m_titleTabBar != nullptr) {
+                    m_titleTabBar->setTabConnectionState(m_tabs->indexOf(workspace),
+                                                         SessionTabBar::ConnectionState::Connected);
+                }
                 if (!target.id.isEmpty() && pane->forwardingSessionStack() != nullptr) {
                     // 只有完成认证后的根栈才可承载规则；临时连接 id 不在数据库中，因此
                     // 管理器即使收到也不会找到任何持久化规则。
@@ -1831,7 +1839,7 @@ TerminalWorkspace *MainWindow::createWorkspaceTab(const QString &title)
     connect(pane,
             &TerminalPane::automaticReconnectStarted,
             this,
-            [this, pane](const ConnectionTarget &target,
+            [this, pane, workspace](const ConnectionTarget &target,
                          const int attempt,
                          const int maximumAttempts) {
                 // 只有主机树中的持久化 id 才写历史；临时连接仍可自动恢复，但不能制造无法在
@@ -1843,6 +1851,10 @@ TerminalWorkspace *MainWindow::createWorkspaceTab(const QString &title)
                     m_pendingHistoryHosts.insert(pane, target.id);
                     m_pendingHistoryStartedAt.insert(pane, QDateTime::currentDateTimeUtc());
                 }
+                if (m_titleTabBar != nullptr) {
+                    m_titleTabBar->setTabConnectionState(
+                        m_tabs->indexOf(workspace), SessionTabBar::ConnectionState::Connecting);
+                }
                 showTransientMessage(
                     tr("正在自动重连 %1（第 %2/%3 次）")
                         .arg(target.connectionSpecifier())
@@ -1853,16 +1865,28 @@ TerminalWorkspace *MainWindow::createWorkspaceTab(const QString &title)
     connect(pane,
             &TerminalPane::rootConnectionFailed,
             this,
-            [this, pane](const ConnectionTarget &target, const QString &message) {
+            [this, pane, workspace](const ConnectionTarget &target, const QString &message) {
                 recordConnectionFailed(pane, target, message);
+                if (m_titleTabBar != nullptr) {
+                    m_titleTabBar->setTabConnectionState(m_tabs->indexOf(workspace),
+                                                         SessionTabBar::ConnectionState::Failed);
+                }
                 m_portForwardManager->unregisterSession(target.id,
                                                         pane->forwardingSessionStack());
             });
     connect(pane,
             &TerminalPane::rootConnectionDisconnected,
             this,
-            [this, pane](const ConnectionTarget &target, const int exitStatus) {
+            [this, pane, workspace](const ConnectionTarget &target, const int exitStatus) {
                 recordConnectionDisconnected(pane, target, exitStatus);
+                if (m_titleTabBar != nullptr) {
+                    // -1 表示网络异常中断（无正常退出码）；用户主动 exit 产生的正常退出码
+                    // 只是回退到本地终端，不是故障，不该继续顶着一个红点。
+                    m_titleTabBar->setTabConnectionState(
+                        m_tabs->indexOf(workspace),
+                        exitStatus == -1 ? SessionTabBar::ConnectionState::Failed
+                                         : SessionTabBar::ConnectionState::Unknown);
+                }
                 m_portForwardManager->unregisterSession(target.id,
                                                         pane->forwardingSessionStack());
             });

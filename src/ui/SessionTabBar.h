@@ -29,10 +29,33 @@ class SessionTabBar final : public QTabBar {
 
 public:
     /**
+     * @brief 标签对应会话的连接状态，驱动标签左上角的微型状态点。
+     *
+     * Unknown 表示"还没有连接结果可展示"（刚打开的本地终端、正在首次建立连接前的
+     * 一瞬间），此时不画点——每个标签常驻一个默认灰点只会制造噪音，不传递任何信息。
+     */
+    enum class ConnectionState {
+        Unknown,
+        Connecting,
+        Connected,
+        Failed
+    };
+
+    /**
      * @brief 创建标题栏会话标签控件。
      * @param parent Qt 父控件，通常是窗口顶部的自定义标题区。
      */
     explicit SessionTabBar(QWidget *parent = nullptr);
+
+    /**
+     * @brief 更新指定标签的连接状态点，立即重绘。
+     * @param index 目标标签的当前索引；越界时安全忽略。
+     * @param state 新的连接状态。
+     *
+     * 状态点画在每一个标签上（不只是当前选中的那个），因为它回答的是"哪些后台标签
+     * 掉线了"，而选中态本身已经通过胶囊底色单独表达，两者不能合并成一个视觉元素。
+     */
+    void setTabConnectionState(int index, ConnectionState state);
 
     /**
      * @brief 更新标签栏颜色并立即重绘。
@@ -316,6 +339,8 @@ private:
     QHash<quint64, int> m_tabAnimationOffsets;
     /** @brief 各标签正在运行的动画对象，由本控件负责停止与延迟销毁。 */
     QHash<quint64, QVariantAnimation *> m_tabMoveAnimations;
+    /** @brief 各标签当前的连接状态，按稳定标识索引，随标签关闭一并清理。 */
+    QHash<quint64, ConnectionState> m_tabConnectionStates;
 
     /** @brief 本次左键按下的标签稳定标识；0 表示没有可拖动标签。 */
     quint64 m_pressedTabId = 0;

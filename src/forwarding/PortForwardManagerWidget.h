@@ -10,7 +10,7 @@ class ApplicationDatabase;
 class PortForwardRuntime;
 class QComboBox;
 class QLabel;
-class QTableWidget;
+class QListWidget;
 class SshSessionStack;
 
 /**
@@ -127,7 +127,7 @@ private:
 
     ApplicationDatabase *m_database = nullptr;
     QComboBox *m_hostCombo = nullptr;
-    QTableWidget *m_ruleTable = nullptr;
+    QListWidget *m_ruleList = nullptr;
     QLabel *m_summaryLabel = nullptr;
 
     /** @brief 每台主机当前打开的根会话弱引用列表。 */

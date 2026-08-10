@@ -11,16 +11,15 @@
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QFormLayout>
-#include <QHeaderView>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
+#include <QListWidget>
 #include <QMessageBox>
 #include <QMenu>
 #include <QPushButton>
 #include <QSpinBox>
 #include <QStringList>
-#include <QTableWidget>
 #include <QToolButton>
 #include <QVBoxLayout>
 #include <QUuid>
@@ -205,13 +204,114 @@ QString formatEndpoint(const QString &host, const quint16 port)
         : QStringLiteral("%1:%2").arg(normalizedHost).arg(port);
 }
 
-/** @brief 端口转发表的可见列顺序；第二列固定用于本机/远程地址映射。 */
-enum RuleTableColumn {
-    RuleNameColumn = 0,
-    EndpointMappingColumn,
-    RuleTypeColumn,
-    RuleStateColumn,
-    RuleTableColumnCount
+/**
+ * @brief 转发类型徽章的背景/文字配色，用半透明背景色叠加在列表项实际背景上。
+ *
+ * 用 rgba() 而不是"深色/浅色主题各一套固定色号"，是因为侧栏的 QPalette 不保证和应用
+ * 自己选择的深浅主题同步（系统外观与应用内主题不一致时会读到错的一套）——半透明背景色
+ * 由 Qt 直接跟当前实际显示的底色做 alpha 合成，不需要猜测,同一份颜色在深浅主题下都读得清。
+ */
+QString typeChipStyleSheet(const PortForwardType type)
+{
+    QString background;
+    QString foreground;
+    switch (type) {
+    case PortForwardType::Remote:
+        background = QStringLiteral("rgba(59,120,201,40)");
+        foreground = QStringLiteral("#3b78c9");
+        break;
+    case PortForwardType::Dynamic:
+        background = QStringLiteral("rgba(132,82,201,40)");
+        foreground = QStringLiteral("#8452c9");
+        break;
+    case PortForwardType::Local:
+    default:
+        background = QStringLiteral("rgba(43,217,129,40)");
+        foreground = QStringLiteral("#159a60");
+        break;
+    }
+    return QStringLiteral("background:%1; color:%2; border-radius:6px; padding:1px 7px; "
+                          "font-weight:700; font-size:10px;")
+        .arg(background, foreground);
+}
+
+/**
+ * @brief 状态点颜色；固定单一色号，不按深浅主题分支。
+ *
+ * 圆点是纯色实心图形，不存在"和背景对比不足"的问题，没必要为了区区一个点引入同一类
+ * 深浅误判风险（参见主机树选中态曾经踩过的坑）。
+ */
+QColor statusDotColor(const PortForwardState state)
+{
+    switch (state) {
+    case PortForwardState::Running:
+        return QColor(QStringLiteral("#2bd981"));
+    case PortForwardState::Failed:
+        return QColor(QStringLiteral("#e5484d"));
+    case PortForwardState::Starting:
+    case PortForwardState::Stopping:
+        return QColor(QStringLiteral("#e2a94f"));
+    case PortForwardState::Stopped:
+    default:
+        return QColor(QStringLiteral("#8a94a6"));
+    }
+}
+
+/**
+ * @brief 端口转发卡片式列表的单行内容：名称+类型徽章一行，地址映射+状态一行。
+ *
+ * 原来的四列表格在默认 320px 侧栏里要么互相挤占，要么被裁到看不清；改成两行卡片后，
+ * 地址映射可以占满整行宽度，不再需要横向滚动或极窄的列。行内容由调用方（reloadRules）
+ * 预先算好文本传入，本类只负责排版和配色，不重新访问数据库或规则对象。
+ */
+class PortForwardRuleRow final : public QWidget {
+public:
+    PortForwardRuleRow(const QString &name,
+                       const PortForwardType type,
+                       const QString &endpointText,
+                       const PortForwardState state,
+                       const QString &stateLabel,
+                       const int activeConnections,
+                       QWidget *parent = nullptr)
+        : QWidget(parent)
+    {
+        auto *layout = new QVBoxLayout(this);
+        layout->setContentsMargins(6, 5, 6, 5);
+        layout->setSpacing(2);
+
+        auto *topRow = new QHBoxLayout;
+        auto *nameLabel = new QLabel(name, this);
+        QFont nameFont = nameLabel->font();
+        nameFont.setBold(true);
+        nameLabel->setFont(nameFont);
+        nameLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+        auto *typeLabel = new QLabel(typeText(type), this);
+        typeLabel->setStyleSheet(typeChipStyleSheet(type));
+        topRow->addWidget(nameLabel, 1);
+        topRow->addWidget(typeLabel, 0, Qt::AlignRight | Qt::AlignVCenter);
+        layout->addLayout(topRow);
+
+        auto *endpointLabel = new QLabel(endpointText, this);
+        QFont monoFont(QStringLiteral("Menlo"));
+        monoFont.setStyleHint(QFont::Monospace);
+        monoFont.setPointSizeF(std::max(7.0, this->font().pointSizeF() - 1.0));
+        endpointLabel->setFont(monoFont);
+        endpointLabel->setStyleSheet(QStringLiteral("color: palette(mid);"));
+        layout->addWidget(endpointLabel);
+
+        auto *statusRow = new QHBoxLayout;
+        statusRow->setSpacing(5);
+        auto *dotLabel = new QLabel(QStringLiteral("●"), this);
+        dotLabel->setStyleSheet(
+            QStringLiteral("color: %1; font-size: 9px;").arg(statusDotColor(state).name()));
+        auto *statusLabel = new QLabel(
+            tr("%1 / %2").arg(stateLabel).arg(activeConnections), this);
+        statusLabel->setStyleSheet(QStringLiteral("color: palette(mid); font-size: 11px;"));
+        statusRow->addWidget(dotLabel, 0, Qt::AlignVCenter);
+        statusRow->addWidget(statusLabel, 0, Qt::AlignVCenter);
+        statusRow->addStretch(1);
+        layout->addLayout(statusRow);
+    }
 };
 
 } // namespace
@@ -221,7 +321,7 @@ PortForwardManagerWidget::PortForwardManagerWidget(ApplicationDatabase *database
     : QWidget(parent)
     , m_database(database)
     , m_hostCombo(new QComboBox(this))
-    , m_ruleTable(new QTableWidget(this))
+    , m_ruleList(new QListWidget(this))
     , m_summaryLabel(new QLabel(tr("尚无运行中的端口转发"), this))
 {
     Q_ASSERT(m_database != nullptr);
@@ -233,35 +333,14 @@ PortForwardManagerWidget::PortForwardManagerWidget(ApplicationDatabase *database
     hostRow->addWidget(m_hostCombo, 1);
     layout->addLayout(hostRow);
 
-    m_ruleTable->setObjectName(QStringLiteral("PortForwardRuleTable"));
-    m_ruleTable->setColumnCount(RuleTableColumnCount);
-    m_ruleTable->setHorizontalHeaderLabels(
-        {tr("名称"), tr("本机 / 远程"), tr("类型"), tr("状态/连接")});
-    m_ruleTable->setSelectionBehavior(QAbstractItemView::SelectRows);
-    m_ruleTable->setSelectionMode(QAbstractItemView::SingleSelection);
-    m_ruleTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    m_ruleTable->setAlternatingRowColors(false);
-    m_ruleTable->setShowGrid(false);
-    m_ruleTable->verticalHeader()->setVisible(false);
-    m_ruleTable->verticalHeader()->setDefaultSectionSize(34);
-    // 用户拖动侧栏会实时改变地址列宽；行高采用 ResizeToContents 才能同步增加或收紧，
-    // 否则两行端点在侧栏变窄后可能被旧行高裁掉。转发规则通常数量有限，此处按内容计算
-    // 的成本远低于网络运行时本身，也不会阻塞任何 SSH 或转发线程。
-    m_ruleTable->verticalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
-    m_ruleTable->setContextMenuPolicy(Qt::CustomContextMenu);
-    QHeaderView *ruleHeader = m_ruleTable->horizontalHeader();
-    ruleHeader->setMinimumSectionSize(34);
-    // 地址映射承担新增的核心信息并使用剩余宽度；类型与状态按内容收紧，名称允许用户手工
-    // 调整。这样默认窄侧栏中仍能读到全部四列，侧栏加宽后的空间也会优先用于完整地址。
-    ruleHeader->setSectionResizeMode(RuleNameColumn, QHeaderView::Interactive);
-    ruleHeader->setSectionResizeMode(EndpointMappingColumn, QHeaderView::Stretch);
-    ruleHeader->setSectionResizeMode(RuleTypeColumn, QHeaderView::ResizeToContents);
-    ruleHeader->setSectionResizeMode(RuleStateColumn, QHeaderView::ResizeToContents);
-    ruleHeader->resizeSection(RuleNameColumn, 86);
-    // 地址使用两行展示，窄侧栏中通过换行保持可读，避免横向滚动后看不到运行状态。
-    m_ruleTable->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    m_ruleTable->setWordWrap(true);
-    layout->addWidget(m_ruleTable, 1);
+    // 原来的四列表格在默认 320px 侧栏里放不下，改成卡片式单列列表：每条规则用
+    // PortForwardRuleRow 画成两行，天然不需要横向滚动，侧栏加宽后也只是卡片变宽。
+    m_ruleList->setObjectName(QStringLiteral("PortForwardRuleList"));
+    m_ruleList->setSelectionMode(QAbstractItemView::SingleSelection);
+    m_ruleList->setSelectionBehavior(QAbstractItemView::SelectRows);
+    m_ruleList->setContextMenuPolicy(Qt::CustomContextMenu);
+    m_ruleList->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    layout->addWidget(m_ruleList, 1);
 
     auto *buttons = new QHBoxLayout;
     auto *addButton = new QPushButton(tr("新建"), this);
@@ -330,15 +409,15 @@ PortForwardManagerWidget::PortForwardManagerWidget(ApplicationDatabase *database
             this, &PortForwardManagerWidget::startAllRules);
     connect(stopButton, &QToolButton::clicked,
             this, &PortForwardManagerWidget::stopAllRules);
-    connect(m_ruleTable, &QTableWidget::cellDoubleClicked,
-            this, [this](const int, const int) { startSelectedRule(); });
-    connect(m_ruleTable,
+    connect(m_ruleList, &QListWidget::itemDoubleClicked,
+            this, [this](QListWidgetItem *) { startSelectedRule(); });
+    connect(m_ruleList,
             &QWidget::customContextMenuRequested,
             this,
             [this, addButton, editButton, deleteButton](const QPoint &position) {
-                const QModelIndex index = m_ruleTable->indexAt(position);
-                if (index.isValid()) {
-                    m_ruleTable->setCurrentCell(index.row(), 0);
+                QListWidgetItem *item = m_ruleList->itemAt(position);
+                if (item != nullptr) {
+                    m_ruleList->setCurrentItem(item);
                 }
 
                 QMenu menu(this);
@@ -347,7 +426,7 @@ PortForwardManagerWidget::PortForwardManagerWidget(ApplicationDatabase *database
                     UiIcons::symbol(this, UiIcons::Symbol::Plus, this->palette().color(QPalette::WindowText)),
                     tr("新建规则"));
                 connect(addAction, &QAction::triggered, addButton, &QPushButton::click);
-                if (index.isValid()) {
+                if (item != nullptr) {
                     menu.addSeparator();
                     QAction *startAction = menu.addAction(
                         UiIcons::symbol(this, UiIcons::Symbol::Play, this->palette().color(QPalette::WindowText)),
@@ -372,7 +451,7 @@ PortForwardManagerWidget::PortForwardManagerWidget(ApplicationDatabase *database
                     connect(deleteAction, &QAction::triggered,
                             deleteButton, &QToolButton::click);
                 }
-                menu.exec(m_ruleTable->viewport()->mapToGlobal(position));
+                menu.exec(m_ruleList->viewport()->mapToGlobal(position));
             });
 
     reloadHosts();
@@ -511,7 +590,16 @@ void PortForwardManagerWidget::reloadHosts()
 
 void PortForwardManagerWidget::reloadRules()
 {
-    m_ruleTable->setRowCount(0);
+    // QListWidget::clear() 只删除 QListWidgetItem 本身，不会删除 setItemWidget() 挂上去的
+    // 卡片控件——那是单独 reparent 出去的子控件，clear() 之后仍留在列表里泄漏，且残留内容
+    // 还会被 findChildren 之类的遍历重新找到。必须先逐个摘下并手动删除，再清空条目。
+    for (int row = 0; row < m_ruleList->count(); ++row) {
+        QListWidgetItem *item = m_ruleList->item(row);
+        QWidget *oldRowWidget = m_ruleList->itemWidget(item);
+        m_ruleList->removeItemWidget(item);
+        delete oldRowWidget;
+    }
+    m_ruleList->clear();
     const QString hostId = m_hostCombo->currentData().toString();
     if (hostId.isEmpty()) {
         m_summaryLabel->setText(tr("请先在主机管理中保存一台主机"));
@@ -528,30 +616,27 @@ void PortForwardManagerWidget::reloadRules()
     quint64 activeConnections = 0;
     quint64 totalTraffic = 0;
     for (const PortForwardRule &rule : rules) {
-        const int row = m_ruleTable->rowCount();
-        m_ruleTable->insertRow(row);
-        auto *nameItem = new QTableWidgetItem(rule.name);
-        nameItem->setData(kRuleIdRole, rule.id);
-        m_ruleTable->setItem(row, RuleNameColumn, nameItem);
-        m_ruleTable->setItem(
-            row, EndpointMappingColumn, new QTableWidgetItem(endpointMappingText(rule)));
-        m_ruleTable->setItem(row, RuleTypeColumn, new QTableWidgetItem(typeText(rule.type)));
         const PortForwardStatistics statistics = m_statistics.value(rule.id);
-        m_ruleTable->setItem(row, RuleStateColumn, new QTableWidgetItem(
-            tr("%1 / %2").arg(stateText(statistics.state))
-                            .arg(statistics.activeConnections)));
-        const quint64 traffic = statistics.bytesToTarget + statistics.bytesFromTarget;
+
+        auto *item = new QListWidgetItem(m_ruleList);
+        item->setData(kRuleIdRole, rule.id);
+        auto *row = new PortForwardRuleRow(rule.name,
+                                           rule.type,
+                                           endpointMappingText(rule),
+                                           statistics.state,
+                                           stateText(statistics.state),
+                                           statistics.activeConnections,
+                                           m_ruleList);
         if (!statistics.lastError.isEmpty()) {
-            for (int column = 0; column < m_ruleTable->columnCount(); ++column) {
-                m_ruleTable->item(row, column)->setToolTip(statistics.lastError);
-            }
+            row->setToolTip(statistics.lastError);
         }
+        item->setSizeHint(row->sizeHint());
+        m_ruleList->setItemWidget(item, row);
+
+        const quint64 traffic = statistics.bytesToTarget + statistics.bytesFromTarget;
         activeConnections += statistics.activeConnections;
         totalTraffic += traffic;
     }
-    // 地址映射列会随侧栏宽度伸缩，长文本改用换行而不是隐藏在横向滚动条后面，因此每次
-    // 重新填充数据后都要按新内容重算行高。
-    m_ruleTable->resizeRowsToContents();
     m_summaryLabel->setText(
         tr("%1 条规则，%2 条活动连接，累计流量 %3；%4")
             .arg(rules.size())
@@ -788,8 +873,7 @@ void PortForwardManagerWidget::stopAllRules()
 
 QString PortForwardManagerWidget::selectedRuleId() const
 {
-    const int row = m_ruleTable->currentRow();
-    QTableWidgetItem *item = row < 0 ? nullptr : m_ruleTable->item(row, 0);
+    QListWidgetItem *item = m_ruleList->currentItem();
     return item == nullptr ? QString() : item->data(kRuleIdRole).toString();
 }
 

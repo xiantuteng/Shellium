@@ -282,6 +282,16 @@ private:
     /** @brief 当前终端编码和列×行尺寸，随 PTY 尺寸信号实时更新。 */
     QLabel *m_terminalMetaLabel = nullptr;
 
+    /**
+     * @brief "推测嵌套目标"徽章，紧邻服务器名之后，只在当前层是推测层时可见。
+     *
+     * 自持层（本程序亲自建立并认证，m_ownedTargets）和推测层（解析用户手打命令得出，
+     * m_inferredTargets）的可信度完全不同，此前只在标题文字里加一个"（推测）"后缀，
+     * 容易被当成普通说明文字忽略。徽章可见性只能从 activeTarget().confidence 显式判断，
+     * 不能从标题文字反推——文字本身就是给人看的展示层，不是可信来源。
+     */
+    QLabel *m_nestedBadge = nullptr;
+
     /** @brief 当前标签专属的远程文件管理显隐按钮，位于状态栏最右侧。 */
     QToolButton *m_fileManagerButton = nullptr;
 

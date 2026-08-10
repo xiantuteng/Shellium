@@ -85,6 +85,25 @@ constexpr int kMinimumTabSettleAnimationDuration = 80;
                  closeButtonSize);
 }
 
+/**
+ * @brief 连接状态点的固定颜色；标题区背景恒定深色（不跟随应用深浅主题），因此不需要
+ * 像内容区控件那样按主题分支取色，直接用饱和色即可保证可读性。
+ */
+[[nodiscard]] QColor connectionStateDotColor(const SessionTabBar::ConnectionState state)
+{
+    switch (state) {
+    case SessionTabBar::ConnectionState::Connected:
+        return QColor(QStringLiteral("#2bd981"));
+    case SessionTabBar::ConnectionState::Failed:
+        return QColor(QStringLiteral("#e5484d"));
+    case SessionTabBar::ConnectionState::Connecting:
+        return QColor(QStringLiteral("#e2a94f"));
+    case SessionTabBar::ConnectionState::Unknown:
+    default:
+        return QColor();
+    }
+}
+
 } // namespace
 
 SessionTabBar::SessionTabBar(QWidget *parent)
@@ -122,6 +141,20 @@ SessionTabBar::SessionTabBar(QWidget *parent)
             &SessionTabBar::handleTabMoved,
             Qt::DirectConnection);
     syncScrollButtons();
+}
+
+void SessionTabBar::setTabConnectionState(const int index, const ConnectionState state)
+{
+    const quint64 tabId = tabIdAt(index);
+    if (tabId == 0) {
+        return;
+    }
+    if (state == ConnectionState::Unknown) {
+        m_tabConnectionStates.remove(tabId);
+    } else {
+        m_tabConnectionStates.insert(tabId, state);
+    }
+    update();
 }
 
 bool SessionTabBar::eventFilter(QObject *watched, QEvent *event)
@@ -351,6 +384,20 @@ void SessionTabBar::drawSessionTab(QPainter &painter,
         painter.setPen(Qt::NoPen);
         painter.setBrush(m_accentColor);
         painter.drawEllipse(QPointF(terminalRect.right() - 1.0, terminalRect.top() + 1.0),
+                            2.2,
+                            2.2);
+    }
+
+    // 连接状态点画在图标右下角，与上面"当前标签"专用的强调点（右上角）分开，避免
+    // 一个圆点身兼两种含义。它不分选中/未选中都画，因为它回答的正是"这个不在前台的
+    // 标签是不是掉线了"，选中态反而是它最不需要提示的时候。
+    const ConnectionState connectionState =
+        m_tabConnectionStates.value(tabIdAt(index), ConnectionState::Unknown);
+    const QColor stateDotColor = connectionStateDotColor(connectionState);
+    if (stateDotColor.isValid()) {
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(stateDotColor);
+        painter.drawEllipse(QPointF(terminalRect.right() - 1.0, terminalRect.bottom() - 1.0),
                             2.2,
                             2.2);
     }
@@ -605,6 +652,7 @@ void SessionTabBar::tabRemoved(const int index)
         const quint64 removedTabId = m_tabIds.at(index);
         stopTabMoveAnimation(removedTabId);
         m_tabIds.removeAt(index);
+        m_tabConnectionStates.remove(removedTabId);
         if (removedTabId == m_pressedTabId) {
             // 业务层可能在拖拽过程中关闭当前会话；立即终止本地手势可防止 paintEvent 继续
             // 查找一个已不存在的稳定标识，同时基类仍会按自身规则清理 pressedIndex。
