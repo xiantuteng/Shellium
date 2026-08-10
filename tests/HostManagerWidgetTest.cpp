@@ -2,6 +2,7 @@
 #include "security/Vault.h"
 #include "storage/ApplicationDatabase.h"
 #include "ui/HostManagerWidget.h"
+#include "ui/UiIcons.h"
 
 #include <QAbstractButton>
 #include <QApplication>
@@ -50,6 +51,9 @@ private slots:
 
     /** @brief 分组名与主机名必须用同一套字体：同一串文字画出来的墨迹宽度要相等。 */
     void groupNameUsesSameFontAsHostName();
+
+    /** @brief 同一个自绘图标实例必须在主题切换后改用新前景色，显式品牌色则保持不变。 */
+    void semanticIconsFollowLightAndDarkPalettes();
 
 private:
     [[nodiscard]] QTreeWidgetItem *findItem(const HostManagerWidget &widget,
@@ -394,6 +398,53 @@ int inkWidth(const QImage &image, const QRect &area, const QColor &background)
 }
 
 } // namespace
+
+void HostManagerWidgetTest::semanticIconsFollowLightAndDarkPalettes()
+{
+    QWidget context;
+    const QColor lightThemeIcon(QStringLiteral("#1b2230"));
+    const QColor darkThemeIcon(QStringLiteral("#f0f3fa"));
+    const QColor fixedBrandIcon(QStringLiteral("#0c2f24"));
+
+    const auto setWindowText = [&context](const QColor &color) {
+        QPalette palette = context.palette();
+        // 正常和禁用模式分别读取对应 ColorGroup；测试正常模式时也同步其它组，避免平台默认
+        // 调色板在控件尚未显示时把 Active 自动解析为 Inactive 而造成无关差异。
+        palette.setColor(QPalette::Active, QPalette::WindowText, color);
+        palette.setColor(QPalette::Inactive, QPalette::WindowText, color);
+        palette.setColor(QPalette::Disabled, QPalette::WindowText, color);
+        context.setPalette(palette);
+    };
+    const auto strongestPixel = [](const QIcon &icon) {
+        const QImage image = icon.pixmap(QSize(20, 20), QIcon::Normal).toImage();
+        QColor result;
+        int greatestAlpha = -1;
+        for (int y = 0; y < image.height(); ++y) {
+            for (int x = 0; x < image.width(); ++x) {
+                const QColor pixel = image.pixelColor(x, y);
+                if (pixel.alpha() > greatestAlpha) {
+                    greatestAlpha = pixel.alpha();
+                    result = pixel;
+                }
+            }
+        }
+        return result;
+    };
+
+    setWindowText(lightThemeIcon);
+    const QIcon adaptive = UiIcons::symbol(
+        &context, UiIcons::Symbol::Refresh, context.palette().color(QPalette::WindowText));
+    const QIcon fixed = UiIcons::symbol(&context, UiIcons::Symbol::Plus, fixedBrandIcon);
+    QCOMPARE(strongestPixel(adaptive).rgb(), lightThemeIcon.rgb());
+    QCOMPARE(strongestPixel(fixed).rgb(), fixedBrandIcon.rgb());
+
+    // 关键回归：不重新创建 QIcon，只切换所属控件的调色板。同一个实例必须立即绘制成深色
+    // 主题前景色，否则应用设置页实时切换主题后仍会保留旧位图并消失在新背景上。
+    setWindowText(darkThemeIcon);
+    QCOMPARE(strongestPixel(adaptive).rgb(), darkThemeIcon.rgb());
+    // 主按钮的绿色背景不随主题改变，它的深色“+”属于显式品牌色，不能被全局前景色覆盖。
+    QCOMPARE(strongestPixel(fixed).rgb(), fixedBrandIcon.rgb());
+}
 
 void HostManagerWidgetTest::groupNameUsesSameFontAsHostName()
 {

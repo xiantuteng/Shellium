@@ -127,11 +127,17 @@ void SettingsUiTest::togglesRoundTripBooleanSettings()
 
     auto *bellToggle = dialog.findChild<ToggleSwitch *>(QStringLiteral("audibleBellToggle"));
     auto *blinkToggle = dialog.findChild<ToggleSwitch *>(QStringLiteral("cursorBlinkToggle"));
+    auto *completionToggle =
+        dialog.findChild<ToggleSwitch *>(QStringLiteral("commandAutoCompletionToggle"));
     QVERIFY(bellToggle != nullptr);
     QVERIFY(blinkToggle != nullptr);
+    QVERIFY(completionToggle != nullptr);
     // 打开对话框时开关必须反映已持久化的值，而不是一律显示默认关闭。
     QCOMPARE(bellToggle->isChecked(), service->currentSettings().audibleBell);
     QCOMPARE(blinkToggle->isChecked(), service->currentSettings().cursorBlink);
+    // 命令自动提示属于可能打断既有输入习惯的新功能，首次启动和恢复默认都必须保持关闭。
+    QVERIFY(!service->currentSettings().commandAutoCompletion);
+    QVERIFY(!completionToggle->isChecked());
 
     // 点击开关会经 previewChanges() 立即改写服务里的运行设置，因此期望值必须取点击前的
     // 快照，不能再读 service->currentSettings()。
@@ -139,14 +145,19 @@ void SettingsUiTest::togglesRoundTripBooleanSettings()
     const bool originalBlink = service->currentSettings().cursorBlink;
     bellToggle->click();
     blinkToggle->click();
+    completionToggle->click();
     QCOMPARE(dialog.editedSettings().audibleBell, !originalBell);
     QCOMPARE(dialog.editedSettings().cursorBlink, !originalBlink);
+    QVERIFY(dialog.editedSettings().commandAutoCompletion);
 
     const bool expectedBell = !originalBell;
     dialog.accept();
     QCOMPARE(service->currentSettings().audibleBell, expectedBell);
     QCOMPARE(m_database->setting(QStringLiteral("terminal/audible_bell")).value_or(QString()),
              expectedBell ? QStringLiteral("1") : QStringLiteral("0"));
+    QCOMPARE(m_database->setting(QStringLiteral("terminal/command_auto_completion"))
+                 .value_or(QString()),
+             QStringLiteral("1"));
 }
 
 void SettingsUiTest::reconnectToggleGatesDependentRows()

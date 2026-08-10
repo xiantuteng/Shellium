@@ -78,6 +78,7 @@ SettingsDialog::SettingsDialog(TerminalSettingsService *service, QWidget *parent
     , m_cursorBlinkToggle(new ToggleSwitch(this))
     , m_scrollbackSpin(new QSpinBox(this))
     , m_audibleBellToggle(new ToggleSwitch(this))
+    , m_commandAutoCompletionToggle(new ToggleSwitch(this))
     , m_automaticReconnectToggle(new ToggleSwitch(this))
     , m_reconnectMaxAttemptsSpin(new QSpinBox(this))
     , m_reconnectBaseDelaySpin(new QSpinBox(this))
@@ -168,7 +169,10 @@ SettingsDialog::SettingsDialog(TerminalSettingsService *service, QWidget *parent
     connect(m_reconnectBaseDelaySpin, &QSpinBox::valueChanged,
             this, [this](int) { previewChanges(); });
     for (ToggleSwitch *toggle :
-         {m_cursorBlinkToggle, m_audibleBellToggle, m_automaticReconnectToggle}) {
+         {m_cursorBlinkToggle,
+          m_audibleBellToggle,
+          m_commandAutoCompletionToggle,
+          m_automaticReconnectToggle}) {
         connect(toggle, &ToggleSwitch::toggled, this, [this](bool) { previewChanges(); });
     }
     connect(m_automaticReconnectToggle, &ToggleSwitch::toggled, this, [this](const bool enabled) {
@@ -412,6 +416,8 @@ QWidget *SettingsDialog::buildTerminalPage()
     m_scrollbackSpin->setSuffix(tr(" 行"));
     m_scrollbackSpin->setMinimumWidth(120);
     m_audibleBellToggle->setObjectName(QStringLiteral("audibleBellToggle"));
+    m_commandAutoCompletionToggle->setObjectName(
+        QStringLiteral("commandAutoCompletionToggle"));
 
     auto *sessionCard = new SettingsCard(tr("会话"), page);
     sessionCard->addRow(tr("滚动缓冲"),
@@ -420,6 +426,10 @@ QWidget *SettingsDialog::buildTerminalPage()
     sessionCard->addRow(tr("提示音"),
                         m_audibleBellToggle,
                         tr("收到终端 BEL 字节时播放系统提示音。"));
+    sessionCard->addRow(
+        tr("命令行自动提示"),
+        m_commandAutoCompletionToggle,
+        tr("输入至少两个字符后，根据当前主机的命令历史自动显示候选；默认关闭。"));
     layout->addWidget(sessionCard);
 
     layout->addStretch(1);
@@ -507,6 +517,7 @@ TerminalSettings SettingsDialog::editedSettings() const
     settings.cursorBlink = m_cursorBlinkToggle->isChecked();
     settings.scrollbackLines = m_scrollbackSpin->value();
     settings.audibleBell = m_audibleBellToggle->isChecked();
+    settings.commandAutoCompletion = m_commandAutoCompletionToggle->isChecked();
     settings.automaticReconnect = m_automaticReconnectToggle->isChecked();
     settings.reconnectMaxAttempts = m_reconnectMaxAttemptsSpin->value();
     settings.reconnectBaseDelaySeconds = m_reconnectBaseDelaySpin->value();
@@ -568,6 +579,7 @@ void SettingsDialog::populateControls(const TerminalSettings &settings)
     m_cursorBlinkToggle->setChecked(normalized.cursorBlink);
     m_scrollbackSpin->setValue(normalized.scrollbackLines);
     m_audibleBellToggle->setChecked(normalized.audibleBell);
+    m_commandAutoCompletionToggle->setChecked(normalized.commandAutoCompletion);
     m_automaticReconnectToggle->setChecked(normalized.automaticReconnect);
     m_reconnectMaxAttemptsSpin->setValue(normalized.reconnectMaxAttempts);
     m_reconnectBaseDelaySpin->setValue(normalized.reconnectBaseDelaySeconds);

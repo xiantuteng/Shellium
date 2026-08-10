@@ -21,6 +21,7 @@
 #include <QContextMenuEvent>
 #include <QFontMetrics>
 #include <QKeySequence>
+#include <QListView>
 #include <QMenu>
 #include <QMessageBox>
 #include <QPainter>
@@ -61,6 +62,15 @@ constexpr int kTerminalResizeDebounceMilliseconds = 80;
  * 画既保证了肉眼流畅度，也让事件循环在两帧之间有机会处理用户的按键与滚动。
  */
 constexpr int kRenderCoalesceMilliseconds = 16;
+
+/**
+ * @brief 命令提示弹层与当前终端行之间保留的逻辑像素间距。
+ *
+ * QCompleter 默认紧贴传入矩形的底边放置。终端光标矩形有时只覆盖字体的插入符高度，低于
+ * 实际行框；额外留出这段空隙可以吸收字体上下缘和高 DPI 取整误差，避免弹层压住正在输入
+ * 的命令，同时又不会浪费明显的垂直空间。
+ */
+constexpr int kCompletionPopupVerticalGap = 4;
 
 /**
  * @brief 认证接线的按需诊断通道。
@@ -300,27 +310,38 @@ TerminalView::TerminalView(QWidget *parent)
     m_commandCompleter->setCompletionMode(QCompleter::PopupCompletion);
     m_commandCompleter->setModelSorting(QCompleter::UnsortedModel);
     m_commandCompleter->setFilterMode(Qt::MatchStartsWith);
-    m_commandCompleter->setMaxVisibleItems(10);
+    m_commandCompleter->setMaxVisibleItems(12);
     // 补全弹层是独立的顶层 QListView，不会继承 MainWindow/TerminalView 的样式表，
     // 需要单独硬编码一份深色配色（参考 Termius 的浮层观感），避免沿用系统默认的
     // 陈旧方框样式。
-    m_commandCompleter->popup()->setStyleSheet(QStringLiteral(
-        "QListView {"
+    QAbstractItemView *completionPopup = m_commandCompleter->popup();
+    completionPopup->setObjectName(QStringLiteral("CommandCompletionPopup"));
+    if (auto *completionList = qobject_cast<QListView *>(completionPopup)) {
+        // QCompleter 的默认弹层当前是 QListView。候选都使用同一种字体和单行文本，固定统一
+        // 行尺寸可避免每次滚动都重新计算高度；spacing 归零则把空间留给文字而不是空白。
+        completionList->setUniformItemSizes(true);
+        completionList->setSpacing(0);
+    }
+    completionPopup->setStyleSheet(QStringLiteral(
+        "QListView#CommandCompletionPopup {"
         "    background-color: #1c2333;"
         "    color: #e4e8f5;"
         "    border: 1px solid #2e3650;"
         "    border-radius: 8px;"
-        "    padding: 4px;"
+        "    padding: 2px;"
         "    outline: 0;"
         "}"
-        "QListView::item {"
-        "    padding: 6px 10px;"
-        "    border-radius: 6px;"
+        "QListView#CommandCompletionPopup::item {"
+        // 主窗口通用列表样式带有 28px 最小行高；必须在局部显式覆盖，否则即使减小 padding，
+        // 候选仍会保持稀疏。1px 上下留白足以避免字形贴边，并能在同样高度展示更多命令。
+        "    min-height: 0px;"
+        "    padding: 1px 8px;"
+        "    border-radius: 4px;"
         "}"
-        "QListView::item:hover {"
+        "QListView#CommandCompletionPopup::item:hover {"
         "    background-color: #2a3148;"
         "}"
-        "QListView::item:selected {"
+        "QListView#CommandCompletionPopup::item:selected {"
         "    background-color: #39415d;"
         "    color: #ffffff;"
         "}"));
@@ -394,6 +415,15 @@ void TerminalView::applySettings(const TerminalSettings &settings)
     terminalFont.setPointSize(normalized.fontPointSize);
     terminalFont.setLetterSpacing(QFont::AbsoluteSpacing, normalized.letterSpacing);
     setFont(terminalFont);
+    // 补全弹层是独立顶层窗口，不会可靠继承 TerminalView 的字体。显式复制完整 QFont 可让
+    // 字体族、字号和字符间距都与终端一致，设置页实时预览及快捷键缩放也不会产生两套字形。
+    m_commandCompleter->popup()->setFont(terminalFont);
+    m_commandCompletionEnabled = normalized.commandAutoCompletion;
+    if (!m_commandCompletionEnabled) {
+        // 设置实时关闭时立即收起已经显示的弹层；仅阻止后续 updateCompletionPopup 不足以
+        // 清理当前顶层窗口，会让用户误以为开关没有生效。
+        m_commandCompleter->popup()->hide();
+    }
 
     m_basePointSize = normalized.fontPointSize;
     m_lineHeightPercent = normalized.lineHeightPercent;
@@ -434,6 +464,10 @@ void TerminalView::applySettings(const TerminalSettings &settings)
     // 而不是必须等用户再拖动一次窗口。
     m_resizeDebounceTimer->stop();
     commitTerminalGeometry();
+    if (m_commandCompletionEnabled) {
+        // 用户可能在已经输入前缀时从设置页开启功能，立即重新评估可避免必须再敲一个字符。
+        updateCompletionPopup();
+    }
     viewport()->update();
 }
 
@@ -446,12 +480,15 @@ void TerminalView::zoomFont(const int deltaPoints)
     }
     terminalFont.setPointSize(clamped);
     setFont(terminalFont);
+    // 命令候选必须跟随终端的临时缩放；缩放只改运行时字体，不写回设置，但两者视觉契约相同。
+    m_commandCompleter->popup()->setFont(terminalFont);
     // 锚点字体跟着字号走：字号变了它的像素高度也变，不同步会让行高锚点和 cellHeight
     // 对不上，网格重新开始溢出或留白。
     m_vtermBridge->setLineAnchors(buildLineAnchors());
     // 字号调整是离散操作，不需要等待窗口拖动防抖；立即同步字符网格可让缩放反馈更直接。
     m_resizeDebounceTimer->stop();
     commitTerminalGeometry();
+    updateCompletionPopup();
     viewport()->update();
 }
 
@@ -783,7 +820,7 @@ QRect TerminalView::visualCursorRect() const
 
 void TerminalView::updateCompletionPopup()
 {
-    if (m_localCapture || m_vtermBridge->isAlternateScreen()
+    if (!m_commandCompletionEnabled || m_localCapture || m_vtermBridge->isAlternateScreen()
         || m_currentCommand.size() < 2 || m_completionModel->rowCount() == 0) {
         m_commandCompleter->popup()->hide();
         return;
@@ -801,6 +838,11 @@ void TerminalView::updateCompletionPopup()
     if (popupRect.isNull()) {
         popupRect = cursorRect();
     }
+    // QCompleter 把弹层放在传入矩形的底边。插入符矩形在部分字体/高 DPI 环境下比终端的
+    // 实际文本行矮，直接传入会让弹层上缘切进字形下半部。把锚点扩到真实终端行高后再留一
+    // 个小间隙，向下放置时不会挡当前命令；空间不足翻到上方时也以整行顶部为边界。
+    popupRect.setHeight(qMax(popupRect.height(), computeCellHeight())
+                        + kCompletionPopupVerticalGap);
     popupRect.setWidth(qMax(320, m_commandCompleter->popup()->sizeHintForColumn(0)
                                     + m_commandCompleter->popup()->verticalScrollBar()->sizeHint().width()));
     m_commandCompleter->complete(popupRect);

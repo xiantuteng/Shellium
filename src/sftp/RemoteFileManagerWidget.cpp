@@ -479,6 +479,9 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
 
     // 目录/链接/普通文件已由名称列的图标区分，独立的"类型"列只是重复信息，删掉它可以
     // 把宽度让给真正需要横向空间的时间与所有者。
+    // 对象名用于应用级样式表精确增强远程文件选中态；本地树仍沿用通用选中色，避免用户在
+    // 全屏双栏模式下误以为两个列表同时处于当前操作焦点。
+    m_fileTree->setObjectName(QStringLiteral("RemoteFileTree"));
     m_fileTree->setColumnCount(5);
     m_fileTree->setHeaderLabels(
         {tr("名称"), tr("大小"), tr("修改时间"), tr("权限"), tr("所有者")});

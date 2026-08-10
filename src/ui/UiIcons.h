@@ -3,16 +3,20 @@
 #include <QAbstractButton>
 #include <QColor>
 #include <QIcon>
+#include <QIconEngine>
 #include <QMenu>
 #include <QPainter>
 #include <QPainterPath>
+#include <QPalette>
 #include <QPixmap>
+#include <QPointer>
 #include <QSize>
 #include <QString>
 #include <QStyle>
 #include <QWidget>
 #include <QtMath>
 
+#include <algorithm>
 #include <cmath>
 
 /**
@@ -73,23 +77,22 @@ enum class Symbol {
 };
 
 /**
- * @brief 绘制适合标题栏和导航轨的高分屏线性图标。
- * @param context 用于取得屏幕设备像素比的控件；不得为 nullptr。
+ * @brief 把一个语义图标绘制为指定分辨率的高分屏透明位图。
  * @param symbol 待绘制的语义图标。
  * @param color 线条颜色，通常使用导航区的主文字色或弱化文字色。
  * @param logicalSize Qt 逻辑像素尺寸；函数内部按设备像素比创建清晰位图。
- * @return 带正确 devicePixelRatio 的 QIcon。
+ * @param pixelRatio 目标绘制设备的像素比，必须大于 0。
+ * @return 带正确 devicePixelRatio 的透明位图。
  *
  * 这里采用 QPainter 而不是字体字符：字体回退会让同一个“文件夹”在不同系统上出现完全
  * 不同的笔画粗细，自绘路径则能稳定保持 1.7px 圆角线条，与 Termius 类界面一致。
  */
-[[nodiscard]] inline QIcon symbol(const QWidget *context,
-                                  const Symbol symbol,
-                                  const QColor &color,
-                                  const QSize logicalSize = QSize(20, 20))
+[[nodiscard]] inline QPixmap renderSymbolPixmap(const Symbol symbol,
+                                                const QColor &color,
+                                                const QSize logicalSize,
+                                                const qreal pixelRatio)
 {
-    Q_ASSERT(context != nullptr);
-    const qreal pixelRatio = context->devicePixelRatioF();
+    Q_ASSERT(pixelRatio > 0.0);
     QPixmap pixmap((QSizeF(logicalSize) * pixelRatio).toSize());
     pixmap.setDevicePixelRatio(pixelRatio);
     pixmap.fill(Qt::transparent);
@@ -406,7 +409,169 @@ enum class Symbol {
         break;
     }
     painter.end();
-    return QIcon(pixmap);
+    return pixmap;
+}
+
+/**
+ * @brief 根据控件当前调色板实时绘制自定义图标的 QIconEngine。
+ *
+ * 普通 QIcon 会把创建时的颜色永久烘焙进位图；应用从浅色切到深色后，那张位图仍然是旧
+ * 颜色，正是工具栏和树节点图标在另一种主题下消失的根因。本引擎仅在调用方原本使用控件
+ * WindowText 颜色时跟随调色板，每次绘制都重新读取当前颜色；显式品牌色、终端配色和主按钮
+ * 深色图标仍保持调用方指定值，不会被全局主题擅自覆盖。
+ */
+class PaletteAwareSymbolIconEngine final : public QIconEngine {
+public:
+    /**
+     * @brief 创建可随控件调色板变化的图标引擎。
+     * @param context 图标所属控件；销毁后安全退回 initialColor。
+     * @param symbol 图标语义。
+     * @param initialColor 创建时指定的颜色。
+     * @param followWindowText true 表示绘制时读取控件当前 WindowText；false 表示始终使用
+     *        initialColor。
+     * @param logicalSize 图标设计尺寸。
+     */
+    PaletteAwareSymbolIconEngine(const QWidget *context,
+                                 const Symbol symbol,
+                                 const QColor &initialColor,
+                                 const bool followWindowText,
+                                 const QSize logicalSize)
+        : m_context(const_cast<QWidget *>(context))
+        , m_symbol(symbol)
+        , m_initialColor(initialColor)
+        , m_followWindowText(followWindowText)
+        , m_logicalSize(logicalSize)
+    {
+    }
+
+    /** @brief 复制引擎；QIcon 隐式共享分离时由 Qt 调用。 */
+    [[nodiscard]] QIconEngine *clone() const override
+    {
+        return new PaletteAwareSymbolIconEngine(*this);
+    }
+
+    /**
+     * @brief 把图标绘制到目标矩形。
+     * @param painter Qt 提供的目标画笔，不可为空。
+     * @param rect 目标逻辑像素矩形。
+     * @param mode 正常、激活、选中或禁用模式；禁用模式读取 Disabled 调色板组。
+     * @param state 开关状态；当前线性符号不因 On/Off 改形，状态由调用方选择不同 Symbol 表达。
+     */
+    void paint(QPainter *painter,
+               const QRect &rect,
+               const QIcon::Mode mode,
+               const QIcon::State state) override
+    {
+        Q_UNUSED(state)
+        if (painter == nullptr || rect.isEmpty()) {
+            return;
+        }
+        const qreal pixelRatio = painter->device() == nullptr
+            ? 1.0
+            : painter->device()->devicePixelRatioF();
+        const QPixmap pixmap = renderSymbolPixmap(
+            m_symbol, colorForMode(mode), rect.size(), std::max(pixelRatio, 1.0));
+        painter->drawPixmap(rect, pixmap);
+    }
+
+    /**
+     * @brief 返回指定像素尺寸的位图，供菜单、按钮和测试直接请求。
+     * @return DPR=1 的位图；高分屏路径由 scaledPixmap() 保留真实像素比。
+     */
+    [[nodiscard]] QPixmap pixmap(const QSize &size,
+                                 const QIcon::Mode mode,
+                                 const QIcon::State state) override
+    {
+        Q_UNUSED(state)
+        return renderSymbolPixmap(m_symbol, colorForMode(mode), size, 1.0);
+    }
+
+    /**
+     * @brief 返回适配高分屏比例的位图。
+     * @param size Qt 请求的逻辑尺寸。
+     * @param mode 图标模式。
+     * @param state 图标开关状态。
+     * @param scale 设备像素比。
+     * @return 设置了对应 DPR 的清晰位图。
+     */
+    [[nodiscard]] QPixmap scaledPixmap(const QSize &size,
+                                       const QIcon::Mode mode,
+                                       const QIcon::State state,
+                                       const qreal scale) override
+    {
+        Q_UNUSED(state)
+        return renderSymbolPixmap(m_symbol,
+                                  colorForMode(mode),
+                                  size,
+                                  std::max(scale, 1.0));
+    }
+
+    /** @brief 返回稳定引擎名称，便于 Qt 与诊断工具识别自定义实现。 */
+    [[nodiscard]] QString key() const override
+    {
+        return QStringLiteral("ShelliumPaletteAwareSymbol");
+    }
+
+    /**
+     * @brief 返回图标的设计尺寸，供 Qt 在菜单和工具栏没有显式尺寸时选择合理大小。
+     * @param mode 图标模式；所有模式共用同一设计尺寸。
+     * @return 仅包含构造时逻辑尺寸的列表。
+     */
+    [[nodiscard]] QList<QSize> availableSizes(
+        const QIcon::Mode mode = QIcon::Normal,
+        const QIcon::State state = QIcon::Off) override
+    {
+        Q_UNUSED(mode)
+        Q_UNUSED(state)
+        return {m_logicalSize};
+    }
+
+private:
+    /**
+     * @brief 解析当前绘制模式应使用的颜色。
+     * @param mode QIcon 当前模式。
+     * @return 跟随主题时取控件实时调色板；控件已销毁或显式色图标返回初始颜色。
+     */
+    [[nodiscard]] QColor colorForMode(const QIcon::Mode mode) const
+    {
+        if (!m_followWindowText || m_context.isNull()) {
+            return m_initialColor;
+        }
+        const QPalette::ColorGroup group = mode == QIcon::Disabled
+            ? QPalette::Disabled
+            : QPalette::Active;
+        return m_context->palette().color(group, QPalette::WindowText);
+    }
+
+    QPointer<QWidget> m_context;
+    Symbol m_symbol;
+    QColor m_initialColor;
+    bool m_followWindowText = false;
+    QSize m_logicalSize;
+};
+
+/**
+ * @brief 创建同时兼容浅色和深色主题的自绘语义图标。
+ * @param context 图标所属控件；用于读取设备比例和实时调色板，不得为空。
+ * @param symbol 待绘制的语义图标。
+ * @param color 初始线条色。若它等于 context 当前 WindowText，图标会在后续主题切换时自动
+ *        跟随新的 WindowText；显式传入的品牌色保持固定。
+ * @param logicalSize 图标设计尺寸。
+ * @return 使用动态绘制引擎的 QIcon。
+ *
+ * “是否跟随主题”在创建时按颜色来源判定，而不是简单让全部图标追随应用色。终端会话标题栏
+ * 使用终端调色板前景色，主操作按钮使用固定深色；这两类若被强制替换成 WindowText，反而会
+ * 在终端自定义配色或绿色按钮上失去对比度。
+ */
+[[nodiscard]] inline QIcon symbol(const QWidget *context,
+                                  const Symbol symbol,
+                                  const QColor &color,
+                                  const QSize logicalSize = QSize(20, 20))
+{
+    Q_ASSERT(context != nullptr);
+    const bool followWindowText = color == context->palette().color(QPalette::WindowText);
+    return QIcon(new PaletteAwareSymbolIconEngine(
+        context, symbol, color, followWindowText, logicalSize));
 }
 
 /**

@@ -929,6 +929,10 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
     const QString accentColor = QStringLiteral("#2bd981");
     const QString selectionBackground = dark ? QStringLiteral("#24413d")
                                              : QStringLiteral("#dff6ec");
+    // 导航入口、主机和远程文件都是用户持续关注的“当前对象”，需要比文本选区、按钮按下态
+    // 更明确的视觉反馈。单独提供高对比选中色，可以加深这三处而不让全局交互控件显得过重。
+    const QString prominentSelectionBackground = dark ? QStringLiteral("#2f6256")
+                                                       : QStringLiteral("#b7e6d0");
 
     QString styleSheet = QStringLiteral(R"QSS(
         QWidget#ShelliumRoot,
@@ -988,7 +992,7 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
             background: @RAISED@;
         }
         QToolButton[navButton="true"]:checked {
-            background: @SELECTION@;
+            background: @PROMINENT_SELECTION@;
         }
         QToolButton[compactIconButton="true"] {
             color: @TEXT@;
@@ -1157,6 +1161,17 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
         QListView::item:selected:hover,
         QTableView::item:selected:hover {
             background: @SELECTION@;
+        }
+        QTreeView#HostTree::item:selected,
+        QTreeView#HostTree::item:selected:active,
+        QTreeView#HostTree::item:selected:!active,
+        QTreeView#HostTree::item:selected:hover,
+        QTreeView#RemoteFileTree::item:selected,
+        QTreeView#RemoteFileTree::item:selected:active,
+        QTreeView#RemoteFileTree::item:selected:!active,
+        QTreeView#RemoteFileTree::item:selected:hover {
+            background: @PROMINENT_SELECTION@;
+            color: @TEXT@;
         }
         QHeaderView::section {
             color: @MUTED@;
@@ -1381,6 +1396,8 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
     styleSheet.replace(QStringLiteral("@TEXT@"), textColor);
     styleSheet.replace(QStringLiteral("@MUTED@"), mutedTextColor);
     styleSheet.replace(QStringLiteral("@ACCENT@"), accentColor);
+    styleSheet.replace(QStringLiteral("@PROMINENT_SELECTION@"),
+                       prominentSelectionBackground);
     styleSheet.replace(QStringLiteral("@SELECTION@"), selectionBackground);
     // 顶层 QMenu / QComboBox 弹出层等不是 MainWindow 的子控件，
     // this->setStyleSheet(...) 只对 MainWindow 子树生效，右键菜单等

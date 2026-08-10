@@ -670,6 +670,9 @@ HostManagerWidget::HostManagerWidget(ApplicationDatabase *database,
         UiIcons::symbol(this, UiIcons::Symbol::Search, this->palette().color(QPalette::WindowText)),
         QLineEdit::LeadingPosition);
 
+    // 为主机树设置稳定的对象名，供应用级样式表只增强主机选中态。不能直接加深所有
+    // QTreeView 的选中色，否则设置页、效率工具等无关列表也会被意外改变视觉层级。
+    m_tree->setObjectName(QStringLiteral("HostTree"));
     m_tree->setHeaderHidden(true);
     // 展开箭头改由 HostItemDelegate 画在分组行右端，Qt 自带的左侧分支装饰列必须关掉：
     // 那一列只为箭头存在，留着会在顶层节点左边压出一条空白。层级缩进则要保留——分组和它
@@ -710,7 +713,11 @@ HostManagerWidget::HostManagerWidget(ApplicationDatabase *database,
         tr("在当前层级新建主机分组"));
     UiIcons::decorateButton(
         addHostButton,
-        UiIcons::symbol(this, UiIcons::Symbol::Plus, this->palette().color(QPalette::WindowText)),
+        // 主操作背景在浅色和深色主题下都固定为高亮绿色，图标也必须固定使用深色；若让它
+        // 跟随深色主题的浅色 WindowText，绿色按钮上的“+”反而会降低对比度。
+        UiIcons::symbol(this,
+                        UiIcons::Symbol::Plus,
+                        QColor(QStringLiteral("#0c2f24"))),
         tr("在当前分组中新建 SSH 主机"));
     UiIcons::decorateButton(
         refreshButton,

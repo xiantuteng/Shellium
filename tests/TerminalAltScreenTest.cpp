@@ -1,5 +1,7 @@
 #include <QAbstractTextDocumentLayout>
+#include <QAbstractItemView>
 #include <QClipboard>
+#include <QCompleter>
 #include <QFontMetrics>
 #include <QScrollBar>
 #include <QSignalSpy>
@@ -133,7 +135,66 @@ private slots:
     void everyRenderedLineHasIdenticalHeightRegardlessOfContent();
     void gridFillsViewportWithoutWastedRows();
     void themeBackgroundSurvivesLeavingFullScreenApplication();
+    /** @brief 自动提示必须默认关闭；开启后的弹层字体、行高和位置要符合终端视觉约束。 */
+    void commandCompletionHonorsSwitchAndUsesCompactTerminalLayout();
 };
+
+void TerminalAltScreenTest::commandCompletionHonorsSwitchAndUsesCompactTerminalLayout()
+{
+    TerminalView view;
+    QVERIFY(showAndSettle(view));
+    view.appendTerminalOutput(QByteArrayLiteral("[root@server ~]# "));
+    QTest::qWait(50);
+
+    QCompleter *completer = view.findChild<QCompleter *>();
+    QVERIFY(completer != nullptr);
+    QVERIFY(completer->popup() != nullptr);
+    view.setCommandCompletions({QStringLiteral("git status"),
+                                QStringLiteral("git log --oneline"),
+                                QStringLiteral("git diff")});
+
+    // 默认设置下即使已有历史候选且输入满足两个字符，也不能自动打断用户或抢占方向键。
+    TerminalSettings settings;
+    QVERIFY(!settings.commandAutoCompletion);
+    view.applySettings(settings);
+    QTest::keyClicks(&view, QStringLiteral("gi"));
+    QCoreApplication::processEvents();
+    QVERIFY(!completer->popup()->isVisible());
+
+    settings.commandAutoCompletion = true;
+    view.applySettings(settings);
+    QTRY_VERIFY(completer->popup()->isVisible());
+
+    // 弹层是独立顶层窗口，若不显式同步字体就会退回应用 UI 字体。完整 QFont 相等同时锁住
+    // 字体族、字号和用户配置的字符间距，防止后续只同步 family 而漏掉其它度量。
+    QCOMPARE(completer->popup()->font(), view.font());
+
+    // 主窗口对普通列表设置了较大的最小行高；命令提示必须局部覆盖它。这里只允许在终端字形
+    // 高度之外增加少量内边距，从行为层面验证候选列表确实采用紧凑布局。
+    const int candidateRowHeight = completer->popup()->sizeHintForRow(0);
+    QVERIFY(candidateRowHeight > 0);
+    QVERIFY2(candidateRowHeight <= QFontMetrics(view.font()).height() + 6,
+             qPrintable(QStringLiteral("命令提示行高 %1px，终端字体高度 %2px，列表仍过于稀疏")
+                            .arg(candidateRowHeight)
+                            .arg(QFontMetrics(view.font()).height())));
+
+    // 当前命令位于首行，窗口下方空间充足，QCompleter 应选择向下弹出。弹层顶边必须越过完整
+    // 终端行而非只越过细窄插入符，否则下边缘较低的字体仍会被弹层盖住。
+    QTextCursor documentCursor(view.document());
+    documentCursor.movePosition(QTextCursor::End);
+    const QRect caretRect = view.cursorRect(documentCursor);
+    const QPoint caretTopLeft = view.viewport()->mapToGlobal(caretRect.topLeft());
+    const int terminalLineBottom = caretTopLeft.y()
+        + qMax(caretRect.height(), QFontMetrics(view.font()).lineSpacing()) - 1;
+    QVERIFY2(completer->popup()->geometry().top() > terminalLineBottom,
+             qPrintable(QStringLiteral("命令提示顶边 %1 未越过当前终端行底边 %2")
+                            .arg(completer->popup()->geometry().top())
+                            .arg(terminalLineBottom)));
+
+    settings.commandAutoCompletion = false;
+    view.applySettings(settings);
+    QVERIFY(!completer->popup()->isVisible());
+}
 
 void TerminalAltScreenTest::themeBackgroundSurvivesLeavingFullScreenApplication()
 {

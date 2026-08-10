@@ -25,6 +25,8 @@ const QString kCursorShapeKey = QStringLiteral("terminal/cursor_shape");
 const QString kCursorBlinkKey = QStringLiteral("terminal/cursor_blink");
 const QString kScrollbackKey = QStringLiteral("terminal/scrollback_lines");
 const QString kAudibleBellKey = QStringLiteral("terminal/audible_bell");
+/** @brief 命令行历史自动提示开关；缺失该键时由结构默认值保持关闭。 */
+const QString kCommandAutoCompletionKey = QStringLiteral("terminal/command_auto_completion");
 const QString kAutomaticReconnectKey = QStringLiteral("connection/automatic_reconnect");
 const QString kReconnectMaxAttemptsKey = QStringLiteral("connection/reconnect_max_attempts");
 const QString kReconnectBaseDelayKey = QStringLiteral("connection/reconnect_base_delay_seconds");
@@ -780,6 +782,7 @@ bool TerminalSettings::operator==(const TerminalSettings &other) const
         && cursorBlink == other.cursorBlink
         && scrollbackLines == other.scrollbackLines
         && audibleBell == other.audibleBell
+        && commandAutoCompletion == other.commandAutoCompletion
         && automaticReconnect == other.automaticReconnect
         && reconnectMaxAttempts == other.reconnectMaxAttempts
         && reconnectBaseDelaySeconds == other.reconnectBaseDelaySeconds
@@ -919,6 +922,7 @@ bool TerminalSettingsService::load(QString *errorMessage)
     assignBoolean(kCursorBlinkKey, &loaded.cursorBlink);
     assignInteger(kScrollbackKey, &loaded.scrollbackLines);
     assignBoolean(kAudibleBellKey, &loaded.audibleBell);
+    assignBoolean(kCommandAutoCompletionKey, &loaded.commandAutoCompletion);
     assignBoolean(kAutomaticReconnectKey, &loaded.automaticReconnect);
     assignInteger(kReconnectMaxAttemptsKey, &loaded.reconnectMaxAttempts);
     assignInteger(kReconnectBaseDelayKey, &loaded.reconnectBaseDelaySeconds);
@@ -998,6 +1002,8 @@ bool TerminalSettingsService::save(const TerminalSettings &settings, QString *er
                 || !write(kCursorBlinkKey, serializeBool(normalizedSettings.cursorBlink))
                 || !write(kScrollbackKey, QString::number(normalizedSettings.scrollbackLines))
                 || !write(kAudibleBellKey, serializeBool(normalizedSettings.audibleBell))
+                || !write(kCommandAutoCompletionKey,
+                          serializeBool(normalizedSettings.commandAutoCompletion))
                 || !write(kAutomaticReconnectKey,
                           serializeBool(normalizedSettings.automaticReconnect))
                 || !write(kReconnectMaxAttemptsKey,

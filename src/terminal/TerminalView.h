@@ -322,6 +322,14 @@ private:
     /** @brief 防止同一条最终 Permission denied 输出重复撤销嵌套目标。 */
     bool m_authenticationFailureReported = false;
 
+    /**
+     * @brief 是否允许按历史命令自动展示补全弹层，默认关闭。
+     *
+     * 当前输入缓冲和历史记录在关闭时仍正常维护，因为它们还承担嵌套 SSH 识别、命令历史
+     * 持久化等职责；这里只控制自动弹层，不能用清空命令缓冲的方式实现开关。
+     */
+    bool m_commandCompletionEnabled = false;
+
     /** @brief 基于当前主机持久命令历史的弹出式补全器。 */
     QCompleter *m_commandCompleter = nullptr;
 

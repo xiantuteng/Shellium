@@ -120,6 +120,8 @@ private:
     ToggleSwitch *m_cursorBlinkToggle = nullptr;
     QSpinBox *m_scrollbackSpin = nullptr;
     ToggleSwitch *m_audibleBellToggle = nullptr;
+    /** @brief 是否在普通命令输入达到最小前缀长度后自动展示历史命令候选。 */
+    ToggleSwitch *m_commandAutoCompletionToggle = nullptr;
     /** @brief 是否对已建立会话的异常网络断线启用有限自动重连。 */
     ToggleSwitch *m_automaticReconnectToggle = nullptr;
     /** @brief 每次异常断线周期的最大尝试次数。 */
