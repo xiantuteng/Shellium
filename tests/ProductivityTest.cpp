@@ -53,14 +53,8 @@ private slots:
      */
     void terminalPaneShowsAndExpiresTransientStatus();
 
-    /**
-     * @brief "推测嵌套目标"徽章默认隐藏，且没有自持层时不会被形似 ssh 的命令误触发。
-     *
-     * 徽章完整的"显示"路径需要一次真实 SSH 根连接（自持层）才能触发，不在本隔离测试
-     * 套件范围内；这里覆盖的是不需要网络也该成立的部分——默认隐藏、守卫没被打开、切回
-     * 本地终端后保持隐藏。
-     */
-    void terminalPaneShowsNestedBadgeOnlyWhileInferredLayerIsActive();
+    /** @brief 终端状态栏不应再创建“推测嵌套目标”徽章，以免重复展示内部判定。 */
+    void terminalPaneDoesNotExposeInferredTargetBadge();
 
     /**
      * @brief 320px 侧栏放不下"名称/说明"两列，片段树必须收窄成单列，说明改到第二行角色里；
@@ -314,33 +308,13 @@ void ProductivityTest::terminalPaneShowsAndExpiresTransientStatus()
     QTRY_VERIFY_WITH_TIMEOUT(statusLabel->text().isEmpty(), 9000);
 }
 
-void ProductivityTest::terminalPaneShowsNestedBadgeOnlyWhileInferredLayerIsActive()
+void ProductivityTest::terminalPaneDoesNotExposeInferredTargetBadge()
 {
-    // 徽章真正显示的那条路径（推测层建立在一个已认证的自持层之上）需要一次真实 SSH
-    // 根连接才能触发——inspectSubmittedCommand 在 m_ownedTargets 为空时直接短路返回，
-    // 这是刻意的：没有人已经连上任何机器时，解析器不该把终端里出现的字符串当成"进入了
-    // 嵌套服务器"。真实网络连接不在这个隔离测试套件的覆盖范围内（见类注释），因此这里
-    // 只覆盖能在没有网络的前提下验证的部分：徽章存在、默认隐藏，且这个短路守卫本身没有
-    // 被意外打开——传一条形似 ssh 的命令进去，在没有自持层时绝不能让徽章冒出来。
     TerminalPane pane;
-    pane.show();
-    QVERIFY(QTest::qWaitForWindowExposed(&pane));
-
-    auto *badge = pane.findChild<QLabel *>(QStringLiteral("terminalSessionNestedBadge"));
-    QVERIFY2(badge != nullptr, "状态栏必须有一个专门的推测层徽章控件");
-    QVERIFY2(!badge->isVisibleTo(&pane), "没有任何推测层时徽章不能显示");
-
-    QVERIFY(QMetaObject::invokeMethod(&pane,
-                                      "inspectSubmittedCommand",
-                                      Qt::DirectConnection,
-                                      Q_ARG(QString, QStringLiteral("ssh demo@example.com"))));
-    QVERIFY2(!badge->isVisibleTo(&pane),
-             "还没有任何自持层（从未真正连接过）时，徽章不能因为一条形似 ssh 的命令就冒出来");
-
-    // 本地 Shell 是徽章"必须隐藏"的另一类状态：即便未来某处误把它设成可见，切回本地
-    // 终端也必须把它带回隐藏状态。
-    pane.openLocalShell();
-    QVERIFY2(!badge->isVisibleTo(&pane), "本地终端状态下徽章必须保持隐藏");
+    // 直接断言控件不存在而不是仅检查 hidden：隐藏控件未来可能被旧状态流重新设为可见，
+    // 从对象树移除才能永久满足“终端会话不显示该提示”的界面契约。
+    QVERIFY2(pane.findChild<QLabel *>(QStringLiteral("terminalSessionNestedBadge")) == nullptr,
+             "终端状态栏不应创建“推测嵌套目标”徽章");
 }
 
 void ProductivityTest::snippetTreeIsSingleColumnWithDescriptionFallbackToCommand()

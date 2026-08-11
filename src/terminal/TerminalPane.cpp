@@ -8,7 +8,6 @@
 #include "storage/ApplicationDatabase.h"
 #include "terminal/LocalShellWorker.h"
 #include "terminal/TerminalView.h"
-#include "ui/SettingsWidgets.h"
 #include "ui/UiIcons.h"
 
 #include <QHBoxLayout>
@@ -35,7 +34,6 @@ TerminalPane::TerminalPane(QWidget *parent)
     , m_statusMessageLabel(new QLabel(this))
     , m_statusMessageTimer(new QTimer(this))
     , m_terminalMetaLabel(new QLabel(tr("UTF-8 · 80×24"), this))
-    , m_nestedBadge(new QLabel(tr("⚠ 推测嵌套目标"), this))
     , m_fileManagerButton(new QToolButton(this))
     , m_terminalView(new TerminalView(this))
 {
@@ -60,10 +58,6 @@ TerminalPane::TerminalPane(QWidget *parent)
             this, [this]() { m_statusMessageLabel->clear(); });
     m_terminalMetaLabel->setObjectName(QStringLiteral("terminalSessionMeta"));
     m_terminalMetaLabel->setToolTip(tr("当前终端编码和列×行尺寸"));
-    m_nestedBadge->setObjectName(QStringLiteral("terminalSessionNestedBadge"));
-    m_nestedBadge->setToolTip(
-        tr("连接链解析器无法确认这一层的认证状态，仅根据识别到的命令推测得出"));
-    m_nestedBadge->setVisible(false);
     m_fileManagerButton->setObjectName(QStringLiteral("terminalFileManagerToggle"));
     m_fileManagerButton->setCheckable(true);
     // 远程文件管理默认收起：多数会话只用终端，一进来就占掉三分之一宽度并立刻发起 SFTP
@@ -75,7 +69,6 @@ TerminalPane::TerminalPane(QWidget *parent)
     m_fileManagerButton->setAccessibleName(tr("远程文件管理"));
     updateFileManagerButtonIcon();
     headerLayout->addWidget(m_headerLabel, 1);
-    headerLayout->addWidget(m_nestedBadge);
     headerLayout->addWidget(m_statusMessageLabel);
     headerLayout->addWidget(m_terminalMetaLabel);
     headerLayout->addWidget(m_fileManagerButton);
@@ -211,7 +204,6 @@ void TerminalPane::openLocalShell(const QString &shellPath)
     // 管理器，不能等 zsh 启动完成后继续短暂显示上一条 SSH 会话的目录。
     emit targetsChanged(this);
     m_headerLabel->setText(tr("正在启动本地 zsh…"));
-    m_nestedBadge->setVisible(false);
     m_terminalView->appendTerminalOutput(tr("正在启动本地 zsh…\r\n").toUtf8());
 
     m_localWorker = new LocalShellWorker(shellPath, this);
@@ -307,7 +299,6 @@ void TerminalPane::connectToHosts(const QList<ConnectionTarget> &connectionPlan)
     m_shellReady = false;
     m_ownedTargets.clear();
     m_inferredTargets.clear();
-    m_nestedBadge->setVisible(false);
     refreshCommandCompletions();
     // 旧会话登记的期望串永远不会再出现；继续持有只会让新会话的第一段输出被误扣。
     m_echoFilter.reset();
@@ -466,7 +457,6 @@ void TerminalPane::connectToHosts(const QList<ConnectionTarget> &connectionPlan)
         m_shellReady = false;
         m_remoteSessionEstablished = false;
         m_headerLabel->setText(tr("连接失败"));
-        m_nestedBadge->setVisible(false);
         m_terminalView->appendTerminalOutput((QStringLiteral("\r\n") + message
                                               + QStringLiteral("\r\n")).toUtf8());
         emit statusMessage(message);
@@ -526,7 +516,6 @@ void TerminalPane::connectToHosts(const QList<ConnectionTarget> &connectionPlan)
         } else {
             const QString message = tr("已取消连接：服务器需要已禁用的 hmac-sha1。请升级服务器配置。");
             m_headerLabel->setText(tr("连接失败"));
-            m_nestedBadge->setVisible(false);
             m_terminalView->appendTerminalOutput(
                 (QStringLiteral("\r\n") + message + QStringLiteral("\r\n")).toUtf8());
             emit statusMessage(message);
@@ -551,7 +540,6 @@ void TerminalPane::connectToHosts(const QList<ConnectionTarget> &connectionPlan)
             ? tr("SSH 连接因网络异常中断，准备自动重连")
             : tr("SSH 连接已结束（退出状态 %1），正在退回本地 zsh").arg(exitStatus);
         m_headerLabel->setText(message);
-        m_nestedBadge->setVisible(false);
         m_terminalView->appendTerminalOutput((QStringLiteral("\r\n") + message
                                               + QStringLiteral("\r\n")).toUtf8());
         emit statusMessage(message);
@@ -655,19 +643,12 @@ void TerminalPane::refreshHeaderLabel()
 {
     const ConnectionTarget target = activeTarget();
     if (!target.isValid()) {
-        // 没有任何自持层或推测层时（回滚到根、或根本还没建过嵌套层），徽章必须跟着隐藏，
-        // 否则会残留上一层的可见状态——activeTarget() 无效不代表标题不变，只是这个函数
-        // 不再更新标题文字，徽章却是完全独立的可见性状态，必须在这里显式收掉。
-        m_nestedBadge->setVisible(false);
+        // 没有任何自持层或推测层时不覆盖连接阶段文字，例如“正在连接”或失败原因。
         return;
     }
-    const bool inferred = target.confidence == ConnectionTarget::Confidence::Inferred;
-    m_headerLabel->setText(inferred
-                               ? tr("%1（推测）").arg(target.connectionSpecifier())
-                               : target.connectionSpecifier());
-    // 徽章只认 confidence，不认标题文字：自持层和推测层都可能在标题里带括注说明，但只有
-    // Inferred 才是"解析器猜的、没有确认过"。
-    m_nestedBadge->setVisible(inferred);
+    // 推测/确认仍作为文件操作与路由的内部安全状态保留，但不再在终端标题重复展示；用户
+    // 已能从服务器层级和实际 Shell 提示符判断所在位置，额外警示只会挤占横向空间。
+    m_headerLabel->setText(target.connectionSpecifier());
     refreshCommandCompletions();
 }
 
@@ -721,27 +702,19 @@ void TerminalPane::applyTerminalSettings(const TerminalSettings &settings)
     // 样式施加在整个容器而不是单个服务器标签上，保证尺寸文字和文件按钮属于同一条视觉
     // 状态栏。按钮悬停仍保留边框反馈，避免纯图标控件看起来不可点击。
     //
-    // 徽章颜色单独走 ShelliumUi::warningColor()/warningTintColor()：这块状态栏是跟着每个
-    // 会话自己的 TerminalPalette 内联设色的，不吃 MainWindow 全局样式表的 token，因此警示色
-    // 也不能指望全局 QSS 自动生效，必须在这里显式拼进同一段样式字符串。这里的 dark 直接来自
-    // TerminalSettings 已解析好的主题模式，不是从 QPalette 反推，不会重蹈主机树选中色的误判。
     m_headerBar->setStyleSheet(
         QStringLiteral(
             "QWidget#terminalSessionStatusBar { background: %1; color: %2; }"
             "QLabel#terminalSessionServer { color: %2; font-weight: 600; }"
             "QLabel#terminalSessionTransientStatus { color: %2; }"
             "QLabel#terminalSessionMeta { color: %2; }"
-            "QLabel#terminalSessionNestedBadge { color: %4; background: %5; "
-            "border-radius: 5px; padding: 1px 6px; font-size: 11px; font-weight: 700; }"
             "QToolButton#terminalFileManagerToggle { border: 1px solid transparent; "
             "border-radius: 5px; padding: 3px; }"
             "QToolButton#terminalFileManagerToggle:hover { border-color: %2; }"
             "QToolButton#terminalFileManagerToggle:checked { background: %3; }")
             .arg(headerBackground.name(),
                  palette.foreground.name(),
-                 palette.selection.name(),
-                 ShelliumUi::warningColor(dark).name(),
-                 ShelliumUi::warningTintColor(dark).name()));
+                 palette.selection.name()));
 
     // 自绘图标的线条色不受样式表 color 影响，必须随主题显式重绘，否则深色配色下会残留
     // 上一套主题的浅色线条。
@@ -796,7 +769,6 @@ bool TerminalPane::scheduleAutomaticReconnect(const ConnectionTarget &target,
         const QString exhausted = tr("自动重连已达到 %1 次上限，正在退回本地 zsh")
                                       .arg(m_reconnectMaxAttempts);
         m_headerLabel->setText(exhausted);
-        m_nestedBadge->setVisible(false);
         m_terminalView->appendTerminalOutput(
             (QStringLiteral("\r\n") + exhausted + QStringLiteral("\r\n")).toUtf8());
         emit statusMessage(exhausted);
@@ -820,7 +792,6 @@ bool TerminalPane::scheduleAutomaticReconnect(const ConnectionTarget &target,
                                 .arg(attempt)
                                 .arg(m_reconnectMaxAttempts);
     m_headerLabel->setText(waiting);
-    m_nestedBadge->setVisible(false);
     emit statusMessage(waiting);
 
     QTimer::singleShot(delaySeconds * 1000,
@@ -1008,10 +979,6 @@ void TerminalPane::inspectSubmittedCommand(const QString &command)
         refreshCommandCompletions();
         m_pendingNestedCredentialTargetId = nestedTarget.id;
         m_headerLabel->setText(tr("%1（嵌套目标）").arg(nestedTarget.connectionSpecifier()));
-        // 这个目标已经进了 m_inferredTargets（585 行前后），confidence 恒为 Inferred；
-        // 和 refreshHeaderLabel() 走的是同一条真值，只是这里的标题文案更具体，所以没有
-        // 复用 refreshHeaderLabel() 本身，但徽章可见性必须保持一致。
-        m_nestedBadge->setVisible(true);
         emit statusMessage(tr("已识别嵌套 SSH 目标：%1").arg(nestedTarget.connectionSpecifier()));
 
         // 公钥/Agent 登录不会出现 password 提示。这里为高延迟网络保留五秒认证观察窗口：
