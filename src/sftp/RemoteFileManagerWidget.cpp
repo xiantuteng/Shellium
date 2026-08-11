@@ -13,6 +13,7 @@
 #include <QFileInfo>
 #include <QFileSystemModel>
 #include <QFontMetrics>
+#include <QFrame>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QImage>
@@ -162,6 +163,22 @@ void configureCompactFileButton(QToolButton *button,
     button->setProperty("compactIconButton", true);
     button->setToolTip(accessibleName);
     button->setAccessibleName(accessibleName);
+}
+
+/**
+ * @brief 创建操作行里的一条竖向分隔线。
+ * @param parent 父控件，负责其生命周期。
+ *
+ * 操作行把"传输""文件操作""传输控制"三组动作放在同一行，从左到右符合从常用到不
+ * 常用的操作频率；不加分隔线时六七个紧挨着的图标按钮很难一眼看出分组边界。
+ */
+QFrame *createOperationRowSeparator(QWidget *parent)
+{
+    auto *separator = new QFrame(parent);
+    separator->setFrameShape(QFrame::VLine);
+    separator->setFrameShadow(QFrame::Plain);
+    separator->setFixedWidth(1);
+    return separator;
 }
 
 /**
@@ -614,14 +631,20 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     m_resumeTransfersCheck->setText(tr("断点续传"));
     m_resumeTransfersCheck->setToolTip(
         tr("开启时从已有较小文件继续；关闭时始终截断并覆盖重传。"));
+    // 操作行按"传输""文件操作""传输控制"三组用竖线隔开，从左到右符合从常用到不常用
+    // 的操作频率，用户不用逐个图标猜边界。
     operationRow->addWidget(uploadButton);
     operationRow->addWidget(downloadButton);
+    operationRow->addWidget(createOperationRowSeparator(this));
     operationRow->addWidget(previewButton);
     operationRow->addWidget(chmodButton);
     operationRow->addWidget(renameButton);
     operationRow->addWidget(deleteButton);
     operationRow->addStretch(1);
     operationRow->addWidget(m_resumeTransfersCheck);
+    m_transferControlSeparator = createOperationRowSeparator(this);
+    m_transferControlSeparator->setVisible(false);
+    operationRow->addWidget(m_transferControlSeparator);
     operationRow->addWidget(m_pauseButton);
     operationRow->addWidget(m_cancelButton);
     mainLayout->addLayout(operationRow);
@@ -1392,6 +1415,7 @@ void RemoteFileManagerWidget::rebuildTransferQueueView()
     // 顺序显示，不会影响文件操作按钮的位置。
     m_pauseButton->setVisible(hasActive);
     m_cancelButton->setVisible(hasAnyTransfer);
+    m_transferControlSeparator->setVisible(hasActive || hasAnyTransfer);
     m_transferQueueList->setVisible(hasAnyTransfer);
 }
 

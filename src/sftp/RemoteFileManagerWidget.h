@@ -12,6 +12,7 @@
 class QComboBox;
 class QCheckBox;
 class QFileSystemModel;
+class QFrame;
 class QLabel;
 class QLineEdit;
 class QListWidget;
@@ -300,6 +301,9 @@ private:
     QToolButton *m_cancelButton = nullptr;
     /** @brief 暂停/恢复当前活动传输的按钮。 */
     QToolButton *m_pauseButton = nullptr;
+    /** @brief 操作行里"传输控制"分组前的竖线，随暂停/取消按钮一起显隐，避免空转时
+     *  单独留一条没有对应按钮的分隔线。 */
+    QFrame *m_transferControlSeparator = nullptr;
 
     /** @brief 用户选择“优先续传”或“覆盖重传”的当前标签偏好。 */
     QCheckBox *m_resumeTransfersCheck = nullptr;
