@@ -70,6 +70,16 @@ signals:
      */
     void fullScreenChanged(bool fullScreen);
 
+protected:
+    /**
+     * @brief 根据可用宽度在完整文字动作和紧凑图标动作之间切换。
+     * @param event Qt 尺寸变化事件，仅用于读取新宽度；函数不会持有该指针。
+     *
+     * 全屏双栏按设计图展示“上传、下载、预览”等完整文字；默认与终端并排时宽度通常只有
+     * 420px，继续强塞文字会挤掉传输控制，因此窄态保留相同按钮但只显示图标与 Tooltip。
+     */
+    void resizeEvent(QResizeEvent *event) override;
+
 private slots:
     /** @brief 使用路径输入框内容读取远端目录。 */
     void refreshDirectory();
@@ -204,8 +214,11 @@ private:
     /** @brief 从指定树节点还原结构化远程条目；空节点返回空值。 */
     [[nodiscard]] std::optional<RemoteFileInfo> fileFromItem(QTreeWidgetItem *item) const;
 
-    /** @brief 统一刷新按钮、进度条和状态文字。 */
+    /** @brief 统一刷新传输信息带、进度条和状态文字。 */
     void setBusy(bool busy, const QString &message = {});
+
+    /** @brief 按当前宽度刷新操作栏按钮的文字/图标展示方式。 */
+    void updateResponsiveActionButtons();
 
     /** @brief SFTP 操作成功后刷新目录并显示结果。 */
     void handleOperationSuccess(quint64 requestId, const QString &description);
@@ -296,7 +309,15 @@ private:
      * @param total 总字节数；为 0 表示总量未知。
      */
     void updateTransferProgressText(quint64 completed, quint64 total);
+    /** @brief 传输信息带左侧状态，显示当前条目或一般 SFTP 操作进度。 */
     QLabel *m_statusLabel = nullptr;
+
+    /** @brief 传输信息带右侧摘要，显示已传字节、速度和预计剩余时间。 */
+    QLabel *m_transferDetailLabel = nullptr;
+
+    /** @brief 合并进度、状态和队列的底部信息带；空闲且无队列时整体隐藏。 */
+    QFrame *m_transferPanel = nullptr;
+
     QProgressBar *m_progressBar = nullptr;
     QToolButton *m_cancelButton = nullptr;
     /** @brief 暂停/恢复当前活动传输的按钮。 */

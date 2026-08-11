@@ -143,6 +143,83 @@ QString standaloneDialogStyleSheet(const bool dark)
     styleSheet.replace(QStringLiteral("@SELECTION@"),
                        dark ? QStringLiteral("#24413d") : QStringLiteral("#dff6ec"));
     styleSheet.replace(QStringLiteral("@ACCENT@"), accentColor().name());
+    // 保险库会在 MainWindow 创建前使用本样式。追加专用片段而不是把选择器散落到基础规则中，
+    // 可确保应用运行期间由全局样式复用时，得到与首次启动完全一致的安全操作视觉层级。
+    return styleSheet + vaultDialogStyleSheet(dark);
+}
+
+QString vaultDialogStyleSheet(const bool dark)
+{
+    // 颜色逐项对应设计文档中的 accent-tint、danger、warn 与 warn-tint。警示边框使用不透明
+    // 的预混合色，是因为 Qt QSS 对 rgba 边框在不同平台样式引擎上的抗锯齿结果并不一致。
+    const QString workspace = dark ? QStringLiteral("#101525") : QStringLiteral("#edf1f4");
+    const QString text = dark ? QStringLiteral("#f0f3fa") : QStringLiteral("#1b2230");
+    const QString muted = dark ? QStringLiteral("#929bb3") : QStringLiteral("#71808d");
+    const QString accentTint = dark ? QStringLiteral("#173729") : QStringLiteral("#e2f6ec");
+    const QString danger = dark ? QStringLiteral("#ef776e") : QStringLiteral("#d84a41");
+    const QString warning = dark ? QStringLiteral("#e2a94f") : QStringLiteral("#b8791f");
+    const QString warningTint = dark ? QStringLiteral("#3a2f18") : QStringLiteral("#faefdc");
+    const QString warningBorder = dark ? QStringLiteral("#765827") : QStringLiteral("#e1c08e");
+
+    QString styleSheet = QStringLiteral(R"QSS(
+        QDialog#VaultDialog,
+        QWidget#VaultBody {
+            background: @WORKSPACE@;
+            color: @TEXT@;
+        }
+        QLabel#VaultSecurityBadge {
+            background: @ACCENT_TINT@;
+            border: 0;
+            border-radius: 12px;
+        }
+        QLabel#VaultHeading {
+            color: @TEXT@;
+            font-size: 15px;
+            font-weight: 700;
+        }
+        QLabel#VaultIntroduction {
+            color: @MUTED@;
+            font-size: 12px;
+        }
+        QLabel#VaultFieldLabel {
+            color: @TEXT@;
+            font-size: 13px;
+            font-weight: 600;
+        }
+        QLineEdit[validationError="true"],
+        QLineEdit[validationError="true"]:focus {
+            border: 1px solid @DANGER@;
+        }
+        QLabel#VaultErrorLabel {
+            color: @DANGER@;
+            font-size: 12px;
+        }
+        QFrame#VaultWarningNotice {
+            color: @TEXT@;
+            background: @WARNING_TINT@;
+            border: 1px solid @WARNING_BORDER@;
+            border-radius: 8px;
+        }
+        QLabel#VaultWarningIcon {
+            color: @WARNING@;
+            background: transparent;
+            border: 0;
+        }
+        QLabel#VaultWarningText {
+            color: @TEXT@;
+            background: transparent;
+            border: 0;
+            font-size: 12px;
+        }
+    )QSS");
+    styleSheet.replace(QStringLiteral("@WORKSPACE@"), workspace);
+    styleSheet.replace(QStringLiteral("@TEXT@"), text);
+    styleSheet.replace(QStringLiteral("@MUTED@"), muted);
+    styleSheet.replace(QStringLiteral("@ACCENT_TINT@"), accentTint);
+    styleSheet.replace(QStringLiteral("@DANGER@"), danger);
+    styleSheet.replace(QStringLiteral("@WARNING@"), warning);
+    styleSheet.replace(QStringLiteral("@WARNING_TINT@"), warningTint);
+    styleSheet.replace(QStringLiteral("@WARNING_BORDER@"), warningBorder);
     return styleSheet;
 }
 

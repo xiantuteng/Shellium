@@ -934,6 +934,106 @@
   </div>
 </section>
 
+<!-- ================= 保险库 ================= -->
+<section class="screen" id="vault">
+  <div class="screen-head">
+    <p class="eyebrow">Dialog · VaultDialog</p>
+    <h2>保险库解锁 / 创建</h2>
+    <p>同一个对话框按 <code style="font-family:var(--font-mono);">CredentialVault::State</code> 分两种形态，字段和文案都已经和实现一致；这版补的是视觉：顶部加一个安静的锁形徽标锚定"这是安全相关操作"，卡片标题从大段说明文字收成"小标题 + 居中说明"，创建模式下"无法找回"的提醒从纯段落文字改成带图标的醒目提示框，错误态改成红色描边 + 字段下方短句，不再是孤立的红色文字。</p>
+  </div>
+  <div class="stage-wrap">
+    <div class="dialog" style="width:400px;">
+      <div class="dialog-head">
+        <div>
+          <div class="title">解锁 Shellium 保险库</div>
+        </div>
+        <button class="icon-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg></button>
+      </div>
+      <div class="dialog-body">
+        <div class="vault-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/><circle cx="12" cy="15" r="1.6"/></svg>
+        </div>
+        <p class="vault-card-title">解锁保险库</p>
+        <p class="vault-note">保险库已锁定。请输入主密码以使用已保存的 SSH 凭据。</p>
+        <div class="card">
+          <div class="field">
+            <label>主密码</label>
+            <input type="password" placeholder="输入主密码" value="••••" />
+          </div>
+        </div>
+      </div>
+      <div class="dialog-foot">
+        <button class="btn">取消</button>
+        <div class="spacer"></div>
+        <button class="btn primary">解锁</button>
+      </div>
+    </div>
+
+    <div class="dialog" style="width:400px;">
+      <div class="dialog-head">
+        <div>
+          <div class="title">创建 Shellium 保险库</div>
+        </div>
+        <button class="icon-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg></button>
+      </div>
+      <div class="dialog-body">
+        <div class="vault-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/><circle cx="12" cy="15" r="1.6"/></svg>
+        </div>
+        <p class="vault-card-title">创建保险库</p>
+        <p class="vault-note">请设置主密码。Shellium 使用 Argon2id 派生密钥，并以 XChaCha20-Poly1305 加密保存的 SSH 凭据。</p>
+        <div class="card">
+          <div class="field" style="margin-bottom:11px;">
+            <label>主密码</label>
+            <input type="password" placeholder="至少 8 个字符" />
+          </div>
+          <div class="field">
+            <label>确认主密码</label>
+            <input type="password" placeholder="再次输入以确认" />
+          </div>
+          <div class="notice-warn" style="margin-top:12px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
+            <p>主密码无法找回，请妥善保管。丢失后已保存的 SSH 凭据将无法解密。</p>
+          </div>
+        </div>
+      </div>
+      <div class="dialog-foot">
+        <button class="btn">取消</button>
+        <div class="spacer"></div>
+        <button class="btn primary">创建保险库</button>
+      </div>
+    </div>
+
+    <div class="msg-stack" style="width:320px;">
+      <div class="dialog" style="width:320px;">
+        <div class="dialog-body" style="padding-top:18px;">
+          <div class="card">
+            <div class="field has-error">
+              <label>主密码</label>
+              <input type="password" placeholder="输入主密码" />
+              <div class="field-error">无法解锁保险库：主密码不正确。</div>
+            </div>
+          </div>
+        </div>
+        <div class="dialog-foot">
+          <button class="btn">取消</button>
+          <div class="spacer"></div>
+          <button class="btn primary">解锁</button>
+        </div>
+      </div>
+      <div class="caption">
+        <b>要点</b>
+        <ul>
+          <li>顶部锁形徽标只在这一类"需要主密码"的对话框出现，是它和新建主机/新建分组等普通表单在第一眼就能区分开的信号，不需要每次读标题文字才知道这是安全操作。</li>
+          <li>错误态改成红色描边 + 字段正下方的短句：原来的实现是把红色提示放在整张卡片下方，字段本身没有任何视觉标记，用户得先读完文字才知道是哪个字段错了。</li>
+          <li>"主密码无法找回"从一段夹在说明文字里的话，独立成带警示图标的提示框——这是唯一一次性提醒、后悔药买不到的信息，值得单独占一块视觉空间。</li>
+          <li>取消按钮左对齐、主操作右对齐，和主机/分组对话框的 footer 节奏保持一致；不允许取消的场景（保险库首次创建且被强制要求）时直接不渲染取消按钮，而不是禁用它。</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
 <!-- ================= 效率工具 ================= -->
 <section class="screen" id="productivity">
   <div class="screen-head">

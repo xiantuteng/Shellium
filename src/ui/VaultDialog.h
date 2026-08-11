@@ -52,10 +52,17 @@ private:
      */
     void showInlineError(const QString &message, QLineEdit *focusTarget = nullptr);
 
+    /**
+     * @brief 清除两个密码字段的错误文案和红色描边。
+     *
+     * 用户开始修正输入后立即清除旧错误，避免已经过时的校验结果继续被误认为当前状态。
+     */
+    void clearInlineError();
+
     CredentialVault *m_vault = nullptr;
     bool m_creating = false;
-    QLabel *m_errorLabel = nullptr;
     QLineEdit *m_passwordEdit = nullptr;
     QLineEdit *m_confirmationEdit = nullptr;
+    QLabel *m_passwordErrorLabel = nullptr;
+    QLabel *m_confirmationErrorLabel = nullptr;
 };
-

@@ -14,6 +14,7 @@
 #include "ui/MacWindowChrome.h"
 #include "ui/SessionTabBar.h"
 #include "ui/SettingsDialog.h"
+#include "ui/SettingsWidgets.h"
 #include "ui/SshKeyManagerDialog.h"
 #include "ui/UiIcons.h"
 #include "ui/VaultDialog.h"
@@ -980,6 +981,14 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
     const QString mutedTextColor = dark ? QStringLiteral("#929bb3")
                                         : QStringLiteral("#71808d");
     const QString accentColor = QStringLiteral("#2bd981");
+    const QString dangerColor = dark ? QStringLiteral("#ef776e")
+                                     : QStringLiteral("#d84a41");
+    const QString dangerTintColor = dark ? QStringLiteral("#3a1f22")
+                                         : QStringLiteral("#fbe7e5");
+    const QString warningColor = dark ? QStringLiteral("#e2a94f")
+                                      : QStringLiteral("#b8791f");
+    const QString warningTintColor = dark ? QStringLiteral("#3a2f18")
+                                          : QStringLiteral("#faefdc");
     const QString selectionBackground = dark ? QStringLiteral("#24413d")
                                              : QStringLiteral("#dff6ec");
     // 导航入口、主机和远程文件都是用户持续关注的“当前对象”，需要比文本选区、按钮按下态
@@ -1128,6 +1137,198 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
         QToolButton#HostTagFilterButton:pressed {
             color: @TEXT@;
             background: @PROMINENT_SELECTION@;
+        }
+        /* 远程文件管理器由顶栏、文件区、操作栏、传输信息带四段连续组成。选择器只匹配
+           SFTP 命名控件，避免为了参考图的紧凑尺寸改变设置页或主机侧栏的通用控件。 */
+        QWidget#RemoteFileManager {
+            color: @TEXT@;
+            background: @SURFACE@;
+        }
+        QWidget#SftpTopBar {
+            background: @SIDEBAR@;
+            border-bottom: 1px solid @BORDER@;
+        }
+        QLabel#SftpServerLabel {
+            color: @MUTED@;
+            font-size: 13px;
+            font-weight: 700;
+        }
+        QComboBox#SftpTargetCombo {
+            background: @SURFACE@;
+            min-height: 32px;
+        }
+        QToolButton[sftpFullScreenAction="true"],
+        QToolButton[sftpPaneAction="true"] {
+            color: @MUTED@;
+            background: transparent;
+            border: 0;
+            border-radius: 7px;
+            padding: 5px;
+        }
+        QToolButton[sftpFullScreenAction="true"]:hover,
+        QToolButton[sftpPaneAction="true"]:hover {
+            color: @TEXT@;
+            background: @RAISED@;
+        }
+        QWidget#SftpLocalPane,
+        QWidget#SftpRemotePane {
+            background: @SURFACE@;
+        }
+        QSplitter#SftpPaneSplitter::handle:horizontal {
+            background: @BORDER@;
+        }
+        QWidget#SftpLocalToolbar,
+        QWidget#SftpRemoteToolbar {
+            background: @SURFACE@;
+            border-bottom: 1px solid @BORDER@;
+        }
+        QLabel#SftpPaneLabel {
+            color: @MUTED@;
+            font-size: 12px;
+            font-weight: 700;
+            padding: 0 2px 0 0;
+        }
+        QLineEdit#SftpLocalPathEdit,
+        QLineEdit#SftpRemotePathEdit {
+            color: @MUTED@;
+            background: @SIDEBAR@;
+            border: 1px solid @BORDER@;
+            border-radius: 7px;
+            min-height: 26px;
+            padding: 1px 8px;
+            font-family: "SF Mono", "Menlo", monospace;
+            font-size: 12px;
+        }
+        QLineEdit#SftpLocalPathEdit:focus,
+        QLineEdit#SftpRemotePathEdit:focus {
+            color: @TEXT@;
+            border-color: @ACCENT@;
+        }
+        QTreeView#LocalFileTree,
+        QTreeView#RemoteFileTree {
+            background: @SURFACE@;
+            border: 0;
+        }
+        QTreeView#LocalFileTree::item,
+        QTreeView#RemoteFileTree::item {
+            min-height: 30px;
+            border-bottom: 1px solid @BORDER@;
+            border-radius: 0;
+            padding: 2px 6px;
+        }
+        QTreeView#LocalFileTree::item:hover,
+        QTreeView#RemoteFileTree::item:hover {
+            background: @RAISED@;
+        }
+        QTreeView#LocalFileTree QHeaderView::section,
+        QTreeView#RemoteFileTree QHeaderView::section {
+            color: @MUTED@;
+            background: @RAISED@;
+            border: 0;
+            border-bottom: 1px solid @BORDER@;
+            padding: 7px 10px;
+            font-size: 12px;
+            font-weight: 700;
+        }
+        QFrame#SftpOperationBar {
+            background: @SIDEBAR@;
+            border-top: 1px solid @BORDER@;
+            border-bottom: 1px solid @BORDER@;
+        }
+        QFrame#SftpOperationSeparator {
+            color: @BORDER@;
+            background: @BORDER@;
+            border: 0;
+        }
+        QToolButton[sftpResponsiveAction="true"] {
+            color: @TEXT@;
+            background: transparent;
+            border: 1px solid transparent;
+            border-radius: 8px;
+            padding: 5px 10px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+        QToolButton[sftpActionRole="transfer"] {
+            background: @SURFACE@;
+            border-color: @BORDER@;
+        }
+        QToolButton[sftpResponsiveAction="true"]:hover {
+            background: @RAISED@;
+            border-color: @BORDER@;
+        }
+        QToolButton[sftpActionRole="danger"] {
+            color: @DANGER@;
+        }
+        QToolButton[sftpActionRole="danger"]:hover {
+            color: @DANGER@;
+            background: @DANGER_TINT@;
+            border-color: transparent;
+        }
+        QCheckBox#SftpResumeCheck {
+            color: @MUTED@;
+            spacing: 7px;
+            font-size: 12px;
+        }
+        QFrame#SftpTransferBand {
+            background: @SIDEBAR@;
+            border-top: 1px solid @BORDER@;
+        }
+        QProgressBar#SftpTransferProgress {
+            background: @RAISED@;
+            border: 0;
+            border-radius: 3px;
+            min-height: 6px;
+            max-height: 6px;
+        }
+        QProgressBar#SftpTransferProgress::chunk {
+            background: @ACCENT@;
+            border-radius: 3px;
+        }
+        QLabel#SftpTransferStatus,
+        QLabel#SftpTransferDetail {
+            color: @MUTED@;
+            font-size: 12px;
+        }
+        QListWidget#SftpTransferQueue {
+            color: @TEXT@;
+            background: transparent;
+            border: 0;
+            outline: 0;
+        }
+        QListWidget#SftpTransferQueue::item {
+            min-height: 30px;
+            border: 0;
+            border-radius: 7px;
+            padding: 0;
+        }
+        QListWidget#SftpTransferQueue::item:selected {
+            background: @SELECTION@;
+        }
+        QLabel#SftpQueueItemName {
+            color: @TEXT@;
+            background: transparent;
+            border: 0;
+            font-size: 12px;
+        }
+        QLabel#SftpQueueStateBadge {
+            border: 0;
+            border-radius: 5px;
+            padding: 2px 7px;
+            font-size: 11px;
+            font-weight: 700;
+        }
+        QLabel#SftpQueueStateBadge[queueState="active"] {
+            color: @ACCENT@;
+            background: @SELECTION@;
+        }
+        QLabel#SftpQueueStateBadge[queueState="queued"] {
+            color: @MUTED@;
+            background: @RAISED@;
+        }
+        QLabel#SftpQueueStateBadge[queueState="paused"] {
+            color: @WARNING@;
+            background: @WARNING_TINT@;
         }
         QTabWidget QTabBar::tab {
             color: @MUTED@;
@@ -1290,7 +1491,7 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
         QTreeView#RemoteFileTree::item:selected:active,
         QTreeView#RemoteFileTree::item:selected:!active,
         QTreeView#RemoteFileTree::item:selected:hover {
-            background: @PROMINENT_SELECTION@;
+            background: @SELECTION@;
             color: @TEXT@;
         }
         QTreeView#HostTree::item:selected,
@@ -1526,9 +1727,16 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
     styleSheet.replace(QStringLiteral("@TEXT@"), textColor);
     styleSheet.replace(QStringLiteral("@MUTED@"), mutedTextColor);
     styleSheet.replace(QStringLiteral("@ACCENT@"), accentColor);
+    styleSheet.replace(QStringLiteral("@DANGER@"), dangerColor);
+    styleSheet.replace(QStringLiteral("@DANGER_TINT@"), dangerTintColor);
+    styleSheet.replace(QStringLiteral("@WARNING@"), warningColor);
+    styleSheet.replace(QStringLiteral("@WARNING_TINT@"), warningTintColor);
     styleSheet.replace(QStringLiteral("@PROMINENT_SELECTION@"),
                        prominentSelectionBackground);
     styleSheet.replace(QStringLiteral("@SELECTION@"), selectionBackground);
+    // 保险库既可能在启动阶段使用独立样式，也可能在主窗口运行期间再次弹出。这里复用同一
+    // 片段，确保应用自选主题与系统主题不一致时仍以应用主题绘制安全徽标、警示框和错误态。
+    styleSheet += ShelliumUi::vaultDialogStyleSheet(dark);
     // 顶层 QMenu / QComboBox 弹出层等不是 MainWindow 的子控件，
     // this->setStyleSheet(...) 只对 MainWindow 子树生效，右键菜单等
     // 顶层部件会吃不到这份样式，因此改为通过 qApp 应用到整个应用。

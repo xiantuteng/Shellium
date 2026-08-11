@@ -3,6 +3,7 @@
 
 #include <QAction>
 #include <QCheckBox>
+#include <QColor>
 #include <QComboBox>
 #include <QDir>
 #include <QDialog>
@@ -30,12 +31,14 @@
 #include <QPixmap>
 #include <QRegularExpression>
 #include <QResizeEvent>
+#include <QSizePolicy>
 #include <QSplitter>
 #include <QTimer>
 #include <QToolButton>
 #include <QTreeView>
 #include <QTreeWidget>
 #include <QUrl>
+#include <QVariant>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -45,7 +48,6 @@
 
 namespace {
 
-/** @brief 把字节数格式化为适合文件列表展示的 IEC 单位。 */
 /**
  * @brief 远程条目在服务器返回列表中的原始序号，用于"还原默认排序"。
  *
@@ -54,7 +56,7 @@ namespace {
  */
 constexpr int kOriginalIndexRole = Qt::UserRole + 5;
 
-/** @brief 条目修改时间的原值，按时间排序时不能用格式化后的文本比较。 */
+/** @brief 条目修改时间的结构化原值；列表不显示该列，但详情功能仍可直接复用。 */
 constexpr int kModifiedAtRole = Qt::UserRole + 6;
 
 /**
@@ -88,6 +90,7 @@ QString formatDuration(const double seconds)
     return QObject::tr("%1 小时 %2 分").arg(total / 3600).arg((total % 3600) / 60);
 }
 
+/** @brief 把字节数格式化为适合文件列表展示的 IEC 单位。 */
 QString formatSize(const quint64 bytes)
 {
     static const QStringList units = {
@@ -141,6 +144,25 @@ constexpr char kRemotePathMimeType[] = "application/x-shellium-remote-path";
 constexpr char kRemoteDirectoryMimeType[] = "application/x-shellium-remote-directory";
 
 /**
+ * @brief 返回远程文件列表使用的目录或普通文件图标。
+ * @param context 图标所属控件，用于高 DPI 绘制与生命周期跟踪，不得为空。
+ * @param directory true 返回蓝色文件夹，false 返回弱化灰色文件图标。
+ * @return 与参考设计一致、跨平台不依赖系统图标主题的远程文件线性图标。
+ *
+ * 远程条目没有本地 QFileIconProvider 可用，因此使用稳定的 Shellium 图标。该函数刻意不用于
+ * 本地栏：本地侧保留操作系统原生文件图标，可以让用户在双栏对拷时快速区分文件来源。
+ */
+QIcon remoteFileEntryIcon(QWidget *context, const bool directory)
+{
+    Q_ASSERT(context != nullptr);
+    return UiIcons::symbol(context,
+                           directory ? UiIcons::Symbol::Folder : UiIcons::Symbol::File,
+                           directory ? QColor(QStringLiteral("#5b95d6"))
+                                     : QColor(QStringLiteral("#9aa6b2")),
+                           QSize(16, 16));
+}
+
+/**
  * @brief 把文件管理高频动作配置为带完整辅助说明的紧凑图标按钮。
  * @param button 待配置按钮；不得为空。
  * @param icon 语义图标，已包含跨平台回退资源。
@@ -166,6 +188,59 @@ void configureCompactFileButton(QToolButton *button,
 }
 
 /**
+ * @brief 配置双栏路径工具条里的小型图标按钮。
+ * @param button 待配置按钮，不得为空。
+ * @param icon 返回上级或刷新图标。
+ * @param accessibleName Tooltip 与辅助技术读取的完整动作名称。
+ *
+ * 路径工具条需要把“栏标题、返回、刷新、地址”放在同一行。这里使用 28px 点击区，在不
+ * 破坏单行节奏的前提下仍保留足够的鼠标命中面积。
+ */
+void configurePaneNavigationButton(QToolButton *button,
+                                   const QIcon &icon,
+                                   const QString &accessibleName)
+{
+    Q_ASSERT(button != nullptr);
+    button->setText(accessibleName);
+    button->setIcon(icon);
+    button->setIconSize(QSize(15, 15));
+    button->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    button->setAutoRaise(false);
+    button->setFixedSize(28, 28);
+    button->setProperty("sftpPaneAction", true);
+    button->setToolTip(accessibleName);
+    button->setAccessibleName(accessibleName);
+}
+
+/**
+ * @brief 配置操作栏里可随宽度切换文字的文件动作按钮。
+ * @param button 待配置按钮，不得为空。
+ * @param icon 动作语义图标。
+ * @param text 用户可见的简短动作名称。
+ * @param role 视觉角色：transfer、file 或 danger，由全局 QSS 精确着色。
+ *
+ * 业务动作和响应式展示分离：按钮始终保留 text、Tooltip 与 AccessibleName，窄态只改变
+ * ToolButtonStyle，不清空文字，切回全屏时无需重新构造菜单或信号连接。
+ */
+void configureResponsiveFileAction(QToolButton *button,
+                                   const QIcon &icon,
+                                   const QString &text,
+                                   const QString &role)
+{
+    Q_ASSERT(button != nullptr);
+    button->setText(text);
+    button->setIcon(icon);
+    button->setIconSize(QSize(16, 16));
+    button->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    button->setAutoRaise(false);
+    button->setMinimumHeight(32);
+    button->setProperty("sftpResponsiveAction", true);
+    button->setProperty("sftpActionRole", role);
+    button->setToolTip(text);
+    button->setAccessibleName(text);
+}
+
+/**
  * @brief 创建操作行里的一条竖向分隔线。
  * @param parent 父控件，负责其生命周期。
  *
@@ -178,6 +253,7 @@ QFrame *createOperationRowSeparator(QWidget *parent)
     separator->setFrameShape(QFrame::VLine);
     separator->setFrameShadow(QFrame::Plain);
     separator->setFixedWidth(1);
+    separator->setObjectName(QStringLiteral("SftpOperationSeparator"));
     return separator;
 }
 
@@ -358,6 +434,51 @@ private:
     RemoteDropHandler m_remoteDropHandler;
 };
 
+/**
+ * @brief 为本地文件栏提供稳定中文表头，并保留系统原生文件图标。
+ *
+ * 仅覆盖 headerData 的水平 DisplayRole；名称列 DecorationRole 完全交回
+ * QFileSystemModel/QFileIconProvider。这样本地文件继续显示 Finder、Linux 桌面等系统提供的
+ * 原始图标，与远程栏的 Shellium 线性图标形成明确区分，同时不会因缺少 Qt 翻译包而混入
+ * 英文表头。
+ */
+class LocalizedLocalFileSystemModel final : public QFileSystemModel {
+public:
+    /**
+     * @brief 创建本地文件模型。
+     * @param parent Qt 父对象，负责释放模型。
+     */
+    explicit LocalizedLocalFileSystemModel(QObject *parent = nullptr)
+        : QFileSystemModel(parent)
+    {
+    }
+
+    /**
+     * @brief 返回本地文件表格的稳定中文表头。
+     * @param section QFileSystemModel 固定列号：0 名称、1 大小、2 类型、3 修改时间。
+     * @param orientation 表头方向；只有水平显示角色需要覆盖。
+     * @param role Qt 数据角色；非 DisplayRole 沿用系统模型数据。
+     * @return 产品统一中文表头，或 QFileSystemModel 的原始表头数据。
+     */
+    QVariant headerData(const int section,
+                        const Qt::Orientation orientation,
+                        const int role = Qt::DisplayRole) const override
+    {
+        if (orientation == Qt::Horizontal && role == Qt::DisplayRole) {
+            static const QStringList headers = {
+                QObject::tr("名称"),
+                QObject::tr("大小"),
+                QObject::tr("类型"),
+                QObject::tr("修改时间"),
+            };
+            if (section >= 0 && section < headers.size()) {
+                return headers.at(section);
+            }
+        }
+        return QFileSystemModel::headerData(section, orientation, role);
+    }
+};
+
 } // namespace
 
 RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
@@ -366,7 +487,7 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     , m_followInnermostCheck(new QCheckBox(tr("自动跟随最内层"), this))
     , m_fullScreenButton(new QToolButton(this))
     , m_localPathEdit(new QLineEdit(QDir::homePath(), this))
-    , m_localModel(new QFileSystemModel(this))
+    , m_localModel(new LocalizedLocalFileSystemModel(this))
     , m_localTree(new LocalDropTree(this))
     , m_pathEdit(new QLineEdit(QStringLiteral("/"), this))
     , m_fileTree(new RemoteDropTree(this))
@@ -378,16 +499,26 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     , m_transferQueueList(new QListWidget(this))
     , m_service(new SftpService(this))
 {
+    setObjectName(QStringLiteral("RemoteFileManager"));
     auto *mainLayout = new QVBoxLayout(this);
-    mainLayout->setContentsMargins(10, 10, 10, 8);
-    mainLayout->setSpacing(8);
+    // 顶栏、文件区、操作栏与传输信息带直接首尾相接，由各自边框形成分区。若继续保留外层
+    // 10px 空隙，每一段都会像孤立控件漂在背景上，无法形成参考图中的完整文件管理面板。
+    mainLayout->setContentsMargins(0, 0, 0, 0);
+    mainLayout->setSpacing(0);
 
     m_targetRow = new QWidget(this);
+    m_targetRow->setObjectName(QStringLiteral("SftpTopBar"));
     auto *targetRowLayout = new QHBoxLayout(m_targetRow);
-    targetRowLayout->setContentsMargins(0, 0, 0, 0);
-    targetRowLayout->setSpacing(6);
-    targetRowLayout->addWidget(new QLabel(tr("服务器："), m_targetRow));
-    targetRowLayout->addWidget(m_targetCombo, 1);
+    targetRowLayout->setContentsMargins(14, 12, 14, 12);
+    targetRowLayout->setSpacing(10);
+    auto *serverLabel = new QLabel(tr("服务器"), m_targetRow);
+    serverLabel->setObjectName(QStringLiteral("SftpServerLabel"));
+    m_targetCombo->setObjectName(QStringLiteral("SftpTargetCombo"));
+    m_targetCombo->setMinimumWidth(260);
+    m_targetCombo->setMaximumWidth(520);
+    m_targetCombo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    targetRowLayout->addWidget(serverLabel);
+    targetRowLayout->addWidget(m_targetCombo);
 
     // 自动跟随最内层是唯一合理的默认行为，不再作为可见选项占用顶部空间；它退化为内部
     // 状态：用户一旦在下拉框里手动选择外层，这里会自动置否，避免后续刷新把人抢回内层。
@@ -398,39 +529,50 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     m_fullScreenButton->setChecked(false);
     m_fullScreenButton->setAutoRaise(true);
     m_fullScreenButton->setIconSize(QSize(18, 18));
+    m_fullScreenButton->setFixedSize(32, 32);
+    m_fullScreenButton->setProperty("sftpFullScreenAction", true);
+    m_fullScreenButton->setObjectName(QStringLiteral("SftpFullScreenButton"));
     m_fullScreenButton->setToolTip(tr("全屏显示文件管理，并展开本地文件用于双栏对拷"));
     m_fullScreenButton->setAccessibleName(tr("全屏"));
-
-    auto *serverRow = new QHBoxLayout;
-    serverRow->addWidget(m_targetRow, 1);
-    serverRow->addWidget(m_fullScreenButton);
-    mainLayout->addLayout(serverRow);
+    targetRowLayout->addStretch(1);
+    targetRowLayout->addWidget(m_fullScreenButton);
+    mainLayout->addWidget(m_targetRow);
 
     auto *contentSplitter = new QSplitter(Qt::Horizontal, this);
+    contentSplitter->setObjectName(QStringLiteral("SftpPaneSplitter"));
+    contentSplitter->setHandleWidth(1);
     m_localPanel = new QWidget(contentSplitter);
+    m_localPanel->setObjectName(QStringLiteral("SftpLocalPane"));
     auto *localPanel = m_localPanel;
     auto *localLayout = new QVBoxLayout(localPanel);
     localLayout->setContentsMargins(0, 0, 0, 0);
-    localLayout->setSpacing(4);
-    auto *localCaption = new QLabel(tr("本地文件"), localPanel);
+    localLayout->setSpacing(0);
+    auto *localToolbar = new QWidget(localPanel);
+    localToolbar->setObjectName(QStringLiteral("SftpLocalToolbar"));
+    auto *localPathRow = new QHBoxLayout(localToolbar);
+    localPathRow->setContentsMargins(10, 8, 10, 8);
+    localPathRow->setSpacing(6);
+    auto *localCaption = new QLabel(tr("本地文件"), localToolbar);
+    localCaption->setObjectName(QStringLiteral("SftpPaneLabel"));
     localCaption->setProperty("sectionCaption", true);
-    localLayout->addWidget(localCaption);
-    auto *localPathRow = new QHBoxLayout;
-    localPathRow->setSpacing(5);
-    auto *localUpButton = new QToolButton(localPanel);
-    auto *localRefreshButton = new QToolButton(localPanel);
-    configureCompactFileButton(
+    auto *localUpButton = new QToolButton(localToolbar);
+    localUpButton->setObjectName(QStringLiteral("SftpLocalUpButton"));
+    auto *localRefreshButton = new QToolButton(localToolbar);
+    localRefreshButton->setObjectName(QStringLiteral("SftpLocalRefreshButton"));
+    configurePaneNavigationButton(
         localUpButton,
         UiIcons::symbol(this, UiIcons::Symbol::ArrowUp, this->palette().color(QPalette::WindowText)),
         tr("返回本地父目录"));
-    configureCompactFileButton(
+    configurePaneNavigationButton(
         localRefreshButton,
         UiIcons::symbol(this, UiIcons::Symbol::Refresh, this->palette().color(QPalette::WindowText)),
         tr("刷新本地目录"));
+    m_localPathEdit->setObjectName(QStringLiteral("SftpLocalPathEdit"));
+    localPathRow->addWidget(localCaption);
     localPathRow->addWidget(localUpButton);
-    localPathRow->addWidget(m_localPathEdit, 1);
     localPathRow->addWidget(localRefreshButton);
-    localLayout->addLayout(localPathRow);
+    localPathRow->addWidget(m_localPathEdit, 1);
+    localLayout->addWidget(localToolbar);
 
     // QFileSystemModel 自带按需加载和文件系统监听，适合大目录；保持只读可确保拖放只触发
     // Shellium 的上传/下载，不会意外在本机执行移动、重命名或删除。
@@ -438,8 +580,10 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     m_localModel->setFilter(QDir::AllEntries | QDir::NoDotAndDotDot | QDir::Hidden);
     m_localModel->setRootPath(QDir::rootPath());
     m_localTree->setModel(m_localModel);
+    m_localTree->setObjectName(QStringLiteral("LocalFileTree"));
     m_localTree->setRootIndex(m_localModel->index(QDir::homePath()));
     m_localTree->setAlternatingRowColors(false);
+    m_localTree->setUniformRowHeights(true);
     m_localTree->setSelectionMode(QAbstractItemView::SingleSelection);
     m_localTree->setContextMenuPolicy(Qt::CustomContextMenu);
     // 双栏对拷时，本地侧和远程侧要回答同一个问题——"这两边是不是同一个文件"。只有名称就
@@ -453,7 +597,7 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     m_localTree->setColumnHidden(kTypeColumn, true);
     const QFontMetrics localMetrics(m_localTree->font());
     constexpr int kLocalCellPadding = 18;
-    m_localTree->setColumnWidth(kNameColumn, 200);
+    m_localTree->setColumnWidth(kNameColumn, 190);
     m_localTree->setColumnWidth(
         kSizeColumn,
         localMetrics.horizontalAdvance(QStringLiteral("1023.9 MiB")) + kLocalCellPadding);
@@ -471,48 +615,56 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     localLayout->addWidget(m_localTree, 1);
 
     auto *remotePanel = new QWidget(contentSplitter);
+    remotePanel->setObjectName(QStringLiteral("SftpRemotePane"));
     auto *remoteLayout = new QVBoxLayout(remotePanel);
     remoteLayout->setContentsMargins(0, 0, 0, 0);
-    remoteLayout->setSpacing(4);
-    auto *remoteCaption = new QLabel(tr("远程文件"), remotePanel);
+    remoteLayout->setSpacing(0);
+    auto *remoteToolbar = new QWidget(remotePanel);
+    remoteToolbar->setObjectName(QStringLiteral("SftpRemoteToolbar"));
+    auto *pathRow = new QHBoxLayout(remoteToolbar);
+    pathRow->setContentsMargins(10, 8, 10, 8);
+    pathRow->setSpacing(6);
+    auto *remoteCaption = new QLabel(tr("远程文件"), remoteToolbar);
+    remoteCaption->setObjectName(QStringLiteral("SftpPaneLabel"));
     remoteCaption->setProperty("sectionCaption", true);
-    remoteLayout->addWidget(remoteCaption);
-    auto *pathRow = new QHBoxLayout;
-    pathRow->setSpacing(5);
-    auto *upButton = new QToolButton(this);
-    auto *refreshButton = new QToolButton(this);
-    configureCompactFileButton(
+    auto *upButton = new QToolButton(remoteToolbar);
+    upButton->setObjectName(QStringLiteral("SftpRemoteUpButton"));
+    auto *refreshButton = new QToolButton(remoteToolbar);
+    refreshButton->setObjectName(QStringLiteral("SftpRemoteRefreshButton"));
+    configurePaneNavigationButton(
         upButton,
         UiIcons::symbol(this, UiIcons::Symbol::ArrowUp, this->palette().color(QPalette::WindowText)),
         tr("返回远程父目录"));
-    configureCompactFileButton(
+    configurePaneNavigationButton(
         refreshButton,
         UiIcons::symbol(this, UiIcons::Symbol::Refresh, this->palette().color(QPalette::WindowText)),
         tr("刷新当前远程目录"));
+    m_pathEdit->setObjectName(QStringLiteral("SftpRemotePathEdit"));
+    pathRow->addWidget(remoteCaption);
     pathRow->addWidget(upButton);
-    pathRow->addWidget(m_pathEdit, 1);
     pathRow->addWidget(refreshButton);
-    remoteLayout->addLayout(pathRow);
+    pathRow->addWidget(m_pathEdit, 1);
+    remoteLayout->addWidget(remoteToolbar);
 
-    // 目录/链接/普通文件已由名称列的图标区分，独立的"类型"列只是重复信息，删掉它可以
-    // 把宽度让给真正需要横向空间的时间与所有者。
-    // 对象名用于应用级样式表精确增强远程文件选中态；本地树仍沿用通用选中色，避免用户在
-    // 全屏双栏模式下误以为两个列表同时处于当前操作焦点。
+    // 目录/链接/普通文件已由名称列的图标区分，独立“类型”列没有保留价值。参考设计的远程
+    // 栏只显示名称、大小、权限、所有者：修改时间在双栏对拷的主要决策中优先级较低，去掉后
+    // 权限和所有者无需横向滚动即可看全。本地栏仍保留修改时间，便于判断待上传文件的新旧。
     m_fileTree->setObjectName(QStringLiteral("RemoteFileTree"));
-    m_fileTree->setColumnCount(5);
+    m_fileTree->setColumnCount(4);
     m_fileTree->setHeaderLabels(
-        {tr("名称"), tr("大小"), tr("修改时间"), tr("权限"), tr("所有者")});
+        {tr("名称"), tr("大小"), tr("权限"), tr("所有者")});
     m_fileTree->setRootIsDecorated(false);
     m_fileTree->setAlternatingRowColors(false);
+    m_fileTree->setUniformRowHeights(true);
     m_fileTree->setSelectionMode(QAbstractItemView::ExtendedSelection);
     m_fileTree->setContextMenuPolicy(Qt::CustomContextMenu);
     m_fileTree->header()->setStretchLastSection(false);
-    // 六列全部固定显示且可手动拖拽调整宽度。Stretch 会把列压缩进可视宽度、
-    // ResizeToContents 则由内容独断宽度，两者都会剥夺用户调整列宽的能力；Interactive
-    // 配合初始宽度既保留拖拽，又让总宽超出面板时自然出现横向滚动条。
+    // 数据列允许用户拖拽调整；名称列随后设为 Stretch 以优先吃掉剩余空间，使单栏和双栏
+    // 两种宽度下表头都贴合面板，而不是在所有者列右侧留下大片空白。
     for (int column = 0; column < m_fileTree->columnCount(); ++column) {
         m_fileTree->header()->setSectionResizeMode(column, QHeaderView::Interactive);
     }
+    m_fileTree->header()->setSectionResizeMode(0, QHeaderView::Stretch);
     m_fileTree->header()->setMinimumSectionSize(40);
     // 除名称外的每一列都按"最长的真实内容"取宽，而不是拍脑袋给一个整数：面板本来就只占
     // 窗口的三分之一，多给出去的每一像素都是从文件名那里抢来的。名称列吃掉剩余空间，因为
@@ -527,9 +679,8 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
             + kCellPadding;
     };
     const QList<int> defaultColumnWidths = {
-        200,
+        190,
         columnWidthFor(QStringLiteral("1023.9 MiB"), tr("大小")),
-        columnWidthFor(QStringLiteral("2026-08-09 23:56:28"), tr("修改时间")),
         columnWidthFor(QStringLiteral("drwxrwxrwt"), tr("权限")),
         columnWidthFor(QStringLiteral("root"), tr("所有者")),
     };
@@ -567,18 +718,28 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
         emit fullScreenChanged(fullScreen);
     });
 
-    auto *operationRow = new QHBoxLayout;
+    auto *operationBar = new QFrame(this);
+    operationBar->setObjectName(QStringLiteral("SftpOperationBar"));
+    auto *operationRow = new QHBoxLayout(operationBar);
+    operationRow->setContentsMargins(14, 10, 14, 10);
     operationRow->setSpacing(5);
-    auto *uploadButton = new QToolButton(this);
-    auto *downloadButton = new QToolButton(this);
-    auto *previewButton = new QToolButton(this);
-    auto *chmodButton = new QToolButton(this);
-    auto *renameButton = new QToolButton(this);
-    auto *deleteButton = new QToolButton(this);
-    configureCompactFileButton(
+    auto *uploadButton = new QToolButton(operationBar);
+    uploadButton->setObjectName(QStringLiteral("SftpUploadButton"));
+    auto *downloadButton = new QToolButton(operationBar);
+    downloadButton->setObjectName(QStringLiteral("SftpDownloadButton"));
+    auto *previewButton = new QToolButton(operationBar);
+    previewButton->setObjectName(QStringLiteral("SftpPreviewButton"));
+    auto *chmodButton = new QToolButton(operationBar);
+    chmodButton->setObjectName(QStringLiteral("SftpChmodButton"));
+    auto *renameButton = new QToolButton(operationBar);
+    renameButton->setObjectName(QStringLiteral("SftpRenameButton"));
+    auto *deleteButton = new QToolButton(operationBar);
+    deleteButton->setObjectName(QStringLiteral("SftpDeleteButton"));
+    configureResponsiveFileAction(
         uploadButton,
         UiIcons::symbol(this, UiIcons::Symbol::Upload, this->palette().color(QPalette::WindowText)),
-        tr("上传文件或目录到当前远程目录"));
+        tr("上传"),
+        QStringLiteral("transfer"));
     // 文件与目录合成一个按钮。系统文件选择器无法在一次会话里同时接受文件和目录，因此按钮
     // 展开一个二选一菜单，而不是让用户在两个外观相近的图标之间猜。
     auto *uploadMenu = new QMenu(uploadButton);
@@ -595,26 +756,33 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
             this, &RemoteFileManagerWidget::uploadSelectedDirectory);
     uploadButton->setMenu(uploadMenu);
     uploadButton->setPopupMode(QToolButton::InstantPopup);
-    configureCompactFileButton(
+    configureResponsiveFileAction(
         downloadButton,
         UiIcons::symbol(this, UiIcons::Symbol::Download, this->palette().color(QPalette::WindowText)),
-        tr("下载选中的远程文件或目录"));
-    configureCompactFileButton(
+        tr("下载"),
+        QStringLiteral("transfer"));
+    configureResponsiveFileAction(
         previewButton,
         UiIcons::symbol(this, UiIcons::Symbol::Eye, this->palette().color(QPalette::WindowText)),
-        tr("安全预览选中的文本或图片"));
-    configureCompactFileButton(
+        tr("预览"),
+        QStringLiteral("file"));
+    configureResponsiveFileAction(
         chmodButton,
         UiIcons::symbol(this, UiIcons::Symbol::Info, this->palette().color(QPalette::WindowText)),
-        tr("修改选中远程条目的 POSIX 权限"));
-    configureCompactFileButton(
+        tr("权限"),
+        QStringLiteral("file"));
+    configureResponsiveFileAction(
         renameButton,
         UiIcons::symbol(this, UiIcons::Symbol::Edit, this->palette().color(QPalette::WindowText)),
-        tr("重命名选中的远程条目"));
-    configureCompactFileButton(
+        tr("重命名"),
+        QStringLiteral("file"));
+    configureResponsiveFileAction(
         deleteButton,
-        UiIcons::symbol(this, UiIcons::Symbol::Trash, this->palette().color(QPalette::WindowText)),
-        tr("删除选中的远程文件或空目录"));
+        UiIcons::symbol(this,
+                        UiIcons::Symbol::Trash,
+                        QColor(QStringLiteral("#d84a41"))),
+        tr("删除"),
+        QStringLiteral("danger"));
     configureCompactFileButton(
         m_pauseButton,
         UiIcons::symbol(this, UiIcons::Symbol::Pause, this->palette().color(QPalette::WindowText)),
@@ -623,11 +791,14 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
         m_cancelButton,
         UiIcons::symbol(this, UiIcons::Symbol::Cancel, this->palette().color(QPalette::WindowText)),
         tr("取消当前传输或选中的等待任务"));
+    m_pauseButton->setObjectName(QStringLiteral("SftpPauseButton"));
+    m_cancelButton->setObjectName(QStringLiteral("SftpCancelButton"));
     m_cancelButton->setEnabled(false);
     m_pauseButton->setEnabled(false);
     m_cancelButton->setVisible(false);
     m_pauseButton->setVisible(false);
     m_resumeTransfersCheck->setChecked(true);
+    m_resumeTransfersCheck->setObjectName(QStringLiteral("SftpResumeCheck"));
     m_resumeTransfersCheck->setText(tr("断点续传"));
     m_resumeTransfersCheck->setToolTip(
         tr("开启时从已有较小文件继续；关闭时始终截断并覆盖重传。"));
@@ -635,31 +806,60 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     // 的操作频率，用户不用逐个图标猜边界。
     operationRow->addWidget(uploadButton);
     operationRow->addWidget(downloadButton);
-    operationRow->addWidget(createOperationRowSeparator(this));
+    operationRow->addWidget(createOperationRowSeparator(operationBar));
     operationRow->addWidget(previewButton);
     operationRow->addWidget(chmodButton);
     operationRow->addWidget(renameButton);
     operationRow->addWidget(deleteButton);
     operationRow->addStretch(1);
     operationRow->addWidget(m_resumeTransfersCheck);
-    m_transferControlSeparator = createOperationRowSeparator(this);
+    m_transferControlSeparator = createOperationRowSeparator(operationBar);
     m_transferControlSeparator->setVisible(false);
     operationRow->addWidget(m_transferControlSeparator);
     operationRow->addWidget(m_pauseButton);
     operationRow->addWidget(m_cancelButton);
-    mainLayout->addLayout(operationRow);
+    mainLayout->addWidget(operationBar);
 
+    // 进度、当前状态与队列合并在同一信息带：进度条只表达当前项百分比，队列行右侧的状态
+    // 徽章表达“进行中/等待/已暂停”，避免旧版同时出现两组相似进度信息。
+    m_transferPanel = new QFrame(this);
+    m_transferPanel->setObjectName(QStringLiteral("SftpTransferBand"));
+    auto *transferLayout = new QVBoxLayout(m_transferPanel);
+    transferLayout->setContentsMargins(14, 10, 14, 14);
+    transferLayout->setSpacing(8);
+    m_progressBar->setObjectName(QStringLiteral("SftpTransferProgress"));
     m_progressBar->setVisible(false);
     m_progressBar->setRange(0, 100);
     m_progressBar->setTextVisible(false);
-    mainLayout->addWidget(m_progressBar);
-    m_transferQueueList->setMaximumHeight(110);
+    transferLayout->addWidget(m_progressBar);
+
+    auto *transferStatusRow = new QHBoxLayout;
+    transferStatusRow->setContentsMargins(0, 0, 0, 0);
+    transferStatusRow->setSpacing(12);
+    m_statusLabel->setObjectName(QStringLiteral("SftpTransferStatus"));
+    m_statusLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    // 状态消息可能包含完整路径。Ignored 允许布局在窄栏里压缩标签，而不是由一条长路径
+    // 反向撑宽整个文件管理器；完整文字仍可通过鼠标选择横向拖动读取。
+    m_statusLabel->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+    m_transferDetailLabel = new QLabel(m_transferPanel);
+    m_transferDetailLabel->setObjectName(QStringLiteral("SftpTransferDetail"));
+    m_transferDetailLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    m_transferDetailLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    transferStatusRow->addWidget(m_statusLabel, 1);
+    transferStatusRow->addWidget(m_transferDetailLabel, 0);
+    transferLayout->addLayout(transferStatusRow);
+
+    m_transferQueueList->setObjectName(QStringLiteral("SftpTransferQueue"));
+    m_transferQueueList->setMaximumHeight(116);
     m_transferQueueList->setAlternatingRowColors(false);
+    m_transferQueueList->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_transferQueueList->setSelectionMode(QAbstractItemView::SingleSelection);
     m_transferQueueList->setContextMenuPolicy(Qt::CustomContextMenu);
     m_transferQueueList->setToolTip(
         tr("传输严格按顺序执行；选择等待项后点击“取消选中”可直接移除。"));
-    mainLayout->addWidget(m_transferQueueList);
-    mainLayout->addWidget(m_statusLabel);
+    transferLayout->addWidget(m_transferQueueList);
+    m_transferPanel->setVisible(false);
+    mainLayout->addWidget(m_transferPanel);
 
     connect(refreshButton, &QToolButton::clicked, this, &RemoteFileManagerWidget::refreshDirectory);
     connect(upButton, &QToolButton::clicked, this, &RemoteFileManagerWidget::navigateUp);
@@ -886,24 +1086,18 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
                     item->setText(0, entry.name);
                     item->setIcon(
                         0,
-                        entry.isDirectory
-                            ? UiIcons::symbol(m_fileTree,
-                                             UiIcons::Symbol::Folder,
-                                             m_fileTree->palette().color(QPalette::WindowText))
-                            : UiIcons::symbol(m_fileTree,
-                                             UiIcons::Symbol::File,
-                                             m_fileTree->palette().color(QPalette::WindowText)));
+                        remoteFileEntryIcon(m_fileTree, entry.isDirectory));
                     item->setText(1, entry.isDirectory ? QStringLiteral("—") : formatSize(entry.size));
-                    item->setText(2, entry.modifiedAt.toString(QStringLiteral("yyyy-MM-dd HH:mm:ss")));
-                    item->setText(3, entry.permissionText());
-                    item->setText(4, entry.owner);
+                    item->setText(2, entry.permissionText());
+                    item->setText(3, entry.owner);
                     item->setData(0, Qt::UserRole, entry.path);
                     item->setData(0, Qt::UserRole + 1, entry.isDirectory);
                     item->setData(0, Qt::UserRole + 2, QVariant::fromValue(entry.size));
                     item->setData(0, Qt::UserRole + 3, QVariant::fromValue(entry.permissions));
                     item->setData(0, Qt::UserRole + 4, entry.isSymbolicLink);
-                    // 排序必须比较真实值而不是显示文本：大小按字节排否则 "9 B" 会大于
-                    // "10 MiB"，时间按 QDateTime 排否则跨格式会乱。原始序号用于"还原默认"。
+                    // 大小排序必须比较真实字节值，否则 "9 B" 会大于 "10 MiB"；权限同样
+                    // 比较原始位掩码。修改时间不显示，但继续保存在角色中，避免结构化信息因
+                    // UI 精简而丢失，并为后续详情面板复用保留数据。
                     item->setData(0, kOriginalIndexRole, originalIndex++);
                     item->setData(0, kModifiedAtRole, entry.modifiedAt);
                 }
@@ -959,9 +1153,8 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
                     m_progressBar->setRange(0, 100);
                     m_progressBar->setValue(percent);
                 }
-                // 百分比无法回答"还要多久""是不是卡住了"。补上已传/总量和实时速度后，
-                // 用户才能判断一次大文件传输是正常慢还是已经停滞。
-                m_progressBar->setTextVisible(true);
+                // 百分比无法回答“还要多久”“是不是卡住了”。字节、速度与剩余时间放在
+                // 进度条正下方的独立摘要标签，避免把长文本硬塞进只有 6px 高的轨道。
                 updateTransferProgressText(completed, total);
             });
     connect(m_service,
@@ -1050,6 +1243,36 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
 
     rebuildTransferQueueView();
     updateFullScreenIcon();
+    updateResponsiveActionButtons();
+}
+
+void RemoteFileManagerWidget::resizeEvent(QResizeEvent *event)
+{
+    QWidget::resizeEvent(event);
+    updateResponsiveActionButtons();
+}
+
+void RemoteFileManagerWidget::updateResponsiveActionButtons()
+{
+    // 760px 能容纳六个文字动作、续传复选框和右侧控制按钮；低于该阈值时保留图标与完整
+    // Tooltip。使用控件实际宽度而不是全屏布尔值，可正确处理用户拖动外层分隔器的场景。
+    const bool showText = width() >= 760;
+    const QList<QToolButton *> actionButtons = findChildren<QToolButton *>();
+    for (QToolButton *button : actionButtons) {
+        if (!button->property("sftpResponsiveAction").toBool()) {
+            continue;
+        }
+        button->setToolButtonStyle(showText ? Qt::ToolButtonTextBesideIcon
+                                            : Qt::ToolButtonIconOnly);
+        // 窄态统一 34px 点击区；宽态让文字和菜单箭头按 sizeHint 自然展开。最大宽度必须
+        // 恢复，否则用户退出全屏后再进入时会一直被前一次窄态尺寸锁住。
+        if (showText) {
+            button->setMinimumWidth(0);
+            button->setMaximumWidth(QWIDGETSIZE_MAX);
+        } else {
+            button->setFixedWidth(34);
+        }
+    }
 }
 
 void RemoteFileManagerWidget::exitFullScreen()
@@ -1123,15 +1346,11 @@ void RemoteFileManagerWidget::applyRemoteSort()
                                        right->data(0, Qt::UserRole + 2).toULongLong());
             break;
         case 2:
-            comparison = compareValues(left->data(0, kModifiedAtRole).toDateTime(),
-                                       right->data(0, kModifiedAtRole).toDateTime());
-            break;
-        case 3:
             comparison = compareValues(left->data(0, Qt::UserRole + 3).toUInt(),
                                        right->data(0, Qt::UserRole + 3).toUInt());
             break;
-        case 4:
-            comparison = QString::compare(left->text(4), right->text(4), Qt::CaseInsensitive);
+        case 3:
+            comparison = QString::compare(left->text(3), right->text(3), Qt::CaseInsensitive);
             break;
         case 0:
         default:
@@ -1177,9 +1396,7 @@ void RemoteFileManagerWidget::updateTransferProgressText(const quint64 completed
         m_lastSpeedSampleBytes = completed;
     }
 
-    QString text = total > 0
-        ? tr("%1 / %2").arg(formatSize(completed), formatSize(total))
-        : tr("已传输 %1").arg(formatSize(completed));
+    QString text = tr("已传输 %1").arg(formatSize(completed));
     if (m_smoothedBytesPerSecond > 0.0) {
         text += tr(" · %1/s").arg(formatSize(quint64(m_smoothedBytesPerSecond)));
         if (total > completed) {
@@ -1189,10 +1406,7 @@ void RemoteFileManagerWidget::updateTransferProgressText(const quint64 completed
             text += tr(" · 剩余 %1").arg(formatDuration(remainingSeconds));
         }
     }
-    if (total > 0) {
-        text.prepend(QStringLiteral("%p%  "));
-    }
-    m_progressBar->setFormat(text);
+    m_transferDetailLabel->setText(text);
 }
 
 RemoteFileManagerWidget::~RemoteFileManagerWidget()
@@ -1385,26 +1599,46 @@ void RemoteFileManagerWidget::rebuildTransferQueueView()
 
     const auto appendItem = [this, selectedQueueId](const QueuedTransfer &transfer,
                                                      const QString &state,
-                                                     const QIcon &icon) {
-        auto *item = new QListWidgetItem(state + transfer.description, m_transferQueueList);
-        item->setIcon(icon);
+                                                     const QString &stateRole) {
+        auto *item = new QListWidgetItem(m_transferQueueList);
         item->setData(Qt::UserRole, QVariant::fromValue(transfer.queueId));
+
+        // 状态从文件名左侧前缀移到右侧徽章：文件名保持连续，三种状态又能通过固定位置和
+        // 颜色迅速扫读。容器对鼠标透明，让 QListWidget 继续负责选择和右键取消逻辑。
+        auto *row = new QWidget(m_transferQueueList);
+        row->setAttribute(Qt::WA_TransparentForMouseEvents);
+        auto *rowLayout = new QHBoxLayout(row);
+        rowLayout->setContentsMargins(0, 0, 2, 0);
+        rowLayout->setSpacing(8);
+        auto *nameLabel = new QLabel(transfer.description, row);
+        nameLabel->setObjectName(QStringLiteral("SftpQueueItemName"));
+        nameLabel->setTextFormat(Qt::PlainText);
+        nameLabel->setToolTip(transfer.description);
+        // 队列描述常含完整路径。让名称区域可被压缩，才能保证右侧状态徽章始终留在可视区；
+        // Tooltip 保留未经截断的完整信息，避免紧凑布局损失可诊断性。
+        nameLabel->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+        auto *stateLabel = new QLabel(state, row);
+        stateLabel->setObjectName(QStringLiteral("SftpQueueStateBadge"));
+        stateLabel->setProperty("queueState", stateRole);
+        stateLabel->setAlignment(Qt::AlignCenter);
+        rowLayout->addWidget(nameLabel, 1);
+        rowLayout->addWidget(stateLabel, 0);
+        item->setSizeHint(QSize(0, 30));
+        m_transferQueueList->setItemWidget(item, row);
         if (transfer.queueId == selectedQueueId) {
             m_transferQueueList->setCurrentItem(item);
         }
     };
     if (m_activeQueuedTransfer.has_value()) {
         appendItem(*m_activeQueuedTransfer,
-                   m_activeTransferPaused ? tr("已暂停 · ") : tr("进行中 · "),
-                   UiIcons::symbol(m_transferQueueList,
-                                  m_activeTransferPaused ? UiIcons::Symbol::Pause
-                                                          : UiIcons::Symbol::Play,
-                                  m_transferQueueList->palette().color(QPalette::WindowText)));
+                   m_activeTransferPaused ? tr("已暂停") : tr("进行中"),
+                   m_activeTransferPaused ? QStringLiteral("paused")
+                                          : QStringLiteral("active"));
     }
     for (const QueuedTransfer &transfer : std::as_const(m_pendingTransfers)) {
         appendItem(transfer,
-                   tr("等待 · "),
-                   UiIcons::symbol(m_transferQueueList, UiIcons::Symbol::Clock, m_transferQueueList->palette().color(QPalette::WindowText)));
+                   tr("等待"),
+                   QStringLiteral("queued"));
     }
 
     const bool hasActive = m_activeQueuedTransfer.has_value();
@@ -1417,6 +1651,7 @@ void RemoteFileManagerWidget::rebuildTransferQueueView()
     m_cancelButton->setVisible(hasAnyTransfer);
     m_transferControlSeparator->setVisible(hasActive || hasAnyTransfer);
     m_transferQueueList->setVisible(hasAnyTransfer);
+    m_transferPanel->setVisible(hasAnyTransfer || m_progressBar->isVisible());
 }
 
 void RemoteFileManagerWidget::uploadLocalPaths(const QStringList &localPaths,
@@ -1852,13 +2087,17 @@ void RemoteFileManagerWidget::setBusy(const bool busy, const QString &message)
         emit statusMessage(message);
     }
     if (busy) {
+        m_transferDetailLabel->clear();
         m_progressBar->setRange(0, 0);
         m_progressBar->setVisible(true);
+        m_transferPanel->setVisible(true);
     } else {
         m_progressBar->setVisible(false);
         m_progressBar->setRange(0, 100);
-        // 清掉上一次传输遗留的"已传/总量·速度"文字，否则下次进度条一出现就先闪出旧数据。
-        m_progressBar->setFormat(QStringLiteral("%p%"));
+        // 清掉上一次传输遗留的字节/速度/剩余时间，否则下次信息带出现会先闪出旧摘要。
+        m_transferDetailLabel->clear();
+        m_transferPanel->setVisible(
+            m_activeQueuedTransfer.has_value() || !m_pendingTransfers.isEmpty());
     }
 }
 

@@ -446,6 +446,27 @@ if(BUILD_TESTING)
     target_link_libraries(ShelliumSftpRecursiveTests PRIVATE Qt6::Core Qt6::Test)
     add_test(NAME ShelliumSftpRecursiveTests COMMAND ShelliumSftpRecursiveTests)
 
+    # 远程文件管理改版不仅调整颜色，还改变默认单栏/全屏双栏、列结构、工具条顺序和窄宽度
+    # 降级策略。这些契约必须通过真实 QWidget 构树验证。测试目标链接正式 SftpService 以确保
+    # 控件与生产代码一致，但在测试文件中提供不会访问网络的 SshTunnelBroker 替身，因此运行
+    # 测试不要求 SSH 服务器，也不会复用用户当前终端会话。
+    qt_add_executable(ShelliumSftpUiTests
+        tests/RemoteFileManagerWidgetTest.cpp
+        src/core/ConnectionTarget.cpp
+        src/core/ConnectionTarget.h
+        src/core/HostRecord.h
+        src/sftp/RemoteFileManagerWidget.cpp
+        src/sftp/RemoteFileManagerWidget.h
+        src/sftp/SftpService.cpp
+        src/sftp/SftpService.h
+        src/ssh/SshTunnelBroker.h
+        src/ui/UiIcons.h
+    )
+    target_include_directories(ShelliumSftpUiTests PRIVATE src)
+    target_link_libraries(ShelliumSftpUiTests PRIVATE
+        Qt6::Core Qt6::Concurrent Qt6::Gui Qt6::Widgets Qt6::Test PkgConfig::LIBSSH)
+    add_test(NAME ShelliumSftpUiTests COMMAND ShelliumSftpUiTests)
+
     # 备用屏（vim/top/less 等全屏程序）下的渲染与按键编码回归。只需要 libvterm 与
     # Widgets，不涉及 SSH 会话；单独成目标同样是为了避开重复 main。
     qt_add_executable(ShelliumTerminalAltScreenTests

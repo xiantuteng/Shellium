@@ -71,6 +71,8 @@ enum class Symbol {
     Download,
     Eye,
     Info,
+    /** @brief 三角形警示图标，用于不可逆操作说明等需要用户注意但尚未出错的状态。 */
+    Warning,
     FullscreenEnter,
     FullscreenExit,
     Copy,
@@ -379,6 +381,22 @@ enum class Symbol {
         painter.drawLine(QPointF(12.0, 10.5), QPointF(12.0, 17.0));
         painter.drawEllipse(QPointF(12.0, 7.3), 0.9, 0.9);
         break;
+    case Symbol::Warning: {
+        // 使用圆角折线而不是平台字体里的“⚠”字符，可确保 macOS、Linux 与高 DPI 屏幕上
+        // 都保持相同的笔画和基线，并避免系统把文本符号替换成彩色 Emoji。
+        QPainterPath triangle;
+        triangle.moveTo(11.0, 3.8);
+        triangle.quadTo(12.0, 2.2, 13.0, 3.8);
+        triangle.lineTo(21.0, 18.0);
+        triangle.quadTo(22.0, 20.0, 19.7, 20.0);
+        triangle.lineTo(4.3, 20.0);
+        triangle.quadTo(2.0, 20.0, 3.0, 18.0);
+        triangle.closeSubpath();
+        painter.drawPath(triangle);
+        painter.drawLine(QPointF(12.0, 8.0), QPointF(12.0, 13.5));
+        painter.drawEllipse(QPointF(12.0, 17.0), 0.8, 0.8);
+        break;
+    }
     case Symbol::FullscreenEnter:
         painter.drawLine(QPointF(5.0, 9.0), QPointF(5.0, 5.0));
         painter.drawLine(QPointF(5.0, 5.0), QPointF(9.0, 5.0));

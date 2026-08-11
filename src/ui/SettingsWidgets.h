@@ -47,6 +47,17 @@ namespace ShelliumUi {
 [[nodiscard]] QString standaloneDialogStyleSheet(bool dark);
 
 /**
+ * @brief 返回保险库对话框专用的视觉样式表片段。
+ * @param dark true 使用深色主题色，false 使用浅色主题色。
+ * @return 仅匹配 VaultDialog 及其命名子控件的 QSS，不会影响其他窗口。
+ *
+ * 保险库既可能在主窗口创建前独立出现，也可能在应用运行期间从主机编辑等流程再次弹出。
+ * 将这部分样式集中为可复用片段，可以让启动阶段的局部样式和主窗口建立后的全局样式使用
+ * 完全相同的安全徽标、错误字段和警示提示色，避免两条入口逐渐产生视觉差异。
+ */
+[[nodiscard]] QString vaultDialogStyleSheet(bool dark);
+
+/**
  * @brief 在没有全局样式表时给对话框套上 standaloneDialogStyleSheet()。
  * @param dialog 目标对话框，不可为空。
  *

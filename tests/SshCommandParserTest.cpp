@@ -193,6 +193,9 @@ private slots:
     /** @brief 主密码错误要在对话框里内联提示，不能再叠一层需要先关掉的弹窗。 */
     void vaultDialogReportsWrongPasswordInline();
 
+    /** @brief 首次创建保险库时必须展示安全徽标和不可恢复警示，且强制流程不渲染取消按钮。 */
+    void vaultCreationDialogShowsSecurityHierarchy();
+
     /** @brief 光标闪烁重建文档时不得丢失滚动位置，跟随底部必须持续有效。 */
     void terminalKeepsBottomAcrossCursorBlink();
 };
@@ -1498,7 +1501,9 @@ void SshCommandParserTest::vaultDialogHasNoStrayWidgets()
     // VaultDialog 的构造函数是私有的，只能经 ensureUnlocked 弹出。对话框是模态的，因此
     // 在进入事件循环后取当前模态窗口来检查，再关掉它让 ensureUnlocked 返回。
     QString failure;
-    QTimer::singleShot(0, [&failure]() {
+    // 新增的自绘徽标首次生成高 DPI pixmap 时可能初始化平台图形资源；offscreen 插件会在
+    // 构造阶段短暂处理事件，因此给窗口完成 show/exec 留出一个很小的稳定宽限。
+    QTimer::singleShot(50, [&failure]() {
         QWidget *dialog = QApplication::activeModalWidget();
         if (dialog == nullptr) {
             failure = QStringLiteral("解锁对话框未能弹出");
@@ -1523,12 +1528,21 @@ void SshCommandParserTest::vaultDialogHasNoStrayWidgets()
                           .arg(QString::fromLatin1(child->metaObject()->className()));
             break;
         }
+
+        auto *cancelButton = dialog->findChild<QAbstractButton *>(
+            QStringLiteral("vaultCancelButton"));
+        auto *confirmButton = dialog->findChild<QAbstractButton *>(
+            QStringLiteral("vaultConfirmButton"));
+        if (failure.isEmpty()
+            && (cancelButton == nullptr || confirmButton == nullptr
+                || cancelButton->geometry().left() >= confirmButton->geometry().left())) {
+            failure = QStringLiteral("可取消的保险库对话框未按左侧取消、右侧主操作排列");
+        }
         dialog->close();
     });
 
-    // 解锁模式下不需要"确认主密码"输入框；它仍以对话框为父对象被创建，而父子关系只决定
-    // 归属、不决定位置：没有被任何布局接管的控件会停在 (0,0) 并按 sizeHint 绘制，于是
-    // 左上角出现一个盖住说明文字的空白输入框，而且还能被 Tab 选中。
+    // 解锁模式从对象树层面就不创建“确认主密码”输入框；测试仍遍历全部直接子控件，防止
+    // 后续重构再次引入未被布局接管、会浮在左上角并意外接收主密码的可见控件。
     VaultDialog::ensureUnlocked(&vault, nullptr, true);
     QVERIFY2(failure.isEmpty(), qPrintable(failure));
 }
@@ -1553,14 +1567,10 @@ void SshCommandParserTest::vaultDialogReportsWrongPasswordInline()
             failure = QStringLiteral("解锁对话框未能弹出");
             return;
         }
-        // 解锁模式下"确认主密码"框仍以对话框为父对象存在，只是被隐藏；取第一个可见的
-        // 输入框才能保证键入的是真正参与解锁的那个。
-        QLineEdit *passwordEdit = nullptr;
-        for (QLineEdit *edit : dialog->findChildren<QLineEdit *>()) {
-            if (passwordEdit == nullptr && !edit->isHidden()) {
-                passwordEdit = edit;
-            }
-        }
+        // 使用稳定对象名定位真正参与解锁的密码框，避免测试依赖控件创建顺序；解锁模式不会
+        // 创建确认密码框，因此任何后续新增的输入控件也不应改变本用例目标。
+        QLineEdit *passwordEdit = dialog->findChild<QLineEdit *>(
+            QStringLiteral("vaultPasswordEdit"));
         QAbstractButton *unlockButton = nullptr;
         for (QAbstractButton *button : dialog->findChildren<QAbstractButton *>()) {
             if (button->text() == QStringLiteral("解锁")) {
@@ -1599,6 +1609,8 @@ void SshCommandParserTest::vaultDialogReportsWrongPasswordInline()
             }
             if (!reported) {
                 failure = QStringLiteral("解锁失败后对话框内没有可见的错误说明");
+            } else if (!passwordEdit->property("validationError").toBool()) {
+                failure = QStringLiteral("解锁失败后主密码字段没有进入红色错误描边状态");
             }
         }
         dialog->close();
@@ -1608,6 +1620,85 @@ void SshCommandParserTest::vaultDialogReportsWrongPasswordInline()
     QVERIFY2(failure.isEmpty(), qPrintable(failure));
     // 密码错误绝不能被当成解锁成功。
     QCOMPARE(vault.state(&error), CredentialVault::State::Locked);
+}
+
+void SshCommandParserTest::vaultCreationDialogShowsSecurityHierarchy()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+    ApplicationDatabase database(
+        temporaryDirectory.filePath(QStringLiteral("vault-dialog-create.db")));
+    QString error;
+    QVERIFY2(database.initialize(&error), qPrintable(error));
+
+    CredentialVault vault(database);
+    QCOMPARE(vault.state(&error), CredentialVault::State::Uninitialized);
+
+    QString failure;
+    // 首次生成锁形与警示图标的高 DPI pixmap 可能初始化平台图形资源；offscreen 插件会在
+    // 构造阶段短暂处理事件，因此给窗口完成 show/exec 留出一个很小的稳定宽限。
+    QTimer::singleShot(50, [&failure]() {
+        QWidget *dialog = QApplication::activeModalWidget();
+        if (dialog == nullptr) {
+            // offscreen 平台在连续执行多个模态测试时可能尚未更新 activeModalWidget；顶层窗口
+            // 列表仍已包含并显示目标对话框。按稳定对象名回退查找，避免把平台激活时序误判
+            // 成产品窗口没有创建。真实界面断言仍只针对当前可见的 VaultDialog。
+            for (QWidget *candidate : QApplication::topLevelWidgets()) {
+                if (candidate->isVisible()
+                    && candidate->objectName() == QStringLiteral("VaultDialog")) {
+                    dialog = candidate;
+                    break;
+                }
+            }
+        }
+        if (dialog == nullptr) {
+            failure = QStringLiteral("保险库创建对话框未能弹出");
+            return;
+        }
+
+        // 锁形徽标、居中标题和独立警示框共同建立“安全操作”层级。这里只检查稳定的对象语义
+        // 与内容，不断言平台相关的字体像素和原生窗口边框，避免测试在 macOS/Linux 间漂移。
+        const QLabel *badge = dialog->findChild<QLabel *>(
+            QStringLiteral("VaultSecurityBadge"));
+        const QLabel *heading = dialog->findChild<QLabel *>(
+            QStringLiteral("VaultHeading"));
+        const QWidget *warning = dialog->findChild<QWidget *>(
+            QStringLiteral("VaultWarningNotice"));
+        const QLabel *warningText = dialog->findChild<QLabel *>(
+            QStringLiteral("VaultWarningText"));
+        const QLineEdit *passwordEdit = dialog->findChild<QLineEdit *>(
+            QStringLiteral("vaultPasswordEdit"));
+        const QLineEdit *confirmationEdit = dialog->findChild<QLineEdit *>(
+            QStringLiteral("vaultConfirmationEdit"));
+        const QAbstractButton *cancelButton = dialog->findChild<QAbstractButton *>(
+            QStringLiteral("vaultCancelButton"));
+
+        if (badge == nullptr || badge->pixmap().isNull()
+            || badge->size() != QSize(44, 44)) {
+            failure = QStringLiteral("保险库创建对话框缺少 44px 锁形安全徽标");
+        } else if (heading == nullptr
+                   || heading->text() != QStringLiteral("创建保险库")
+                   || !(heading->alignment() & Qt::AlignHCenter)) {
+            failure = QStringLiteral("保险库创建对话框缺少居中的操作标题");
+        } else if (warning == nullptr || !warning->isVisible()
+                   || warningText == nullptr
+                   || !warningText->text().contains(QStringLiteral("主密码无法找回"))) {
+            failure = QStringLiteral("保险库创建对话框缺少独立的不可恢复警示");
+        } else if (passwordEdit == nullptr || confirmationEdit == nullptr
+                   || passwordEdit->placeholderText() != QStringLiteral("至少 8 个字符")) {
+            failure = QStringLiteral("保险库创建对话框没有完整呈现两次密码输入");
+        } else if (cancelButton != nullptr) {
+            // allowCancel=false 用于首次启动强制创建流程。按钮必须根本不存在，而不是仅禁用，
+            // 否则键盘和辅助技术仍会把它当成一个无法执行的操作入口。
+            failure = QStringLiteral("强制创建保险库时不应渲染取消按钮");
+        }
+        dialog->close();
+    });
+
+    // 测试通过窗口关闭结束模态循环，不会提交主密码，因此服务仍须保持未初始化。
+    QVERIFY(!VaultDialog::ensureUnlocked(&vault, nullptr, false));
+    QVERIFY2(failure.isEmpty(), qPrintable(failure));
+    QCOMPARE(vault.state(&error), CredentialVault::State::Uninitialized);
 }
 
 void SshCommandParserTest::terminalKeepsBottomAcrossCursorBlink()
