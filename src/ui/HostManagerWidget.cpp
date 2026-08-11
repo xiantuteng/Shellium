@@ -23,6 +23,7 @@
 #include <QInputDialog>
 #include <QLabel>
 #include <QLineEdit>
+#include <QListWidget>
 #include <QMenu>
 #include <QMessageBox>
 #include <QMouseEvent>
@@ -44,6 +45,8 @@
 #include <functional>
 
 namespace {
+
+class HostChainDialog;
 
 /** @brief 树节点保存数据库主键的角色，避开 Qt 内置显示和图标角色。 */
 constexpr int HostIdRole = Qt::UserRole;
@@ -776,14 +779,17 @@ public:
      */
     explicit HostRecordDialog(const HostRecord &initial,
                               const HostRecord &inheritedParent,
+                              ApplicationDatabase *database,
                               CredentialVault *credentialVault,
                               QWidget *parent = nullptr)
         : QDialog(parent)
         , m_initial(initial)
         , m_inheritedParent(inheritedParent)
+        , m_database(database)
         , m_credentialVault(credentialVault)
         , m_nameEdit(new QLineEdit(initial.name, this))
     {
+        Q_ASSERT(m_database != nullptr);
         Q_ASSERT(m_credentialVault != nullptr);
 
         // 字段版式与设置窗口、连接对话框统一：分组卡片 + “左说明右控件”的行 + 滑动开关。
@@ -826,6 +832,18 @@ public:
                 initial.proxyJumps.join(QLatin1Char(',')), this);
             m_proxyJumpsEdit->setObjectName(QStringLiteral("hostProxyJumpsEdit"));
             m_proxyJumpsEdit->setPlaceholderText(tr("逗号分隔；留空则继承父分组"));
+            m_hostChain = initial.hostChain;
+            m_hostChainButton = new QPushButton(this);
+            m_hostChainButton->setObjectName(QStringLiteral("hostChainButton"));
+            m_hostChainButton->setMinimumWidth(260);
+            UiIcons::decorateButton(
+                m_hostChainButton,
+                UiIcons::symbol(
+                    this,
+                    UiIcons::Symbol::ArrowUp,
+                    this->palette().color(QPalette::WindowText)),
+                tr("编辑当前主机在最终连接前依次经过的跳板机"));
+            refreshHostChainSummary();
             m_savePasswordToggle = new ToggleSwitch(this);
             m_savePasswordToggle->setObjectName(QStringLiteral("hostSavePasswordToggle"));
             m_savePasswordToggle->setChecked(
@@ -860,17 +878,40 @@ public:
             identityLayout->addWidget(m_identityEdit, 1);
             identityLayout->addWidget(browseButton);
 
-            // 认证区严格按用户填写路径排列：用户名、密码、私钥、ProxyJump，最后才是保存与
-            // 兼容性开关。账号和凭据相邻能减少来回扫描，也符合 SSH 的认证心智顺序。
+            // 认证区严格按用户填写路径排列：用户名、密码、私钥和受管主机链保持在主路径中；
+            // 自由文本 ProxyJump 收进末尾的高级入口，避免与主机链形成两个并列的首选方案。
+            // 保存凭据和旧版算法开关仍保持直接可见，因为它们会明显改变安全行为。
             auto *authCard = new SettingsCard(tr("认证与跳板"), this);
             authCard->addRow(tr("用户名"), m_usernameEdit);
             authCard->addRow(tr("密码"), m_passwordEdit);
             authCard->addRow(tr("私钥文件"), identityContainer);
-            authCard->addRow(tr("ProxyJump"), m_proxyJumpsEdit);
+            authCard->addRow(tr("主机链"),
+                             m_hostChainButton,
+                             tr("选择主机管理中的已有主机作为跳板，也可以在链编辑器中新增主机。"));
             authCard->addRow(tr("加密保存到本地保险库"), m_savePasswordToggle);
             authCard->addRow(tr("旧版兼容"),
                              m_legacyHmacToggle,
                              tr("仅为该主机允许 hmac-sha1（不继承）。"));
+
+            m_advancedSettingsButton = new QToolButton(authCard);
+            m_advancedSettingsButton->setObjectName(
+                QStringLiteral("hostAdvancedSettingsButton"));
+            m_advancedSettingsButton->setProperty("advancedDisclosure", true);
+            m_advancedSettingsButton->setCheckable(true);
+            m_advancedSettingsButton->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+            m_advancedSettingsButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+            m_advancedSettingsButton->setAccessibleName(tr("展开 ProxyJump 高级设置"));
+            // 已有主机若保存过手工 ProxyJump，打开编辑器时必须直接展示真实生效值，不能因
+            // “弱化入口”而把旧路由悄悄藏起来；全新配置和单纯继承父分组时则默认折叠。
+            m_advancedSettingsButton->setChecked(!initial.proxyJumps.isEmpty());
+            authCard->addFullWidthWidget(m_advancedSettingsButton);
+            authCard->addRow(
+                tr("ProxyJump"),
+                m_proxyJumpsEdit,
+                tr("兼容 OpenSSH 的高级手工跳板配置；通常请优先使用上方主机链。"));
+            m_proxyJumpRow = m_proxyJumpsEdit->parentWidget();
+            m_proxyJumpRow->setObjectName(QStringLiteral("hostProxyJumpRow"));
+            refreshProxyJumpDisclosure();
 
             connect(browseButton, &QPushButton::clicked, this, [this]() {
                 const QString path = QFileDialog::getOpenFileName(
@@ -879,6 +920,29 @@ public:
                     m_identityEdit->setText(path);
                 }
             });
+            connect(m_hostChainButton,
+                    &QPushButton::clicked,
+                    this,
+                    &HostRecordDialog::editHostChain);
+            connect(m_proxyJumpsEdit,
+                    &QLineEdit::textEdited,
+                    this,
+                    [this](const QString &manualProxyJump) {
+                        // 两套路线同时存在会让“实际经过哪些主机”变得不可判断。只有用户亲自
+                        // 输入非空高级配置时才清除受管链；构造阶段 setText 不会触发该分支。
+                        if (!manualProxyJump.trimmed().isEmpty() && !m_hostChain.isEmpty()) {
+                            m_hostChain.clear();
+                            refreshHostChainSummary();
+                        }
+                    });
+            connect(m_proxyJumpsEdit,
+                    &QLineEdit::textChanged,
+                    this,
+                    [this]() { refreshProxyJumpDisclosure(); });
+            connect(m_advancedSettingsButton,
+                    &QToolButton::toggled,
+                    this,
+                    [this]() { refreshProxyJumpDisclosure(); });
 
             // 只有打开窗口时名称为空，或用户后来主动清空名称，才启用自动命名。名称框一旦
             // 收到非空人工输入便立即退出自动模式，后续修改账号、地址或端口都不能覆盖用户
@@ -1022,6 +1086,7 @@ public:
             result.username = m_usernameEdit->text().trimmed();
             result.identityFile = m_identityEdit->text().trimmed();
             result.proxyJumps = splitList(m_proxyJumpsEdit->text());
+            result.hostChain = m_hostChain;
             result.allowLegacyHmacSha1 = m_legacyHmacToggle->isChecked();
         }
         return result;
@@ -1053,7 +1118,71 @@ public:
             && !m_savePasswordToggle->isChecked();
     }
 
+    /**
+     * @brief 链编辑器是否已经现场保存过独立的新主机。
+     * @return true 表示即使当前目标随后取消，主机侧栏也应刷新以展示新建记录。
+     */
+    [[nodiscard]] bool relatedHostsCreated() const { return m_relatedHostsCreated; }
+
 private:
+    /** @brief 打开 Termius 风格的独立主机链编辑器，并把确认后的有序 id 写回当前草稿。 */
+    void editHostChain();
+
+    /**
+     * @brief 同步 ProxyJump 高级入口的摘要、箭头和明细行可见性。
+     *
+     * 折叠状态下仍显示“已配置”或“继承”摘要，是为了让用户无需展开即可判断连接是否还
+     * 存在手工跳板路径；展开状态只控制展示，不改变字段内容或父分组继承语义。
+     */
+    void refreshProxyJumpDisclosure()
+    {
+        if (m_advancedSettingsButton == nullptr || m_proxyJumpsEdit == nullptr
+            || m_proxyJumpRow == nullptr) {
+            return;
+        }
+
+        const bool expanded = m_advancedSettingsButton->isChecked();
+        const bool hasExplicitProxyJump = !m_proxyJumpsEdit->text().trimmed().isEmpty();
+        // 非空受管链拥有路由优先级，此时父分组即使配置了 ProxyJump 也不会参与连接，摘要
+        // 不能错误宣称“正在继承”；只有直连草稿才提示潜在生效的继承路径。
+        const bool inheritsProxyJump = !hasExplicitProxyJump && m_hostChain.isEmpty()
+            && !m_inheritedParent.proxyJumps.isEmpty();
+        QString summary = tr("高级设置");
+        if (hasExplicitProxyJump) {
+            summary = tr("高级设置 · ProxyJump 已配置");
+        } else if (inheritsProxyJump) {
+            summary = tr("高级设置 · 继承 ProxyJump");
+        }
+
+        m_advancedSettingsButton->setText(summary);
+        m_advancedSettingsButton->setArrowType(expanded ? Qt::DownArrow : Qt::RightArrow);
+        m_advancedSettingsButton->setAccessibleName(
+            expanded ? tr("收起 ProxyJump 高级设置") : tr("展开 ProxyJump 高级设置"));
+        m_advancedSettingsButton->setToolTip(
+            tr("仅在兼容 OpenSSH 配置或需要手工指定跳板地址时使用"));
+        m_proxyJumpRow->setVisible(expanded);
+    }
+
+    /** @brief 根据当前链路数量刷新主机配置页入口摘要，避免用户必须再次打开才能确认状态。 */
+    void refreshHostChainSummary()
+    {
+        if (m_hostChainButton == nullptr) {
+            return;
+        }
+        if (m_hostChain.isEmpty()) {
+            m_hostChainButton->setText(tr("主机链  ·  直连  ›"));
+        } else if (m_hostChain.size() == 1) {
+            const std::optional<HostRecord> jump = m_database->findHost(m_hostChain.constFirst());
+            m_hostChainButton->setText(
+                tr("主机链  ·  经 %1  ›")
+                    .arg(jump.has_value() ? jump->name : tr("失效主机")));
+        } else {
+            m_hostChainButton->setText(tr("主机链  ·  %1 个跳板  ›").arg(m_hostChain.size()));
+        }
+        // 主机链会覆盖父分组 ProxyJump；链路增删后同步摘要，避免继续显示已经不生效的继承。
+        refreshProxyJumpDisclosure();
+    }
+
     /**
      * @brief 用当前有效账号、主机地址和端口刷新自动生成的主机名称。
      *
@@ -1120,23 +1249,64 @@ private:
             effective.credentialId = m_inheritedParent.credentialId;
         }
 
-        ConnectionTarget target = effective.toConnectionTarget();
-        target.password = sessionPassword();
-        if (target.password.isEmpty() && !effective.credentialId.isEmpty()
-            && shouldSavePassword()) {
-            if (!VaultDialog::ensureUnlocked(m_credentialVault, this)) {
-                return;
-            }
-            QString credentialError;
-            if (!m_credentialVault->applyHostCredential(
-                    effective, target, &credentialError)) {
+        QList<HostRecord> routeRecords;
+        QSet<QString> routeIds;
+        for (const QString &jumpId : effective.hostChain) {
+            QString routeError;
+            const QList<HostRecord> expanded = m_database->resolveConnectionChain(
+                jumpId, &routeError);
+            if (expanded.isEmpty()) {
                 QMessageBox::warning(
                     this,
-                    tr("无法测试连接"),
-                    credentialError.isEmpty() ? tr("无法读取已保存的主机凭据。")
-                                              : credentialError);
+                    tr("无法测试主机链"),
+                    routeError.isEmpty() ? tr("跳板机不存在或链路无效：%1").arg(jumpId)
+                                         : routeError);
                 return;
             }
+            for (const HostRecord &hop : expanded) {
+                if (routeIds.contains(hop.id) || hop.id == effective.id) {
+                    QMessageBox::warning(
+                        this, tr("无法测试主机链"), tr("主机链包含重复节点或环路：%1").arg(hop.name));
+                    return;
+                }
+                routeIds.insert(hop.id);
+                routeRecords.append(hop);
+            }
+        }
+        effective.hostChain.clear();
+        routeRecords.append(effective);
+
+        QList<ConnectionTarget> connectionPlan;
+        connectionPlan.reserve(routeRecords.size());
+        bool vaultReady = false;
+        for (qsizetype index = 0; index < routeRecords.size(); ++index) {
+            const HostRecord &hop = routeRecords.at(index);
+            ConnectionTarget hopTarget = hop.toConnectionTarget();
+            if (routeRecords.size() > 1) {
+                hopTarget.proxyJumps.clear();
+            }
+            if (index + 1 == routeRecords.size()) {
+                hopTarget.password = sessionPassword();
+            }
+            if (hopTarget.password.isEmpty() && !hop.credentialId.isEmpty()) {
+                if (!vaultReady) {
+                    if (!VaultDialog::ensureUnlocked(m_credentialVault, this)) {
+                        return;
+                    }
+                    vaultReady = true;
+                }
+                QString credentialError;
+                if (!m_credentialVault->applyHostCredential(hop, hopTarget, &credentialError)) {
+                    QMessageBox::warning(
+                        this,
+                        tr("无法测试连接"),
+                        credentialError.isEmpty()
+                            ? tr("无法读取“%1”的已保存凭据。").arg(hop.name)
+                            : credentialError);
+                    return;
+                }
+            }
+            connectionPlan.append(hopTarget);
         }
 
         m_testInProgress = true;
@@ -1145,12 +1315,14 @@ private:
 
         // 测试连接复用生产 SSH 状态机，才能覆盖 ProxyJump、私钥、密码和旧版 HMAC 等完整
         // 配置。第二个参数关闭 Shell 集成安装，避免一次只读测试在远端写入临时脚本。
-        const QString testSpecifier = target.connectionSpecifier(true);
-        auto *session = new SshSessionStack(target, false, this);
+        const QString testSpecifier = connectionPlan.constLast().connectionSpecifier(true);
+        auto *session = new SshSessionStack(connectionPlan, false, this);
         // 工作线程已经复制了测试快照，立即擦除这里的临时密码副本，避免信号闭包再额外持有
         // 一份明文直到会话销毁；输入框本身仍由用户控制，保存/再次测试行为不会受影响。
-        target.password.fill(QChar::Null);
-        target.password.clear();
+        for (ConnectionTarget &temporaryTarget : connectionPlan) {
+            temporaryTarget.password.fill(QChar::Null);
+            temporaryTarget.password.clear();
+        }
         m_testSession = session;
         connect(session,
                 &SshSessionStack::shellConnected,
@@ -1262,6 +1434,8 @@ private:
     HostRecord m_initial;
     /** @brief 父分组的已解析配置，仅用于补齐尚未持久化的测试连接快照。 */
     HostRecord m_inheritedParent;
+    /** @brief 主机链选择和现场新增主机所使用的应用数据库，不拥有生命周期。 */
+    ApplicationDatabase *m_database = nullptr;
     /** @brief 应用共享凭据保险库，不拥有其生命周期。 */
     CredentialVault *m_credentialVault = nullptr;
     QLineEdit *m_nameEdit = nullptr;
@@ -1272,6 +1446,13 @@ private:
     bool m_automaticNameEnabled = false;
     QLineEdit *m_identityEdit = nullptr;
     QLineEdit *m_proxyJumpsEdit = nullptr;
+    /** @brief 折叠手工 ProxyJump 的次要入口；摘要始终提示显式配置或父分组继承状态。 */
+    QToolButton *m_advancedSettingsButton = nullptr;
+    /** @brief SettingsCard 为 ProxyJump 创建的完整标签/输入行，用于整体隐藏无障碍与布局内容。 */
+    QWidget *m_proxyJumpRow = nullptr;
+    /** @brief 当前对话框中的受管链草稿；只有外层主机保存后才持久化到 owner_host_id。 */
+    QStringList m_hostChain;
+    QPushButton *m_hostChainButton = nullptr;
     QLineEdit *m_passwordEdit = nullptr;
     ToggleSwitch *m_savePasswordToggle = nullptr;
     ToggleSwitch *m_legacyHmacToggle = nullptr;
@@ -1281,7 +1462,577 @@ private:
     SshSessionStack *m_testSession = nullptr;
     /** @brief 防止底层重复完成信号产生多个结果弹窗或并行测试。 */
     bool m_testInProgress = false;
+    /** @brief 记录链编辑器产生的独立数据库变更，供外层在取消目标编辑时仍刷新主机树。 */
+    bool m_relatedHostsCreated = false;
 };
+
+/**
+ * @brief 绘制主机链与跳板机选择器中的两行主机卡片。
+ *
+ * 主机链行额外绘制六点拖拽手柄，并把名称/连接地址相对整张卡片居中；选择器行不显示手柄，
+ * 内容左对齐。委托直接绘制选中与悬停底纹，避免 macOS、Windows 原生列表样式在圆角容器内
+ * 产生蓝色矩形高亮，从而让同一交互在深浅主题和各平台保持一致。
+ */
+class HostChainRowDelegate final : public QStyledItemDelegate {
+public:
+    /**
+     * @brief 创建一类主机卡片委托。
+     * @param showDragHandle true 为可排序链路行绘制六点手柄，false 为普通候选项。
+     * @param centerContent true 让两行文字相对整卡居中，false 使用标准左对齐。
+     * @param parent Qt 父对象。
+     */
+    HostChainRowDelegate(const bool showDragHandle,
+                         const bool centerContent,
+                         QObject *parent = nullptr)
+        : QStyledItemDelegate(parent)
+        , m_showDragHandle(showDragHandle)
+        , m_centerContent(centerContent)
+    {
+    }
+
+    /** @brief 返回参考设计规定的紧凑双行高度；宽度仍由列表视口决定。 */
+    [[nodiscard]] QSize sizeHint(const QStyleOptionViewItem &option,
+                                 const QModelIndex &index) const override
+    {
+        QSize hint = QStyledItemDelegate::sizeHint(option, index);
+        hint.setHeight(m_showDragHandle ? 68 : 62);
+        return hint;
+    }
+
+protected:
+    /**
+     * @brief 绘制交互底纹、拖拽手柄、主机名称和等宽连接说明。
+     * @param painter 当前列表视口的绘制器，不可为空。
+     * @param option 当前行的矩形、状态与调色板。
+     * @param index 当前模型索引；DisplayRole 使用“名称\n连接信息”格式。
+     */
+    void paint(QPainter *painter,
+               const QStyleOptionViewItem &option,
+               const QModelIndex &index) const override
+    {
+        Q_ASSERT(painter != nullptr);
+        painter->save();
+        painter->setRenderHint(QPainter::Antialiasing, true);
+
+        const bool selected = (option.state & QStyle::State_Selected) != 0;
+        const bool hovered = (option.state & QStyle::State_MouseOver) != 0;
+        const QColor textColor = option.palette.color(QPalette::Text);
+        QColor interactionFill = selected ? ShelliumUi::accentColor() : textColor;
+        interactionFill.setAlphaF(selected ? 0.14F : (hovered ? 0.055F : 0.0F));
+        if (interactionFill.alpha() > 0) {
+            // 填满列表内部整行而不额外画圆角：外层 QListWidget 已负责裁剪圆角，连续候选项
+            // 因而共享一个整洁容器，选中态也不会在边缘留下系统高亮色缝隙。
+            painter->fillRect(option.rect, interactionFill);
+        }
+
+        if (index.row() + 1 < index.model()->rowCount(index.parent())) {
+            QColor separator = textColor;
+            separator.setAlphaF(0.10F);
+            painter->setPen(QPen(separator, 1));
+            painter->drawLine(option.rect.bottomLeft(), option.rect.bottomRight());
+        }
+
+        if (m_showDragHandle) {
+            // 六个圆点只属于可拖动跳板行，并固定在整卡左侧；文字区域不为它参与居中计算，
+            // 因此名称和地址始终相对整张卡片居中，不会被手柄推向右侧。
+            QColor gripColor = textColor;
+            gripColor.setAlphaF(0.34F);
+            painter->setPen(Qt::NoPen);
+            painter->setBrush(gripColor);
+            const int centerX = option.rect.left() + 22;
+            const int centerY = option.rect.center().y();
+            for (const int columnOffset : {-3, 3}) {
+                for (const int rowOffset : {-7, 0, 7}) {
+                    painter->drawEllipse(
+                        QPointF(centerX + columnOffset, centerY + rowOffset), 1.4, 1.4);
+                }
+            }
+        }
+
+        const QString displayText = index.data(Qt::DisplayRole).toString();
+        const qsizetype lineBreak = displayText.indexOf(QLatin1Char('\n'));
+        const QString title = lineBreak < 0 ? displayText : displayText.left(lineBreak);
+        const QString detail = lineBreak < 0 ? QString{} : displayText.mid(lineBreak + 1);
+        const QFont titleFont = scaledFont(option.font, 0.0, true);
+        const QFont detailFont = connectionDetailFont(option.font);
+        const QFontMetrics titleMetrics(titleFont);
+        const QFontMetrics detailMetrics(detailFont);
+        const int blockHeight = titleMetrics.height() + detailMetrics.height() + 1;
+        const int blockTop = option.rect.center().y() - (blockHeight / 2);
+        const int horizontalInset = m_centerContent ? 42 : 16;
+        const QRect textBounds = option.rect.adjusted(horizontalInset, 0, -horizontalInset, 0);
+        const Qt::Alignment horizontalAlignment = m_centerContent ? Qt::AlignHCenter
+                                                                  : Qt::AlignLeft;
+
+        painter->setFont(titleFont);
+        painter->setPen(textColor);
+        painter->drawText(
+            QRect(textBounds.left(), blockTop, textBounds.width(), titleMetrics.height()),
+            horizontalAlignment | Qt::AlignVCenter,
+            titleMetrics.elidedText(title, Qt::ElideRight, textBounds.width()));
+
+        QColor detailColor = textColor;
+        detailColor.setAlphaF(0.58F);
+        painter->setFont(detailFont);
+        painter->setPen(detailColor);
+        painter->drawText(
+            QRect(textBounds.left(),
+                  blockTop + titleMetrics.height() + 1,
+                  textBounds.width(),
+                  detailMetrics.height()),
+            horizontalAlignment | Qt::AlignVCenter,
+            detailMetrics.elidedText(detail, Qt::ElideRight, textBounds.width()));
+        painter->restore();
+    }
+
+private:
+    /** @brief 是否绘制六点拖拽手柄；候选列表必须为 false，避免暗示它可排序。 */
+    bool m_showDragHandle = false;
+    /** @brief 是否将文字相对整张卡片居中；选择器候选项采用左对齐。 */
+    bool m_centerContent = false;
+};
+
+/**
+ * @brief 从主机管理中搜索并选择一个已有跳板机，或转入新建主机流程。
+ *
+ * 选择器只展示 Host 节点，不把组织分组伪装成可连接目标；当前目标和已经位于链中的主机
+ * 由调用方排除，避免用户直到保存阶段才收到“自身引用/重复主机”的迟到错误。
+ */
+class HostPickerDialog final : public QDialog {
+public:
+    HostPickerDialog(const QList<HostRecord> &candidates,
+                     const QSet<QString> &excludedIds,
+                     QWidget *parent = nullptr)
+        : QDialog(parent)
+        , m_searchEdit(new QLineEdit(this))
+        , m_list(new QListWidget(this))
+    {
+        setObjectName(QStringLiteral("HostPickerDialog"));
+        setWindowTitle(tr("选择跳板机"));
+        setMinimumSize(460, 470);
+        ShelliumUi::applyStandaloneDialogStyle(this);
+
+        auto *body = new QWidget(this);
+        body->setObjectName(QStringLiteral("HostPickerBody"));
+        auto *subtitle = new QLabel(tr("选择已有主机"), body);
+        subtitle->setObjectName(QStringLiteral("HostPickerSubtitle"));
+
+        m_searchEdit->setObjectName(QStringLiteral("hostChainSearchEdit"));
+        m_searchEdit->setPlaceholderText(tr("搜索名称、地址或账号"));
+        // 搜索图标作为 QLineEdit 的 leading action 存在，不占用独立布局，也不会遮挡输入文本；
+        // 使用语义图标而不是 Unicode 放大镜，保证高分屏和不同字体环境下轮廓一致。
+        m_searchEdit->addAction(
+            UiIcons::symbol(
+                this,
+                UiIcons::Symbol::Search,
+                this->palette().color(QPalette::PlaceholderText)),
+            QLineEdit::LeadingPosition);
+        m_list->setObjectName(QStringLiteral("hostChainCandidateList"));
+        m_list->setSelectionMode(QAbstractItemView::SingleSelection);
+        m_list->setItemDelegate(new HostChainRowDelegate(false, false, m_list));
+        m_list->setMouseTracking(true);
+        m_list->setUniformItemSizes(true);
+        m_list->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
+        for (const HostRecord &record : candidates) {
+            if (record.kind != HostNodeKind::Host || excludedIds.contains(record.id)) {
+                continue;
+            }
+            const ConnectionTarget target = record.toConnectionTarget();
+            auto *item = new QListWidgetItem(
+                QStringLiteral("%1\n%2").arg(record.name, target.connectionSpecifier(true)),
+                m_list);
+            item->setData(Qt::UserRole, record.id);
+            item->setData(Qt::UserRole + 1,
+                          QStringLiteral("%1 %2 %3")
+                              .arg(record.name, record.host, record.username).toLower());
+            item->setSizeHint(QSize(0, 62));
+        }
+
+        auto *newButton = new QPushButton(tr("新建主机"), this);
+        newButton->setObjectName(QStringLiteral("hostChainCreateHostButton"));
+        auto *selectButton = new QPushButton(tr("选择"), this);
+        selectButton->setObjectName(QStringLiteral("hostChainSelectHostButton"));
+        selectButton->setProperty("primaryAction", true);
+        selectButton->setEnabled(false);
+        selectButton->setDefault(true);
+        UiIcons::decorateButton(
+            newButton,
+            UiIcons::symbol(
+                this,
+                UiIcons::Symbol::Plus,
+                this->palette().color(QPalette::WindowText)),
+            tr("新建一台可复用的跳板主机"));
+        UiIcons::decorateButton(
+            selectButton,
+            UiIcons::symbol(
+                this,
+                UiIcons::Symbol::Check,
+                QColor(QStringLiteral("#0c2f24"))),
+            tr("把当前选中的主机加入链路"));
+
+        auto *bodyLayout = new QVBoxLayout(body);
+        bodyLayout->setContentsMargins(24, 18, 24, 20);
+        bodyLayout->setSpacing(12);
+        bodyLayout->addWidget(subtitle);
+        bodyLayout->addWidget(m_searchEdit);
+        bodyLayout->addWidget(m_list, 1);
+
+        auto *footer = new QWidget(this);
+        footer->setObjectName(QStringLiteral("HostPickerFooter"));
+        auto *footerLayout = new QHBoxLayout(footer);
+        footerLayout->setContentsMargins(24, 13, 24, 13);
+        footerLayout->setSpacing(10);
+        footerLayout->addWidget(newButton);
+        footerLayout->addStretch(1);
+        footerLayout->addWidget(selectButton);
+
+        auto *layout = new QVBoxLayout(this);
+        layout->setContentsMargins(0, 0, 0, 0);
+        layout->setSpacing(0);
+        layout->addWidget(body, 1);
+        layout->addWidget(footer);
+
+        connect(m_searchEdit, &QLineEdit::textChanged, this, [this](const QString &text) {
+            const QString needle = text.trimmed().toLower();
+            for (int row = 0; row < m_list->count(); ++row) {
+                QListWidgetItem *item = m_list->item(row);
+                item->setHidden(!needle.isEmpty()
+                                && !item->data(Qt::UserRole + 1).toString().contains(needle));
+            }
+            // 过滤后若原选中项被隐藏，立即清空当前项并禁用“选择”。保留一个看不见的选中
+            // id 会让用户在结果为空时仍能提交旧目标，属于危险且难以察觉的状态错位。
+            if (m_list->currentItem() != nullptr && m_list->currentItem()->isHidden()) {
+                m_list->setCurrentItem(nullptr);
+            }
+        });
+        connect(m_list, &QListWidget::currentItemChanged, this,
+                [selectButton](QListWidgetItem *current) {
+                    selectButton->setEnabled(current != nullptr && !current->isHidden());
+                });
+        connect(m_list, &QListWidget::itemDoubleClicked, this, [this](QListWidgetItem *) {
+            if (m_list->currentItem() != nullptr) {
+                accept();
+            }
+        });
+        connect(selectButton, &QPushButton::clicked, this, &QDialog::accept);
+        connect(newButton, &QPushButton::clicked, this, [this]() {
+            m_createNewRequested = true;
+            accept();
+        });
+    }
+
+    /** @brief 返回当前选中的已有主机 id；选择“新建主机”或无选择时为空。 */
+    [[nodiscard]] QString selectedHostId() const
+    {
+        return m_list->currentItem() == nullptr
+            ? QString() : m_list->currentItem()->data(Qt::UserRole).toString();
+    }
+
+    /** @brief 用户是否选择了“新建主机”分支。 */
+    [[nodiscard]] bool createNewRequested() const { return m_createNewRequested; }
+
+private:
+    QLineEdit *m_searchEdit = nullptr;
+    QListWidget *m_list = nullptr;
+    bool m_createNewRequested = false;
+};
+
+/**
+ * @brief Termius 风格的受管主机链编辑器。
+ *
+ * 列表内容是从本机到最终目标之前依次经过的主机。最终目标以固定卡片显示在底部，不进入
+ * 可拖动列表，因此用户不可能误把目标拖成跳板或从链路中删除。现有主机只保存稳定 id；
+ * 新建主机则通过完整 HostRecordDialog 保存为可复用的普通主机，再自动加入当前草稿。
+ */
+class HostChainDialog final : public QDialog {
+public:
+    HostChainDialog(const HostRecord &target,
+                    const QStringList &initialChain,
+                    ApplicationDatabase *database,
+                    CredentialVault *credentialVault,
+                    QWidget *parent = nullptr)
+        : QDialog(parent)
+        , m_target(target)
+        , m_database(database)
+        , m_credentialVault(credentialVault)
+        , m_list(new QListWidget(this))
+    {
+        Q_ASSERT(m_database != nullptr);
+        Q_ASSERT(m_credentialVault != nullptr);
+        setObjectName(QStringLiteral("HostChainDialog"));
+        setWindowTitle(tr("编辑主机链"));
+        setMinimumSize(560, 560);
+        ShelliumUi::applyStandaloneDialogStyle(this);
+
+        auto *body = new QWidget(this);
+        body->setObjectName(QStringLiteral("HostChainBody"));
+        const QString targetDetail = target.toConnectionTarget().connectionSpecifier(true);
+        auto *explanation = new QLabel(
+            tr("添加的主机将按下列顺序建立连接，最后进入 "
+               "<span style=\"font-family: monospace; font-weight: 600;\">%1</span>。")
+                .arg(targetDetail.toHtmlEscaped()),
+            body);
+        explanation->setObjectName(QStringLiteral("HostChainIntroduction"));
+        explanation->setTextFormat(Qt::RichText);
+        explanation->setWordWrap(true);
+
+        auto *addButton = new QPushButton(tr("添加主机"), body);
+        addButton->setObjectName(QStringLiteral("hostChainAddButton"));
+        addButton->setProperty("primaryAction", true);
+        addButton->setMinimumHeight(42);
+        UiIcons::decorateButton(
+            addButton,
+            UiIcons::symbol(
+                this,
+                UiIcons::Symbol::Plus,
+                QColor(QStringLiteral("#0c2f24"))),
+            tr("从主机管理中选择或新建一台跳板主机"));
+
+        m_list->setObjectName(QStringLiteral("hostChainList"));
+        m_list->setDragDropMode(QAbstractItemView::InternalMove);
+        m_list->setDefaultDropAction(Qt::MoveAction);
+        m_list->setSelectionMode(QAbstractItemView::SingleSelection);
+        m_list->setItemDelegate(new HostChainRowDelegate(true, true, m_list));
+        m_list->setMouseTracking(true);
+        m_list->setUniformItemSizes(true);
+        m_list->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
+        m_list->setDragDropOverwriteMode(false);
+        m_list->setDropIndicatorShown(true);
+        for (const QString &hostId : initialChain) {
+            appendHost(hostId);
+        }
+        refreshListHeight();
+
+        auto *arrow = new QLabel(QStringLiteral("↓"), body);
+        arrow->setObjectName(QStringLiteral("hostChainRouteArrow"));
+        arrow->setAlignment(Qt::AlignCenter);
+        QFont arrowFont = arrow->font();
+        arrowFont = scaledFont(arrowFont, 4.0, false);
+        arrow->setFont(arrowFont);
+
+        auto *targetCard = new QFrame(body);
+        targetCard->setObjectName(QStringLiteral("hostChainTargetCard"));
+        targetCard->setMinimumHeight(82);
+        targetCard->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        auto *targetLabel = new QLabel(tr("目标主机"), targetCard);
+        targetLabel->setObjectName(QStringLiteral("hostChainTargetLabel"));
+        targetLabel->setAlignment(Qt::AlignCenter);
+        auto *targetDetailLabel = new QLabel(targetDetail, targetCard);
+        targetDetailLabel->setObjectName(QStringLiteral("hostChainTargetDetail"));
+        targetDetailLabel->setAlignment(Qt::AlignCenter);
+        targetDetailLabel->setFont(connectionDetailFont(targetDetailLabel->font()));
+        auto *targetLayout = new QVBoxLayout(targetCard);
+        targetLayout->setContentsMargins(16, 10, 16, 10);
+        targetLayout->setSpacing(2);
+        targetLayout->addStretch(1);
+        targetLayout->addWidget(targetLabel);
+        targetLayout->addWidget(targetDetailLabel);
+        targetLayout->addStretch(1);
+
+        auto *removeButton = new QPushButton(tr("从链路移除"), this);
+        removeButton->setObjectName(QStringLiteral("hostChainRemoveButton"));
+        removeButton->setProperty("hostChainDanger", true);
+        removeButton->setEnabled(false);
+        auto *cancelButton = new QPushButton(tr("取消"), this);
+        cancelButton->setObjectName(QStringLiteral("hostChainCancelButton"));
+        auto *saveButton = new QPushButton(tr("保存"), this);
+        saveButton->setObjectName(QStringLiteral("hostChainSaveButton"));
+        saveButton->setProperty("primaryAction", true);
+        saveButton->setDefault(true);
+        UiIcons::decorateButton(
+            cancelButton,
+            UiIcons::symbol(
+                this,
+                UiIcons::Symbol::Cancel,
+                this->palette().color(QPalette::WindowText)),
+            tr("放弃当前主机链修改"));
+        UiIcons::decorateButton(
+            saveButton,
+            UiIcons::symbol(
+                this,
+                UiIcons::Symbol::Check,
+                QColor(QStringLiteral("#0c2f24"))),
+            tr("保存当前主机链顺序"));
+
+        auto *bodyLayout = new QVBoxLayout(body);
+        bodyLayout->setContentsMargins(28, 22, 28, 22);
+        bodyLayout->setSpacing(14);
+        bodyLayout->addWidget(explanation);
+        bodyLayout->addWidget(addButton);
+        bodyLayout->addWidget(m_list);
+        bodyLayout->addWidget(arrow);
+        bodyLayout->addWidget(targetCard);
+
+        auto *footer = new QWidget(this);
+        footer->setObjectName(QStringLiteral("HostChainFooter"));
+        auto *footerLayout = new QHBoxLayout(footer);
+        footerLayout->setContentsMargins(28, 13, 28, 13);
+        footerLayout->setSpacing(10);
+        footerLayout->addWidget(removeButton);
+        footerLayout->addStretch(1);
+        footerLayout->addWidget(cancelButton);
+        footerLayout->addWidget(saveButton);
+
+        auto *layout = new QVBoxLayout(this);
+        layout->setContentsMargins(0, 0, 0, 0);
+        layout->setSpacing(0);
+        layout->addWidget(body, 1);
+        layout->addWidget(footer);
+
+        connect(m_list, &QListWidget::currentItemChanged, this,
+                [removeButton](QListWidgetItem *current) {
+                    removeButton->setEnabled(current != nullptr);
+                });
+        connect(removeButton, &QPushButton::clicked, this, [this]() {
+            delete m_list->takeItem(m_list->currentRow());
+            refreshListHeight();
+        });
+        connect(addButton, &QPushButton::clicked, this, &HostChainDialog::addHost);
+        connect(cancelButton, &QPushButton::clicked, this, &QDialog::reject);
+        connect(saveButton, &QPushButton::clicked, this, &QDialog::accept);
+    }
+
+    /** @brief 返回用户当前排列的跳板机 id，顺序即实际连接顺序。 */
+    [[nodiscard]] QStringList chain() const
+    {
+        QStringList result;
+        for (int row = 0; row < m_list->count(); ++row) {
+            result.append(m_list->item(row)->data(Qt::UserRole).toString());
+        }
+        return result;
+    }
+
+    /** @brief 是否通过“新建主机”保存过独立记录。 */
+    [[nodiscard]] bool databaseChanged() const { return m_databaseChanged; }
+
+private:
+    /**
+     * @brief 按跳板数量调整列表高度，最多同时展示三行。
+     *
+     * 空链路仍保留一行高度，维持“这里是可添加跳板的列表”这一视觉位置；超过三跳时改用
+     * 列表自身滚动，避免主机链异常长时把目标主机卡片和保存按钮推出窗口可视区域。
+     */
+    void refreshListHeight()
+    {
+        constexpr int rowHeight = 68;
+        constexpr int frameAllowance = 2;
+        const int visibleRows = std::clamp(m_list->count(), 1, 3);
+        m_list->setFixedHeight((visibleRows * rowHeight) + frameAllowance);
+        m_list->setVerticalScrollBarPolicy(
+            m_list->count() > visibleRows ? Qt::ScrollBarAsNeeded : Qt::ScrollBarAlwaysOff);
+    }
+
+    /** @brief 把一台已存在主机转换为可拖动链路卡片；缺失引用用醒目占位保留以便用户移除。 */
+    void appendHost(const QString &hostId)
+    {
+        const std::optional<HostRecord> record = m_database->resolveHost(hostId);
+        const QString title = record.has_value() ? record->name : tr("失效主机引用");
+        const QString detail = record.has_value()
+            ? record->toConnectionTarget().connectionSpecifier(true) : hostId;
+        auto *item = new QListWidgetItem(
+            QStringLiteral("%1\n%2").arg(title, detail), m_list);
+        item->setData(Qt::UserRole, hostId);
+        item->setFlags(item->flags() | Qt::ItemIsDragEnabled | Qt::ItemIsDropEnabled);
+        item->setSizeHint(QSize(0, 68));
+        refreshListHeight();
+    }
+
+    /** @brief 打开已有主机选择器；选择新建时保存完整主机并自动加入当前链路。 */
+    void addHost()
+    {
+        bool ok = false;
+        QString error;
+        const QList<HostRecord> rawCandidates = m_database->searchHosts({}, &ok, &error);
+        if (!ok) {
+            QMessageBox::critical(this, tr("读取主机失败"), error);
+            return;
+        }
+
+        QSet<QString> excluded{m_target.id};
+        for (const QString &hostId : chain()) {
+            excluded.insert(hostId);
+        }
+        QList<HostRecord> candidates;
+        for (const HostRecord &raw : rawCandidates) {
+            if (raw.kind != HostNodeKind::Host) {
+                continue;
+            }
+            // 选择器展示的账号和端口必须是实际连接值，而不是“空代表继承”的原始字段；
+            // 否则用户可能因为看到错误摘要而选中同名的另一台服务器。
+            candidates.append(m_database->resolveHost(raw.id).value_or(raw));
+        }
+        HostPickerDialog picker(candidates, excluded, this);
+        if (picker.exec() != QDialog::Accepted) {
+            return;
+        }
+        if (!picker.createNewRequested()) {
+            const QString selectedId = picker.selectedHostId();
+            if (!selectedId.isEmpty()) {
+                appendHost(selectedId);
+            }
+            return;
+        }
+
+        HostRecord created;
+        created.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+        // 现场新建默认放在目标所在分组，用户返回主机管理时能在当前上下文立即找到；这只是
+        // 组织位置，不会让跳板机继承目标主机本身的任何连接字段。
+        created.parentId = m_target.parentId;
+        created.kind = HostNodeKind::Host;
+        created.port = quint16{22};
+        HostRecord inheritedParent;
+        if (!created.parentId.isEmpty()) {
+            inheritedParent = m_database->resolveHost(created.parentId).value_or(HostRecord{});
+        }
+        HostRecordDialog dialog(created, inheritedParent, m_database, m_credentialVault, this);
+        const int dialogResult = dialog.exec();
+        m_databaseChanged = m_databaseChanged || dialog.relatedHostsCreated();
+        if (dialogResult != QDialog::Accepted) {
+            return;
+        }
+        created = dialog.record();
+        ConnectionTarget target = created.toConnectionTarget();
+        target.password = dialog.sessionPassword();
+        bool saved = false;
+        if (dialog.shouldSavePassword() && !dialog.sessionPassword().isEmpty()) {
+            if (!VaultDialog::ensureUnlocked(m_credentialVault, this)) {
+                return;
+            }
+            saved = m_credentialVault->saveConnectionPassword(
+                created, target, tr("%1 的登录凭据").arg(created.name), &error);
+        } else {
+            saved = m_database->saveHost(created, &error);
+        }
+        if (!saved) {
+            QMessageBox::critical(this, tr("新建跳板机失败"), error);
+            return;
+        }
+        m_databaseChanged = true;
+        appendHost(created.id);
+    }
+
+    HostRecord m_target;
+    ApplicationDatabase *m_database = nullptr;
+    CredentialVault *m_credentialVault = nullptr;
+    QListWidget *m_list = nullptr;
+    bool m_databaseChanged = false;
+};
+
+void HostRecordDialog::editHostChain()
+{
+    HostRecord target = record();
+    HostChainDialog dialog(target, m_hostChain, m_database, m_credentialVault, this);
+    if (dialog.exec() == QDialog::Accepted) {
+        m_hostChain = dialog.chain();
+        // 受管主机链与自由文本 ProxyJump 都表达路由，同时启用会执行两次跳转。用户确认
+        // 非空受管链时清空旧文本；若后来清空链路，仍可重新填写高级 ProxyJump。
+        if (!m_hostChain.isEmpty() && m_proxyJumpsEdit != nullptr) {
+            m_proxyJumpsEdit->clear();
+        }
+        refreshHostChainSummary();
+    }
+    m_relatedHostsCreated = m_relatedHostsCreated || dialog.databaseChanged();
+}
 
 } // namespace
 
@@ -1644,7 +2395,7 @@ void HostManagerWidget::addGroup()
     record.parentId = selectedParentGroupId();
     record.kind = HostNodeKind::Folder;
     // 分组窗口只编辑名称，不需要父分组的连接参数；仍传入共享保险库以保持构造契约统一。
-    HostRecordDialog dialog(record, HostRecord{}, m_credentialVault, this);
+    HostRecordDialog dialog(record, HostRecord{}, m_database, m_credentialVault, this);
     if (dialog.exec() != QDialog::Accepted) {
         return;
     }
@@ -1680,8 +2431,11 @@ void HostManagerWidget::addHost()
         inheritedParent = *resolvedParent;
     }
 
-    HostRecordDialog dialog(record, inheritedParent, m_credentialVault, this);
+    HostRecordDialog dialog(record, inheritedParent, m_database, m_credentialVault, this);
     if (dialog.exec() != QDialog::Accepted) {
+        if (dialog.relatedHostsCreated()) {
+            refresh();
+        }
         return;
     }
 
@@ -1715,7 +2469,7 @@ void HostManagerWidget::addHost()
     // 生成；明文仍只取对话框的本次会话副本，不会进入数据库。
     target = record.toConnectionTarget();
     target.password = dialog.sessionPassword();
-    emit hostConnectionRequested(record.id, target, false);
+    requestConnection(record.id, target, false);
 }
 
 void HostManagerWidget::editSelected()
@@ -1742,8 +2496,11 @@ void HostManagerWidget::editSelected()
         inheritedParent = *resolvedParent;
     }
 
-    HostRecordDialog dialog(*existing, inheritedParent, m_credentialVault, this);
+    HostRecordDialog dialog(*existing, inheritedParent, m_database, m_credentialVault, this);
     if (dialog.exec() != QDialog::Accepted) {
+        if (dialog.relatedHostsCreated()) {
+            refresh();
+        }
         return;
     }
     HostRecord updated = dialog.record();
@@ -1955,31 +2712,34 @@ void HostManagerWidget::requestConnection(const QString &hostId,
                                           const ConnectionTarget &sessionTarget,
                                           const bool openInNewTab)
 {
-    if (sessionTarget.isValid()) {
-        // 新建主机后立即连接时，使用对话框产生的会话快照以保留未落库密码；其他字段仍与
-        // 刚保存的记录一致。后续从树中连接会重新 resolveHost，获取最新的分组继承结果。
-        emit hostConnectionRequested(hostId, sessionTarget, openInNewTab);
+    QString error;
+    const QList<HostRecord> records = m_database->resolveConnectionChain(hostId, &error);
+    if (records.isEmpty()) {
+        showDatabaseError(tr("解析主机链"),
+                          error.isEmpty() ? tr("主机记录或链路不存在") : error);
         return;
     }
 
-    QString error;
-    const std::optional<HostRecord> record = m_database->resolveHost(hostId, &error);
-    if (!record.has_value()) {
-        showDatabaseError(tr("解析主机配置"),
-                          error.isEmpty() ? tr("主机记录不存在") : error);
-        return;
-    }
-    ConnectionTarget target = record->toConnectionTarget();
-    if (!record->credentialId.isEmpty()) {
-        if (!VaultDialog::ensureUnlocked(m_credentialVault, this)) {
-            return;
+    QList<ConnectionTarget> connectionPlan;
+    connectionPlan.reserve(records.size());
+    for (const HostRecord &record : records) {
+        ConnectionTarget target = record.toConnectionTarget();
+        // 受管链由 Shellium 的自持会话逐层建立，不能同时再把手动 ProxyJump 交给 libssh，
+        // 否则同一跳会执行两次。单层计划仍保留原高级 ProxyJump 兼容行为。
+        if (records.size() > 1) {
+            target.proxyJumps.clear();
         }
-        if (!m_credentialVault->applyHostCredential(*record, target, &error)) {
-            showDatabaseError(tr("读取主机凭据"), error);
-            return;
+        connectionPlan.append(target);
+    }
+    if (sessionTarget.isValid()) {
+        // 新建主机后的首次连接可能带有未落库密码，只覆盖最终目标；跳板层继续由主窗口按
+        // 各自 credentialId 从保险库加载，不能把目标密码错误复用于整条链。
+        connectionPlan.last() = sessionTarget;
+        if (connectionPlan.size() > 1) {
+            connectionPlan.last().proxyJumps.clear();
         }
     }
-    emit hostConnectionRequested(hostId, target, openInNewTab);
+    emit hostConnectionRequested(hostId, connectionPlan, openInNewTab);
 }
 
 std::optional<HostRecord> HostManagerWidget::selectedRecord(QString *errorMessage) const
@@ -2025,8 +2785,16 @@ QTreeWidgetItem *HostManagerWidget::createTreeItem(const HostRecord &record) con
         // 端口；记录自身的字段为空只代表"继承"，直接显示会漏掉最关键的信息。
         const std::optional<HostRecord> resolved = m_database->resolveHost(record.id);
         const HostRecord displayRecord = resolved.has_value() ? *resolved : record;
-        const QString detail =
-            displayRecord.toConnectionTarget().connectionSpecifier(true);
+        QString detail = displayRecord.toConnectionTarget().connectionSpecifier(true);
+        if (!record.hostChain.isEmpty()) {
+            const std::optional<HostRecord> firstJump =
+                m_database->findHost(record.hostChain.constFirst());
+            detail += record.hostChain.size() == 1
+                ? tr(" · 经 %1").arg(firstJump.has_value() ? firstJump->name : tr("失效跳板"))
+                : tr(" · 经 %1 等 %2 个跳板")
+                      .arg(firstJump.has_value() ? firstJump->name : tr("失效跳板"))
+                      .arg(record.hostChain.size());
+        }
         item->setData(0, HostDetailRole, detail);
         // resolveHost() 会把父分组标签合并进主机；展示这一结果才能让“分组标记为测试环境”
         // 的主机在树中也出现相同徽章，与 #标签 搜索的实际命中语义保持一致。

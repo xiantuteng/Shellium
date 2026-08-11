@@ -178,20 +178,28 @@
     font-size:11px; font-weight:700; color:var(--faint); letter-spacing:.06em; text-transform:uppercase;
     margin:0 0 10px;
   }
-  .field{display:flex; flex-direction:column; gap:5px; margin-bottom:11px;}
+  /* 左右布局：label 固定宽度靠左，控件靠右对齐，宽度按内容需要收窄（不铺满整行——一个 IP/端口不需要 400px 宽的输入框） */
+  .field{display:flex; align-items:flex-start; gap:14px; margin-bottom:13px;}
   .field:last-child{margin-bottom:0;}
-  .field label{font-size:12.5px; font-weight:600; color:var(--text);}
-  .field .hint{font-size:11px; color:var(--faint);}
+  .field > label{flex:0 0 84px; padding-top:7px; font-size:12.5px; font-weight:600; color:var(--text); text-align:left;}
+  .field .field-body{flex:1; min-width:0; display:flex; flex-direction:column; align-items:flex-end; gap:5px;}
+  .field .hint{align-self:stretch; font-size:11px; color:var(--faint);}
   .field input[type="text"], .field input[type="password"], .field input, .field textarea, .field select{
     font:inherit; font-size:13px; background:var(--panel); color:var(--text);
     border:1px solid var(--border); border-radius:8px; padding:7px 10px; width:100%;
   }
   .field textarea{font-family:var(--font-mono); font-size:12.5px; resize:vertical; min-height:64px;}
   .field input:focus, .field textarea:focus, .field select:focus{outline:none; border-color:var(--accent);}
-  .field-row{display:flex; gap:10px;}
-  .field-row .field{flex:1;}
-  .field-row .field.narrow{flex:0 0 110px;}
-  .with-btn{display:flex; gap:8px;}
+  /* 直接子级才是"控件本体"，统一收窄到合适宽度并靠右；hint/error 等说明文字仍走上面的 align-self:stretch 撑满一行 */
+  .field .field-body > input, .field .field-body > select{max-width:230px;}
+  .field .field-body > .with-btn{width:100%; max-width:280px;}
+  .field .field-body > .stepper{width:auto; max-width:130px;}
+  .field .field-body > .chain-btn{width:100%; max-width:280px;}
+  .field-compound{display:flex; align-items:center; gap:8px; width:100%; max-width:230px;}
+  .field-compound input{flex:1; min-width:0; width:auto;}
+  .field-compound input.narrow{flex:0 0 72px;}
+  .field-compound .sep{color:var(--faint); font-size:12.5px; flex:none;}
+  .with-btn{display:flex; gap:8px; width:100%;}
   .with-btn input{flex:1;}
 
   .stepper{display:flex; align-items:center; border:1px solid var(--border); border-radius:8px; background:var(--panel); overflow:hidden;}
@@ -609,7 +617,7 @@
   .vault-note{font-size:12px; color:var(--muted); text-align:center; line-height:1.6; margin:0 0 16px;}
   .field.has-error input{border-color:var(--danger);}
   .field.has-error input:focus{border-color:var(--danger);}
-  .field-error{font-size:11.5px; color:var(--danger); margin-top:2px;}
+  .field-error{align-self:stretch; font-size:11.5px; color:var(--danger); margin-top:2px;}
   .notice-warn{
     display:flex; gap:8px; align-items:flex-start;
     background:var(--warn-tint); border:1px solid color-mix(in srgb, var(--warn) 35%, transparent);
@@ -617,6 +625,57 @@
   }
   .notice-warn svg{width:15px; height:15px; color:var(--warn); flex:none; margin-top:1px;}
   .notice-warn p{font-size:11.5px; color:var(--text); line-height:1.6; margin:0;}
+
+  /* ===== 主机链（HostChainDialog / HostPickerDialog） ===== */
+  .chain-btn{
+    display:flex; align-items:center; justify-content:space-between; gap:8px;
+    width:100%; text-align:left; font:inherit; font-size:12.5px; font-weight:600; color:var(--text);
+    background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:8px 10px; cursor:pointer;
+  }
+  .chain-btn:hover{border-color:var(--faint); background:var(--raised);}
+  .chain-btn .chain-label{display:flex; align-items:center; gap:7px; min-width:0;}
+  .chain-btn .chain-label svg{width:14px; height:14px; color:var(--accent-strong); flex:none;}
+  .chain-btn .chain-label span{overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .chain-btn .chevron{color:var(--faint); flex:none; width:15px; height:15px;}
+
+  .chain-intro{font-size:12px; color:var(--muted); line-height:1.6; margin:0 0 14px;}
+  .chain-list{border:1px solid var(--border-soft); border-radius:10px; background:var(--surface); overflow:hidden;}
+  .chain-row{display:flex; align-items:center; gap:8px; padding:9px 10px; border-bottom:1px solid var(--border-soft); cursor:grab;}
+  .chain-row:last-child{border-bottom:0;}
+  .chain-row:hover{background:var(--raised);}
+  .chain-row.selected{background:var(--selection);}
+  .chain-row .grip{color:var(--faint); flex:none;}
+  .chain-row .grip svg{width:14px; height:14px;}
+  .chain-row .info{flex:1; min-width:0;}
+  .chain-row .info .nm{font-size:12.5px; font-weight:600; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .chain-row .info .addr{font-family:var(--font-mono); font-size:11px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  /* 编辑主机链主列表：抓手图标脱离文档流，改成绝对定位贴在卡片左边——这样"信息文字"
+     就是整行唯一的排版内容，text-align:center 才是相对整张卡片居中，而不是相对
+     "抓手让出空间之后剩下的区域"居中（那样会整体偏右一点点，肉眼可辨）。 */
+  .chain-list-center .chain-row{position:relative; justify-content:center;}
+  .chain-list-center .chain-row .grip{
+    position:absolute; left:10px; top:50%; transform:translateY(-50%);
+  }
+  .chain-list-center .chain-row .info{flex:none; text-align:center;}
+  .chain-arrow{display:flex; justify-content:center; padding:6px 0; color:var(--faint);}
+  .chain-arrow svg{width:16px; height:16px;}
+  .chain-target{
+    border:1.5px dashed color-mix(in srgb, var(--accent) 55%, transparent);
+    background:color-mix(in srgb, var(--accent) 8%, transparent);
+    border-radius:10px; padding:10px 12px; text-align:center;
+  }
+  .chain-target .tlabel{
+    font-size:10px; font-weight:700; letter-spacing:.06em; text-transform:uppercase;
+    color:var(--accent-strong); margin-bottom:3px;
+  }
+  .chain-target .addr{font-family:var(--font-mono); font-size:11px; color:var(--muted); margin-top:1px;}
+
+  .picker-search{position:relative; margin-bottom:10px;}
+  .picker-search svg{position:absolute; left:9px; top:50%; transform:translateY(-50%); width:13px; height:13px; color:var(--faint);}
+  .picker-search input{
+    width:100%; font:inherit; font-size:12.5px; background:var(--surface); border:1px solid var(--border);
+    border-radius:8px; padding:7px 9px 7px 28px; color:var(--text);
+  }
 </style>
 </head>
 <body>
@@ -626,6 +685,7 @@
   <div class="nav-pills">
     <a href="#host-manager">主机管理</a>
     <a href="#new-host">新建主机</a>
+    <a href="#hostchain">主机链</a>
     <a href="#new-group">新建分组</a>
     <a href="#vault">保险库</a>
     <a href="#productivity">效率工具</a>
@@ -805,15 +865,15 @@
           <p class="card-title">主机</p>
           <div class="field">
             <label>名称</label>
-            <input type="text" value="10.70.165.60" />
+            <div class="field-body"><input type="text" value="10.70.165.60" /></div>
           </div>
-          <div class="field-row">
-            <div class="field">
-              <label>主机地址</label>
-              <input type="text" value="10.70.165.60" />
-            </div>
-            <div class="field narrow">
-              <label>端口</label>
+          <div class="field">
+            <label>主机地址</label>
+            <div class="field-body"><input type="text" value="10.70.165.60" /></div>
+          </div>
+          <div class="field">
+            <label>端口</label>
+            <div class="field-body">
               <div class="stepper">
                 <button>−</button>
                 <input type="text" value="22" />
@@ -825,33 +885,49 @@
 
         <div class="card">
           <p class="card-title">认证与跳板</p>
-          <div class="field-row">
-            <div class="field">
-              <label>用户名</label>
-              <input type="text" placeholder="留空则继承父分组" />
-            </div>
+          <div class="field">
+            <label>用户名</label>
+            <div class="field-body"><input type="text" placeholder="登录账号" /></div>
           </div>
           <div class="field">
             <label>密码</label>
-            <input type="password" placeholder="仅用于本次连接；保存由保险库负责" />
+            <div class="field-body"><input type="password" placeholder="仅用于本次连接；保存由保险库负责" /></div>
           </div>
           <div class="field">
             <label>私钥文件</label>
-            <div class="with-btn">
-              <input type="text" placeholder="未选择文件" />
-              <button class="btn sm">浏览…</button>
+            <div class="field-body">
+              <div class="with-btn">
+                <input type="text" placeholder="未选择文件" />
+                <button class="btn sm">浏览…</button>
+              </div>
+            </div>
+          </div>
+          <div class="field">
+            <label>主机链</label>
+            <div class="field-body">
+              <div class="hint">选择主机管理中的已有主机作为跳板，也可以在链编辑器中新增主机。</div>
+              <button class="chain-btn">
+                <span class="chain-label">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>
+                  <span>主机链 · 经 192.168.1.79-中间件</span>
+                </span>
+                <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>
+              </button>
             </div>
           </div>
           <div class="field">
             <label>ProxyJump</label>
-            <input type="text" placeholder="逗号分隔；留空则继承父分组" />
+            <div class="field-body">
+              <input type="text" placeholder="逗号分隔的跳板地址" disabled style="opacity:.5;" />
+              <div class="hint">主机链非空时二选一生效，输入内容会清空上面的主机链。</div>
+            </div>
           </div>
           <div class="toggle-row">
             <div class="lbl"><span>加密保存到本地保险库</span></div>
             <div class="switch on"></div>
           </div>
           <div class="toggle-row">
-            <div class="lbl"><span>旧版兼容</span><small>仅为该主机允许 hmac-sha1（不继承）</small></div>
+            <div class="lbl"><span>旧版兼容</span><small>仅为该主机允许 hmac-sha1</small></div>
             <div class="switch"></div>
           </div>
         </div>
@@ -893,6 +969,113 @@
   </div>
 </section>
 
+<!-- ================= 主机链 ================= -->
+<section class="screen" id="hostchain">
+  <div class="screen-head">
+    <p class="eyebrow">Dialog · HostChainDialog / HostPickerDialog</p>
+    <h2>编辑主机链</h2>
+    <p>受管主机链和自由文本 ProxyJump 是两套互斥的路由表达（同时启用会跳两次），因此编辑器里刻意不做"文本框 + 逗号分隔"，改成可拖拽排序的跳板列表 + 固定不可编辑的目标主机卡片，让"经过谁、最后到哪"在结构上就分得清楚，不需要解析一行文本。</p>
+  </div>
+  <div class="stage-wrap">
+    <div class="dialog" style="width:420px;">
+      <div class="dialog-head">
+        <div>
+          <div class="title">编辑主机链</div>
+        </div>
+        <button class="icon-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg></button>
+      </div>
+      <div class="dialog-body">
+        <p class="chain-intro">添加的主机将按下列顺序建立连接，最后进入 <b style="color:var(--text); font-family:var(--font-mono); font-weight:600;">root@192.168.1.27:52231</b>。</p>
+
+        <button class="btn primary sm" style="width:100%; justify-content:center; margin-bottom:12px;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          添加主机
+        </button>
+
+        <div class="chain-list chain-list-center">
+          <div class="chain-row selected">
+            <span class="grip">
+              <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="8" cy="6" r="1.4"/><circle cx="8" cy="12" r="1.4"/><circle cx="8" cy="18" r="1.4"/><circle cx="16" cy="6" r="1.4"/><circle cx="16" cy="12" r="1.4"/><circle cx="16" cy="18" r="1.4"/></svg>
+            </span>
+            <div class="info">
+              <div class="nm">192.168.1.79-中间件</div>
+              <div class="addr">root@115.159.35.31:3822</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="chain-arrow">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="6 13 12 19 18 13"/></svg>
+        </div>
+
+        <div class="chain-target">
+          <div class="tlabel">目标主机</div>
+          <div class="addr">root@192.168.1.27:52231</div>
+        </div>
+      </div>
+      <div class="dialog-foot">
+        <button class="btn sm danger-ghost">从链路移除</button>
+        <div class="spacer"></div>
+        <button class="btn">取消</button>
+        <button class="btn primary">保存</button>
+      </div>
+    </div>
+
+    <div class="dialog" style="width:300px;">
+      <div class="dialog-head">
+        <div>
+          <div class="title">选择跳板机</div>
+          <div class="sub">选择已有主机</div>
+        </div>
+      </div>
+      <div class="dialog-body">
+        <div class="picker-search">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input placeholder="搜索名称、地址或账号" />
+        </div>
+        <div class="chain-list">
+          <div class="chain-row" style="cursor:pointer;">
+            <div class="info">
+              <div class="nm">预发布</div>
+              <div class="addr">root@10.194.135.11:22</div>
+            </div>
+          </div>
+          <div class="chain-row selected" style="cursor:pointer;">
+            <div class="info">
+              <div class="nm">192.168.1.79-中间件</div>
+              <div class="addr">root@115.159.35.31:3822</div>
+            </div>
+          </div>
+          <div class="chain-row" style="cursor:pointer;">
+            <div class="info">
+              <div class="nm">10.70.165.50</div>
+              <div class="addr">geoadmin@10.70.165.50:22022</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="dialog-foot">
+        <button class="btn sm">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          新建主机
+        </button>
+        <div class="spacer"></div>
+        <button class="btn sm primary">选择</button>
+      </div>
+    </div>
+
+    <div class="caption">
+      <b>要点</b>
+      <ul>
+        <li>拖拽手柄（六个圆点）只出现在链路中的跳板行上——目标主机卡片用虚线描边和"目标主机"小标签明确标出"这一项不能拖、不能删、不属于列表"，避免用户对着它找不到抓取点而困惑。</li>
+        <li>"添加主机"打开的是一个独立的轻量选择器（"选择跳板机"），复用主机管理里已经保存的主机，而不是重新填一遍地址/账号/端口；同一个选择器里也留了"新建主机"入口，两条路径最终都汇入同一个列表。</li>
+        <li>"从链路移除"只对列表里当前选中的跳板行生效，永远不会碰目标主机——按钮默认置灰，选中一行后才可用，避免"删除"这个危险动作在没有明确选中目标时被误触发。</li>
+        <li>主机配置对话框里的 ProxyJump 文本框在主机链非空时置灰，两者互斥而不是同时生效——避免用户以为两边都在起作用，实际却被系统悄悄按主机链优先级忽略掉其中一个。</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
 <!-- ================= 新建分组 ================= -->
 <section class="screen" id="new-group">
   <div class="screen-head">
@@ -914,7 +1097,7 @@
           <p class="card-title">分组</p>
           <div class="field">
             <label>名称</label>
-            <input type="text" placeholder="例如：华东机房" />
+            <div class="field-body"><input type="text" placeholder="例如：华东机房" /></div>
           </div>
         </div>
       </div>
@@ -958,7 +1141,7 @@
         <div class="card">
           <div class="field">
             <label>主密码</label>
-            <input type="password" placeholder="输入主密码" value="••••" />
+            <div class="field-body"><input type="password" placeholder="输入主密码" value="••••" /></div>
           </div>
         </div>
       </div>
@@ -983,13 +1166,13 @@
         <p class="vault-card-title">创建保险库</p>
         <p class="vault-note">请设置主密码。Shellium 使用 Argon2id 派生密钥，并以 XChaCha20-Poly1305 加密保存的 SSH 凭据。</p>
         <div class="card">
-          <div class="field" style="margin-bottom:11px;">
+          <div class="field">
             <label>主密码</label>
-            <input type="password" placeholder="至少 8 个字符" />
+            <div class="field-body"><input type="password" placeholder="至少 8 个字符" /></div>
           </div>
           <div class="field">
             <label>确认主密码</label>
-            <input type="password" placeholder="再次输入以确认" />
+            <div class="field-body"><input type="password" placeholder="再次输入以确认" /></div>
           </div>
           <div class="notice-warn" style="margin-top:12px;">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
@@ -1010,8 +1193,10 @@
           <div class="card">
             <div class="field has-error">
               <label>主密码</label>
-              <input type="password" placeholder="输入主密码" />
-              <div class="field-error">无法解锁保险库：主密码不正确。</div>
+              <div class="field-body">
+                <input type="password" placeholder="输入主密码" />
+                <div class="field-error">无法解锁保险库：主密码不正确。</div>
+              </div>
             </div>
           </div>
         </div>
@@ -1225,19 +1410,32 @@
     </div>
 
     <div class="msg-stack">
-      <div class="card" style="width:280px;">
+      <div class="card" style="width:340px;">
         <p class="card-title">新建端口转发（独立弹窗，不受侧栏宽度限制）</p>
-        <div class="field"><label>名称</label><input type="text" value="数据库隧道" /></div>
-        <div class="field"><label>类型</label>
-          <select><option>本地转发 (-L)</option><option>远程转发 (-R)</option><option>动态 SOCKS5 (-D)</option></select>
+        <div class="field"><label>名称</label><div class="field-body"><input type="text" value="数据库隧道" /></div></div>
+        <div class="field">
+          <label>类型</label>
+          <div class="field-body"><select><option>本地转发 (-L)</option><option>远程转发 (-R)</option><option>动态 SOCKS5 (-D)</option></select></div>
         </div>
-        <div class="field-row">
-          <div class="field"><label>监听地址</label><input type="text" value="127.0.0.1" /></div>
-          <div class="field narrow"><label>监听端口</label><input type="text" value="3307" /></div>
+        <div class="field">
+          <label>监听</label>
+          <div class="field-body">
+            <div class="field-compound">
+              <input type="text" value="127.0.0.1" />
+              <span class="sep">:</span>
+              <input type="text" class="narrow" value="3307" />
+            </div>
+          </div>
         </div>
-        <div class="field-row">
-          <div class="field"><label>目标地址</label><input type="text" value="10.70.165.52" /></div>
-          <div class="field narrow"><label>目标端口</label><input type="text" value="3306" /></div>
+        <div class="field">
+          <label>目标</label>
+          <div class="field-body">
+            <div class="field-compound">
+              <input type="text" value="10.70.165.52" />
+              <span class="sep">:</span>
+              <input type="text" class="narrow" value="3306" />
+            </div>
+          </div>
         </div>
         <div class="toggle-row">
           <div class="lbl"><span>根 SSH 连接成功后自动启动</span></div>
@@ -1643,5 +1841,6 @@
     event.target.classList.add('active');
   }
 </script>
+
 </body>
 </html>

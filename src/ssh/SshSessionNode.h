@@ -104,6 +104,14 @@ class SshSessionNode final {
 
 public:
     /**
+     * @brief 当前认证会话在连接链中的职责。
+     *
+     * Transit 只完成 SSH 认证并提供 direct-tcpip/exec 中继，不申请 PTY 或远端 Shell。
+     * 这既减少跳板机资源占用，也兼容明确禁止交互登录、但允许端口转发的堡垒机账号。
+     */
+    enum class Role { Interactive, Transit };
+
+    /**
      * @brief 一次状态推进的结构化结果。
      *
      * pending 为 true 表示本轮没有产生结论，调用方稍后应再次推进。hostKeyUnknown 与
@@ -131,7 +139,7 @@ public:
      * @brief 构造一层，但不发起任何网络操作。
      * @param target 该层的服务器配置；password 只在本对象生命周期内驻留内存。
      */
-    explicit SshSessionNode(ConnectionTarget target);
+    explicit SshSessionNode(ConnectionTarget target, Role role = Role::Interactive);
     ~SshSessionNode();
 
     SshSessionNode(const SshSessionNode &) = delete;
@@ -454,6 +462,12 @@ private:
     /** @brief 依次尝试 none、公钥/Agent、密码认证；每次调用最多推进一个方法一步。 */
     StepResult advanceAuthenticating();
 
+    /**
+     * @brief 统一处理认证成功后的角色分流。
+     * @return 中转层直接返回成功；交互层进入 Shell 通道建立阶段并返回 pending。
+     */
+    StepResult authenticationSucceeded();
+
     /** @brief 对照 known_hosts 校验服务器公钥，决定进入认证还是等待用户核验。 */
     StepResult evaluateHostKey();
 
@@ -476,6 +490,8 @@ private:
     static void discardPending(PendingForward &pending);
 
     ConnectionTarget m_target;
+    /** @brief 该层是最终交互会话还是仅承担受管链传输。 */
+    Role m_role = Role::Interactive;
 
     /** @brief 外层 Shell 中是否有一个 shim 因本层而挂起，等待本层结束后放行。 */
     bool m_outerShimSuspended = false;

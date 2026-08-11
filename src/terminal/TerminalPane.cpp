@@ -282,14 +282,22 @@ TerminalPane::~TerminalPane()
 
 void TerminalPane::connectToHost(const ConnectionTarget &target)
 {
-    if (!target.isValid()) {
+    connectToHosts(QList<ConnectionTarget>{target});
+}
+
+void TerminalPane::connectToHosts(const QList<ConnectionTarget> &connectionPlan)
+{
+    if (connectionPlan.isEmpty() || !connectionPlan.constLast().isValid()) {
         return;
     }
+    const ConnectionTarget target = connectionPlan.constLast();
     if (!m_automaticReconnectInvocation) {
         // 菜单、主机树或工作区发起的新连接代表用户改变意图，必须取消旧异常恢复周期。
         m_reconnectCycleActive = false;
         m_reconnectAttempts = 0;
         ++m_reconnectToken;
+        // 用户主动连接时替换整条计划；自动重连调用则保留原快照，防止中途只剩最终目标。
+        m_connectionPlan = connectionPlan;
     }
     // 在停止旧工作线程前先推进代次，保证旧线程随后发出的 shellDisconnected 被识别为
     // 过期事件，不能中断这次新连接。
@@ -312,7 +320,7 @@ void TerminalPane::connectToHost(const ConnectionTarget &target)
     m_terminalView->appendTerminalOutput(
         tr("正在连接 %1…\r\n").arg(target.connectionSpecifier()).toUtf8());
 
-    m_sessionStack = new SshSessionStack(target, this);
+    m_sessionStack = new SshSessionStack(connectionPlan, true, this);
     connect(m_sessionStack,
             &SshSessionStack::outputReady,
             this,
@@ -491,7 +499,7 @@ void TerminalPane::connectToHost(const ConnectionTarget &target)
     connect(m_sessionStack,
             &SshSessionStack::legacyHmacRequired,
             this,
-            [this, target, sessionGeneration](const QString &error) {
+            [this, target, connectionPlan, sessionGeneration](const QString &error) {
         if (sessionGeneration != m_sessionGeneration) {
             return;
         }
@@ -505,12 +513,14 @@ void TerminalPane::connectToHost(const ConnectionTarget &target)
             QMessageBox::Yes | QMessageBox::No,
             QMessageBox::No);
         if (answer == QMessageBox::Yes) {
-            ConnectionTarget compatibleTarget = target;
-            compatibleTarget.allowLegacyHmacSha1 = true;
+            QList<ConnectionTarget> compatiblePlan = connectionPlan;
+            // libssh 的协商错误信号目前不携带具体层；最终层是用户确认兼容的业务目标。若是
+            // 中间跳板需要旧算法，错误文本仍会明确该节点，用户应编辑对应主机长期配置。
+            compatiblePlan.last().allowLegacyHmacSha1 = true;
             // 当前槽由工作线程结束信号排队触发；延迟重连可让旧线程先完整退出并释放 libssh 句柄。
-            QTimer::singleShot(0, this, [this, compatibleTarget, sessionGeneration]() {
+            QTimer::singleShot(0, this, [this, compatiblePlan, sessionGeneration]() {
                 if (sessionGeneration == m_sessionGeneration) {
-                    connectToHost(compatibleTarget);
+                    connectToHosts(compatiblePlan);
                 }
             });
         } else {
@@ -602,7 +612,14 @@ QList<ConnectionTarget> TerminalPane::targets() const
 {
     // 自持层在下、推测层在上：这正是用户看到的外层→内层顺序，也保证文件管理器"跟随最内层"
     // 时选中的是当前终端实际所在的那一层。
-    QList<ConnectionTarget> combined = m_ownedTargets.toList();
+    QList<ConnectionTarget> combined;
+    for (const ConnectionTarget &target : m_ownedTargets) {
+        // 受管跳板层只承担传输，不是用户终端实际所在的服务器。隐藏它们可避免文件管理器
+        // 自动选择公网跳板并把上传、删除等操作发往错误主机；完整层仍保留在内部用于路由。
+        if (!target.transit) {
+            combined.append(target);
+        }
+    }
     combined.append(m_inferredTargets.toList());
     return combined;
 }
@@ -817,7 +834,9 @@ bool TerminalPane::scheduleAutomaticReconnect(const ConnectionTarget &target,
         // 该标志只覆盖同步的 connectToHost 设置阶段；真正网络连接随后异步运行。这样内部调用
         // 不会清空恢复次数，而用户从菜单发起的新连接仍会取消本周期。
         m_automaticReconnectInvocation = true;
-        connectToHost(target);
+        connectToHosts(m_connectionPlan.isEmpty()
+                           ? QList<ConnectionTarget>{target}
+                           : m_connectionPlan);
         m_automaticReconnectInvocation = false;
     });
     return true;

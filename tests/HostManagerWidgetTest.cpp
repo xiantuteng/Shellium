@@ -7,7 +7,9 @@
 #include <QAbstractButton>
 #include <QApplication>
 #include <QColor>
+#include <QDialog>
 #include <QFileIconProvider>
+#include <QFrame>
 #include <QImage>
 #include <QLabel>
 #include <QLayout>
@@ -50,11 +52,17 @@ private slots:
     /** @brief 分组配置窗口只能保留名称字段，且页脚按钮必须带语义图标。 */
     void groupDialogHasNoStrayWidgets();
 
-    /** @brief 主机配置字段顺序、移除项、左下角测试按钮和按钮图标必须符合新版交互。 */
+    /** @brief 主机配置字段顺序、ProxyJump 高级入口、页脚和按钮图标必须符合新版交互。 */
     void hostDialogUsesRequestedFieldOrderAndIcons();
+
+    /** @brief 编辑已有 ProxyJump 时必须自动展开并明确提示，避免兼容路由被视觉弱化后隐身。 */
+    void configuredProxyJumpRemainsVisibleWhenEditing();
 
     /** @brief 名称为空时应根据账号、地址和端口自动命名，且不得覆盖人工名称。 */
     void emptyHostNameFollowsConnectionFieldsUntilManuallyEdited();
+
+    /** @brief 主机链编辑器应能选择已有主机，并能现场新建主机后自动加入当前链路。 */
+    void hostChainEditorCreatesAndSelectsManagedJumpHost();
 
     /** @brief 顶层节点顶格、分组下的主机右缩进，二者不能再被分支装饰列推乱。 */
     void topLevelNodesShareLeftEdgeAndChildHostsIndent();
@@ -356,20 +364,34 @@ void HostManagerWidgetTest::hostDialogUsesRequestedFieldOrderAndIcons()
             QStringLiteral("hostIdentityEdit"));
         const auto *proxyJumps = dialog->findChild<QLineEdit *>(
             QStringLiteral("hostProxyJumpsEdit"));
+        auto *advancedSettings = dialog->findChild<QToolButton *>(
+            QStringLiteral("hostAdvancedSettingsButton"));
         if (failure.isEmpty()
             && (username == nullptr || password == nullptr || identity == nullptr
-                || proxyJumps == nullptr)) {
+                || proxyJumps == nullptr || advancedSettings == nullptr)) {
             failure = QStringLiteral("主机配置缺少认证与跳板字段");
         }
         if (failure.isEmpty()) {
             const int usernameTop = username->mapTo(dialog, QPoint{}).y();
             const int passwordTop = password->mapTo(dialog, QPoint{}).y();
             const int identityTop = identity->mapTo(dialog, QPoint{}).y();
-            const int proxyTop = proxyJumps->mapTo(dialog, QPoint{}).y();
+            const int advancedTop = advancedSettings->mapTo(dialog, QPoint{}).y();
             if (!(usernameTop < passwordTop && passwordTop < identityTop
-                  && identityTop < proxyTop)) {
+                  && identityTop < advancedTop)) {
                 failure = QStringLiteral(
-                    "认证字段未按用户名、密码、私钥文件、ProxyJump 的顺序排列");
+                    "认证字段未按用户名、密码、私钥文件、高级设置的顺序排列");
+            }
+        }
+        // 全新主机不应直接暴露自由文本 ProxyJump；点击高级入口后必须显示原输入框，确保
+        // 兼容能力只是降低视觉优先级而非被删除。
+        if (failure.isEmpty() && proxyJumps->isVisible()) {
+            failure = QStringLiteral("全新主机默认展开了 ProxyJump 高级字段");
+        }
+        if (failure.isEmpty()) {
+            advancedSettings->click();
+            if (!proxyJumps->isVisible()
+                || advancedSettings->arrowType() != Qt::DownArrow) {
+                failure = QStringLiteral("ProxyJump 高级入口无法正常展开");
             }
         }
 
@@ -400,6 +422,51 @@ void HostManagerWidgetTest::hostDialogUsesRequestedFieldOrderAndIcons()
     });
 
     addHostButton->click();
+    QVERIFY2(failure.isEmpty(), qPrintable(failure));
+}
+
+void HostManagerWidgetTest::configuredProxyJumpRemainsVisibleWhenEditing()
+{
+    QString error;
+    HostRecord host;
+    host.id = QStringLiteral("manual-proxy-host");
+    host.kind = HostNodeKind::Host;
+    host.name = QStringLiteral("兼容跳板目标");
+    host.host = QStringLiteral("private.example.com");
+    host.proxyJumps = {QStringLiteral("ops@edge.example.com:2200")};
+    QVERIFY2(m_database->saveHost(host, &error), qPrintable(error));
+
+    HostManagerWidget widget(m_database.get(), m_vault.get());
+    auto *tree = widget.findChild<QTreeWidget *>();
+    QTreeWidgetItem *hostItem = findItem(widget, host.name);
+    QVERIFY(tree != nullptr);
+    QVERIFY(hostItem != nullptr);
+    tree->setCurrentItem(hostItem);
+
+    QString failure;
+    QTimer::singleShot(0, [&failure]() {
+        auto *dialog = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+        auto *advancedSettings = dialog == nullptr
+            ? nullptr
+            : dialog->findChild<QToolButton *>(
+                  QStringLiteral("hostAdvancedSettingsButton"));
+        auto *proxyJumps = dialog == nullptr
+            ? nullptr
+            : dialog->findChild<QLineEdit *>(QStringLiteral("hostProxyJumpsEdit"));
+        if (dialog == nullptr || advancedSettings == nullptr || proxyJumps == nullptr) {
+            failure = QStringLiteral("已有主机的 ProxyJump 高级控件不完整");
+        } else if (!advancedSettings->isChecked() || !proxyJumps->isVisible()
+                   || !advancedSettings->text().contains(QStringLiteral("已配置"))) {
+            // 既有路由必须在打开窗口时主动显露；否则用户可能误以为当前目标是直连并保存
+            // 其他改动，给连接排障和安全审计带来歧义。
+            failure = QStringLiteral("已有 ProxyJump 未自动展开或缺少已配置提示");
+        }
+        if (dialog != nullptr) {
+            dialog->reject();
+        }
+    });
+
+    widget.editSelected();
     QVERIFY2(failure.isEmpty(), qPrintable(failure));
 }
 
@@ -477,6 +544,191 @@ void HostManagerWidgetTest::emptyHostNameFollowsConnectionFieldsUntilManuallyEdi
 
     addHostButton->click();
     QVERIFY2(failure.isEmpty(), qPrintable(failure));
+}
+
+void HostManagerWidgetTest::hostChainEditorCreatesAndSelectsManagedJumpHost()
+{
+    QString error;
+    HostRecord existingJump;
+    existingJump.id = QStringLiteral("existing-jump");
+    existingJump.kind = HostNodeKind::Host;
+    existingJump.name = QStringLiteral("已有跳板机");
+    existingJump.host = QStringLiteral("edge.example.com");
+    QVERIFY2(m_database->saveHost(existingJump, &error), qPrintable(error));
+
+    HostRecord target;
+    target.id = QStringLiteral("managed-target");
+    target.kind = HostNodeKind::Host;
+    target.name = QStringLiteral("内网数据库");
+    target.host = QStringLiteral("10.20.3.15");
+    QVERIFY2(m_database->saveHost(target, &error), qPrintable(error));
+
+    HostManagerWidget widget(m_database.get(), m_vault.get());
+    QTreeWidgetItem *targetItem = findItem(widget, target.name);
+    QVERIFY(targetItem != nullptr);
+    auto *tree = widget.findChild<QTreeWidget *>();
+    QVERIFY(tree != nullptr);
+    tree->setCurrentItem(targetItem);
+
+    QString failure;
+    QTimer::singleShot(0, [&failure]() {
+        auto *hostDialog = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+        if (hostDialog == nullptr) {
+            failure = QStringLiteral("没有打开主机配置窗口");
+            return;
+        }
+        auto *chainButton = hostDialog->findChild<QPushButton *>(
+            QStringLiteral("hostChainButton"));
+        if (chainButton == nullptr) {
+            failure = QStringLiteral("主机配置缺少主机链入口");
+            hostDialog->reject();
+            return;
+        }
+
+        QTimer::singleShot(0, [&failure]() {
+            auto *chainDialog = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+            if (chainDialog == nullptr
+                || chainDialog->objectName() != QStringLiteral("HostChainDialog")) {
+                failure = QStringLiteral("没有打开独立主机链编辑器");
+                return;
+            }
+            auto *addButton = chainDialog->findChild<QPushButton *>(
+                QStringLiteral("hostChainAddButton"));
+            auto *chainList = chainDialog->findChild<QListWidget *>(
+                QStringLiteral("hostChainList"));
+            auto *targetCard = chainDialog->findChild<QFrame *>(
+                QStringLiteral("hostChainTargetCard"));
+            auto *removeButton = chainDialog->findChild<QPushButton *>(
+                QStringLiteral("hostChainRemoveButton"));
+            auto *footer = chainDialog->findChild<QWidget *>(
+                QStringLiteral("HostChainFooter"));
+            if (addButton == nullptr || chainList == nullptr || targetCard == nullptr
+                || removeButton == nullptr || footer == nullptr) {
+                failure = QStringLiteral("主机链编辑器缺少添加、列表、目标卡片或页脚结构");
+                chainDialog->reject();
+                return;
+            }
+            // 目标主机必须位于 QListWidget 外，才能从结构上保证它不可拖动、不可删除；空链
+            // 默认不选中任何跳板，危险移除动作也必须保持禁用。
+            if (chainList->isAncestorOf(targetCard) || removeButton->isEnabled()
+                || !addButton->property("primaryAction").toBool()) {
+                failure = QStringLiteral("目标主机或危险移除动作未遵守参考界面的结构边界");
+                chainDialog->reject();
+                return;
+            }
+
+            QTimer::singleShot(0, [&failure]() {
+                auto *picker = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+                if (picker == nullptr
+                    || picker->objectName() != QStringLiteral("HostPickerDialog")) {
+                    failure = QStringLiteral("没有打开已有主机选择器");
+                    return;
+                }
+                auto *candidates = picker->findChild<QListWidget *>(
+                    QStringLiteral("hostChainCandidateList"));
+                auto *createButton = picker->findChild<QPushButton *>(
+                    QStringLiteral("hostChainCreateHostButton"));
+                auto *searchEdit = picker->findChild<QLineEdit *>(
+                    QStringLiteral("hostChainSearchEdit"));
+                auto *pickerFooter = picker->findChild<QWidget *>(
+                    QStringLiteral("HostPickerFooter"));
+                if (candidates == nullptr || candidates->count() != 1
+                    || !candidates->item(0)->text().contains(QStringLiteral("已有跳板机"))) {
+                    failure = QStringLiteral("已有主机没有作为可选跳板出现，或目标主机未被排除");
+                    picker->reject();
+                    return;
+                }
+                if (createButton == nullptr) {
+                    failure = QStringLiteral("选择器缺少新建主机入口");
+                    picker->reject();
+                    return;
+                }
+                if (searchEdit == nullptr || searchEdit->actions().isEmpty()
+                    || pickerFooter == nullptr
+                    || candidates->item(0)->sizeHint().height() != 62) {
+                    failure = QStringLiteral("跳板机选择器缺少带图标搜索、卡片列表或独立页脚");
+                    picker->reject();
+                    return;
+                }
+
+                // 点击“新建主机”会先关闭选择器，随后由链编辑器打开完整主机配置窗口；提前
+                // 排队处理器才能跨越两个嵌套 exec()，真实覆盖“保存后自动加入”的流程。
+                QTimer::singleShot(0, [&failure]() {
+                    auto *newHostDialog = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+                    if (newHostDialog == nullptr
+                        || newHostDialog->objectName() != QStringLiteral("ConnectionDialog")) {
+                        failure = QStringLiteral("新建跳板机没有复用完整主机配置窗口");
+                        return;
+                    }
+                    auto *name = newHostDialog->findChild<QLineEdit *>(
+                        QStringLiteral("hostRecordNameEdit"));
+                    auto *address = newHostDialog->findChild<QLineEdit *>(
+                        QStringLiteral("hostAddressEdit"));
+                    auto *save = newHostDialog->findChild<QPushButton *>(
+                        QStringLiteral("hostRecordSaveButton"));
+                    if (name == nullptr || address == nullptr || save == nullptr) {
+                        failure = QStringLiteral("新建跳板机窗口字段不完整");
+                        newHostDialog->reject();
+                        return;
+                    }
+                    address->setText(QStringLiteral("198.51.100.8"));
+                    name->selectAll();
+                    QTest::keyClicks(name, "On-demand jump");
+                    save->click();
+                });
+                createButton->click();
+            });
+            addButton->click();
+
+            if (failure.isEmpty()
+                && (chainList == nullptr || chainList->count() != 1
+                    || !chainList->item(0)->text().contains(QStringLiteral("On-demand jump")))) {
+                failure = QStringLiteral("现场新建的主机没有自动加入当前链路");
+            }
+            if (failure.isEmpty()) {
+                const QListWidgetItem *jumpItem = chainList->item(0);
+                if ((jumpItem->flags() & Qt::ItemIsDragEnabled) == 0
+                    || jumpItem->sizeHint().height() != 68) {
+                    failure = QStringLiteral("主机链跳板卡片不可拖拽或未使用参考行高");
+                } else {
+                    // 只有明确选中可拖拽跳板行后才允许移除；目标卡片不在列表中，因此永远
+                    // 无法通过这个状态门成为删除目标。
+                    chainList->setCurrentRow(0);
+                    if (!removeButton->isEnabled()) {
+                        failure = QStringLiteral("选中跳板卡片后移除动作仍未启用");
+                    }
+                }
+            }
+            auto *saveChain = chainDialog->findChild<QPushButton *>(
+                QStringLiteral("hostChainSaveButton"));
+            if (failure.isEmpty() && saveChain != nullptr) {
+                saveChain->click();
+            } else {
+                chainDialog->reject();
+            }
+        });
+        chainButton->click();
+
+        auto *saveHost = hostDialog->findChild<QPushButton *>(
+            QStringLiteral("hostRecordSaveButton"));
+        if (failure.isEmpty() && saveHost != nullptr) {
+            saveHost->click();
+        } else {
+            hostDialog->reject();
+        }
+    });
+
+    widget.editSelected();
+    QVERIFY2(failure.isEmpty(), qPrintable(failure));
+
+    const std::optional<HostRecord> savedTarget = m_database->findHost(target.id, &error);
+    QVERIFY2(savedTarget.has_value(), qPrintable(error));
+    QCOMPARE(savedTarget->hostChain.size(), 1);
+    const std::optional<HostRecord> createdJump =
+        m_database->findHost(savedTarget->hostChain.constFirst(), &error);
+    QVERIFY2(createdJump.has_value(), "链路引用的新建跳板机没有独立保存到主机管理");
+    QCOMPARE(createdJump->name, QStringLiteral("On-demand jump"));
+    QCOMPARE(createdJump->host, QStringLiteral("198.51.100.8"));
 }
 
 namespace {

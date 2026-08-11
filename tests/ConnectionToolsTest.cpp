@@ -180,6 +180,11 @@ void ConnectionToolsTest::jsonCodecOmitsCredentialsAndPersistsWithNewIds()
     group.id = QStringLiteral("export-group");
     group.kind = HostNodeKind::Folder;
     group.name = QStringLiteral("生产环境");
+    HostRecord jump;
+    jump.id = QStringLiteral("export-jump");
+    jump.parentId = group.id;
+    jump.name = QStringLiteral("生产跳板机");
+    jump.host = QStringLiteral("edge.example.com");
     HostRecord host;
     host.id = QStringLiteral("export-host");
     host.parentId = group.id;
@@ -189,9 +194,10 @@ void ConnectionToolsTest::jsonCodecOmitsCredentialsAndPersistsWithNewIds()
     host.port = 2200;
     host.credentialId = QStringLiteral("must-not-be-exported");
     host.proxyJumps = {QStringLiteral("edge@example.com")};
+    host.hostChain = {jump.id};
 
     QString error;
-    const QByteArray json = ConnectionConfigCodec::exportJson({group, host}, &error);
+    const QByteArray json = ConnectionConfigCodec::exportJson({group, jump, host}, &error);
     QVERIFY2(!json.isEmpty(), qPrintable(error));
     QVERIFY(!json.contains("credentialId"));
     QVERIFY(!json.contains("must-not-be-exported"));
@@ -199,8 +205,9 @@ void ConnectionToolsTest::jsonCodecOmitsCredentialsAndPersistsWithNewIds()
 
     QList<HostRecord> imported;
     QVERIFY2(ConnectionConfigCodec::importJson(json, &imported, &error), qPrintable(error));
-    QCOMPARE(imported.size(), 2);
-    QVERIFY(imported.at(1).credentialId.isEmpty());
+    QCOMPARE(imported.size(), 3);
+    QVERIFY(imported.at(2).credentialId.isEmpty());
+    QCOMPARE(imported.at(2).hostChain, QStringList{jump.id});
 
     ApplicationDatabase database(ApplicationDatabase::inMemoryPath());
     QVERIFY2(database.initialize(&error), qPrintable(error));
@@ -212,9 +219,21 @@ void ConnectionToolsTest::jsonCodecOmitsCredentialsAndPersistsWithNewIds()
     QVERIFY(roots.first().id != group.id);
     const QList<HostRecord> children = database.listHostsInGroup(roots.first().id, &ok, &error);
     QVERIFY2(ok, qPrintable(error));
-    QCOMPARE(children.size(), 1);
-    QVERIFY(children.first().id != host.id);
-    QVERIFY(children.first().credentialId.isEmpty());
+    QCOMPARE(children.size(), 2);
+    QString importedJumpId;
+    QString importedTargetId;
+    for (const HostRecord &child : children) {
+        if (child.name == jump.name) {
+            importedJumpId = child.id;
+        } else if (child.name == host.name) {
+            importedTargetId = child.id;
+            QVERIFY(child.credentialId.isEmpty());
+        }
+    }
+    QVERIFY(!importedJumpId.isEmpty());
+    QVERIFY(!importedTargetId.isEmpty());
+    QCOMPARE(database.findHost(importedTargetId, &error)->hostChain,
+             QStringList{importedJumpId});
 
     const QByteArray malicious = QByteArrayLiteral(
         R"({"format":"shellium-hosts","version":1,"hosts":[],"password":"leak"})");

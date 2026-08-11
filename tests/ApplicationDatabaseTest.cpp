@@ -41,6 +41,15 @@ private slots:
     /** @brief 未设置字段沿父分组链继承，已设置字段永远优先。 */
     void resolveHostInheritsFromAncestors();
 
+    /** @brief 受管主机链必须按顺序往返，并递归展开为可直接建立的连接计划。 */
+    void managedHostChainRoundTripsAndResolvesInOrder();
+
+    /** @brief 主机链必须拒绝自身引用、重复节点、分组节点、缺失引用和跨主机环路。 */
+    void managedHostChainRejectsInvalidGraphs();
+
+    /** @brief 正被连接链引用的跳板机不得被删除，避免目标静默退化为危险的本机直连。 */
+    void referencedJumpHostCannotBeDeleted();
+
     /** @brief 删除分组级联删除子节点；删除不存在的 id 不算失败。 */
     void removeHostCascadesAndReportsMissing();
 
@@ -121,12 +130,18 @@ void ApplicationDatabaseTest::hostRoundTripPreservesEveryField()
     host.identityFile = QStringLiteral("/home/deploy/.ssh/id_ed25519");
     host.tags = QStringList{QStringLiteral("db"), QStringLiteral("prod")};
     host.proxyJumps = QStringList{QStringLiteral("bastion@edge:2200")};
+    host.hostChain = QStringList{QStringLiteral("jump-managed")};
     host.allowLegacyHmacSha1 = true;
     host.sortOrder = 7;
     host.createdAt = QDateTime::fromString(QStringLiteral("2026-01-02T03:04:05.678Z"),
                                            Qt::ISODateWithMs);
     host.updatedAt = QDateTime::fromString(QStringLiteral("2026-02-03T04:05:06.789Z"),
                                            Qt::ISODateWithMs);
+    // 受管链使用真实外键，必须先保存被引用的跳板机。
+    HostRecord managedJump = makeHost(QStringLiteral("jump-managed"),
+                                      QStringLiteral("受管跳板机"),
+                                      QStringLiteral("edge.example"));
+    QVERIFY2(m_database->saveHost(managedJump, &error), qPrintable(error));
     QVERIFY2(m_database->saveHost(host, &error), qPrintable(error));
 
     const std::optional<HostRecord> loaded = m_database->findHost(host.id, &error);
@@ -141,6 +156,7 @@ void ApplicationDatabaseTest::hostRoundTripPreservesEveryField()
     QCOMPARE(loaded->identityFile, host.identityFile);
     QCOMPARE(loaded->tags, host.tags);
     QCOMPARE(loaded->proxyJumps, host.proxyJumps);
+    QCOMPARE(loaded->hostChain, host.hostChain);
     QCOMPARE(loaded->allowLegacyHmacSha1, true);
     QCOMPARE(loaded->sortOrder, 7);
     QCOMPARE(loaded->createdAt, host.createdAt);
@@ -334,6 +350,106 @@ void ApplicationDatabaseTest::resolveHostInheritsFromAncestors()
     QCOMPARE(target.port, quint16{2200});
     QCOMPARE(target.username, QStringLiteral("builder"));
     QVERIFY(target.password.isEmpty());
+}
+
+void ApplicationDatabaseTest::managedHostChainRoundTripsAndResolvesInOrder()
+{
+    QString error;
+    HostRecord edge = makeHost(QStringLiteral("edge"), QStringLiteral("公网入口"),
+                               QStringLiteral("edge.example"));
+    edge.username = QStringLiteral("edge-user");
+    QVERIFY2(m_database->saveHost(edge, &error), qPrintable(error));
+
+    HostRecord bastion = makeHost(QStringLiteral("bastion"), QStringLiteral("业务跳板机"),
+                                  QStringLiteral("10.0.0.10"));
+    bastion.username = QStringLiteral("ops");
+    // 跳板机自己也需要经过公网入口；目标引用它时解析器应展开为同一条可见的实际路径。
+    bastion.hostChain = {edge.id};
+    QVERIFY2(m_database->saveHost(bastion, &error), qPrintable(error));
+
+    HostRecord target = makeHost(QStringLiteral("target"), QStringLiteral("订单数据库"),
+                                 QStringLiteral("10.20.3.15"));
+    target.username = QStringLiteral("dba");
+    target.hostChain = {bastion.id};
+    QVERIFY2(m_database->saveHost(target, &error), qPrintable(error));
+
+    const std::optional<HostRecord> reloaded = m_database->findHost(target.id, &error);
+    QVERIFY2(reloaded.has_value(), qPrintable(error));
+    QCOMPARE(reloaded->hostChain, QStringList{bastion.id});
+
+    const QList<HostRecord> plan = m_database->resolveConnectionChain(target.id, &error);
+    QVERIFY2(!plan.isEmpty(), qPrintable(error));
+    QCOMPARE(plan.size(), 3);
+    QCOMPARE(plan.at(0).id, edge.id);
+    QCOMPARE(plan.at(1).id, bastion.id);
+    QCOMPARE(plan.at(2).id, target.id);
+    // 返回计划已经被扁平化，调用方不应再次递归展开结构字段。
+    QVERIFY(plan.at(0).hostChain.isEmpty());
+    QVERIFY(plan.at(1).hostChain.isEmpty());
+    QVERIFY(plan.at(2).hostChain.isEmpty());
+}
+
+void ApplicationDatabaseTest::managedHostChainRejectsInvalidGraphs()
+{
+    QString error;
+    HostRecord jump = makeHost(QStringLiteral("jump"), QStringLiteral("跳板机"),
+                               QStringLiteral("jump.example"));
+    QVERIFY2(m_database->saveHost(jump, &error), qPrintable(error));
+
+    HostRecord target = makeHost(QStringLiteral("target"), QStringLiteral("目标"),
+                                 QStringLiteral("target.internal"));
+    target.hostChain = {target.id};
+    QVERIFY(!m_database->saveHost(target, &error));
+    QVERIFY(error.contains(QStringLiteral("自身")));
+
+    target.hostChain = {jump.id, jump.id};
+    QVERIFY(!m_database->saveHost(target, &error));
+    QVERIFY(error.contains(QStringLiteral("重复")));
+
+    HostRecord folder;
+    folder.id = QStringLiteral("folder");
+    folder.kind = HostNodeKind::Folder;
+    folder.name = QStringLiteral("分组");
+    QVERIFY2(m_database->saveHost(folder, &error), qPrintable(error));
+    target.hostChain = {folder.id};
+    QVERIFY(!m_database->saveHost(target, &error));
+    QVERIFY(error.contains(QStringLiteral("分组")));
+
+    target.hostChain = {QStringLiteral("missing")};
+    QVERIFY(!m_database->saveHost(target, &error));
+    QVERIFY(error.contains(QStringLiteral("不存在")));
+
+    // 先保存 A→B，再尝试把 B 改成 B→A，第二次保存必须检测递归环路并完整回滚。
+    HostRecord first = makeHost(QStringLiteral("first"), QStringLiteral("A"),
+                                QStringLiteral("a.example"));
+    HostRecord second = makeHost(QStringLiteral("second"), QStringLiteral("B"),
+                                 QStringLiteral("b.example"));
+    QVERIFY2(m_database->saveHost(second, &error), qPrintable(error));
+    first.hostChain = {second.id};
+    QVERIFY2(m_database->saveHost(first, &error), qPrintable(error));
+    second.hostChain = {first.id};
+    QVERIFY(!m_database->saveHost(second, &error));
+    QVERIFY(error.contains(QStringLiteral("环路")));
+    QCOMPARE(m_database->findHost(second.id, &error)->hostChain, QStringList{});
+}
+
+void ApplicationDatabaseTest::referencedJumpHostCannotBeDeleted()
+{
+    QString error;
+    HostRecord jump = makeHost(QStringLiteral("jump"), QStringLiteral("生产跳板机"),
+                               QStringLiteral("jump.example"));
+    QVERIFY2(m_database->saveHost(jump, &error), qPrintable(error));
+
+    HostRecord target = makeHost(QStringLiteral("target"), QStringLiteral("内网主机"),
+                                 QStringLiteral("10.0.0.8"));
+    target.hostChain = {jump.id};
+    QVERIFY2(m_database->saveHost(target, &error), qPrintable(error));
+
+    int removed = -1;
+    QVERIFY(!m_database->removeHost(jump.id, &removed, &error));
+    QCOMPARE(removed, 0);
+    QVERIFY2(m_database->findHost(jump.id, &error).has_value(),
+             "被引用的跳板机删除失败后必须仍然存在");
 }
 
 void ApplicationDatabaseTest::removeHostCascadesAndReportsMissing()

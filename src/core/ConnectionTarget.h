@@ -54,6 +54,14 @@ struct ConnectionTarget {
     QString tunnelRouteId;
 
     /**
+     * @brief 当前目标是否只是受管主机链中的中转层。
+     *
+     * 该状态只在进程内使用，不持久化。中转层仍由 SshSessionStack 完成认证并提供转发，
+     * 但不应出现在文件管理器的普通目标列表中，也不应被连接历史误记为用户最终进入的主机。
+     */
+    bool transit = false;
+
+    /**
      * @brief 是否为该目标显式启用旧版 hmac-sha1 双向 MAC。
      *
      * 默认关闭。只有服务器明确仅支持 hmac-sha1 且用户知情确认时才打开，避免为了兼容

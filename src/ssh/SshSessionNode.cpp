@@ -205,8 +205,9 @@ constexpr qint64 kEstablishTimeoutMs = 30000;
 
 } // namespace
 
-SshSessionNode::SshSessionNode(ConnectionTarget target)
+SshSessionNode::SshSessionNode(ConnectionTarget target, const Role role)
     : m_target(std::move(target))
+    , m_role(role)
 {
 }
 
@@ -504,8 +505,7 @@ SshSessionNode::StepResult SshSessionNode::advanceAuthenticating()
             return pending();
         }
         if (result == SSH_AUTH_SUCCESS) {
-            m_stage = Stage::OpeningChannel;
-            return pending();
+            return authenticationSucceeded();
         }
         // publickey_auto 会尝试 SSH Agent、默认密钥以及通过 SSH_OPTIONS_IDENTITY 指定的
         // 密钥。当用户输入的密码实际是私钥口令时，也允许 libssh 用它解密私钥。
@@ -518,8 +518,7 @@ SshSessionNode::StepResult SshSessionNode::advanceAuthenticating()
             return pending();
         }
         if (result == SSH_AUTH_SUCCESS) {
-            m_stage = Stage::OpeningChannel;
-            return pending();
+            return authenticationSucceeded();
         }
         if (m_secret.isEmpty()) {
             // 公钥与 Agent 都不被接受，且命令行没有携带密码——接管用户手打的 ssh 时这是
@@ -537,8 +536,7 @@ SshSessionNode::StepResult SshSessionNode::advanceAuthenticating()
             return pending();
         }
         if (result == SSH_AUTH_SUCCESS) {
-            m_stage = Stage::OpeningChannel;
-            return pending();
+            return authenticationSucceeded();
         }
         // 与 OpenSSH 一致地允许重试：输错一次不该让整层连接失败，否则用户必须从头再敲
         // 一遍 ssh 命令。
@@ -558,6 +556,21 @@ SshSessionNode::StepResult SshSessionNode::advanceAuthenticating()
 
     m_stage = Stage::Failed;
     return failure(tr("认证状态机进入了未定义状态。"));
+}
+
+SshSessionNode::StepResult SshSessionNode::authenticationSucceeded()
+{
+    if (m_role == Role::Transit) {
+        // 跳板层不启动远端 Shell。很多堡垒机账号刻意配置了 ForceCommand 或禁用 PTY，若仍
+        // 沿用交互层流程会在认证成功后错误失败；转发通道只依赖已认证 session，直接 Ready
+        // 即可。认证报文刚完成也属于链路活动，从此刻开始分层保活计时。
+        m_stage = Stage::Ready;
+        m_establishTimer.invalidate();
+        noteActivity();
+        return success();
+    }
+    m_stage = Stage::OpeningChannel;
+    return pending();
 }
 
 void SshSessionNode::provideCredential(const QString &secret)

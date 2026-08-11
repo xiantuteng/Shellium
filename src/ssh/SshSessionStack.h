@@ -46,6 +46,19 @@ public:
     SshSessionStack(const ConnectionTarget &rootTarget,
                     bool installShellIntegration,
                     QObject *parent);
+
+    /**
+     * @brief 构造一条由受管跳板机和最终目标组成的完整连接计划。
+     * @param connectionPlan 从本机可达的第一跳到最终交互目标的有序列表，不得为空。
+     * @param installShellIntegration 是否只在最终交互目标安装 Shell 集成。
+     * @param parent Qt 父对象。
+     *
+     * 计划中的中间层会先认证再承载下一层；只有最后一层完成后才发出 shellConnected，
+     * 因此用户不会在连接过程中短暂落到跳板机提示符。
+     */
+    SshSessionStack(const QList<ConnectionTarget> &connectionPlan,
+                    bool installShellIntegration,
+                    QObject *parent);
     ~SshSessionStack() override;
 
     /**
@@ -112,21 +125,21 @@ public:
                           QString *errorMessage);
 
     /**
-     * @brief 通过根 SSH 会话打开到根服务器视角目标的 direct-tcpip 通道。
-     * @param host 根服务器能够解析和访问的目标地址。
+     * @brief 通过逻辑目标 SSH 会话打开到其视角目标的 direct-tcpip 通道。
+     * @param host 最终业务服务器能够解析和访问的目标地址。
      * @param port 目标端口。
      * @param errorMessage 失败原因输出。
      * @return 与 SSH 通道相连的本进程 socket fd；失败返回 -1，成功时调用方取得所有权。
      *
-     * 本地与动态端口转发绑定的是持久化根主机，不能使用 openForwardSocket() 的“当前栈顶”
-     * 语义。否则用户进入内层服务器后，同一条 -L/-D 规则会悄悄改从内层出网。
+     * 本地与动态端口转发绑定的是持久化业务主机。受管链存在时它是计划最后一层而非物理
+     * 栈底；用户后来进入临时嵌套层时仍保持这个起点，不能悄悄改从临时层出网。
      */
     int openRootForwardSocket(const QString &host,
                               quint16 port,
                               QString *errorMessage);
 
     /**
-     * @brief 在根 SSH 会话上申请服务端远程监听（OpenSSH -R 语义）。
+     * @brief 在逻辑目标 SSH 会话上申请服务端远程监听（OpenSSH -R 语义）。
      * @param ruleId 持久化端口转发规则 id。
      * @param bindHost SSH 服务器侧监听地址。
      * @param bindPort SSH 服务器侧监听端口。
@@ -134,8 +147,8 @@ public:
      * @return 服务端确认监听成功返回 true。
      *
      * 调用方通常是 PortForwardRuntime 后台线程；本方法只等待受 QWaitCondition 保护的结果，
-     * 所有 libssh API 仍由本栈工作线程执行。根层而非当前栈顶承载规则，保证规则始终与其
-     * 持久化 hostId 对应，不会因用户进入临时嵌套层而悄悄改变服务端。
+     * 所有 libssh API 仍由本栈工作线程执行。最终业务层而非物理栈底或临时栈顶承载规则，
+     * 保证监听始终落在规则绑定的持久化 hostId 上。
      */
     bool startRemoteForward(const QString &ruleId,
                             const QString &bindHost,
@@ -164,7 +177,7 @@ signals:
      */
     void legacyHmacRequired(const QString &originalError);
 
-    /** @brief 栈底 Shell 通道已完成认证并可以交互。 */
+    /** @brief 逻辑最终目标的 Shell 通道已完成认证并可以交互。 */
     void shellConnected();
 
     /** @brief 整个层栈结束，可能由远端退出或用户关闭面板触发。 */
@@ -231,6 +244,8 @@ private:
     struct PendingPush {
         ConnectionTarget target;
         bool outerShimSuspended = false;
+        /** @brief true 表示启动阶段的受管主机链成员，失败时必须终止整个逻辑连接。 */
+        bool planned = false;
     };
 
     /** @brief 一个跨线程等待 direct-tcpip 通道创建结果的请求。 */
@@ -336,6 +351,12 @@ private:
      */
     [[nodiscard]] SshSessionNode *originLayerFor(const QString &layerId);
 
+    /**
+     * @brief 返回承载持久化目标端口转发的逻辑根节点。
+     * @return 受管链最终目标；直连时等同栈底；尚未建立完成时返回 nullptr。
+     */
+    [[nodiscard]] SshSessionNode *logicalRootLayer();
+
     /** @brief 该层 Shell 集成脚本的远端临时路径。 */
     [[nodiscard]] static QByteArray shimPathFor(const SshSessionNode &node);
 
@@ -351,7 +372,8 @@ private:
     /** @brief 判断停止标志；内部统一加锁以避免数据竞争。 */
     [[nodiscard]] bool shouldStop() const;
 
-    ConnectionTarget m_rootTarget;
+    /** @brief 启动时从本机到最终目标的有序计划；运行期间保持不变，供重连语义与边界判断。 */
+    QList<ConnectionTarget> m_connectionPlan;
     /** @brief 是否在每层认证完成后安装 Shell 集成；连接测试会显式关闭以保持只读。 */
     bool m_installShellIntegration = true;
 
@@ -365,6 +387,9 @@ private:
 
     /** @brief 栈底就绪信号是否已发出，保证 shellConnected 在一次运行中只发一次。 */
     bool m_rootAnnounced = false;
+
+    /** @brief 计划内转发在压入下一层前失败时保存原因，由主循环统一作为致命错误退出。 */
+    QString m_plannedFailure;
 
 
     mutable QMutex m_mutex;

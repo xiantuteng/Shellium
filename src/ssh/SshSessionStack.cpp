@@ -25,10 +25,22 @@ SshSessionStack::SshSessionStack(const ConnectionTarget &rootTarget, QObject *pa
 SshSessionStack::SshSessionStack(const ConnectionTarget &rootTarget,
                                  const bool installShellIntegration,
                                  QObject *parent)
+    : SshSessionStack(QList<ConnectionTarget>{rootTarget}, installShellIntegration, parent)
+{
+}
+
+SshSessionStack::SshSessionStack(const QList<ConnectionTarget> &connectionPlan,
+                                 const bool installShellIntegration,
+                                 QObject *parent)
     : QThread(parent)
-    , m_rootTarget(rootTarget)
+    , m_connectionPlan(connectionPlan)
     , m_installShellIntegration(installShellIntegration)
 {
+    // 中转标记由连接计划的实际位置决定，不能信任调用方可能过时的快照。最后一层始终是
+    // 用户要交互的逻辑目标；单元素计划自然就是普通直连。
+    for (qsizetype index = 0; index < m_connectionPlan.size(); ++index) {
+        m_connectionPlan[index].transit = index + 1 < m_connectionPlan.size();
+    }
 }
 
 SshSessionStack::~SshSessionStack()
@@ -89,7 +101,7 @@ void SshSessionStack::requestPushLayer(const ConnectionTarget &target,
         return;
     }
     QMutexLocker locker(&m_mutex);
-    m_pendingPushes.append(PendingPush{target, outerShimSuspended});
+    m_pendingPushes.append(PendingPush{target, outerShimSuspended, false});
 }
 
 void SshSessionStack::requestPopLayer()
@@ -209,10 +221,17 @@ void SshSessionStack::run()
         m_sizeDirty = false;
     }
 
-    ConnectionTarget rootTarget = m_rootTarget;
+    if (m_connectionPlan.isEmpty() || !m_connectionPlan.constFirst().isValid()) {
+        emit connectionError(tr("连接计划为空或第一跳无效"));
+        return;
+    }
+    ConnectionTarget rootTarget = m_connectionPlan.constFirst();
     // 栈底由本程序直接建立，其身份同样是确定事实。
     rootTarget.confidence = ConnectionTarget::Confidence::Confirmed;
-    auto root = std::make_unique<SshSessionNode>(rootTarget);
+    auto root = std::make_unique<SshSessionNode>(
+        rootTarget,
+        rootTarget.transit ? SshSessionNode::Role::Transit
+                           : SshSessionNode::Role::Interactive);
     const SshSessionNode::StepResult start = root->beginEstablish(-1, columns, rows);
     if (!start.ok) {
         emit connectionError(start.message);
@@ -254,6 +273,11 @@ bool SshSessionStack::pumpLoop()
         // 会让内层连接失去承载，这也是建立阶段不能阻塞的根本原因。
         pumpAllForwards();
 
+        if (!m_plannedFailure.isEmpty()) {
+            emit connectionError(m_plannedFailure);
+            return false;
+        }
+
         // 保活要放在栈顶就绪判断之前：栈顶还在握手时，下面已经就绪的外层照样会空闲到被
         // 掐断，而外层一断，正在其上建立的内层也就白建了。
         serviceKeepAlive();
@@ -283,6 +307,14 @@ bool SshSessionStack::pumpLoop()
             continue;
         }
 
+        // 受管主机链尚未到达最终目标时，只推进建层和隧道，不读取中间层 PTY，也不向界面
+        // 宣布成功。这样登录横幅、提示符和 Shell Integration 都只属于最终目标。
+        if (m_layers.size() < static_cast<std::size_t>(m_connectionPlan.size())) {
+            servicePendingLayerRequests();
+            QThread::msleep(5);
+            continue;
+        }
+
         if (!m_rootAnnounced) {
             m_rootAnnounced = true;
             emit shellConnected();
@@ -290,7 +322,7 @@ bool SshSessionStack::pumpLoop()
         }
 
         if (!m_layers.back()->isShellAlive()) {
-            if (m_layers.size() > 1) {
+            if (m_layers.size() > static_cast<std::size_t>(m_connectionPlan.size())) {
                 // 内层 Shell 结束（用户 exit、远端 kill、网络中断）是一个确定事件，不需要
                 // 也不应该去解析终端输出。弹栈后终端自动回到外层，这正是自持会话相对于
                 // 观察式识别的根本优势：出栈与入栈同样可靠。
@@ -438,6 +470,15 @@ bool SshSessionStack::advanceEstablishingLayers()
         return true;
     }
     if (step.ok) {
+        if (m_layers.size() < static_cast<std::size_t>(m_connectionPlan.size())) {
+            // 当前层只是计划中的中转节点。下一跳通过普通建层队列复用既有 direct-tcpip / exec
+            // 中继状态机；planned 标记让任何失败都升级为整条逻辑连接失败。
+            const ConnectionTarget next = m_connectionPlan.at(
+                static_cast<qsizetype>(m_layers.size()));
+            QMutexLocker locker(&m_mutex);
+            m_pendingPushes.append(PendingPush{next, false, true});
+            return true;
+        }
         // 交互式终端依赖 Shell 集成获得确定性的目录和嵌套连接事件；连接测试则必须保持
         // 只读，认证成功本身已足以得出结论，不应为了测试向远端写入临时脚本。
         if (m_installShellIntegration) {
@@ -445,7 +486,7 @@ bool SshSessionStack::advanceEstablishingLayers()
         }
         // 该层刚刚就绪。栈底的通知留给 pumpLoop，以便 shellConnected 先于 layersChanged
         // 到达界面，避免文件管理器先收到一份“尚未连接”的空列表再被立刻覆盖。
-        if (m_layers.size() > 1) {
+        if (m_rootAnnounced && m_layers.size() > m_connectionPlan.size()) {
             emit layersChanged(layerTargets());
         }
         return true;
@@ -462,6 +503,16 @@ bool SshSessionStack::advanceEstablishingLayers()
             // 接管失败后外层 Shell 必须重新取得提示符：用户接下来还要在那里继续操作，
             // 而 TerminalPane 也要把原始 ssh 命令交还给它执行。
             m_layers.back()->queueOutgoing(ShellShim::resumeResponse());
+        }
+        if (!m_rootAnnounced) {
+            if (step.legacyHmacRequired && m_connectionPlan.size() == 1) {
+                emit legacyHmacRequired(step.message);
+            } else {
+                emit connectionError(
+                    tr("主机链在 %1 失败：%2")
+                        .arg(failedTarget.connectionSpecifier(true), step.message));
+            }
+            return false;
         }
         emit layerFailed(failedTarget, step.message);
         emit layersChanged(layerTargets());
@@ -495,6 +546,15 @@ SshSessionNode *SshSessionStack::originLayerFor(const QString &layerId)
     return nullptr;
 }
 
+SshSessionNode *SshSessionStack::logicalRootLayer()
+{
+    if (m_connectionPlan.isEmpty()
+        || m_layers.size() < static_cast<std::size_t>(m_connectionPlan.size())) {
+        return nullptr;
+    }
+    return m_layers[m_connectionPlan.size() - 1].get();
+}
+
 void SshSessionStack::servicePendingLayerRequests()
 {
     int pops = 0;
@@ -512,7 +572,7 @@ void SshSessionStack::servicePendingLayerRequests()
     }
 
     bool changed = false;
-    while (pops > 0 && m_layers.size() > 1) {
+    while (pops > 0 && m_layers.size() > static_cast<std::size_t>(m_connectionPlan.size())) {
         popTopLayer();
         --pops;
         changed = true;
@@ -527,7 +587,12 @@ void SshSessionStack::servicePendingLayerRequests()
         return;
     }
     if (m_layers.empty() || !m_layers.back()->isReady()) {
-        emit layerFailed(push.target, tr("当前没有可用于建立内层连接的已就绪会话"));
+        const QString error = tr("当前没有可用于建立内层连接的已就绪会话");
+        if (push.planned) {
+            m_plannedFailure = error;
+        } else {
+            emit layerFailed(push.target, error);
+        }
         return;
     }
 
@@ -539,7 +604,12 @@ void SshSessionStack::servicePendingLayerRequests()
         push.target.host, push.target.port, true, kNestedForwardTimeoutMs, &error);
     if (forwardId == 0) {
         releaseSuspendedOuterShim(push);
-        emit layerFailed(push.target, error);
+        if (push.planned) {
+            m_plannedFailure = tr("主机链在 %1 失败：%2")
+                                   .arg(push.target.connectionSpecifier(true), error);
+        } else {
+            emit layerFailed(push.target, error);
+        }
         return;
     }
 
@@ -557,12 +627,22 @@ void SshSessionStack::handleForwardOutcome(const SshSessionNode::ForwardOutcome 
 
         if (!outcome.ok) {
             releaseSuspendedOuterShim(push);
-            emit layerFailed(target, outcome.error);
+            if (push.planned) {
+                m_plannedFailure = tr("主机链在 %1 失败：%2")
+                                       .arg(target.connectionSpecifier(true), outcome.error);
+            } else {
+                emit layerFailed(target, outcome.error);
+            }
             return;
         }
         if (m_layers.empty()) {
             ::close(outcome.callerFd);
-            emit layerFailed(target, tr("承载该内层连接的会话已经关闭"));
+            const QString error = tr("承载该内层连接的会话已经关闭");
+            if (push.planned) {
+                m_plannedFailure = error;
+            } else {
+                emit layerFailed(target, error);
+            }
             return;
         }
 
@@ -580,7 +660,10 @@ void SshSessionStack::handleForwardOutcome(const SshSessionNode::ForwardOutcome 
 
         // 新层从干净状态开始：任何为上一层输入、却没来得及被消费的凭据都必须作废。
         discardPendingCredential();
-        auto node = std::make_unique<SshSessionNode>(target);
+        auto node = std::make_unique<SshSessionNode>(
+            target,
+            target.transit ? SshSessionNode::Role::Transit
+                           : SshSessionNode::Role::Interactive);
         node->setOuterShimSuspended(push.outerShimSuspended);
         const SshSessionNode::StepResult start =
             node->beginEstablish(outcome.callerFd, columns, rows);
@@ -588,7 +671,12 @@ void SshSessionStack::handleForwardOutcome(const SshSessionNode::ForwardOutcome 
             // 不手工关闭 callerFd：它已经交给 libssh 会话，由节点析构中的 ssh_free 统一
             // 释放，重复关闭会误伤后续复用同一编号的 fd。
             releaseSuspendedOuterShim(push);
-            emit layerFailed(target, start.message);
+            if (push.planned) {
+                m_plannedFailure = tr("主机链在 %1 失败：%2")
+                                       .arg(target.connectionSpecifier(true), start.message);
+            } else {
+                emit layerFailed(target, start.message);
+            }
             return;
         }
         // 这里**绝不能**发 layersChanged：此刻该层只完成了选项配置，握手、指纹校验和认证
@@ -713,7 +801,7 @@ void SshSessionStack::serviceForwardRequests()
         QString error;
         quint64 forwardId = 0;
         SshSessionNode *origin = request->rootOrigin
-            ? (m_layers.empty() ? nullptr : m_layers.front().get())
+            ? logicalRootLayer()
             : originLayerFor(request->layerId);
         if (origin != nullptr && origin->isReady()) {
             // SFTP 侧调用方自身有 15 秒等待上限，这里略短以便先返回结构化错误而非超时。
@@ -747,7 +835,7 @@ void SshSessionStack::serviceRemoteForwardRequests()
         stops.swap(m_pendingRemoteStops);
     }
 
-    SshSessionNode *root = m_layers.empty() ? nullptr : m_layers.front().get();
+    SshSessionNode *root = logicalRootLayer();
     for (const QString &ruleId : std::as_const(stops)) {
         if (root != nullptr) {
             root->cancelRemoteListen(ruleId);

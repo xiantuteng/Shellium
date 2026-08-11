@@ -104,6 +104,19 @@ QString standaloneDialogStyleSheet(const bool dark)
             background: #45e394;
             border-color: #45e394;
         }
+        QToolButton[advancedDisclosure="true"] {
+            color: @MUTED@;
+            background: transparent;
+            border: 0;
+            min-height: 24px;
+            padding: 2px 0;
+            text-align: left;
+        }
+        QToolButton[advancedDisclosure="true"]:hover,
+        QToolButton[advancedDisclosure="true"]:checked {
+            color: @TEXT@;
+            background: transparent;
+        }
         QFrame#SettingsCard {
             background: @SURFACE@;
             border: 1px solid @BORDER@;
@@ -145,7 +158,7 @@ QString standaloneDialogStyleSheet(const bool dark)
     styleSheet.replace(QStringLiteral("@ACCENT@"), accentColor().name());
     // 保险库会在 MainWindow 创建前使用本样式。追加专用片段而不是把选择器散落到基础规则中，
     // 可确保应用运行期间由全局样式复用时，得到与首次启动完全一致的安全操作视觉层级。
-    return styleSheet + vaultDialogStyleSheet(dark);
+    return styleSheet + vaultDialogStyleSheet(dark) + hostChainDialogStyleSheet(dark);
 }
 
 QString vaultDialogStyleSheet(const bool dark)
@@ -220,6 +233,111 @@ QString vaultDialogStyleSheet(const bool dark)
     styleSheet.replace(QStringLiteral("@WARNING@"), warning);
     styleSheet.replace(QStringLiteral("@WARNING_TINT@"), warningTint);
     styleSheet.replace(QStringLiteral("@WARNING_BORDER@"), warningBorder);
+    return styleSheet;
+}
+
+QString hostChainDialogStyleSheet(const bool dark)
+{
+    // 颜色与 MainWindow::applyModernAppearance() 的同名主题变量严格一致。单独生成具体值
+    // 而不是在局部样式中依赖未替换占位符，确保独立测试和主窗口全局样式都能直接复用。
+    const QString workspace = dark ? QStringLiteral("#101525") : QStringLiteral("#edf1f4");
+    const QString sidebar = dark ? QStringLiteral("#191f31") : QStringLiteral("#f5f7f8");
+    const QString surface = dark ? QStringLiteral("#21283b") : QStringLiteral("#ffffff");
+    const QString raised = dark ? QStringLiteral("#293147") : QStringLiteral("#f0f3f5");
+    const QString border = dark ? QStringLiteral("#30384f") : QStringLiteral("#d9e0e4");
+    const QString text = dark ? QStringLiteral("#f0f3fa") : QStringLiteral("#1b2230");
+    const QString muted = dark ? QStringLiteral("#929bb3") : QStringLiteral("#71808d");
+    const QString selection = dark ? QStringLiteral("#24413d") : QStringLiteral("#dff6ec");
+    const QString danger = dark ? QStringLiteral("#ef776e") : QStringLiteral("#d84a41");
+
+    QString styleSheet = QStringLiteral(R"QSS(
+        QDialog#HostChainDialog,
+        QDialog#HostPickerDialog,
+        QWidget#HostChainBody,
+        QWidget#HostPickerBody {
+            color: @TEXT@;
+            background: @WORKSPACE@;
+        }
+        QLabel#HostChainIntroduction,
+        QLabel#HostPickerSubtitle {
+            color: @MUTED@;
+            font-size: 12px;
+        }
+        QLineEdit#hostChainSearchEdit {
+            color: @TEXT@;
+            background: @SURFACE@;
+            border: 1px solid @BORDER@;
+            border-radius: 9px;
+            min-height: 30px;
+            padding: 4px 10px;
+        }
+        QLineEdit#hostChainSearchEdit:focus {
+            border-color: @ACCENT@;
+        }
+        QListWidget#hostChainList,
+        QListWidget#hostChainCandidateList {
+            color: @TEXT@;
+            background: @SURFACE@;
+            border: 1px solid @BORDER@;
+            border-radius: 11px;
+            outline: 0;
+            padding: 0;
+        }
+        QLabel#hostChainRouteArrow {
+            color: @MUTED@;
+            background: transparent;
+        }
+        QFrame#hostChainTargetCard {
+            color: @TEXT@;
+            background: @SELECTION@;
+            border: 1px dashed @ACCENT@;
+            border-radius: 11px;
+        }
+        QLabel#hostChainTargetLabel {
+            color: @ACCENT_DARK@;
+            background: transparent;
+            font-size: 11px;
+            font-weight: 700;
+        }
+        QLabel#hostChainTargetDetail {
+            color: @MUTED@;
+            background: transparent;
+            font-size: 12px;
+        }
+        QWidget#HostChainFooter,
+        QWidget#HostPickerFooter {
+            color: @TEXT@;
+            background: @SIDEBAR@;
+            border-top: 1px solid @BORDER@;
+        }
+        QPushButton[hostChainDanger="true"] {
+            color: @DANGER@;
+            background: transparent;
+            border: 0;
+            font-weight: 600;
+            padding-left: 0;
+            padding-right: 0;
+        }
+        QPushButton[hostChainDanger="true"]:hover {
+            color: @DANGER@;
+            background: @RAISED@;
+        }
+        QPushButton[hostChainDanger="true"]:disabled {
+            color: @MUTED@;
+            background: transparent;
+        }
+    )QSS");
+    styleSheet.replace(QStringLiteral("@WORKSPACE@"), workspace);
+    styleSheet.replace(QStringLiteral("@SIDEBAR@"), sidebar);
+    styleSheet.replace(QStringLiteral("@SURFACE@"), surface);
+    styleSheet.replace(QStringLiteral("@RAISED@"), raised);
+    styleSheet.replace(QStringLiteral("@BORDER@"), border);
+    styleSheet.replace(QStringLiteral("@TEXT@"), text);
+    styleSheet.replace(QStringLiteral("@MUTED@"), muted);
+    styleSheet.replace(QStringLiteral("@SELECTION@"), selection);
+    styleSheet.replace(QStringLiteral("@ACCENT_DARK@"), ShelliumUi::accentColor().darker(140).name());
+    styleSheet.replace(QStringLiteral("@ACCENT@"), ShelliumUi::accentColor().name());
+    styleSheet.replace(QStringLiteral("@DANGER@"), danger);
     return styleSheet;
 }
 

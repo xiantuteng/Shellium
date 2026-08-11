@@ -35,6 +35,15 @@ public:
     void connectToHost(const ConnectionTarget &target);
 
     /**
+     * @brief 按受管主机链启动新的 SSH 工作线程。
+     * @param connectionPlan 从本机第一跳到最终交互目标的有序列表；中间节点仅用作跳板。
+     *
+     * 自动重连会保留整条计划，而不是只重连最后一个内网地址；否则断线后会绕过跳板从
+     * 本机误连同名私网主机，属于必须在接口边界避免的安全问题。
+     */
+    void connectToHosts(const QList<ConnectionTarget> &connectionPlan);
+
+    /**
      * @brief 在当前连接之上由本程序亲自建立一层嵌套会话，终端随后切换到该层。
      * @param target 内层服务器；host/port 由当前栈顶服务器的视角解析。
      *
@@ -357,6 +366,9 @@ private:
     quint64 m_reconnectToken = 0;
     /** @brief 防止自动重连内部调用 connectToHost 时被误判成用户主动连接。 */
     bool m_automaticReconnectInvocation = false;
+
+    /** @brief 当前逻辑连接的完整受管计划，供异常断线后的整链重连复用。 */
+    QList<ConnectionTarget> m_connectionPlan;
 
     QStringList m_tunnelRouteIds;
 

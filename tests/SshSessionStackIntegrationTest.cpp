@@ -45,6 +45,9 @@ private slots:
     /** @brief 经第一层会话的 direct-tcpip 隧道抵达第二层，验证嵌套路径的传输基础。 */
     void opensForwardSocketThroughRootLayer();
 
+    /** @brief 受管主机链应自动逐跳认证，只在最终目标就绪后对界面宣布连接成功。 */
+    void establishesManagedHostChainDirectly();
+
     /** @brief 压入真实的第二层，在其中执行命令，再通过远端 exit 确定性地弹回第一层。 */
     void pushesAndPopsNestedLayer();
 
@@ -318,6 +321,38 @@ void SshSessionStackIntegrationTest::opensForwardSocketThroughRootLayer()
     ::close(tunnelFd);
     stack.requestStop();
     QVERIFY(stack.wait(10000));
+}
+
+void SshSessionStackIntegrationTest::establishesManagedHostChainDirectly()
+{
+    if (m_secondLayerHost.isEmpty()) {
+        QSKIP("未设置 SHELLIUM_IT_HOST2，无法验证受管主机链");
+    }
+
+    const QList<ConnectionTarget> plan{firstLayerTarget(), secondLayerTarget()};
+    SshSessionStack stack(plan, false, nullptr);
+    QSignalSpy connectedSpy(&stack, &SshSessionStack::shellConnected);
+    QSignalSpy layersSpy(&stack, &SshSessionStack::layersChanged);
+    QSignalSpy errorSpy(&stack, &SshSessionStack::connectionError);
+    stack.start();
+
+    QVERIFY2(waitFor([&connectedSpy, &errorSpy]() {
+                 return !connectedSpy.isEmpty() || !errorSpy.isEmpty();
+             }),
+             "受管主机链在时限内既未成功也未返回错误");
+    QVERIFY2(errorSpy.isEmpty(),
+             errorSpy.isEmpty() ? "" : qPrintable(errorSpy.constFirst().constFirst().toString()));
+    QCOMPARE(connectedSpy.size(), 1);
+    QVERIFY(!layersSpy.isEmpty());
+    const QList<ConnectionTarget> layers =
+        qvariant_cast<QList<ConnectionTarget>>(layersSpy.constLast().constFirst());
+    QCOMPARE(layers.size(), 2);
+    QVERIFY(layers.at(0).transit);
+    QVERIFY(!layers.at(1).transit);
+    QCOMPARE(layers.at(1).id, secondLayerTarget().id);
+
+    stack.requestStop();
+    QVERIFY(stack.wait(5000));
 }
 
 void SshSessionStackIntegrationTest::pushesAndPopsNestedLayer()

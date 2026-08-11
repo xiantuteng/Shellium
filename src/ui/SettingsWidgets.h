@@ -58,6 +58,16 @@ namespace ShelliumUi {
 [[nodiscard]] QString vaultDialogStyleSheet(bool dark);
 
 /**
+ * @brief 返回受管主机链编辑器与跳板机选择器共用的视觉样式片段。
+ * @param dark true 使用深色主题色，false 使用浅色主题色。
+ * @return 只匹配 HostChainDialog、HostPickerDialog 及其命名子控件的 QSS。
+ *
+ * 两个弹窗可能由带全局主题的主窗口打开，也可能在独立界面测试中直接创建。把卡片、目标
+ * 主机、危险操作和页脚样式集中在这里，可以保证两条运行路径以及深浅主题使用同一套层级。
+ */
+[[nodiscard]] QString hostChainDialogStyleSheet(bool dark);
+
+/**
  * @brief 在没有全局样式表时给对话框套上 standaloneDialogStyleSheet()。
  * @param dialog 目标对话框，不可为空。
  *

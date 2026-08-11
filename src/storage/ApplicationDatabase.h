@@ -128,6 +128,19 @@ public:
     [[nodiscard]] std::optional<HostRecord> resolveHost(const QString &id,
                                                         QString *errorMessage = nullptr) const;
 
+    /**
+     * @brief 把目标主机及其受管主机链解析为从本机到最终目标的有序连接计划。
+     * @param id 最终目标主机的稳定 id。
+     * @param errorMessage 缺失引用、分组被当作跳板、重复节点或环路的可读说明。
+     * @return 成功时返回至少包含最终目标的一组已完成分组继承解析的主机；失败返回空列表。
+     *
+     * 每个链路成员也可以拥有自己的前置链路，本方法会递归展开并拒绝任何重复节点。拒绝
+     * 重复而不是静默去重，是因为同一主机在路径中出现两次通常代表配置顺序已经不可信，
+     * 继续连接可能把后续内网地址交给错误的服务器解析。
+     */
+    [[nodiscard]] QList<HostRecord> resolveConnectionChain(
+        const QString &id, QString *errorMessage = nullptr) const;
+
     // ---------------------------------------------------------------- 凭据
 
     /**

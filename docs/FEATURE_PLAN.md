@@ -131,7 +131,7 @@ Shellium 面向需要在跳板机、内网多层服务器与 SFTP 之间频繁�
 | 主机图标与 OS 自动识别 | P2 | ❌ |
 | 导入/导出 | P1 | ⚠️ 支持 OpenSSH config 与无凭据 Shellium JSON；未支持 Termius/PuTTY/MobaXterm |
 | 最近连接与连接历史 | P0/P1 | ✅ 记录成功、失败、断开时间与重连尝试 |
-| ProxyJump 配置 | P1 | ✅ 主机/分组编辑 UI 与继承链 |
+| 受管主机链 / ProxyJump | P1 | ✅ 可视化有序链、选择已有主机、现场新建、逐跳独立凭据与指纹；保留手动 ProxyJump 兼容入口 |
 
 ### 2.4 SSH 引擎与密钥
 

@@ -1704,6 +1704,19 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
             color: @MUTED@;
             background: @SIDEBAR@;
         }
+        QToolButton[advancedDisclosure="true"] {
+            color: @MUTED@;
+            background: transparent;
+            border: 0;
+            min-height: 24px;
+            padding: 2px 0;
+            text-align: left;
+        }
+        QToolButton[advancedDisclosure="true"]:hover,
+        QToolButton[advancedDisclosure="true"]:checked {
+            color: @TEXT@;
+            background: transparent;
+        }
         QPushButton[segmentButton="true"] {
             color: @MUTED@;
             background: transparent;
@@ -1742,6 +1755,9 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
     // 保险库既可能在启动阶段使用独立样式，也可能在主窗口运行期间再次弹出。这里复用同一
     // 片段，确保应用自选主题与系统主题不一致时仍以应用主题绘制安全徽标、警示框和错误态。
     styleSheet += ShelliumUi::vaultDialogStyleSheet(dark);
+    // 主机链弹窗包含自绘列表委托、固定目标卡片和危险移除动作；追加同源专用片段，使它们
+    // 在应用自选主题下与独立测试环境保持一致，而不把这些选择器污染到普通 QListWidget。
+    styleSheet += ShelliumUi::hostChainDialogStyleSheet(dark);
     // 顶层 QMenu / QComboBox 弹出层等不是 MainWindow 的子控件，
     // this->setStyleSheet(...) 只对 MainWindow 子树生效，右键菜单等
     // 顶层部件会吃不到这份样式，因此改为通过 qApp 应用到整个应用。
@@ -1931,15 +1947,34 @@ void MainWindow::connectNestedFromCurrentPane()
 }
 
 void MainWindow::connectSavedHost(const QString &hostId,
-                                  const ConnectionTarget &sessionTarget,
+                                  const QList<ConnectionTarget> &requestedPlan,
                                   const bool openInNewTab)
 {
-    if (!sessionTarget.isValid()) {
+    QString routeError;
+    QList<ConnectionTarget> connectionPlan = requestedPlan;
+    if (connectionPlan.isEmpty()) {
+        const QList<HostRecord> route = m_database->resolveConnectionChain(hostId, &routeError);
+        if (route.isEmpty()) {
+            QMessageBox::critical(this,
+                                  tr("无法连接保存的主机"),
+                                  routeError.isEmpty() ? tr("主机记录或主机链不存在") : routeError);
+            return;
+        }
+        for (const HostRecord &record : route) {
+            ConnectionTarget target = record.toConnectionTarget();
+            if (route.size() > 1) {
+                target.proxyJumps.clear();
+            }
+            connectionPlan.append(target);
+        }
+    }
+    if (connectionPlan.isEmpty() || !connectionPlan.constLast().isValid()) {
         return;
     }
+    ConnectionTarget &logicalTarget = connectionPlan.last();
     TerminalWorkspace *workspace = openInNewTab
-        ? createWorkspaceTab(sessionTarget.displayName.isEmpty() ? sessionTarget.host
-                                                                  : sessionTarget.displayName)
+        ? createWorkspaceTab(logicalTarget.displayName.isEmpty() ? logicalTarget.host
+                                                                  : logicalTarget.displayName)
         : activeWorkspace();
     if (openInNewTab && workspace != nullptr) {
         m_tabs->setCurrentWidget(workspace);
@@ -1949,47 +1984,53 @@ void MainWindow::connectSavedHost(const QString &hostId,
         return;
     }
 
-    ConnectionTarget target = sessionTarget;
-    if (target.password.isEmpty()) {
+    // 一次解锁后逐跳读取各自主机凭据。每一跳都按自己的 id 查找已解析记录，绝不能把最终
+    // 目标密码复制给跳板机；这正是自由文本 ProxyJump 无法满足的核心场景。
+    bool vaultReady = false;
+    for (ConnectionTarget &target : connectionPlan) {
+        if (!target.password.isEmpty()) {
+            continue;
+        }
         QString lookupError;
-        const std::optional<HostRecord> savedHost = m_database->resolveHost(hostId, &lookupError);
+        const std::optional<HostRecord> savedHost = m_database->resolveHost(target.id, &lookupError);
         if (!savedHost.has_value()) {
             QMessageBox::critical(this,
-                                  tr("无法连接保存的主机"),
-                                  lookupError.isEmpty() ? tr("主机记录不存在") : lookupError);
+                                  tr("无法读取主机链"),
+                                  lookupError.isEmpty()
+                                      ? tr("链路主机不存在：%1").arg(target.displayName)
+                                      : lookupError);
             return;
         }
         if (!savedHost->credentialId.isEmpty()) {
-            if (!ensureVaultUnlocked()) {
-                return;
+            if (!vaultReady) {
+                if (!ensureVaultUnlocked()) {
+                    return;
+                }
+                vaultReady = true;
             }
             QString credentialError;
-            std::optional<QByteArray> secret =
-                m_credentialVault->loadSecret(savedHost->credentialId, &credentialError);
-            if (!secret.has_value()) {
+            if (!m_credentialVault->applyHostCredential(*savedHost, target, &credentialError)) {
                 QMessageBox::critical(this,
                                       tr("无法读取主机凭据"),
                                       credentialError.isEmpty() ? tr("凭据不存在") : credentialError);
                 return;
             }
-            target.password = QString::fromUtf8(*secret);
-            Vault::secureErase(*secret);
         }
     }
     // 持久化主机 id 必须进入终端根层快照。ConnectionDialog 会为临时会话生成 UUID，如果不
     // 覆盖，连接历史、命令历史与凭据引用就无法回到主机树中的同一条记录。
-    target.id = hostId;
-    target.parentId.clear();
-    target.confidence = ConnectionTarget::Confidence::Confirmed;
+    logicalTarget.id = hostId;
+    logicalTarget.parentId.clear();
+    logicalTarget.confidence = ConnectionTarget::Confidence::Confirmed;
     m_pendingHistoryHosts.insert(pane, hostId);
     m_pendingHistoryStartedAt.insert(pane, QDateTime::currentDateTimeUtc());
-    pane->connectToHost(target);
+    pane->connectToHosts(connectionPlan);
 
     const int tabIndex = m_tabs->indexOf(workspace);
     if (tabIndex >= 0) {
         setWorkspaceTabText(tabIndex,
-                            target.displayName.isEmpty() ? target.connectionSpecifier()
-                                                         : target.displayName);
+                            logicalTarget.displayName.isEmpty() ? logicalTarget.connectionSpecifier()
+                                                                : logicalTarget.displayName);
         if (m_titleTabBar != nullptr) {
             m_titleTabBar->setTabConnectionState(tabIndex,
                                                  SessionTabBar::ConnectionState::Connecting);
@@ -2587,7 +2628,7 @@ void MainWindow::openSavedWorkspace()
         QString title;
         QString hostId;
         bool filesVisible = true;
-        ConnectionTarget target;
+        QList<ConnectionTarget> connectionPlan;
     };
     QList<RestoredTab> restoredTabs;
     restoredTabs.reserve(serializedTabs.size());
@@ -2620,7 +2661,21 @@ void MainWindow::openSavedWorkspace()
                     : hostError;
                 break;
             }
-            restored.target = host->toConnectionTarget();
+            const QList<HostRecord> route = m_database->resolveConnectionChain(
+                restored.hostId, &hostError);
+            if (route.isEmpty()) {
+                error = hostError.isEmpty()
+                    ? tr("主机链无法解析：%1").arg(restored.hostId)
+                    : hostError;
+                break;
+            }
+            for (const HostRecord &routeHost : route) {
+                ConnectionTarget target = routeHost.toConnectionTarget();
+                if (route.size() > 1) {
+                    target.proxyJumps.clear();
+                }
+                restored.connectionPlan.append(target);
+            }
         }
         restoredTabs.append(restored);
     }
@@ -2655,7 +2710,7 @@ void MainWindow::openSavedWorkspace()
         if (restored.hostId.isEmpty()) {
             workspace->activePane()->openLocalShell();
         } else {
-            connectSavedHost(restored.hostId, restored.target);
+            connectSavedHost(restored.hostId, restored.connectionPlan);
             const int index = m_tabs->indexOf(workspace);
             if (index >= 0) {
                 // connectSavedHost 默认使用主机显示名；工作区显式保存的标签名优先。

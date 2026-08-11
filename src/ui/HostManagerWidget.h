@@ -64,9 +64,12 @@ signals:
     /**
      * @brief 用户要求连接一条已保存的主机记录。
      * @param hostId 数据库 hosts 表中的稳定主键；接收方应再次 resolveHost，不能信任旧快照。
+     * @param connectionPlan 已解析但尚未读取保险库凭据的外层到最终目标计划；新建主机后的
+     *        最后一层可能携带仅供本次连接使用的临时密码。
      * @param openInNewTab true 表示应在新标签页中连接（双击触发），而不是复用当前标签页。
      */
-    void hostConnectionRequested(const QString &hostId, const ConnectionTarget &sessionTarget,
+    void hostConnectionRequested(const QString &hostId,
+                                 const QList<ConnectionTarget> &connectionPlan,
                                  bool openInNewTab);
 
 private:
@@ -111,7 +114,7 @@ private:
     /**
      * @brief 解析持久化主机并发出连接请求。
      * @param hostId 数据库稳定主键。
-     * @param sessionTarget 可选的本次会话覆盖值；新建主机时用于携带不落库的临时密码。
+     * @param sessionTarget 可选的最终目标会话覆盖值；新建主机时用于携带不落库的临时密码。
      * @param openInNewTab true 表示应在新标签页中连接。
      */
     void requestConnection(const QString &hostId,

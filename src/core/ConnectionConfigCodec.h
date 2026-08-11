@@ -18,7 +18,7 @@ class ApplicationDatabase;
 class ConnectionConfigCodec final {
 public:
     /** @brief 当前 Shellium JSON 交换格式版本。 */
-    static constexpr int JsonFormatVersion = 1;
+    static constexpr int JsonFormatVersion = 2;
 
     /**
      * @brief 解析 OpenSSH config。
@@ -71,4 +71,3 @@ public:
 private:
     ConnectionConfigCodec() = delete;
 };
-

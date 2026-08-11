@@ -101,10 +101,12 @@ private:
     /**
      * @brief 从主机树或最近连接列表连接一条持久化主机记录。
      * @param hostId 数据库稳定主键，用于连接历史与凭据引用。
-     * @param sessionTarget 已解析配置；新建主机后首次连接时还可能带进程内临时密码。
+     * @param connectionPlan 已解析的受管连接计划；为空时由主窗口按 hostId 重新解析。新建
+     *        主机后首次连接时，最终层还可能带进程内临时密码。
      * @param openInNewTab true 时先新建标签页再连接（双击主机），而不是复用当前标签页。
      */
-    void connectSavedHost(const QString &hostId, const ConnectionTarget &sessionTarget,
+    void connectSavedHost(const QString &hostId,
+                          const QList<ConnectionTarget> &connectionPlan,
                           bool openInNewTab = false);
 
     /** @brief 根连接认证成功后写入进行中的成功历史。 */

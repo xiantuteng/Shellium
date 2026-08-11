@@ -41,6 +41,16 @@ struct HostRecord {
     QString credentialId;         ///< 空字符串表示继承父分组。
     QString identityFile;         ///< 空字符串表示继承父分组。
     QStringList proxyJumps;       ///< 空列表表示继承父分组的跳板链。
+    /**
+     * @brief 受管主机链中从本机到当前主机之前依次经过的主机 id。
+     *
+     * 列表只保存稳定 id，不复制跳板机地址、账号或凭据引用。这样跳板机资料更新后，所有
+     * 使用它的目标都会在下次连接时获得最新配置。该字段不参与分组继承：主机链是明确的
+     * 网络路径，隐式从组织分组继承会让用户难以判断连接究竟经过了哪些服务器。
+     *
+     * 非空时受管主机链优先于 proxyJumps；后者仅保留给 OpenSSH 导入和高级手工配置。
+     */
+    QStringList hostChain;
     QStringList tags;             ///< 与祖先分组的标签取并集，用于按标签筛选。
 
     /**

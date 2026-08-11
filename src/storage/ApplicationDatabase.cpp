@@ -13,7 +13,7 @@
 namespace {
 
 /// 当前代码要求的 schema 版本。每次结构变更必须递增，并在 upgradeSchema 中补齐对应分支。
-constexpr int kSchemaVersion = 4;
+constexpr int kSchemaVersion = 5;
 
 /// 内存数据库的 SQLite 特殊路径。
 const QString kMemoryPath = QStringLiteral(":memory:");
@@ -123,6 +123,37 @@ HostRecord readHostRow(const QSqlQuery &query)
     record.createdAt = deserializeTime(query.value(QStringLiteral("created_at")));
     record.updatedAt = deserializeTime(query.value(QStringLiteral("updated_at")));
     return record;
+}
+
+/**
+ * @brief 从规范化关联表读取一台主机的有序前置链路。
+ * @param database 当前 ApplicationDatabase 持有的连接。
+ * @param hostId 链路所属的目标主机 id。
+ * @param chain 成功时接收按 hop_index 排序的跳板机 id。
+ * @param errorMessage 查询失败原因；可为空。
+ * @return 查询成功返回 true，空链同样属于成功。
+ */
+bool readManagedHostChain(const QSqlDatabase &database,
+                          const QString &hostId,
+                          QStringList *chain,
+                          QString *errorMessage)
+{
+    Q_ASSERT(chain != nullptr);
+    QSqlQuery query(database);
+    query.prepare(QStringLiteral(
+        "SELECT jump_host_id FROM host_chain_members "
+        "WHERE owner_host_id = :owner_host_id ORDER BY hop_index"));
+    query.bindValue(QStringLiteral(":owner_host_id"), hostId);
+    if (!query.exec()) {
+        reportQueryError(query, errorMessage);
+        return false;
+    }
+    QStringList result;
+    while (query.next()) {
+        result.append(query.value(0).toString());
+    }
+    *chain = result;
+    return true;
 }
 
 CredentialRecord readCredentialRow(const QSqlQuery &query)
@@ -294,6 +325,16 @@ bool ApplicationDatabase::createBaseSchema(QString *errorMessage)
                        "legacy_hmac INTEGER NOT NULL DEFAULT 0, sort_order INTEGER NOT NULL DEFAULT 0, "
                        "created_at TEXT NOT NULL, updated_at TEXT NOT NULL)"),
         QStringLiteral("CREATE INDEX IF NOT EXISTS idx_hosts_parent ON hosts(parent_id, sort_order)"),
+        // 主机链使用独立关联表保存稳定引用和顺序。jump_host_id 采用 RESTRICT：若仍有目标
+        // 依赖一台跳板机，删除操作必须明确失败，不能静默把内网主机退化成本机直连。
+        QStringLiteral("CREATE TABLE IF NOT EXISTS host_chain_members ("
+                       "owner_host_id TEXT NOT NULL REFERENCES hosts(id) ON DELETE CASCADE, "
+                       "hop_index INTEGER NOT NULL CHECK(hop_index >= 0), "
+                       "jump_host_id TEXT NOT NULL REFERENCES hosts(id) ON DELETE RESTRICT, "
+                       "PRIMARY KEY(owner_host_id, hop_index), "
+                       "UNIQUE(owner_host_id, jump_host_id))"),
+        QStringLiteral("CREATE INDEX IF NOT EXISTS idx_host_chain_jump "
+                       "ON host_chain_members(jump_host_id)"),
         QStringLiteral("CREATE TABLE IF NOT EXISTS credentials ("
                        "id TEXT PRIMARY KEY, name TEXT NOT NULL, type INTEGER NOT NULL, "
                        "encrypted_payload BLOB NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)"),
@@ -410,6 +451,19 @@ bool ApplicationDatabase::upgradeSchema(QString *errorMessage)
                    << QStringLiteral("DROP TABLE port_forwards_v3")
                    << QStringLiteral("CREATE INDEX idx_port_forwards_host "
                                      "ON port_forwards(host_id, name)");
+    }
+    if (*currentVersion < 5) {
+        // 版本 5：把受管主机链规范化保存。旧版本的 proxy_jump 是自由文本，无法安全映射到
+        // 本机主机 id，因此原样保留在 hosts.proxy_jump 中，不进行猜测式自动转换。
+        statements << QStringLiteral(
+                          "CREATE TABLE IF NOT EXISTS host_chain_members ("
+                          "owner_host_id TEXT NOT NULL REFERENCES hosts(id) ON DELETE CASCADE, "
+                          "hop_index INTEGER NOT NULL CHECK(hop_index >= 0), "
+                          "jump_host_id TEXT NOT NULL REFERENCES hosts(id) ON DELETE RESTRICT, "
+                          "PRIMARY KEY(owner_host_id, hop_index), "
+                          "UNIQUE(owner_host_id, jump_host_id))")
+                   << QStringLiteral("CREATE INDEX IF NOT EXISTS idx_host_chain_jump "
+                                     "ON host_chain_members(jump_host_id)");
     }
     statements << QStringLiteral("UPDATE schema_version SET version = %1").arg(kSchemaVersion);
 
@@ -540,6 +594,12 @@ bool ApplicationDatabase::saveHost(const HostRecord &record, QString *errorMessa
         }
         return false;
     }
+    if (record.kind != HostNodeKind::Host && !record.hostChain.isEmpty()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("分组不能配置主机链");
+        }
+        return false;
+    }
 
     const QDateTime now = QDateTime::currentDateTimeUtc();
     const QDateTime createdAt = record.createdAt.isValid() ? record.createdAt : now;
@@ -580,6 +640,66 @@ bool ApplicationDatabase::saveHost(const HostRecord &record, QString *errorMessa
             reportQueryError(query, innerError);
             return false;
         }
+
+        // 链路与主机记录必须原子更新。先清空旧成员再写入新顺序，任一引用无效时外层事务
+        // 会整体回滚，数据库不会留下 mode 已更新而链路只有一半的中间状态。
+        QSqlQuery clearChain(m_database);
+        clearChain.prepare(QStringLiteral(
+            "DELETE FROM host_chain_members WHERE owner_host_id = :owner_host_id"));
+        clearChain.bindValue(QStringLiteral(":owner_host_id"), record.id);
+        if (!clearChain.exec()) {
+            reportQueryError(clearChain, innerError);
+            return false;
+        }
+
+        QSet<QString> uniqueJumpIds;
+        for (qsizetype index = 0; index < record.hostChain.size(); ++index) {
+            const QString jumpId = record.hostChain.at(index).trimmed();
+            if (jumpId.isEmpty() || jumpId == record.id || uniqueJumpIds.contains(jumpId)) {
+                *innerError = jumpId == record.id
+                    ? QStringLiteral("主机链不能包含目标主机自身")
+                    : QStringLiteral("主机链包含空引用或重复主机：%1").arg(jumpId);
+                return false;
+            }
+            uniqueJumpIds.insert(jumpId);
+
+            QSqlQuery verifyJump(m_database);
+            verifyJump.prepare(QStringLiteral("SELECT kind FROM hosts WHERE id = :id"));
+            verifyJump.bindValue(QStringLiteral(":id"), jumpId);
+            if (!verifyJump.exec()) {
+                reportQueryError(verifyJump, innerError);
+                return false;
+            }
+            if (!verifyJump.next()) {
+                *innerError = QStringLiteral("主机链引用了不存在的主机：%1").arg(jumpId);
+                return false;
+            }
+            if (verifyJump.value(0).toInt() != static_cast<int>(HostNodeKind::Host)) {
+                *innerError = QStringLiteral("主机链不能使用分组节点：%1").arg(jumpId);
+                return false;
+            }
+
+            QSqlQuery insertHop(m_database);
+            insertHop.prepare(QStringLiteral(
+                "INSERT INTO host_chain_members(owner_host_id, hop_index, jump_host_id) "
+                "VALUES (:owner_host_id, :hop_index, :jump_host_id)"));
+            insertHop.bindValue(QStringLiteral(":owner_host_id"), record.id);
+            insertHop.bindValue(QStringLiteral(":hop_index"), index);
+            insertHop.bindValue(QStringLiteral(":jump_host_id"), jumpId);
+            if (!insertHop.exec()) {
+                reportQueryError(insertHop, innerError);
+                return false;
+            }
+        }
+
+        // 写入后通过与正式连接完全相同的解析器校验跨主机环路。把校验放在事务内可让一次
+        // A→B、B→A 的编辑安全回滚，而不是把损坏图留给下一次连接才发现。
+        QString chainError;
+        if (record.kind == HostNodeKind::Host
+            && resolveConnectionChain(record.id, &chainError).isEmpty()) {
+            *innerError = chainError.isEmpty() ? QStringLiteral("无法解析主机链") : chainError;
+            return false;
+        }
         return true;
     }, errorMessage);
 }
@@ -597,7 +717,11 @@ std::optional<HostRecord> ApplicationDatabase::findHost(const QString &id,
     if (!query.next()) {
         return std::nullopt;
     }
-    return readHostRow(query);
+    HostRecord record = readHostRow(query);
+    if (!readManagedHostChain(m_database, record.id, &record.hostChain, errorMessage)) {
+        return std::nullopt;
+    }
+    return record;
 }
 
 bool ApplicationDatabase::removeHost(const QString &id, int *removedCount, QString *errorMessage)
@@ -643,6 +767,11 @@ QList<HostRecord> ApplicationDatabase::listHostsInGroup(const QString &parentId,
     while (query.next()) {
         records.append(readHostRow(query));
     }
+    for (HostRecord &record : records) {
+        if (!readManagedHostChain(m_database, record.id, &record.hostChain, errorMessage)) {
+            return {};
+        }
+    }
     setFlag(ok, true);
     return records;
 }
@@ -669,6 +798,11 @@ QList<HostRecord> ApplicationDatabase::searchHosts(const QString &keyword,
     QList<HostRecord> records;
     while (query.next()) {
         records.append(readHostRow(query));
+    }
+    for (HostRecord &record : records) {
+        if (!readManagedHostChain(m_database, record.id, &record.hostChain, errorMessage)) {
+            return {};
+        }
     }
     setFlag(ok, true);
     return records;
@@ -699,6 +833,11 @@ QList<HostRecord> ApplicationDatabase::hostsWithTag(const QString &tag,
     QList<HostRecord> records;
     while (query.next()) {
         records.append(readHostRow(query));
+    }
+    for (HostRecord &record : records) {
+        if (!readManagedHostChain(m_database, record.id, &record.hostChain, errorMessage)) {
+            return {};
+        }
     }
     setFlag(ok, true);
     return records;
@@ -762,6 +901,77 @@ std::optional<HostRecord> ApplicationDatabase::resolveHost(const QString &id,
         parentId = ancestor->parentId;
     }
     return resolved;
+}
+
+QList<HostRecord> ApplicationDatabase::resolveConnectionChain(
+    const QString &id, QString *errorMessage) const
+{
+    QList<HostRecord> plan;
+    QSet<QString> activePath;
+    QSet<QString> appended;
+
+    // 链路成员可以复用另一台主机已经配置的前置链，因此解析必须递归。activePath 用于给
+    // 真正的环路提供精确错误，appended 则拒绝从不同分支重复抵达同一主机的歧义路径。
+    std::function<bool(const QString &)> appendHost = [&](const QString &hostId) {
+        if (activePath.contains(hostId)) {
+            if (errorMessage != nullptr) {
+                *errorMessage = QStringLiteral("主机链存在环路，重复进入主机：%1").arg(hostId);
+            }
+            return false;
+        }
+        if (appended.contains(hostId)) {
+            if (errorMessage != nullptr) {
+                *errorMessage = QStringLiteral("主机链重复经过同一主机：%1").arg(hostId);
+            }
+            return false;
+        }
+
+        QString lookupError;
+        const std::optional<HostRecord> raw = findHost(hostId, &lookupError);
+        if (!raw.has_value()) {
+            if (errorMessage != nullptr) {
+                *errorMessage = lookupError.isEmpty()
+                    ? QStringLiteral("主机链引用不存在：%1").arg(hostId)
+                    : lookupError;
+            }
+            return false;
+        }
+        if (raw->kind != HostNodeKind::Host) {
+            if (errorMessage != nullptr) {
+                *errorMessage = QStringLiteral("主机链节点不是可连接主机：%1").arg(raw->name);
+            }
+            return false;
+        }
+
+        activePath.insert(hostId);
+        for (const QString &jumpId : raw->hostChain) {
+            if (!appendHost(jumpId)) {
+                return false;
+            }
+        }
+        activePath.remove(hostId);
+
+        const std::optional<HostRecord> resolved = resolveHost(hostId, &lookupError);
+        if (!resolved.has_value()) {
+            if (errorMessage != nullptr) {
+                *errorMessage = lookupError.isEmpty()
+                    ? QStringLiteral("无法解析主机配置：%1").arg(hostId)
+                    : lookupError;
+            }
+            return false;
+        }
+        HostRecord hop = *resolved;
+        // 返回值已经是扁平的实际连接顺序。清掉结构字段可防止调用方误把它再次展开。
+        hop.hostChain.clear();
+        plan.append(hop);
+        appended.insert(hostId);
+        return true;
+    };
+
+    if (!appendHost(id)) {
+        return {};
+    }
+    return plan;
 }
 
 // -------------------------------------------------------------------- 凭据
