@@ -62,6 +62,12 @@ private slots:
     /** @brief 展开箭头必须位于分组左侧，且完整图标区域都能展开、收起。 */
     void groupToggleIsLeftAlignedVerticallyCenteredAndClickable();
 
+    /** @brief 子主机悬停或选中时不得改变左侧中性连线，只允许右侧圆角卡片变化。 */
+    void childHostInteractionDoesNotAlterGuideLines();
+
+    /** @brief 空分组保留为可用拖放目标，但右侧不得再绘制无信息价值的“0”徽章。 */
+    void emptyGroupDoesNotPaintZeroCountBadge();
+
     /** @brief 分组名与主机名必须使用同一套加粗字体，形成参考设计的清晰名称层级。 */
     void groupNameUsesSameEmphasizedFontAsHostName();
 
@@ -197,6 +203,12 @@ void HostManagerWidgetTest::headerExposesOnlyThreePrimaryActions()
     // 导入/导出已移入树的右键菜单，不应再占用侧栏顶部的常驻位置。
     QVERIFY(!labels.contains(QStringLiteral("导入")));
     QVERIFY(!labels.contains(QStringLiteral("导出")));
+
+    auto *addHostButton = header->findChild<QPushButton *>(QStringLiteral("HostAddButton"));
+    QVERIFY2(addHostButton != nullptr, "主标题动作区缺少可精确设置尺寸的新建主机按钮");
+    QCOMPARE(addHostButton->height(), 30);
+    QVERIFY2(addHostButton->minimumWidth() <= 90,
+             "新建主机按钮仍占用过多横向空间，窄侧栏下会挤压标题或右侧动作");
 
     // "最近连接"整块已移除，面板里不应再残留任何列表控件。
     QVERIFY(widget.findChild<QListWidget *>() == nullptr);
@@ -645,6 +657,145 @@ int inkWidth(const QImage &image, const QRect &area, const QColor &background)
 
 } // namespace
 
+void HostManagerWidgetTest::childHostInteractionDoesNotAlterGuideLines()
+{
+    QString error;
+    QVERIFY2(seedGroupWithChildAndTopLevelHost(m_database.get(), &error), qPrintable(error));
+
+    HostRecord sibling;
+    sibling.id = QStringLiteral("host-3-sibling");
+    sibling.parentId = QStringLiteral("group-3");
+    sibling.kind = HostNodeKind::Host;
+    sibling.name = QStringLiteral("对照主机");
+    sibling.host = QStringLiteral("115.159.35.32");
+    QVERIFY2(m_database->saveHost(sibling, &error), qPrintable(error));
+
+    HostManagerWidget widget(m_database.get(), m_vault.get());
+    widget.resize(320, 400);
+    widget.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&widget));
+
+    auto *tree = widget.findChild<QTreeWidget *>(QStringLiteral("HostTree"));
+    QTreeWidgetItem *groupItem = findItem(widget, QStringLiteral("上饶E呼即办"));
+    QTreeWidgetItem *childItem = findItem(widget, QStringLiteral("中间件"));
+    QTreeWidgetItem *siblingItem = findItem(widget, sibling.name);
+    QVERIFY(tree != nullptr);
+    QVERIFY(groupItem != nullptr);
+    QVERIFY(childItem != nullptr);
+    QVERIFY(siblingItem != nullptr);
+    const QRect groupRect = tree->visualItemRect(groupItem);
+    const QRect childRect = tree->visualItemRect(childItem);
+    QVERIFY(!groupRect.isEmpty());
+    QVERIFY(!childRect.isEmpty());
+    QVERIFY2(childRect.left() > groupRect.left(), "测试数据没有形成可检查的子节点缩进区");
+
+    const auto indentationDifferenceCount = [&](const QImage &rendered) {
+        const int scale = std::max(1, qRound(rendered.devicePixelRatio()));
+        const QRect currentChildRect = tree->visualItemRect(childItem);
+        const QRect currentSiblingRect = tree->visualItemRect(siblingItem);
+        const int indentationWidth =
+            std::max(0, currentChildRect.left() - groupRect.left() - 2);
+        const int comparisonHeight = std::max(
+            0, std::min(currentChildRect.height(), currentSiblingRect.height()) - 4);
+        const QRect childIndentation((groupRect.left() + 1) * scale,
+                                     (currentChildRect.top() + 2) * scale,
+                                     indentationWidth * scale,
+                                     comparisonHeight * scale);
+        const QRect siblingIndentation((groupRect.left() + 1) * scale,
+                                       (currentSiblingRect.top() + 2) * scale,
+                                       indentationWidth * scale,
+                                       comparisonHeight * scale);
+        int changedPixelCount = 0;
+        for (int offsetX = 0; offsetX < childIndentation.width(); ++offsetX) {
+            for (int offsetY = 0; offsetY < childIndentation.height(); ++offsetY) {
+                const QColor pixel = rendered.pixelColor(childIndentation.left() + offsetX,
+                                                         childIndentation.top() + offsetY);
+                const QColor siblingPixel = rendered.pixelColor(
+                    siblingIndentation.left() + offsetX,
+                    siblingIndentation.top() + offsetY);
+                // 同一分组下的对照主机处于无交互状态，使用它的缩进区作为平台相关基线，可
+                // 兼容系统行底色，同时拦截选中条、连接线变色和悬停填充。
+                if (std::abs(pixel.red() - siblingPixel.red()) > 8
+                    || std::abs(pixel.green() - siblingPixel.green()) > 8
+                    || std::abs(pixel.blue() - siblingPixel.blue()) > 8) {
+                    ++changedPixelCount;
+                }
+            }
+        }
+        return changedPixelCount;
+    };
+
+    tree->clearSelection();
+    tree->setCurrentItem(nullptr);
+    QTest::mouseMove(tree->viewport(), QPoint(2, tree->viewport()->height() - 2));
+    QCoreApplication::processEvents();
+
+    const QImage neutralRendering = tree->viewport()->grab().toImage();
+    const int neutralScale = std::max(1, qRound(neutralRendering.devicePixelRatio()));
+    const QRect neutralChildRect = tree->visualItemRect(childItem);
+    const int guideLineX = (neutralChildRect.left() - 15) * neutralScale;
+    const int backgroundSampleX = (neutralChildRect.left() - 25) * neutralScale;
+    int visibleGuidePixels = 0;
+    for (int y = (neutralChildRect.top() + 2) * neutralScale;
+         y < (neutralChildRect.bottom() - 2) * neutralScale;
+         ++y) {
+        const QColor linePixel = neutralRendering.pixelColor(guideLineX, y);
+        const QColor backgroundPixel = neutralRendering.pixelColor(backgroundSampleX, y);
+        if (std::abs(linePixel.red() - backgroundPixel.red()) > 8
+            || std::abs(linePixel.green() - backgroundPixel.green()) > 8
+            || std::abs(linePixel.blue() - backgroundPixel.blue()) > 8) {
+            ++visibleGuidePixels;
+        }
+    }
+    QVERIFY2(visibleGuidePixels > neutralChildRect.height() * neutralScale / 2,
+             "子主机左侧的中性父子连线没有被绘制");
+
+    QTest::mouseMove(tree->viewport(), childRect.center());
+    QCoreApplication::processEvents();
+    QCOMPARE(indentationDifferenceCount(tree->viewport()->grab().toImage()), 0);
+
+    tree->setCurrentItem(childItem);
+    QTest::mouseMove(tree->viewport(), QPoint(2, tree->viewport()->height() - 2));
+    QCoreApplication::processEvents();
+    QCOMPARE(indentationDifferenceCount(tree->viewport()->grab().toImage()), 0);
+}
+
+void HostManagerWidgetTest::emptyGroupDoesNotPaintZeroCountBadge()
+{
+    HostRecord emptyGroup;
+    emptyGroup.id = QStringLiteral("empty-group-no-count");
+    emptyGroup.kind = HostNodeKind::Folder;
+    emptyGroup.name = QStringLiteral("空分组");
+    QString error;
+    QVERIFY2(m_database->saveHost(emptyGroup, &error), qPrintable(error));
+
+    HostManagerWidget widget(m_database.get(), m_vault.get());
+    widget.resize(320, 180);
+    widget.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&widget));
+
+    auto *tree = widget.findChild<QTreeWidget *>(QStringLiteral("HostTree"));
+    QTreeWidgetItem *groupItem = findItem(widget, emptyGroup.name);
+    QVERIFY(tree != nullptr);
+    QVERIFY(groupItem != nullptr);
+    tree->clearSelection();
+    tree->setCurrentItem(nullptr);
+    QTest::mouseMove(tree->viewport(), QPoint(2, tree->viewport()->height() - 2));
+    QCoreApplication::processEvents();
+
+    const QRect groupRect = tree->visualItemRect(groupItem);
+    QVERIFY(!groupRect.isEmpty());
+    const QImage rendered = tree->viewport()->grab().toImage();
+    const int scale = std::max(1, qRound(rendered.devicePixelRatio()));
+    const QRect rightDecorationArea((groupRect.right() - 31) * scale,
+                                    (groupRect.top() + 5) * scale,
+                                    26 * scale,
+                                    std::max(0, groupRect.height() - 10) * scale);
+    const QColor background = rendered.pixelColor(rightDecorationArea.right(),
+                                                  rightDecorationArea.top());
+    QCOMPARE(inkWidth(rendered, rightDecorationArea, background), 0);
+}
+
 void HostManagerWidgetTest::semanticIconsFollowLightAndDarkPalettes()
 {
     QWidget context;
@@ -770,10 +921,10 @@ void HostManagerWidgetTest::groupNameUsesSameEmphasizedFontAsHostName()
                      rect.height() * scale);
     };
 
-    // 空分组没有展开箭头，但行右侧会画一个子节点数量徽章；主机名在上、连接信息在下，
-    // 只量名称行。取样从委托定义的文字左缘开始，排除两种节点尺寸不同的图标装饰区。
-    QVERIFY2(groupItem->childCount() == 0, "分组带了子节点，行末的展开箭头会混进墨迹里");
-    constexpr int kRightDecorationMargin = 40;
+    // 空分组没有展开箭头或数量徽章；主机名在上、连接信息在下，只量名称行。取样从委托
+    // 定义的文字左缘开始，排除两种节点尺寸不同的图标装饰区。
+    QVERIFY2(groupItem->childCount() == 0, "分组带了子节点，展开箭头会混进墨迹里");
+    constexpr int kRightDecorationMargin = 8;
     constexpr int kFolderTextLeft = 52;
     constexpr int kHostTextLeft = 46;
     const QRect groupArea = toDevice(QRect(groupRect.left() + kFolderTextLeft,

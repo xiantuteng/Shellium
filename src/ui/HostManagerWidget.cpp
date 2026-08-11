@@ -260,19 +260,21 @@ protected:
         }
 
         const bool selected = (option.state & QStyle::State_Selected) != 0;
+        const bool hovered = (option.state & QStyle::State_MouseOver) != 0;
         QStyleOptionViewItem background = option;
         initStyleOption(&background, index);
         background.text.clear();
         background.icon = {};
         background.features &= ~QStyleOptionViewItem::HasDecoration;
-        background.state &= ~QStyle::State_Selected;
+        // Qt 会分别绘制“缩进分支区”和“实际节点区”。若让系统样式继续处理 hover/selected，
+        // 子主机左侧缩进区会出现一块与右侧圆角卡片相连的矩形尾巴。两种交互态都清除后，
+        // 再由委托只在 option.rect（实际节点区域）内绘制完整圆角矩形。
+        background.state &= ~(QStyle::State_Selected | QStyle::State_MouseOver);
         const QWidget *widget = option.widget;
         QStyle *style = widget != nullptr ? widget->style() : QApplication::style();
         style->drawControl(QStyle::CE_ItemViewItem, &background, painter, widget);
-        if (selected) {
-            paintSelectionBackground(painter, option.rect);
-        }
-        paintGuideLine(painter, option, index, selected);
+        paintInteractionBackground(painter, option.rect, selected, hovered, widget);
+        paintGuideLine(painter, option, index);
 
         // 主机图标先放进独立圆角容器：未选中时是白色/深色表面卡片，选中时改为品牌绿色。
         // 这样图标不会漂浮在两行文字旁边，当前连接目标也能通过颜色块被快速定位。
@@ -419,26 +421,26 @@ protected:
     }
 
 private:
-    /** @brief 画分组：左侧箭头、文件夹和名称依次排列；空分组在行末显示“0”数量徽章。 */
+    /** @brief 画分组：左侧箭头、文件夹和名称依次排列；空分组不追加冗余数量文字。 */
     void paintFolder(QPainter *painter,
                      const QStyleOptionViewItem &option,
                      const QModelIndex &index) const
     {
         const bool selected = (option.state & QStyle::State_Selected) != 0;
+        const bool hovered = (option.state & QStyle::State_MouseOver) != 0;
         QStyleOptionViewItem background = option;
         initStyleOption(&background, index);
         const QString name = background.text;
         background.text.clear();
         background.icon = {};
         background.features &= ~QStyleOptionViewItem::HasDecoration;
-        background.state &= ~QStyle::State_Selected;
+        // 分组也使用同一套自绘交互背景，避免顶层和子层节点在悬停时出现两种圆角规则。
+        background.state &= ~(QStyle::State_Selected | QStyle::State_MouseOver);
         const QWidget *widget = option.widget;
         QStyle *style = widget != nullptr ? widget->style() : QApplication::style();
         style->drawControl(QStyle::CE_ItemViewItem, &background, painter, widget);
-        if (selected) {
-            paintSelectionBackground(painter, option.rect);
-        }
-        paintGuideLine(painter, option, index, selected);
+        paintInteractionBackground(painter, option.rect, selected, hovered, widget);
+        paintGuideLine(painter, option, index);
 
         const bool emptyFolder = index.model() == nullptr || index.model()->rowCount(index) == 0;
         const QRect iconRect(option.rect.left() + kFolderIconLeft,
@@ -464,11 +466,10 @@ private:
         painter->setFont(nameFont);
         painter->setPen(baseColor);
         const QFontMetrics metrics(nameFont);
-        const int badgeReserve = emptyFolder ? 34 : 8;
         const QRect textRect(option.rect.left() + kFolderTextLeft,
                              option.rect.top(),
                              std::max(0,
-                                      option.rect.width() - kFolderTextLeft - badgeReserve),
+                                      option.rect.width() - kFolderTextLeft - 8),
                              option.rect.height());
         painter->drawText(textRect,
                           Qt::AlignLeft | Qt::AlignVCenter,
@@ -476,89 +477,85 @@ private:
         if (!arrowRect.isNull()) {
             drawToggleArrow(painter, arrowRect, (option.state & QStyle::State_Open) != 0, baseColor);
         }
-        if (emptyFolder) {
-            // 空分组仍是有效的拖放目标，不能直接隐藏；轻量“0”徽章明确说明它只是暂时没有
-            // 主机，避免用户把不可展开误认为加载失败或权限问题。
-            const QRect badgeRect(option.rect.right() - 28,
-                                  option.rect.center().y() - 10,
-                                  20,
-                                  20);
-            QColor badgeFill = baseColor;
-            badgeFill.setAlphaF(0.08F);
-            painter->setPen(Qt::NoPen);
-            painter->setBrush(badgeFill);
-            painter->drawEllipse(badgeRect);
-            painter->setPen(baseColor);
-            painter->setFont(scaledFont(option.font, -1.0, true));
-            painter->drawText(badgeRect, Qt::AlignCenter, QStringLiteral("0"));
-        }
         painter->restore();
     }
 
     /**
-     * @brief 画选中态的柔和背景：把强调色以低透明度叠在已经画好的行背景上。
-     * @param rect 整行矩形（列宽即树宽，因为分组展开列已关闭）。
+     * @brief 只在实际节点区域绘制完整圆角的悬停或选中背景。
+     * @param rect 委托收到的实际节点矩形，不包含父级缩进区。
+     * @param selected 是否处于选中状态；优先于悬停状态。
+     * @param hovered 鼠标是否位于当前节点。
+     * @param widget 提供主题动态属性的主机树；允许为空并使用安全回退色。
      *
-     * 之前按“深色/浅色主题各一套固定色号”实现，用的是控件的 QPalette 明暗来判断——但
-     * Shellium 的深浅主题是应用自己的样式表选择，并不会同步改写 QPalette，本机系统外观
-     * 和应用内主题不一致时（例如系统深色、应用选了浅色）就会判断反，选中行画出一块几乎
-     * 看不清文字的深底色。改成把强调色叠加在“已经画好的正确背景”之上，就不需要再猜深浅：
-     * 无论背景本身是什么颜色，叠加同一个低透明度的绿都只会让它变浅，不会反转成看不清的
-     * 深色块。
+     * 不能把背景交给 QTreeView 的通用 item 规则：子节点的分支缩进区会被平台样式连带填充，
+     * 形成用户指出的左侧“小尾巴”。选中态继续使用半透明品牌色，悬停态读取 MainWindow
+     * 写入的主题色，两者都只绘制一个边界明确的圆角矩形。
      */
-    static void paintSelectionBackground(QPainter *painter, const QRect &rect)
+    static void paintInteractionBackground(QPainter *painter,
+                                           const QRect &rect,
+                                           const bool selected,
+                                           const bool hovered,
+                                           const QWidget *widget)
     {
+        if (!selected && !hovered) {
+            return;
+        }
+
         painter->save();
         painter->setRenderHint(QPainter::Antialiasing, true);
 
-        QColor fill = ShelliumUi::accentColor();
-        fill.setAlphaF(0.13F);
-        QColor border = ShelliumUi::accentColor();
-        border.setAlphaF(0.42F);
+        QColor fill;
+        QColor border;
+        if (selected) {
+            fill = ShelliumUi::accentColor();
+            fill.setAlphaF(0.13F);
+            border = ShelliumUi::accentColor();
+            border.setAlphaF(0.42F);
+        } else {
+            if (widget != nullptr) {
+                fill = QColor(widget->property("hostHoverBackgroundColor").toString());
+            }
+            if (!fill.isValid()) {
+                fill = QColor(QStringLiteral("#e1e7eb"));
+            }
+        }
 
         const QRect fillRect = rect.adjusted(0, 2, -1, -2);
-        painter->setPen(QPen(border, 1));
+        painter->setPen(selected ? QPen(border, 1) : Qt::NoPen);
         painter->setBrush(fill);
         painter->drawRoundedRect(fillRect, 9, 9);
         painter->restore();
     }
 
     /**
-     * @brief 为非顶层节点画一条竖向引导线，纵向贯穿整行，再接一小段横向连接线指向图标。
+     * @brief 在子节点缩进区绘制中性的父子层级连线。
+     * @param painter 当前节点的绘制画笔，不得为空。
+     * @param option 当前节点几何与调色板信息。
+     * @param index 当前节点索引；顶层节点不会绘制连线。
      *
-     * 树关闭了 Qt 默认的分支装饰列（setRootIsDecorated(false)），缩进因此纯靠留白表达，
-     * 子节点较多时很难一眼看出"这几行同属一个分组"。引导线画在缩进留白区内，不占用任何
-     * 图标/文字空间，也不需要重新打开分支装饰列（那会在树左侧多出一条只为箭头存在的列）。
+     * 连线表达分组归属，必须保留；但它始终使用同一低透明度中性色，不随 hover/selected
+     * 变色，也不参与背景填充。因此右侧圆角卡片仍然完整独立，左侧不会再出现矩形背景尾巴
+     * 或绿色选中强调条。
      */
     static void paintGuideLine(QPainter *painter,
                                const QStyleOptionViewItem &option,
-                               const QModelIndex &index,
-                               const bool selected)
+                               const QModelIndex &index)
     {
+        Q_ASSERT(painter != nullptr);
         if (!index.parent().isValid()) {
             return;
         }
+
         QColor lineColor = option.palette.color(QPalette::Text);
         lineColor.setAlphaF(0.14F);
         painter->save();
         painter->setPen(QPen(lineColor, 1));
-        const int x = option.rect.left() - 15;
-        painter->drawLine(x, option.rect.top(), x, option.rect.bottom());
-        const int midY = option.rect.center().y();
-        painter->drawLine(x, midY, option.rect.left() - 3, midY);
-        if (selected) {
-            // 选中卡片外侧的绿色短线与参考设计一致，并且正好覆盖原有灰色父级引导线。
-            // 圆头线段比直角矩形更适合在连续树线中表达“当前这一项”，不会像断裂或错误标记。
-            painter->setRenderHint(QPainter::Antialiasing, true);
-            painter->setPen(QPen(ShelliumUi::accentColor(),
-                                 3,
-                                 Qt::SolidLine,
-                                 Qt::RoundCap));
-            painter->drawLine(x,
-                              option.rect.top() + 9,
-                              x,
-                              option.rect.bottom() - 9);
-        }
+        const int lineX = option.rect.left() - 15;
+        painter->drawLine(lineX, option.rect.top(), lineX, option.rect.bottom());
+        painter->drawLine(lineX,
+                          option.rect.center().y(),
+                          option.rect.left() - 3,
+                          option.rect.center().y());
         painter->restore();
     }
 
@@ -637,6 +634,25 @@ public:
     std::function<void(QTreeWidgetItem *movedItem, QTreeWidgetItem *oldParentItem)> onDropped;
 
 protected:
+    /**
+     * @brief 禁止 Qt 在子节点缩进区绘制平台分支背景或装饰。
+     * @param painter Qt 原本用于绘制分支区域的画笔；此处不使用。
+     * @param rect 当前分支缩进区域；保持透明，不做填充。
+     * @param index 对应节点索引；层级线改由 HostItemDelegate 稳定绘制。
+     *
+     * 即使委托清除了 MouseOver/Selected，QTreeView 仍可能通过 drawBranches 单独给缩进区
+     * 绘制悬停或选中底色，形成圆角卡片左边的矩形尾巴。主机树已经自绘展开箭头和中性层级
+     * 连线，关闭平台层不会损失交互元素，只会避免系统样式重复绘制或填充缩进区。
+     */
+    void drawBranches(QPainter *painter,
+                      const QRect &rect,
+                      const QModelIndex &index) const override
+    {
+        Q_UNUSED(painter)
+        Q_UNUSED(rect)
+        Q_UNUSED(index)
+    }
+
     void dragMoveEvent(QDragMoveEvent *event) override
     {
         QTreeWidgetItem *draggedItem = currentItem();
@@ -1303,14 +1319,37 @@ HostManagerWidget::HostManagerWidget(ApplicationDatabase *database,
     // 为主机树设置稳定的对象名，供应用级样式表只增强主机选中态。不能直接加深所有
     // QTreeView 的选中色，否则设置页、效率工具等无关列表也会被意外改变视觉层级。
     m_tree->setObjectName(QStringLiteral("HostTree"));
+    // QTreeView 会在委托绘制前按平台样式给“当前/选中”行铺底，而且可能连缩进分支区一起
+    // 填充。这里在组件自身层级强制透明，确保无论控件是否挂进 MainWindow、运行在哪个平台，
+    // 背景都只由 HostItemDelegate 在右侧实际节点矩形内绘制。局部规则只处理背景，不覆盖
+    // 应用级 QSS 的字体、行高、颜色或圆角参数。
+    m_tree->setStyleSheet(QStringLiteral(R"QSS(
+        QTreeView#HostTree {
+            selection-background-color: transparent;
+        }
+        QTreeView#HostTree::item:hover,
+        QTreeView#HostTree::item:selected,
+        QTreeView#HostTree::item:selected:active,
+        QTreeView#HostTree::item:selected:!active,
+        QTreeView#HostTree::item:selected:hover {
+            background: transparent;
+        }
+    )QSS"));
+    // 某些原生样式绘制缩进区时直接读取 QPalette::Highlight 而不经过 item QSS。同步把该
+    // 调色板角色设为透明，作为跨平台后备；右侧选中卡片由委托使用品牌色绘制，不依赖它。
+    QPalette hostTreePalette = m_tree->palette();
+    hostTreePalette.setColor(QPalette::Active, QPalette::Highlight, Qt::transparent);
+    hostTreePalette.setColor(QPalette::Inactive, QPalette::Highlight, Qt::transparent);
+    m_tree->setPalette(hostTreePalette);
     // HostManagerWidget 可在不含 MainWindow 的测试和独立容器中使用，因此先提供浅色表面回退；
     // MainWindow::applyModernAppearance() 会按实际应用主题覆盖该属性。不能直接读取
     // QPalette::Base：用户可在深色 macOS 上选择应用浅色主题，两套明暗状态并不保证一致。
     m_tree->setProperty("hostIconSurfaceColor", QStringLiteral("#ffffff"));
+    m_tree->setProperty("hostHoverBackgroundColor", QStringLiteral("#e1e7eb"));
     m_tree->setHeaderHidden(true);
     // 展开箭头改由 HostItemDelegate 画在分组行左侧，Qt 自带的分支装饰列必须关掉，否则
-    // 会出现两套箭头和不可控的平台间距。32px 层级缩进让子主机卡片左缘与父级引导线形成
-    // 参考图中的清晰落差，同时为绿色选中强调条预留空间。
+    // 会出现两套箭头和不可控的平台间距。32px 层级缩进配合委托绘制的中性连线表达父子
+    // 关系；连线不随悬停/选中变色，右侧圆角卡片也不会再带矩形背景“小尾巴”。
     m_tree->setRootIsDecorated(false);
     m_tree->setIndentation(32);
     m_tree->setIconSize(QSize(18, 18));
@@ -1339,10 +1378,13 @@ HostManagerWidget::HostManagerWidget(ApplicationDatabase *database,
     auto *addGroupButton = new QToolButton(m_headerActions);
     addGroupButton->setText(tr("新建分组"));
     auto *addHostButton = new QPushButton(tr("新建主机"), m_headerActions);
+    addHostButton->setObjectName(QStringLiteral("HostAddButton"));
     addHostButton->setProperty("primaryAction", true);
     addHostButton->setProperty("hostPrimaryAction", true);
-    addHostButton->setMinimumWidth(96);
-    addHostButton->setFixedHeight(34);
+    // 30px 总高度与两侧 28px 图标按钮形成紧凑动作组，同时为 QSS 的内容区、内边距和边框
+    // 留足空间，避免固定高度小于样式最小尺寸时圆角底部被裁剪。
+    addHostButton->setMinimumWidth(90);
+    addHostButton->setFixedHeight(30);
     auto *refreshButton = new QToolButton(m_headerActions);
     refreshButton->setText(tr("刷新"));
     UiIcons::decorateButton(

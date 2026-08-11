@@ -1026,7 +1026,7 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
         QLabel#SidebarHeader {
             color: @TEXT@;
             font-size: 18px;
-            font-weight: 700;
+            font-weight: 400;
             padding: 2px 0 7px 0;
         }
         QLabel#HostCountLabel {
@@ -1426,9 +1426,13 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
             border-color: #45e394;
         }
         QPushButton[hostPrimaryAction="true"] {
-            border-radius: 10px;
-            padding: 4px 12px;
-            font-size: 14px;
+            /* 固定按钮总高为 30px；内容高 20px + 上下内边距 6px + 边框 2px 留有余量，
+               不再因通用按钮的 28px 最小内容高与固定高度冲突而裁掉下圆角。 */
+            min-height: 20px;
+            max-height: 20px;
+            border-radius: 8px;
+            padding: 3px 10px;
+            font-size: 13px;
         }
         QLabel[sectionCaption="true"] {
             color: @MUTED@;
@@ -1461,8 +1465,9 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
             background: @RAISED@;
         }
         QTreeView#HostTree::item:hover:!selected {
-            /* 主机与分组行需要比通用列表更明确的悬停反馈；选中行仍由下方绿色规则负责。 */
-            background: @HOST_TREE_HOVER@;
+            /* 悬停卡片由 HostItemDelegate 只在实际节点区绘制；QSS 必须透明，否则树缩进区
+               会被平台样式补成左侧矩形尾巴。 */
+            background: transparent;
         }
         QTreeView#HostTree::item {
             min-height: 0;
@@ -1498,8 +1503,8 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
         QTreeView#HostTree::item:selected:active,
         QTreeView#HostTree::item:selected:!active,
         QTreeView#HostTree::item:selected:hover {
-            /* 主机树由委托绘制淡绿卡片、描边和父级引导线。这里必须透明，否则 Qt 会先给
-               缩进区和整行铺通用选中色，形成参考设计中不存在的宽绿色块并叠深卡片底色。 */
+            /* 主机树由委托绘制淡绿圆角卡片。这里必须透明，否则 Qt 会先给缩进区和整行铺
+               通用选中色，重新形成已移除的左侧矩形尾巴并叠深右侧卡片底色。 */
             background: transparent;
             color: @TEXT@;
         }
@@ -1749,6 +1754,7 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
             // 主机委托自绘图标卡片时通过动态属性读取同一 SURFACE 色，才能正确支持“系统深色
             // + 应用浅色”及其反向组合；更新 viewport 让主题切换在当前帧立即生效。
             hostTree->setProperty("hostIconSurfaceColor", surfaceBackground);
+            hostTree->setProperty("hostHoverBackgroundColor", hostTreeHoverBackground);
             hostTree->viewport()->update();
         }
     }
