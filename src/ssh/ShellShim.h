@@ -91,8 +91,9 @@ public:
      * @param declineReason 无法接管时的原因，供回执给远端 shim。
      * @return 可接管时返回有效目标；否则返回无效目标并填写 declineReason。
      *
-     * 无法完整表达的用法（一次性远程命令、纯转发、自定义 ProxyCommand 等）一律拒绝接管，
-     * 交还给真正的 ssh 执行。宁可退回降级路径，也不能用一个错误的目标去建立会话。
+     * 无法完整表达的用法（一次性远程命令、纯转发、自定义 ProxyCommand、OpenSSH 详细
+     * 日志等）一律拒绝接管，交还给真正的 ssh 执行。宁可退回降级路径，也不能用一个错误
+     * 的目标去建立会话，或吞掉用户明确要求的诊断输出。
      */
     [[nodiscard]] static ConnectionTarget resolveTarget(const QStringList &arguments,
                                                         const ConnectionTarget &currentTarget,

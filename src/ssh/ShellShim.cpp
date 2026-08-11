@@ -18,6 +18,31 @@ bool isSshExecutable(const QString &token)
     return QFileInfo(token).fileName() == QStringLiteral("ssh");
 }
 
+/**
+ * @brief 判断参数是否为 OpenSSH 的详细日志开关（`-v`、`-vv` 或 `-vvv`）。
+ * @param token 远端 Shell 已完成引号展开后的单个命令行参数。
+ * @return 参数仅由一个前导短横线和一个或多个 `v` 组成时返回 true。
+ *
+ * Shellium 接管嵌套连接后实际使用 libssh 建连，不会启动用户输入的 OpenSSH 进程，也就
+ * 无法忠实产生 OpenSSH 写入 stderr 的 `debug1/debug2/debug3` 诊断。这里不能像普通的
+ * 无参数开关一样忽略 `-v`，而应当识别所有合法重复级别并让调用方回退到原生 ssh。
+ */
+bool isOpenSshVerboseFlag(const QString &token)
+{
+    if (token.size() < 2 || token.front() != QLatin1Char('-')) {
+        return false;
+    }
+
+    // OpenSSH 用重复的 v 提高日志等级；逐字符判断可同时覆盖 -v、-vv、-vvv，并拒绝把
+    // 其他未知组合选项误判成详细日志请求。
+    for (qsizetype index = 1; index < token.size(); ++index) {
+        if (token.at(index) != QLatin1Char('v')) {
+            return false;
+        }
+    }
+    return true;
+}
+
 } // namespace
 
 QByteArray ShellShim::scriptBody()
@@ -188,6 +213,11 @@ ConnectionTarget ShellShim::resolveTarget(const QStringList &arguments,
         }
         if (nonInteractiveFlags.contains(token)) {
             return decline(tr("该 ssh 调用不会进入交互式 Shell"));
+        }
+        if (isOpenSshVerboseFlag(token)) {
+            // -v 的核心用途就是观察 OpenSSH 自身的协商过程。若继续由 libssh 接管，连接虽
+            // 可能成功，但用户明确要求的 stderr 调试输出会消失，因此必须交还原生 ssh。
+            return decline(tr("该 ssh 调用要求显示 OpenSSH 详细过程"));
         }
         if (token == QStringLiteral("-F") || token == QStringLiteral("-J")) {
             // 自定义配置文件与显式跳板链无法用一条 direct-tcpip 忠实复现，

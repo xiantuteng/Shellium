@@ -989,6 +989,9 @@ void TerminalPane::inspectSubmittedCommand(const QString &command)
     if (parsed.action == SshCommandParser::Action::EnterServer && parsed.target.isValid()) {
         // 这里记录“候选已进入”状态。若命令连接失败，用户可通过 exit 或目标选择器回到外层；
         // 后续 Shell Integration 会用远端 preexec/precmd 事件进一步确认实际状态。
+        // 路由注册前保存真实外层：推测目标加入列表后 activeTarget() 会变成第 2 层，而远端
+        // OpenSSH SFTP 兜底需要重新认证并执行命令的是当前第 1 层，不能把两端写反。
+        const ConnectionTarget relayOrigin = activeTarget();
         ConnectionTarget nestedTarget = parsed.target;
         if (m_sessionStack != nullptr && m_sessionStack->isRunning()) {
             nestedTarget.tunnelRouteId = nestedTarget.id;
@@ -996,8 +999,8 @@ void TerminalPane::inspectSubmittedCommand(const QString &command)
             SshTunnelBroker::instance().registerRoute(nestedTarget.tunnelRouteId,
                                                        m_sessionStack,
                                                        QString(),
-                                                       nestedTarget.host,
-                                                       nestedTarget.port);
+                                                       nestedTarget,
+                                                       relayOrigin);
             m_tunnelRouteIds.append(nestedTarget.tunnelRouteId);
         }
         nestedTarget.interactiveAuthenticationPending = true;
@@ -1127,8 +1130,8 @@ void TerminalPane::registerOwnedLayerRoutes()
         SshTunnelBroker::instance().registerRoute(target.tunnelRouteId,
                                                    m_sessionStack,
                                                    target.id,
-                                                   target.host,
-                                                   target.port);
+                                                   target,
+                                                   m_ownedTargets.at(index - 1));
         m_ownedRouteIds.append(target.tunnelRouteId);
     }
 }

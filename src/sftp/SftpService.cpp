@@ -13,6 +13,7 @@
 #include <QWaitCondition>
 #include <QtConcurrentRun>
 
+#include <algorithm>
 #include <functional>
 #include <memory>
 
@@ -20,6 +21,7 @@
 #include <libssh/sftp.h>
 
 #include <fcntl.h>
+#include <unistd.h>
 
 namespace {
 
@@ -30,6 +32,53 @@ struct ConnectResult {
     QString message;
     QString fingerprint;
 };
+
+} // namespace
+
+namespace SftpRemoteRelay {
+
+namespace {
+
+/**
+ * @brief 把一个参数编码成可安全交给远端 POSIX Shell 的单个 token。
+ * @param value 未经转义的参数值。
+ * @return 使用单引号包裹、并正确拆分内部单引号后的 UTF-8 字节串。
+ *
+ * 内层主机名与用户名来自终端命令，绝不能直接拼进外层服务器的 exec 字符串；否则空格、
+ * 分号或命令替换语法可能改变要执行的命令。单引号编码只表达一个 argv，不做任何展开。
+ */
+QByteArray quoteRemoteShellArgument(QString value)
+{
+    value.replace(QStringLiteral("'"), QStringLiteral("'\\''"));
+    return "'" + value.toUtf8() + "'";
+}
+
+} // namespace
+
+/**
+ * @brief 构造在外层服务器上启动内层 SFTP 子系统的 OpenSSH 命令。
+ * @param target 内层服务器；用户名、地址和端口均已由 SSH 命令解析器规范化。
+ * @return 可交给 ssh_channel_request_exec 的安全命令行。
+ *
+ * `-s ... sftp` 要求 OpenSSH 把最后一个参数当作子系统名，而不是执行普通 Shell 命令；
+ * `BatchMode=yes` 禁止密码提示混入二进制 SFTP 数据流，`ConnectTimeout` 防止错误地址让后台
+ * 任务永久阻塞。认证由外层服务器自己的默认密钥、ssh-agent 与 ~/.ssh/config 完成，这正是
+ * 本机无法读取远端私钥时仍能工作的关键。
+ */
+QByteArray buildCommand(const ConnectionTarget &target)
+{
+    QByteArray command = "command ssh -q -o BatchMode=yes -o ConnectTimeout=12 -p "
+        + QByteArray::number(target.port);
+    if (!target.username.trimmed().isEmpty()) {
+        command += " -l " + quoteRemoteShellArgument(target.username.trimmed());
+    }
+    command += " -s -- " + quoteRemoteShellArgument(target.host.trimmed()) + " sftp";
+    return command;
+}
+
+} // namespace SftpRemoteRelay
+
+namespace {
 
 /**
  * @brief 对 libssh 句柄进行 RAII 管理，确保所有失败分支都释放网络与 SFTP 资源。
@@ -44,13 +93,7 @@ public:
 
     ~SftpConnection()
     {
-        if (m_sftp != nullptr) {
-            sftp_free(m_sftp);
-        }
-        if (m_session != nullptr) {
-            ssh_disconnect(m_session);
-            ssh_free(m_session);
-        }
+        close();
     }
 
     /**
@@ -61,16 +104,71 @@ public:
      */
     ConnectResult open(const ConnectionTarget &target, const bool allowUnknownHost)
     {
-        m_session = ssh_new();
-        if (m_session == nullptr) {
-            return failure(SftpService::ErrorKind::Connection,
-                           QObject::tr("无法创建 libssh 会话。"));
+        ConnectResult directResult = openDirect(target, allowUnknownHost);
+        if (directResult.success) {
+            return directResult;
         }
 
-        const QByteArray host = target.host.toUtf8();
-        const QByteArray user = target.username.toUtf8();
-        const unsigned int port = target.port;
-        ssh_options_set(m_session, SSH_OPTIONS_HOST, host.constData());
+        // 主机密钥异常必须由本机的显式确认流程处理，不能改走远端 OpenSSH 后绕过界面警告。
+        // 只有传输失败或本机缺少内层认证材料时才尝试远端密钥兜底。
+        if (target.tunnelRouteId.isEmpty()
+            || (directResult.kind != SftpService::ErrorKind::Connection
+                && directResult.kind != SftpService::ErrorKind::Authentication)) {
+            return directResult;
+        }
+
+        ConnectionTarget relayOrigin;
+        ConnectionTarget relayTarget;
+        if (!SshTunnelBroker::instance().remoteSftpRelay(
+                target.tunnelRouteId, &relayOrigin, &relayTarget)) {
+            return directResult;
+        }
+
+        // 常规路径可能已经创建了半成品 libssh 会话或隧道 fd；必须完整释放后再把 m_session
+        // 用作外层连接，否则旧句柄会泄漏，lastError 也可能错误引用第一次失败。
+        close();
+        const ConnectResult relayResult = openViaRemoteOpenSsh(relayOrigin, relayTarget);
+        if (relayResult.success) {
+            return relayResult;
+        }
+
+        ConnectResult combined = relayResult;
+        combined.message = QObject::tr("常规 SFTP 路径失败：%1\n远端密钥 SFTP 兜底失败：%2")
+                               .arg(directResult.message, relayResult.message);
+        return combined;
+    }
+
+    [[nodiscard]] sftp_session handle() const { return m_sftp; }
+
+    /**
+     * @brief 连接是否仍可用于下一次操作。
+     *
+     * 池化连接可能因服务器空闲超时、网络中断或承载它的隧道随标签页关闭而失效。复用前必须
+     * 核对，否则用户会看到一次莫名其妙的失败，而不是自动重连。
+     */
+    [[nodiscard]] bool isAlive() const
+    {
+        const bool relayAlive = m_remoteSftpChannel == nullptr
+            || (ssh_channel_is_open(m_remoteSftpChannel) != 0
+                && ssh_channel_is_eof(m_remoteSftpChannel) == 0);
+        return m_session != nullptr && m_sftp != nullptr && relayAlive
+            && ssh_is_connected(m_session) != 0;
+    }
+    [[nodiscard]] QString lastError() const
+    {
+        return m_session == nullptr ? QObject::tr("未知 libssh 错误")
+                                    : QString::fromUtf8(ssh_get_error(m_session));
+    }
+
+private:
+    /**
+     * @brief 使用本机 libssh 直连或经已注册隧道连接内层服务器。
+     * @param target 内层目标。
+     * @param allowUnknownHost 是否已由用户确认内层服务器指纹。
+     * @return 完整连接与 SFTP 初始化结果。
+     */
+    ConnectResult openDirect(const ConnectionTarget &target, const bool allowUnknownHost)
+    {
         int tunnelFd = -1;
         if (!target.tunnelRouteId.isEmpty()) {
             QString tunnelError;
@@ -79,9 +177,125 @@ public:
                 return failure(SftpService::ErrorKind::Connection,
                                QObject::tr("无法复用外层 SSH 会话：%1").arg(tunnelError));
             }
-            // SSH_OPTIONS_FD 让 libssh 在已连接 socket 上执行内层握手，同时 HOST 仍保持真实
-            // 内层地址，known_hosts 校验不会错误绑定到 127.0.0.1。
-            ssh_options_set(m_session, SSH_OPTIONS_FD, &tunnelFd);
+        }
+
+        const ConnectResult connected = connectAndAuthenticate(
+            target, allowUnknownHost, tunnelFd, QObject::tr("SFTP"));
+        if (!connected.success) {
+            return connected;
+        }
+
+        m_sftp = sftp_new(m_session);
+        if (m_sftp == nullptr || sftp_init(m_sftp) != SSH_OK) {
+            return failure(SftpService::ErrorKind::Connection,
+                           QObject::tr("服务器未能初始化 SFTP 子系统：%1")
+                               .arg(QString::fromUtf8(ssh_get_error(m_session))));
+        }
+        return {.success = true};
+    }
+
+    /**
+     * @brief 重连外层服务器，并让外层原生 OpenSSH 使用远端私钥启动内层 SFTP。
+     * @param relayOrigin 外层服务器配置，包含本次会话可用的认证信息。
+     * @param target 内层服务器配置。
+     * @return 外层认证、exec 命令与 SFTP 协议初始化的综合结果。
+     */
+    ConnectResult openViaRemoteOpenSsh(const ConnectionTarget &relayOrigin,
+                                       const ConnectionTarget &target)
+    {
+        // 外层已经由当前终端完成过主机密钥确认，known_hosts 应有记录；这里仍强制校验且不
+        // 自动接受未知指纹，防止兜底路径成为绕过主机身份校验的后门。
+        const ConnectResult connected = connectAndAuthenticate(
+            relayOrigin, false, -1, QObject::tr("外层 SSH"));
+        if (!connected.success) {
+            return connected;
+        }
+
+        ssh_channel relayChannel = ssh_channel_new(m_session);
+        if (relayChannel == nullptr) {
+            return failure(SftpService::ErrorKind::Connection,
+                           QObject::tr("无法创建远端 SFTP 中继通道：%1")
+                               .arg(QString::fromUtf8(ssh_get_error(m_session))));
+        }
+
+        if (ssh_channel_open_session(relayChannel) != SSH_OK) {
+            const QString error = QString::fromUtf8(ssh_get_error(m_session));
+            ssh_channel_free(relayChannel);
+            return failure(SftpService::ErrorKind::Connection,
+                           QObject::tr("外层服务器拒绝启动 SFTP 中继会话：%1").arg(error));
+        }
+
+        const QByteArray command = SftpRemoteRelay::buildCommand(target);
+        if (ssh_channel_request_exec(relayChannel, command.constData()) != SSH_OK) {
+            const QString error = QString::fromUtf8(ssh_get_error(m_session));
+            ssh_channel_free(relayChannel);
+            return failure(SftpService::ErrorKind::Connection,
+                           QObject::tr("外层服务器无法执行内层 OpenSSH：%1").arg(error));
+        }
+
+        // sftp_new_channel 虽然通常接收 subsystem request 创建的通道，但 SFTP 协议只依赖
+        // 通道标准输入输出。这里 exec 的远端 OpenSSH 已把自己的 stdio 接到内层 sftp 子系统，
+        // 因而可以直接由 libssh 的 SFTP 客户端发送 SSH_FXP_INIT 等协议包。
+        m_sftp = sftp_new_channel(m_session, relayChannel);
+        if (m_sftp == nullptr) {
+            ssh_channel_free(relayChannel);
+            return failure(SftpService::ErrorKind::Connection,
+                           QObject::tr("无法绑定远端 OpenSSH 的 SFTP 数据通道：%1")
+                               .arg(QString::fromUtf8(ssh_get_error(m_session))));
+        }
+        m_remoteSftpChannel = relayChannel;
+
+        if (sftp_init(m_sftp) != SSH_OK) {
+            const QString diagnostic = readRelayDiagnostic(relayChannel);
+            const QString detail = diagnostic.isEmpty()
+                ? QString::fromUtf8(ssh_get_error(m_session))
+                : diagnostic;
+            // 远端 OpenSSH 使用的是外层服务器上的密钥/Agent，本机密码输入框无法修复这条
+            // 路径；按连接错误上报并展示真实 stderr，避免诱导用户输入一份不会被使用的密码。
+            return failure(SftpService::ErrorKind::Connection,
+                           QObject::tr("外层 OpenSSH 未能建立内层 SFTP：%1").arg(detail));
+        }
+        return {.success = true};
+    }
+
+    /**
+     * @brief 配置、连接、校验并认证一个 SSH 会话。
+     * @param target 实际要由本机 libssh 认证的服务器。
+     * @param allowUnknownHost 是否允许写入此前已由界面确认的未知主机指纹。
+     * @param transportFd 已连通的隧道 fd；负数表示按 host/proxyJumps 自行连接。
+     * @param authenticationLabel 认证失败消息中的连接角色名称。
+     * @return 成功时 m_session 已认证；失败时返回可分类诊断。
+     */
+    ConnectResult connectAndAuthenticate(const ConnectionTarget &target,
+                                         const bool allowUnknownHost,
+                                         const int transportFd,
+                                         const QString &authenticationLabel)
+    {
+        m_session = ssh_new();
+        if (m_session == nullptr) {
+            if (transportFd >= 0) {
+                // ssh_new 失败时 fd 尚未交给 libssh，仍由调用方负责关闭，避免隧道端点泄漏。
+                ::close(transportFd);
+            }
+            return failure(SftpService::ErrorKind::Connection,
+                           QObject::tr("无法创建 libssh 会话。"));
+        }
+
+        const QByteArray host = target.host.toUtf8();
+        const QByteArray user = target.username.toUtf8();
+        const unsigned int port = target.port;
+        ssh_options_set(m_session, SSH_OPTIONS_HOST, host.constData());
+        if (transportFd >= 0) {
+            // SSH_OPTIONS_FD 接管 fd 的生命周期；HOST 仍保留真实地址，使 known_hosts 校验
+            // 绑定内层主机而不是 socketpair 的本地端。
+            int fd = transportFd;
+            if (ssh_options_set(m_session, SSH_OPTIONS_FD, &fd) != SSH_OK) {
+                // 选项设置失败代表 libssh 没有接管 fd；此分支必须显式关闭调用方端点。
+                ::close(transportFd);
+                return failure(SftpService::ErrorKind::Connection,
+                               QObject::tr("无法绑定内层 SSH 隧道：%1")
+                                   .arg(QString::fromUtf8(ssh_get_error(m_session))));
+            }
         }
         if (!user.isEmpty()) {
             ssh_options_set(m_session, SSH_OPTIONS_USER, user.constData());
@@ -92,7 +306,7 @@ public:
             const QByteArray identity = QFile::encodeName(target.identityFile);
             ssh_options_set(m_session, SSH_OPTIONS_IDENTITY, identity.constData());
         }
-        if (target.tunnelRouteId.isEmpty() && !target.proxyJumps.isEmpty()) {
+        if (transportFd < 0 && !target.proxyJumps.isEmpty()) {
             const QByteArray jumps = target.proxyJumps.join(QLatin1Char(',')).toUtf8();
             if (ssh_options_set(m_session, SSH_OPTIONS_PROXYJUMP, jumps.constData()) != SSH_OK) {
                 return failure(SftpService::ErrorKind::Connection,
@@ -138,39 +352,51 @@ public:
         }
         if (authentication != SSH_AUTH_SUCCESS) {
             return failure(SftpService::ErrorKind::Authentication,
-                           QObject::tr("SFTP 认证失败：%1。请检查用户名、密码、私钥或 SSH Agent。")
-                               .arg(QString::fromUtf8(ssh_get_error(m_session))));
-        }
-
-        m_sftp = sftp_new(m_session);
-        if (m_sftp == nullptr || sftp_init(m_sftp) != SSH_OK) {
-            return failure(SftpService::ErrorKind::Connection,
-                           QObject::tr("服务器未能初始化 SFTP 子系统：%1")
-                               .arg(QString::fromUtf8(ssh_get_error(m_session))));
+                           QObject::tr("%1 认证失败：%2。请检查用户名、密码、私钥或 SSH Agent。")
+                               .arg(authenticationLabel,
+                                    QString::fromUtf8(ssh_get_error(m_session))));
         }
         return {.success = true};
     }
 
-    [[nodiscard]] sftp_session handle() const { return m_sftp; }
-
     /**
-     * @brief 连接是否仍可用于下一次操作。
-     *
-     * 池化连接可能因服务器空闲超时、网络中断或承载它的隧道随标签页关闭而失效。复用前必须
-     * 核对，否则用户会看到一次莫名其妙的失败，而不是自动重连。
+     * @brief 读取远端 OpenSSH 写入扩展数据流的短诊断。
+     * @param channel 已执行 `ssh -s ... sftp` 的外层 session channel。
+     * @return 去除首尾空白且限制为 4096 字节的错误文本。
      */
-    [[nodiscard]] bool isAlive() const
+    static QString readRelayDiagnostic(ssh_channel channel)
     {
-        return m_session != nullptr && m_sftp != nullptr
-            && ssh_is_connected(m_session) != 0;
-    }
-    [[nodiscard]] QString lastError() const
-    {
-        return m_session == nullptr ? QObject::tr("未知 libssh 错误")
-                                    : QString::fromUtf8(ssh_get_error(m_session));
+        QByteArray diagnostic;
+        char buffer[1024];
+        while (diagnostic.size() < 4096) {
+            const int count = ssh_channel_read_timeout(
+                channel, buffer, sizeof(buffer), 1, 100);
+            if (count <= 0) {
+                break;
+            }
+            const qsizetype remainingCapacity = 4096 - diagnostic.size();
+            diagnostic.append(buffer,
+                              std::min<qsizetype>(count, remainingCapacity));
+        }
+        return QString::fromUtf8(diagnostic).trimmed();
     }
 
-private:
+    /** @brief 释放当前 SFTP、通道与 SSH 会话，使同一对象可以安全尝试另一条连接路径。 */
+    void close()
+    {
+        if (m_sftp != nullptr) {
+            // sftp_free 同时释放 sftp_new_channel 接管的 relay channel，不能再次 free。
+            sftp_free(m_sftp);
+            m_sftp = nullptr;
+            m_remoteSftpChannel = nullptr;
+        }
+        if (m_session != nullptr) {
+            ssh_disconnect(m_session);
+            ssh_free(m_session);
+            m_session = nullptr;
+        }
+    }
+
     ConnectResult verifyServerKey(const bool allowUnknownHost)
     {
         ssh_key serverKey = nullptr;
@@ -234,6 +460,8 @@ private:
 
     ssh_session m_session = nullptr;
     sftp_session m_sftp = nullptr;
+    /** @brief 远端 OpenSSH 兜底使用的 exec channel；所有权随 m_sftp 一起释放。 */
+    ssh_channel m_remoteSftpChannel = nullptr;
 };
 
 using SftpRecursive::joinRemotePath;

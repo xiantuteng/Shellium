@@ -1,5 +1,7 @@
 #include "productivity/ProductivityModel.h"
 #include "productivity/ProductivityWidget.h"
+#include "ssh/SshSessionStack.h"
+#include "ssh/SshTunnelBroker.h"
 #include "storage/ApplicationDatabase.h"
 #include "terminal/TerminalPane.h"
 #include "terminal/TerminalView.h"
@@ -65,6 +67,9 @@ private slots:
      * 没有说明时要退化显示命令，分组节点则完全不设置这个角色。
      */
     void snippetTreeIsSingleColumnWithDescriptionFallbackToCommand();
+
+    /** @brief 嵌套路由必须保留远端密钥 SFTP 兜底所需的外层认证配置与内层端口。 */
+    void tunnelBrokerReturnsRemoteSftpRelayEndpoints();
 
 private:
     /** @brief 递归查找树中保存指定稳定 id 的节点。 */
@@ -395,7 +400,38 @@ void ProductivityTest::snippetTreeIsSingleColumnWithDescriptionFallbackToCommand
     QCOMPARE(withoutDescItem->data(0, kPreviewRole).toString(), withoutDescription.command);
 }
 
+void ProductivityTest::tunnelBrokerReturnsRemoteSftpRelayEndpoints()
+{
+    ConnectionTarget outer;
+    outer.id = QStringLiteral("outer-layer");
+    outer.host = QStringLiteral("115.159.35.31");
+    outer.username = QStringLiteral("root");
+    outer.port = 3822;
+    outer.password = QStringLiteral("process-only-secret");
+
+    ConnectionTarget inner;
+    inner.id = QStringLiteral("inner-layer");
+    inner.host = QStringLiteral("192.168.1.27");
+    inner.username = QStringLiteral("root");
+    inner.port = 52231;
+
+    // 栈不启动网络线程；Broker 只需要一个生命周期有效的 QPointer 来验证路由归属。
+    SshSessionStack stack(outer, false, nullptr);
+    SshTunnelBroker &broker = SshTunnelBroker::instance();
+    broker.registerRoute(inner.id, &stack, QString(), inner, outer);
+
+    ConnectionTarget resolvedOuter;
+    ConnectionTarget resolvedInner;
+    QVERIFY(broker.remoteSftpRelay(inner.id, &resolvedOuter, &resolvedInner));
+    QCOMPARE(resolvedOuter.connectionSpecifier(true), outer.connectionSpecifier(true));
+    QCOMPARE(resolvedOuter.password, outer.password);
+    QCOMPARE(resolvedInner.connectionSpecifier(true), inner.connectionSpecifier(true));
+
+    // 注销后不能继续泄露或复用外层认证材料；后台任务必须看到路由已经失效。
+    broker.unregisterRoute(inner.id);
+    QVERIFY(!broker.remoteSftpRelay(inner.id, &resolvedOuter, &resolvedInner));
+}
+
 QTEST_MAIN(ProductivityTest)
 
 #include "ProductivityTest.moc"
-

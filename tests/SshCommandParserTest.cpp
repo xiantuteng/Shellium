@@ -122,6 +122,9 @@ private slots:
     /** @brief 无法忠实复现的 ssh 用法必须拒绝接管，交还给原生 ssh。 */
     void shellShimDeclinesUnsupportedInvocations();
 
+    /** @brief OpenSSH 详细日志开关必须交还原生 ssh，不能被 libssh 接管后静默吞掉。 */
+    void shellShimDeclinesVerboseInvocations();
+
     /** @brief shim 追加历史策略时必须保留用户已有的 HISTCONTROL 选项。 */
     void shellShimPreservesExistingHistoryPolicy();
 
@@ -851,6 +854,50 @@ void SshCommandParserTest::shellShimDeclinesUnsupportedInvocations()
         // 必须给出原因：远端 shim 正阻塞等待回执，界面也要能解释为什么没接管。
         QVERIFY2(!reason.isEmpty(), qPrintable(arguments.join(QLatin1Char(' '))));
     }
+}
+
+void SshCommandParserTest::shellShimDeclinesVerboseInvocations()
+{
+    ConnectionTarget current;
+    current.id = QStringLiteral("layer-1");
+    current.host = QStringLiteral("10.0.0.1");
+    current.username = QStringLiteral("root");
+
+    // -v 可以重复至三级。三种写法都必须返回无效接管目标，使远端 shim 回复 pass 后执行
+    // `command ssh "$@"`；只有真实 OpenSSH 进程才能把 debug1/debug2/debug3 写入终端。
+    const QStringList verboseFlags = {
+        QStringLiteral("-v"),
+        QStringLiteral("-vv"),
+        QStringLiteral("-vvv"),
+    };
+    for (const QString &verboseFlag : verboseFlags) {
+        QString reason;
+        const ConnectionTarget target = ShellShim::resolveTarget(
+            {verboseFlag, QStringLiteral("root@192.168.0.1")}, current, &reason);
+        QVERIFY2(!target.isValid(), qPrintable(verboseFlag));
+        QVERIFY2(reason.contains(QStringLiteral("OpenSSH")), qPrintable(reason));
+    }
+
+    // shim 回退只决定“谁来执行终端里的 ssh”，不会关闭第 2 层文件管理。命令提交时的
+    // 降级解析器仍须识别同一个目标，并记录从当前服务器出发的转发路径；TerminalPane 会
+    // 用这个推测目标建立独立 SFTP 会话。这里锁住该协作关系，避免修复日志后意外丢失
+    // 嵌套文件管理能力。
+    const SshCommandParser::Result inferred = SshCommandParser::parse(
+        QStringLiteral("ssh -v root@192.168.0.1"), current);
+    QCOMPARE(inferred.action, SshCommandParser::Action::EnterServer);
+    QVERIFY(inferred.target.isValid());
+    QCOMPARE(inferred.target.host, QStringLiteral("192.168.0.1"));
+    QCOMPARE(inferred.target.username, QStringLiteral("root"));
+    QCOMPARE(inferred.target.parentId, current.id);
+    QCOMPARE(inferred.target.proxyJumps,
+             (QStringList{current.connectionSpecifier(true)}));
+
+    // 防止检测条件过宽：普通无参数开关仍可由 Shellium 接管，不能因为参数中存在字母 v
+    // 就让所有嵌套连接退化成推测模式。
+    QString reason;
+    const ConnectionTarget normalTarget = ShellShim::resolveTarget(
+        {QStringLiteral("-4"), QStringLiteral("root@192.168.0.1")}, current, &reason);
+    QVERIFY(normalTarget.isValid());
 }
 
 void SshCommandParserTest::shellShimPreservesExistingHistoryPolicy()

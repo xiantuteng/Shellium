@@ -33,20 +33,20 @@ SshTunnelBroker &SshTunnelBroker::instance()
  * @param routeId 正式实现使用的路由标识；界面测试不读取。
  * @param stack 正式实现使用的终端会话栈；界面测试不持有。
  * @param layerId 正式实现使用的目标层标识；界面测试不读取。
- * @param targetHost 正式实现使用的目标地址；界面测试不读取。
- * @param targetPort 正式实现使用的目标端口；界面测试不读取。
+ * @param target 正式实现使用的目标服务器；界面测试不读取。
+ * @param relayOrigin 正式实现远端 OpenSSH 兜底使用的外层服务器；界面测试不读取。
  */
 void SshTunnelBroker::registerRoute(const QString &routeId,
                                     SshSessionStack *stack,
                                     const QString &layerId,
-                                    const QString &targetHost,
-                                    const quint16 targetPort)
+                                    const ConnectionTarget &target,
+                                    const ConnectionTarget &relayOrigin)
 {
     Q_UNUSED(routeId)
     Q_UNUSED(stack)
     Q_UNUSED(layerId)
-    Q_UNUSED(targetHost)
-    Q_UNUSED(targetPort)
+    Q_UNUSED(target)
+    Q_UNUSED(relayOrigin)
 }
 
 /**
@@ -74,6 +74,23 @@ int SshTunnelBroker::openSocket(const QString &routeId, QString *errorMessage)
 }
 
 /**
+ * @brief 界面测试不提供远端 OpenSSH SFTP 中继配置。
+ * @param routeId 正式路由标识；测试不读取。
+ * @param relayOrigin 正式实现的外层配置输出；测试不写入。
+ * @param target 正式实现的内层配置输出；测试不写入。
+ * @return 始终返回 false，保证界面结构测试不会连接真实服务器。
+ */
+bool SshTunnelBroker::remoteSftpRelay(const QString &routeId,
+                                      ConnectionTarget *relayOrigin,
+                                      ConnectionTarget *target)
+{
+    Q_UNUSED(routeId)
+    Q_UNUSED(relayOrigin)
+    Q_UNUSED(target)
+    return false;
+}
+
+/**
  * @brief 远程文件管理改版的结构与响应式界面回归。
  *
  * 这些测试只检查设计稿要求且会直接影响可用性的稳定契约：默认远程单栏、全屏双栏、两侧
@@ -95,6 +112,9 @@ private slots:
 
     /** @brief 进度、状态和队列必须归入同一底部信息带，并在空闲时整体隐藏。 */
     void transferWidgetsShareOneHiddenInformationBand();
+
+    /** @brief 远端 SFTP 中继命令必须保留端口和用户名，并阻断 Shell 参数注入。 */
+    void remoteSftpRelayCommandQuotesEveryUntrustedArgument();
 
 private:
     /**
@@ -176,6 +196,31 @@ void RemoteFileManagerWidgetTest::fullScreenSwitchesFromRemoteOnlyToSymmetricDua
     QCOMPARE(localTree->model()->headerData(0, Qt::Horizontal).toString(), QStringLiteral("名称"));
     QCOMPARE(localTree->model()->headerData(1, Qt::Horizontal).toString(), QStringLiteral("大小"));
     QCOMPARE(localTree->model()->headerData(3, Qt::Horizontal).toString(), QStringLiteral("修改时间"));
+}
+
+void RemoteFileManagerWidgetTest::remoteSftpRelayCommandQuotesEveryUntrustedArgument()
+{
+    ConnectionTarget target;
+    target.host = QStringLiteral("192.168.1.27;touch /tmp/should-not-run");
+    target.username = QStringLiteral("root'operator");
+    target.port = 52231;
+
+    // 分号和单引号刻意模拟不可信终端输入。期望值中的 `'\\''` 会让 POSIX Shell 结束
+    // 单引号、写入一个字面单引号后重新进入单引号；因此整个值始终只形成一个 argv。
+    QCOMPARE(
+        SftpRemoteRelay::buildCommand(target),
+        QByteArrayLiteral(
+            "command ssh -q -o BatchMode=yes -o ConnectTimeout=12 -p 52231 "
+            "-l 'root'\\''operator' "
+            "-s -- '192.168.1.27;touch /tmp/should-not-run' sftp"));
+
+    // 用户没有显式用户名时不应生成空的 -l 参数，交由外层 OpenSSH 按登录用户/config 决定。
+    target.username.clear();
+    QCOMPARE(
+        SftpRemoteRelay::buildCommand(target),
+        QByteArrayLiteral(
+            "command ssh -q -o BatchMode=yes -o ConnectTimeout=12 -p 52231 "
+            "-s -- '192.168.1.27;touch /tmp/should-not-run' sftp"));
 }
 
 void RemoteFileManagerWidgetTest::remoteFileTableUsesReferenceColumns()

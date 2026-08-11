@@ -12,6 +12,18 @@
 #include <atomic>
 #include <memory>
 
+/** @brief 远端 OpenSSH SFTP 中继的纯命令构造逻辑，独立暴露以便安全回归测试。 */
+namespace SftpRemoteRelay {
+
+/**
+ * @brief 构造在外层服务器上启动内层 SFTP 子系统的安全命令行。
+ * @param target 内层服务器，使用其中的用户名、地址与端口。
+ * @return 参数均经过 POSIX Shell 单 token 转义的 `command ssh ... -s ... sftp` 命令。
+ */
+[[nodiscard]] QByteArray buildCommand(const ConnectionTarget &target);
+
+} // namespace SftpRemoteRelay
+
 /**
  * @brief 远程目录中的一个文件或文件夹条目。
  *
