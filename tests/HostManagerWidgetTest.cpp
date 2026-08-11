@@ -68,8 +68,8 @@ private slots:
     /** @brief 空分组保留为可用拖放目标，但右侧不得再绘制无信息价值的“0”徽章。 */
     void emptyGroupDoesNotPaintZeroCountBadge();
 
-    /** @brief 分组名与主机名必须使用同一套加粗字体，形成参考设计的清晰名称层级。 */
-    void groupNameUsesSameEmphasizedFontAsHostName();
+    /** @brief 具体主机名称使用常规字重，分组名称继续加粗以区分组织层级。 */
+    void hostNameUsesRegularWeightWhileGroupRemainsEmphasized();
 
     /** @brief 标题数量必须统计全部嵌套主机，不能把分组或当前搜索结果计入。 */
     void hostCountTracksAllNestedHosts();
@@ -862,10 +862,9 @@ void HostManagerWidgetTest::semanticIconsFollowLightAndDarkPalettes()
     QCOMPARE(strongestPixel(fixed).rgb(), fixedBrandIcon.rgb());
 }
 
-void HostManagerWidgetTest::groupNameUsesSameEmphasizedFontAsHostName()
+void HostManagerWidgetTest::hostNameUsesRegularWeightWhileGroupRemainsEmphasized()
 {
-    // 两个节点取同一串名字：字体一致时，画出来的墨迹宽度必然相等；任一类型擅自改变字号
-    // 或字重，同样的文本都会出现明显不同的渲染结果。
+    // 两个节点刻意使用同一名称，避免文字内容干扰字体属性检查；产品层级只由节点类型决定。
     const QString sharedName = QStringLiteral("上饶E呼即办");
 
     HostRecord group;
@@ -883,70 +882,33 @@ void HostManagerWidgetTest::groupNameUsesSameEmphasizedFontAsHostName()
     QVERIFY2(m_database->saveHost(host, &error), qPrintable(error));
 
     HostManagerWidget widget(m_database.get(), m_vault.get());
-    widget.resize(320, 400);
-    widget.show();
-    QVERIFY(QTest::qWaitForWindowExposed(&widget));
-
+    QTreeWidgetItem *groupItem = findItem(widget, sharedName);
+    QVERIFY(groupItem != nullptr);
+    // findItems 会返回同名的第一项；再从全部匹配项中按稳定类型角色识别具体主机，避免依赖
+    // 数据库或树控件对同名记录的偶然排序。
     auto *tree = widget.findChild<QTreeWidget *>();
     QVERIFY(tree != nullptr);
-    // 选中态会换掉底色和字色，量墨迹前先清掉，让两行都落在同一种背景上。
-    tree->clearSelection();
-    tree->setCurrentItem(nullptr);
-
-    QTreeWidgetItem *groupItem = nullptr;
+    const QList<QTreeWidgetItem *> matches =
+        tree->findItems(sharedName, Qt::MatchExactly | Qt::MatchRecursive);
     QTreeWidgetItem *hostItem = nullptr;
-    for (int row = 0; row < tree->topLevelItemCount(); ++row) {
-        QTreeWidgetItem *item = tree->topLevelItem(row);
+    groupItem = nullptr;
+    for (QTreeWidgetItem *item : matches) {
         const auto kind = static_cast<HostNodeKind>(item->data(0, Qt::UserRole + 1).toInt());
-        (kind == HostNodeKind::Folder ? groupItem : hostItem) = item;
+        if (kind == HostNodeKind::Folder) {
+            groupItem = item;
+        } else if (kind == HostNodeKind::Host) {
+            hostItem = item;
+        }
     }
     QVERIFY(groupItem != nullptr);
     QVERIFY(hostItem != nullptr);
-    // 模型层明确写入 Bold，既表达产品约束，也让编辑态、辅助技术与自绘委托保持一致。
+
+    // 模型字体是委托 QStyleOptionViewItem::font 的来源，这里直接检查真实渲染输入：分组保留
+    // Bold，主机必须明确回到 Normal，不能只依赖平台默认值碰巧不加粗。
     QCOMPARE(groupItem->font(0).weight(), QFont::Bold);
-    QCOMPARE(hostItem->font(0).weight(), QFont::Bold);
+    QCOMPARE(hostItem->font(0).weight(), QFont::Normal);
     QVERIFY(groupItem->font(0).bold());
-    QVERIFY(hostItem->font(0).bold());
-
-    const QImage rendered = tree->viewport()->grab().toImage();
-    const QRect groupRect = tree->visualItemRect(groupItem);
-    const QRect hostRect = tree->visualItemRect(hostItem);
-    QVERIFY(!groupRect.isEmpty());
-    QVERIFY(!hostRect.isEmpty());
-
-    // visualItemRect 给的是逻辑坐标，grab() 出来的图在 Retina 上是设备像素，取样前要换算。
-    const int scale = std::max(1, qRound(rendered.devicePixelRatio()));
-    const auto toDevice = [scale](const QRect &rect) {
-        return QRect(rect.left() * scale, rect.top() * scale, rect.width() * scale,
-                     rect.height() * scale);
-    };
-
-    // 空分组没有展开箭头或数量徽章；主机名在上、连接信息在下，只量名称行。取样从委托
-    // 定义的文字左缘开始，排除两种节点尺寸不同的图标装饰区。
-    QVERIFY2(groupItem->childCount() == 0, "分组带了子节点，展开箭头会混进墨迹里");
-    constexpr int kRightDecorationMargin = 8;
-    constexpr int kFolderTextLeft = 52;
-    constexpr int kHostTextLeft = 46;
-    const QRect groupArea = toDevice(QRect(groupRect.left() + kFolderTextLeft,
-                                           groupRect.top(),
-                                           std::max(0,
-                                                    groupRect.width() - kFolderTextLeft
-                                                        - kRightDecorationMargin),
-                                           groupRect.height()));
-    const QRect hostArea = toDevice(QRect(hostRect.left() + kHostTextLeft,
-                                          hostRect.top(),
-                                          std::max(0, hostRect.width() - kHostTextLeft),
-                                          hostRect.height() / 2));
-    const QColor background = rendered.pixelColor(groupArea.right() - 1, groupArea.top() + 1);
-
-    const int groupInk = inkWidth(rendered, groupArea, background);
-    const int hostInk = inkWidth(rendered, hostArea, background);
-    QVERIFY2(groupInk > 0 && hostInk > 0, "没量到任何文字墨迹，行的取样区域不对");
-    // 容差按逻辑像素折算：字体相同时只剩反锯齿的零头，换字号或字重会差出明显像素。
-    QVERIFY2(std::abs(groupInk - hostInk) <= 2 * scale,
-             qPrintable(QStringLiteral("分组名墨迹宽 %1，主机名墨迹宽 %2（设备像素），两者字体不一致")
-                            .arg(groupInk)
-                            .arg(hostInk)));
+    QVERIFY(!hostItem->font(0).bold());
 }
 
 void HostManagerWidgetTest::hostCountTracksAllNestedHosts()

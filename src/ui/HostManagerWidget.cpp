@@ -116,8 +116,14 @@ QFont scaledFont(QFont font, const double deltaPoints, const bool bold)
     return font;
 }
 
-/** @brief 节点名称行的字体；分组与主机统一使用略放大的半粗体，建立清晰的两级信息层次。 */
-[[nodiscard]] QFont itemNameFont(const QFont &base)
+/** @brief 主机名称使用略放大的常规字重，避免地址列表在大量粗体下显得拥挤。 */
+[[nodiscard]] QFont hostNameFont(const QFont &base)
+{
+    return scaledFont(base, 0.5, false);
+}
+
+/** @brief 分组名称保留略放大的粗体，用字重与文件夹图标共同标识组织层级。 */
+[[nodiscard]] QFont folderNameFont(const QFont &base)
 {
     return scaledFont(base, 0.5, true);
 }
@@ -311,7 +317,7 @@ protected:
         }
         painter->restore();
 
-        const QFont nameFont = itemNameFont(option.font);
+        const QFont nameFont = hostNameFont(option.font);
         const QFont detailFont = connectionDetailFont(option.font);
         const QFontMetrics nameMetrics(nameFont);
         const QFontMetrics detailMetrics(detailFont);
@@ -460,9 +466,9 @@ private:
         }
 
         painter->save();
-        // 分组名与主机名采用同一套字重和字号，层级由箭头、图标与缩进表达；这样它们看起来
-        // 属于同一棵树，又能通过两行副标题自然区分可连接主机。
-        const QFont nameFont = itemNameFont(background.font);
+        // 分组保留粗体作为组织层级标题；具体主机名称使用常规字重，避免连续地址列表形成
+        // 大片视觉重块。两者字号一致，因此层级变化不会造成文字基线跳动。
+        const QFont nameFont = folderNameFont(background.font);
         painter->setFont(nameFont);
         painter->setPen(baseColor);
         const QFontMetrics metrics(nameFont);
@@ -1999,11 +2005,11 @@ QTreeWidgetItem *HostManagerWidget::createTreeItem(const HostRecord &record) con
 {
     auto *item = new QTreeWidgetItem;
     item->setText(0, record.name);
-    // 在模型层明确记录加粗名称，保证辅助技术、编辑状态以及不经过自绘委托的后备路径仍与
-    // 视觉设计一致；分组与主机使用同一字重，区别只来自图标、缩进和主机副标题。
-    QFont emphasizedNameFont = m_tree->font();
-    emphasizedNameFont.setWeight(QFont::Bold);
-    item->setFont(0, emphasizedNameFont);
+    // 字重同时写入模型，保证编辑态、辅助技术和不经过自绘委托的后备路径与最终视觉一致：
+    // 分组是组织标题所以加粗，具体主机使用常规字重，避免主机列表整体过重。
+    QFont itemNameFont = m_tree->font();
+    itemNameFont.setWeight(record.kind == HostNodeKind::Folder ? QFont::Bold : QFont::Normal);
+    item->setFont(0, itemNameFont);
     item->setIcon(
         0,
         record.kind == HostNodeKind::Folder
