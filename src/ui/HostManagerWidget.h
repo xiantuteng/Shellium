@@ -7,6 +7,7 @@
 class ApplicationDatabase;
 class CredentialVault;
 class QLineEdit;
+class QMenu;
 class QTreeWidget;
 class QTreeWidgetItem;
 
@@ -96,6 +97,15 @@ private:
     /** @brief 弹出连接配置框并在当前分组下保存一台新主机。 */
     void addHost();
 
+    /**
+     * @brief 在原主机所属分组中复制当前选中的主机。
+     *
+     * 复制会保留连接参数、凭据引用、标签和主机链等业务配置，只重新生成稳定主键，并按
+     * 当前分组已有名称依次追加“-1”“-2”等可用序号。分组节点和“未分组”展示标题不
+     * 属于可复制主机，会被安全忽略。
+     */
+    void copySelectedHost();
+
     /** @brief 编辑当前选中的分组名称或主机连接参数。 */
     void editSelected();
 
@@ -126,6 +136,16 @@ private:
 
     /** @brief 返回新节点应归属的父分组；选中主机时使用其所在分组。 */
     [[nodiscard]] QString selectedParentGroupId() const;
+
+    /**
+     * @brief 根据右键命中的树节点填充主机管理上下文菜单。
+     * @param menu 接收动作的菜单对象；调用方负责生命周期和最终显示。
+     * @param item 右键命中的节点；为空时表示点击树的空白区域。
+     *
+     * 将菜单构造独立出来，既避免弹出逻辑与动作顺序混杂，也让界面回归测试无需真的打开
+     * 原生弹出窗口即可核对菜单内容。动作仍统一调用面板方法，不复制业务实现。
+     */
+    void populateContextMenu(QMenu *menu, QTreeWidgetItem *item);
 
     /** @brief 把一条主机/分组记录转换为树节点，并保存稳定 id 与类型到 UserRole。 */
     [[nodiscard]] QTreeWidgetItem *createTreeItem(const HostRecord &record) const;

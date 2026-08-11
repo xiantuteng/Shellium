@@ -4,6 +4,7 @@
 #include "ui/HostManagerWidget.h"
 #include "ui/UiIcons.h"
 
+#include <QAction>
 #include <QAbstractButton>
 #include <QApplication>
 #include <QColor>
@@ -15,6 +16,7 @@
 #include <QLayout>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QMenu>
 #include <QPushButton>
 #include <QSet>
 #include <QSignalSpy>
@@ -48,6 +50,12 @@ private slots:
 
     /** @brief 侧栏标题行只暴露新建主机、新建分组与刷新三个动作。 */
     void headerExposesOnlyThreePrimaryActions();
+
+    /** @brief 主机右键菜单必须提供复制，并把新建主机排在新建分组之前。 */
+    void hostContextMenuProvidesCopyAndRequestedCreationOrder();
+
+    /** @brief 连续复制必须递增名称序号，同时保留完整配置与父分组。 */
+    void copyHostKeepsConfigurationInSameGroup();
 
     /** @brief 分组配置窗口只能保留名称字段，且页脚按钮必须带语义图标。 */
     void groupDialogHasNoStrayWidgets();
@@ -220,6 +228,127 @@ void HostManagerWidgetTest::headerExposesOnlyThreePrimaryActions()
 
     // "最近连接"整块已移除，面板里不应再残留任何列表控件。
     QVERIFY(widget.findChild<QListWidget *>() == nullptr);
+}
+
+void HostManagerWidgetTest::hostContextMenuProvidesCopyAndRequestedCreationOrder()
+{
+    HostRecord host;
+    host.id = QStringLiteral("context-host");
+    host.kind = HostNodeKind::Host;
+    host.name = QStringLiteral("菜单测试主机");
+    host.host = QStringLiteral("192.0.2.20");
+    QString error;
+    QVERIFY2(m_database->saveHost(host, &error), qPrintable(error));
+
+    HostManagerWidget widget(m_database.get(), m_vault.get());
+    QTreeWidgetItem *hostItem = findItem(widget, host.name);
+    QVERIFY2(hostItem != nullptr, "主机节点未出现在树中");
+
+    // 直接调用独立菜单构造入口，不弹出依赖窗口系统的原生菜单；这样测试只关心动作集合和
+    // 顺序，不会因 CI 的无头平台、焦点切换或菜单动画产生偶发失败。
+    QMenu menu;
+    widget.populateContextMenu(&menu, hostItem);
+    QStringList actionTexts;
+    for (const QAction *action : menu.actions()) {
+        if (!action->isSeparator()) {
+            actionTexts.append(action->text());
+        }
+    }
+
+    const qsizetype addHostIndex = actionTexts.indexOf(QStringLiteral("新建主机"));
+    const qsizetype addGroupIndex = actionTexts.indexOf(QStringLiteral("新建分组"));
+    QVERIFY2(addHostIndex >= 0, "主机右键菜单缺少新建主机动作");
+    QVERIFY2(addGroupIndex >= 0, "主机右键菜单缺少新建分组动作");
+    QVERIFY2(addHostIndex < addGroupIndex, "新建主机没有排在新建分组之前");
+    QVERIFY2(actionTexts.contains(QStringLiteral("复制")), "主机右键菜单缺少复制动作");
+}
+
+void HostManagerWidgetTest::copyHostKeepsConfigurationInSameGroup()
+{
+    HostRecord group;
+    group.id = QStringLiteral("copy-group");
+    group.kind = HostNodeKind::Folder;
+    group.name = QStringLiteral("复制测试分组");
+    QString error;
+    QVERIFY2(m_database->saveHost(group, &error), qPrintable(error));
+
+    HostRecord jumpHost;
+    jumpHost.id = QStringLiteral("copy-jump-host");
+    jumpHost.parentId = group.id;
+    jumpHost.kind = HostNodeKind::Host;
+    jumpHost.name = QStringLiteral("复制测试跳板机");
+    jumpHost.host = QStringLiteral("198.51.100.10");
+    QVERIFY2(m_database->saveHost(jumpHost, &error), qPrintable(error));
+
+    HostRecord source;
+    source.id = QStringLiteral("copy-source-host");
+    source.parentId = group.id;
+    source.kind = HostNodeKind::Host;
+    source.name = QStringLiteral("生产主机");
+    source.host = QStringLiteral("10.20.30.40");
+    source.port = quint16{2202};
+    source.username = QStringLiteral("deploy");
+    source.credentialId = QStringLiteral("shared-credential");
+    source.identityFile = QStringLiteral("/keys/production_ed25519");
+    source.proxyJumps = {QStringLiteral("legacy-bastion")};
+    source.hostChain = {jumpHost.id};
+    source.tags = {QStringLiteral("生产"), QStringLiteral("核心")};
+    source.allowLegacyHmacSha1 = true;
+    source.sortOrder = 7;
+    source.createdAt = QDateTime::fromString(
+        QStringLiteral("2024-01-02T03:04:05Z"), Qt::ISODate);
+    source.updatedAt = source.createdAt;
+    QVERIFY2(m_database->saveHost(source, &error), qPrintable(error));
+
+    HostManagerWidget widget(m_database.get(), m_vault.get());
+    auto *tree = widget.findChild<QTreeWidget *>();
+    QVERIFY(tree != nullptr);
+    QTreeWidgetItem *sourceItem = findItem(widget, source.name);
+    QVERIFY2(sourceItem != nullptr, "待复制主机节点未出现在树中");
+    tree->setCurrentItem(sourceItem);
+
+    // HostManagerWidgetTest 是生产类声明的友元，可直接触发私有业务入口，避免测试依赖菜单
+    // 弹出和鼠标坐标；菜单是否接到该入口由上一条用例独立验证。
+    widget.copySelectedHost();
+
+    // 第一次刷新会重建树节点并清除选择，模拟用户再次右键原主机时必须重新选中新的节点。
+    // 第二次复制应检查当前分组已经存在的“-1”，继而使用“-2”，而不是生成重名记录。
+    sourceItem = findItem(widget, source.name);
+    QVERIFY2(sourceItem != nullptr, "第一次复制后原主机节点丢失");
+    tree->setCurrentItem(sourceItem);
+    widget.copySelectedHost();
+
+    bool ok = false;
+    const QList<HostRecord> children = m_database->listHostsInGroup(group.id, &ok, &error);
+    QVERIFY2(ok, qPrintable(error));
+    const auto copiedIterator = std::find_if(
+        children.cbegin(), children.cend(), [](const HostRecord &record) {
+            return record.name == QStringLiteral("生产主机-1");
+        });
+    QVERIFY2(copiedIterator != children.cend(), "当前分组中没有找到复制出的主机");
+    const HostRecord &copied = *copiedIterator;
+    const auto secondCopyIterator = std::find_if(
+        children.cbegin(), children.cend(), [](const HostRecord &record) {
+            return record.name == QStringLiteral("生产主机-2");
+        });
+    QVERIFY2(secondCopyIterator != children.cend(), "第二次复制没有生成名称后缀-2");
+
+    QVERIFY(copied.id != source.id);
+    QCOMPARE(copied.parentId, source.parentId);
+    QCOMPARE(copied.kind, source.kind);
+    QCOMPARE(copied.host, source.host);
+    QCOMPARE(copied.port, source.port);
+    QCOMPARE(copied.username, source.username);
+    QCOMPARE(copied.credentialId, source.credentialId);
+    QCOMPARE(copied.identityFile, source.identityFile);
+    QCOMPARE(copied.proxyJumps, source.proxyJumps);
+    QCOMPARE(copied.hostChain, source.hostChain);
+    QCOMPARE(copied.tags, source.tags);
+    QCOMPARE(copied.allowLegacyHmacSha1, source.allowLegacyHmacSha1);
+    QCOMPARE(copied.sortOrder, source.sortOrder);
+    QVERIFY2(copied.createdAt.isValid(), "复制记录没有生成新的创建时间");
+    QVERIFY2(copied.updatedAt.isValid(), "复制记录没有生成新的更新时间");
+    QVERIFY2(copied.createdAt != source.createdAt, "复制记录错误沿用了原主机创建时间");
 }
 
 namespace {

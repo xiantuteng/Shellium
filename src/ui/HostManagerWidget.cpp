@@ -2205,55 +2205,7 @@ HostManagerWidget::HostManagerWidget(ApplicationDatabase *database,
         }
 
         QMenu menu(this);
-                UiIcons::modernizePopup(&menu);
-        const bool isHost = item != nullptr
-            && static_cast<HostNodeKind>(item->data(0, HostKindRole).toInt())
-                == HostNodeKind::Host;
-        if (isHost) {
-            QAction *connectAction = menu.addAction(
-                UiIcons::symbol(this, UiIcons::Symbol::Connect, this->palette().color(QPalette::WindowText)),
-                tr("连接"));
-            connect(connectAction, &QAction::triggered,
-                    this, [this, item]() { activateTreeItem(item); });
-            menu.addSeparator();
-        }
-        QAction *addGroupAction = menu.addAction(
-            UiIcons::symbol(this, UiIcons::Symbol::FolderAdd, this->palette().color(QPalette::WindowText)),
-            tr("新建分组"));
-        QAction *addHostAction = menu.addAction(
-            UiIcons::symbol(this, UiIcons::Symbol::Plus, this->palette().color(QPalette::WindowText)),
-            tr("新建主机"));
-        connect(addGroupAction, &QAction::triggered, this, &HostManagerWidget::addGroup);
-        connect(addHostAction, &QAction::triggered, this, &HostManagerWidget::addHost);
-        // “未分组”分区标题不对应任何数据库记录，右键它时不提供编辑/删除——那两个动作
-        // 只会因为没有选中项而静默无效，不如直接不显示。
-        const bool isRecordItem =
-            item != nullptr && item->data(0, HostKindRole).toInt() != kSectionHeaderKindValue;
-        if (isRecordItem) {
-            menu.addSeparator();
-            QAction *editAction = menu.addAction(
-                UiIcons::symbol(this, UiIcons::Symbol::Edit, this->palette().color(QPalette::WindowText)),
-                tr("编辑"));
-            QAction *deleteAction = menu.addAction(
-                UiIcons::symbol(this, UiIcons::Symbol::Trash, this->palette().color(QPalette::WindowText)),
-                tr("删除"));
-            connect(editAction, &QAction::triggered, this, &HostManagerWidget::editSelected);
-            connect(deleteAction, &QAction::triggered, this, &HostManagerWidget::removeSelected);
-        }
-        menu.addSeparator();
-        QAction *importAction = menu.addAction(
-            UiIcons::symbol(this, UiIcons::Symbol::Upload, this->palette().color(QPalette::WindowText)),
-            tr("导入主机…"));
-        QAction *exportAction = menu.addAction(
-            UiIcons::symbol(this, UiIcons::Symbol::Download, this->palette().color(QPalette::WindowText)),
-            tr("导出主机…"));
-        connect(importAction, &QAction::triggered, this, &HostManagerWidget::importHosts);
-        connect(exportAction, &QAction::triggered, this, &HostManagerWidget::exportHosts);
-        menu.addSeparator();
-        QAction *refreshAction = menu.addAction(
-            UiIcons::symbol(this, UiIcons::Symbol::Refresh, this->palette().color(QPalette::WindowText)),
-            tr("刷新"));
-        connect(refreshAction, &QAction::triggered, this, &HostManagerWidget::refresh);
+        populateContextMenu(&menu, item);
         menu.exec(m_tree->viewport()->mapToGlobal(position));
     });
 
@@ -2268,6 +2220,92 @@ QWidget *HostManagerWidget::headerActionsWidget() const
 int HostManagerWidget::hostCount() const
 {
     return m_hostCount;
+}
+
+void HostManagerWidget::populateContextMenu(QMenu *menu, QTreeWidgetItem *item)
+{
+    Q_ASSERT(menu != nullptr);
+    UiIcons::modernizePopup(menu);
+
+    const bool isHost = item != nullptr
+        && static_cast<HostNodeKind>(item->data(0, HostKindRole).toInt())
+            == HostNodeKind::Host;
+    if (isHost) {
+        QAction *connectAction = menu->addAction(
+            UiIcons::symbol(this,
+                            UiIcons::Symbol::Connect,
+                            this->palette().color(QPalette::WindowText)),
+            tr("连接"));
+        connect(connectAction, &QAction::triggered,
+                this, [this, item]() { activateTreeItem(item); });
+        menu->addSeparator();
+    }
+
+    // “新建主机”是主机管理中的首要创建动作，必须排在“新建分组”之前；这里的顺序与
+    // 标题动作区保持一致，避免同一页面的两个入口形成相反的操作习惯。
+    QAction *addHostAction = menu->addAction(
+        UiIcons::symbol(this, UiIcons::Symbol::Plus, this->palette().color(QPalette::WindowText)),
+        tr("新建主机"));
+    QAction *addGroupAction = menu->addAction(
+        UiIcons::symbol(this,
+                        UiIcons::Symbol::FolderAdd,
+                        this->palette().color(QPalette::WindowText)),
+        tr("新建分组"));
+    connect(addHostAction, &QAction::triggered, this, &HostManagerWidget::addHost);
+    connect(addGroupAction, &QAction::triggered, this, &HostManagerWidget::addGroup);
+
+    // “未分组”分区标题不对应任何数据库记录，右键它时不提供编辑/删除——那两个动作
+    // 只会因为没有选中项而静默无效，不如直接不显示。复制进一步限定为真实主机，避免
+    // 用户误以为可以通过复制分组来递归克隆整棵子树。
+    const bool isRecordItem =
+        item != nullptr && item->data(0, HostKindRole).toInt() != kSectionHeaderKindValue;
+    if (isRecordItem) {
+        menu->addSeparator();
+        if (isHost) {
+            QAction *copyAction = menu->addAction(
+                UiIcons::symbol(this,
+                                UiIcons::Symbol::Copy,
+                                this->palette().color(QPalette::WindowText)),
+                tr("复制"));
+            connect(copyAction,
+                    &QAction::triggered,
+                    this,
+                    &HostManagerWidget::copySelectedHost);
+        }
+        QAction *editAction = menu->addAction(
+            UiIcons::symbol(this,
+                            UiIcons::Symbol::Edit,
+                            this->palette().color(QPalette::WindowText)),
+            tr("编辑"));
+        QAction *deleteAction = menu->addAction(
+            UiIcons::symbol(this,
+                            UiIcons::Symbol::Trash,
+                            this->palette().color(QPalette::WindowText)),
+            tr("删除"));
+        connect(editAction, &QAction::triggered, this, &HostManagerWidget::editSelected);
+        connect(deleteAction, &QAction::triggered, this, &HostManagerWidget::removeSelected);
+    }
+
+    menu->addSeparator();
+    QAction *importAction = menu->addAction(
+        UiIcons::symbol(this,
+                        UiIcons::Symbol::Upload,
+                        this->palette().color(QPalette::WindowText)),
+        tr("导入主机…"));
+    QAction *exportAction = menu->addAction(
+        UiIcons::symbol(this,
+                        UiIcons::Symbol::Download,
+                        this->palette().color(QPalette::WindowText)),
+        tr("导出主机…"));
+    connect(importAction, &QAction::triggered, this, &HostManagerWidget::importHosts);
+    connect(exportAction, &QAction::triggered, this, &HostManagerWidget::exportHosts);
+    menu->addSeparator();
+    QAction *refreshAction = menu->addAction(
+        UiIcons::symbol(this,
+                        UiIcons::Symbol::Refresh,
+                        this->palette().color(QPalette::WindowText)),
+        tr("刷新"));
+    connect(refreshAction, &QAction::triggered, this, &HostManagerWidget::refresh);
 }
 
 void HostManagerWidget::refresh()
@@ -2470,6 +2508,62 @@ void HostManagerWidget::addHost()
     target = record.toConnectionTarget();
     target.password = dialog.sessionPassword();
     requestConnection(record.id, target, false);
+}
+
+void HostManagerWidget::copySelectedHost()
+{
+    QString error;
+    const std::optional<HostRecord> source = selectedRecord(&error);
+    if (!source.has_value()) {
+        if (!error.isEmpty()) {
+            showDatabaseError(tr("读取主机"), error);
+        }
+        return;
+    }
+    if (source->kind != HostNodeKind::Host) {
+        // 该方法当前只由主机节点的右键动作调用，但仍在业务入口守住类型边界。这样未来若
+        // 增加快捷键或自动化入口，也不会意外把分组当作普通记录复制成空连接目标。
+        return;
+    }
+
+    bool siblingsLoaded = false;
+    const QList<HostRecord> siblings =
+        m_database->listHostsInGroup(source->parentId, &siblingsLoaded, &error);
+    if (!siblingsLoaded) {
+        showDatabaseError(tr("读取当前分组"), error);
+        return;
+    }
+
+    QSet<QString> occupiedNames;
+    occupiedNames.reserve(siblings.size());
+    for (const HostRecord &sibling : siblings) {
+        occupiedNames.insert(sibling.name);
+    }
+
+    // 从 1 开始寻找当前分组中第一个尚未占用的副本序号。每次都查询持久化记录而不是保存
+    // 进程内计数，应用重启后仍能延续“-2”“-3”，删除某个副本后也能自然复用空缺序号。
+    quint64 copyIndex = 1;
+    QString copiedName;
+    do {
+        copiedName = QStringLiteral("%1-%2").arg(source->name).arg(copyIndex);
+        ++copyIndex;
+    } while (occupiedNames.contains(copiedName));
+
+    HostRecord copied = *source;
+    copied.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    copied.name = copiedName;
+    // parentId 原样保留正是“当前目录”的持久化语义；连接参数、凭据引用、标签、旧式
+    // ProxyJump 和受管主机链也都来自整条记录副本，因此复制结果与原主机配置一致。
+    // 时间戳属于记录本身而不是主机配置，必须清空后交给数据库生成当前时间，不能让新记录
+    // 冒充与原记录同一时刻创建、更新的数据。
+    copied.createdAt = QDateTime{};
+    copied.updatedAt = QDateTime{};
+
+    if (!m_database->saveHost(copied, &error)) {
+        showDatabaseError(tr("复制主机"), error);
+        return;
+    }
+    refresh();
 }
 
 void HostManagerWidget::editSelected()
