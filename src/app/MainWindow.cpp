@@ -18,6 +18,7 @@
 #include "ui/UiIcons.h"
 #include "ui/VaultDialog.h"
 
+#include <QAbstractItemView>
 #include <QAction>
 #include <QApplication>
 #include <QButtonGroup>
@@ -67,10 +68,10 @@ namespace {
 constexpr int kWindowChromeHeight = 52;
 
 /** @brief 侧栏允许缩小到的宽度，避免表单和动作按钮被挤到无法操作。 */
-constexpr int kSidebarMinimumWidth = 260;
+constexpr int kSidebarMinimumWidth = 320;
 
-/** @brief 首次启动时沿用的侧栏宽度，保持既有窗口布局和用户视觉习惯。 */
-constexpr int kSidebarDefaultWidth = 320;
+/** @brief 参考设计以约 360px 侧栏承载完整搜索框、标签入口和双行主机卡片。 */
+constexpr int kSidebarDefaultWidth = 360;
 
 /** @brief 终端工作区的最小宽度，确保侧栏拖动后终端仍可进行基本交互。 */
 constexpr int kWorkspaceMinimumWidth = 420;
@@ -303,14 +304,19 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     m_sidebarPanel->setObjectName(QStringLiteral("SidebarPanel"));
     m_sidebarPanel->setMinimumWidth(kSidebarMinimumWidth);
     auto *sidebarLayout = new QVBoxLayout(m_sidebarPanel);
-    sidebarLayout->setContentsMargins(14, 16, 14, 14);
-    sidebarLayout->setSpacing(12);
+    // 参考图的内容相对侧栏边缘保留约 18px 呼吸区。标题和搜索框使用同一左右基线，树内
+    // 再通过委托建立箭头、图标与文字层级，不需要在外层堆叠额外缩进。
+    sidebarLayout->setContentsMargins(18, 16, 18, 14);
+    sidebarLayout->setSpacing(14);
     m_sidebarTitle = new QLabel(tr("主机"), m_sidebarPanel);
     m_sidebarTitle->setObjectName(QStringLiteral("SidebarHeader"));
+    m_hostCountLabel = new QLabel(tr("0 台"), m_sidebarPanel);
+    m_hostCountLabel->setObjectName(QStringLiteral("HostCountLabel"));
     auto *sidebarHeaderLayout = new QHBoxLayout;
     sidebarHeaderLayout->setContentsMargins(0, 0, 0, 0);
     sidebarHeaderLayout->setSpacing(6);
     sidebarHeaderLayout->addWidget(m_sidebarTitle);
+    sidebarHeaderLayout->addWidget(m_hostCountLabel, 0, Qt::AlignVCenter);
     sidebarHeaderLayout->addStretch(1);
     sidebarLayout->addLayout(sidebarHeaderLayout);
 
@@ -325,6 +331,18 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     m_sidebarStack->addWidget(m_productivityWidget);
     m_sidebarStack->addWidget(m_portForwardManager);
     sidebarLayout->addWidget(m_sidebarStack, 1);
+
+    // HostManagerWidget 在构造末尾已完成首次刷新，该次信号早于 MainWindow 的连接，因此先
+    // 读取快照初始化标签；之后的增删、导入和刷新再由信号增量同步。
+    m_hostCountLabel->setText(tr("%1 台").arg(m_hostManager->hostCount()));
+    connect(m_hostManager,
+            &HostManagerWidget::hostCountChanged,
+            this,
+            [this](const int count) {
+                if (m_hostCountLabel != nullptr) {
+                    m_hostCountLabel->setText(tr("%1 台").arg(count));
+                }
+            });
 
     // 主机页的高频动作与侧栏标题同排右对齐。标题归 MainWindow 所有，因此动作条由主机页
     // 提供、在这里改挂到标题行；切到其他页面时隐藏，避免动作与页面内容对不上。
@@ -914,6 +932,11 @@ void MainWindow::showSidebarPage(const int pageIndex)
     if (m_sidebarTitle != nullptr) {
         m_sidebarTitle->setText(pageTitles.value(pageIndex));
     }
+    if (m_hostCountLabel != nullptr) {
+        // 数量摘要只解释“主机”这一页；放在效率工具或端口转发标题后会被误读成相应页面的
+        // 条目数量，因此切页时与主机动作条使用同一可见性条件。
+        m_hostCountLabel->setVisible(pageIndex == HostsPage);
+    }
     if (m_hostHeaderActions != nullptr) {
         m_hostHeaderActions->setVisible(pageIndex == HostsPage);
     }
@@ -995,7 +1018,18 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
             color: @TEXT@;
             font-size: 18px;
             font-weight: 700;
-            padding: 2px 4px 7px 4px;
+            padding: 2px 0 7px 0;
+        }
+        QLabel#HostCountLabel {
+            color: @MUTED@;
+            font-size: 13px;
+            font-weight: 600;
+            padding: 3px 0 7px 0;
+        }
+        QFrame#HostHeaderActionDivider {
+            color: @BORDER@;
+            background: @BORDER@;
+            border: 0;
         }
         QToolButton[chromeButton="true"] {
             background: transparent;
@@ -1058,6 +1092,42 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
         QStackedWidget#SidebarStack {
             border: 0;
             background: transparent;
+        }
+        QFrame#HostSearchBar {
+            background: @SURFACE@;
+            border: 1px solid @BORDER@;
+            border-radius: 10px;
+            min-height: 34px;
+            max-height: 34px;
+        }
+        QLineEdit#HostSearchEdit,
+        QLineEdit#HostSearchEdit:focus {
+            color: @TEXT@;
+            placeholder-text-color: @MUTED@;
+            background: transparent;
+            border: 0;
+            border-radius: 0;
+            min-height: 28px;
+            padding: 2px 3px;
+        }
+        QToolButton#HostTagFilterButton {
+            color: @MUTED@;
+            background: @RAISED@;
+            border: 0;
+            border-radius: 8px;
+            min-height: 24px;
+            max-height: 24px;
+            padding: 0 7px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        QToolButton#HostTagFilterButton:hover {
+            color: @TEXT@;
+            background: @SELECTION@;
+        }
+        QToolButton#HostTagFilterButton:pressed {
+            color: @TEXT@;
+            background: @PROMINENT_SELECTION@;
         }
         QTabWidget QTabBar::tab {
             color: @MUTED@;
@@ -1154,6 +1224,11 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
             background: #45e394;
             border-color: #45e394;
         }
+        QPushButton[hostPrimaryAction="true"] {
+            border-radius: 10px;
+            padding: 4px 12px;
+            font-size: 14px;
+        }
         QLabel[sectionCaption="true"] {
             color: @MUTED@;
             font-size: 12px;
@@ -1188,6 +1263,12 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
             /* 主机与分组行需要比通用列表更明确的悬停反馈；选中行仍由下方绿色规则负责。 */
             background: @HOST_TREE_HOVER@;
         }
+        QTreeView#HostTree::item {
+            min-height: 0;
+            padding: 0;
+            border: 0;
+            border-radius: 9px;
+        }
         QTreeView::item:selected,
         QListView::item:selected,
         QTableView::item:selected,
@@ -1205,15 +1286,20 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
         QTableView::item:selected:hover {
             background: @SELECTION@;
         }
-        QTreeView#HostTree::item:selected,
-        QTreeView#HostTree::item:selected:active,
-        QTreeView#HostTree::item:selected:!active,
-        QTreeView#HostTree::item:selected:hover,
         QTreeView#RemoteFileTree::item:selected,
         QTreeView#RemoteFileTree::item:selected:active,
         QTreeView#RemoteFileTree::item:selected:!active,
         QTreeView#RemoteFileTree::item:selected:hover {
             background: @PROMINENT_SELECTION@;
+            color: @TEXT@;
+        }
+        QTreeView#HostTree::item:selected,
+        QTreeView#HostTree::item:selected:active,
+        QTreeView#HostTree::item:selected:!active,
+        QTreeView#HostTree::item:selected:hover {
+            /* 主机树由委托绘制淡绿卡片、描边和父级引导线。这里必须透明，否则 Qt 会先给
+               缩进区和整行铺通用选中色，形成参考设计中不存在的宽绿色块并叠深卡片底色。 */
+            background: transparent;
             color: @TEXT@;
         }
         QHeaderView::section {
@@ -1447,6 +1533,17 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
     // this->setStyleSheet(...) 只对 MainWindow 子树生效，右键菜单等
     // 顶层部件会吃不到这份样式，因此改为通过 qApp 应用到整个应用。
     qApp->setStyleSheet(styleSheet);
+
+    if (m_hostManager != nullptr) {
+        if (auto *hostTree = m_hostManager->findChild<QAbstractItemView *>(
+                QStringLiteral("HostTree"))) {
+            // QSS 能绘制列表表面，却不会可靠地把应用自选主题回写到操作系统 QPalette::Base。
+            // 主机委托自绘图标卡片时通过动态属性读取同一 SURFACE 色，才能正确支持“系统深色
+            // + 应用浅色”及其反向组合；更新 viewport 让主题切换在当前帧立即生效。
+            hostTree->setProperty("hostIconSurfaceColor", surfaceBackground);
+            hostTree->viewport()->update();
+        }
+    }
 
     if (auto *sessionTabs = dynamic_cast<SessionTabBar *>(m_titleTabBar)) {
         sessionTabs->setVisualColors(QColor(QStringLiteral("#aeb6cc")),

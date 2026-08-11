@@ -10,6 +10,154 @@
 #include <QStyleFactory>
 #include <QUuid>
 
+namespace {
+
+/**
+ * @brief 向隔离的 UI 预览数据库写入一条主机或分组记录。
+ * @param database 已初始化且必须指向内存的预览数据库。
+ * @param record 仅用于视觉覆盖的非敏感示例记录。
+ * @param errorMessage 写入失败时接收数据库错误；可为空。
+ * @return 保存成功返回 true；失败返回 false，由调用方终止预览启动并显示原因。
+ *
+ * 单独封装保存动作的原因是预览数据包含多个层级：任何一条写入失败都应立即停止，不能继续
+ * 展示一棵半完整的树，否则截图会把数据库故障误报成布局回归。该函数仅在明确开启
+ * SHELLIUM_UI_PREVIEW 时调用，正常启动路径永远不会创建这些记录。
+ */
+bool saveUiPreviewRecord(ApplicationDatabase *database,
+                         const HostRecord &record,
+                         QString *errorMessage)
+{
+    Q_ASSERT(database != nullptr);
+    return database->saveHost(record, errorMessage);
+}
+
+/**
+ * @brief 构造覆盖主机页关键视觉状态的纯内存示例树。
+ * @param database 已初始化的内存数据库；不得指向用户真实数据库。
+ * @param errorMessage 任一记录保存失败时接收可读原因；可为空。
+ * @return 七台主机及其分组全部写入成功返回 true。
+ *
+ * 数据刻意覆盖展开分组、空分组、继承账号/端口、环境标签与未分组主机。这样 UI 预览截图
+ * 可以同时发现箭头、引导线、双行卡片、标签徽章、数量摘要和分区标题的回归，而不是只验证
+ * 一个空白侧栏。地址均为文档/内网示例值，记录只存在本进程内存中，不包含任何凭据。
+ */
+bool seedHostUiPreview(ApplicationDatabase *database, QString *errorMessage)
+{
+    Q_ASSERT(database != nullptr);
+
+    HostRecord wuhanGroup;
+    wuhanGroup.id = QStringLiteral("preview-group-wuhan");
+    wuhanGroup.kind = HostNodeKind::Folder;
+    wuhanGroup.name = QStringLiteral("武汉");
+    wuhanGroup.username = QStringLiteral("root");
+    wuhanGroup.port = 22;
+    if (!saveUiPreviewRecord(database, wuhanGroup, errorMessage)) {
+        return false;
+    }
+
+    HostRecord preRelease;
+    preRelease.id = QStringLiteral("preview-host-pre-release");
+    preRelease.parentId = wuhanGroup.id;
+    preRelease.kind = HostNodeKind::Host;
+    preRelease.name = QStringLiteral("预发布");
+    preRelease.host = QStringLiteral("10.194.135.11");
+    if (!saveUiPreviewRecord(database, preRelease, errorMessage)) {
+        return false;
+    }
+
+    HostRecord numberedHost = preRelease;
+    numberedHost.id = QStringLiteral("preview-host-numbered");
+    numberedHost.name = QStringLiteral("1");
+    numberedHost.sortOrder = 1;
+    if (!saveUiPreviewRecord(database, numberedHost, errorMessage)) {
+        return false;
+    }
+
+    HostRecord shangraoGroup;
+    shangraoGroup.id = QStringLiteral("preview-group-shangrao");
+    shangraoGroup.kind = HostNodeKind::Folder;
+    shangraoGroup.name = QStringLiteral("上饶E呼即办");
+    shangraoGroup.username = QStringLiteral("root");
+    shangraoGroup.port = 3822;
+    shangraoGroup.tags = {QStringLiteral("测试")};
+    shangraoGroup.sortOrder = 1;
+    if (!saveUiPreviewRecord(database, shangraoGroup, errorMessage)) {
+        return false;
+    }
+
+    HostRecord middleware;
+    middleware.id = QStringLiteral("preview-host-middleware");
+    middleware.parentId = shangraoGroup.id;
+    middleware.kind = HostNodeKind::Host;
+    middleware.name = QStringLiteral("192.168.1.79-中间件");
+    middleware.host = QStringLiteral("115.159.35.31");
+    if (!saveUiPreviewRecord(database, middleware, errorMessage)) {
+        return false;
+    }
+
+    HostRecord emptyGroup;
+    emptyGroup.id = QStringLiteral("preview-group-empty");
+    emptyGroup.kind = HostNodeKind::Folder;
+    emptyGroup.name = QStringLiteral("江夏镇");
+    emptyGroup.sortOrder = 2;
+    if (!saveUiPreviewRecord(database, emptyGroup, errorMessage)) {
+        return false;
+    }
+
+    HostRecord dongxihuGroup;
+    dongxihuGroup.id = QStringLiteral("preview-group-dongxihu");
+    dongxihuGroup.kind = HostNodeKind::Folder;
+    dongxihuGroup.name = QStringLiteral("东西湖城运");
+    dongxihuGroup.username = QStringLiteral("geoadmin");
+    dongxihuGroup.sortOrder = 3;
+    if (!saveUiPreviewRecord(database, dongxihuGroup, errorMessage)) {
+        return false;
+    }
+
+    HostRecord cityHost;
+    cityHost.id = QStringLiteral("preview-host-city-50");
+    cityHost.parentId = dongxihuGroup.id;
+    cityHost.kind = HostNodeKind::Host;
+    cityHost.name = QStringLiteral("10.70.165.50");
+    cityHost.host = QStringLiteral("10.70.165.50");
+    cityHost.port = 22022;
+    if (!saveUiPreviewRecord(database, cityHost, errorMessage)) {
+        return false;
+    }
+
+    HostRecord secondCityHost = cityHost;
+    secondCityHost.id = QStringLiteral("preview-host-city-52");
+    secondCityHost.name = QStringLiteral("10.70.165.52");
+    secondCityHost.host = QStringLiteral("10.70.165.52");
+    secondCityHost.port = 10022;
+    secondCityHost.sortOrder = 1;
+    if (!saveUiPreviewRecord(database, secondCityHost, errorMessage)) {
+        return false;
+    }
+
+    HostRecord ungroupedHost;
+    ungroupedHost.id = QStringLiteral("preview-host-ungrouped");
+    ungroupedHost.kind = HostNodeKind::Host;
+    ungroupedHost.name = QStringLiteral("10.38.217.99");
+    ungroupedHost.host = QStringLiteral("10.38.217.99");
+    ungroupedHost.username = QStringLiteral("root");
+    ungroupedHost.port = 8000;
+    ungroupedHost.sortOrder = 4;
+    if (!saveUiPreviewRecord(database, ungroupedHost, errorMessage)) {
+        return false;
+    }
+
+    HostRecord finalPreviewHost = ungroupedHost;
+    finalPreviewHost.id = QStringLiteral("preview-host-secondary");
+    finalPreviewHost.name = QStringLiteral("GPU 运算节点");
+    finalPreviewHost.host = QStringLiteral("192.0.2.80");
+    finalPreviewHost.port = 22;
+    finalPreviewHost.sortOrder = 5;
+    return saveUiPreviewRecord(database, finalPreviewHost, errorMessage);
+}
+
+} // namespace
+
 /**
  * @brief Shellium 图形应用入口。
  * @param argc 系统传入的命令行参数数量。
@@ -50,6 +198,15 @@ int main(int argc, char *argv[])
     }
 
     if (uiPreviewMode) {
+        QString previewSeedError;
+        if (!seedHostUiPreview(&database, &previewSeedError)) {
+            QMessageBox::critical(nullptr,
+                                  QObject::tr("UI 预览初始化失败"),
+                                  QObject::tr("无法创建隔离的主机页预览数据：%1")
+                                      .arg(previewSeedError));
+            return 1;
+        }
+
         // 可选主题仅写入本次内存数据库，用于持续集成分别截图浅色/深色界面。未知值回退为
         // 跟随系统，不让测试辅助参数影响正常启动或制造无效持久化设置。
         const QString requestedPreviewTheme =

@@ -15,9 +15,11 @@
 #include <QListWidget>
 #include <QPushButton>
 #include <QSet>
+#include <QSignalSpy>
 #include <QSpinBox>
 #include <QTest>
 #include <QTimer>
+#include <QToolButton>
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
 
@@ -57,11 +59,17 @@ private slots:
     /** @brief 顶层节点顶格、分组下的主机右缩进，二者不能再被分支装饰列推乱。 */
     void topLevelNodesShareLeftEdgeAndChildHostsIndent();
 
-    /** @brief 展开箭头必须右对齐，且整个右侧图标区域都能展开、收起。 */
-    void groupToggleIsRightAlignedVerticallyCenteredAndClickable();
+    /** @brief 展开箭头必须位于分组左侧，且完整图标区域都能展开、收起。 */
+    void groupToggleIsLeftAlignedVerticallyCenteredAndClickable();
 
-    /** @brief 分组名与主机名必须使用同一套常规字重字体，不得以粗体争抢视觉注意力。 */
-    void groupNameUsesSameFontAsHostName();
+    /** @brief 分组名与主机名必须使用同一套加粗字体，形成参考设计的清晰名称层级。 */
+    void groupNameUsesSameEmphasizedFontAsHostName();
+
+    /** @brief 标题数量必须统计全部嵌套主机，不能把分组或当前搜索结果计入。 */
+    void hostCountTracksAllNestedHosts();
+
+    /** @brief 搜索框右侧的标签胶囊必须进入 #标签 查询模式并保留焦点。 */
+    void tagShortcutEntersTagSearchMode();
 
     /** @brief 同一个自绘图标实例必须在主题切换后改用新前景色，显式品牌色则保持不变。 */
     void semanticIconsFollowLightAndDarkPalettes();
@@ -71,6 +79,9 @@ private slots:
 
     /** @brief 没有任何无父分组主机时，树里不应出现"未分组"标题这个多余的空壳分区。 */
     void sectionHeaderAbsentWhenNoUngroupedHosts();
+
+    /** @brief 顶层拖放保存必须跳过“未分组”展示标题，并为真实记录生成连续排序号。 */
+    void rootReorderIgnoresUngroupedSectionHeader();
 
 private:
     [[nodiscard]] QTreeWidgetItem *findItem(const HostManagerWidget &widget,
@@ -522,7 +533,7 @@ void HostManagerWidgetTest::topLevelNodesShareLeftEdgeAndChildHostsIndent()
     QVERIFY2(tree->indentation() > 0, "层级缩进被压成 0，分组与主机会顶成一列");
 }
 
-void HostManagerWidgetTest::groupToggleIsRightAlignedVerticallyCenteredAndClickable()
+void HostManagerWidgetTest::groupToggleIsLeftAlignedVerticallyCenteredAndClickable()
 {
     QString error;
     QVERIFY2(seedGroupWithChildAndTopLevelHost(m_database.get(), &error), qPrintable(error));
@@ -555,11 +566,8 @@ void HostManagerWidgetTest::groupToggleIsRightAlignedVerticallyCenteredAndClicka
         return changed;
     };
 
-    // 行首现在只有分组图标和名称，点它不该再展开收起。
-    QVERIFY2(!togglesAt(QPoint(groupRect.left() + 2, groupRect.center().y())), "行首被当成展开按钮");
-
-    // 横向：热区必须覆盖行末完整图标区域，而不是只有 8 像素宽的箭头图形。逐像素探测既
-    // 验证它右对齐，也防止后续重构又把可点击范围缩回三角形本身。
+    // 横向：热区必须覆盖行首完整图标区域，而不是只有 8 像素宽的箭头图形。逐像素探测既
+    // 验证它左对齐，也防止后续重构又把可点击范围缩回三角形本身。
     int leftmostHit = -1;
     int rightmostHit = -1;
     for (int x = groupRect.left(); x < groupRect.right(); ++x) {
@@ -569,19 +577,21 @@ void HostManagerWidgetTest::groupToggleIsRightAlignedVerticallyCenteredAndClicka
         }
     }
     QVERIFY2(leftmostHit >= 0, "分组行上找不到能展开收起的箭头");
-    const int nameWidth = tree->fontMetrics().horizontalAdvance(QStringLiteral("上饶E呼即办"));
-    QVERIFY2(leftmostHit > groupRect.left() + nameWidth,
-             qPrintable(QStringLiteral("箭头左缘 x=%1 紧贴着分组名称（名称宽 %2）")
-                            .arg(leftmostHit)
-                            .arg(nameWidth)));
-    QVERIFY2(groupRect.right() - rightmostHit <= 12,
-             qPrintable(QStringLiteral("箭头右缘距行末 %1 像素，没有右对齐")
-                            .arg(groupRect.right() - rightmostHit)));
-    QVERIFY2(rightmostHit - leftmostHit + 1 >= 28,
-             qPrintable(QStringLiteral("右侧展开按钮热区只有 %1 像素宽，仍然过小")
+    QVERIFY2(leftmostHit <= groupRect.left() + 1,
+             qPrintable(QStringLiteral("箭头热区左缘距行首 %1 像素，没有左对齐")
+                            .arg(leftmostHit - groupRect.left())));
+    QVERIFY2(rightmostHit < groupRect.left() + 30,
+             qPrintable(QStringLiteral("箭头热区延伸到 x=%1，覆盖了后面的文件夹或名称")
+                            .arg(rightmostHit)));
+    QVERIFY2(rightmostHit - leftmostHit + 1 >= 20,
+             qPrintable(QStringLiteral("左侧展开按钮热区只有 %1 像素宽，仍然过小")
                             .arg(rightmostHit - leftmostHit + 1)));
 
-    // 纵向：右侧图标区域应覆盖当前分组行的完整高度。循环没有探测 QRect::bottom() 这一
+    // 文件夹与名称是选中/拖拽入口，不应顺带改变展开状态；参考设计只把左侧箭头区作为开关。
+    QVERIFY2(!togglesAt(QPoint(groupRect.left() + 34, groupRect.center().y())),
+             "文件夹图标区域被误当成展开按钮");
+
+    // 纵向：左侧图标区域应覆盖当前分组行的完整高度。循环没有探测 QRect::bottom() 这一
     // 个边界像素，因此上下各允许 1 像素取整误差。
     const int probeX = (leftmostHit + rightmostHit) / 2;
     int topHit = -1;
@@ -594,10 +604,10 @@ void HostManagerWidgetTest::groupToggleIsRightAlignedVerticallyCenteredAndClicka
     }
     QVERIFY(topHit >= 0);
     QVERIFY2(topHit <= groupRect.top() + 1,
-             qPrintable(QStringLiteral("右侧展开按钮热区顶部留出了 %1 像素死区")
+             qPrintable(QStringLiteral("左侧展开按钮热区顶部留出了 %1 像素死区")
                             .arg(topHit - groupRect.top())));
     QVERIFY2(bottomHit >= groupRect.bottom() - 2,
-             qPrintable(QStringLiteral("右侧展开按钮热区底部留出了 %1 像素死区")
+             qPrintable(QStringLiteral("左侧展开按钮热区底部留出了 %1 像素死区")
                             .arg(groupRect.bottom() - bottomHit)));
 
     // 收起后再点同一个位置必须能重新展开，避免做成“单向收起”。
@@ -701,7 +711,7 @@ void HostManagerWidgetTest::semanticIconsFollowLightAndDarkPalettes()
     QCOMPARE(strongestPixel(fixed).rgb(), fixedBrandIcon.rgb());
 }
 
-void HostManagerWidgetTest::groupNameUsesSameFontAsHostName()
+void HostManagerWidgetTest::groupNameUsesSameEmphasizedFontAsHostName()
 {
     // 两个节点取同一串名字：字体一致时，画出来的墨迹宽度必然相等；任一类型擅自改变字号
     // 或字重，同样的文本都会出现明显不同的渲染结果。
@@ -741,11 +751,11 @@ void HostManagerWidgetTest::groupNameUsesSameFontAsHostName()
     }
     QVERIFY(groupItem != nullptr);
     QVERIFY(hostItem != nullptr);
-    // 模型层明确写入 Normal，既表达产品约束，也阻止平台主题把某一种节点默认成粗体。
-    QCOMPARE(groupItem->font(0).weight(), QFont::Normal);
-    QCOMPARE(hostItem->font(0).weight(), QFont::Normal);
-    QVERIFY(!groupItem->font(0).bold());
-    QVERIFY(!hostItem->font(0).bold());
+    // 模型层明确写入 Bold，既表达产品约束，也让编辑态、辅助技术与自绘委托保持一致。
+    QCOMPARE(groupItem->font(0).weight(), QFont::Bold);
+    QCOMPARE(hostItem->font(0).weight(), QFont::Bold);
+    QVERIFY(groupItem->font(0).bold());
+    QVERIFY(hostItem->font(0).bold());
 
     const QImage rendered = tree->viewport()->grab().toImage();
     const QRect groupRect = tree->visualItemRect(groupItem);
@@ -761,15 +771,21 @@ void HostManagerWidgetTest::groupNameUsesSameFontAsHostName()
     };
 
     // 空分组没有展开箭头，但行右侧会画一个子节点数量徽章；主机名在上、连接信息在下，
-    // 只量上半行。两种节点行末都留一段右侧装饰边距不参与取样，量的才是纯文字渲染宽度。
+    // 只量名称行。取样从委托定义的文字左缘开始，排除两种节点尺寸不同的图标装饰区。
     QVERIFY2(groupItem->childCount() == 0, "分组带了子节点，行末的展开箭头会混进墨迹里");
     constexpr int kRightDecorationMargin = 40;
-    const QRect groupArea = toDevice(QRect(groupRect.left(),
+    constexpr int kFolderTextLeft = 52;
+    constexpr int kHostTextLeft = 46;
+    const QRect groupArea = toDevice(QRect(groupRect.left() + kFolderTextLeft,
                                            groupRect.top(),
-                                           std::max(0, groupRect.width() - kRightDecorationMargin),
+                                           std::max(0,
+                                                    groupRect.width() - kFolderTextLeft
+                                                        - kRightDecorationMargin),
                                            groupRect.height()));
-    const QRect hostArea = toDevice(
-        QRect(hostRect.left(), hostRect.top(), hostRect.width(), hostRect.height() / 2));
+    const QRect hostArea = toDevice(QRect(hostRect.left() + kHostTextLeft,
+                                          hostRect.top(),
+                                          std::max(0, hostRect.width() - kHostTextLeft),
+                                          hostRect.height() / 2));
     const QColor background = rendered.pixelColor(groupArea.right() - 1, groupArea.top() + 1);
 
     const int groupInk = inkWidth(rendered, groupArea, background);
@@ -780,6 +796,84 @@ void HostManagerWidgetTest::groupNameUsesSameFontAsHostName()
              qPrintable(QStringLiteral("分组名墨迹宽 %1，主机名墨迹宽 %2（设备像素），两者字体不一致")
                             .arg(groupInk)
                             .arg(hostInk)));
+}
+
+void HostManagerWidgetTest::hostCountTracksAllNestedHosts()
+{
+    HostRecord group;
+    group.id = QStringLiteral("count-group");
+    group.kind = HostNodeKind::Folder;
+    group.name = QStringLiteral("测试环境");
+    group.tags = {QStringLiteral("测试")};
+    QString error;
+    QVERIFY2(m_database->saveHost(group, &error), qPrintable(error));
+
+    HostRecord child;
+    child.id = QStringLiteral("count-child");
+    child.parentId = group.id;
+    child.kind = HostNodeKind::Host;
+    child.name = QStringLiteral("应用服务器");
+    child.host = QStringLiteral("10.0.0.1");
+    QVERIFY2(m_database->saveHost(child, &error), qPrintable(error));
+
+    HostRecord topLevel;
+    topLevel.id = QStringLiteral("count-top-level");
+    topLevel.kind = HostNodeKind::Host;
+    topLevel.name = QStringLiteral("运维入口");
+    topLevel.host = QStringLiteral("10.0.0.2");
+    QVERIFY2(m_database->saveHost(topLevel, &error), qPrintable(error));
+
+    HostManagerWidget widget(m_database.get(), m_vault.get());
+    QCOMPARE(widget.hostCount(), 2);
+
+    // 分组标签会由 resolveHost() 继承给子主机，模型角色必须保存解析后的值，委托才能画出
+    // 与 #标签 搜索语义一致的“测试”徽章。
+    QTreeWidgetItem *childItem = findItem(widget, child.name);
+    QVERIFY(childItem != nullptr);
+    QCOMPARE(childItem->data(0, Qt::UserRole + 3).toStringList(),
+             QStringList{QStringLiteral("测试")});
+
+    // 搜索只改变当前树的展示结果，标题数量仍代表整个数据库，不能随过滤条件跳动。
+    auto *searchEdit = widget.findChild<QLineEdit *>(QStringLiteral("HostSearchEdit"));
+    QVERIFY(searchEdit != nullptr);
+    searchEdit->setText(QStringLiteral("运维入口"));
+    QCOMPARE(widget.hostCount(), 2);
+
+    QSignalSpy countSpy(&widget, &HostManagerWidget::hostCountChanged);
+    HostRecord anotherChild;
+    anotherChild.id = QStringLiteral("count-child-2");
+    anotherChild.parentId = group.id;
+    anotherChild.kind = HostNodeKind::Host;
+    anotherChild.name = QStringLiteral("数据库服务器");
+    anotherChild.host = QStringLiteral("10.0.0.3");
+    QVERIFY2(m_database->saveHost(anotherChild, &error), qPrintable(error));
+    widget.refresh();
+    QCOMPARE(widget.hostCount(), 3);
+    QCOMPARE(countSpy.count(), 1);
+    QCOMPARE(countSpy.constFirst().constFirst().toInt(), 3);
+}
+
+void HostManagerWidgetTest::tagShortcutEntersTagSearchMode()
+{
+    HostManagerWidget widget(m_database.get(), m_vault.get());
+    widget.resize(320, 400);
+    widget.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&widget));
+
+    auto *searchEdit = widget.findChild<QLineEdit *>(QStringLiteral("HostSearchEdit"));
+    auto *tagButton = widget.findChild<QToolButton *>(QStringLiteral("HostTagFilterButton"));
+    QVERIFY2(searchEdit != nullptr, "主机页没有设计稿要求的组合搜索输入框");
+    QVERIFY2(tagButton != nullptr, "搜索框右侧缺少 #标签 快捷入口");
+    QCOMPARE(tagButton->text(), QStringLiteral("#标签"));
+
+    tagButton->click();
+    QCOMPARE(searchEdit->text(), QStringLiteral("#"));
+    QVERIFY2(searchEdit->hasFocus(), "点击 #标签 后焦点没有回到输入框，用户无法连续输入标签名");
+
+    // 已在标签模式时再次点击只负责聚焦，不能把用户已经输入的标签名重置成单个井号。
+    searchEdit->setText(QStringLiteral("#生产"));
+    tagButton->click();
+    QCOMPARE(searchEdit->text(), QStringLiteral("#生产"));
 }
 
 void HostManagerWidgetTest::ungroupedHostsFollowFoldersBehindSectionHeader()
@@ -866,6 +960,60 @@ void HostManagerWidgetTest::sectionHeaderAbsentWhenNoUngroupedHosts()
     // 没有无父主机时不该凭空多出一个"未分组"空壳分区。
     QCOMPARE(tree->topLevelItemCount(), 1);
     QCOMPARE(tree->topLevelItem(0)->text(0), QStringLiteral("东西湖城运"));
+}
+
+void HostManagerWidgetTest::rootReorderIgnoresUngroupedSectionHeader()
+{
+    HostRecord firstGroup;
+    firstGroup.id = QStringLiteral("reorder-group-a");
+    firstGroup.kind = HostNodeKind::Folder;
+    firstGroup.name = QStringLiteral("第一分组");
+    firstGroup.sortOrder = 0;
+    QString error;
+    QVERIFY2(m_database->saveHost(firstGroup, &error), qPrintable(error));
+
+    HostRecord secondGroup;
+    secondGroup.id = QStringLiteral("reorder-group-b");
+    secondGroup.kind = HostNodeKind::Folder;
+    secondGroup.name = QStringLiteral("第二分组");
+    secondGroup.sortOrder = 1;
+    QVERIFY2(m_database->saveHost(secondGroup, &error), qPrintable(error));
+
+    HostRecord ungroupedHost;
+    ungroupedHost.id = QStringLiteral("reorder-host");
+    ungroupedHost.kind = HostNodeKind::Host;
+    ungroupedHost.name = QStringLiteral("未分组主机");
+    ungroupedHost.host = QStringLiteral("192.0.2.10");
+    ungroupedHost.sortOrder = 2;
+    QVERIFY2(m_database->saveHost(ungroupedHost, &error), qPrintable(error));
+
+    HostManagerWidget widget(m_database.get(), m_vault.get());
+    auto *tree = widget.findChild<QTreeWidget *>();
+    QVERIFY(tree != nullptr);
+    QCOMPARE(tree->topLevelItemCount(), 4);
+
+    // 用 take/insert 精确构造 Qt 完成 InternalMove 后的树状态，避免鼠标坐标和平台拖放动画
+    // 让用例变得不稳定。此时树中仍保留没有数据库 id 的“未分组”标题，正是原故障条件。
+    QTreeWidgetItem *movedGroup = tree->takeTopLevelItem(1);
+    QVERIFY(movedGroup != nullptr);
+    QCOMPARE(movedGroup->data(0, Qt::UserRole).toString(), secondGroup.id);
+    tree->insertTopLevelItem(0, movedGroup);
+
+    error.clear();
+    QVERIFY2(widget.reindexChildren(nullptr, &error), qPrintable(error));
+
+    const std::optional<HostRecord> persistedSecond = m_database->findHost(secondGroup.id, &error);
+    QVERIFY2(persistedSecond.has_value(), qPrintable(error));
+    QCOMPARE(persistedSecond->sortOrder, 0);
+
+    const std::optional<HostRecord> persistedFirst = m_database->findHost(firstGroup.id, &error);
+    QVERIFY2(persistedFirst.has_value(), qPrintable(error));
+    QCOMPARE(persistedFirst->sortOrder, 1);
+
+    const std::optional<HostRecord> persistedHost = m_database->findHost(ungroupedHost.id, &error);
+    QVERIFY2(persistedHost.has_value(), qPrintable(error));
+    // 分区标题位于树下标 2，但不对应记录；主机排序号应紧接两个真实分组，而不是被抬到 3。
+    QCOMPARE(persistedHost->sortOrder, 2);
 }
 
 QTEST_MAIN(HostManagerWidgetTest)

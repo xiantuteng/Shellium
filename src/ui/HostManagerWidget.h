@@ -20,6 +20,10 @@ class QTreeWidgetItem;
 class HostManagerWidget final : public QWidget {
     Q_OBJECT
 
+    // 界面回归测试需要直接验证拖放持久化的私有边界：测试只操作内存数据库，不会把测试
+    // 入口暴露成正式 API。使用友元比为了测试扩大 reindexChildren() 的生产可见性更稳妥。
+    friend class HostManagerWidgetTest;
+
 public:
     /**
      * @brief 创建主机管理面板并立即从数据库加载主机树。
@@ -34,6 +38,12 @@ public:
     void refresh();
 
     /**
+     * @brief 返回数据库中的可连接主机总数，不包含仅用于组织的分组。
+     * @return 最近一次 refresh() 成功统计出的主机数量；数据库读取失败时保留上次有效值。
+     */
+    [[nodiscard]] int hostCount() const;
+
+    /**
      * @brief 返回承载新建主机/新建分组/刷新的动作条。
      *
      * 侧栏标题由 MainWindow 统一渲染，主机页的主要动作需要与标题同排右对齐。把动作条作为
@@ -44,6 +54,12 @@ public:
 signals:
     /** @brief 主机或分组列表已重新加载，依赖 hostId 的其他侧栏应同步刷新。 */
     void hostsChanged();
+
+    /**
+     * @brief 主机总数发生变化，侧栏标题可据此同步“主机 N 台”摘要。
+     * @param count 数据库中 Host 类型记录的总数，不包含分组与展示伪节点。
+     */
+    void hostCountChanged(int count);
 
     /**
      * @brief 用户要求连接一条已保存的主机记录。
@@ -128,6 +144,9 @@ private:
 
     /**
      * @brief 把某个父节点（或根层级，parentItem 为空）下的直接子节点顺序写回数据库。
+     *
+     * 根层级允许包含不对应数据库记录的“未分组”展示标题；该伪节点会被跳过，并且不会
+     * 占用 sortOrder。真实节点缺少 id 时仍按错误处理，防止损坏数据被静默忽略。
      * @return 全部子节点写入成功返回 true；中途失败时终止并通过 errorMessage 返回原因。
      */
     bool reindexChildren(QTreeWidgetItem *parentItem, QString *errorMessage);
@@ -137,4 +156,6 @@ private:
     QLineEdit *m_searchEdit = nullptr;
     QTreeWidget *m_tree = nullptr;
     QWidget *m_headerActions = nullptr;
+    /** @brief 最近一次完整统计得到的主机数量；搜索过滤不会改变该值。 */
+    int m_hostCount = 0;
 };

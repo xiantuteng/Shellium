@@ -122,8 +122,13 @@ enum class Symbol {
             hostItemPen.setWidthF(1.4);
             painter.setPen(hostItemPen);
         }
-        for (int row = 0; row < 3; ++row) {
-            const qreal top = 4.0 + row * 5.6;
+        // 侧栏节点使用两层服务器轮廓，放进 14px 的圆角图标容器后仍能辨认；导航入口尺寸
+        // 更大，继续保留三层机架以增强识别度。两种图标共享语义但适配各自的信息密度。
+        const int rowCount = symbol == Symbol::HostItem ? 2 : 3;
+        const qreal firstTop = symbol == Symbol::HostItem ? 6.2 : 4.0;
+        const qreal rowGap = symbol == Symbol::HostItem ? 7.0 : 5.6;
+        for (int row = 0; row < rowCount; ++row) {
+            const qreal top = firstTop + row * rowGap;
             painter.drawRoundedRect(QRectF(3.5, top, 17.0, 4.2), 1.3, 1.3);
             painter.drawEllipse(QPointF(6.3, top + 2.1), 0.65, 0.65);
             painter.drawLine(QPointF(15.0, top + 2.1), QPointF(18.0, top + 2.1));
