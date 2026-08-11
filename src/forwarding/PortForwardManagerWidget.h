@@ -54,6 +54,18 @@ signals:
     /** @brief 非致命启动、停止、数据库错误，供主窗口顶部提示区展示。 */
     void statusMessage(const QString &message);
 
+private slots:
+    /**
+     * @brief 接收单条运行时的最新统计，刷新对应卡片并上报启动失败。
+     * @param ruleId 产生统计的持久化规则 id。
+     * @param statistics 包含状态、连接数、流量和最近错误的完整快照。
+     *
+     * 独立槽函数让异步运行时只有一个状态落库入口，卡片展示与顶部提示不会因新增连接方式
+     * 而走不同分支；直接保存 lastError 也保证列表重建后仍能显示具体失败原因。
+     */
+    void applyRuntimeStatistics(const QString &ruleId,
+                                const PortForwardStatistics &statistics);
+
 private:
     /** @brief 重新加载主机下拉框并尽量保留当前选择。 */
     void reloadHosts();

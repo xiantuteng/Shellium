@@ -258,6 +258,44 @@ QColor statusDotColor(const PortForwardState state)
 }
 
 /**
+ * @brief 把网络或 SSH 层错误整理为适合卡片直接展示的单行安全文本。
+ * @param message 运行时返回的原始错误，可能包含换行或不可见控制字符。
+ * @param maximumLength 允许保留的最大 UTF-16 字符数；小于 2 时返回空字符串。
+ * @return 移除控制字符、合并空白并按上限截断后的文本；无有效内容时返回空字符串。
+ *
+ * 错误内容可能间接来自远端 SSH 服务或系统网络栈，不能原样把控制字符送进界面。卡片空间
+ * 也有限，设置上限可避免异常长错误把一条规则撑满整个侧栏；完整诊断仍通过较长 Tooltip
+ * 提供，且两条路径使用相同清理规则。
+ */
+QString displayableForwardingError(const QString &message, const qsizetype maximumLength)
+{
+    if (maximumLength < 2) {
+        return {};
+    }
+
+    QString sanitized;
+    sanitized.reserve(std::min(message.size(), maximumLength));
+    for (const QChar character : message) {
+        if (character.isSpace()) {
+            sanitized.append(QLatin1Char(' '));
+            continue;
+        }
+        const QChar::Category category = character.category();
+        if (category == QChar::Other_Control || category == QChar::Other_Format) {
+            // C0/C1、ESC 和双向文本控制符没有可读内容，还可能改变后续文字方向或视觉顺序。
+            continue;
+        }
+        sanitized.append(character);
+    }
+    sanitized = sanitized.simplified();
+    if (sanitized.size() > maximumLength) {
+        sanitized.truncate(maximumLength - 1);
+        sanitized.append(QChar(0x2026));
+    }
+    return sanitized;
+}
+
+/**
  * @brief 端口转发卡片式列表的单行内容：名称+类型徽章一行，地址映射+状态一行。
  *
  * 原来的四列表格在默认 320px 侧栏里要么互相挤占，要么被裁到看不清；改成两行卡片后，
@@ -272,6 +310,7 @@ public:
                        const PortForwardState state,
                        const QString &stateLabel,
                        const int activeConnections,
+                       const QString &lastError,
                        QWidget *parent = nullptr)
         : QWidget(parent)
     {
@@ -311,6 +350,29 @@ public:
         statusRow->addWidget(statusLabel, 0, Qt::AlignVCenter);
         statusRow->addStretch(1);
         layout->addLayout(statusRow);
+
+        // 启动失败不能只藏在 Tooltip：触屏用户没有稳定的悬停入口，截图和远程协助场景也
+        // 无法知道红点为何出现。运行中某一条客户端连接失败时监听仍然有效，因此使用“最近
+        // 错误”而不是“失败原因”，避免把整条规则误报为不可用。
+        QString visibleError = displayableForwardingError(lastError, 220);
+        if (state == PortForwardState::Failed && visibleError.isEmpty()) {
+            visibleError = tr("运行时未返回具体错误信息");
+        }
+        if (!visibleError.isEmpty()) {
+            auto *errorLabel = new QLabel(this);
+            errorLabel->setObjectName(QStringLiteral("PortForwardErrorLabel"));
+            errorLabel->setTextFormat(Qt::PlainText);
+            errorLabel->setWordWrap(true);
+            errorLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+            errorLabel->setStyleSheet(
+                QStringLiteral("color:#e5484d; font-size:10px; padding-top:1px;"));
+            errorLabel->setText(
+                state == PortForwardState::Failed
+                    ? tr("失败原因：%1").arg(visibleError)
+                    : tr("最近错误：%1").arg(visibleError));
+            errorLabel->setToolTip(displayableForwardingError(lastError, 1000));
+            layout->addWidget(errorLabel);
+        }
     }
 };
 
@@ -626,10 +688,8 @@ void PortForwardManagerWidget::reloadRules()
                                            statistics.state,
                                            stateText(statistics.state),
                                            statistics.activeConnections,
+                                           statistics.lastError,
                                            m_ruleList);
-        if (!statistics.lastError.isEmpty()) {
-            row->setToolTip(statistics.lastError);
-        }
         item->setSizeHint(row->sizeHint());
         m_ruleList->setItemWidget(item, row);
 
@@ -927,13 +987,7 @@ bool PortForwardManagerWidget::startRule(const PortForwardRule &rule,
     connect(runtime,
             &PortForwardRuntime::statisticsChanged,
             this,
-            [this](const QString &ruleId, const PortForwardStatistics &statistics) {
-                m_statistics.insert(ruleId, statistics);
-                reloadRules();
-                if (statistics.state == PortForwardState::Failed) {
-                    emit statusMessage(tr("端口转发失败：%1").arg(statistics.lastError));
-                }
-            });
+            &PortForwardManagerWidget::applyRuntimeStatistics);
     connect(runtime,
             &PortForwardRuntime::statusMessage,
             this,
@@ -943,6 +997,24 @@ bool PortForwardManagerWidget::startRule(const PortForwardRule &rule,
     runtime->start();
     emit statusMessage(tr("正在启动端口转发：%1").arg(rule.name));
     return true;
+}
+
+void PortForwardManagerWidget::applyRuntimeStatistics(
+    const QString &ruleId,
+    const PortForwardStatistics &statistics)
+{
+    if (ruleId.isEmpty()) {
+        // 缺少稳定 id 的统计无法安全归属到任何卡片；忽略比污染另一条规则的状态更可靠。
+        return;
+    }
+    m_statistics.insert(ruleId, statistics);
+    reloadRules();
+    if (statistics.state == PortForwardState::Failed) {
+        const QString reason = displayableForwardingError(statistics.lastError, 1000);
+        emit statusMessage(
+            tr("端口转发失败：%1")
+                .arg(reason.isEmpty() ? tr("运行时未返回具体错误信息") : reason));
+    }
 }
 
 void PortForwardManagerWidget::startAutomaticRules(const QString &hostId,

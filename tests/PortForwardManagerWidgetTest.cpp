@@ -35,6 +35,9 @@ private slots:
     /** @brief 没有保存任何主机时，列表必须为空并提示去主机管理创建，而不是留白。 */
     void emptyStateShowsGuidanceWhenNoHostsSaved();
 
+    /** @brief 运行时失败后卡片必须直接展示具体原因，不能只把错误藏在悬停提示里。 */
+    void failedRuleCardDisplaysConcreteReason();
+
 private:
     /** @brief 递归查找控件树中第一个显示指定文本的 QLabel。 */
     static QLabel *findLabelWithText(const QWidget *root, const QString &text);
@@ -190,6 +193,51 @@ void PortForwardManagerWidgetTest::emptyStateShowsGuidanceWhenNoHostsSaved()
     QVERIFY2(findLabelWithText(&widget, QStringLiteral("请先在主机管理中保存一台主机"))
                  != nullptr,
              "没有保存主机时必须提示去主机管理创建，而不是留一片空白列表");
+}
+
+void PortForwardManagerWidgetTest::failedRuleCardDisplaysConcreteReason()
+{
+    HostRecord host;
+    host.id = QStringLiteral("failed-host");
+    host.kind = HostNodeKind::Host;
+    host.name = QStringLiteral("故障测试主机");
+    host.host = QStringLiteral("10.0.0.8");
+    QString databaseError;
+    QVERIFY2(m_database->saveHost(host, &databaseError), qPrintable(databaseError));
+
+    PortForwardRule rule;
+    rule.id = QStringLiteral("failed-rule");
+    rule.hostId = host.id;
+    rule.name = QStringLiteral("占用端口测试");
+    rule.type = PortForwardType::Local;
+    rule.bindHost = QStringLiteral("127.0.0.1");
+    rule.bindPort = 8080;
+    rule.targetHost = QStringLiteral("10.0.0.9");
+    rule.targetPort = 80;
+    QVERIFY2(m_database->savePortForward(rule, &databaseError), qPrintable(databaseError));
+
+    PortForwardManagerWidget widget(m_database.get());
+    PortForwardStatistics failedStatistics;
+    failedStatistics.state = PortForwardState::Failed;
+    // 换行模拟系统/SSH 返回的多段错误；界面应合并为空格，避免把卡片布局拆成任意多行。
+    failedStatistics.lastError =
+        QStringLiteral("监听 127.0.0.1:8080 失败：Address already in use\n请更换端口");
+    QVERIFY2(QMetaObject::invokeMethod(&widget,
+                                       "applyRuntimeStatistics",
+                                       Qt::DirectConnection,
+                                       Q_ARG(QString, rule.id),
+                                       Q_ARG(PortForwardStatistics, failedStatistics)),
+             "测试无法投递运行时统计，私有槽签名可能已与生产连接不一致");
+
+    auto *list = widget.findChild<QListWidget *>(QStringLiteral("PortForwardRuleList"));
+    QVERIFY(list != nullptr);
+    auto *errorLabel = list->findChild<QLabel *>(QStringLiteral("PortForwardErrorLabel"));
+    QVERIFY2(errorLabel != nullptr, "失败卡片必须创建直接可见的原因标签");
+    QCOMPARE(errorLabel->text(),
+             QStringLiteral("失败原因：监听 127.0.0.1:8080 失败：Address already in use 请更换端口"));
+    QVERIFY2(errorLabel->wordWrap(), "较长失败原因必须允许换行，不能在窄侧栏中被直接裁掉");
+    QVERIFY2(findLabelWithText(list, QStringLiteral("失败 / 0")) != nullptr,
+             "展示失败原因时不能丢失原有状态与活动连接数");
 }
 
 QTEST_MAIN(PortForwardManagerWidgetTest)
