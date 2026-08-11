@@ -256,14 +256,12 @@ void SessionTabBar::wheelEvent(QWheelEvent *event)
 void SessionTabBar::setVisualColors(const QColor &textColor,
                                     const QColor &selectedTextColor,
                                     const QColor &hoverColor,
-                                    const QColor &selectedColor,
-                                    const QColor &accentColor)
+                                    const QColor &selectedColor)
 {
     m_textColor = textColor;
     m_selectedTextColor = selectedTextColor;
     m_hoverColor = hoverColor;
     m_selectedColor = selectedColor;
-    m_accentColor = accentColor;
     update();
 }
 
@@ -380,17 +378,9 @@ void SessionTabBar::drawSessionTab(QPainter &painter,
     painter.drawLine(QPointF(terminalRect.left() + 9.5, terminalRect.top() + 11.0),
                      QPointF(terminalRect.left() + 13.0, terminalRect.top() + 11.0));
 
-    if (selected) {
-        painter.setPen(Qt::NoPen);
-        painter.setBrush(m_accentColor);
-        painter.drawEllipse(QPointF(terminalRect.right() - 1.0, terminalRect.top() + 1.0),
-                            2.2,
-                            2.2);
-    }
-
-    // 连接状态点画在图标右下角，与上面"当前标签"专用的强调点（右上角）分开，避免
-    // 一个圆点身兼两种含义。它不分选中/未选中都画，因为它回答的正是"这个不在前台的
-    // 标签是不是掉线了"，选中态反而是它最不需要提示的时候。
+    // 连接状态点保留在图标右下角，并且不分选中/未选中都绘制：它表达的是会话连接结果，
+    // 与当前标签选择状态无关。选中态已经由胶囊背景和高对比文字完整表达，不再额外绘制
+    // 右上角绿点，避免一个没有独立业务含义的装饰元素干扰真正的连接状态。
     const ConnectionState connectionState =
         m_tabConnectionStates.value(tabIdAt(index), ConnectionState::Unknown);
     const QColor stateDotColor = connectionStateDotColor(connectionState);

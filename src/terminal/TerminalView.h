@@ -13,6 +13,7 @@ class QContextMenuEvent;
 class QMenu;
 class QMimeData;
 class QPaintEvent;
+class QPainter;
 class QWheelEvent;
 class QStringListModel;
 class QTimer;
@@ -286,6 +287,17 @@ private:
 
     /** @brief 只失效光标所在的一小块区域；闪烁不再触碰 QTextDocument。 */
     void updateCursorArea();
+
+    /**
+     * @brief 在 Qt 完成选区绘制后遮住被选中的内部行高锚点。
+     * @param painter 已绑定到终端 viewport 的绘制器。
+     * @param repaintArea 本次 paintEvent 实际需要刷新的区域。
+     *
+     * 行高锚点中的真实“中”字平时依靠透明前景色隐藏，但 Qt 选区会强制改用
+     * HighlightedText 颜色，导致内部字形显现。本方法只遍历当前可见段，并用选区背景覆盖
+     * 带专用格式标记的锚点；用户真实输出的同名汉字不会受影响。
+     */
+    void paintSelectedLineAnchorMasks(QPainter &painter, const QRect &repaintArea) const;
 
     /** @brief 标记欠一帧渲染；已经排队时不重复排队，保证持续输出下的稳定帧率。 */
     void scheduleRender();

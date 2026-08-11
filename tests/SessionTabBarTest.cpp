@@ -384,8 +384,7 @@ void SessionTabBarTest::draggingPaintsOnlyOneTabCopy()
     tabBar.setVisualColors(QColor(QStringLiteral("#00ff66")),
                            QColor(QStringLiteral("#ffffff")),
                            QColor(QStringLiteral("#202020")),
-                           selectedColor,
-                           QColor(QStringLiteral("#00ffff")));
+                           selectedColor);
     tabBar.addTab(QStringLiteral("唯一拖拽标签"));
     tabBar.show();
     QVERIFY(QTest::qWaitForWindowExposed(&tabBar));
@@ -428,8 +427,7 @@ void SessionTabBarTest::reorderedNeighborAnimatesFromPreviousPosition()
     tabBar.setVisualColors(neighborColor,
                            QColor(QStringLiteral("#ffffff")),
                            QColor(QStringLiteral("#303030")),
-                           QColor(QStringLiteral("#4050ff")),
-                           QColor(QStringLiteral("#00ffff")));
+                           QColor(QStringLiteral("#4050ff")));
     tabBar.addTab(QStringLiteral("左侧让位标签"));
     tabBar.addTab(QStringLiteral("右侧拖拽标签"));
     tabBar.setCurrentIndex(1);
@@ -473,8 +471,7 @@ void SessionTabBarTest::connectionStateDotReflectsPerTabStateAndClearsOnRemoval(
     tabBar.setVisualColors(QColor(QStringLiteral("#aeb6cc")),
                            QColor(QStringLiteral("#f8f9fd")),
                            QColor(QStringLiteral("#353c56")),
-                           QColor(QStringLiteral("#424b68")),
-                           QColor(QStringLiteral("#2bd981")));
+                           QColor(QStringLiteral("#424b68")));
     tabBar.addTab(QStringLiteral("会话一"));
     tabBar.addTab(QStringLiteral("会话二"));
     tabBar.setCurrentIndex(0);
@@ -486,12 +483,21 @@ void SessionTabBarTest::connectionStateDotReflectsPerTabStateAndClearsOnRemoval(
 
     // 状态点画在终端图标右下角：图标矩形是 (tabRect.left()+15, 纵向居中-8, 17, 16)，
     // 点心落在图标的 (right-1, bottom-1)。采样一个 10×10 的小方块覆盖点本身即可，
-    // 不会碰到左上角"当前标签"专用的强调点或右侧仅悬停时才出现的关闭按钮。
+    // 不会碰到右侧仅悬停时才出现的关闭按钮。
     const auto dotSampleRect = [&tabBar](const int index) {
         const QRect tabRect = tabBar.tabRect(index);
         const int iconRight = tabRect.left() + 15 + 17;
         const int iconBottom = tabRect.center().y() - 8 + 16;
         return QRect(iconRight - 5, iconBottom - 5, 10, 10);
+    };
+
+    // 当前标签此前会在图标右上角额外绘制同色绿点。该点只重复表达胶囊选中态，没有连接
+    // 语义，因此无论会话是否 Connected，该区域都必须保持无绿色像素。
+    const auto removedSelectionDotRect = [&tabBar](const int index) {
+        const QRect tabRect = tabBar.tabRect(index);
+        const int iconRight = tabRect.left() + 15 + 17;
+        const int iconTop = tabRect.top() + (tabRect.height() - 16) / 2;
+        return QRect(iconRight - 5, iconTop - 3, 10, 10);
     };
 
     QPixmap frame = tabBar.grab();
@@ -505,6 +511,8 @@ void SessionTabBarTest::connectionStateDotReflectsPerTabStateAndClearsOnRemoval(
     frame = tabBar.grab();
     QVERIFY2(countPixelsNearColor(frame, dotSampleRect(0), connectedColor) > 4,
              "已连接的标签必须显示绿色状态点");
+    QVERIFY2(countPixelsNearColor(frame, removedSelectionDotRect(0), connectedColor) == 0,
+             "当前标签右上角不能再显示仅用于表达选中状态的绿色装饰点");
     QVERIFY2(countPixelsNearColor(frame, dotSampleRect(1), failedColor) > 4,
              "连接失败的标签必须显示红色状态点，即便它不是当前选中标签");
 

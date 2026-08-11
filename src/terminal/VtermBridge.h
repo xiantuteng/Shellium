@@ -80,6 +80,17 @@ public:
     [[nodiscard]] static QString lineAnchorSuffix();
 
     /**
+     * @brief 判断字符格式是否属于内部行高锚点。
+     * @param format 待检查的 QTextDocument 字符格式。
+     * @return 由 writeRenderedLine() 写入的行高锚点返回 true，普通终端字符返回 false。
+     *
+     * 行高锚点使用真实 CJK 字形才能取得与正文完全一致的后备字体度量。视图在选区绘制后
+     * 需要精确识别并遮住这些内部字形，不能仅凭字符内容判断，否则用户真实输入的“中”字
+     * 也会被误认为锚点。
+     */
+    [[nodiscard]] static bool isLineAnchorFormat(const QTextCharFormat &format);
+
+    /**
      * @brief 当前是否处于备用屏（vim、top、less 等全屏程序会切换到该屏）。
      *
      * 备用屏与主屏的显示契约完全不同：主屏是一条不断向下增长的历史，用户按底部对齐阅读；

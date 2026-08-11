@@ -3,6 +3,7 @@
 #include <QClipboard>
 #include <QCompleter>
 #include <QFontMetrics>
+#include <QImage>
 #include <QScrollBar>
 #include <QSignalSpy>
 #include <QTextBlock>
@@ -121,6 +122,8 @@ private slots:
     void wheelScrollsFullScreenApplicationWithArrowKeys();
     void pasteIsBracketedWhenRemoteEnablesIt();
     void selectionSurvivesCursorBlinkRepaint();
+    /** @brief 行高锚点在普通与选中状态下都不得暴露真实“中”字或进入剪贴板。 */
+    void selectedLineHeightAnchorsRemainInvisible();
     void insertClipboardShortcutsBypassRemoteInsertKey();
     void incrementalRenderMatchesFullRebuild();
     void cursorBlinkLeavesDocumentUntouched();
@@ -360,6 +363,67 @@ void TerminalAltScreenTest::selectionSurvivesCursorBlinkRepaint()
     QCOMPARE(QGuiApplication::clipboard()->text(), QStringLiteral("copy me"));
     // 复制不是终端输入，一个字节都不该发给远端。
     QCOMPARE(inputSpy.count(), 0);
+}
+
+void TerminalAltScreenTest::selectedLineHeightAnchorsRemainInvisible()
+{
+    TerminalView view;
+    QVERIFY(showAndSettle(view));
+    // 最后把终端光标移回首行，避免 libvterm 为末行光标额外保留一个空格干扰复制断言。
+    view.appendTerminalOutput(
+        QByteArrayLiteral("plain ascii line\r\nsecond line\x1b[1;1H"));
+    QTest::qWait(100);
+
+    const QString anchorMarker = VtermBridge::lineAnchorSuffix();
+    QVERIFY(!anchorMarker.isEmpty());
+    const int anchorPosition = view.document()->toPlainText().indexOf(QChar(0x4E2D));
+    QVERIFY2(anchorPosition >= 0, "测试内容没有生成 CJK 行高锚点");
+    QTextCursor anchorProbe(view.document());
+    anchorProbe.setPosition(anchorPosition);
+    anchorProbe.movePosition(QTextCursor::Right, QTextCursor::KeepAnchor);
+    QVERIFY2(VtermBridge::isLineAnchorFormat(anchorProbe.charFormat()),
+             "段尾“中”字没有内部锚点标记，视图无法与用户真实内容安全区分");
+
+    // 全选会走与截图相同的选区绘制路径。抓取真实 viewport 后检查整个锚点字符格必须保持
+    // 纯选区背景色；只要“中”的任一笔画显形，该区域就会出现 HighlightedText 色像素。
+    view.setFocus();
+    view.selectAll();
+    const QPixmap selectedFrame = view.viewport()->grab();
+    QVERIFY(!selectedFrame.isNull());
+    QTextCursor anchorStart(view.document());
+    anchorStart.setPosition(anchorPosition);
+    QTextCursor anchorEnd(view.document());
+    anchorEnd.setPosition(anchorPosition + 1);
+    const QRect startCaret = view.cursorRect(anchorStart);
+    const QRect endCaret = view.cursorRect(anchorEnd);
+    const QRect anchorArea(std::min(startCaret.left(), endCaret.left()),
+                           startCaret.top(),
+                           std::abs(endCaret.left() - startCaret.left()),
+                           startCaret.height());
+    QVERIFY2(anchorArea.width() > 2 && anchorArea.height() > 2,
+             "无法取得可检查的行高锚点字形区域");
+
+    const QImage selectedImage = selectedFrame.toImage().convertToFormat(QImage::Format_ARGB32);
+    const qreal pixelRatio = selectedFrame.devicePixelRatio();
+    const QColor expectedBackground = view.palette().color(
+        view.hasFocus() ? QPalette::Active : QPalette::Inactive,
+        QPalette::Highlight);
+    const QRect pixelArea(qFloor(anchorArea.left() * pixelRatio) + 1,
+                          qFloor(anchorArea.top() * pixelRatio) + 1,
+                          qCeil(anchorArea.width() * pixelRatio) - 2,
+                          qCeil(anchorArea.height() * pixelRatio) - 2);
+    for (int y = pixelArea.top(); y <= pixelArea.bottom(); ++y) {
+        for (int x = pixelArea.left(); x <= pixelArea.right(); ++x) {
+            QCOMPARE(QColor::fromRgba(selectedImage.pixel(x, y)), expectedBackground);
+        }
+    }
+
+    // 绘制层修复不能改变既有复制契约，内部锚点仍需在进入剪贴板前被完整剥除。
+    QGuiApplication::clipboard()->setText(QStringLiteral("stale clipboard"));
+    pressCopyShortcut(view);
+    const QString copied = QGuiApplication::clipboard()->text();
+    QVERIFY(!copied.contains(anchorMarker));
+    QCOMPARE(copied, QStringLiteral("plain ascii line\nsecond line"));
 }
 
 void TerminalAltScreenTest::insertClipboardShortcutsBypassRemoteInsertKey()

@@ -1452,8 +1452,7 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
         sessionTabs->setVisualColors(QColor(QStringLiteral("#aeb6cc")),
                                      QColor(QStringLiteral("#f8f9fd")),
                                      QColor(QStringLiteral("#39415d")),
-                                     QColor(QStringLiteral("#424b68")),
-                                     QColor(accentColor));
+                                     QColor(QStringLiteral("#424b68")));
     }
 
     const QColor chromeIconColor(QStringLiteral("#c6ccdc"));

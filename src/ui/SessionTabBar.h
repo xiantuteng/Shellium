@@ -29,7 +29,7 @@ class SessionTabBar final : public QTabBar {
 
 public:
     /**
-     * @brief 标签对应会话的连接状态，驱动标签左上角的微型状态点。
+     * @brief 标签对应会话的连接状态，驱动终端图标右下角的微型状态点。
      *
      * Unknown 表示"还没有连接结果可展示"（刚打开的本地终端、正在首次建立连接前的
      * 一瞬间），此时不画点——每个标签常驻一个默认灰点只会制造噪音，不传递任何信息。
@@ -63,7 +63,6 @@ public:
      * @param selectedTextColor 当前标签的文字与图标颜色。
      * @param hoverColor 未选中标签悬停时的背景颜色。
      * @param selectedColor 当前标签的胶囊背景颜色。
-     * @param accentColor 当前会话的连接感知强调色。
      *
      * 颜色由 MainWindow 根据深浅主题集中下发，避免该控件私自读取全局 Palette 后与始终
      * 保持深色的原生标题区产生反差。该方法只改变展示，不改变当前索引或标签顺序。
@@ -71,8 +70,7 @@ public:
     void setVisualColors(const QColor &textColor,
                          const QColor &selectedTextColor,
                          const QColor &hoverColor,
-                         const QColor &selectedColor,
-                         const QColor &accentColor);
+                         const QColor &selectedColor);
 
     /**
      * @brief 向左滚动一格标签。
@@ -314,8 +312,6 @@ private:
     QColor m_hoverColor = QColor(QStringLiteral("#353c56"));
     /** @brief 当前标签胶囊背景色。 */
     QColor m_selectedColor = QColor(QStringLiteral("#424b68"));
-    /** @brief 当前标签终端图标与微型状态点的强调色。 */
-    QColor m_accentColor = QColor(QStringLiteral("#2bd981"));
     /**
      * @brief 鼠标精确悬停在关闭按钮上时叉号线条的颜色。
      *

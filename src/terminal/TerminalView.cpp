@@ -1305,6 +1305,14 @@ void TerminalView::resizeEvent(QResizeEvent *event)
 void TerminalView::paintEvent(QPaintEvent *event)
 {
     QPlainTextEdit::paintEvent(event);
+
+    // Qt 的选区调色板会覆盖透明前景色，因此必须在基础文本与选区都画完以后遮住内部锚点。
+    // 只在确有选区时创建额外绘制器，避免持续输出的普通场景为每一帧承担无意义开销。
+    if (textCursor().hasSelection()) {
+        QPainter anchorMaskPainter(viewport());
+        paintSelectedLineAnchorMasks(anchorMaskPainter, event->rect());
+    }
+
     // 三种光标形态全部在这里叠加绘制。把光标画进 QTextCharFormat 看似省事，代价却是每次
     // 闪烁都要重建整份文档；改成叠加后，闪烁只是一次局部重绘，与历史长度完全无关。
     if (!m_cursorPhaseVisible || !m_vtermBridge->isCursorVisible()) {
@@ -1315,6 +1323,7 @@ void TerminalView::paintEvent(QPaintEvent *event)
         return;
     }
 
+    // 光标最后绘制，避免它恰好停在行尾时被前面的锚点遮罩覆盖。
     QPainter painter(viewport());
     const auto shape = static_cast<TerminalCursorShape>(m_cursorShape);
     if (shape == TerminalCursorShape::IBeam) {
@@ -1343,6 +1352,76 @@ void TerminalView::paintEvent(QPaintEvent *event)
         painter.setPen(textColor.isValid() ? textColor : palette().color(QPalette::Base));
         painter.setFont(font());
         painter.drawText(cellArea, Qt::AlignLeft | Qt::AlignVCenter, cursorText);
+    }
+}
+
+void TerminalView::paintSelectedLineAnchorMasks(QPainter &painter,
+                                                 const QRect &repaintArea) const
+{
+    const QTextCursor selection = textCursor();
+    if (!selection.hasSelection()) {
+        return;
+    }
+
+    const int selectionStart = selection.selectionStart();
+    const int selectionEnd = selection.selectionEnd();
+    const QPalette::ColorGroup colorGroup = !isEnabled()
+        ? QPalette::Disabled
+        : (hasFocus() ? QPalette::Active : QPalette::Inactive);
+    const QBrush selectionBackground = palette().brush(colorGroup, QPalette::Highlight);
+
+    // 只扫描当前可见段，避免用户全选数十万行历史后每次光标闪烁都遍历整份文档。段落的
+    // 几何位置已经包含滚动偏移，可同时用于跳过本次脏区之外的可见段。
+    for (QTextBlock block = firstVisibleBlock(); block.isValid(); block = block.next()) {
+        const QRectF blockArea = blockBoundingGeometry(block).translated(contentOffset());
+        if (blockArea.top() > repaintArea.bottom()) {
+            break;
+        }
+        if (blockArea.bottom() < repaintArea.top()) {
+            continue;
+        }
+
+        // 从段尾按格式属性反向寻找连续锚点。不能按“中”字或透明色判断：用户输出可能合法
+        // 包含相同字符与 ANSI 透明色，只有桥接层写入的专用属性才具有明确业务语义。
+        int firstAnchorOffset = block.text().size();
+        while (firstAnchorOffset > 0) {
+            QTextCursor probe(document());
+            probe.setPosition(block.position() + firstAnchorOffset - 1);
+            probe.movePosition(QTextCursor::Right, QTextCursor::KeepAnchor);
+            if (!VtermBridge::isLineAnchorFormat(probe.charFormat())) {
+                break;
+            }
+            --firstAnchorOffset;
+        }
+        if (firstAnchorOffset == block.text().size()) {
+            continue;
+        }
+
+        const int anchorStart = block.position() + firstAnchorOffset;
+        const int anchorEnd = block.position() + block.text().size();
+        const int coveredStart = std::max(anchorStart, selectionStart);
+        const int coveredEnd = std::min(anchorEnd, selectionEnd);
+        if (coveredStart >= coveredEnd) {
+            continue;
+        }
+
+        QTextCursor startCursor(document());
+        startCursor.setPosition(coveredStart);
+        QTextCursor endCursor(document());
+        endCursor.setPosition(coveredEnd);
+        const QRect startCaret = cursorRect(startCursor);
+        const QRect endCaret = cursorRect(endCursor);
+        const int left = std::min(startCaret.left(), endCaret.left());
+        const int right = std::max(startCaret.left(), endCaret.left());
+        if (right <= left) {
+            // 只选中 U+200B 之类零宽锚点时没有任何像素需要处理。
+            continue;
+        }
+
+        const QRect maskArea(left, startCaret.top(), right - left, startCaret.height());
+        if (maskArea.intersects(repaintArea)) {
+            painter.fillRect(maskArea, selectionBackground);
+        }
     }
 }
 

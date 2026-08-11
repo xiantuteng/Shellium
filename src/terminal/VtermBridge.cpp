@@ -10,6 +10,14 @@
 
 namespace {
 
+/**
+ * @brief 标记内部行高锚点的 QTextFormat 自定义属性编号。
+ *
+ * 不能按字符值识别锚点：真实终端内容完全可能以“中”或零宽字符结尾。写入专用属性后，
+ * 视图只遮住渲染层生成的锚点，不会误伤用户数据。
+ */
+constexpr int kLineHeightAnchorProperty = QTextFormat::UserProperty + 1;
+
 /** @brief 把 libvterm RGB/索引颜色统一转换为 QColor。 */
 QColor toQColor(const VTermScreen *screen, VTermColor color)
 {
@@ -227,6 +235,11 @@ QString VtermBridge::lineAnchorSuffix()
     return suffix;
 }
 
+bool VtermBridge::isLineAnchorFormat(const QTextCharFormat &format)
+{
+    return format.property(kLineHeightAnchorProperty).toBool();
+}
+
 void VtermBridge::invalidateDocument()
 {
     m_documentDirty = true;
@@ -420,9 +433,9 @@ void VtermBridge::writeRenderedLine(QTextCursor &cursor, const RenderedLine &lin
     for (const auto &anchor : m_lineAnchors) {
         QTextCharFormat anchorFormat;
         anchorFormat.setFont(anchor.second);
-        // 锚点只为撑住行高而存在，任何时候都不该被看见：其中的 CJK 锚点是一个真实的
-        // 汉字（只有真实汉字才会走到和正文完全相同的后备字体，度量才对得上），画成
-        // 透明才不会在每行末尾留下一个"中"字。
+        // 专用属性让视图能区分“内部锚点中”与用户真实输入的“中”。仅依靠透明前景色不够：
+        // Qt 绘制选区时会用 HighlightedText 覆盖前景色，正是原问题中锚点显形的原因。
+        anchorFormat.setProperty(kLineHeightAnchorProperty, true);
         anchorFormat.setForeground(QColor(Qt::transparent));
         cursor.insertText(QString(anchor.first), anchorFormat);
     }
