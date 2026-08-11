@@ -2505,9 +2505,11 @@ void HostManagerWidget::addHost()
     // 复用这份进程内数据；从主机树再次连接时则由 Vault 或终端内联提示提供凭据。
     // saveConnectionPassword 可能为记录补上新 credentialId，因此持久字段重新从 record
     // 生成；明文仍只取对话框的本次会话副本，不会进入数据库。
+    // 新建主机是一次独立的连接意图，必须新建标签承载。如果复用当前标签，已连接主机
+    // 的会话会被新主机替换，且用户无法同时保留两个远程会话。
     target = record.toConnectionTarget();
     target.password = dialog.sessionPassword();
-    requestConnection(record.id, target, false);
+    requestConnection(record.id, target, true);
 }
 
 void HostManagerWidget::copySelectedHost()

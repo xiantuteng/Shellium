@@ -63,6 +63,9 @@ private slots:
     /** @brief 主机配置字段顺序、ProxyJump 高级入口、页脚和按钮图标必须符合新版交互。 */
     void hostDialogUsesRequestedFieldOrderAndIcons();
 
+    /** @brief 新建主机保存后的自动连接必须打开新标签，不得覆盖当前会话。 */
+    void newlySavedHostRequestsConnectionInNewTab();
+
     /** @brief 编辑已有 ProxyJump 时必须自动展开并明确提示，避免兼容路由被视觉弱化后隐身。 */
     void configuredProxyJumpRemainsVisibleWhenEditing();
 
@@ -552,6 +555,70 @@ void HostManagerWidgetTest::hostDialogUsesRequestedFieldOrderAndIcons()
 
     addHostButton->click();
     QVERIFY2(failure.isEmpty(), qPrintable(failure));
+}
+
+void HostManagerWidgetTest::newlySavedHostRequestsConnectionInNewTab()
+{
+    HostManagerWidget widget(m_database.get(), m_vault.get());
+
+    QAbstractButton *addHostButton = nullptr;
+    for (QAbstractButton *button : widget.headerActionsWidget()->findChildren<QAbstractButton *>()) {
+        if (button->text() == QStringLiteral("新建主机")) {
+            addHostButton = button;
+            break;
+        }
+    }
+    QVERIFY2(addHostButton != nullptr, "侧栏没有新建主机按钮");
+
+    int connectionRequestCount = 0;
+    QString requestedHostId;
+    QList<ConnectionTarget> requestedPlan;
+    bool requestedNewTab = false;
+    connect(&widget,
+            &HostManagerWidget::hostConnectionRequested,
+            this,
+            [&](const QString &hostId,
+                const QList<ConnectionTarget> &connectionPlan,
+                const bool openInNewTab) {
+                ++connectionRequestCount;
+                requestedHostId = hostId;
+                requestedPlan = connectionPlan;
+                requestedNewTab = openInNewTab;
+            });
+
+    QString failure;
+    QTimer::singleShot(0, [&failure]() {
+        QWidget *dialog = QApplication::activeModalWidget();
+        if (dialog == nullptr) {
+            failure = QStringLiteral("主机配置对话框未能弹出");
+            return;
+        }
+
+        auto *hostAddress = dialog->findChild<QLineEdit *>(
+            QStringLiteral("hostAddressEdit"));
+        auto *saveButton = dialog->findChild<QPushButton *>(
+            QStringLiteral("hostRecordSaveButton"));
+        if (hostAddress == nullptr || saveButton == nullptr) {
+            failure = QStringLiteral("主机配置对话框缺少地址或保存控件");
+            dialog->close();
+            return;
+        }
+
+        // 输入地址会同步生成名称，使用文档专用地址避免测试数据被误解为真实可连主机。
+        hostAddress->setText(QStringLiteral("192.0.2.25"));
+        saveButton->click();
+    });
+
+    // addHost() 内部使用模态对话框；定时器在对话框事件循环中填写并保存，
+    // 返回后即可同步验证完整的“落库 → 请求连接”业务链路。
+    addHostButton->click();
+
+    QVERIFY2(failure.isEmpty(), qPrintable(failure));
+    QCOMPARE(connectionRequestCount, 1);
+    QVERIFY2(requestedNewTab, "新建主机保存后的自动连接仍在复用当前会话标签");
+    QVERIFY2(!requestedHostId.isEmpty(), "连接请求没有携带已保存主机的稳定 id");
+    QCOMPARE(requestedPlan.size(), 1);
+    QCOMPARE(requestedPlan.constFirst().host, QStringLiteral("192.0.2.25"));
 }
 
 void HostManagerWidgetTest::configuredProxyJumpRemainsVisibleWhenEditing()
