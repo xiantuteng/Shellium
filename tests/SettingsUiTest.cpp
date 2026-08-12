@@ -42,7 +42,10 @@ private slots:
     void reconnectToggleGatesDependentRows();
     void colorSchemeSwatchesAreExclusiveAndPersist();
     void navigationSelectsMatchingPage();
-    void rejectRestoresOriginalSettings();
+    /** @brief 设置页不再显示保存/取消，修改必须即时入库且关闭窗口不得回滚。 */
+    void changesPersistImmediatelyAndCloseDoesNotRollback();
+    /** @brief 恢复默认必须和普通单项修改一样自动持久化。 */
+    void restoreDefaultsPersistsImmediately();
     void connectionDialogToggleRoundTripsLegacyHmac();
     void everyThemePresetGetsUniqueSwatchAndPalette();
     void colorSchemeFilterKeepsVisibleSwatchesPacked();
@@ -149,8 +152,8 @@ void SettingsUiTest::togglesRoundTripBooleanSettings()
     QVERIFY(!completionToggle->isChecked());
     QVERIFY(!vaultPasswordToggle->isChecked());
 
-    // 点击开关会经 previewChanges() 立即改写服务里的运行设置，因此期望值必须取点击前的
-    // 快照，不能再读 service->currentSettings()。
+    // 点击开关会立即保存并改写服务里的运行设置，因此期望值必须取点击前的快照，不能在
+    // 第一次点击后再把 currentSettings() 当作原值。
     const bool originalBell = service->currentSettings().audibleBell;
     const bool originalBlink = service->currentSettings().cursorBlink;
     bellToggle->click();
@@ -164,7 +167,6 @@ void SettingsUiTest::togglesRoundTripBooleanSettings()
     QVERIFY(!dialog.editedSettings().vaultPasswordEnabled);
 
     const bool expectedBell = !originalBell;
-    dialog.accept();
     QCOMPARE(service->currentSettings().audibleBell, expectedBell);
     QCOMPARE(m_database->setting(QStringLiteral("terminal/audible_bell")).value_or(QString()),
              expectedBell ? QStringLiteral("1") : QStringLiteral("0"));
@@ -193,12 +195,8 @@ void SettingsUiTest::vaultProtectionToggleRequiresPasswordInBothDirections()
     auto *enableToggle = enablingDialog.findChild<ToggleSwitch *>(
         QStringLiteral("vaultPasswordEnabledToggle"));
     QVERIFY(enableToggle != nullptr);
-    enableToggle->click();
-    QVERIFY(enablingDialog.editedSettings().vaultPasswordEnabled);
-    // 开关本身只是待保存草稿；密码对话框出现前不允许运行态提前进入主密码模式。
-    QVERIFY(!vault.passwordProtectionEnabled());
-
     QString interactionFailure;
+    // 自动保存把安全验证移动到了开关点击当下，因此必须在 click() 前排队填写模态密码窗口。
     QTimer::singleShot(0, [&interactionFailure, &masterPassword]() {
         QWidget *dialog = QApplication::activeModalWidget();
         auto *passwordEdit = dialog == nullptr ? nullptr : dialog->findChild<QLineEdit *>(
@@ -218,8 +216,9 @@ void SettingsUiTest::vaultProtectionToggleRequiresPasswordInBothDirections()
         confirmationEdit->setText(masterPassword);
         confirmButton->click();
     });
-    enablingDialog.accept();
+    enableToggle->click();
     QVERIFY2(interactionFailure.isEmpty(), qPrintable(interactionFailure));
+    QVERIFY(enablingDialog.editedSettings().vaultPasswordEnabled);
     QVERIFY(vault.passwordProtectionEnabled());
     QVERIFY(service.currentSettings().vaultPasswordEnabled);
 
@@ -228,8 +227,6 @@ void SettingsUiTest::vaultProtectionToggleRequiresPasswordInBothDirections()
         QStringLiteral("vaultPasswordEnabledToggle"));
     QVERIFY(disableToggle != nullptr);
     QVERIFY(disableToggle->isChecked());
-    disableToggle->click();
-
     interactionFailure.clear();
     QTimer::singleShot(0, [&interactionFailure, &masterPassword]() {
         QWidget *dialog = QApplication::activeModalWidget();
@@ -251,7 +248,7 @@ void SettingsUiTest::vaultProtectionToggleRequiresPasswordInBothDirections()
         passwordEdit->setText(masterPassword);
         confirmButton->click();
     });
-    disablingDialog.accept();
+    disableToggle->click();
     QVERIFY2(interactionFailure.isEmpty(), qPrintable(interactionFailure));
     QVERIFY(!vault.passwordProtectionEnabled());
     QVERIFY(!service.currentSettings().vaultPasswordEnabled);
@@ -302,7 +299,6 @@ void SettingsUiTest::colorSchemeSwatchesAreExclusiveAndPersist()
         QVERIFY(draculaSwatch->isChecked());
         QVERIFY(!defaultSwatch->isChecked());
         QCOMPARE(dialog.editedSettings().colorSchemeId, QStringLiteral("dracula"));
-        dialog.accept();
     }
 
     QCOMPARE(service->currentSettings().colorSchemeId, QStringLiteral("dracula"));
@@ -333,23 +329,53 @@ void SettingsUiTest::navigationSelectsMatchingPage()
     }
 }
 
-void SettingsUiTest::rejectRestoresOriginalSettings()
+void SettingsUiTest::changesPersistImmediatelyAndCloseDoesNotRollback()
 {
     auto service = makeService();
     const TerminalSettings before = service->currentSettings();
 
     SettingsDialog dialog(service.get());
+    // 自动保存模式只保留语义明确的关闭按钮；继续显示保存或取消会让用户误以为设置仍是草稿。
+    QVERIFY(dialog.findChild<QAbstractButton *>(QStringLiteral("settingsSave")) == nullptr);
+    QVERIFY(dialog.findChild<QAbstractButton *>(QStringLiteral("settingsCancel")) == nullptr);
+    QVERIFY(dialog.findChild<QAbstractButton *>(QStringLiteral("settingsClose")) != nullptr);
+
     QSignalSpy changeSpy(service.get(), &TerminalSettingsService::settingsChanged);
     stepperButton(dialog.findChild<QSpinBox *>(QStringLiteral("terminalFontSizeSpin")),
                   QStringLiteral("increase"))
         ->click();
     QVERIFY(changeSpy.count() > 0);
     QCOMPARE(service->currentSettings().fontPointSize, before.fontPointSize + 1);
-
-    dialog.reject();
-    QVERIFY(service->currentSettings() == before);
     QCOMPARE(m_database->setting(QStringLiteral("terminal/font_size")).value_or(QString()),
-             QString::number(before.fontPointSize));
+             QString::number(before.fontPointSize + 1));
+
+    // Esc/窗口关闭仍会调用 reject()，但已自动保存的值不允许再恢复为打开窗口时的旧快照。
+    dialog.reject();
+    QCOMPARE(service->currentSettings().fontPointSize, before.fontPointSize + 1);
+    QCOMPARE(m_database->setting(QStringLiteral("terminal/font_size")).value_or(QString()),
+             QString::number(before.fontPointSize + 1));
+}
+
+void SettingsUiTest::restoreDefaultsPersistsImmediately()
+{
+    auto service = makeService();
+    TerminalSettings customized = service->currentSettings();
+    customized.fontPointSize = 23;
+    customized.audibleBell = !TerminalSettings{}.normalized().audibleBell;
+    QString error;
+    QVERIFY2(service->save(customized, &error), qPrintable(error));
+
+    SettingsDialog dialog(service.get());
+    auto *restoreButton = dialog.findChild<QAbstractButton *>(
+        QStringLiteral("settingsRestoreDefaults"));
+    QVERIFY(restoreButton != nullptr);
+    restoreButton->click();
+
+    const TerminalSettings defaults = TerminalSettings{}.normalized();
+    QCOMPARE(service->currentSettings().fontPointSize, defaults.fontPointSize);
+    QCOMPARE(service->currentSettings().audibleBell, defaults.audibleBell);
+    QCOMPARE(m_database->setting(QStringLiteral("terminal/font_size")).value_or(QString()),
+             QString::number(defaults.fontPointSize));
 }
 
 void SettingsUiTest::connectionDialogToggleRoundTripsLegacyHmac()
@@ -536,7 +562,6 @@ void SettingsUiTest::fontComboOffersRecommendedFamiliesAndKeepsMissingOne()
         const QString target = expectedRecommended.last();
         fontCombo->setCurrentIndex(fontCombo->findData(target));
         QCOMPARE(dialog.editedSettings().fontFamily, target);
-        dialog.accept();
     }
 
     // 已保存但本机没安装的字体不能被静默替换成别的字体：重开设置仍要选中原来的名字。

@@ -74,8 +74,8 @@ SettingsDialog::SettingsDialog(TerminalSettingsService *service,
                                QWidget *parent)
     : QDialog(parent)
     , m_service(service)
-    , m_originalSettings(service == nullptr ? TerminalSettings{}.normalized()
-                                            : service->currentSettings())
+    , m_persistedSettings(service == nullptr ? TerminalSettings{}.normalized()
+                                             : service->currentSettings())
     , m_navigationList(new QListWidget(this))
     , m_pages(new QStackedWidget(this))
     , m_themeSelector(new SegmentedControl(this))
@@ -145,62 +145,66 @@ SettingsDialog::SettingsDialog(TerminalSettingsService *service,
     footerLayout->setSpacing(10);
     auto *restoreButton = new QPushButton(tr("恢复默认"), footer);
     restoreButton->setObjectName(QStringLiteral("settingsRestoreDefaults"));
-    auto *cancelButton = new QPushButton(tr("取消"), footer);
-    cancelButton->setObjectName(QStringLiteral("settingsCancel"));
-    auto *saveButton = new QPushButton(tr("保存"), footer);
-    saveButton->setObjectName(QStringLiteral("settingsSave"));
-    saveButton->setProperty("primaryAction", true);
-    saveButton->setDefault(true);
+    auto *closeButton = new QPushButton(tr("关闭"), footer);
+    closeButton->setObjectName(QStringLiteral("settingsClose"));
     footerLayout->addWidget(restoreButton);
     footerLayout->addStretch(1);
-    footerLayout->addWidget(cancelButton);
-    footerLayout->addWidget(saveButton);
+    footerLayout->addWidget(closeButton);
     rootLayout->addWidget(footer);
 
-    connect(saveButton, &QPushButton::clicked, this, &SettingsDialog::accept);
-    connect(cancelButton, &QPushButton::clicked, this, &SettingsDialog::reject);
+    // 自动保存后窗口不再持有“待提交草稿”。关闭按钮只结束对话框，Esc 触发的 reject() 也
+    // 使用 QDialog 默认行为，二者都不会撤销已经成功写入数据库的设置。
+    connect(closeButton, &QPushButton::clicked, this, &QDialog::accept);
     connect(restoreButton, &QPushButton::clicked, this, [this]() {
         populateControls(TerminalSettings{}.normalized());
-        previewChanges();
+        // “恢复默认”是一次明确的批量操作，使用服务的完整设置事务一次提交，避免逐字段写入
+        // 时应用短暂处于半默认状态；若涉及关闭主密码保护，persistChanges() 会照常要求验证。
+        persistChanges();
     });
 
     connect(m_themeSelector, &SegmentedControl::currentDataChanged,
-            this, [this](int) { previewChanges(); });
+            this, [this](int) { persistChanges(); });
     connect(m_cursorShapeSelector, &SegmentedControl::currentDataChanged,
-            this, [this](int) { previewChanges(); });
+            this, [this](int) { persistChanges(); });
     connect(m_fontCombo, &QComboBox::currentTextChanged,
-            this, [this](const QString &) { previewChanges(); });
-    connect(m_fontSizeSpin, &QSpinBox::valueChanged, this, [this](int) { previewChanges(); });
-    connect(m_lineHeightSpin, &QSpinBox::valueChanged, this, [this](int) { previewChanges(); });
+            this, [this](const QString &) { persistChanges(); });
+    connect(m_fontSizeSpin, &QSpinBox::valueChanged, this, [this](int) { persistChanges(); });
+    connect(m_lineHeightSpin, &QSpinBox::valueChanged, this, [this](int) { persistChanges(); });
     connect(m_letterSpacingSpin, &QDoubleSpinBox::valueChanged,
-            this, [this](double) { previewChanges(); });
-    connect(m_scrollbackSpin, &QSpinBox::valueChanged, this, [this](int) { previewChanges(); });
+            this, [this](double) { persistChanges(); });
+    connect(m_scrollbackSpin, &QSpinBox::valueChanged, this, [this](int) { persistChanges(); });
     connect(m_reconnectMaxAttemptsSpin, &QSpinBox::valueChanged,
-            this, [this](int) { previewChanges(); });
+            this, [this](int) { persistChanges(); });
     connect(m_reconnectBaseDelaySpin, &QSpinBox::valueChanged,
-            this, [this](int) { previewChanges(); });
-    for (ToggleSwitch *toggle :
-         {m_cursorBlinkToggle,
-          m_audibleBellToggle,
-          m_commandAutoCompletionToggle,
-          m_automaticReconnectToggle}) {
-        connect(toggle, &ToggleSwitch::toggled, this, [this](bool) { previewChanges(); });
-    }
-    // 主密码开关不是可实时预览的视觉偏好：切换它只更新待保存控件，真正的密码验证、凭据
-    // 迁移和运行态切换统一延迟到 accept()。这样用户点击后再取消设置，不会在后台留下已经
-    // 改变的加密策略或半迁移数据。
+            this, [this](int) { persistChanges(); });
+
+    // 先更新重连依赖项的可用状态，再执行持久化。若保存失败，populateControls() 触发的嵌套
+    // toggled 信号会把行状态恢复为持久值；此连接顺序可避免外层旧参数在回滚完成后再次覆盖它。
     connect(m_automaticReconnectToggle, &ToggleSwitch::toggled, this, [this](const bool enabled) {
         for (QWidget *row : std::as_const(m_reconnectDependentRows)) {
             row->setEnabled(enabled);
         }
     });
+    for (ToggleSwitch *toggle :
+         {m_cursorBlinkToggle,
+          m_audibleBellToggle,
+          m_commandAutoCompletionToggle,
+          m_automaticReconnectToggle}) {
+        connect(toggle, &ToggleSwitch::toggled, this, [this](bool) { persistChanges(); });
+    }
+    // 主密码保护不是普通布尔值：开关改变后立即进入专用验证/迁移流程；只有流程完成且设置
+    // 快照写入成功，控件才保持新状态。用户关闭密码对话框时会自动回到原持久值。
+    connect(m_vaultPasswordEnabledToggle,
+            &ToggleSwitch::toggled,
+            this,
+            [this](bool) { persistChanges(); });
     for (QKeySequenceEdit *editor : std::as_const(m_shortcutEditors)) {
         connect(editor, &QKeySequenceEdit::keySequenceChanged,
-                this, [this](const QKeySequence &) { previewChanges(); });
+                this, [this](const QKeySequence &) { persistChanges(); });
     }
 
-    populateControls(m_originalSettings);
-    updatePreviewCard(m_originalSettings);
+    populateControls(m_persistedSettings);
+    updatePreviewCard(m_persistedSettings);
 }
 
 void SettingsDialog::buildNavigation()
@@ -334,7 +338,7 @@ QWidget *SettingsDialog::buildAppearancePage()
     for (const TerminalThemePreset &preset : TerminalSettings::themePresets()) {
         const bool isDefault = preset.id == QLatin1String("default");
         const TerminalPalette palette = isDefault
-            ? paletteForScheme(m_originalSettings, preset.id)
+            ? paletteForScheme(m_persistedSettings, preset.id)
             : preset.palette;
         auto *swatch = new ThemeSwatchButton(preset.name,
                                             isDefault ? tr("跟随应用主题")
@@ -355,7 +359,7 @@ QWidget *SettingsDialog::buildAppearancePage()
                  ++iterator) {
                 iterator.value()->setChecked(iterator.key() == id);
             }
-            previewChanges();
+            persistChanges();
         });
     }
     relayoutColorSchemeGrid(QString());
@@ -554,13 +558,21 @@ TerminalSettings SettingsDialog::editedSettings() const
     return settings.normalized();
 }
 
-void SettingsDialog::accept()
+void SettingsDialog::persistChanges()
 {
+    if (m_populating) {
+        return;
+    }
+
     const TerminalSettings candidate = editedSettings();
     const bool passwordProtectionChanged =
-        candidate.vaultPasswordEnabled != m_originalSettings.vaultPasswordEnabled;
+        candidate.vaultPasswordEnabled != m_persistedSettings.vaultPasswordEnabled;
     if (passwordProtectionChanged) {
         if (m_credentialVault == nullptr) {
+            // 兼容构造入口没有保险箱服务，不能仅保存一个无法落实的安全开关。先恢复界面再
+            // 提示，保证模态消息框背后的控件已经反映真实状态。
+            populateControls(m_persistedSettings);
+            updatePreviewCard(m_persistedSettings);
             QMessageBox::warning(this,
                                  tr("保险箱不可用"),
                                  tr("当前窗口没有连接凭据保险箱服务，无法更改主密码保护。"));
@@ -573,32 +585,50 @@ void SettingsDialog::accept()
             ? VaultDialog::enablePasswordProtection(m_credentialVault, this)
             : VaultDialog::disablePasswordProtection(m_credentialVault, this);
         if (!transitionSucceeded) {
+            // 用户取消验证或迁移失败时，保险箱事务自身不会留下半迁移数据；同步恢复开关，避免
+            // 界面看起来已经启用/关闭而实际安全策略没有变化。
+            populateControls(m_persistedSettings);
+            refreshDefaultSwatchPreview(m_persistedSettings);
+            updatePreviewCard(m_persistedSettings);
+            return;
+        }
+    }
+
+    QString error;
+    if (!m_service->save(candidate, &error)) {
+        if (passwordProtectionChanged) {
+            // 凭据迁移已经在独立安全事务中提交，不能为了恢复一个设置键而反向迁移且再次索要
+            // 密码。迁移事务自身已持久化安全开关，因此只推进该字段；恢复同批次其他普通字段，
+            // 避免“恢复默认”等批量操作让界面把未落库的值误记为成功快照。
+            TerminalSettings synchronizedSettings = m_persistedSettings;
+            synchronizedSettings.vaultPasswordEnabled = candidate.vaultPasswordEnabled;
+            m_persistedSettings = synchronizedSettings;
+            populateControls(m_persistedSettings);
+            m_service->applyTransient(m_persistedSettings);
+            refreshDefaultSwatchPreview(m_persistedSettings);
+            updatePreviewCard(m_persistedSettings);
+            QMessageBox::critical(
+                this,
+                tr("设置保存不完整"),
+                tr("主密码保护已经切换，但其他设置写入失败：%1\n未保存的配置已恢复。")
+                    .arg(error));
             return;
         }
 
-        // 迁移事务已经把真实安全状态写入数据库，后续即使保存某个无关外观设置失败，也不能
-        // 在运行态或“取消”处理中把开关伪装回旧值。这里只同步安全字段，其他设置仍保持原
-        // 有的预览/取消语义；MainWindow 收到信号后会立即更新锁定菜单的可用状态。
-        TerminalSettings synchronizedRuntimeSettings = m_service->currentSettings();
-        synchronizedRuntimeSettings.vaultPasswordEnabled = candidate.vaultPasswordEnabled;
-        m_service->applyTransient(synchronizedRuntimeSettings);
-        m_originalSettings.vaultPasswordEnabled = candidate.vaultPasswordEnabled;
-    }
-    QString error;
-    if (!m_service->save(candidate, &error)) {
+        // 普通配置没有额外副作用，失败时安全地恢复到上一份持久快照。恢复期间 m_populating
+        // 会屏蔽控件信号，防止回滚动作再次发起保存。
+        populateControls(m_persistedSettings);
+        refreshDefaultSwatchPreview(m_persistedSettings);
+        updatePreviewCard(m_persistedSettings);
         QMessageBox::warning(this, tr("无法保存设置"), error);
         return;
     }
-    m_originalSettings = m_service->currentSettings();
-    QDialog::accept();
-}
 
-void SettingsDialog::reject()
-{
-    // applyTransient 不写数据库，因此恢复原快照既能让所有工作区回到原外观，也不会触发
-    // 没必要的 SQLite 写事务。
-    m_service->applyTransient(m_originalSettings);
-    QDialog::reject();
+    // 服务会在 save() 成功后规范化并广播；以服务快照作为下一次失败回滚基准，避免界面自行
+    // 推断规范化结果。即使控件连续快速修改，每次成功提交都会推进这一基准。
+    m_persistedSettings = m_service->currentSettings();
+    refreshDefaultSwatchPreview(m_persistedSettings);
+    updatePreviewCard(m_persistedSettings);
 }
 
 void SettingsDialog::populateControls(const TerminalSettings &settings)
@@ -646,20 +676,6 @@ void SettingsDialog::populateControls(const TerminalSettings &settings)
         iterator.value()->setKeySequence(normalized.shortcuts.value(iterator.key()));
     }
     m_populating = false;
-}
-
-void SettingsDialog::previewChanges()
-{
-    if (m_populating) {
-        return;
-    }
-    TerminalSettings settings = editedSettings();
-    // 安全开关的控件值在用户按保存前只是草稿。其他外观控件触发预览时也必须强制保留原
-    // 安全状态，否则先点开关、再调字体就会通过整份设置快照提前改变凭据保存策略。
-    settings.vaultPasswordEnabled = m_originalSettings.vaultPasswordEnabled;
-    m_service->applyTransient(settings);
-    refreshDefaultSwatchPreview(settings);
-    updatePreviewCard(settings);
 }
 
 void SettingsDialog::refreshDefaultSwatchPreview(const TerminalSettings &settings)

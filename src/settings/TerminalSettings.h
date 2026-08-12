@@ -212,8 +212,8 @@ Q_DECLARE_METATYPE(ThemeMode)
  * @brief 负责加载、校验、原子保存并广播终端设置的应用级服务。
  *
  * 服务必须创建和使用于 GUI 主线程，因为 ApplicationDatabase 的 Qt SQL 连接具有线程归属，
- * 同时 settingsChanged 的直接连接会立即更新 QWidget。SettingsDialog 可调用 applyTransient()
- * 进行实时预览，取消时再恢复打开对话框前的快照；save() 才真正写入 SQLite。
+ * 同时 settingsChanged 的直接连接会立即更新 QWidget。SettingsDialog 对每次用户修改直接调用
+ * save() 自动持久化；applyTransient() 保留给系统主题探测、测试和其他无需写库的临时场景。
  */
 class TerminalSettingsService final : public QObject {
     Q_OBJECT
@@ -243,8 +243,11 @@ public:
     bool save(const TerminalSettings &settings, QString *errorMessage = nullptr);
 
     /**
-     * @brief 仅在内存中应用设置，用于设置对话框实时预览。
-     * @param settings 待预览快照；数值会先规范化，但不会写数据库。
+     * @brief 仅在内存中应用设置，用于无需持久化的临时运行态覆盖。
+     * @param settings 待应用快照；数值会先规范化，但不会写数据库。
+     *
+     * 设置对话框已改为直接调用 save() 自动保存；该入口仍供测试、系统状态适配及其他明确
+     * 需要短暂覆盖运行设置的场景使用，调用方必须自行决定何时恢复持久快照。
      */
     void applyTransient(const TerminalSettings &settings);
 

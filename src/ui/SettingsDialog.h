@@ -29,9 +29,10 @@ class ToggleSwitch;
  * 卡片内部是“左侧说明 + 右侧控件”的行。布尔项用滑动开关、数值项用加减步进器、少量互斥项
  * 用分段控件、终端配色用可直接看出底色的色板卡，避免整页都是尺寸不一的原生表单控件。
  *
- * 交互契约与旧版一致：用户调整任一控件即调用 TerminalSettingsService::applyTransient()，所有
- * 已订阅工作区立即预览效果；取消对话框会恢复打开前快照，保存则通过服务的单事务 save()
- * 持久化。这样既有实时反馈，也不会让“取消”意外改写 SQLite。
+ * 设置项采用即时持久化：用户修改任一控件后，对话框立即通过
+ * TerminalSettingsService::save() 原子写入 SQLite，并由服务广播给全部已订阅工作区。
+ * 因此窗口只提供“关闭”而不再提供容易产生草稿语义的“保存/取消”；若单次写入失败，界面会
+ * 恢复到最近一次成功保存的快照，避免控件显示值与实际生效值不一致。
  */
 class SettingsDialog final : public QDialog {
     Q_OBJECT
@@ -56,13 +57,6 @@ public:
 
     /** @brief 返回当前控件组成的设置快照，主要供测试和扩展页复用。 */
     [[nodiscard]] TerminalSettings editedSettings() const;
-
-public slots:
-    /** @brief 校验并持久化当前设置；失败时保留对话框并展示原因。 */
-    void accept() override;
-
-    /** @brief 恢复打开前设置后关闭，确保实时预览可以完整撤销。 */
-    void reject() override;
 
 private:
     /** @brief 构建左侧分类导航，并与右侧页面栈双向同步。 */
@@ -95,11 +89,16 @@ private:
     /** @brief 把页面包进滚动区，保证小屏幕上底部按钮不会被卡片挤出窗口。 */
     QWidget *wrapInScrollArea(QWidget *page);
 
-    /** @brief 从设置快照刷新全部控件；刷新期间不会触发瞬态应用。 */
+    /** @brief 从设置快照刷新全部控件；刷新期间不会递归触发自动保存。 */
     void populateControls(const TerminalSettings &settings);
 
-    /** @brief 把当前控件值实时应用到服务，并同步主题预览卡。 */
-    void previewChanges();
+    /**
+     * @brief 原子保存当前控件值，并同步主题预览卡。
+     *
+     * 普通配置写入失败时恢复最近一次成功保存的快照；主密码保护切换还会先执行凭据迁移，
+     * 用户取消密码验证时仅回滚该次开关操作，不影响此前已经自动保存的其他配置。
+     */
+    void persistChanges();
 
     /** @brief 根据当前有效主题与字体刷新对话框内的示例终端。 */
     void updatePreviewCard(const TerminalSettings &settings);
@@ -108,7 +107,8 @@ private:
     void refreshDefaultSwatchPreview(const TerminalSettings &settings);
 
     TerminalSettingsService *m_service = nullptr;
-    TerminalSettings m_originalSettings;
+    /** @brief 最近一次成功持久化的完整快照，保存失败时据此恢复界面。 */
+    TerminalSettings m_persistedSettings;
     bool m_populating = false;
 
     QListWidget *m_navigationList = nullptr;
