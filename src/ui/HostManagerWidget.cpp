@@ -32,6 +32,7 @@
 #include <QPushButton>
 #include <QSet>
 #include <QSaveFile>
+#include <QScrollBar>
 #include <QSignalBlocker>
 #include <QSpinBox>
 #include <QStyle>
@@ -69,6 +70,42 @@ constexpr int HostTagsRole = Qt::UserRole + 3;
  * 一个不存在的”分组/主机”之外的第三种 kind。
  */
 constexpr int kSectionHeaderKindValue = -1;
+
+/**
+ * @brief 按数据库稳定主键查找当前主机树中的真实记录节点。
+ * @param tree 待搜索的主机树；为空时直接返回空指针。
+ * @param recordId hosts 表中的稳定主键；空字符串不代表任何真实节点。
+ * @return 找到的主机或分组节点；记录不在当前树中时返回 nullptr。
+ *
+ * 刷新会销毁全部 QTreeWidgetItem，旧节点指针不能跨刷新使用。这里递归比较 HostIdRole，
+ * 既能覆盖任意深度的分组，也会自然跳过没有数据库 id 的“未分组”展示标题。没有使用名称
+ * 作为匹配条件，是因为名称正是编辑时最常变化的字段，而且不同分组允许存在同名节点。
+ */
+[[nodiscard]] QTreeWidgetItem *findTreeItemByRecordId(QTreeWidget *tree,
+                                                       const QString &recordId)
+{
+    if (tree == nullptr || recordId.isEmpty()) {
+        return nullptr;
+    }
+
+    QList<QTreeWidgetItem *> pendingItems;
+    pendingItems.reserve(tree->topLevelItemCount());
+    for (int index = 0; index < tree->topLevelItemCount(); ++index) {
+        pendingItems.append(tree->topLevelItem(index));
+    }
+
+    while (!pendingItems.isEmpty()) {
+        QTreeWidgetItem *item = pendingItems.takeLast();
+        if (item->data(0, HostIdRole).toString() == recordId) {
+            return item;
+        }
+        // 采用显式栈而非固定层级循环，保证将来增加更深的分组嵌套后仍能恢复选择。
+        for (int childIndex = 0; childIndex < item->childCount(); ++childIndex) {
+            pendingItems.append(item->child(childIndex));
+        }
+    }
+    return nullptr;
+}
 
 /**
  * @brief 创建一个不对应任何数据库记录的分区标题伪节点（如"未分组"）。
@@ -2449,7 +2486,39 @@ void HostManagerWidget::populateContextMenu(QMenu *menu, QTreeWidgetItem *item)
 
 void HostManagerWidget::refresh()
 {
+    // QTreeWidget 的选择模型保存的是 QModelIndex，而 applyFilter() 会 clear() 并创建全新节点。
+    // 因此必须在重建前提取数据库稳定 id，不能保存 QTreeWidgetItem* 或 QModelIndex。当前控件
+    // 是单选模式，优先读取 selectedItems() 能准确对应用户看到的绿色高亮；currentItem() 仅作
+    // 键盘当前项的兼容后备，避免平台样式导致 current 与 selected 短暂不同步时丢失选择。
+    const QList<QTreeWidgetItem *> selectedItems = m_tree->selectedItems();
+    QTreeWidgetItem *selectedItem = selectedItems.isEmpty()
+        ? m_tree->currentItem()
+        : selectedItems.constFirst();
+    const QString selectedRecordId = selectedItem == nullptr
+        ? QString{}
+        : selectedItem->data(0, HostIdRole).toString();
+    const int previousVerticalScrollValue = m_tree->verticalScrollBar()->value();
+
     applyFilter();
+
+    QTreeWidgetItem *restoredItem = findTreeItemByRecordId(m_tree, selectedRecordId);
+    if (restoredItem != nullptr) {
+        // 完整树当前默认 expandAll()，这里仍显式展开祖先：若以后改为记忆分组折叠状态，或
+        // 从扁平搜索切回层级树，恢复的选中节点也不会藏在折叠分组里而让用户误以为已丢失。
+        for (QTreeWidgetItem *ancestor = restoredItem->parent();
+             ancestor != nullptr;
+             ancestor = ancestor->parent()) {
+            ancestor->setExpanded(true);
+        }
+        m_tree->setCurrentItem(restoredItem);
+        restoredItem->setSelected(true);
+    }
+
+    // 重建模型后滚动条范围可能变化，先强制完成一次布局，再让 QScrollBar 自动把旧值限制在
+    // 新范围内。这样普通刷新和仅修改名称等不改变列表长度的保存操作会停留在原浏览位置；
+    // 若记录被删除导致列表变短，也不会产生越界位置。
+    m_tree->doItemsLayout();
+    m_tree->verticalScrollBar()->setValue(previousVerticalScrollValue);
 
     // 标题中的数量始终代表数据库全部可连接主机，而不是当前搜索结果。复用导出路径的递归
     // 遍历可以正确覆盖任意深度的嵌套分组，也避免直接访问数据库内部连接或复制 SQL 规则。

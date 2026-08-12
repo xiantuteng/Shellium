@@ -70,6 +70,9 @@ private slots:
     /** @brief 编辑页默认掩码密码；未启用时眼睛图标给出引导，启用后才能切换明文。 */
     void editHostMasksPasswordAndGatesVisibility();
 
+    /** @brief 编辑保存和手动刷新重建树后，必须按稳定 id 恢复原主机的选中高亮。 */
+    void selectionSurvivesHostEditAndManualRefresh();
+
     /** @brief 新建主机保存后的自动连接必须打开新标签，不得覆盖当前会话。 */
     void newlySavedHostRequestsConnectionInNewTab();
 
@@ -708,6 +711,73 @@ void HostManagerWidgetTest::editHostMasksPasswordAndGatesVisibility()
     });
     widget.editSelected();
     QVERIFY2(failure.isEmpty(), qPrintable(failure));
+}
+
+void HostManagerWidgetTest::selectionSurvivesHostEditAndManualRefresh()
+{
+    HostRecord group;
+    group.id = QStringLiteral("selection-group");
+    group.kind = HostNodeKind::Folder;
+    group.name = QStringLiteral("选中状态测试分组");
+    QString error;
+    QVERIFY2(m_database->saveHost(group, &error), qPrintable(error));
+
+    HostRecord host;
+    host.id = QStringLiteral("selection-host-stable-id");
+    host.parentId = group.id;
+    host.kind = HostNodeKind::Host;
+    host.name = QStringLiteral("修改前的主机名称");
+    host.host = QStringLiteral("192.0.2.81");
+    QVERIFY2(m_database->saveHost(host, &error), qPrintable(error));
+
+    HostManagerWidget widget(m_database.get(), m_vault.get());
+    auto *tree = widget.findChild<QTreeWidget *>();
+    QTreeWidgetItem *originalItem = findItem(widget, host.name);
+    QVERIFY(tree != nullptr);
+    QVERIFY(originalItem != nullptr);
+    tree->setCurrentItem(originalItem);
+    QVERIFY(originalItem->isSelected());
+
+    QString dialogFailure;
+    const QString updatedName = QStringLiteral("修改后的主机名称");
+    QTimer::singleShot(0, [&dialogFailure, &updatedName]() {
+        auto *dialog = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+        auto *nameEdit = dialog == nullptr
+            ? nullptr
+            : dialog->findChild<QLineEdit *>(QStringLiteral("hostRecordNameEdit"));
+        auto *saveButton = dialog == nullptr
+            ? nullptr
+            : dialog->findChild<QPushButton *>(QStringLiteral("hostRecordSaveButton"));
+        if (dialog == nullptr || nameEdit == nullptr || saveButton == nullptr) {
+            dialogFailure = QStringLiteral("主机配置窗口缺少名称输入框或保存按钮");
+            if (dialog != nullptr) {
+                dialog->reject();
+            }
+            return;
+        }
+
+        // 名称变化用于证明恢复逻辑依赖稳定 id，而不是恰好用旧显示文本重新匹配成功。
+        nameEdit->setText(updatedName);
+        saveButton->click();
+    });
+    widget.editSelected();
+    QVERIFY2(dialogFailure.isEmpty(), qPrintable(dialogFailure));
+
+    QTreeWidgetItem *itemAfterSave = findItem(widget, updatedName);
+    QVERIFY2(itemAfterSave != nullptr, "编辑保存后未找到改名后的主机节点");
+    QCOMPARE(itemAfterSave->data(0, Qt::UserRole).toString(), host.id);
+    QCOMPARE(tree->currentItem(), itemAfterSave);
+    QVERIFY2(itemAfterSave->isSelected(), "编辑保存重建主机树后选中高亮丢失");
+    QVERIFY2(itemAfterSave->parent() != nullptr && itemAfterSave->parent()->isExpanded(),
+             "恢复选择后主机所在分组没有保持展开");
+
+    // 再执行一次用户点击刷新按钮所走的同一公开入口，确保选择恢复不是编辑流程的偶然效果。
+    widget.refresh();
+    QTreeWidgetItem *itemAfterManualRefresh = findItem(widget, updatedName);
+    QVERIFY2(itemAfterManualRefresh != nullptr, "手动刷新后主机节点消失");
+    QCOMPARE(itemAfterManualRefresh->data(0, Qt::UserRole).toString(), host.id);
+    QCOMPARE(tree->currentItem(), itemAfterManualRefresh);
+    QVERIFY2(itemAfterManualRefresh->isSelected(), "手动刷新主机列表后选中高亮丢失");
 }
 
 void HostManagerWidgetTest::newlySavedHostRequestsConnectionInNewTab()

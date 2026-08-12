@@ -35,7 +35,13 @@ public:
                                CredentialVault *credentialVault,
                                QWidget *parent = nullptr);
 
-    /** @brief 重新读取主机树，供连接历史变化后主动刷新。 */
+    /**
+     * @brief 重新读取主机树，并按数据库稳定主键恢复刷新前选中的主机或分组。
+     *
+     * 主机树刷新会销毁旧 QTreeWidgetItem，因此不能依赖节点指针保留界面状态。本方法会在
+     * 重建前记录当前记录 id 和垂直滚动位置，重建后恢复高亮、当前项及其祖先展开状态；若
+     * 记录已被删除或不再满足当前搜索条件，则保持无选中项，避免错误选中另一条记录。
+     */
     void refresh();
 
     /**
