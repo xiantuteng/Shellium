@@ -9,6 +9,8 @@
 #include <QApplication>
 #include <QColor>
 #include <QDialog>
+#include <QDragEnterEvent>
+#include <QDragMoveEvent>
 #include <QFileIconProvider>
 #include <QFrame>
 #include <QImage>
@@ -17,6 +19,7 @@
 #include <QLineEdit>
 #include <QListWidget>
 #include <QMenu>
+#include <QMimeData>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QSet>
@@ -117,6 +120,9 @@ private slots:
 
     /** @brief 顶层拖放保存必须跳过“未分组”展示标题，并为真实记录生成连续排序号。 */
     void rootReorderIgnoresUngroupedSectionHeader();
+
+    /** @brief 同组主机之间的首个拖动事件必须立即生效，不得要求先悬停到任意分组刷新落点。 */
+    void sameGroupReorderAcceptsFirstDragMove();
 
 private:
     [[nodiscard]] QTreeWidgetItem *findItem(const HostManagerWidget &widget,
@@ -1798,6 +1804,83 @@ void HostManagerWidgetTest::rootReorderIgnoresUngroupedSectionHeader()
     QVERIFY2(persistedHost.has_value(), qPrintable(error));
     // 分区标题位于树下标 2，但不对应记录；主机排序号应紧接两个真实分组，而不是被抬到 3。
     QCOMPARE(persistedHost->sortOrder, 2);
+}
+
+void HostManagerWidgetTest::sameGroupReorderAcceptsFirstDragMove()
+{
+    HostRecord group;
+    group.id = QStringLiteral("same-group-reorder-folder");
+    group.kind = HostNodeKind::Folder;
+    group.name = QStringLiteral("同组排序");
+    QString error;
+    QVERIFY2(m_database->saveHost(group, &error), qPrintable(error));
+
+    HostRecord firstHost;
+    firstHost.id = QStringLiteral("same-group-reorder-first");
+    firstHost.parentId = group.id;
+    firstHost.kind = HostNodeKind::Host;
+    firstHost.name = QStringLiteral("第一台主机");
+    firstHost.host = QStringLiteral("192.0.2.21");
+    firstHost.sortOrder = 0;
+    QVERIFY2(m_database->saveHost(firstHost, &error), qPrintable(error));
+
+    HostRecord secondHost;
+    secondHost.id = QStringLiteral("same-group-reorder-second");
+    secondHost.parentId = group.id;
+    secondHost.kind = HostNodeKind::Host;
+    secondHost.name = QStringLiteral("第二台主机");
+    secondHost.host = QStringLiteral("192.0.2.22");
+    secondHost.sortOrder = 1;
+    QVERIFY2(m_database->saveHost(secondHost, &error), qPrintable(error));
+
+    HostManagerWidget widget(m_database.get(), m_vault.get());
+    widget.resize(420, 520);
+    widget.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&widget));
+
+    auto *tree = widget.findChild<QTreeWidget *>();
+    QVERIFY(tree != nullptr);
+    QTreeWidgetItem *groupItem = tree->topLevelItem(0);
+    QVERIFY(groupItem != nullptr);
+    tree->expandItem(groupItem);
+    QCoreApplication::processEvents();
+    QCOMPARE(groupItem->childCount(), 2);
+
+    QTreeWidgetItem *draggedItem = groupItem->child(0);
+    QTreeWidgetItem *targetItem = groupItem->child(1);
+    tree->setCurrentItem(draggedItem);
+
+    // 单元测试直接投递拖放事件，没有 QDragManager 可提供 event->source()；InternalMove 会
+    // 因而在 dragEnter 阶段把这份数据当成外部来源拒绝。临时改为 DragDrop 仅绕过来源检查，
+    // 落点计算、HostTreeWidget::dragMoveEvent() 和业务合法性校验仍走与生产代码相同的路径。
+    tree->setDragDropMode(QAbstractItemView::DragDrop);
+
+    // 使用模型正式生成的拖放 MIME 数据，确保基类按真实项目模型与 flags 计算落点。
+    // 坐标选择目标行底部边缘，语义是“插入到第二台主机之后”，目标父节点仍应是当前分组。
+    // 该事件就是用户开始同组排序后抵达有效插入线的第一个 dragMove；旧实现此时会先读取
+    // 尚未更新的 OnItem 状态，把第二台主机误判为容器并直接拒绝。
+    const QModelIndex draggedIndex = tree->indexFromItem(draggedItem);
+    std::unique_ptr<QMimeData> mimeData(tree->model()->mimeData({draggedIndex}));
+    QVERIFY(mimeData != nullptr);
+    const QRect targetRect = tree->visualItemRect(targetItem);
+    QVERIFY(targetRect.isValid());
+    const QPoint dropPosition(targetRect.center().x(), targetRect.bottom() - 1);
+    QDragEnterEvent dragEnterEvent(dropPosition,
+                                   Qt::MoveAction,
+                                   mimeData.get(),
+                                   Qt::LeftButton,
+                                   Qt::NoModifier);
+    QCoreApplication::sendEvent(tree->viewport(), &dragEnterEvent);
+    QVERIFY2(dragEnterEvent.isAccepted(), "主机树必须接受自身模型产生的内部拖放数据");
+    QDragMoveEvent dragMoveEvent(dropPosition,
+                                 Qt::MoveAction,
+                                 mimeData.get(),
+                                 Qt::LeftButton,
+                                 Qt::NoModifier);
+    QCoreApplication::sendEvent(tree->viewport(), &dragMoveEvent);
+
+    QVERIFY2(dragMoveEvent.isAccepted(),
+             "同组排序的首个有效拖动事件应被接受，不能依赖此前悬停过分组节点");
 }
 
 QTEST_MAIN(HostManagerWidgetTest)

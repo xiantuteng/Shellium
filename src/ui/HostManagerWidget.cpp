@@ -702,14 +702,24 @@ protected:
 
     void dragMoveEvent(QDragMoveEvent *event) override
     {
+        // QAbstractItemView 会在基类 dragMoveEvent() 中根据本次鼠标坐标更新
+        // dropIndicatorPosition()。必须先让 Qt 完成这一步，再判断目标父节点；如果在基类
+        // 之前读取，该值仍属于上一次悬停位置。典型后果是：刚开始在同一分组的两台主机
+        // 之间拖动时，旧的 OnItem 状态会把目标主机误当成父节点并拒绝，只有先经过某个
+        // 分组、让旧状态变为合法后，同组排序才突然可用。
+        QTreeWidget::dragMoveEvent(event);
+        if (!event->isAccepted()) {
+            // 基类已经因为 MIME 类型、拖放动作或项目 flags 拒绝时，沿用 Qt 的决定；这里
+            // 只收紧主机树的业务约束，不把框架判定为非法的拖放重新放行。
+            return;
+        }
+
         QTreeWidgetItem *draggedItem = currentItem();
         QTreeWidgetItem *candidateParent = nullptr;
         if (draggedItem == nullptr
             || !computeLegalDrop(event->position().toPoint(), draggedItem, &candidateParent)) {
             event->ignore();
-            return;
         }
-        QTreeWidget::dragMoveEvent(event);
     }
 
     void dropEvent(QDropEvent *event) override
