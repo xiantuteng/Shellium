@@ -1413,15 +1413,76 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
             subcontrol-position: center right;
         }
         QComboBox::down-arrow {
-            width: 0;
-            height: 0;
-            border-left: 4px solid transparent;
-            border-right: 4px solid transparent;
-            border-top: 5px solid @MUTED@;
+            image: url(@COMBO_ARROW@);
+            width: 12px;
+            height: 8px;
             margin-right: 10px;
         }
-        QComboBox::down-arrow:hover {
-            border-top-color: @TEXT@;
+        QComboBox QAbstractItemView {
+            color: @TEXT@;
+            background: @SURFACE@;
+            border: 1px solid @BORDER@;
+            border-radius: 10px;
+            outline: 0;
+            padding: 6px;
+            selection-color: @TEXT@;
+            selection-background-color: @SELECTION@;
+        }
+        QComboBox QAbstractItemView::item {
+            min-height: 30px;
+            border: 0;
+            border-radius: 7px;
+            padding: 3px 8px;
+        }
+        QComboBox QAbstractItemView::item:hover {
+            background: @RAISED@;
+        }
+        QComboBox#PortForwardHostCombo {
+            /* 端口转发主机是侧栏中的主要上下文选择器，使用比通用表单边框更清楚的弱化
+               文字色，避免白色背景下边界过浅而像一个无边框文本区域。 */
+            border: 1px solid @MUTED@;
+            padding-right: 30px;
+        }
+        QComboBox#PortForwardHostCombo:focus {
+            border: 1px solid @ACCENT@;
+        }
+        QFrame#PortForwardHostPopup {
+            color: @TEXT@;
+            background-color: @SURFACE@;
+            border: 1px solid @MUTED@;
+            border-radius: 10px;
+        }
+        QTreeWidget#PortForwardHostTree {
+            color: @TEXT@;
+            /* 必须显式给树和 viewport 实色背景；仅给顶层 QFrame 设置背景时，macOS 的
+               QAbstractScrollArea viewport 仍可能使用透明画刷，导致主界面文字透入弹层。 */
+            background-color: @SURFACE@;
+            border: 0;
+            outline: 0;
+            padding: 2px;
+            font-weight: 600;
+            selection-color: @TEXT@;
+            selection-background-color: @SELECTION@;
+        }
+        QTreeWidget#PortForwardHostTree QWidget {
+            background-color: @SURFACE@;
+        }
+        QTreeWidget#PortForwardHostTree::item {
+            min-height: 30px;
+            border: 0;
+            /* QTreeView 的分支缩进区与内容区由两个子控件绘制。圆角 item 会把同一选中行
+               切成两块带阴影的胶囊；取消行圆角可以保持连续、清晰的整行底色。 */
+            border-radius: 0;
+            padding: 3px 6px;
+        }
+        QTreeWidget#PortForwardHostTree::item:hover {
+            background: @RAISED@;
+        }
+        QTreeWidget#PortForwardHostTree::item:selected,
+        QTreeWidget#PortForwardHostTree::item:selected:active,
+        QTreeWidget#PortForwardHostTree::item:selected:!active {
+            color: @TEXT@;
+            background: @SELECTION@;
         }
         QPlainTextEdit#TerminalView {
             color: palette(text);
@@ -1797,6 +1858,11 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
     styleSheet.replace(QStringLiteral("@BORDER@"), borderColor);
     styleSheet.replace(QStringLiteral("@TEXT@"), textColor);
     styleSheet.replace(QStringLiteral("@MUTED@"), mutedTextColor);
+    // 箭头资源必须在颜色占位符替换后再写入，避免资源路径中的字符被其他主题替换误伤。
+    // 使用编译进 qrc 的绝对资源路径，不依赖应用启动时的当前工作目录。
+    styleSheet.replace(QStringLiteral("@COMBO_ARROW@"),
+                       dark ? QStringLiteral(":/resources/icons/chevron-down-dark.svg")
+                            : QStringLiteral(":/resources/icons/chevron-down-light.svg"));
     styleSheet.replace(QStringLiteral("@ACCENT@"), accentColor);
     styleSheet.replace(QStringLiteral("@DANGER@"), dangerColor);
     styleSheet.replace(QStringLiteral("@DANGER_TINT@"), dangerTintColor);

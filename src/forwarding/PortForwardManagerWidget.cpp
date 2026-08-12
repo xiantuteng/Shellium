@@ -11,16 +11,23 @@
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QFormLayout>
+#include <QFrame>
+#include <QGuiApplication>
 #include <QHBoxLayout>
+#include <QKeyEvent>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QMessageBox>
 #include <QMenu>
 #include <QPushButton>
+#include <QScreen>
+#include <QSignalBlocker>
 #include <QSpinBox>
 #include <QStringList>
 #include <QToolButton>
+#include <QTreeWidget>
+#include <QTreeWidgetItemIterator>
 #include <QVBoxLayout>
 #include <QUuid>
 
@@ -33,6 +40,280 @@ namespace {
 
 /** @brief 表格首列存放持久化规则 id 的自定义数据角色。 */
 constexpr int kRuleIdRole = Qt::UserRole + 31;
+
+/** @brief 主机树节点保存持久化 hostId 的数据角色；分组节点保持为空，确保无法被选中。 */
+constexpr int kHostIdRole = Qt::UserRole + 32;
+
+/** @brief 主机树节点保存 HostNodeKind 的角色，供键盘激活时区分分组与可选主机。 */
+constexpr int kHostKindRole = Qt::UserRole + 33;
+
+/**
+ * @brief 端口转发专用的树形主机下拉框。
+ *
+ * QComboBox 原生弹出视图虽然可以替换为 QTreeView，但其 currentIndex 仍是相对于单个
+ * rootModelIndex 的行号，选择任意深度子节点后很难稳定恢复到完整模型索引。这里保留一个
+ * 只含主机的扁平 QComboBox 模型作为真实选择状态，再用独立 Qt::Popup 树呈现组织层级：
+ * 分组只负责展开，主机点击后映射回稳定 hostId。这样既兼容现有 currentData()/信号调用，
+ * 又从数据结构上保证分组永远不会成为端口转发归属对象。
+ */
+class HostTreeComboBox final : public QComboBox {
+public:
+    /**
+     * @brief 创建下拉框与现代化树形弹层。
+     * @param parent Qt 父控件。
+     */
+    explicit HostTreeComboBox(QWidget *parent = nullptr)
+        : QComboBox(parent)
+        , m_popup(new QFrame(this, Qt::Popup | Qt::FramelessWindowHint))
+        , m_tree(new QTreeWidget(m_popup))
+    {
+        setObjectName(QStringLiteral("PortForwardHostCombo"));
+        setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+        setMinimumContentsLength(14);
+        setAccessibleName(tr("端口转发主机"));
+
+        // 树形列表承载大量文字，不能使用 WA_TranslucentBackground：macOS 会把下方主界面
+        // 一并合成进顶层窗口，重叠文字不仅降低可读性，还会让抗锯齿边缘看起来发虚。这里让
+        // 弹层与滚动视口都进行不透明绘制，圆角和边框交给 QSS；Qt::Popup 仍负责外部点击关闭。
+        m_popup->setObjectName(QStringLiteral("PortForwardHostPopup"));
+        m_popup->setAttribute(Qt::WA_TranslucentBackground, false);
+        m_popup->setAttribute(Qt::WA_StyledBackground, true);
+        m_popup->setAutoFillBackground(true);
+        m_popup->setFrameShape(QFrame::StyledPanel);
+        m_popup->setFrameShadow(QFrame::Plain);
+        auto *popupLayout = new QVBoxLayout(m_popup);
+        // 内容与外框之间保留 5px 安全区，滚动时文字和选中背景不会覆盖边框。
+        popupLayout->setContentsMargins(5, 5, 5, 5);
+        popupLayout->setSpacing(0);
+
+        m_tree->setObjectName(QStringLiteral("PortForwardHostTree"));
+        m_tree->setAttribute(Qt::WA_StyledBackground, true);
+        m_tree->setAutoFillBackground(true);
+        m_tree->viewport()->setAttribute(Qt::WA_StyledBackground, true);
+        m_tree->viewport()->setAutoFillBackground(true);
+        m_tree->setHeaderHidden(true);
+        m_tree->setRootIsDecorated(true);
+        m_tree->setItemsExpandable(true);
+        m_tree->setExpandsOnDoubleClick(true);
+        m_tree->setIndentation(18);
+        m_tree->setUniformRowHeights(true);
+        m_tree->setSelectionMode(QAbstractItemView::SingleSelection);
+        m_tree->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        m_tree->installEventFilter(this);
+        popupLayout->addWidget(m_tree);
+
+        connect(m_tree, &QTreeWidget::itemClicked,
+                this, [this](QTreeWidgetItem *item, const int) { selectTreeItem(item); });
+        connect(m_tree, &QTreeWidget::itemActivated,
+                this, [this](QTreeWidgetItem *item, const int) { selectTreeItem(item); });
+    }
+
+    /**
+     * @brief 同步完整主机树、主机规则数量并尽量恢复原选择。
+     * @param records 数据库中的全部分组与主机记录。
+     * @param forwardingCounts hostId 到端口转发规则数的聚合结果。
+     * @param preferredHostId 刷新前选中的主机 id；不存在时自动选择第一台主机。
+     *
+     * 扁平模型和弹层树在同一次信号阻断区间内重建，外部不会观察到“文字已更新但树还是
+     * 旧数据”的中间状态。全部主机加入完成后只触发一次最终选择变更。
+     */
+    void setHostRecords(const QList<HostRecord> &records,
+                        const QHash<QString, int> &forwardingCounts,
+                        const QString &preferredHostId)
+    {
+        const QSignalBlocker blocker(this);
+        clear();
+        m_tree->clear();
+        m_recordCount = records.size();
+
+        QHash<QString, QList<HostRecord>> childrenByParent;
+        for (const HostRecord &record : records) {
+            childrenByParent[record.parentId].append(record);
+            if (record.kind == HostNodeKind::Host) {
+                const int count = forwardingCounts.value(record.id, 0);
+                addItem(UiIcons::symbol(
+                            this,
+                            UiIcons::Symbol::HostItem,
+                            palette().color(QPalette::WindowText),
+                            QSize(16, 16)),
+                        tr("%1  (%2)").arg(record.name).arg(count),
+                        record.id);
+            }
+        }
+
+        // 使用递归按 parentId 构造任意深度的分组树。数据库已阻止环和悬空父引用，因此
+        // 这里无需猜测异常节点的归属；若未来导入层放宽约束，未挂到根下的节点也不会被误选。
+        const auto appendChildren = [&](const auto &self,
+                                        QTreeWidgetItem *parentItem,
+                                        const QString &parentId) -> void {
+            const QList<HostRecord> children = childrenByParent.value(parentId);
+            for (const HostRecord &record : children) {
+                const int count = forwardingCounts.value(record.id, 0);
+                auto *item = new QTreeWidgetItem;
+                item->setText(0,
+                              record.kind == HostNodeKind::Host
+                                  ? tr("%1  (%2)").arg(record.name).arg(count)
+                                  : record.name);
+                item->setData(0, kHostKindRole, static_cast<int>(record.kind));
+                if (record.kind == HostNodeKind::Host) {
+                    item->setData(0, kHostIdRole, record.id);
+                    item->setIcon(0, UiIcons::symbol(
+                                         this,
+                                         UiIcons::Symbol::HostItem,
+                                         palette().color(QPalette::WindowText),
+                                         QSize(16, 16)));
+                    item->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+                } else {
+                    item->setIcon(0, UiIcons::symbol(
+                                         this,
+                                         UiIcons::Symbol::Folder,
+                                         palette().color(QPalette::WindowText),
+                                         QSize(16, 16)));
+                    // 分组只承担组织和展开功能，主动移除 ItemIsSelectable 可以同时阻止
+                    // 鼠标和键盘把它写入当前 hostId，符合数据库端“规则不能绑定分组”的约束。
+                    item->setFlags(Qt::ItemIsEnabled);
+                }
+
+                if (parentItem == nullptr) {
+                    m_tree->addTopLevelItem(item);
+                } else {
+                    parentItem->addChild(item);
+                }
+                if (record.kind == HostNodeKind::Folder) {
+                    self(self, item, record.id);
+                }
+            }
+        };
+        appendChildren(appendChildren, nullptr, QString());
+        m_tree->expandAll();
+
+        const int restoredIndex = findData(preferredHostId);
+        setCurrentIndex(restoredIndex >= 0 ? restoredIndex : (count() > 0 ? 0 : -1));
+        synchronizeTreeSelection();
+    }
+
+protected:
+    /** @brief 在字段下方显示自定义树弹层，并把当前主机滚动到可见区域。 */
+    void showPopup() override
+    {
+        if (count() <= 0) {
+            return;
+        }
+        synchronizeTreeSelection();
+
+        // 主题可能在控件构造后切换。每次显示前把当前下拉框调色板同步给独立顶层弹窗及其
+        // viewport，确保 autoFillBackground 使用的是最新实色，而不是启动阶段的系统颜色。
+        const QPalette popupPalette = palette();
+        m_popup->setPalette(popupPalette);
+        m_tree->setPalette(popupPalette);
+        m_tree->viewport()->setPalette(popupPalette);
+
+        const QPoint belowField = mapToGlobal(QPoint(0, height() + 4));
+        QScreen *screen = QGuiApplication::screenAt(belowField);
+        const QRect available = screen == nullptr
+            ? QRect(belowField, QSize(360, 360))
+            : screen->availableGeometry();
+        const int popupWidth = std::min(std::max(width(), 300), available.width());
+        const int estimatedRowsHeight = std::clamp(m_recordCount * 32 + 14, 112, 360);
+        const int popupHeight = std::min(estimatedRowsHeight, available.height());
+        int popupX = belowField.x();
+        if (popupX + popupWidth > available.right() + 1) {
+            popupX = available.right() + 1 - popupWidth;
+        }
+        int popupY = belowField.y();
+        if (popupY + popupHeight > available.bottom() + 1) {
+            popupY = mapToGlobal(QPoint(0, -popupHeight - 4)).y();
+        }
+        m_popup->setGeometry(popupX, popupY, popupWidth, popupHeight);
+        m_popup->show();
+        m_popup->raise();
+        m_tree->setFocus(Qt::PopupFocusReason);
+    }
+
+    /** @brief 关闭自定义弹层；Qt::Popup 的外部点击也会进入同一隐藏状态。 */
+    void hidePopup() override
+    {
+        m_popup->hide();
+    }
+
+    /**
+     * @brief 处理弹层内的 Escape、Enter 与空格键，补齐原生下拉框的键盘可访问性。
+     * @param watched 事件来源；只有主机树会进入特殊处理。
+     * @param event 待处理 Qt 事件。
+     * @return 已消费事件返回 true，其余交回 QComboBox 默认逻辑。
+     */
+    bool eventFilter(QObject *watched, QEvent *event) override
+    {
+        if (watched == m_tree && event->type() == QEvent::KeyPress) {
+            auto *keyEvent = static_cast<QKeyEvent *>(event);
+            if (keyEvent->key() == Qt::Key_Escape) {
+                hidePopup();
+                setFocus(Qt::PopupFocusReason);
+                return true;
+            }
+            if (keyEvent->key() == Qt::Key_Return
+                || keyEvent->key() == Qt::Key_Enter
+                || keyEvent->key() == Qt::Key_Space) {
+                QTreeWidgetItem *item = m_tree->currentItem();
+                if (item != nullptr && !item->data(0, kHostIdRole).toString().isEmpty()) {
+                    selectTreeItem(item);
+                } else if (item != nullptr) {
+                    item->setExpanded(!item->isExpanded());
+                }
+                return true;
+            }
+        }
+        return QComboBox::eventFilter(watched, event);
+    }
+
+private:
+    /**
+     * @brief 将可选树节点映射为扁平模型中的 currentIndex；分组点击不改变选择。
+     * @param item 用户点击或键盘激活的树节点；可为空。
+     */
+    void selectTreeItem(QTreeWidgetItem *item)
+    {
+        if (item == nullptr) {
+            return;
+        }
+        const QString hostId = item->data(0, kHostIdRole).toString();
+        if (hostId.isEmpty()) {
+            return;
+        }
+        const int hostIndex = findData(hostId);
+        if (hostIndex < 0) {
+            return;
+        }
+        setCurrentIndex(hostIndex);
+        hidePopup();
+        setFocus(Qt::PopupFocusReason);
+    }
+
+    /** @brief 根据当前扁平模型 hostId 恢复树选择并展开全部祖先节点。 */
+    void synchronizeTreeSelection()
+    {
+        const QString selectedHostId = currentData().toString();
+        QTreeWidgetItemIterator iterator(m_tree);
+        while (*iterator != nullptr) {
+            QTreeWidgetItem *item = *iterator;
+            if (item->data(0, kHostIdRole).toString() == selectedHostId) {
+                for (QTreeWidgetItem *ancestor = item->parent(); ancestor != nullptr;
+                     ancestor = ancestor->parent()) {
+                    ancestor->setExpanded(true);
+                }
+                m_tree->setCurrentItem(item);
+                m_tree->scrollToItem(item, QAbstractItemView::PositionAtCenter);
+                return;
+            }
+            ++iterator;
+        }
+        m_tree->setCurrentItem(nullptr);
+    }
+
+    QFrame *m_popup = nullptr;
+    QTreeWidget *m_tree = nullptr;
+    int m_recordCount = 0;
+};
 
 /**
  * @brief 将端口转发侧栏的次要动作配置为紧凑图标按钮。
@@ -382,7 +663,7 @@ PortForwardManagerWidget::PortForwardManagerWidget(ApplicationDatabase *database
                                                      QWidget *parent)
     : QWidget(parent)
     , m_database(database)
-    , m_hostCombo(new QComboBox(this))
+    , m_hostCombo(new HostTreeComboBox(this))
     , m_ruleList(new QListWidget(this))
     , m_summaryLabel(new QLabel(tr("尚无运行中的端口转发"), this))
 {
@@ -627,26 +908,29 @@ void PortForwardManagerWidget::refresh()
 void PortForwardManagerWidget::reloadHosts()
 {
     const QString previousHostId = m_hostCombo->currentData().toString();
-    bool ok = false;
+    bool hostsLoaded = false;
     QString error;
-    const QList<HostRecord> records = m_database->searchHosts({}, &ok, &error);
-    m_hostCombo->blockSignals(true);
-    m_hostCombo->clear();
-    if (ok) {
-        for (const HostRecord &record : records) {
-            if (record.kind == HostNodeKind::Host) {
-                m_hostCombo->addItem(record.name, record.id);
-            }
-        }
-    }
-    const int previousIndex = m_hostCombo->findData(previousHostId);
-    if (previousIndex >= 0) {
-        m_hostCombo->setCurrentIndex(previousIndex);
-    }
-    m_hostCombo->blockSignals(false);
-    if (!ok) {
+    const QList<HostRecord> records = m_database->searchHosts({}, &hostsLoaded, &error);
+    if (!hostsLoaded) {
         emit statusMessage(tr("读取端口转发主机失败：%1").arg(error));
+        reloadRules();
+        return;
     }
+
+    bool countsLoaded = false;
+    const QHash<QString, int> forwardingCounts =
+        m_database->portForwardCounts(&countsLoaded, &error);
+    if (!countsLoaded) {
+        emit statusMessage(tr("读取端口转发数量失败：%1").arg(error));
+        reloadRules();
+        return;
+    }
+
+    // m_hostCombo 在构造时固定为 HostTreeComboBox。保留基类成员类型可减少头文件对具体 UI
+    // 实现的暴露，但这里必须调用专用树模型同步入口；qobject_cast 不适用于无 Q_OBJECT 的
+    // 私有实现类，因此使用受构造不变量保护的 static_cast。
+    auto *hostTreeCombo = static_cast<HostTreeComboBox *>(m_hostCombo);
+    hostTreeCombo->setHostRecords(records, forwardingCounts, previousHostId);
     reloadRules();
 }
 
@@ -741,7 +1025,9 @@ void PortForwardManagerWidget::editRule(const std::optional<PortForwardRule> &ex
         QMessageBox::critical(this, tr("保存规则失败"), error);
         return;
     }
-    reloadRules();
+    // 新增规则后主机名称后的数量也必须立即变化；reloadHosts 会保留当前 hostId，并在一次
+    // 聚合查询后同步树和规则卡片，避免数量要等到外部刷新才更新。
+    reloadHosts();
 }
 
 void PortForwardManagerWidget::removeSelectedRule()
@@ -768,7 +1054,8 @@ void PortForwardManagerWidget::removeSelectedRule()
         return;
     }
     m_statistics.remove(ruleId);
-    reloadRules();
+    // 删除规则同时影响主机树数量徽标，因此统一重载主机树并保留当前主机选择。
+    reloadHosts();
 }
 
 void PortForwardManagerWidget::startSelectedRule()

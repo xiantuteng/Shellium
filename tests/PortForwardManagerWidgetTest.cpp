@@ -4,10 +4,13 @@
 #include "storage/ApplicationDatabase.h"
 
 #include <QComboBox>
+#include <QFrame>
 #include <QLabel>
 #include <QListWidget>
 #include <QSet>
 #include <QTest>
+#include <QTreeWidget>
+#include <QTreeWidgetItemIterator>
 
 #include <memory>
 
@@ -32,6 +35,9 @@ private slots:
     /** @brief 切换主机下拉框必须只显示该主机的规则，不残留上一台主机的卡片。 */
     void switchingHostReloadsRuleListForThatHostOnly();
 
+    /** @brief 主机下拉弹层必须保留分组层级、禁止选择分组，并在主机名后显示规则数量。 */
+    void hostSelectorUsesNonSelectableTreeGroupsAndDisplaysForwardingCounts();
+
     /** @brief 没有保存任何主机时，列表必须为空并提示去主机管理创建，而不是留白。 */
     void emptyStateShowsGuidanceWhenNoHostsSaved();
 
@@ -41,6 +47,14 @@ private slots:
 private:
     /** @brief 递归查找控件树中第一个显示指定文本的 QLabel。 */
     static QLabel *findLabelWithText(const QWidget *root, const QString &text);
+
+    /**
+     * @brief 按稳定 hostId 在树中递归查找节点。
+     * @param tree 端口转发主机弹层中的树控件；不得为空。
+     * @param hostId 目标主机 id；分组没有该数据，因此不会被误命中。
+     * @return 找到的主机节点；不存在返回 nullptr。
+     */
+    static QTreeWidgetItem *findHostTreeItem(QTreeWidget *tree, const QString &hostId);
 
     std::unique_ptr<ApplicationDatabase> m_database;
 };
@@ -64,6 +78,21 @@ QLabel *PortForwardManagerWidgetTest::findLabelWithText(const QWidget *root, con
         if (label->text() == text) {
             return label;
         }
+    }
+    return nullptr;
+}
+
+QTreeWidgetItem *PortForwardManagerWidgetTest::findHostTreeItem(QTreeWidget *tree,
+                                                                const QString &hostId)
+{
+    Q_ASSERT(tree != nullptr);
+    constexpr int kHostIdRole = Qt::UserRole + 32;
+    QTreeWidgetItemIterator iterator(tree);
+    while (*iterator != nullptr) {
+        if ((*iterator)->data(0, kHostIdRole).toString() == hostId) {
+            return *iterator;
+        }
+        ++iterator;
     }
     return nullptr;
 }
@@ -182,6 +211,95 @@ void PortForwardManagerWidgetTest::switchingHostReloadsRuleListForThatHostOnly()
     QVERIFY2(findLabelWithText(list, ruleB.name) != nullptr, "切到主机 B 应看到规则 B");
     QVERIFY2(findLabelWithText(list, ruleA.name) == nullptr,
              "切到主机 B 不应残留主机 A 的规则卡片");
+}
+
+void PortForwardManagerWidgetTest::hostSelectorUsesNonSelectableTreeGroupsAndDisplaysForwardingCounts()
+{
+    HostRecord productionGroup;
+    productionGroup.id = QStringLiteral("group-production");
+    productionGroup.kind = HostNodeKind::Folder;
+    productionGroup.name = QStringLiteral("生产环境");
+    QString error;
+    QVERIFY2(m_database->saveHost(productionGroup, &error), qPrintable(error));
+
+    HostRecord databaseGroup;
+    databaseGroup.id = QStringLiteral("group-database");
+    databaseGroup.parentId = productionGroup.id;
+    databaseGroup.kind = HostNodeKind::Folder;
+    databaseGroup.name = QStringLiteral("数据库");
+    QVERIFY2(m_database->saveHost(databaseGroup, &error), qPrintable(error));
+
+    HostRecord nestedHost;
+    nestedHost.id = QStringLiteral("host-nested");
+    nestedHost.parentId = databaseGroup.id;
+    nestedHost.kind = HostNodeKind::Host;
+    nestedHost.name = QStringLiteral("核心 MySQL");
+    nestedHost.host = QStringLiteral("10.0.0.10");
+    QVERIFY2(m_database->saveHost(nestedHost, &error), qPrintable(error));
+
+    HostRecord rootHost;
+    rootHost.id = QStringLiteral("host-root");
+    rootHost.kind = HostNodeKind::Host;
+    rootHost.name = QStringLiteral("独立跳板机");
+    rootHost.host = QStringLiteral("10.0.0.20");
+    QVERIFY2(m_database->saveHost(rootHost, &error), qPrintable(error));
+
+    for (int index = 0; index < 2; ++index) {
+        PortForwardRule rule;
+        rule.id = QStringLiteral("nested-rule-%1").arg(index);
+        rule.hostId = nestedHost.id;
+        rule.name = QStringLiteral("数据库规则 %1").arg(index + 1);
+        rule.type = PortForwardType::Local;
+        rule.bindHost = QStringLiteral("127.0.0.1");
+        rule.bindPort = static_cast<quint16>(3307 + index);
+        rule.targetHost = QStringLiteral("127.0.0.1");
+        rule.targetPort = 3306;
+        QVERIFY2(m_database->savePortForward(rule, &error), qPrintable(error));
+    }
+
+    PortForwardManagerWidget widget(m_database.get());
+    auto *hostCombo = widget.findChild<QComboBox *>(QStringLiteral("PortForwardHostCombo"));
+    auto *hostTree = widget.findChild<QTreeWidget *>(QStringLiteral("PortForwardHostTree"));
+    QVERIFY2(hostCombo != nullptr, "端口转发页必须保留 QComboBox 兼容接口");
+    QVERIFY2(hostTree != nullptr, "主机下拉框必须提供树形弹层，不能继续使用扁平列表");
+    QCOMPARE(hostCombo->count(), 2);
+
+    auto *hostPopup = widget.findChild<QFrame *>(QStringLiteral("PortForwardHostPopup"));
+    QVERIFY2(hostPopup != nullptr, "树形列表必须由独立弹层承载，以便绘制完整外边框");
+    QVERIFY2(!hostPopup->testAttribute(Qt::WA_TranslucentBackground),
+             "主机弹层不得透明，否则会与主界面文字重叠并造成视觉模糊");
+    QVERIFY2(hostPopup->autoFillBackground(),
+             "主机弹层必须主动填充实色背景，不能依赖平台透明窗口的默认行为");
+    QVERIFY2(hostTree->autoFillBackground() && hostTree->viewport()->autoFillBackground(),
+             "树与滚动视口都必须填充背景，避免只有边框不透明而内容区继续透底");
+
+    // 两层 parent 关系必须原样反映在弹层中；这比只检查文本更能防止后续重构再次拍平主机。
+    QTreeWidgetItem *nestedItem = findHostTreeItem(hostTree, nestedHost.id);
+    QVERIFY(nestedItem != nullptr);
+    QVERIFY(nestedItem->parent() != nullptr);
+    QCOMPARE(nestedItem->parent()->text(0), databaseGroup.name);
+    QVERIFY(nestedItem->parent()->parent() != nullptr);
+    QCOMPARE(nestedItem->parent()->parent()->text(0), productionGroup.name);
+    QCOMPARE(nestedItem->text(0), QStringLiteral("核心 MySQL  (2)"));
+
+    QTreeWidgetItem *rootItem = findHostTreeItem(hostTree, rootHost.id);
+    QVERIFY(rootItem != nullptr);
+    QVERIFY(rootItem->parent() == nullptr);
+    QCOMPARE(rootItem->text(0), QStringLiteral("独立跳板机  (0)"));
+
+    constexpr int kHostIdRole = Qt::UserRole + 32;
+    QTreeWidgetItem *topGroupItem = nestedItem->parent()->parent();
+    QVERIFY2(!(topGroupItem->flags() & Qt::ItemIsSelectable),
+             "分组节点必须移除 ItemIsSelectable，鼠标与键盘都不能把规则绑定到分组");
+    QVERIFY2(topGroupItem->data(0, kHostIdRole).toString().isEmpty(),
+             "分组不得携带可被业务层误读为主机的 hostId");
+
+    const int nestedComboIndex = hostCombo->findData(nestedHost.id);
+    QVERIFY(nestedComboIndex >= 0);
+    QCOMPARE(hostCombo->itemText(nestedComboIndex), QStringLiteral("核心 MySQL  (2)"));
+    const int rootComboIndex = hostCombo->findData(rootHost.id);
+    QVERIFY(rootComboIndex >= 0);
+    QCOMPARE(hostCombo->itemText(rootComboIndex), QStringLiteral("独立跳板机  (0)"));
 }
 
 void PortForwardManagerWidgetTest::emptyStateShowsGuidanceWhenNoHostsSaved()

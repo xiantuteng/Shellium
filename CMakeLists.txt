@@ -107,6 +107,11 @@ qt_add_resources(Shellium "shellium_brand_assets"
     PREFIX "/"
     BASE "${CMAKE_CURRENT_SOURCE_DIR}"
     FILES
+        # 下拉箭头必须使用真实矢量折线；QSS 的 CSS 边框三角写法不属于 Qt 的稳定能力，
+        # 在 macOS/Fusion 组合下会退化成截图中的小方块。深浅主题分别提供同色系资源，
+        # 由主题样式在运行时选择，保证两种背景上都有合适对比度。
+        resources/icons/chevron-down-dark.svg
+        resources/icons/chevron-down-light.svg
         resources/icons/shellium-app-icon-macos-512.png
 )
 

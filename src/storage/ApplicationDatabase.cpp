@@ -1828,6 +1828,28 @@ QList<PortForwardRule> ApplicationDatabase::listPortForwards(const QString &host
     return rules;
 }
 
+QHash<QString, int> ApplicationDatabase::portForwardCounts(bool *ok,
+                                                           QString *errorMessage) const
+{
+    setFlag(ok, false);
+    QSqlQuery query(m_database);
+    // 这里只统计已存在的规则。port_forwards.host_id 带外键约束，因此结果不会出现已删除
+    // 主机的悬空 id；未配置规则的主机由界面通过 QHash::value(id, 0) 自然显示为 0。
+    query.prepare(QStringLiteral(
+        "SELECT host_id, COUNT(*) FROM port_forwards GROUP BY host_id"));
+    if (!query.exec()) {
+        reportQueryError(query, errorMessage);
+        return {};
+    }
+
+    QHash<QString, int> counts;
+    while (query.next()) {
+        counts.insert(query.value(0).toString(), query.value(1).toInt());
+    }
+    setFlag(ok, true);
+    return counts;
+}
+
 bool ApplicationDatabase::removePortForward(const QString &id,
                                             int *removedCount,
                                             QString *errorMessage)

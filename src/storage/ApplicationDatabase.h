@@ -3,6 +3,7 @@
 #include "core/HostRecord.h"
 #include "forwarding/PortForwardRule.h"
 
+#include <QHash>
 #include <QList>
 #include <QSqlDatabase>
 #include <QString>
@@ -336,6 +337,18 @@ public:
     [[nodiscard]] QList<PortForwardRule> listPortForwards(const QString &hostId,
                                                           bool *ok = nullptr,
                                                           QString *errorMessage = nullptr) const;
+
+    /**
+     * @brief 一次查询返回每台主机保存的端口转发规则数量。
+     * @param ok 可选出参；查询成功（包括完全没有规则）置 true，失败置 false。
+     * @param errorMessage 查询失败时接收数据库错误；可为空。
+     * @return hostId 到规则数量的映射；没有规则的主机不出现在映射中，调用方应按 0 处理。
+     *
+     * 主机树会同时展示大量节点，集中聚合可避免为每台主机分别执行一次 COUNT 查询而形成
+     * N+1 数据库访问；主机数量增加后刷新耗时仍保持为一次顺序扫描。
+     */
+    [[nodiscard]] QHash<QString, int>
+    portForwardCounts(bool *ok = nullptr, QString *errorMessage = nullptr) const;
 
     /** @brief 删除规则；id 不存在仍算成功，并通过 removedCount 返回 0。 */
     bool removePortForward(const QString &id,
