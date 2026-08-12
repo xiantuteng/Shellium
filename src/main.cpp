@@ -240,9 +240,37 @@ int main(int argc, char *argv[])
             return 1;
         }
     } else {
-        // 正常模式首次启动必须创建主密码，后续启动必须成功解锁。这里不允许取消后继续进入
-        // 一个看似可用但无法读取保存凭据的半初始化界面；关闭窗口时直接结束且不改数据库。
-        if (!VaultDialog::ensureUnlocked(&credentialVault, nullptr, false)) {
+        QString vaultSettingError;
+        const std::optional<QString> configured =
+            database.setting(QStringLiteral("security/vault_password_enabled"),
+                             &vaultSettingError);
+        if (!vaultSettingError.isEmpty()) {
+            QMessageBox::critical(nullptr,
+                                  QObject::tr("读取设置失败"),
+                                  vaultSettingError);
+            return 1;
+        }
+        // 旧版本没有开关键，但已经存在 vault_metadata 时代表用户明确创建过主密码，升级后
+        // 必须继续要求解锁；全新安装则默认关闭，让用户进入设置后再自主决定是否启用。
+        bool legacyVaultExists = false;
+        if (!configured.has_value()) {
+            QString configurationError;
+            legacyVaultExists =
+                database.vaultConfiguration(&configurationError).has_value();
+            if (!configurationError.isEmpty()) {
+                QMessageBox::critical(nullptr,
+                                      QObject::tr("保险箱配置损坏"),
+                                      configurationError);
+                return 1;
+            }
+        }
+        const bool passwordProtectionEnabled = configured.has_value()
+            ? (*configured == QLatin1String("1")
+               || configured->compare(QStringLiteral("true"), Qt::CaseInsensitive) == 0)
+            : legacyVaultExists;
+        credentialVault.setPasswordProtectionEnabled(passwordProtectionEnabled);
+        if (passwordProtectionEnabled
+            && !VaultDialog::ensureUnlocked(&credentialVault, nullptr, false)) {
             return 1;
         }
     }

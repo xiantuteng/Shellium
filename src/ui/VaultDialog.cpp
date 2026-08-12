@@ -41,39 +41,97 @@ bool VaultDialog::ensureUnlocked(CredentialVault *vault,
     }
 
     VaultDialog dialog(vault,
-                       state == CredentialVault::State::Uninitialized,
+                       state == CredentialVault::State::Uninitialized
+                           ? Operation::Create
+                           : Operation::Unlock,
                        allowCancel,
                        parent);
     return dialog.exec() == QDialog::Accepted;
 }
 
+bool VaultDialog::enablePasswordProtection(CredentialVault *vault, QWidget *parent)
+{
+    if (vault == nullptr) {
+        QMessageBox::critical(parent, QObject::tr("保险箱不可用"),
+                              QObject::tr("应用没有初始化凭据保险箱服务。"));
+        return false;
+    }
+    QString stateError;
+    if (vault->state(&stateError) != CredentialVault::State::Uninitialized) {
+        QMessageBox::critical(
+            parent,
+            QObject::tr("无法启用主密码保护"),
+            stateError.isEmpty() ? QObject::tr("保险箱当前状态不允许重复启用主密码保护。")
+                                 : stateError);
+        return false;
+    }
+    VaultDialog dialog(vault, Operation::Enable, true, parent);
+    return dialog.exec() == QDialog::Accepted;
+}
+
+bool VaultDialog::disablePasswordProtection(CredentialVault *vault, QWidget *parent)
+{
+    if (vault == nullptr) {
+        QMessageBox::critical(parent, QObject::tr("保险箱不可用"),
+                              QObject::tr("应用没有初始化凭据保险箱服务。"));
+        return false;
+    }
+    QString stateError;
+    const CredentialVault::State state = vault->state(&stateError);
+    if (state == CredentialVault::State::Corrupt
+        || state == CredentialVault::State::Uninitialized) {
+        QMessageBox::critical(
+            parent,
+            QObject::tr("无法关闭主密码保护"),
+            stateError.isEmpty() ? QObject::tr("保险箱没有可供验证的主密码配置。")
+                                 : stateError);
+        return false;
+    }
+    // 不因 State::Unlocked 跳过对话框：关闭保护是安全降级，必须重新验证用户本次输入。
+    VaultDialog dialog(vault, Operation::Disable, true, parent);
+    return dialog.exec() == QDialog::Accepted;
+}
+
 VaultDialog::VaultDialog(CredentialVault *vault,
-                         const bool creating,
+                         const Operation operation,
                          const bool allowCancel,
                          QWidget *parent)
     : QDialog(parent)
     , m_vault(vault)
-    , m_creating(creating)
+    , m_operation(operation)
     , m_passwordEdit(new QLineEdit(this))
-    , m_confirmationEdit(creating ? new QLineEdit(this) : nullptr)
+    , m_confirmationEdit(
+          operation == Operation::Create || operation == Operation::Enable
+              ? new QLineEdit(this)
+              : nullptr)
     , m_passwordErrorLabel(new QLabel(this))
-    , m_confirmationErrorLabel(creating ? new QLabel(this) : nullptr)
+    , m_confirmationErrorLabel(m_confirmationEdit != nullptr ? new QLabel(this) : nullptr)
 {
+    const bool creating = operation == Operation::Create || operation == Operation::Enable;
     // 保险库沿用全应用的卡片和独立页脚，但主密码属于安全入口，不再套用普通设置页的
     // “左说明右控件”版式。居中的锁形徽标和说明先建立操作语境，字段再纵向排列，用户在
     // 第一次阅读时即可区分这是安全操作，而不是一般连接参数表单。
     setObjectName(QStringLiteral("VaultDialog"));
-    setWindowTitle(creating ? tr("创建 Shellium 保险库") : tr("解锁 Shellium 保险库"));
+    const QString windowTitle = operation == Operation::Enable
+        ? tr("启用主密码保护")
+        : operation == Operation::Disable
+            ? tr("关闭主密码保护")
+            : creating ? tr("创建 Shellium 保险库") : tr("解锁 Shellium 保险库");
+    setWindowTitle(windowTitle);
     setMinimumWidth(400);
     setWindowFlag(Qt::WindowContextHelpButtonHint, false);
     // 启动阶段本对话框先于 MainWindow 出现，全局样式表还没铺开，因此这里补一份等效样式；
     // 主窗口运行期间则由全局样式按用户选择的应用主题接管，避免错误地跟随系统外观。
     ShelliumUi::applyStandaloneDialogStyle(this);
 
-    const QString introduction = creating
-        ? tr("请设置主密码。Shellium 使用 Argon2id 派生密钥，并以 XChaCha20-Poly1305 "
-             "加密保存的 SSH 凭据。")
-        : tr("保险库已锁定。请输入主密码以使用已保存的 SSH 凭据。");
+    const QString introduction = operation == Operation::Enable
+        ? tr("请设置新的主密码。已有主机凭据将安全迁移为主密码保护。")
+        : operation == Operation::Disable
+            ? tr("请输入当前主密码确认关闭。已有凭据将迁移为本机加密，随后清除主密码配置。")
+            : creating
+                ? tr("请设置主密码。Shellium 使用 Argon2id 派生密钥，并以 "
+                     "XChaCha20-Poly1305 加密保存的 SSH 凭据。")
+                : tr("保险库已锁定。请输入主密码以使用已保存的 SSH 凭据。");
     m_passwordEdit->setObjectName(QStringLiteral("vaultPasswordEdit"));
     m_passwordEdit->setEchoMode(QLineEdit::Password);
     m_passwordEdit->setPlaceholderText(creating ? tr("至少 8 个字符") : tr("输入主密码"));
@@ -158,7 +216,12 @@ VaultDialog::VaultDialog(CredentialVault *vault,
     auto *footerLayout = new QHBoxLayout(footer);
     footerLayout->setContentsMargins(20, 12, 20, 12);
     footerLayout->setSpacing(10);
-    auto *confirmButton = new QPushButton(creating ? tr("创建保险库") : tr("解锁"), footer);
+    const QString confirmText = operation == Operation::Enable
+        ? tr("启用保护")
+        : operation == Operation::Disable
+            ? tr("确认关闭")
+            : creating ? tr("创建保险库") : tr("解锁");
+    auto *confirmButton = new QPushButton(confirmText, footer);
     confirmButton->setObjectName(QStringLiteral("vaultConfirmButton"));
     confirmButton->setProperty("primaryAction", true);
     confirmButton->setDefault(true);
@@ -189,7 +252,12 @@ VaultDialog::VaultDialog(CredentialVault *vault,
                         ShelliumUi::accentColor(),
                         QSize(22, 22))
             .pixmap(QSize(22, 22)));
-    auto *heading = new QLabel(creating ? tr("创建保险库") : tr("解锁保险库"), body);
+    const QString headingText = operation == Operation::Enable
+        ? tr("启用主密码保护")
+        : operation == Operation::Disable
+            ? tr("关闭主密码保护")
+            : creating ? tr("创建保险库") : tr("解锁保险库");
+    auto *heading = new QLabel(headingText, body);
     heading->setObjectName(QStringLiteral("VaultHeading"));
     heading->setAlignment(Qt::AlignCenter);
     auto *introductionLabel = new QLabel(introduction, body);
@@ -281,11 +349,13 @@ void VaultDialog::accept()
         showInlineError(tr("请输入主密码。"), m_passwordEdit);
         return;
     }
-    if (m_creating && password.size() < 8) {
+    const bool creating = m_operation == Operation::Create
+        || m_operation == Operation::Enable;
+    if (creating && password.size() < 8) {
         showInlineError(tr("主密码至少需要 8 个字符，以降低离线猜测风险。"), m_passwordEdit);
         return;
     }
-    if (m_creating && password != m_confirmationEdit->text()) {
+    if (creating && password != m_confirmationEdit->text()) {
         m_confirmationEdit->clear();
         showInlineError(tr("两次输入的主密码不一致，请重新确认。"), m_confirmationEdit);
         return;
@@ -293,8 +363,21 @@ void VaultDialog::accept()
     clearInlineError();
 
     QString error;
-    const bool succeeded = m_creating ? m_vault->initialize(password, &error)
-                                      : m_vault->unlock(password, &error);
+    bool succeeded = false;
+    switch (m_operation) {
+    case Operation::Create:
+        succeeded = m_vault->initialize(password, &error);
+        break;
+    case Operation::Unlock:
+        succeeded = m_vault->unlock(password, &error);
+        break;
+    case Operation::Enable:
+        succeeded = m_vault->enablePasswordProtection(password, &error);
+        break;
+    case Operation::Disable:
+        succeeded = m_vault->disablePasswordProtection(password, &error);
+        break;
+    }
     // QLineEdit 内部存储无法获得操作系统级不可复制保证，但在完成派生后立即清空控件，仍能
     // 显著缩短主密码留在常规 UI 对象中的时间。
     m_passwordEdit->clear();
@@ -302,8 +385,13 @@ void VaultDialog::accept()
         m_confirmationEdit->clear();
     }
     if (!succeeded) {
-        showInlineError(m_creating ? tr("创建保险库失败：%1").arg(error)
-                                   : tr("无法解锁保险库：%1").arg(error),
+        const QString operationError = m_operation == Operation::Enable
+            ? tr("无法启用主密码保护：%1").arg(error)
+            : m_operation == Operation::Disable
+                ? tr("无法关闭主密码保护：%1").arg(error)
+                : creating ? tr("创建保险库失败：%1").arg(error)
+                           : tr("无法解锁保险库：%1").arg(error);
+        showInlineError(operationError,
                         m_passwordEdit);
         return;
     }

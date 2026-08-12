@@ -80,6 +80,9 @@ private slots:
     /** @brief 从 schema 版本 1 升级后，旧数据必须完好且新列可用。 */
     void migrationFromVersionOnePreservesData();
 
+    /** @brief 版本 6 迁移必须把历史共享凭据拆成独立密文引用，且不改变密文内容。 */
+    void migrationToVersionSixSplitsSharedCredentialReferences();
+
 private:
     /** @brief 构造一台可连接主机的样例记录。 */
     static HostRecord makeHost(const QString &id, const QString &name, const QString &address);
@@ -944,6 +947,84 @@ void ApplicationDatabaseTest::migrationFromVersionOnePreservesData()
     QVERIFY2(reopened.initialize(&error), qPrintable(error));
     QCOMPARE(*reopened.schemaVersion(&error), ApplicationDatabase::expectedSchemaVersion());
     QVERIFY(reopened.findHost(QStringLiteral("old-host"), &error).has_value());
+}
+
+void ApplicationDatabaseTest::migrationToVersionSixSplitsSharedCredentialReferences()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+    const QString path = temporaryDirectory.filePath(QStringLiteral("shared-credentials-v5.db"));
+
+    // 直接构造版本 5 的最小合法数据库，精确复现旧版“复制主机”留下的三个相同引用。迁移
+    // 不需要解密密文，因此测试使用固定字节即可验证 payload、nonce 和公开元数据原样复制。
+    const QString connectionName = QStringLiteral("shared-credential-v5-fixture");
+    {
+        QSqlDatabase legacy = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connectionName);
+        legacy.setDatabaseName(path);
+        QVERIFY2(legacy.open(), qPrintable(legacy.lastError().text()));
+        QSqlQuery query(legacy);
+        const QStringList statements = {
+            QStringLiteral("CREATE TABLE schema_version (version INTEGER NOT NULL)"),
+            QStringLiteral("INSERT INTO schema_version VALUES (5)"),
+            QStringLiteral("CREATE TABLE hosts (id TEXT PRIMARY KEY, parent_id TEXT, kind INTEGER "
+                           "NOT NULL, name TEXT NOT NULL, host TEXT, port INTEGER, username TEXT, "
+                           "credential_id TEXT, identity_file TEXT, tags TEXT, proxy_jump TEXT, "
+                           "legacy_hmac INTEGER NOT NULL DEFAULT 0, sort_order INTEGER NOT NULL "
+                           "DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)"),
+            QStringLiteral("CREATE TABLE credentials (id TEXT PRIMARY KEY, name TEXT NOT NULL, "
+                           "type INTEGER NOT NULL, encrypted_payload BLOB NOT NULL, cipher TEXT, "
+                           "nonce BLOB, kdf_algorithm TEXT, kdf_salt BLOB, "
+                           "kdf_iterations INTEGER NOT NULL DEFAULT 0, "
+                           "kdf_memory_kib INTEGER NOT NULL DEFAULT 0, "
+                           "kdf_parallelism INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, "
+                           "updated_at TEXT NOT NULL)"),
+            QStringLiteral("CREATE TABLE host_chain_members (owner_host_id TEXT NOT NULL, "
+                           "hop_index INTEGER NOT NULL, jump_host_id TEXT NOT NULL, "
+                           "PRIMARY KEY(owner_host_id, hop_index))"),
+            QStringLiteral("INSERT INTO credentials VALUES ('shared-cred', '共享凭据', 0, "
+                           "X'11223344556677889900AABBCCDDEEFF', 'xchacha20-poly1305-v1', "
+                           "X'000102030405060708090A0B0C0D0E0F1011121314151617', "
+                           "'local-key-v1', X'A0A1A2A3A4A5A6A7A8A9AAABACADAEAF', 1, 0, 1, "
+                           "'2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z')"),
+            QStringLiteral("INSERT INTO hosts VALUES "
+                           "('h1', NULL, 1, '主机一', '192.0.2.1', 22, 'root', 'shared-cred', NULL, "
+                           "NULL, NULL, 0, 0, '2026-01-01T00:00:00.000Z', "
+                           "'2026-01-01T00:00:00.000Z'), "
+                           "('h2', NULL, 1, '主机二', '192.0.2.2', 22, 'root', 'shared-cred', NULL, "
+                           "NULL, NULL, 0, 1, '2026-01-01T00:00:00.000Z', "
+                           "'2026-01-01T00:00:00.000Z'), "
+                           "('h3', NULL, 1, '主机三', '192.0.2.3', 22, 'root', 'shared-cred', NULL, "
+                           "NULL, NULL, 0, 2, '2026-01-01T00:00:00.000Z', "
+                           "'2026-01-01T00:00:00.000Z')")
+        };
+        for (const QString &statement : statements) {
+            QVERIFY2(query.exec(statement), qPrintable(query.lastError().text()));
+        }
+        legacy.close();
+    }
+    QSqlDatabase::removeDatabase(connectionName);
+
+    ApplicationDatabase upgraded(path);
+    QString error;
+    QVERIFY2(upgraded.initialize(&error), qPrintable(error));
+    QCOMPARE(*upgraded.schemaVersion(&error), 6);
+
+    QSet<QString> credentialIds;
+    for (const QString &hostId : {QStringLiteral("h1"), QStringLiteral("h2"),
+                                  QStringLiteral("h3")}) {
+        const std::optional<HostRecord> host = upgraded.findHost(hostId, &error);
+        QVERIFY2(host.has_value(), qPrintable(error));
+        QVERIFY2(!host->credentialId.isEmpty(), "迁移后主机丢失凭据引用");
+        credentialIds.insert(host->credentialId);
+        const std::optional<CredentialRecord> credential =
+            upgraded.findCredential(host->credentialId, &error);
+        QVERIFY2(credential.has_value(), qPrintable(error));
+        QCOMPARE(credential->encryptedPayload,
+                 QByteArray::fromHex("11223344556677889900AABBCCDDEEFF"));
+        QCOMPARE(credential->nonce,
+                 QByteArray::fromHex("000102030405060708090A0B0C0D0E0F1011121314151617"));
+    }
+    QCOMPARE(credentialIds.size(), 3);
 }
 
 QTEST_GUILESS_MAIN(ApplicationDatabaseTest)

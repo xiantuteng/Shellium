@@ -175,6 +175,15 @@ private slots:
     /** @brief 首次创建后应只持久化公开配置和密文，并能在新服务实例中重新解锁。 */
     void credentialVaultPersistsEncryptedSecretsAcrossUnlocks();
 
+    /** @brief 未启用主密码时也应自动加密保存，并可在重启后的透明模式中自动读取。 */
+    void credentialVaultUsesPersistentLocalKeyWithoutMasterPassword();
+
+    /** @brief 主密码保护的启用和关闭必须双向迁移凭据并清除关闭后的保险箱配置。 */
+    void credentialVaultMigratesCredentialsAcrossProtectionModes();
+
+    /** @brief 编辑仍被多台主机直接引用的历史凭据时必须先为当前主机执行写时分离。 */
+    void credentialVaultSeparatesSharedCredentialBeforePasswordUpdate();
+
     /** @brief 错误主密码、空校验块与被篡改的凭据都必须安全失败且保持锁定。 */
     void credentialVaultRejectsWrongPasswordAndCorruptData();
 
@@ -1304,6 +1313,148 @@ void SshCommandParserTest::credentialVaultPersistsEncryptedSecretsAcrossUnlocks(
     Vault::secureErase(*loaded);
     QVERIFY(loaded->isEmpty());
     Vault::secureErase(secret);
+}
+
+void SshCommandParserTest::credentialVaultUsesPersistentLocalKeyWithoutMasterPassword()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+    ApplicationDatabase database(
+        temporaryDirectory.filePath(QStringLiteral("local-credential-vault.db")));
+    QString error;
+    QVERIFY2(database.initialize(&error), qPrintable(error));
+
+    CredentialVault firstSession(database);
+    QVERIFY(!firstSession.passwordProtectionEnabled());
+    QCOMPARE(firstSession.state(&error), CredentialVault::State::Uninitialized);
+
+    HostRecord host;
+    host.id = QStringLiteral("local-key-host");
+    host.name = QStringLiteral("透明保存主机");
+    host.host = QStringLiteral("192.0.2.10");
+    ConnectionTarget target = host.toConnectionTarget();
+    target.password = QStringLiteral("自动保存但不可查看的密码");
+    QVERIFY2(firstSession.saveConnectionPassword(host, target, {}, &error), qPrintable(error));
+
+    const std::optional<CredentialRecord> stored =
+        database.findCredential(host.credentialId, &error);
+    QVERIFY2(stored.has_value(), qPrintable(error));
+    QCOMPARE(stored->kdfAlgorithm, QStringLiteral("local-key-v1"));
+    QVERIFY(!stored->encryptedPayload.contains(target.password.toUtf8()));
+    QVERIFY(!firstSession.credentialRequiresUnlock(host.credentialId, &error));
+
+    // 新对象不继承任何内存密钥；仍能从持久化的本机随机密钥恢复，证明关闭主密码后自动
+    // 连接不依赖用户每次启动输入口令。
+    CredentialVault secondSession(database);
+    std::optional<QByteArray> restored = secondSession.loadSecret(host.credentialId, &error);
+    QVERIFY2(restored.has_value(), qPrintable(error));
+    QCOMPARE(QString::fromUtf8(*restored), target.password);
+    Vault::secureErase(*restored);
+}
+
+void SshCommandParserTest::credentialVaultMigratesCredentialsAcrossProtectionModes()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+    ApplicationDatabase database(
+        temporaryDirectory.filePath(QStringLiteral("credential-protection-migration.db")));
+    QString error;
+    QVERIFY2(database.initialize(&error), qPrintable(error));
+
+    CredentialVault vault(database);
+    HostRecord host;
+    host.id = QStringLiteral("protection-migration-host");
+    host.name = QStringLiteral("保护模式迁移主机");
+    host.host = QStringLiteral("192.0.2.80");
+    ConnectionTarget target = host.toConnectionTarget();
+    target.password = QStringLiteral("迁移前后必须保持一致的密码");
+    QVERIFY2(vault.saveConnectionPassword(host, target, {}, &error), qPrintable(error));
+    QCOMPARE(database.findCredential(host.credentialId, &error)->kdfAlgorithm,
+             QStringLiteral("local-key-v1"));
+
+    const QString masterPassword = QStringLiteral("用于双向迁移测试的主密码-2026");
+    QVERIFY2(vault.enablePasswordProtection(masterPassword, &error), qPrintable(error));
+    QVERIFY(vault.passwordProtectionEnabled());
+    QVERIFY(vault.isUnlocked());
+    QCOMPARE(database.setting(QStringLiteral("security/vault_password_enabled"), &error)
+                 .value_or(QString()),
+             QStringLiteral("1"));
+    QCOMPARE(database.findCredential(host.credentialId, &error)->kdfAlgorithm,
+             Vault::kdfAlgorithm());
+
+    std::optional<QByteArray> protectedSecret = vault.loadSecret(host.credentialId, &error);
+    QVERIFY2(protectedSecret.has_value(), qPrintable(error));
+    QCOMPARE(QString::fromUtf8(*protectedSecret), target.password);
+    Vault::secureErase(*protectedSecret);
+
+    // 关闭时即使当前会话已经解锁，也必须验证本次提供的密码。错误密码不能修改任何密文、
+    // 设置或保险箱公开配置；unlock() 清除了旧会话密钥，因此状态会安全退回 Locked。
+    QVERIFY(!vault.disablePasswordProtection(QStringLiteral("错误主密码"), &error));
+    QVERIFY(!error.isEmpty());
+    QVERIFY(vault.passwordProtectionEnabled());
+    QCOMPARE(vault.state(&error), CredentialVault::State::Locked);
+    QVERIFY(database.vaultConfiguration(&error).has_value());
+    QCOMPARE(database.findCredential(host.credentialId, &error)->kdfAlgorithm,
+             Vault::kdfAlgorithm());
+
+    error.clear();
+    QVERIFY2(vault.disablePasswordProtection(masterPassword, &error), qPrintable(error));
+    QVERIFY(!vault.passwordProtectionEnabled());
+    QCOMPARE(vault.state(&error), CredentialVault::State::Uninitialized);
+    QVERIFY(!database.vaultConfiguration(&error).has_value());
+    QCOMPARE(database.setting(QStringLiteral("security/vault_password_enabled"), &error)
+                 .value_or(QString()),
+             QStringLiteral("0"));
+    QCOMPARE(database.findCredential(host.credentialId, &error)->kdfAlgorithm,
+             QStringLiteral("local-key-v1"));
+
+    // 新服务模拟应用重启：保险箱配置已经彻底清除，但主机密码必须仍可通过本机随机密钥用于
+    // 自动连接。这同时证明关闭操作清除的是主密码保护，而不是用户保存的业务凭据。
+    CredentialVault restarted(database);
+    std::optional<QByteArray> localSecret = restarted.loadSecret(host.credentialId, &error);
+    QVERIFY2(localSecret.has_value(), qPrintable(error));
+    QCOMPARE(QString::fromUtf8(*localSecret), target.password);
+    Vault::secureErase(*localSecret);
+}
+
+void SshCommandParserTest::credentialVaultSeparatesSharedCredentialBeforePasswordUpdate()
+{
+    ApplicationDatabase database(ApplicationDatabase::inMemoryPath());
+    QString error;
+    QVERIFY2(database.initialize(&error), qPrintable(error));
+    CredentialVault vault(database);
+
+    HostRecord first;
+    first.id = QStringLiteral("shared-first");
+    first.name = QStringLiteral("共享凭据主机一");
+    first.host = QStringLiteral("192.0.2.41");
+    ConnectionTarget original = first.toConnectionTarget();
+    original.password = QStringLiteral("original-shared-secret");
+    QVERIFY2(vault.saveConnectionPassword(first, original, {}, &error), qPrintable(error));
+
+    HostRecord second = first;
+    second.id = QStringLiteral("shared-second");
+    second.name = QStringLiteral("共享凭据主机二");
+    QVERIFY2(database.saveHost(second, &error), qPrintable(error));
+    QCOMPARE(second.credentialId, first.credentialId);
+    bool referencesReadable = false;
+    QCOMPARE(database.credentialReferenceCount(
+                 first.credentialId, &referencesReadable, &error),
+             2);
+    QVERIFY2(referencesReadable, qPrintable(error));
+
+    ConnectionTarget updated = second.toConnectionTarget();
+    updated.password = QStringLiteral("second-host-new-secret");
+    QVERIFY2(vault.saveConnectionPassword(second, updated, {}, &error), qPrintable(error));
+    QVERIFY(second.credentialId != first.credentialId);
+
+    std::optional<QByteArray> firstSecret = vault.loadSecret(first.credentialId, &error);
+    std::optional<QByteArray> secondSecret = vault.loadSecret(second.credentialId, &error);
+    QVERIFY2(firstSecret.has_value() && secondSecret.has_value(), qPrintable(error));
+    QCOMPARE(QString::fromUtf8(*firstSecret), QStringLiteral("original-shared-secret"));
+    QCOMPARE(QString::fromUtf8(*secondSecret), QStringLiteral("second-host-new-secret"));
+    Vault::secureErase(*firstSecret);
+    Vault::secureErase(*secondSecret);
 }
 
 void SshCommandParserTest::credentialVaultRejectsWrongPasswordAndCorruptData()

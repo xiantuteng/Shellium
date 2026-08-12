@@ -1,7 +1,9 @@
 #include "ui/SettingsDialog.h"
 
 #include "settings/TerminalSettings.h"
+#include "security/Vault.h"
 #include "ui/SettingsWidgets.h"
+#include "ui/VaultDialog.h"
 
 #include <QApplication>
 #include <QComboBox>
@@ -63,6 +65,13 @@ TerminalPalette paletteForScheme(const TerminalSettings &base, const QString &co
 } // namespace
 
 SettingsDialog::SettingsDialog(TerminalSettingsService *service, QWidget *parent)
+    : SettingsDialog(service, nullptr, parent)
+{
+}
+
+SettingsDialog::SettingsDialog(TerminalSettingsService *service,
+                               CredentialVault *credentialVault,
+                               QWidget *parent)
     : QDialog(parent)
     , m_service(service)
     , m_originalSettings(service == nullptr ? TerminalSettings{}.normalized()
@@ -80,9 +89,11 @@ SettingsDialog::SettingsDialog(TerminalSettingsService *service, QWidget *parent
     , m_audibleBellToggle(new ToggleSwitch(this))
     , m_commandAutoCompletionToggle(new ToggleSwitch(this))
     , m_automaticReconnectToggle(new ToggleSwitch(this))
+    , m_vaultPasswordEnabledToggle(new ToggleSwitch(this))
     , m_reconnectMaxAttemptsSpin(new QSpinBox(this))
     , m_reconnectBaseDelaySpin(new QSpinBox(this))
     , m_previewLabel(new QLabel(this))
+    , m_credentialVault(credentialVault)
 {
     Q_ASSERT(m_service != nullptr);
     setObjectName(QStringLiteral("SettingsDialog"));
@@ -175,6 +186,9 @@ SettingsDialog::SettingsDialog(TerminalSettingsService *service, QWidget *parent
           m_automaticReconnectToggle}) {
         connect(toggle, &ToggleSwitch::toggled, this, [this](bool) { previewChanges(); });
     }
+    // 主密码开关不是可实时预览的视觉偏好：切换它只更新待保存控件，真正的密码验证、凭据
+    // 迁移和运行态切换统一延迟到 accept()。这样用户点击后再取消设置，不会在后台留下已经
+    // 改变的加密策略或半迁移数据。
     connect(m_automaticReconnectToggle, &ToggleSwitch::toggled, this, [this](const bool enabled) {
         for (QWidget *row : std::as_const(m_reconnectDependentRows)) {
             row->setEnabled(enabled);
@@ -197,7 +211,7 @@ void SettingsDialog::buildNavigation()
     m_navigationList->setUniformItemSizes(true);
     m_navigationList->addItem(tr("外观"));
     m_navigationList->addItem(tr("终端"));
-    m_navigationList->addItem(tr("连接恢复"));
+    m_navigationList->addItem(tr("连接与安全"));
     m_navigationList->addItem(tr("快捷键"));
     for (int row = 0; row < m_navigationList->count(); ++row) {
         m_navigationList->item(row)->setSizeHint(QSize(0, 38));
@@ -452,6 +466,18 @@ QWidget *SettingsDialog::buildConnectionPage()
     m_reconnectBaseDelaySpin->setRange(1, 60);
     m_reconnectBaseDelaySpin->setSuffix(tr(" 秒"));
 
+    m_vaultPasswordEnabledToggle->setObjectName(
+        QStringLiteral("vaultPasswordEnabledToggle"));
+    auto *vaultCard = new SettingsCard(tr("凭据保险箱"), page);
+    vaultCard->addRow(
+        tr("使用主密码保护凭据"),
+        m_vaultPasswordEnabledToggle,
+        tr("开启和关闭都需要输入密码；开启后允许在主机编辑页解锁查看明文。"));
+    vaultCard->addNote(
+        tr("关闭时会先验证当前主密码，再将凭据迁移为本机加密并清除主密码配置。主机密码"
+           "仍会自动用于连接，但不能在界面中查看明文，也不再具备主密码防护能力。"));
+    layout->addWidget(vaultCard);
+
     auto *card = new SettingsCard(tr("自动重连"), page);
     card->addRow(tr("网络异常时自动重连"),
                  m_automaticReconnectToggle,
@@ -519,6 +545,7 @@ TerminalSettings SettingsDialog::editedSettings() const
     settings.audibleBell = m_audibleBellToggle->isChecked();
     settings.commandAutoCompletion = m_commandAutoCompletionToggle->isChecked();
     settings.automaticReconnect = m_automaticReconnectToggle->isChecked();
+    settings.vaultPasswordEnabled = m_vaultPasswordEnabledToggle->isChecked();
     settings.reconnectMaxAttempts = m_reconnectMaxAttemptsSpin->value();
     settings.reconnectBaseDelaySeconds = m_reconnectBaseDelaySpin->value();
     for (auto iterator = m_shortcutEditors.cbegin(); iterator != m_shortcutEditors.cend(); ++iterator) {
@@ -529,8 +556,36 @@ TerminalSettings SettingsDialog::editedSettings() const
 
 void SettingsDialog::accept()
 {
+    const TerminalSettings candidate = editedSettings();
+    const bool passwordProtectionChanged =
+        candidate.vaultPasswordEnabled != m_originalSettings.vaultPasswordEnabled;
+    if (passwordProtectionChanged) {
+        if (m_credentialVault == nullptr) {
+            QMessageBox::warning(this,
+                                 tr("保险箱不可用"),
+                                 tr("当前窗口没有连接凭据保险箱服务，无法更改主密码保护。"));
+            return;
+        }
+
+        // 两个方向都通过专用对话框完成。启用要求输入两次新密码；关闭即使保险箱已解锁也
+        // 重新要求当前密码，并在服务层原子迁移全部凭据后清除主密码配置。
+        const bool transitionSucceeded = candidate.vaultPasswordEnabled
+            ? VaultDialog::enablePasswordProtection(m_credentialVault, this)
+            : VaultDialog::disablePasswordProtection(m_credentialVault, this);
+        if (!transitionSucceeded) {
+            return;
+        }
+
+        // 迁移事务已经把真实安全状态写入数据库，后续即使保存某个无关外观设置失败，也不能
+        // 在运行态或“取消”处理中把开关伪装回旧值。这里只同步安全字段，其他设置仍保持原
+        // 有的预览/取消语义；MainWindow 收到信号后会立即更新锁定菜单的可用状态。
+        TerminalSettings synchronizedRuntimeSettings = m_service->currentSettings();
+        synchronizedRuntimeSettings.vaultPasswordEnabled = candidate.vaultPasswordEnabled;
+        m_service->applyTransient(synchronizedRuntimeSettings);
+        m_originalSettings.vaultPasswordEnabled = candidate.vaultPasswordEnabled;
+    }
     QString error;
-    if (!m_service->save(editedSettings(), &error)) {
+    if (!m_service->save(candidate, &error)) {
         QMessageBox::warning(this, tr("无法保存设置"), error);
         return;
     }
@@ -581,6 +636,7 @@ void SettingsDialog::populateControls(const TerminalSettings &settings)
     m_audibleBellToggle->setChecked(normalized.audibleBell);
     m_commandAutoCompletionToggle->setChecked(normalized.commandAutoCompletion);
     m_automaticReconnectToggle->setChecked(normalized.automaticReconnect);
+    m_vaultPasswordEnabledToggle->setChecked(normalized.vaultPasswordEnabled);
     m_reconnectMaxAttemptsSpin->setValue(normalized.reconnectMaxAttempts);
     m_reconnectBaseDelaySpin->setValue(normalized.reconnectBaseDelaySeconds);
     for (QWidget *row : std::as_const(m_reconnectDependentRows)) {
@@ -597,7 +653,10 @@ void SettingsDialog::previewChanges()
     if (m_populating) {
         return;
     }
-    const TerminalSettings settings = editedSettings();
+    TerminalSettings settings = editedSettings();
+    // 安全开关的控件值在用户按保存前只是草稿。其他外观控件触发预览时也必须强制保留原
+    // 安全状态，否则先点开关、再调字体就会通过整份设置快照提前改变凭据保存策略。
+    settings.vaultPasswordEnabled = m_originalSettings.vaultPasswordEnabled;
     m_service->applyTransient(settings);
     refreshDefaultSwatchPreview(settings);
     updatePreviewCard(settings);

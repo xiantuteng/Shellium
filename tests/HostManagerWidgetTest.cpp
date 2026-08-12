@@ -17,6 +17,7 @@
 #include <QLineEdit>
 #include <QListWidget>
 #include <QMenu>
+#include <QMessageBox>
 #include <QPushButton>
 #include <QSet>
 #include <QSignalSpy>
@@ -62,6 +63,12 @@ private slots:
 
     /** @brief 主机配置字段顺序、ProxyJump 高级入口、页脚和按钮图标必须符合新版交互。 */
     void hostDialogUsesRequestedFieldOrderAndIcons();
+
+    /** @brief 新建主机输入的密码与私钥路径必须随保存自动持久化，不再依赖额外开关。 */
+    void newHostAutomaticallyPersistsPasswordAndIdentityFile();
+
+    /** @brief 编辑页默认掩码密码；未启用时眼睛图标给出引导，启用后才能切换明文。 */
+    void editHostMasksPasswordAndGatesVisibility();
 
     /** @brief 新建主机保存后的自动连接必须打开新标签，不得覆盖当前会话。 */
     void newlySavedHostRequestsConnectionInNewTab();
@@ -291,7 +298,6 @@ void HostManagerWidgetTest::copyHostKeepsConfigurationInSameGroup()
     source.host = QStringLiteral("10.20.30.40");
     source.port = quint16{2202};
     source.username = QStringLiteral("deploy");
-    source.credentialId = QStringLiteral("shared-credential");
     source.identityFile = QStringLiteral("/keys/production_ed25519");
     source.proxyJumps = {QStringLiteral("legacy-bastion")};
     source.hostChain = {jumpHost.id};
@@ -301,7 +307,10 @@ void HostManagerWidgetTest::copyHostKeepsConfigurationInSameGroup()
     source.createdAt = QDateTime::fromString(
         QStringLiteral("2024-01-02T03:04:05Z"), Qt::ISODate);
     source.updatedAt = source.createdAt;
-    QVERIFY2(m_database->saveHost(source, &error), qPrintable(error));
+    ConnectionTarget sourceTarget = source.toConnectionTarget();
+    sourceTarget.password = QStringLiteral("copy-test-secret");
+    QVERIFY2(m_vault->saveConnectionPassword(source, sourceTarget, {}, &error),
+             qPrintable(error));
 
     HostManagerWidget widget(m_database.get(), m_vault.get());
     auto *tree = widget.findChild<QTreeWidget *>();
@@ -342,7 +351,19 @@ void HostManagerWidgetTest::copyHostKeepsConfigurationInSameGroup()
     QCOMPARE(copied.host, source.host);
     QCOMPARE(copied.port, source.port);
     QCOMPARE(copied.username, source.username);
-    QCOMPARE(copied.credentialId, source.credentialId);
+    QVERIFY2(!copied.credentialId.isEmpty(), "复制主机没有克隆源凭据");
+    QVERIFY2(copied.credentialId != source.credentialId,
+             "复制主机仍与原主机共享 credentialId");
+    QVERIFY2(secondCopyIterator->credentialId != source.credentialId
+                 && secondCopyIterator->credentialId != copied.credentialId,
+             "多个主机副本没有各自获得独立凭据");
+    const std::optional<CredentialRecord> sourceCredential =
+        m_database->findCredential(source.credentialId, &error);
+    const std::optional<CredentialRecord> copiedCredential =
+        m_database->findCredential(copied.credentialId, &error);
+    QVERIFY2(sourceCredential.has_value() && copiedCredential.has_value(), qPrintable(error));
+    QCOMPARE(copiedCredential->encryptedPayload, sourceCredential->encryptedPayload);
+    QCOMPARE(copiedCredential->nonce, sourceCredential->nonce);
     QCOMPARE(copied.identityFile, source.identityFile);
     QCOMPARE(copied.proxyJumps, source.proxyJumps);
     QCOMPARE(copied.hostChain, source.hostChain);
@@ -492,6 +513,8 @@ void HostManagerWidgetTest::hostDialogUsesRequestedFieldOrderAndIcons()
             QStringLiteral("hostUsernameEdit"));
         const auto *password = dialog->findChild<QLineEdit *>(
             QStringLiteral("hostPasswordEdit"));
+        auto *passwordVisibility = dialog->findChild<QAction *>(
+            QStringLiteral("hostPasswordVisibilityAction"));
         const auto *identity = dialog->findChild<QLineEdit *>(
             QStringLiteral("hostIdentityEdit"));
         const auto *proxyJumps = dialog->findChild<QLineEdit *>(
@@ -499,9 +522,40 @@ void HostManagerWidgetTest::hostDialogUsesRequestedFieldOrderAndIcons()
         auto *advancedSettings = dialog->findChild<QToolButton *>(
             QStringLiteral("hostAdvancedSettingsButton"));
         if (failure.isEmpty()
-            && (username == nullptr || password == nullptr || identity == nullptr
-                || proxyJumps == nullptr || advancedSettings == nullptr)) {
+            && (username == nullptr || password == nullptr || passwordVisibility == nullptr
+                || identity == nullptr || proxyJumps == nullptr || advancedSettings == nullptr)) {
             failure = QStringLiteral("主机配置缺少认证与跳板字段");
+        }
+        if (failure.isEmpty()
+            && (password->echoMode() != QLineEdit::Password
+                || !passwordVisibility->isEnabled())) {
+            failure = QStringLiteral("未启用主密码保护时，密码未保持掩码或眼睛图标无法点击提示");
+        }
+        if (failure.isEmpty()
+            && (!password->actions().contains(passwordVisibility)
+                || dialog->findChild<QPushButton *>(
+                       QStringLiteral("hostPasswordVisibilityButton")) != nullptr)) {
+            failure = QStringLiteral("查看密码入口没有内嵌在密码框右侧，或仍残留独立按钮");
+        }
+        if (failure.isEmpty()) {
+            bool guidanceShown = false;
+            // 信息提示使用模态消息框；预先安排关闭动作，既能验证用户确实得到开启路径，也
+            // 不让自动化用例阻塞在消息框自己的事件循环中。
+            QTimer::singleShot(0, [&guidanceShown]() {
+                auto *messageBox = qobject_cast<QMessageBox *>(
+                    QApplication::activeModalWidget());
+                if (messageBox != nullptr
+                    && messageBox->text().contains(QStringLiteral("启用主密码保护"))) {
+                    guidanceShown = true;
+                    messageBox->accept();
+                }
+            });
+            passwordVisibility->trigger();
+            if (!guidanceShown || password->echoMode() != QLineEdit::Password
+                || passwordVisibility->isChecked()) {
+                failure = QStringLiteral(
+                    "未启用主密码保护时点击眼睛图标没有提示开启，或意外显示了明文");
+            }
         }
         if (failure.isEmpty()) {
             const int usernameTop = username->mapTo(dialog, QPoint{}).y();
@@ -554,6 +608,105 @@ void HostManagerWidgetTest::hostDialogUsesRequestedFieldOrderAndIcons()
     });
 
     addHostButton->click();
+    QVERIFY2(failure.isEmpty(), qPrintable(failure));
+}
+
+void HostManagerWidgetTest::newHostAutomaticallyPersistsPasswordAndIdentityFile()
+{
+    HostManagerWidget widget(m_database.get(), m_vault.get());
+    QString failure;
+    QTimer::singleShot(0, [&failure]() {
+        auto *dialog = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+        if (dialog == nullptr) {
+            failure = QStringLiteral("新建主机窗口未打开");
+            return;
+        }
+        auto *name = dialog->findChild<QLineEdit *>(QStringLiteral("hostRecordNameEdit"));
+        auto *address = dialog->findChild<QLineEdit *>(QStringLiteral("hostAddressEdit"));
+        auto *password = dialog->findChild<QLineEdit *>(QStringLiteral("hostPasswordEdit"));
+        auto *identity = dialog->findChild<QLineEdit *>(QStringLiteral("hostIdentityEdit"));
+        auto *save = dialog->findChild<QPushButton *>(QStringLiteral("hostRecordSaveButton"));
+        if (name == nullptr || address == nullptr || password == nullptr
+            || identity == nullptr || save == nullptr) {
+            failure = QStringLiteral("新建主机窗口缺少自动保存所需字段");
+            dialog->reject();
+            return;
+        }
+        address->setText(QStringLiteral("192.0.2.20"));
+        // 地址会驱动空名称自动生成，因此最后写名称，模拟用户确认自动名称后再改成业务名。
+        name->setText(QStringLiteral("自动保存主机"));
+        password->setText(QStringLiteral("auto-saved-secret"));
+        identity->setText(QStringLiteral("/tmp/id_ed25519_for_test"));
+        save->click();
+    });
+    widget.addHost();
+    QVERIFY2(failure.isEmpty(), qPrintable(failure));
+
+    bool ok = false;
+    QString error;
+    const QList<HostRecord> records =
+        m_database->searchHosts(QStringLiteral("自动保存主机"), &ok, &error);
+    QVERIFY2(ok, qPrintable(error));
+    QCOMPARE(records.size(), 1);
+    const HostRecord saved = records.constFirst();
+    QCOMPARE(saved.identityFile, QStringLiteral("/tmp/id_ed25519_for_test"));
+    QVERIFY2(!saved.credentialId.isEmpty(), "密码未自动生成凭据引用");
+    const std::optional<QByteArray> secret = m_vault->loadSecret(saved.credentialId, &error);
+    QVERIFY2(secret.has_value(), qPrintable(error));
+    QCOMPARE(QString::fromUtf8(*secret), QStringLiteral("auto-saved-secret"));
+}
+
+void HostManagerWidgetTest::editHostMasksPasswordAndGatesVisibility()
+{
+    QString error;
+    QVERIFY2(m_vault->initialize(QStringLiteral("用于界面测试的主密码"), &error),
+             qPrintable(error));
+
+    HostRecord host;
+    host.id = QStringLiteral("masked-password-host");
+    host.kind = HostNodeKind::Host;
+    host.name = QStringLiteral("掩码测试主机");
+    host.host = QStringLiteral("192.0.2.30");
+    ConnectionTarget target = host.toConnectionTarget();
+    target.password = QStringLiteral("visible-after-authorization");
+    QVERIFY2(m_vault->saveConnectionPassword(host, target, {}, &error), qPrintable(error));
+
+    HostManagerWidget widget(m_database.get(), m_vault.get());
+    QTreeWidget *tree = widget.findChild<QTreeWidget *>();
+    QVERIFY(tree != nullptr);
+    QTreeWidgetItem *item = findItem(widget, host.name);
+    QVERIFY(item != nullptr);
+    tree->setCurrentItem(item);
+
+    QString failure;
+    QTimer::singleShot(0, [&failure]() {
+        auto *dialog = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+        auto *password = dialog == nullptr ? nullptr : dialog->findChild<QLineEdit *>(
+            QStringLiteral("hostPasswordEdit"));
+        auto *visibility = dialog == nullptr ? nullptr : dialog->findChild<QAction *>(
+            QStringLiteral("hostPasswordVisibilityAction"));
+        if (password == nullptr || visibility == nullptr) {
+            failure = QStringLiteral("编辑主机窗口缺少密码框或右侧眼睛图标");
+        } else if (password->text() != QStringLiteral("visible-after-authorization")
+                   || password->echoMode() != QLineEdit::Password
+                   || !visibility->isEnabled()) {
+            failure = QStringLiteral("已保存密码未以可授权查看的掩码状态加载");
+        } else {
+            visibility->trigger();
+            if (password->echoMode() != QLineEdit::Normal) {
+                failure = QStringLiteral("启用主密码保护后眼睛图标未显示明文");
+            } else {
+                visibility->trigger();
+                if (password->echoMode() != QLineEdit::Password) {
+                    failure = QStringLiteral("再次点击眼睛图标后密码未恢复掩码");
+                }
+            }
+        }
+        if (dialog != nullptr) {
+            dialog->reject();
+        }
+    });
+    widget.editSelected();
     QVERIFY2(failure.isEmpty(), qPrintable(failure));
 }
 

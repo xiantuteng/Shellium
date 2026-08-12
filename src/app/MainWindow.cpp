@@ -187,6 +187,8 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     if (!m_settingsService->load(&settingsLoadError)) {
         showTransientMessage(tr("读取设置失败：%1").arg(settingsLoadError), 0);
     }
+    m_credentialVault->setPasswordProtectionEnabled(
+        m_settingsService->currentSettings().vaultPasswordEnabled);
     m_productivityModel = new ProductivityModel(m_database, this);
 
     // Qt 6.9 起 ExpandedClientAreaHint 会在平台窗口创建前通知 Cocoa：客户区需要覆盖标题栏，
@@ -594,6 +596,10 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     sshKeyManagerAction->setIcon(
         UiIcons::symbol(this, UiIcons::Symbol::Key, this->palette().color(QPalette::WindowText)));
     lockVaultAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+K")));
+    unlockVaultAction->setEnabled(
+        m_settingsService->currentSettings().vaultPasswordEnabled);
+    lockVaultAction->setEnabled(
+        m_settingsService->currentSettings().vaultPasswordEnabled);
     QMenu *securityMenu = menuBar()->addMenu(tr("安全"));
     securityMenu->addAction(unlockVaultAction);
     securityMenu->addAction(lockVaultAction);
@@ -744,13 +750,13 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     connect(commandPaletteAction, &QAction::triggered,
             this, &MainWindow::openCommandPalette);
     connect(settingsAction, &QAction::triggered, this, [this]() {
-        SettingsDialog dialog(m_settingsService, this);
+        SettingsDialog dialog(m_settingsService, m_credentialVault, this);
         dialog.exec();
     });
     connect(m_settingsService,
             &TerminalSettingsService::settingsChanged,
             this,
-            [this](const TerminalSettings &settings) {
+            [this, unlockVaultAction, lockVaultAction](const TerminalSettings &settings) {
                 // 对已打开标签逐个应用，保证设置对话框的实时预览和系统主题切换不会只影响
                 // 新建终端；动作快捷键同样以这一份快照为唯一来源。
                 for (TerminalPane *pane : allTerminalPanes()) {
@@ -758,6 +764,14 @@ MainWindow::MainWindow(ApplicationDatabase *database,
                 }
                 applyConfiguredShortcuts();
                 applyModernAppearance(settings);
+                // 凭据保存策略与设置快照使用同一事实来源；实时同步只改变后续保存模式，已有
+                // 凭据仍按各自元数据读取，因此取消设置窗口也能安全恢复原状态。
+                m_credentialVault->setPasswordProtectionEnabled(
+                    settings.vaultPasswordEnabled);
+                // 关闭保险箱密码后透明本机模式无需也不能手工锁定/解锁；同步禁用菜单动作和
+                // 快捷键，避免用户收到“已锁定”提示却仍能自动读取本机凭据的矛盾反馈。
+                unlockVaultAction->setEnabled(settings.vaultPasswordEnabled);
+                lockVaultAction->setEnabled(settings.vaultPasswordEnabled);
             });
 
     connect(m_productivityWidget,
@@ -792,7 +806,8 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     // 不持有敏感数据，也不会阻塞终端或 SFTP 工作线程。
     m_vaultIdleTimer->setInterval(15000);
     connect(m_vaultIdleTimer, &QTimer::timeout, this, [this]() {
-        if (m_credentialVault->lockIfIdle()) {
+        if (m_credentialVault->passwordProtectionEnabled()
+            && m_credentialVault->lockIfIdle()) {
             showTransientMessage(tr("凭据保险库因闲置已自动锁定"), 5000);
         }
     });
@@ -2002,7 +2017,13 @@ void MainWindow::connectSavedHost(const QString &hostId,
             return;
         }
         if (!savedHost->credentialId.isEmpty()) {
-            if (!vaultReady) {
+            const bool requiresUnlock = m_credentialVault->credentialRequiresUnlock(
+                savedHost->credentialId, &lookupError);
+            if (!lookupError.isEmpty()) {
+                QMessageBox::critical(this, tr("无法读取主机凭据"), lookupError);
+                return;
+            }
+            if (requiresUnlock && !vaultReady) {
                 if (!ensureVaultUnlocked()) {
                     return;
                 }

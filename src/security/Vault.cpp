@@ -6,6 +6,7 @@
 
 #include <QUuid>
 
+#include <algorithm>
 #include <mutex>
 
 namespace {
@@ -26,6 +27,12 @@ bool initializeSodium()
  * 带上格式版本，将来若更换 KDF 参数或密文布局，可以据此识别旧数据并平滑迁移。
  */
 constexpr char kVerifierPlainText[] = "shellium-vault-v1";
+
+/** @brief 透明本机密钥在设置表中的稳定键名；值为随机 256 位密钥的 Base64 文本。 */
+const QString kLocalEncryptionKeySetting = QStringLiteral("security/local_credential_key");
+
+/** @brief 凭据元数据中用于区分透明本机密钥与 Argon2id 主密码派生密钥的稳定标识。 */
+const QString kLocalKeyAlgorithm = QStringLiteral("local-key-v1");
 
 } // namespace
 
@@ -90,6 +97,28 @@ bool Vault::unlock(const QString &masterPassword,
         }
         return false;
     }
+    return true;
+}
+
+bool Vault::unlockWithKey(const QByteArray &key, QString *errorMessage)
+{
+    lock();
+    if (!initializeSodium()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("libsodium 初始化失败");
+        }
+        return false;
+    }
+    if (key.size() != crypto_aead_xchacha20poly1305_ietf_KEYBYTES) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("本机凭据密钥长度无效");
+        }
+        return false;
+    }
+    // QByteArray 的隐式共享会延长敏感密钥副本寿命，因此显式深拷贝到 Vault 独占缓冲；
+    // lock()/析构时该缓冲会由 sodium_memzero 清零。
+    m_key = QByteArray(key.constData(), key.size());
+    m_salt.clear();
     return true;
 }
 
@@ -261,6 +290,30 @@ CredentialVault::CredentialVault(ApplicationDatabase &database)
     m_lastActivityMs = m_monotonicClock.elapsed();
 }
 
+void CredentialVault::setPasswordProtectionEnabled(const bool enabled)
+{
+    m_passwordProtectionEnabled = enabled;
+}
+
+bool CredentialVault::passwordProtectionEnabled() const
+{
+    return m_passwordProtectionEnabled;
+}
+
+bool CredentialVault::credentialRequiresUnlock(const QString &id,
+                                                QString *errorMessage) const
+{
+    QString lookupError;
+    const std::optional<CredentialRecord> record = m_database.findCredential(id, &lookupError);
+    if (!record.has_value()) {
+        if (errorMessage != nullptr && !lookupError.isEmpty()) {
+            *errorMessage = lookupError;
+        }
+        return false;
+    }
+    return record->kdfAlgorithm == Vault::kdfAlgorithm();
+}
+
 CredentialVault::State CredentialVault::state(QString *errorMessage) const
 {
     QString configurationError;
@@ -277,11 +330,17 @@ CredentialVault::State CredentialVault::state(QString *errorMessage) const
         QString credentialsError;
         const QList<CredentialRecord> existingCredentials =
             m_database.listCredentials(&credentialsReadable, &credentialsError);
-        if (!credentialsReadable || !existingCredentials.isEmpty()) {
+        const bool hasPasswordProtectedCredential = std::any_of(
+            existingCredentials.cbegin(),
+            existingCredentials.cend(),
+            [](const CredentialRecord &record) {
+                return record.kdfAlgorithm == Vault::kdfAlgorithm();
+            });
+        if (!credentialsReadable || hasPasswordProtectedCredential) {
             if (errorMessage != nullptr) {
                 *errorMessage = !credentialsReadable
                     ? credentialsError
-                    : QStringLiteral("数据库已有加密凭据，但缺少保险库盐值和主密码校验块");
+                    : QStringLiteral("数据库已有主密码加密凭据，但缺少保险库盐值和校验块");
             }
             // 老版本或截断数据库可能留下 credentials 行却丢失全局校验块。将其当成首次
             // 启动会生成新密钥并覆盖引用，因此必须停在可诊断、不可写的损坏状态。
@@ -362,6 +421,9 @@ bool CredentialVault::initialize(const QString &masterPassword, QString *errorMe
     }
 
     recordActivity();
+    // initialize() 只有用户明确创建主密码时才会被调用，因此成功后同步切到主密码模式；
+    // 这也保持既有直接使用 CredentialVault 的调用方无需额外设置开关即可按原行为工作。
+    m_passwordProtectionEnabled = true;
     return true;
 }
 
@@ -425,6 +487,250 @@ bool CredentialVault::unlock(const QString &masterPassword, QString *errorMessag
     return true;
 }
 
+std::optional<CredentialRecord> CredentialVault::reencryptCredential(
+    const CredentialRecord &source,
+    const QByteArray &plainText,
+    Vault &encryptionVault,
+    const QString &kdfAlgorithm,
+    const QByteArray &kdfSalt,
+    const qint64 kdfIterations,
+    const qint64 kdfMemoryKib,
+    QString *errorMessage) const
+{
+    QString cryptoError;
+    QByteArray encrypted = encryptionVault.encrypt(plainText, &cryptoError);
+    if (encrypted.isEmpty()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = cryptoError.isEmpty() ? QStringLiteral("凭据重新加密失败")
+                                                  : cryptoError;
+        }
+        return std::nullopt;
+    }
+
+    CredentialRecord migrated = source;
+    migrated.nonce = encrypted.first(Vault::nonceSize());
+    migrated.encryptedPayload = encrypted.sliced(Vault::nonceSize());
+    migrated.cipher = Vault::cipherAlgorithm();
+    migrated.kdfAlgorithm = kdfAlgorithm;
+    migrated.kdfSalt = kdfSalt;
+    migrated.kdfIterations = kdfIterations;
+    migrated.kdfMemoryKib = kdfMemoryKib;
+    migrated.kdfParallelism = 1;
+    // 保留 createdAt 便于审计凭据最初创建时间；清空 updatedAt 让数据库层记录本次安全迁移
+    // 的真实时间。密文使用全新随机 nonce，绝不在不同密钥之间复用旧 nonce。
+    migrated.updatedAt = QDateTime{};
+    encrypted.clear();
+    return migrated;
+}
+
+bool CredentialVault::enablePasswordProtection(const QString &masterPassword,
+                                               QString *errorMessage)
+{
+    QString stateError;
+    const State currentState = state(&stateError);
+    if (currentState != State::Uninitialized) {
+        if (errorMessage != nullptr) {
+            *errorMessage = currentState == State::Corrupt
+                ? stateError
+                : QStringLiteral("保险箱主密码已经存在，无需重复启用");
+        }
+        return false;
+    }
+
+    Vault newVault;
+    QString cryptoError;
+    if (!newVault.unlock(masterPassword, {}, &cryptoError)) {
+        if (errorMessage != nullptr) {
+            *errorMessage = cryptoError;
+        }
+        return false;
+    }
+    const QByteArray verifier = newVault.createVerifier(&cryptoError);
+    if (verifier.isEmpty()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = cryptoError.isEmpty() ? QStringLiteral("无法创建主密码校验块")
+                                                  : cryptoError;
+        }
+        return false;
+    }
+
+    bool credentialsReadable = false;
+    QString credentialsError;
+    const QList<CredentialRecord> credentials =
+        m_database.listCredentials(&credentialsReadable, &credentialsError);
+    if (!credentialsReadable) {
+        if (errorMessage != nullptr) {
+            *errorMessage = credentialsError;
+        }
+        return false;
+    }
+
+    VaultConfiguration configuration;
+    configuration.formatVersion = 1;
+    configuration.kdfAlgorithm = Vault::kdfAlgorithm();
+    configuration.salt = newVault.salt();
+    configuration.verifier = verifier;
+
+    // 在写数据库前先验证正式会话对象能够用相同密码与盐建立密钥。这样一旦事务提交，
+    // 内存状态必然可立即使用；避免“数据库已迁移成功，但提交后才发现无法建立会话”的
+    // 不可补偿边界。若后续事务失败，下方会主动擦除这把尚未生效的密钥。
+    if (!m_vault.unlock(masterPassword, configuration.salt, &cryptoError)
+        || !m_vault.verifyPassword(configuration.verifier)) {
+        m_vault.lock();
+        if (errorMessage != nullptr) {
+            *errorMessage = cryptoError.isEmpty() ? QStringLiteral("无法验证新保险箱会话密钥")
+                                                  : cryptoError;
+        }
+        return false;
+    }
+
+    QString transactionError;
+    const bool migrated = m_database.runInTransaction(
+        [&](QString *innerError) {
+            if (!m_database.saveVaultConfiguration(configuration, innerError)) {
+                return false;
+            }
+            for (const CredentialRecord &credential : credentials) {
+                // 未启用保险箱时正常记录应全部采用本机密钥。若发现未知或主密码记录，
+                // loadSecret 会按元数据拒绝错误密钥，事务随即回滚而不会覆盖可疑密文。
+                std::optional<QByteArray> plainText = loadSecret(credential.id, innerError);
+                if (!plainText.has_value()) {
+                    return false;
+                }
+                const std::optional<CredentialRecord> protectedCredential =
+                    reencryptCredential(credential,
+                                        *plainText,
+                                        newVault,
+                                        Vault::kdfAlgorithm(),
+                                        newVault.salt(),
+                                        Vault::kdfOperationsLimit(),
+                                        Vault::kdfMemoryKib(),
+                                        innerError);
+                Vault::secureErase(*plainText);
+                if (!protectedCredential.has_value()) {
+                    return false;
+                }
+                if (!m_database.saveCredential(*protectedCredential, innerError)) {
+                    return false;
+                }
+            }
+            // 安全模式开关与密文迁移必须同事务落盘。即使设置窗口随后保存其他外观项失败，
+            // 下次启动也会依据这份真实安全状态要求解锁，不会把主密码密文当成本机凭据。
+            return m_database.setSetting(QStringLiteral("security/vault_password_enabled"),
+                                         QStringLiteral("1"),
+                                         innerError);
+        },
+        &transactionError);
+    if (!migrated) {
+        m_vault.lock();
+        if (errorMessage != nullptr) {
+            *errorMessage = transactionError;
+        }
+        return false;
+    }
+
+    m_passwordProtectionEnabled = true;
+    recordActivity();
+    return true;
+}
+
+bool CredentialVault::disablePasswordProtection(const QString &masterPassword,
+                                                QString *errorMessage)
+{
+    // 降级保护属于高风险操作，不能因当前会话尚未超时就跳过验证。unlock() 会先擦除旧会话
+    // 密钥并从数据库盐值重新派生，因此这里确实验证了用户本次输入的密码。
+    QString unlockError;
+    if (!unlock(masterPassword, &unlockError)) {
+        if (errorMessage != nullptr) {
+            *errorMessage = unlockError;
+        }
+        return false;
+    }
+
+    bool credentialsReadable = false;
+    QString credentialsError;
+    const QList<CredentialRecord> credentials =
+        m_database.listCredentials(&credentialsReadable, &credentialsError);
+    if (!credentialsReadable) {
+        if (errorMessage != nullptr) {
+            *errorMessage = credentialsError;
+        }
+        return false;
+    }
+
+    QString transactionError;
+    const bool migrated = m_database.runInTransaction(
+        [&](QString *innerError) {
+            QByteArray localKey = localEncryptionKey(true, innerError);
+            if (localKey.isEmpty()) {
+                return false;
+            }
+            QByteArray localKeyFingerprint(16, Qt::Uninitialized);
+            crypto_generichash(
+                reinterpret_cast<unsigned char *>(localKeyFingerprint.data()),
+                static_cast<size_t>(localKeyFingerprint.size()),
+                reinterpret_cast<const unsigned char *>(localKey.constData()),
+                static_cast<unsigned long long>(localKey.size()),
+                nullptr,
+                0);
+            Vault localVault;
+            QString localVaultError;
+            if (!localVault.unlockWithKey(localKey, &localVaultError)) {
+                Vault::secureErase(localKey);
+                if (innerError != nullptr) {
+                    *innerError = localVaultError;
+                }
+                return false;
+            }
+            Vault::secureErase(localKey);
+
+            for (const CredentialRecord &credential : credentials) {
+                // 历史版本可能在保险箱开启期间仍留有少量本机密钥记录。它们已经满足目标
+                // 状态，跳过重写可减少不必要的明文驻留和数据库写入。
+                if (credential.kdfAlgorithm == kLocalKeyAlgorithm) {
+                    continue;
+                }
+                std::optional<QByteArray> plainText = loadSecret(credential.id, innerError);
+                if (!plainText.has_value()) {
+                    return false;
+                }
+                const std::optional<CredentialRecord> localCredential =
+                    reencryptCredential(credential,
+                                        *plainText,
+                                        localVault,
+                                        kLocalKeyAlgorithm,
+                                        localKeyFingerprint,
+                                        1,
+                                        0,
+                                        innerError);
+                Vault::secureErase(*plainText);
+                if (!localCredential.has_value()) {
+                    return false;
+                }
+                if (!m_database.saveCredential(*localCredential, innerError)) {
+                    return false;
+                }
+            }
+            // 只有全部主密码凭据已经转换完成后才删除校验信息；该删除仍处于同一事务中，
+            // 后续提交若失败会连同所有凭据更新一起回滚。
+            return m_database.removeVaultConfiguration(innerError)
+                && m_database.setSetting(QStringLiteral("security/vault_password_enabled"),
+                                         QStringLiteral("0"),
+                                         innerError);
+        },
+        &transactionError);
+    if (!migrated) {
+        if (errorMessage != nullptr) {
+            *errorMessage = transactionError;
+        }
+        return false;
+    }
+
+    m_passwordProtectionEnabled = false;
+    m_vault.lock();
+    return true;
+}
+
 void CredentialVault::lock()
 {
     m_vault.lock();
@@ -476,7 +782,7 @@ bool CredentialVault::saveSecret(const QString &id,
                                  const QByteArray &secret,
                                  QString *errorMessage)
 {
-    if (!isUnlocked()) {
+    if (m_passwordProtectionEnabled && !isUnlocked()) {
         if (errorMessage != nullptr) {
             *errorMessage = QStringLiteral("保险库尚未解锁");
         }
@@ -490,7 +796,30 @@ bool CredentialVault::saveSecret(const QString &id,
     }
 
     QString cryptoError;
-    QByteArray encrypted = m_vault.encrypt(secret, &cryptoError);
+    QByteArray encrypted;
+    QByteArray localKey;
+    QByteArray localKeyFingerprint;
+    if (m_passwordProtectionEnabled) {
+        encrypted = m_vault.encrypt(secret, &cryptoError);
+    } else {
+        localKey = localEncryptionKey(true, &cryptoError);
+        Vault localVault;
+        if (!localKey.isEmpty() && localVault.unlockWithKey(localKey, &cryptoError)) {
+            encrypted = localVault.encrypt(secret, &cryptoError);
+            // 凭据行只保存不可逆指纹，用于发现设置中的本机密钥被替换；密钥本身集中放在
+            // settings 行，避免每条凭据都复制一份。该透明模式的目标是自动保存且磁盘中不落
+            // 直接明文，不提供抵抗整库窃取的主密码安全边界，后者必须由用户显式开启。
+            localKeyFingerprint.resize(16);
+            crypto_generichash(
+                reinterpret_cast<unsigned char *>(localKeyFingerprint.data()),
+                static_cast<size_t>(localKeyFingerprint.size()),
+                reinterpret_cast<const unsigned char *>(localKey.constData()),
+                static_cast<unsigned long long>(localKey.size()),
+                nullptr,
+                0);
+        }
+        Vault::secureErase(localKey);
+    }
     if (encrypted.isEmpty()) {
         if (errorMessage != nullptr) {
             *errorMessage = cryptoError;
@@ -505,10 +834,11 @@ bool CredentialVault::saveSecret(const QString &id,
     record.nonce = encrypted.first(Vault::nonceSize());
     record.encryptedPayload = encrypted.sliced(Vault::nonceSize());
     record.cipher = Vault::cipherAlgorithm();
-    record.kdfAlgorithm = Vault::kdfAlgorithm();
-    record.kdfSalt = m_vault.salt();
-    record.kdfIterations = Vault::kdfOperationsLimit();
-    record.kdfMemoryKib = Vault::kdfMemoryKib();
+    record.kdfAlgorithm = m_passwordProtectionEnabled ? Vault::kdfAlgorithm()
+                                                       : kLocalKeyAlgorithm;
+    record.kdfSalt = m_passwordProtectionEnabled ? m_vault.salt() : localKeyFingerprint;
+    record.kdfIterations = m_passwordProtectionEnabled ? Vault::kdfOperationsLimit() : 1;
+    record.kdfMemoryKib = m_passwordProtectionEnabled ? Vault::kdfMemoryKib() : 0;
     record.kdfParallelism = 1;
 
     QString databaseError;
@@ -528,13 +858,6 @@ bool CredentialVault::saveSecret(const QString &id,
 std::optional<QByteArray> CredentialVault::loadSecret(const QString &id,
                                                       QString *errorMessage)
 {
-    if (!isUnlocked()) {
-        if (errorMessage != nullptr) {
-            *errorMessage = QStringLiteral("保险库尚未解锁");
-        }
-        return std::nullopt;
-    }
-
     QString databaseError;
     const std::optional<CredentialRecord> record = m_database.findCredential(id, &databaseError);
     if (!record.has_value()) {
@@ -544,15 +867,14 @@ std::optional<QByteArray> CredentialVault::loadSecret(const QString &id,
         return std::nullopt;
     }
 
-    // 所有公开元数据都必须与当前已解锁保险库一致。只检查密文认证标签不够：攻击者若把
-    // 另一套保险库的合法记录替换进来，错误应明确归因于元数据不匹配而不是让解密模糊失败。
+    // 每条记录带有明确 KDF 标识：旧的 Argon2id 凭据继续要求主密码，本机透明凭据则读取
+    // 自动生成的随机密钥。不能根据当前设置开关猜测，否则切换模式后历史主机会全部失效。
+    const bool passwordProtected = record->kdfAlgorithm == Vault::kdfAlgorithm();
+    const bool locallyProtected = record->kdfAlgorithm == kLocalKeyAlgorithm;
     if (record->cipher != Vault::cipherAlgorithm()
         || record->nonce.size() != Vault::nonceSize()
         || record->encryptedPayload.size() < Vault::authenticationTagSize()
-        || record->kdfAlgorithm != Vault::kdfAlgorithm()
-        || record->kdfSalt != m_vault.salt()
-        || record->kdfIterations != Vault::kdfOperationsLimit()
-        || record->kdfMemoryKib != Vault::kdfMemoryKib()
+        || (!passwordProtected && !locallyProtected)
         || record->kdfParallelism != 1) {
         if (errorMessage != nullptr) {
             *errorMessage = QStringLiteral("凭据加密元数据不完整、已损坏或不属于当前保险库");
@@ -560,9 +882,44 @@ std::optional<QByteArray> CredentialVault::loadSecret(const QString &id,
         return std::nullopt;
     }
 
+    if (passwordProtected
+        && (!isUnlocked() || record->kdfSalt != m_vault.salt()
+            || record->kdfIterations != Vault::kdfOperationsLimit()
+            || record->kdfMemoryKib != Vault::kdfMemoryKib())) {
+        if (errorMessage != nullptr) {
+            *errorMessage = !isUnlocked()
+                ? QStringLiteral("保险库尚未解锁")
+                : QStringLiteral("凭据的主密码派生参数与当前保险库不匹配");
+        }
+        return std::nullopt;
+    }
+
     const QByteArray encrypted = record->nonce + record->encryptedPayload;
     QString cryptoError;
-    QByteArray plainText = m_vault.decrypt(encrypted, &cryptoError);
+    QByteArray plainText;
+    if (passwordProtected) {
+        plainText = m_vault.decrypt(encrypted, &cryptoError);
+    } else {
+        QByteArray localKey = localEncryptionKey(false, &cryptoError);
+        QByteArray actualFingerprint(16, Qt::Uninitialized);
+        if (!localKey.isEmpty()) {
+            crypto_generichash(
+                reinterpret_cast<unsigned char *>(actualFingerprint.data()),
+                static_cast<size_t>(actualFingerprint.size()),
+                reinterpret_cast<const unsigned char *>(localKey.constData()),
+                static_cast<unsigned long long>(localKey.size()),
+                nullptr,
+                0);
+        }
+        Vault localVault;
+        if (!localKey.isEmpty() && actualFingerprint == record->kdfSalt
+            && localVault.unlockWithKey(localKey, &cryptoError)) {
+            plainText = localVault.decrypt(encrypted, &cryptoError);
+        } else if (cryptoError.isEmpty()) {
+            cryptoError = QStringLiteral("本机凭据密钥与已保存记录不匹配");
+        }
+        Vault::secureErase(localKey);
+    }
     if (plainText.isEmpty()) {
         if (errorMessage != nullptr) {
             *errorMessage = cryptoError.isEmpty() ? QStringLiteral("凭据解密失败") : cryptoError;
@@ -571,6 +928,49 @@ std::optional<QByteArray> CredentialVault::loadSecret(const QString &id,
     }
     recordActivity();
     return plainText;
+}
+
+QByteArray CredentialVault::localEncryptionKey(const bool createIfMissing,
+                                               QString *errorMessage)
+{
+    QString settingError;
+    const std::optional<QString> encoded =
+        m_database.setting(kLocalEncryptionKeySetting, &settingError);
+    if (!settingError.isEmpty()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = settingError;
+        }
+        return {};
+    }
+    if (encoded.has_value()) {
+        const QByteArray decoded = QByteArray::fromBase64(
+            encoded->toLatin1(), QByteArray::AbortOnBase64DecodingErrors);
+        if (decoded.size() != crypto_aead_xchacha20poly1305_ietf_KEYBYTES) {
+            if (errorMessage != nullptr) {
+                *errorMessage = QStringLiteral("本机凭据密钥已损坏");
+            }
+            return {};
+        }
+        return decoded;
+    }
+    if (!createIfMissing) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("本机凭据密钥不存在");
+        }
+        return {};
+    }
+
+    QByteArray key(crypto_aead_xchacha20poly1305_ietf_KEYBYTES, Qt::Uninitialized);
+    randombytes_buf(key.data(), static_cast<size_t>(key.size()));
+    if (!m_database.setSetting(
+            kLocalEncryptionKeySetting, QString::fromLatin1(key.toBase64()), &settingError)) {
+        Vault::secureErase(key);
+        if (errorMessage != nullptr) {
+            *errorMessage = settingError;
+        }
+        return {};
+    }
+    return key;
 }
 
 bool CredentialVault::applyHostCredential(const HostRecord &host,
@@ -631,6 +1031,23 @@ bool CredentialVault::saveConnectionPassword(HostRecord &host,
     }
 
     HostRecord updatedHost = host;
+    if (!updatedHost.credentialId.isEmpty()) {
+        bool referencesReadable = false;
+        QString referenceError;
+        const int referenceCount = m_database.credentialReferenceCount(
+            updatedHost.credentialId, &referencesReadable, &referenceError);
+        if (!referencesReadable) {
+            if (errorMessage != nullptr) {
+                *errorMessage = referenceError;
+            }
+            return false;
+        }
+        if (referenceCount > 1) {
+            // 历史版本允许复制主机后共享 credential_id。当前主机改密码时必须先切换到新 id，
+            // 随后的 saveSecret 才只覆盖它自己的密文；旧凭据继续供其他主机使用。
+            updatedHost.credentialId.clear();
+        }
+    }
     if (updatedHost.credentialId.isEmpty()) {
         updatedHost.credentialId = QStringLiteral("credential-%1")
                                        .arg(QUuid::createUuid().toString(QUuid::WithoutBraces));
@@ -666,5 +1083,54 @@ bool CredentialVault::saveConnectionPassword(HostRecord &host,
         return false;
     }
     host = updatedHost;
+    return true;
+}
+
+bool CredentialVault::cloneCredentialForHost(HostRecord &host,
+                                             const QString &sourceCredentialId,
+                                             QString *errorMessage)
+{
+    if (host.id.trimmed().isEmpty() || host.name.trimmed().isEmpty()
+        || sourceCredentialId.trimmed().isEmpty()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("复制主机凭据前必须提供主机 id、名称和源凭据 id");
+        }
+        return false;
+    }
+
+    QString lookupError;
+    const std::optional<CredentialRecord> source =
+        m_database.findCredential(sourceCredentialId, &lookupError);
+    if (!source.has_value()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = lookupError.isEmpty() ? QStringLiteral("源主机引用的凭据不存在")
+                                                  : lookupError;
+        }
+        return false;
+    }
+
+    HostRecord independentHost = host;
+    CredentialRecord independentCredential = *source;
+    independentCredential.id = QStringLiteral("credential-%1")
+                                   .arg(QUuid::createUuid().toString(QUuid::WithoutBraces));
+    independentCredential.name = QStringLiteral("%1（独立副本）").arg(host.name);
+    independentCredential.createdAt = QDateTime{};
+    independentCredential.updatedAt = QDateTime{};
+    independentHost.credentialId = independentCredential.id;
+
+    QString transactionError;
+    const bool saved = m_database.runInTransaction(
+        [&](QString *innerError) {
+            return m_database.saveCredential(independentCredential, innerError)
+                && m_database.saveHost(independentHost, innerError);
+        },
+        &transactionError);
+    if (!saved) {
+        if (errorMessage != nullptr) {
+            *errorMessage = transactionError;
+        }
+        return false;
+    }
+    host = independentHost;
     return true;
 }

@@ -35,6 +35,17 @@ public:
                 const QByteArray &salt = {},
                 QString *errorMessage = nullptr);
 
+    /**
+     * @brief 直接安装一把随机生成的 256 位本机密钥。
+     * @param key 必须与 XChaCha20-Poly1305 密钥长度完全一致的随机字节。
+     * @param errorMessage 长度无效或密码库不可用时接收原因；可为空。
+     * @return 密钥成功复制到受控会话缓冲时返回 true。
+     *
+     * 该入口只服务于“未启用保险箱密码”的透明本机加密模式，不接受用户文本，也不会执行
+     * KDF。调用方必须负责安全生成和持久化随机密钥，禁止传入硬编码常量。
+     */
+    bool unlockWithKey(const QByteArray &key, QString *errorMessage = nullptr);
+
     /** @brief 清除会话密钥并进入锁定状态。 */
     void lock();
 
@@ -153,11 +164,58 @@ public:
      */
     bool unlock(const QString &masterPassword, QString *errorMessage = nullptr);
 
+    /**
+     * @brief 启用主密码保护，并把现有透明本机凭据原子迁移到新保险箱。
+     * @param masterPassword 用户新设置且已由界面二次确认的主密码，不会持久化。
+     * @param errorMessage 初始化、解密、加密或数据库提交失败时接收原因；可为空。
+     * @return 全部凭据和保险箱公开配置一次性提交成功时返回 true。
+     *
+     * 该操作先在内存准备新保险箱，再于单个 SQLite 事务中写入校验块和重加密凭据。任何
+     * 一条凭据无法读取时都整体回滚，避免出现一部分依赖本机密钥、一部分依赖尚未启用的
+     * 主密码的半完成状态。成功后服务保持解锁并切换后续保存策略。
+     */
+    bool enablePasswordProtection(const QString &masterPassword,
+                                  QString *errorMessage = nullptr);
+
+    /**
+     * @brief 验证当前主密码后关闭保护，并把现有保险箱凭据原子迁移为本机透明加密。
+     * @param masterPassword 用户为本次高风险操作重新输入的当前主密码；即使会话已解锁也会
+     *        重新派生和验证，防止他人借用未锁屏的应用降级保护。
+     * @param errorMessage 密码错误、凭据损坏或事务失败时接收原因；可为空。
+     * @return 所有凭据迁移完成、保险箱公开配置已删除且内存密钥已清除时返回 true。
+     *
+     * “清除保险箱密码”并非删除密码原文（应用从未保存主密码），而是删除盐值、校验块并
+     * 擦除会话派生密钥。只有凭据已改用本机随机密钥后才能删除这些信息，否则数据不可恢复。
+     */
+    bool disablePasswordProtection(const QString &masterPassword,
+                                   QString *errorMessage = nullptr);
+
     /** @brief 清除会话密钥并进入锁定状态。 */
     void lock();
 
     /** @brief 判断当前是否持有已通过校验的会话密钥。 */
     [[nodiscard]] bool isUnlocked() const;
+
+    /**
+     * @brief 切换后续凭据保存是否使用用户主密码保护。
+     * @param enabled true 使用已解锁的主密码保险库；false 使用本机随机密钥透明加密。
+     *
+     * 切换不会批量重写历史凭据：读取时会按每条记录的 KDF 标识选择正确密钥，新保存或
+     * 再次编辑的凭据会自然迁移到当前模式，避免一次设置操作因中途失败损坏全部主机。
+     */
+    void setPasswordProtectionEnabled(bool enabled);
+
+    /** @brief 返回当前是否要求用用户主密码保护新保存的凭据。 */
+    [[nodiscard]] bool passwordProtectionEnabled() const;
+
+    /**
+     * @brief 判断指定凭据是否需要先解锁用户主密码保险库。
+     * @param id 稳定凭据 id。
+     * @param errorMessage 查询失败时接收原因；可为空。
+     * @return 记录采用 Argon2id 主密码派生密钥时返回 true；本机透明凭据或不存在返回 false。
+     */
+    [[nodiscard]] bool credentialRequiresUnlock(const QString &id,
+                                                QString *errorMessage = nullptr) const;
 
     /**
      * @brief 设置闲置自动锁定阈值。
@@ -236,13 +294,64 @@ public:
                                 const QString &credentialName = {},
                                 QString *errorMessage = nullptr);
 
+    /**
+     * @brief 为一台新复制的主机克隆独立凭据，并与主机记录原子保存。
+     * @param host 待保存的新主机；成功后 credentialId 会被替换为新生成的独立 id。
+     * @param sourceCredentialId 原主机直接引用的凭据 id，不得为空。
+     * @param errorMessage 查询或写入失败原因；可为空。
+     * @return 密文克隆与主机保存全部成功返回 true；失败时二者均不落库。
+     *
+     * 克隆只复制已经认证加密的密文及公开元数据，不需要解锁保险箱，也不会让明文进入
+     * 额外缓冲。新 id 保证以后编辑副本密码时不会覆盖原主机或其他历史副本。
+     */
+    bool cloneCredentialForHost(HostRecord &host,
+                                const QString &sourceCredentialId,
+                                QString *errorMessage = nullptr);
+
 private:
     /** @brief 把负数哨兵转换为内部单调时钟，非负测试值保持原样。 */
     [[nodiscard]] qint64 normalizedMonotonicTime(qint64 supplied) const;
+
+    /**
+     * @brief 读取或创建透明加密使用的本机随机密钥。
+     * @param createIfMissing true 时在首次保存前生成并持久化；读取流程传 false，禁止因数据
+     *        损坏而悄悄换钥匙。
+     * @param errorMessage 失败原因输出；可为空。
+     * @return 固定长度随机密钥；失败返回空数组，调用方用后必须调用 Vault::secureErase()。
+     */
+    [[nodiscard]] QByteArray localEncryptionKey(bool createIfMissing,
+                                                QString *errorMessage = nullptr);
+
+    /**
+     * @brief 使用指定 Vault 与 KDF 元数据重新加密一条已解密凭据。
+     * @param source 原凭据公开信息；id、名称、用途和创建时间会原样保留。
+     * @param plainText 已解密的敏感正文，调用方负责在所有分支结束后擦除。
+     * @param encryptionVault 已持有目标密钥的加密器。
+     * @param kdfAlgorithm 目标凭据的 KDF 标识。
+     * @param kdfSalt 目标盐值或本机密钥指纹。
+     * @param kdfIterations 目标 KDF 迭代参数。
+     * @param kdfMemoryKib 目标 KDF 内存参数。
+     * @param errorMessage 加密失败时接收原因；可为空。
+     * @return 带新随机 nonce 和目标 KDF 元数据的凭据；失败返回 std::nullopt。
+     *
+     * 集中构造记录可以保证启用和关闭两个迁移方向使用完全一致的字段规则，避免某一方向
+     * 漏写算法参数而产生“迁移成功但重启后无法读取”的隐蔽损坏。
+     */
+    [[nodiscard]] std::optional<CredentialRecord> reencryptCredential(
+        const CredentialRecord &source,
+        const QByteArray &plainText,
+        Vault &encryptionVault,
+        const QString &kdfAlgorithm,
+        const QByteArray &kdfSalt,
+        qint64 kdfIterations,
+        qint64 kdfMemoryKib,
+        QString *errorMessage = nullptr) const;
 
     ApplicationDatabase &m_database;
     Vault m_vault;
     QElapsedTimer m_monotonicClock;
     qint64 m_idleTimeoutMs = 15 * 60 * 1000; ///< 默认 15 分钟，UI 可通过设置覆盖。
     qint64 m_lastActivityMs = 0;
+    /** @brief true 表示新凭据必须写入用户主密码保险库；默认使用透明本机加密。 */
+    bool m_passwordProtectionEnabled = false;
 };

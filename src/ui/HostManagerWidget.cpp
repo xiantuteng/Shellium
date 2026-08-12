@@ -32,6 +32,7 @@
 #include <QPushButton>
 #include <QSet>
 #include <QSaveFile>
+#include <QSignalBlocker>
 #include <QSpinBox>
 #include <QStyle>
 #include <QStyledItemDelegate>
@@ -766,7 +767,8 @@ void configureSidebarIconButton(QToolButton *button, const QString &accessibleNa
  *
  * 分组编辑器只暴露名称，避免把组织层级与 SSH 连接参数混在一起；主机编辑器则按“基础信息、
  * 认证与跳板”组织字段。未展示的旧分组配置和主机标签仍保留在 HostRecord 中，编辑名称或其他
- * 可见字段时不会被静默清空。密码只作为测试连接或保存后立即连接的会话值返回，绝不写入记录。
+ * 可见字段时不会被静默清空。密码不写入 HostRecord，而是随保存动作自动交给 CredentialVault：
+ * 开启保险箱密码时使用主密码加密，关闭时使用本机随机密钥透明加密。
  */
 class HostRecordDialog final : public QDialog {
 public:
@@ -823,7 +825,7 @@ public:
             m_passwordEdit = new QLineEdit(this);
             m_passwordEdit->setObjectName(QStringLiteral("hostPasswordEdit"));
             m_passwordEdit->setEchoMode(QLineEdit::Password);
-            m_passwordEdit->setPlaceholderText(tr("仅用于本次连接；保存由保险库负责"));
+            m_passwordEdit->setPlaceholderText(tr("输入后随主机自动保存"));
             m_identityEdit = new QLineEdit(initial.identityFile, this);
             m_identityEdit->setObjectName(QStringLiteral("hostIdentityEdit"));
             m_identityEdit->setPlaceholderText(
@@ -844,10 +846,6 @@ public:
                     this->palette().color(QPalette::WindowText)),
                 tr("编辑当前主机在最终连接前依次经过的跳板机"));
             refreshHostChainSummary();
-            m_savePasswordToggle = new ToggleSwitch(this);
-            m_savePasswordToggle->setObjectName(QStringLiteral("hostSavePasswordToggle"));
-            m_savePasswordToggle->setChecked(
-                !initial.credentialId.isEmpty() || !inheritedParent.credentialId.isEmpty());
             m_legacyHmacToggle = new ToggleSwitch(this);
             m_legacyHmacToggle->setObjectName(QStringLiteral("hostLegacyHmacToggle"));
             m_legacyHmacToggle->setChecked(initial.allowLegacyHmacSha1);
@@ -883,12 +881,34 @@ public:
             // 保存凭据和旧版算法开关仍保持直接可见，因为它们会明显改变安全行为。
             auto *authCard = new SettingsCard(tr("认证与跳板"), this);
             authCard->addRow(tr("用户名"), m_usernameEdit);
-            authCard->addRow(tr("密码"), m_passwordEdit);
+            // 查看入口使用 QLineEdit 的 TrailingPosition 内嵌动作，而不是额外占据一列的文字
+            // 按钮。Qt 会自动为文本保留右侧图标空间，长密码不会画到眼睛图标下面；动作仍是
+            // 独立 QAction，便于禁用、提供无障碍名称和在主题切换时替换图标。
+            m_passwordVisibilityAction = m_passwordEdit->addAction(
+                UiIcons::symbol(
+                    this,
+                    UiIcons::Symbol::Eye,
+                    this->palette().color(QPalette::WindowText)),
+                QLineEdit::TrailingPosition);
+            m_passwordVisibilityAction->setObjectName(
+                QStringLiteral("hostPasswordVisibilityAction"));
+            m_passwordVisibilityAction->setCheckable(true);
+            m_passwordVisibilityAction->setText(tr("查看密码"));
+            // 未启用主密码时仍保持眼睛图标可点击。直接禁用虽然阻止了明文显示，却也切断了
+            // 用户理解原因和找到设置入口的路径；实际授权仍在 toggled 回调第一层严格拦截。
+            m_passwordVisibilityAction->setEnabled(true);
+            m_passwordVisibilityAction->setToolTip(
+                m_credentialVault->passwordProtectionEnabled()
+                    ? tr("查看已保存密码；保险箱锁定时会先要求输入主密码")
+                    : tr("点击查看如何启用主密码保护"));
+            authCard->addRow(
+                tr("密码"),
+                m_passwordEdit,
+                tr("密码会自动保存；启用主密码保护后可解锁查看明文。"));
             authCard->addRow(tr("私钥文件"), identityContainer);
             authCard->addRow(tr("主机链"),
                              m_hostChainButton,
                              tr("选择主机管理中的已有主机作为跳板，也可以在链编辑器中新增主机。"));
-            authCard->addRow(tr("加密保存到本地保险库"), m_savePasswordToggle);
             authCard->addRow(tr("旧版兼容"),
                              m_legacyHmacToggle,
                              tr("仅为该主机允许 hmac-sha1（不继承）。"));
@@ -943,6 +963,64 @@ public:
                     &QToolButton::toggled,
                     this,
                     [this]() { refreshProxyJumpDisclosure(); });
+            connect(m_passwordVisibilityAction,
+                    &QAction::toggled,
+                    this,
+                    [this](const bool visible) {
+                        if (!m_credentialVault->passwordProtectionEnabled()) {
+                            // setChecked(false) 会再次发出 toggled。用信号阻断器复位动作，确保
+                            // 一次点击只弹出一条提示，且密码框始终保持 Password 回显模式。
+                            const QSignalBlocker blocker(m_passwordVisibilityAction);
+                            m_passwordVisibilityAction->setChecked(false);
+                            m_passwordEdit->setEchoMode(QLineEdit::Password);
+                            if (visible) {
+                                QMessageBox::information(
+                                    this,
+                                    tr("需要主密码保护"),
+                                    tr("查看主机密码需要先启用主密码保护。请前往“设置 → "
+                                       "连接与安全 → 凭据保险箱”，开启“使用主密码保护凭据”。"));
+                            }
+                            return;
+                        }
+                        // “已启用”只决定按钮是否可用，真正显示明文前仍必须确认当前会话持有
+                        // 有效主密码密钥。即使这条历史凭据还采用透明本机密钥，也不能绕过
+                        // 用户刚启用的保险箱授权边界直接显示。
+                        if (visible && !m_credentialVault->isUnlocked()
+                            && !VaultDialog::ensureUnlocked(m_credentialVault, this)) {
+                            m_passwordVisibilityAction->setChecked(false);
+                            return;
+                        }
+                        if (visible && !m_passwordLoaded && !loadSavedPassword(true)) {
+                            m_passwordVisibilityAction->setChecked(false);
+                            return;
+                        }
+                        m_passwordEdit->setEchoMode(
+                            visible ? QLineEdit::Normal : QLineEdit::Password);
+                        m_passwordVisibilityAction->setText(
+                            visible ? tr("隐藏密码") : tr("查看密码"));
+                        m_passwordVisibilityAction->setToolTip(
+                            visible ? tr("隐藏密码")
+                                    : tr("查看已保存密码；保险箱锁定时会先要求输入主密码"));
+                        m_passwordVisibilityAction->setIcon(
+                            UiIcons::symbol(
+                                this,
+                                visible ? UiIcons::Symbol::EyeHidden : UiIcons::Symbol::Eye,
+                                this->palette().color(QPalette::WindowText)));
+                    });
+            connect(m_passwordEdit,
+                    &QLineEdit::textEdited,
+                    this,
+                    [this]() {
+                        // 用户输入（包括清空）后，输入框就是本次编辑的权威值；查看按钮不得
+                        // 再从旧凭据加载并覆盖刚输入的内容。textEdited 不会被程序 setText
+                        // 触发，因此下方自动载入已保存密码仍能准确维护同一状态位。
+                        m_passwordLoaded = true;
+                    });
+
+            // 已保存密码先读入输入框并保持 Password 回显，因此编辑页能直接显示与真实长度
+            // 对应的星号。透明本机凭据无需交互即可读取；主密码保险库若因闲置已锁定，则延迟
+            // 到用户点击“查看”时再弹解锁框，避免仅打开配置窗口就打断操作。
+            loadSavedPassword(false);
 
             // 只有打开窗口时名称为空，或用户后来主动清空名称，才启用自动命名。名称框一旦
             // 收到非空人工输入便立即退出自动模式，后续修改账号、地址或端口都不能覆盖用户
@@ -1099,32 +1177,60 @@ public:
     }
 
     /**
-     * @brief 用户是否要求把本次输入加密保存到保险库。
-     * @return 只有主机记录且复选框选中时返回 true；分组永远不直接保存密码。
-     */
-    [[nodiscard]] bool shouldSavePassword() const
-    {
-        return m_savePasswordToggle != nullptr && m_savePasswordToggle->isChecked();
-    }
-
-    /**
-     * @brief 用户是否明确取消了一条既有凭据引用。
-     * @return 原记录有关联凭据且复选框被取消时返回 true。
-     */
-    [[nodiscard]] bool shouldDetachCredential() const
-    {
-        return m_savePasswordToggle != nullptr
-            && !m_initial.credentialId.isEmpty()
-            && !m_savePasswordToggle->isChecked();
-    }
-
-    /**
      * @brief 链编辑器是否已经现场保存过独立的新主机。
      * @return true 表示即使当前目标随后取消，主机侧栏也应刷新以展示新建记录。
      */
     [[nodiscard]] bool relatedHostsCreated() const { return m_relatedHostsCreated; }
 
 private:
+    /**
+     * @brief 把当前记录引用的已保存密码读入掩码输入框。
+     * @param allowUnlock true 时允许弹出主密码解锁窗口；false 只尝试无交互读取。
+     * @return 没有已保存凭据或成功载入时返回 true；需要解锁但不允许交互、解锁取消或读取
+     *         失败时返回 false。失败不会清空既有 credentialId。
+     */
+    bool loadSavedPassword(const bool allowUnlock)
+    {
+        if (m_passwordEdit == nullptr || m_passwordLoaded) {
+            return true;
+        }
+        HostRecord credentialSource = m_initial;
+        if (credentialSource.credentialId.isEmpty()) {
+            credentialSource.credentialId = m_inheritedParent.credentialId;
+        }
+        if (credentialSource.credentialId.isEmpty()) {
+            return true;
+        }
+
+        QString credentialError;
+        if (m_credentialVault->credentialRequiresUnlock(
+                credentialSource.credentialId, &credentialError)
+            && !m_credentialVault->isUnlocked()) {
+            if (!allowUnlock
+                || !VaultDialog::ensureUnlocked(m_credentialVault, this)) {
+                m_passwordEdit->setPlaceholderText(tr("已保存；解锁保险箱后可查看"));
+                return false;
+            }
+        }
+        ConnectionTarget target = credentialSource.toConnectionTarget();
+        if (!m_credentialVault->applyHostCredential(
+                credentialSource, target, &credentialError)) {
+            if (allowUnlock) {
+                QMessageBox::warning(
+                    this,
+                    tr("无法读取已保存密码"),
+                    credentialError.isEmpty() ? tr("凭据不存在或已经损坏。")
+                                              : credentialError);
+            }
+            return false;
+        }
+        m_passwordEdit->setText(target.password);
+        target.password.fill(QChar::Null);
+        target.password.clear();
+        m_passwordLoaded = true;
+        return true;
+    }
+
     /** @brief 打开 Termius 风格的独立主机链编辑器，并把确认后的有序 id 写回当前草稿。 */
     void editHostChain();
 
@@ -1289,13 +1395,19 @@ private:
                 hopTarget.password = sessionPassword();
             }
             if (hopTarget.password.isEmpty() && !hop.credentialId.isEmpty()) {
-                if (!vaultReady) {
+                QString credentialError;
+                const bool requiresUnlock = m_credentialVault->credentialRequiresUnlock(
+                    hop.credentialId, &credentialError);
+                if (!credentialError.isEmpty()) {
+                    QMessageBox::warning(this, tr("无法测试连接"), credentialError);
+                    return;
+                }
+                if (requiresUnlock && !vaultReady) {
                     if (!VaultDialog::ensureUnlocked(m_credentialVault, this)) {
                         return;
                     }
                     vaultReady = true;
                 }
-                QString credentialError;
                 if (!m_credentialVault->applyHostCredential(hop, hopTarget, &credentialError)) {
                     QMessageBox::warning(
                         this,
@@ -1454,7 +1566,10 @@ private:
     QStringList m_hostChain;
     QPushButton *m_hostChainButton = nullptr;
     QLineEdit *m_passwordEdit = nullptr;
-    ToggleSwitch *m_savePasswordToggle = nullptr;
+    /** @brief 密码框右侧的眼睛图标动作，仅在启用保险箱密码时允许切换明文。 */
+    QAction *m_passwordVisibilityAction = nullptr;
+    /** @brief 输入框是否已有来自凭据或用户编辑的权威值，避免查看时用旧凭据覆盖新输入。 */
+    bool m_passwordLoaded = false;
     ToggleSwitch *m_legacyHmacToggle = nullptr;
     SettingsCard *m_authenticationCard = nullptr;
     QPushButton *m_testConnectionButton = nullptr;
@@ -1994,8 +2109,9 @@ private:
         ConnectionTarget target = created.toConnectionTarget();
         target.password = dialog.sessionPassword();
         bool saved = false;
-        if (dialog.shouldSavePassword() && !dialog.sessionPassword().isEmpty()) {
-            if (!VaultDialog::ensureUnlocked(m_credentialVault, this)) {
+        if (!dialog.sessionPassword().isEmpty()) {
+            if (m_credentialVault->passwordProtectionEnabled()
+                && !VaultDialog::ensureUnlocked(m_credentialVault, this)) {
                 return;
             }
             saved = m_credentialVault->saveConnectionPassword(
@@ -2482,8 +2598,9 @@ void HostManagerWidget::addHost()
     ConnectionTarget target = record.toConnectionTarget();
     target.password = dialog.sessionPassword();
     bool hostSaved = false;
-    if (dialog.shouldSavePassword() && !dialog.sessionPassword().isEmpty()) {
-        if (!VaultDialog::ensureUnlocked(m_credentialVault, this)) {
+    if (!dialog.sessionPassword().isEmpty()) {
+        if (m_credentialVault->passwordProtectionEnabled()
+            && !VaultDialog::ensureUnlocked(m_credentialVault, this)) {
             return;
         }
         // 凭据密文与 host.credentialId 必须处在同一事务中；先 saveSecret 再 saveHost 会在
@@ -2501,8 +2618,9 @@ void HostManagerWidget::addHost()
     }
     refresh();
 
-    // 用户在“新建主机”对话框中可能输入了本次会话密码。密码不会落库，但立即连接可以
-    // 复用这份进程内数据；从主机树再次连接时则由 Vault 或终端内联提示提供凭据。
+    // 用户在“新建主机”对话框中输入的密码已由 CredentialVault 加密落库；立即连接继续
+    // 复用输入框中的进程内副本，避免刚保存后再做一次解密。从主机树再次连接时再按凭据
+    // 元数据选择主密码保险箱或本机透明密钥。
     // saveConnectionPassword 可能为记录补上新 credentialId，因此持久字段重新从 record
     // 生成；明文仍只取对话框的本次会话副本，不会进入数据库。
     // 新建主机是一次独立的连接意图，必须新建标签承载。如果复用当前标签，已连接主机
@@ -2554,14 +2672,19 @@ void HostManagerWidget::copySelectedHost()
     HostRecord copied = *source;
     copied.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
     copied.name = copiedName;
-    // parentId 原样保留正是“当前目录”的持久化语义；连接参数、凭据引用、标签、旧式
-    // ProxyJump 和受管主机链也都来自整条记录副本，因此复制结果与原主机配置一致。
+    // parentId 原样保留正是“当前目录”的持久化语义；连接参数、标签、旧式 ProxyJump 和
+    // 受管主机链来自整条记录副本。凭据引用是唯一例外：它会在下方克隆为独立密文，避免
+    // 修改副本密码时覆盖原主机。
     // 时间戳属于记录本身而不是主机配置，必须清空后交给数据库生成当前时间，不能让新记录
     // 冒充与原记录同一时刻创建、更新的数据。
     copied.createdAt = QDateTime{};
     copied.updatedAt = QDateTime{};
 
-    if (!m_database->saveHost(copied, &error)) {
+    const bool copiedSaved = source->credentialId.isEmpty()
+        ? m_database->saveHost(copied, &error)
+        : m_credentialVault->cloneCredentialForHost(
+              copied, source->credentialId, &error);
+    if (!copiedSaved) {
         showDatabaseError(tr("复制主机"), error);
         return;
     }
@@ -2600,16 +2723,12 @@ void HostManagerWidget::editSelected()
         return;
     }
     HostRecord updated = dialog.record();
-    if (dialog.shouldDetachCredential()) {
-        // 只解除当前主机的引用，不删除 credentials 行：一个凭据可能被多台主机共享，未经
-        // 反向引用检查就删除会让其他连接静默失效。孤立凭据由后续凭据管理页显式清理。
-        updated.credentialId.clear();
-    }
     ConnectionTarget editedTarget = updated.toConnectionTarget();
     editedTarget.password = dialog.sessionPassword();
     bool hostSaved = false;
-    if (dialog.shouldSavePassword() && !dialog.sessionPassword().isEmpty()) {
-        if (!VaultDialog::ensureUnlocked(m_credentialVault, this)) {
+    if (!dialog.sessionPassword().isEmpty()) {
+        if (m_credentialVault->passwordProtectionEnabled()
+            && !VaultDialog::ensureUnlocked(m_credentialVault, this)) {
             return;
         }
         hostSaved = m_credentialVault->saveConnectionPassword(

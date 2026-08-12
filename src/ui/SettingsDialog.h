@@ -18,6 +18,7 @@ class QStackedWidget;
 class SegmentedControl;
 class SettingsCard;
 class TerminalSettingsService;
+class CredentialVault;
 class ThemeSwatchButton;
 class ToggleSwitch;
 
@@ -42,6 +43,16 @@ public:
      * @param parent Qt 父窗口。
      */
     explicit SettingsDialog(TerminalSettingsService *service, QWidget *parent = nullptr);
+
+    /**
+     * @brief 创建可管理保险箱主密码的设置对话框。
+     * @param service 应用级设置服务，生命周期必须覆盖本对话框且不可为空。
+     * @param credentialVault 应用共享凭据保险库；启用主密码时用于创建或解锁保险库。
+     * @param parent Qt 父窗口。
+     */
+    SettingsDialog(TerminalSettingsService *service,
+                   CredentialVault *credentialVault,
+                   QWidget *parent);
 
     /** @brief 返回当前控件组成的设置快照，主要供测试和扩展页复用。 */
     [[nodiscard]] TerminalSettings editedSettings() const;
@@ -75,7 +86,7 @@ private:
     /** @brief 构建“终端”页：字体度量、光标与会话行为。 */
     QWidget *buildTerminalPage();
 
-    /** @brief 构建“连接恢复”页：异常断线自动重连策略。 */
+    /** @brief 构建“连接与安全”页：凭据保险箱和异常断线自动重连策略。 */
     QWidget *buildConnectionPage();
 
     /** @brief 构建“快捷键”页：按稳定动作 ID 列出全部可配置动作。 */
@@ -124,6 +135,8 @@ private:
     ToggleSwitch *m_commandAutoCompletionToggle = nullptr;
     /** @brief 是否对已建立会话的异常网络断线启用有限自动重连。 */
     ToggleSwitch *m_automaticReconnectToggle = nullptr;
+    /** @brief 是否要求用用户主密码保护自动保存的主机凭据。 */
+    ToggleSwitch *m_vaultPasswordEnabledToggle = nullptr;
     /** @brief 每次异常断线周期的最大尝试次数。 */
     QSpinBox *m_reconnectMaxAttemptsSpin = nullptr;
     /** @brief 指数退避首轮延迟秒数。 */
@@ -131,6 +144,9 @@ private:
     QLabel *m_previewLabel = nullptr;
     /** @brief 重连相关行的容器，关闭自动重连时整体置灰。 */
     QList<QWidget *> m_reconnectDependentRows;
+
+    /** @brief 应用共享凭据保险库；测试旧构造入口时可为空。 */
+    CredentialVault *m_credentialVault = nullptr;
 
     /** @brief 以稳定动作 ID 索引快捷键编辑器，保存时无需依赖界面显示文本。 */
     QHash<QString, QKeySequenceEdit *> m_shortcutEditors;

@@ -13,7 +13,7 @@
 namespace {
 
 /// 当前代码要求的 schema 版本。每次结构变更必须递增，并在 upgradeSchema 中补齐对应分支。
-constexpr int kSchemaVersion = 5;
+constexpr int kSchemaVersion = 6;
 
 /// 内存数据库的 SQLite 特殊路径。
 const QString kMemoryPath = QStringLiteral(":memory:");
@@ -464,6 +464,44 @@ bool ApplicationDatabase::upgradeSchema(QString *errorMessage)
                           "UNIQUE(owner_host_id, jump_host_id))")
                    << QStringLiteral("CREATE INDEX IF NOT EXISTS idx_host_chain_jump "
                                      "ON host_chain_members(jump_host_id)");
+    }
+    if (*currentVersion < 6) {
+        // 版本 6：历史“复制主机”会原样复制 credential_id，导致若干主机共同更新同一条密文。
+        // 临时映射表为除每组第一条之外的每个直接引用生成独立 id，再复制完全相同的密文和
+        // 元数据。全过程不解密凭据，也不会改变任一主机当前密码；任一步失败由外层事务整体
+        // 回滚。父分组继承不会在 hosts 子记录上写 credential_id，因此不会被误拆分。
+        statements << QStringLiteral(
+                          "CREATE TEMP TABLE credential_reference_splits ("
+                          "host_id TEXT PRIMARY KEY, old_credential_id TEXT NOT NULL, "
+                          "new_credential_id TEXT NOT NULL UNIQUE)")
+                   << QStringLiteral(
+                          "INSERT INTO credential_reference_splits(host_id, old_credential_id, "
+                          "new_credential_id) "
+                          "SELECT h.id, h.credential_id, "
+                          "'credential-' || lower(hex(randomblob(16))) "
+                          "FROM hosts h JOIN credentials c ON c.id = h.credential_id "
+                          "WHERE h.credential_id IS NOT NULL AND h.credential_id <> '' "
+                          "AND h.id <> (SELECT MIN(first_host.id) FROM hosts first_host "
+                          "WHERE first_host.credential_id = h.credential_id)")
+                   << QStringLiteral(
+                          "INSERT INTO credentials(id, name, type, encrypted_payload, cipher, nonce, "
+                          "kdf_algorithm, kdf_salt, kdf_iterations, kdf_memory_kib, kdf_parallelism, "
+                          "created_at, updated_at) "
+                          "SELECT splits.new_credential_id, credentials.name, credentials.type, "
+                          "credentials.encrypted_payload, credentials.cipher, credentials.nonce, "
+                          "credentials.kdf_algorithm, credentials.kdf_salt, "
+                          "credentials.kdf_iterations, credentials.kdf_memory_kib, "
+                          "credentials.kdf_parallelism, credentials.created_at, credentials.updated_at "
+                          "FROM credential_reference_splits splits "
+                          "JOIN credentials ON credentials.id = splits.old_credential_id")
+                   << QStringLiteral(
+                          "UPDATE hosts SET credential_id = ("
+                          "SELECT splits.new_credential_id FROM credential_reference_splits splits "
+                          "WHERE splits.host_id = hosts.id) "
+                          "WHERE id IN (SELECT host_id FROM credential_reference_splits)")
+                   << QStringLiteral("DROP TABLE credential_reference_splits")
+                   << QStringLiteral("CREATE INDEX IF NOT EXISTS idx_hosts_credential "
+                                     "ON hosts(credential_id)");
     }
     statements << QStringLiteral("UPDATE schema_version SET version = %1").arg(kSchemaVersion);
 
@@ -991,14 +1029,16 @@ bool ApplicationDatabase::saveCredential(const CredentialRecord &record, QString
     constexpr qsizetype poly1305TagBytes = 16;
     constexpr qsizetype argon2SaltBytes = 16;
     const bool supportedCipher = record.cipher == QStringLiteral("xchacha20-poly1305-v1");
-    const bool supportedKdf = record.kdfAlgorithm == QStringLiteral("argon2id13");
+    const bool passwordKdf = record.kdfAlgorithm == QStringLiteral("argon2id13");
+    const bool localKeyKdf = record.kdfAlgorithm == QStringLiteral("local-key-v1");
     if (record.encryptedPayload.size() < poly1305TagBytes || !supportedCipher
-        || record.nonce.size() != xChaChaNonceBytes || !supportedKdf
+        || record.nonce.size() != xChaChaNonceBytes || (!passwordKdf && !localKeyKdf)
         || record.kdfSalt.size() != argon2SaltBytes || record.kdfIterations <= 0
-        || record.kdfMemoryKib <= 0 || record.kdfParallelism <= 0) {
+        || (passwordKdf && record.kdfMemoryKib <= 0)
+        || (localKeyKdf && record.kdfMemoryKib != 0) || record.kdfParallelism <= 0) {
         if (errorMessage != nullptr) {
             *errorMessage = QStringLiteral(
-                "凭据必须携带完整的 XChaCha20-Poly1305/Argon2id 密文元数据，禁止写入明文");
+                "凭据必须携带完整的 XChaCha20-Poly1305 与受支持密钥元数据，禁止写入明文");
         }
         return false;
     }
@@ -1096,6 +1136,30 @@ QList<CredentialRecord> ApplicationDatabase::listCredentials(bool *ok, QString *
     return records;
 }
 
+int ApplicationDatabase::credentialReferenceCount(const QString &credentialId,
+                                                  bool *ok,
+                                                  QString *errorMessage) const
+{
+    setFlag(ok, false);
+    if (credentialId.trimmed().isEmpty()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("统计凭据引用时 credentialId 不能为空");
+        }
+        return 0;
+    }
+
+    QSqlQuery query(m_database);
+    query.prepare(QStringLiteral(
+        "SELECT COUNT(*) FROM hosts WHERE credential_id = :credential_id"));
+    query.bindValue(QStringLiteral(":credential_id"), credentialId);
+    if (!query.exec() || !query.next()) {
+        reportQueryError(query, errorMessage);
+        return 0;
+    }
+    setFlag(ok, true);
+    return query.value(0).toInt();
+}
+
 // ---------------------------------------------------------------- 保险库公开配置
 
 bool ApplicationDatabase::saveVaultConfiguration(const VaultConfiguration &configuration,
@@ -1135,6 +1199,21 @@ bool ApplicationDatabase::saveVaultConfiguration(const VaultConfiguration &confi
         query.bindValue(QStringLiteral(":verifier"), configuration.verifier);
         query.bindValue(QStringLiteral(":created_at"), serializeTime(createdAt));
         query.bindValue(QStringLiteral(":updated_at"), serializeTime(updatedAt));
+        if (!query.exec()) {
+            reportQueryError(query, innerError);
+            return false;
+        }
+        return true;
+    }, errorMessage);
+}
+
+bool ApplicationDatabase::removeVaultConfiguration(QString *errorMessage)
+{
+    return runInTransaction([&](QString *innerError) {
+        QSqlQuery query(m_database);
+        // vault_metadata 通过固定主键保证最多一行。这里仍按 id 精确删除，而不是无条件清表，
+        // 既表达数据模型约束，也避免未来表中加入其他格式元数据后被旧客户端误删。
+        query.prepare(QStringLiteral("DELETE FROM vault_metadata WHERE id = 1"));
         if (!query.exec()) {
             reportQueryError(query, innerError);
             return false;

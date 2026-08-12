@@ -164,6 +164,20 @@ public:
     [[nodiscard]] QList<CredentialRecord> listCredentials(bool *ok = nullptr,
                                                           QString *errorMessage = nullptr) const;
 
+    /**
+     * @brief 统计直接引用某条凭据的主机/分组记录数量。
+     * @param credentialId 待统计的稳定凭据 id；空值视为参数错误。
+     * @param ok 查询成功时置 true；没有引用时返回 0 且置 true。
+     * @param errorMessage 参数或查询失败时接收原因；可为空。
+     * @return hosts.credential_id 与指定 id 相等的记录数；失败返回 0。
+     *
+     * 这里只统计数据库中的直接引用，不展开父分组继承。继承本身是有意共享父分组凭据；
+     * 真正危险的是多条独立记录持有同一 credential_id，编辑其中一条会覆盖其他记录。
+     */
+    [[nodiscard]] int credentialReferenceCount(const QString &credentialId,
+                                               bool *ok = nullptr,
+                                               QString *errorMessage = nullptr) const;
+
     // ------------------------------------------------------------ 保险库公开配置
 
     /**
@@ -178,6 +192,18 @@ public:
      */
     bool saveVaultConfiguration(const VaultConfiguration &configuration,
                                 QString *errorMessage = nullptr);
+
+    /**
+     * @brief 删除保险箱的主密码公开配置。
+     * @param errorMessage 删除或事务提交失败时接收可读原因；可为空。
+     * @return 删除语句成功提交时返回 true；配置原本不存在也视为成功。
+     *
+     * 本方法只删除盐值和认证校验块，不处理 credentials 表。调用方必须先在同一个外层事务
+     * 中把所有主密码凭据迁移到新的保护方式，才能调用本方法；否则旧密文会永久失去解密
+     * 所需的派生参数。runInTransaction() 支持嵌套，因此 CredentialVault 可以原子组合迁移与
+     * 删除操作，任何一步失败都会恢复原保险箱。
+     */
+    bool removeVaultConfiguration(QString *errorMessage = nullptr);
 
     /**
      * @brief 读取唯一的保险库公开配置。

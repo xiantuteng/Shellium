@@ -124,6 +124,15 @@ struct TerminalSettings {
      */
     bool automaticReconnect = true;
 
+    /**
+     * @brief 是否使用用户主密码保护自动保存的主机凭据，默认关闭。
+     *
+     * 关闭时凭据仍会使用本机随机密钥加密并自动用于连接，但界面禁止显示明文；开启后改用
+     * 用户主密码派生密钥保存，且只有成功解锁后才允许在主机编辑页查看密码。该开关不影响
+     * 私钥文件路径等普通主机配置的持久化。
+     */
+    bool vaultPasswordEnabled = false;
+
     /** @brief 单次异常断线周期最多重试次数，范围 0 到 10；0 等价于关闭。 */
     int reconnectMaxAttempts = 3;
 

@@ -1,10 +1,12 @@
 #include "settings/TerminalSettings.h"
+#include "security/Vault.h"
 #include "storage/ApplicationDatabase.h"
 #include "ui/ConnectionDialog.h"
 #include "ui/SettingsDialog.h"
 #include "ui/SettingsWidgets.h"
 
 #include <QAbstractSpinBox>
+#include <QAbstractButton>
 #include <QApplication>
 #include <QComboBox>
 #include <QDoubleSpinBox>
@@ -17,6 +19,8 @@
 #include <QSpinBox>
 #include <QStackedWidget>
 #include <QTest>
+#include <QTemporaryDir>
+#include <QTimer>
 #include <QToolButton>
 
 /**
@@ -33,6 +37,8 @@ private slots:
     void initTestCase();
     void stepperButtonsDriveSpinValues();
     void togglesRoundTripBooleanSettings();
+    /** @brief 主密码保护开关必须分别通过设置新密码和验证当前密码后才能保存。 */
+    void vaultProtectionToggleRequiresPasswordInBothDirections();
     void reconnectToggleGatesDependentRows();
     void colorSchemeSwatchesAreExclusiveAndPersist();
     void navigationSelectsMatchingPage();
@@ -129,15 +135,19 @@ void SettingsUiTest::togglesRoundTripBooleanSettings()
     auto *blinkToggle = dialog.findChild<ToggleSwitch *>(QStringLiteral("cursorBlinkToggle"));
     auto *completionToggle =
         dialog.findChild<ToggleSwitch *>(QStringLiteral("commandAutoCompletionToggle"));
+    auto *vaultPasswordToggle =
+        dialog.findChild<ToggleSwitch *>(QStringLiteral("vaultPasswordEnabledToggle"));
     QVERIFY(bellToggle != nullptr);
     QVERIFY(blinkToggle != nullptr);
     QVERIFY(completionToggle != nullptr);
+    QVERIFY(vaultPasswordToggle != nullptr);
     // 打开对话框时开关必须反映已持久化的值，而不是一律显示默认关闭。
     QCOMPARE(bellToggle->isChecked(), service->currentSettings().audibleBell);
     QCOMPARE(blinkToggle->isChecked(), service->currentSettings().cursorBlink);
     // 命令自动提示属于可能打断既有输入习惯的新功能，首次启动和恢复默认都必须保持关闭。
     QVERIFY(!service->currentSettings().commandAutoCompletion);
     QVERIFY(!completionToggle->isChecked());
+    QVERIFY(!vaultPasswordToggle->isChecked());
 
     // 点击开关会经 previewChanges() 立即改写服务里的运行设置，因此期望值必须取点击前的
     // 快照，不能再读 service->currentSettings()。
@@ -149,6 +159,9 @@ void SettingsUiTest::togglesRoundTripBooleanSettings()
     QCOMPARE(dialog.editedSettings().audibleBell, !originalBell);
     QCOMPARE(dialog.editedSettings().cursorBlink, !originalBlink);
     QVERIFY(dialog.editedSettings().commandAutoCompletion);
+    // 该用例使用不带 CredentialVault 的兼容构造入口，因此不触发需要密码交互的安全开关。
+    // 默认关闭值仍必须正确显示并持久化，真正的双向密码迁移由 CredentialVault 专项用例覆盖。
+    QVERIFY(!dialog.editedSettings().vaultPasswordEnabled);
 
     const bool expectedBell = !originalBell;
     dialog.accept();
@@ -158,6 +171,91 @@ void SettingsUiTest::togglesRoundTripBooleanSettings()
     QCOMPARE(m_database->setting(QStringLiteral("terminal/command_auto_completion"))
                  .value_or(QString()),
              QStringLiteral("1"));
+    QCOMPARE(m_database->setting(QStringLiteral("security/vault_password_enabled"))
+                 .value_or(QString()),
+             QStringLiteral("0"));
+}
+
+void SettingsUiTest::vaultProtectionToggleRequiresPasswordInBothDirections()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+    ApplicationDatabase database(
+        temporaryDirectory.filePath(QStringLiteral("settings-vault-toggle.db")));
+    QString error;
+    QVERIFY2(database.initialize(&error), qPrintable(error));
+    TerminalSettingsService service(&database);
+    QVERIFY2(service.load(&error), qPrintable(error));
+    CredentialVault vault(database);
+    const QString masterPassword = QStringLiteral("设置页双向验证主密码-2026");
+
+    SettingsDialog enablingDialog(&service, &vault, nullptr);
+    auto *enableToggle = enablingDialog.findChild<ToggleSwitch *>(
+        QStringLiteral("vaultPasswordEnabledToggle"));
+    QVERIFY(enableToggle != nullptr);
+    enableToggle->click();
+    QVERIFY(enablingDialog.editedSettings().vaultPasswordEnabled);
+    // 开关本身只是待保存草稿；密码对话框出现前不允许运行态提前进入主密码模式。
+    QVERIFY(!vault.passwordProtectionEnabled());
+
+    QString interactionFailure;
+    QTimer::singleShot(0, [&interactionFailure, &masterPassword]() {
+        QWidget *dialog = QApplication::activeModalWidget();
+        auto *passwordEdit = dialog == nullptr ? nullptr : dialog->findChild<QLineEdit *>(
+            QStringLiteral("vaultPasswordEdit"));
+        auto *confirmationEdit = dialog == nullptr ? nullptr : dialog->findChild<QLineEdit *>(
+            QStringLiteral("vaultConfirmationEdit"));
+        auto *confirmButton = dialog == nullptr ? nullptr : dialog->findChild<QAbstractButton *>(
+            QStringLiteral("vaultConfirmButton"));
+        if (passwordEdit == nullptr || confirmationEdit == nullptr || confirmButton == nullptr) {
+            interactionFailure = QStringLiteral("启用主密码保护时没有要求输入并确认新密码");
+            if (dialog != nullptr) {
+                dialog->close();
+            }
+            return;
+        }
+        passwordEdit->setText(masterPassword);
+        confirmationEdit->setText(masterPassword);
+        confirmButton->click();
+    });
+    enablingDialog.accept();
+    QVERIFY2(interactionFailure.isEmpty(), qPrintable(interactionFailure));
+    QVERIFY(vault.passwordProtectionEnabled());
+    QVERIFY(service.currentSettings().vaultPasswordEnabled);
+
+    SettingsDialog disablingDialog(&service, &vault, nullptr);
+    auto *disableToggle = disablingDialog.findChild<ToggleSwitch *>(
+        QStringLiteral("vaultPasswordEnabledToggle"));
+    QVERIFY(disableToggle != nullptr);
+    QVERIFY(disableToggle->isChecked());
+    disableToggle->click();
+
+    interactionFailure.clear();
+    QTimer::singleShot(0, [&interactionFailure, &masterPassword]() {
+        QWidget *dialog = QApplication::activeModalWidget();
+        auto *passwordEdit = dialog == nullptr ? nullptr : dialog->findChild<QLineEdit *>(
+            QStringLiteral("vaultPasswordEdit"));
+        const auto *confirmationEdit = dialog == nullptr ? nullptr
+                                                         : dialog->findChild<QLineEdit *>(
+                                                               QStringLiteral(
+                                                                   "vaultConfirmationEdit"));
+        auto *confirmButton = dialog == nullptr ? nullptr : dialog->findChild<QAbstractButton *>(
+            QStringLiteral("vaultConfirmButton"));
+        if (passwordEdit == nullptr || confirmationEdit != nullptr || confirmButton == nullptr) {
+            interactionFailure = QStringLiteral("关闭主密码保护时没有要求单独验证当前密码");
+            if (dialog != nullptr) {
+                dialog->close();
+            }
+            return;
+        }
+        passwordEdit->setText(masterPassword);
+        confirmButton->click();
+    });
+    disablingDialog.accept();
+    QVERIFY2(interactionFailure.isEmpty(), qPrintable(interactionFailure));
+    QVERIFY(!vault.passwordProtectionEnabled());
+    QVERIFY(!service.currentSettings().vaultPasswordEnabled);
+    QVERIFY(!database.vaultConfiguration(&error).has_value());
 }
 
 void SettingsUiTest::reconnectToggleGatesDependentRows()

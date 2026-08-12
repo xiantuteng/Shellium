@@ -70,6 +70,8 @@ enum class Symbol {
     Upload,
     Download,
     Eye,
+    /** @brief 带斜线的眼睛，表示当前密码可见，点击后将恢复隐藏。 */
+    EyeHidden,
     Info,
     /** @brief 三角形警示图标，用于不可逆操作说明等需要用户注意但尚未出错的状态。 */
     Warning,
@@ -366,7 +368,8 @@ enum class Symbol {
         painter.drawLine(QPointF(17.0, 12.0), QPointF(12.0, 17.0));
         painter.drawLine(QPointF(5.0, 19.0), QPointF(19.0, 19.0));
         break;
-    case Symbol::Eye: {
+    case Symbol::Eye:
+    case Symbol::EyeHidden: {
         QPainterPath eye;
         eye.moveTo(3.5, 12.0);
         eye.quadTo(12.0, 4.5, 20.5, 12.0);
@@ -374,6 +377,11 @@ enum class Symbol {
         eye.closeSubpath();
         painter.drawPath(eye);
         painter.drawEllipse(QPointF(12.0, 12.0), 2.2, 2.2);
+        if (symbol == Symbol::EyeHidden) {
+            // 隐藏动作沿用同一眼睛轮廓并叠加斜线，用户无需读取文字即可判断下一次点击会
+            // 恢复掩码；斜线略伸出轮廓，缩放到 16px 时仍保持足够辨识度。
+            painter.drawLine(QPointF(4.5, 4.5), QPointF(19.5, 19.5));
+        }
         break;
     }
     case Symbol::Info:

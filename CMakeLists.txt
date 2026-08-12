@@ -396,12 +396,15 @@ if(BUILD_TESTING)
 
     # 设置界面改版后的控件接线回归：步进器、滑动开关、配色色板与分类导航都是自绘控件，
     # 只有真实构树才能验证“操作控件 → editedSettings() → SQLite”这条链路没有断。需要
-    # Widgets 与 Sql，不涉及 libssh/libvterm 与网络。
+    # Widgets 与 Sql，不涉及 libssh/libvterm 与网络。设置页现在还会在开启保险箱密码时调用
+    # 正式保险库流程，因此目标需链接 Vault、VaultDialog 与 libsodium，避免测试使用假实现。
     qt_add_executable(ShelliumSettingsUiTests
         tests/SettingsUiTest.cpp
         src/core/ConnectionTarget.cpp
         src/core/ConnectionTarget.h
         src/core/HostRecord.h
+        src/security/Vault.cpp
+        src/security/Vault.h
         src/settings/TerminalSettings.cpp
         src/settings/TerminalSettings.h
         src/storage/ApplicationDatabase.cpp
@@ -412,10 +415,12 @@ if(BUILD_TESTING)
         src/ui/SettingsDialog.h
         src/ui/SettingsWidgets.cpp
         src/ui/SettingsWidgets.h
+        src/ui/VaultDialog.cpp
+        src/ui/VaultDialog.h
     )
     target_include_directories(ShelliumSettingsUiTests PRIVATE src)
     target_link_libraries(ShelliumSettingsUiTests PRIVATE
-        Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Sql Qt6::Test)
+        Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Sql Qt6::Test PkgConfig::LIBSODIUM)
     add_test(NAME ShelliumSettingsUiTests COMMAND ShelliumSettingsUiTests)
 
     # 运行日志是界面提示条移除后唯一的消息去路：写入一旦静默失败，用户既看不到提示也查

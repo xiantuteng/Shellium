@@ -28,20 +28,51 @@ public:
                                QWidget *parent = nullptr,
                                bool allowCancel = true);
 
+    /**
+     * @brief 请求用户设置并确认新主密码，然后启用保护并迁移已有凭据。
+     * @param vault 应用级保险箱服务，不可为空。
+     * @param parent Qt 父窗口；通常为设置对话框。
+     * @return 用户完成密码设置与迁移时返回 true；取消或失败返回 false。
+     *
+     * 与 ensureUnlocked() 的首次初始化不同，本入口明确表达“从本机透明加密升级为主密码
+     * 保护”，因此提交时调用 CredentialVault::enablePasswordProtection() 执行全量迁移。
+     */
+    static bool enablePasswordProtection(CredentialVault *vault,
+                                         QWidget *parent = nullptr);
+
+    /**
+     * @brief 请求用户重新输入当前主密码，然后迁移凭据并清除保险箱密码配置。
+     * @param vault 应用级保险箱服务，不可为空。
+     * @param parent Qt 父窗口；通常为设置对话框。
+     * @return 密码验证、凭据迁移和配置清除全部成功时返回 true。
+     *
+     * 即使当前会话已解锁也始终弹出验证框，避免临时接触已解锁电脑的人直接关闭保护。
+     */
+    static bool disablePasswordProtection(CredentialVault *vault,
+                                          QWidget *parent = nullptr);
+
 protected:
     /** @brief 校验两次输入并调用保险库服务；失败时保持对话框打开并展示具体原因。 */
     void accept() override;
 
 private:
+    /** @brief 对话框执行的安全操作；不同操作决定文案、字段数量和最终服务调用。 */
+    enum class Operation {
+        Create,  ///< 首次启动创建空保险箱，不涉及已有透明凭据迁移。
+        Unlock,  ///< 解锁已经存在的保险箱。
+        Enable,  ///< 从透明本机模式启用主密码保护并迁移全部凭据。
+        Disable  ///< 重新验证当前主密码、降级凭据保护并删除保险箱配置。
+    };
+
     /**
      * @brief 创建指定模式的对话框。
      * @param vault 保险库服务。
-     * @param creating true 表示首次创建，false 表示解锁既有保险库。
+     * @param operation 当前要执行的安全操作。
      * @param allowCancel 是否显示取消按钮。
      * @param parent Qt 父窗口。
      */
     explicit VaultDialog(CredentialVault *vault,
-                         bool creating,
+                         Operation operation,
                          bool allowCancel,
                          QWidget *parent = nullptr);
 
@@ -60,7 +91,7 @@ private:
     void clearInlineError();
 
     CredentialVault *m_vault = nullptr;
-    bool m_creating = false;
+    Operation m_operation = Operation::Unlock;
     QLineEdit *m_passwordEdit = nullptr;
     QLineEdit *m_confirmationEdit = nullptr;
     QLabel *m_passwordErrorLabel = nullptr;
