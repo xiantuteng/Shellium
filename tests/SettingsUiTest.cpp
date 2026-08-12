@@ -39,6 +39,8 @@ private slots:
     void togglesRoundTripBooleanSettings();
     /** @brief 主密码保护开关必须分别通过设置新密码和验证当前密码后才能保存。 */
     void vaultProtectionToggleRequiresPasswordInBothDirections();
+    /** @brief 关闭保护时执行忘记密码重置，必须同步自动保存设置并保留主机。 */
+    void forgottenVaultPasswordResetSynchronizesSettings();
     void reconnectToggleGatesDependentRows();
     void colorSchemeSwatchesAreExclusiveAndPersist();
     void navigationSelectsMatchingPage();
@@ -253,6 +255,94 @@ void SettingsUiTest::vaultProtectionToggleRequiresPasswordInBothDirections()
     QVERIFY(!vault.passwordProtectionEnabled());
     QVERIFY(!service.currentSettings().vaultPasswordEnabled);
     QVERIFY(!database.vaultConfiguration(&error).has_value());
+}
+
+void SettingsUiTest::forgottenVaultPasswordResetSynchronizesSettings()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+    ApplicationDatabase database(
+        temporaryDirectory.filePath(QStringLiteral("settings-forgotten-vault-reset.db")));
+    QString error;
+    QVERIFY2(database.initialize(&error), qPrintable(error));
+
+    CredentialVault vault(database);
+    HostRecord host;
+    host.id = QStringLiteral("settings-reset-host");
+    host.name = QStringLiteral("设置页重置后保留的主机");
+    host.host = QStringLiteral("203.0.113.26");
+    host.identityFile = QStringLiteral("/tmp/preserved_id_ed25519");
+    ConnectionTarget target = host.toConnectionTarget();
+    target.password = QStringLiteral("重置后删除的口令");
+    QVERIFY2(vault.saveConnectionPassword(host, target, {}, &error), qPrintable(error));
+    QVERIFY2(vault.enablePasswordProtection(
+                 QStringLiteral("设置页模拟遗忘的主密码-2026"), &error),
+             qPrintable(error));
+    vault.lock();
+
+    // 设置服务在保险箱启用后加载，确保对话框初始开关与数据库中的真实安全状态一致。
+    TerminalSettingsService service(&database);
+    QVERIFY2(service.load(&error), qPrintable(error));
+    QVERIFY(service.currentSettings().vaultPasswordEnabled);
+
+    SettingsDialog dialog(&service, &vault, nullptr);
+    auto *vaultToggle = dialog.findChild<ToggleSwitch *>(
+        QStringLiteral("vaultPasswordEnabledToggle"));
+    QVERIFY(vaultToggle != nullptr);
+    QVERIFY(vaultToggle->isChecked());
+
+    QString interactionFailure;
+    QTimer::singleShot(0, [&interactionFailure]() {
+        QWidget *disableDialog = QApplication::activeModalWidget();
+        auto *forgotButton = disableDialog == nullptr ? nullptr
+                                                      : disableDialog->findChild<QAbstractButton *>(
+                                                            QStringLiteral(
+                                                                "vaultForgotPasswordButton"));
+        if (forgotButton == nullptr) {
+            interactionFailure = QStringLiteral("关闭主密码保护窗口缺少忘记密码入口");
+            if (disableDialog != nullptr) {
+                disableDialog->close();
+            }
+            return;
+        }
+        QTimer::singleShot(0, [&interactionFailure]() {
+            QWidget *confirmationDialog = QApplication::activeModalWidget();
+            auto *confirmationEdit = confirmationDialog == nullptr ? nullptr
+                                                                    : confirmationDialog
+                                                                          ->findChild<QLineEdit *>(
+                                                                              QStringLiteral(
+                                                                                  "vaultResetConfirmationEdit"));
+            auto *resetButton = confirmationDialog == nullptr ? nullptr
+                                                               : confirmationDialog
+                                                                     ->findChild<QAbstractButton *>(
+                                                                         QStringLiteral(
+                                                                             "vaultResetConfirmButton"));
+            if (confirmationEdit == nullptr || resetButton == nullptr) {
+                interactionFailure = QStringLiteral("设置页重置没有要求输入确认短语");
+                if (confirmationDialog != nullptr) {
+                    confirmationDialog->close();
+                }
+                return;
+            }
+            confirmationEdit->setText(QStringLiteral("重置保险箱"));
+            resetButton->click();
+        });
+        forgotButton->click();
+    });
+    vaultToggle->click();
+
+    QVERIFY2(interactionFailure.isEmpty(), qPrintable(interactionFailure));
+    QVERIFY(!vault.passwordProtectionEnabled());
+    QVERIFY(!vaultToggle->isChecked());
+    QVERIFY(!service.currentSettings().vaultPasswordEnabled);
+    QCOMPARE(database.setting(QStringLiteral("security/vault_password_enabled"), &error)
+                 .value_or(QString()),
+             QStringLiteral("0"));
+    const std::optional<HostRecord> preservedHost = database.findHost(host.id, &error);
+    QVERIFY2(preservedHost.has_value(), qPrintable(error));
+    QVERIFY(preservedHost->credentialId.isEmpty());
+    QCOMPARE(preservedHost->host, host.host);
+    QCOMPARE(preservedHost->identityFile, host.identityFile);
 }
 
 void SettingsUiTest::reconnectToggleGatesDependentRows()

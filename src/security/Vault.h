@@ -4,6 +4,7 @@
 
 #include <QByteArray>
 #include <QElapsedTimer>
+#include <QObject>
 #include <QString>
 
 #include <optional>
@@ -123,7 +124,9 @@ private:
  * 它不缓存任何解密后的凭据；调用 loadSecret() 得到的明文所有权交给调用方，使用完必须调用
  * Vault::secureErase()。数据库对象必须比本服务存活更久。
  */
-class CredentialVault final {
+class CredentialVault final : public QObject {
+    Q_OBJECT
+
 public:
     /** @brief 保险库可观察状态，供首次启动和解锁界面决定展示哪个流程。 */
     enum class State {
@@ -189,6 +192,16 @@ public:
      */
     bool disablePasswordProtection(const QString &masterPassword,
                                    QString *errorMessage = nullptr);
+
+    /**
+     * @brief 在用户确认忘记主密码后不可逆地重置保险箱。
+     * @param errorMessage 数据库清理或事务提交失败时接收原因；可为空。
+     * @return 全部凭据密文及引用已原子删除、服务切回无主密码状态时返回 true。
+     *
+     * 该流程不尝试解密任何凭据，也不要求旧主密码；这是密码真正遗失后的唯一安全恢复路径。
+     * 主机普通配置会保留，但用户必须为需要认证的主机重新输入密码或私钥口令。
+     */
+    bool resetPasswordProtection(QString *errorMessage = nullptr);
 
     /** @brief 清除会话密钥并进入锁定状态。 */
     void lock();
@@ -307,6 +320,15 @@ public:
     bool cloneCredentialForHost(HostRecord &host,
                                 const QString &sourceCredentialId,
                                 QString *errorMessage = nullptr);
+
+signals:
+    /**
+     * @brief 忘记密码重置事务完成后发出，通知设置服务和主机界面刷新派生状态。
+     *
+     * 普通锁定/解锁不会发出该信号；接收方可据此把主密码保护设置同步为关闭，并重新读取
+     * 已被清空 credentialId 的主机记录。
+     */
+    void vaultReset();
 
 private:
     /** @brief 把负数哨兵转换为内部单调时钟，非负测试值保持原样。 */

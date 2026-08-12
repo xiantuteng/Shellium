@@ -206,6 +206,17 @@ public:
     bool removeVaultConfiguration(QString *errorMessage = nullptr);
 
     /**
+     * @brief 在忘记主密码时不可逆地重置整个凭据保险箱。
+     * @param errorMessage 任一清理语句或事务提交失败时接收可读原因；可为空。
+     * @return 主机凭据引用、全部凭据密文、保险箱元数据和旧本机密钥全部原子清除后返回 true。
+     *
+     * 该操作只清理无法再解密的认证材料：hosts 表中的地址、账号、端口、私钥文件路径、
+     * 分组与主机链均原样保留。所有删除必须处在同一个事务中，避免出现主机仍引用已删除密文，
+     * 或密文已删除但应用下次启动仍要求旧主密码的半重置状态。
+     */
+    bool resetCredentialVault(QString *errorMessage = nullptr);
+
+    /**
      * @brief 读取唯一的保险库公开配置。
      * @param errorMessage 查询失败或字段损坏时接收原因；可为空。
      * @return 尚未初始化时返回 std::nullopt 且不设置错误；记录完整时返回配置。

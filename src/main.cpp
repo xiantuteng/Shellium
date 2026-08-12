@@ -269,9 +269,11 @@ int main(int argc, char *argv[])
                || configured->compare(QStringLiteral("true"), Qt::CaseInsensitive) == 0)
             : legacyVaultExists;
         credentialVault.setPasswordProtectionEnabled(passwordProtectionEnabled);
-        if (passwordProtectionEnabled
-            && !VaultDialog::ensureUnlocked(&credentialVault, nullptr, false)) {
-            return 1;
+        if (passwordProtectionEnabled) {
+            // 忘记密码或暂时不想解锁时仍允许进入应用管理非敏感主机配置。取消只保持保险箱
+            // 锁定；“忘记密码”重置成功则会把安全设置原子写为关闭，MainWindow 随后从数据库
+            // 读取真实状态。需要旧凭据的连接仍会在使用时再次要求解锁，不会绕过认证。
+            VaultDialog::ensureUnlocked(&credentialVault, nullptr, true);
         }
     }
 

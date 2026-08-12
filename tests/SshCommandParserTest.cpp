@@ -21,6 +21,7 @@
 #include <QMenu>
 #include <QProcess>
 #include <QProcessEnvironment>
+#include <QPointer>
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QTemporaryDir>
@@ -32,6 +33,8 @@
 #include <QTimer>
 
 #include <libssh/libssh.h>
+
+#include <memory>
 
 /**
  * @brief 验证嵌套 SSH 命令解析和连接链安全边界。
@@ -181,6 +184,9 @@ private slots:
     /** @brief 主密码保护的启用和关闭必须双向迁移凭据并清除关闭后的保险箱配置。 */
     void credentialVaultMigratesCredentialsAcrossProtectionModes();
 
+    /** @brief 忘记密码重置必须删除凭据但完整保留主机的非敏感配置。 */
+    void credentialVaultResetPreservesHostConfiguration();
+
     /** @brief 编辑仍被多台主机直接引用的历史凭据时必须先为当前主机执行写时分离。 */
     void credentialVaultSeparatesSharedCredentialBeforePasswordUpdate();
 
@@ -204,6 +210,9 @@ private slots:
 
     /** @brief 主密码错误要在对话框里内联提示，不能再叠一层需要先关掉的弹窗。 */
     void vaultDialogReportsWrongPasswordInline();
+
+    /** @brief 解锁页必须通过输入确认短语才能执行忘记密码重置。 */
+    void vaultDialogResetsForgottenPasswordAfterTypedConfirmation();
 
     /** @brief 首次创建保险库时必须展示安全徽标和不可恢复警示，且强制流程不渲染取消按钮。 */
     void vaultCreationDialogShowsSecurityHierarchy();
@@ -1417,6 +1426,58 @@ void SshCommandParserTest::credentialVaultMigratesCredentialsAcrossProtectionMod
     Vault::secureErase(*localSecret);
 }
 
+void SshCommandParserTest::credentialVaultResetPreservesHostConfiguration()
+{
+    ApplicationDatabase database(ApplicationDatabase::inMemoryPath());
+    QString error;
+    QVERIFY2(database.initialize(&error), qPrintable(error));
+
+    CredentialVault vault(database);
+    HostRecord host;
+    host.id = QStringLiteral("forgotten-password-host");
+    host.name = QStringLiteral("忘记密码后保留的主机");
+    host.host = QStringLiteral("192.0.2.88");
+    host.username = QStringLiteral("deploy");
+    host.port = 2222;
+    host.identityFile = QStringLiteral("/Users/example/.ssh/id_ed25519");
+    host.tags = {QStringLiteral("生产"), QStringLiteral("关键")};
+    ConnectionTarget target = host.toConnectionTarget();
+    target.password = QStringLiteral("重置后必须消失的私钥口令");
+    QVERIFY2(vault.saveConnectionPassword(host, target, {}, &error), qPrintable(error));
+    QVERIFY(!host.credentialId.isEmpty());
+    QVERIFY2(vault.enablePasswordProtection(
+                 QStringLiteral("最终确实被忘记的主密码-2026"), &error),
+             qPrintable(error));
+    vault.lock();
+    QCOMPARE(vault.state(&error), CredentialVault::State::Locked);
+
+    QSignalSpy resetSpy(&vault, &CredentialVault::vaultReset);
+    QVERIFY2(vault.resetPasswordProtection(&error), qPrintable(error));
+    QCOMPARE(resetSpy.count(), 1);
+    QVERIFY(!vault.passwordProtectionEnabled());
+    QCOMPARE(vault.state(&error), CredentialVault::State::Uninitialized);
+    QVERIFY(!database.vaultConfiguration(&error).has_value());
+    QCOMPARE(database.setting(QStringLiteral("security/vault_password_enabled"), &error)
+                 .value_or(QString()),
+             QStringLiteral("0"));
+    QVERIFY(!database.setting(QStringLiteral("security/local_credential_key"), &error)
+                 .has_value());
+
+    bool credentialsReadable = false;
+    QVERIFY(database.listCredentials(&credentialsReadable, &error).isEmpty());
+    QVERIFY2(credentialsReadable, qPrintable(error));
+
+    const std::optional<HostRecord> preserved = database.findHost(host.id, &error);
+    QVERIFY2(preserved.has_value(), qPrintable(error));
+    QVERIFY(preserved->credentialId.isEmpty());
+    QCOMPARE(preserved->name, host.name);
+    QCOMPARE(preserved->host, host.host);
+    QCOMPARE(preserved->username, host.username);
+    QCOMPARE(preserved->port, host.port);
+    QCOMPARE(preserved->identityFile, host.identityFile);
+    QCOMPARE(preserved->tags, host.tags);
+}
+
 void SshCommandParserTest::credentialVaultSeparatesSharedCredentialBeforePasswordUpdate()
 {
     ApplicationDatabase database(ApplicationDatabase::inMemoryPath());
@@ -1786,17 +1847,24 @@ void SshCommandParserTest::vaultDialogReportsWrongPasswordInline()
         // 用 QMessageBox 报错会在解锁框之上再弹一个模态窗口：它挡住刚输错的密码框，用户
         // 必须先关掉它才能重试。这类弹窗自带事件循环，click() 会一直卡在里面，所以先挂一个
         // 单次定时器：它在弹窗的事件循环里执行，既记录违规也把弹窗关掉让 click() 返回。
-        bool blockedByPopup = false;
-        QTimer::singleShot(0, [dialog, &blockedByPopup]() {
+        // 定时器在正确实现（没有嵌套弹窗）下会等当前回调返回后才执行，因此捕获栈上 bool
+        // 会留下悬空引用，还可能在下一个模态测试开始后误关新窗口。共享状态负责跨事件循环
+        // 生命周期，QPointer 则确保原解锁窗口销毁后排队检查直接失效。
+        auto blockedByPopup = std::make_shared<bool>(false);
+        const QPointer<QWidget> guardedDialog(dialog);
+        QTimer::singleShot(0, [guardedDialog, blockedByPopup]() {
+            if (guardedDialog == nullptr) {
+                return;
+            }
             QWidget *popup = QApplication::activeModalWidget();
-            if (popup != nullptr && popup != dialog) {
-                blockedByPopup = true;
+            if (popup != nullptr && popup != guardedDialog) {
+                *blockedByPopup = true;
                 popup->close();
             }
         });
         unlockButton->click();
 
-        if (blockedByPopup) {
+        if (*blockedByPopup) {
             failure = QStringLiteral("解锁失败后弹出了额外的模态窗口");
         } else {
             bool reported = false;
@@ -1818,6 +1886,90 @@ void SshCommandParserTest::vaultDialogReportsWrongPasswordInline()
     QVERIFY2(failure.isEmpty(), qPrintable(failure));
     // 密码错误绝不能被当成解锁成功。
     QCOMPARE(vault.state(&error), CredentialVault::State::Locked);
+}
+
+void SshCommandParserTest::vaultDialogResetsForgottenPasswordAfterTypedConfirmation()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+    ApplicationDatabase database(
+        temporaryDirectory.filePath(QStringLiteral("vault-forgotten-password-reset.db")));
+    QString error;
+    QVERIFY2(database.initialize(&error), qPrintable(error));
+
+    CredentialVault vault(database);
+    HostRecord host;
+    host.id = QStringLiteral("reset-dialog-host");
+    host.name = QStringLiteral("重置确认测试主机");
+    host.host = QStringLiteral("198.51.100.20");
+    ConnectionTarget target = host.toConnectionTarget();
+    target.password = QStringLiteral("待删除密码");
+    QVERIFY2(vault.saveConnectionPassword(host, target, {}, &error), qPrintable(error));
+    QVERIFY2(vault.enablePasswordProtection(
+                 QStringLiteral("将被模拟遗忘的主密码-2026"), &error),
+             qPrintable(error));
+    vault.lock();
+
+    QString failure;
+    QTimer::singleShot(50, [&failure]() {
+        QWidget *unlockDialog = QApplication::activeModalWidget();
+        auto *forgotButton = unlockDialog == nullptr ? nullptr
+                                                     : unlockDialog->findChild<QAbstractButton *>(
+                                                           QStringLiteral(
+                                                               "vaultForgotPasswordButton"));
+        if (forgotButton == nullptr) {
+            failure = QStringLiteral("解锁窗口缺少忘记密码入口");
+            if (unlockDialog != nullptr) {
+                unlockDialog->close();
+            }
+            return;
+        }
+
+        // forgotButton->click() 会进入第二层模态循环；预先排队的处理器在确认窗口显示后检查
+        // 危险按钮默认禁用，再输入完整短语提交，真实覆盖防误触门槛。
+        QTimer::singleShot(0, [&failure]() {
+            QWidget *confirmationDialog = QApplication::activeModalWidget();
+            auto *confirmationEdit = confirmationDialog == nullptr ? nullptr
+                                                                    : confirmationDialog
+                                                                          ->findChild<QLineEdit *>(
+                                                                              QStringLiteral(
+                                                                                  "vaultResetConfirmationEdit"));
+            auto *resetButton = confirmationDialog == nullptr ? nullptr
+                                                               : confirmationDialog
+                                                                     ->findChild<QAbstractButton *>(
+                                                                         QStringLiteral(
+                                                                             "vaultResetConfirmButton"));
+            if (confirmationEdit == nullptr || resetButton == nullptr) {
+                failure = QStringLiteral("忘记密码入口没有显示输入确认短语的重置窗口");
+                if (confirmationDialog != nullptr) {
+                    confirmationDialog->close();
+                }
+                return;
+            }
+            if (resetButton->isEnabled()) {
+                failure = QStringLiteral("未输入确认短语时永久删除按钮意外可用");
+                confirmationDialog->close();
+                return;
+            }
+            confirmationEdit->setText(QStringLiteral("重置保险箱"));
+            if (!resetButton->isEnabled()) {
+                failure = QStringLiteral("输入完整确认短语后仍无法提交重置");
+                confirmationDialog->close();
+                return;
+            }
+            resetButton->click();
+        });
+        forgotButton->click();
+    });
+
+    QVERIFY(!VaultDialog::ensureUnlocked(&vault, nullptr, true));
+    QVERIFY2(failure.isEmpty(), qPrintable(failure));
+    QCOMPARE(vault.state(&error), CredentialVault::State::Uninitialized);
+    QVERIFY(!vault.passwordProtectionEnabled());
+    QVERIFY(database.findHost(host.id, &error)->credentialId.isEmpty());
+    bool credentialsReadable = false;
+    QVERIFY(database.listCredentials(&credentialsReadable, &error).isEmpty());
+    QVERIFY2(credentialsReadable, qPrintable(error));
 }
 
 void SshCommandParserTest::vaultCreationDialogShowsSecurityHierarchy()

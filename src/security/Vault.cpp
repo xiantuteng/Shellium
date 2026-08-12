@@ -731,6 +731,24 @@ bool CredentialVault::disablePasswordProtection(const QString &masterPassword,
     return true;
 }
 
+bool CredentialVault::resetPasswordProtection(QString *errorMessage)
+{
+    QString resetError;
+    if (!m_database.resetCredentialVault(&resetError)) {
+        if (errorMessage != nullptr) {
+            *errorMessage = resetError;
+        }
+        return false;
+    }
+
+    // 数据库事务提交后再擦除进程内密钥并广播，保证观察者收到通知时持久层已经处于完整的
+    // 无密码状态；反过来先发信号会让界面短暂展示成功，而随后数据库回滚。
+    m_vault.lock();
+    m_passwordProtectionEnabled = false;
+    emit vaultReset();
+    return true;
+}
+
 void CredentialVault::lock()
 {
     m_vault.lock();

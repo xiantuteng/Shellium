@@ -1015,12 +1015,32 @@ public:
                         // 再从旧凭据加载并覆盖刚输入的内容。textEdited 不会被程序 setText
                         // 触发，因此下方自动载入已保存密码仍能准确维护同一状态位。
                         m_passwordLoaded = true;
+                        m_passwordLoadedFromStorage = false;
                     });
 
             // 已保存密码先读入输入框并保持 Password 回显，因此编辑页能直接显示与真实长度
             // 对应的星号。透明本机凭据无需交互即可读取；主密码保险库若因闲置已锁定，则延迟
             // 到用户点击“查看”时再弹解锁框，避免仅打开配置窗口就打断操作。
             loadSavedPassword(false);
+
+            connect(m_credentialVault, &CredentialVault::vaultReset, this, [this]() {
+                // 当前编辑器持有打开窗口时的 HostRecord 副本。重置事务已经在数据库中清空
+                // credential_id，若继续保存旧副本会把失效引用写回，因此必须同步清理直接凭据
+                // 与继承凭据。用户本次亲自输入的新密码仍保留，稍后可按无主密码模式重新保存。
+                m_initial.credentialId.clear();
+                m_inheritedParent.credentialId.clear();
+                if (m_passwordLoadedFromStorage) {
+                    m_passwordEdit->clear();
+                    m_passwordLoaded = false;
+                    m_passwordLoadedFromStorage = false;
+                }
+                m_passwordEdit->setEchoMode(QLineEdit::Password);
+                m_passwordEdit->setPlaceholderText(tr("保险箱已重置，请重新输入凭据"));
+                if (m_passwordVisibilityAction != nullptr) {
+                    const QSignalBlocker blocker(m_passwordVisibilityAction);
+                    m_passwordVisibilityAction->setChecked(false);
+                }
+            });
 
             // 只有打开窗口时名称为空，或用户后来主动清空名称，才启用自动命名。名称框一旦
             // 收到非空人工输入便立即退出自动模式，后续修改账号、地址或端口都不能覆盖用户
@@ -1228,6 +1248,7 @@ private:
         target.password.fill(QChar::Null);
         target.password.clear();
         m_passwordLoaded = true;
+        m_passwordLoadedFromStorage = true;
         return true;
     }
 
@@ -1570,6 +1591,8 @@ private:
     QAction *m_passwordVisibilityAction = nullptr;
     /** @brief 输入框是否已有来自凭据或用户编辑的权威值，避免查看时用旧凭据覆盖新输入。 */
     bool m_passwordLoaded = false;
+    /** @brief 当前输入值是否由旧持久凭据解密得到；保险箱重置时仅清除此类旧明文。 */
+    bool m_passwordLoadedFromStorage = false;
     ToggleSwitch *m_legacyHmacToggle = nullptr;
     SettingsCard *m_authenticationCard = nullptr;
     QPushButton *m_testConnectionButton = nullptr;

@@ -90,6 +90,14 @@ private:
      */
     void clearInlineError();
 
+    /**
+     * @brief 展示不可逆重置确认，并在用户输入指定确认短语后清除保险箱。
+     *
+     * 该入口只会在解锁或关闭保护模式下展示。重置成功后以 Rejected 结束当前密码操作，调用方
+     * 不会把“删除了旧凭据”误判为“旧保险箱已经解锁”。
+     */
+    void resetForgottenPassword();
+
     CredentialVault *m_vault = nullptr;
     Operation m_operation = Operation::Unlock;
     QLineEdit *m_passwordEdit = nullptr;

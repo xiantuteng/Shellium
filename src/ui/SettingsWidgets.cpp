@@ -104,6 +104,21 @@ QString standaloneDialogStyleSheet(const bool dark)
             background: #45e394;
             border-color: #45e394;
         }
+        QPushButton[destructiveAction="true"] {
+            color: #ffffff;
+            background: @DANGER@;
+            border-color: @DANGER@;
+            font-weight: 700;
+        }
+        QPushButton[destructiveAction="true"]:hover {
+            background: @DANGER@;
+            border-color: @DANGER@;
+        }
+        QPushButton[destructiveAction="true"]:disabled {
+            color: @MUTED@;
+            background: @SIDEBAR@;
+            border-color: @BORDER@;
+        }
         QToolButton[advancedDisclosure="true"] {
             color: @MUTED@;
             background: transparent;
@@ -156,6 +171,8 @@ QString standaloneDialogStyleSheet(const bool dark)
     styleSheet.replace(QStringLiteral("@SELECTION@"),
                        dark ? QStringLiteral("#24413d") : QStringLiteral("#dff6ec"));
     styleSheet.replace(QStringLiteral("@ACCENT@"), accentColor().name());
+    styleSheet.replace(QStringLiteral("@DANGER@"),
+                       dark ? QStringLiteral("#ef776e") : QStringLiteral("#d84a41"));
     // 保险库会在 MainWindow 创建前使用本样式。追加专用片段而不是把选择器散落到基础规则中，
     // 可确保应用运行期间由全局样式复用时，得到与首次启动完全一致的安全操作视觉层级。
     return styleSheet + vaultDialogStyleSheet(dark) + hostChainDialogStyleSheet(dark);

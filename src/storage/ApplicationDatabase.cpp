@@ -1222,6 +1222,54 @@ bool ApplicationDatabase::removeVaultConfiguration(QString *errorMessage)
     }, errorMessage);
 }
 
+bool ApplicationDatabase::resetCredentialVault(QString *errorMessage)
+{
+    return runInTransaction([&](QString *innerError) {
+        // 先解除主机到凭据的逻辑引用，再删除密文。hosts.credential_id 历史上没有声明外键，
+        // 数据库不会替我们级联置空；若遗漏这一步，重置后的主机会持续报告“凭据不存在”。
+        QSqlQuery clearHostReferences(m_database);
+        if (!clearHostReferences.exec(QStringLiteral(
+                "UPDATE hosts SET credential_id = NULL "
+                "WHERE credential_id IS NOT NULL AND credential_id <> ''"))) {
+            reportQueryError(clearHostReferences, innerError);
+            return false;
+        }
+
+        // 主密码未知时任何凭据正文都不可验证地恢复；同时删除透明本机凭据可以保证“重置”
+        // 不会因异常混合数据而遗留部分旧秘密，用户随后从干净状态重新录入所需密码。
+        QSqlQuery deleteCredentials(m_database);
+        if (!deleteCredentials.exec(QStringLiteral("DELETE FROM credentials"))) {
+            reportQueryError(deleteCredentials, innerError);
+            return false;
+        }
+
+        QSqlQuery deleteVaultMetadata(m_database);
+        if (!deleteVaultMetadata.exec(QStringLiteral(
+                "DELETE FROM vault_metadata WHERE id = 1"))) {
+            reportQueryError(deleteVaultMetadata, innerError);
+            return false;
+        }
+
+        // 旧透明密钥不再保护任何数据，继续保留只会增加无意义的长期秘密。安全开关采用 UPSERT
+        // 明确写 0，而不是仅删除设置，使旧版本兼容判断也不会把残留状态误认成仍需解锁。
+        QSqlQuery clearSecuritySettings(m_database);
+        if (!clearSecuritySettings.exec(QStringLiteral(
+                "DELETE FROM settings WHERE key = 'security/local_credential_key'"))) {
+            reportQueryError(clearSecuritySettings, innerError);
+            return false;
+        }
+        QSqlQuery disablePasswordProtection(m_database);
+        if (!disablePasswordProtection.exec(QStringLiteral(
+                "INSERT INTO settings(key, value) "
+                "VALUES('security/vault_password_enabled', '0') "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value"))) {
+            reportQueryError(disablePasswordProtection, innerError);
+            return false;
+        }
+        return true;
+    }, errorMessage);
+}
+
 std::optional<VaultConfiguration>
 ApplicationDatabase::vaultConfiguration(QString *errorMessage) const
 {

@@ -585,6 +585,26 @@ void SettingsDialog::persistChanges()
             ? VaultDialog::enablePasswordProtection(m_credentialVault, this)
             : VaultDialog::disablePasswordProtection(m_credentialVault, this);
         if (!transitionSucceeded) {
+            if (!m_credentialVault->passwordProtectionEnabled()) {
+                // 关闭保护窗口中的“忘记密码”会完成不可逆重置，并以 Rejected 结束原密码操作。
+                // 这不是普通取消：必须把自动保存基准和服务快照同步为关闭，否则下次修改外观
+                // 会把旧 true 连同整份设置重新写回数据库。
+                TerminalSettings resetSettings = m_service->currentSettings();
+                resetSettings.vaultPasswordEnabled = false;
+                QString synchronizationError;
+                if (!m_service->save(resetSettings, &synchronizationError)) {
+                    m_service->applyTransient(resetSettings);
+                    QMessageBox::warning(
+                        this,
+                        tr("保险箱已重置"),
+                        tr("凭据已清除，但设置状态同步失败：%1").arg(synchronizationError));
+                }
+                m_persistedSettings = m_service->currentSettings();
+                populateControls(m_persistedSettings);
+                refreshDefaultSwatchPreview(m_persistedSettings);
+                updatePreviewCard(m_persistedSettings);
+                return;
+            }
             // 用户取消验证或迁移失败时，保险箱事务自身不会留下半迁移数据；同步恢复开关，避免
             // 界面看起来已经启用/关闭而实际安全策略没有变化。
             populateControls(m_persistedSettings);

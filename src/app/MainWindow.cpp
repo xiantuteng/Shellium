@@ -773,6 +773,29 @@ MainWindow::MainWindow(ApplicationDatabase *database,
                 unlockVaultAction->setEnabled(settings.vaultPasswordEnabled);
                 lockVaultAction->setEnabled(settings.vaultPasswordEnabled);
             });
+    connect(m_credentialVault,
+            &CredentialVault::vaultReset,
+            this,
+            [this]() {
+                // 重置可能来自主机编辑器、连接前解锁或设置窗口里的嵌套密码框，不能要求每个
+                // 调用点都各自同步设置服务。以保险箱信号为唯一收口，将运行态和 SQLite 开关
+                // 统一为关闭；settingsChanged 随后会刷新锁定菜单与所有相关界面。
+                TerminalSettings settings = m_settingsService->currentSettings();
+                settings.vaultPasswordEnabled = false;
+                QString settingsError;
+                if (!m_settingsService->save(settings, &settingsError)) {
+                    // 核心重置事务已经把数据库开关写为 0，此处失败只影响当前服务快照。仍先
+                    // 修正运行态，避免后续普通设置保存把旧 true 写回，再用持久提示暴露异常。
+                    m_settingsService->applyTransient(settings);
+                    showTransientMessage(
+                        tr("保险箱已重置，但设置状态同步失败：%1").arg(settingsError), 0);
+                } else {
+                    showTransientMessage(
+                        tr("保险箱已重置；主机配置已保留，请重新录入所需凭据"), 10000);
+                }
+                m_hostManager->refresh();
+                refreshProductivityTargets();
+            });
 
     connect(m_productivityWidget,
             &ProductivityWidget::statusMessage,
@@ -1439,6 +1462,21 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
         QPushButton[primaryAction="true"]:hover {
             background: #45e394;
             border-color: #45e394;
+        }
+        QPushButton[destructiveAction="true"] {
+            color: #ffffff;
+            background: @DANGER@;
+            border-color: @DANGER@;
+            font-weight: 700;
+        }
+        QPushButton[destructiveAction="true"]:hover {
+            background: @DANGER@;
+            border-color: @DANGER@;
+        }
+        QPushButton[destructiveAction="true"]:disabled {
+            color: @MUTED@;
+            background: @SIDEBAR@;
+            border-color: @BORDER@;
         }
         QPushButton[hostPrimaryAction="true"] {
             /* 固定按钮总高为 30px；内容高 20px + 上下内边距 6px + 边框 2px 留有余量，

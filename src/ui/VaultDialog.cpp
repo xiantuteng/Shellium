@@ -181,6 +181,22 @@ VaultDialog::VaultDialog(CredentialVault *vault,
                          m_confirmationErrorLabel);
     }
 
+    if (operation == Operation::Unlock || operation == Operation::Disable) {
+        auto *forgotPasswordButton = new QPushButton(tr("忘记密码？"), card);
+        forgotPasswordButton->setObjectName(QStringLiteral("vaultForgotPasswordButton"));
+        forgotPasswordButton->setProperty("hostChainDanger", true);
+        forgotPasswordButton->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
+        forgotPasswordButton->setToolTip(
+            tr("无法找回旧密码；可清除全部已保存凭据后重新开始"));
+        // 忘记密码入口使用危险操作的弱按钮样式：它必须容易找到，但不能与日常“解锁”主操作
+        // 争夺视觉焦点。真正的数据删除仍由下一层输入确认短语后执行。
+        card->addFullWidthWidget(forgotPasswordButton);
+        connect(forgotPasswordButton,
+                &QPushButton::clicked,
+                this,
+                &VaultDialog::resetForgottenPassword);
+    }
+
     if (creating) {
         // “主密码无法找回”属于一次性且不可逆的安全提醒，不能继续埋在普通说明文字末尾。
         // 独立警示框不会阻断输入，却能在用户提交前形成清晰的视觉停顿。
@@ -202,7 +218,8 @@ VaultDialog::VaultDialog(CredentialVault *vault,
                             QSize(15, 15))
                 .pixmap(QSize(15, 15)));
         auto *warningText = new QLabel(
-            tr("主密码无法找回，请妥善保管。丢失后已保存的 SSH 凭据将无法解密。"),
+            tr("主密码无法找回，请妥善保管。丢失后只能重置保险箱，已保存的 SSH 密码和"
+               "私钥口令将被永久删除。"),
             warningNotice);
         warningText->setObjectName(QStringLiteral("VaultWarningText"));
         warningText->setWordWrap(true);
@@ -291,6 +308,93 @@ VaultDialog::VaultDialog(CredentialVault *vault,
         });
     }
     m_passwordEdit->setFocus();
+}
+
+void VaultDialog::resetForgottenPassword()
+{
+    const QString confirmationPhrase = tr("重置保险箱");
+
+    QDialog confirmationDialog(this);
+    confirmationDialog.setObjectName(QStringLiteral("VaultResetConfirmationDialog"));
+    confirmationDialog.setWindowTitle(tr("重置保险箱"));
+    confirmationDialog.setMinimumWidth(430);
+    confirmationDialog.setWindowFlag(Qt::WindowContextHelpButtonHint, false);
+    ShelliumUi::applyStandaloneDialogStyle(&confirmationDialog);
+
+    auto *rootLayout = new QVBoxLayout(&confirmationDialog);
+    rootLayout->setContentsMargins(20, 18, 20, 18);
+    rootLayout->setSpacing(12);
+
+    auto *heading = new QLabel(tr("无法恢复旧凭据"), &confirmationDialog);
+    heading->setObjectName(QStringLiteral("VaultResetHeading"));
+    QFont headingFont = heading->font();
+    headingFont.setBold(true);
+    headingFont.setPointSize(headingFont.pointSize() + 2);
+    heading->setFont(headingFont);
+    rootLayout->addWidget(heading);
+
+    auto *explanation = new QLabel(
+        tr("重置会永久删除全部已保存的 SSH 密码和私钥口令，并解除它们与主机的关联。"
+           "主机地址、账号、端口、私钥文件路径、分组和主机链会保留。此操作无法撤销。"),
+        &confirmationDialog);
+    explanation->setObjectName(QStringLiteral("VaultResetExplanation"));
+    explanation->setWordWrap(true);
+    rootLayout->addWidget(explanation);
+
+    auto *instruction = new QLabel(
+        tr("请输入“%1”确认：").arg(confirmationPhrase), &confirmationDialog);
+    instruction->setObjectName(QStringLiteral("VaultResetInstruction"));
+    rootLayout->addWidget(instruction);
+
+    auto *confirmationEdit = new QLineEdit(&confirmationDialog);
+    confirmationEdit->setObjectName(QStringLiteral("vaultResetConfirmationEdit"));
+    confirmationEdit->setPlaceholderText(confirmationPhrase);
+    rootLayout->addWidget(confirmationEdit);
+
+    auto *footerLayout = new QHBoxLayout;
+    footerLayout->setContentsMargins(0, 4, 0, 0);
+    footerLayout->setSpacing(10);
+    auto *cancelButton = new QPushButton(tr("取消"), &confirmationDialog);
+    cancelButton->setObjectName(QStringLiteral("vaultResetCancelButton"));
+    auto *resetButton = new QPushButton(tr("永久删除并重置"), &confirmationDialog);
+    resetButton->setObjectName(QStringLiteral("vaultResetConfirmButton"));
+    resetButton->setProperty("destructiveAction", true);
+    resetButton->setEnabled(false);
+    footerLayout->addWidget(cancelButton);
+    footerLayout->addStretch(1);
+    footerLayout->addWidget(resetButton);
+    rootLayout->addLayout(footerLayout);
+
+    // 要求完整输入固定短语，而不是只点一次“确定”，可以显著降低误触。这里不 trim 输入，
+    // 前后多余空格也视为未确认，让实际匹配条件与界面展示的短语完全一致。
+    connect(confirmationEdit,
+            &QLineEdit::textChanged,
+            resetButton,
+            [resetButton, confirmationPhrase](const QString &text) {
+                resetButton->setEnabled(text == confirmationPhrase);
+            });
+    connect(cancelButton, &QPushButton::clicked, &confirmationDialog, &QDialog::reject);
+    connect(resetButton, &QPushButton::clicked, &confirmationDialog, &QDialog::accept);
+    confirmationEdit->setFocus();
+
+    if (confirmationDialog.exec() != QDialog::Accepted) {
+        return;
+    }
+
+    QString resetError;
+    if (!m_vault->resetPasswordProtection(&resetError)) {
+        // 数据库事务失败时旧保险箱仍保持完整，当前解锁窗口也继续存在，用户可以重试密码或
+        // 再次发起重置。使用内联错误避免在两个嵌套对话框之上再叠第三个模态消息框。
+        showInlineError(
+            tr("无法重置保险箱：%1").arg(
+                resetError.isEmpty() ? tr("本地数据库写入失败") : resetError),
+            m_passwordEdit);
+        return;
+    }
+
+    // 重置不是解锁成功：以拒绝结果结束旧密码流程，连接等调用方会中止当前动作；保险箱的
+    // vaultReset 信号会让主窗口刷新设置和主机引用，用户随后可重新录入需要的凭据。
+    QDialog::reject();
 }
 
 void VaultDialog::showInlineError(const QString &message, QLineEdit *focusTarget)
