@@ -70,7 +70,7 @@ private:
     /** @brief 重新加载主机下拉框并尽量保留当前选择。 */
     void reloadHosts();
 
-    /** @brief 读取当前主机规则并重建表格；运行时统计按 ruleId 合并显示。 */
+    /** @brief 读取当前主机规则并重建单列卡片列表；运行时统计按 ruleId 合并显示。 */
     void reloadRules();
 
     /** @brief 弹出新建或编辑规则对话框；existing 为空表示新建。 */
@@ -100,13 +100,13 @@ private:
      */
     void stopAllRules();
 
-    /** @brief 返回当前表格选择的规则 id；没有选择时返回空。 */
+    /** @brief 返回当前卡片列表选择的规则 id；没有选择时返回空。 */
     [[nodiscard]] QString selectedRuleId() const;
 
     /** @brief 返回 hostId 的第一条可运行根会话，并顺便清除已经析构的弱指针。 */
     [[nodiscard]] SshSessionStack *availableSession(const QString &hostId);
 
-    /** @brief 使用指定会话创建/替换规则运行时，并把统计更新接回表格。 */
+    /** @brief 使用指定会话创建/替换规则运行时，并把统计更新接回卡片列表。 */
     bool startRule(const PortForwardRule &rule,
                    SshSessionStack *sessionStack,
                    QString *errorMessage = nullptr);
@@ -128,7 +128,7 @@ private:
     [[nodiscard]] static QString stateText(PortForwardState state);
 
     /**
-     * @brief 生成表格第二列使用的本机与远程端点说明。
+     * @brief 生成规则卡片使用的本机与远程端点说明。
      * @param rule 待展示的完整转发规则。
      * @return 两行地址映射；远程转发会反转箭头以准确表达连接方向。
      */

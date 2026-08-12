@@ -68,11 +68,16 @@ namespace {
 /** @brief 一体化标题栏的固定逻辑高度，同时作为 macOS 交通灯垂直对齐的唯一基准。 */
 constexpr int kWindowChromeHeight = 52;
 
-/** @brief 侧栏允许缩小到的宽度，避免表单和动作按钮被挤到无法操作。 */
-constexpr int kSidebarMinimumWidth = 320;
+/**
+ * @brief 共享侧栏允许缩小到的宽度。
+ *
+ * 三个页面均已改成单列与可换行布局，因此 260px 仍可完整操作；继续限制为 320px 会让
+ * 小屏幕用户无法把更多宽度让给终端工作区，也与设计稿的拖动范围不一致。
+ */
+constexpr int kSidebarMinimumWidth = 260;
 
-/** @brief 参考设计以约 360px 侧栏承载完整搜索框、标签入口和双行主机卡片。 */
-constexpr int kSidebarDefaultWidth = 360;
+/** @brief 参考设计的共享侧栏默认宽度，首次打开时在信息密度和终端空间之间取平衡。 */
+constexpr int kSidebarDefaultWidth = 320;
 
 /** @brief 终端工作区的最小宽度，确保侧栏拖动后终端仍可进行基本交互。 */
 constexpr int kWorkspaceMinimumWidth = 420;
@@ -1459,30 +1464,65 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
             background-color: @SURFACE@;
             border: 0;
             outline: 0;
-            padding: 2px;
-            font-weight: 600;
+            padding: 6px;
+            font-weight: 400;
             selection-color: @TEXT@;
-            selection-background-color: @SELECTION@;
+            selection-background-color: transparent;
         }
         QTreeWidget#PortForwardHostTree QWidget {
             background-color: @SURFACE@;
         }
         QTreeWidget#PortForwardHostTree::item {
-            min-height: 30px;
+            min-height: 0;
             border: 0;
-            /* QTreeView 的分支缩进区与内容区由两个子控件绘制。圆角 item 会把同一选中行
-               切成两块带阴影的胶囊；取消行圆角可以保持连续、清晰的整行底色。 */
             border-radius: 0;
-            padding: 3px 6px;
+            padding: 0;
         }
-        QTreeWidget#PortForwardHostTree::item:hover {
-            background: @RAISED@;
-        }
+        QTreeWidget#PortForwardHostTree::item:hover,
         QTreeWidget#PortForwardHostTree::item:selected,
         QTreeWidget#PortForwardHostTree::item:selected:active,
-        QTreeWidget#PortForwardHostTree::item:selected:!active {
-            color: @TEXT@;
+        QTreeWidget#PortForwardHostTree::item:selected:!active,
+        QTreeWidget#PortForwardHostTree::item:selected:hover {
+            /* 端口转发主机树复用主机管理的委托式交互背景。平台 QSS 保持透明，避免给缩进
+               区和实际节点区铺出一整条直角选中色。 */
+            background: transparent;
+        }
+        QLabel#PortForwardHostLabel {
+            font-weight: 700;
+        }
+        QPushButton[forwardingRuntimeAction="true"] {
+            /* 启停与“新建”同处一行，缩短左右内边距才能在 260px 最小侧栏内保持完整文字，
+               固定宽度由构造代码统一约束，避免不同平台字体导致两个按钮宽度跳变。 */
+            padding-left: 6px;
+            padding-right: 6px;
+        }
+        QListWidget#PortForwardRuleList {
+            background: @SURFACE@;
+            border: 1px solid @BORDER@;
+            border-radius: 10px;
+        }
+        QListWidget#PortForwardRuleList::item {
+            border-radius: 0;
+            border-bottom: 1px solid @BORDER@;
+            padding: 0;
+        }
+        QListWidget#PortForwardRuleList::item:selected,
+        QListWidget#PortForwardRuleList::item:selected:active,
+        QListWidget#PortForwardRuleList::item:selected:!active {
             background: @SELECTION@;
+        }
+        QLabel#PortForwardSummary {
+            color: @MUTED@;
+            background: @RAISED@;
+            border: 1px solid @BORDER@;
+            border-top: 0;
+            border-bottom-left-radius: 10px;
+            border-bottom-right-radius: 10px;
+            padding: 7px 9px;
+            font-size: 11px;
+        }
+        QLabel#PortForwardSecurityNotice {
+            color: @WARNING@;
         }
         QPlainTextEdit#TerminalView {
             color: palette(text);
@@ -1891,6 +1931,17 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
             hostTree->setProperty("hostIconSurfaceColor", surfaceBackground);
             hostTree->setProperty("hostHoverBackgroundColor", hostTreeHoverBackground);
             hostTree->viewport()->update();
+        }
+    }
+    if (m_portForwardManager != nullptr) {
+        if (auto *forwardingHostTree = m_portForwardManager->findChild<QAbstractItemView *>(
+                QStringLiteral("PortForwardHostTree"))) {
+            // 端口转发的主机下拉树采用与主机管理同源的委托式卡片。两棵树必须读取完全
+            // 相同的主题色属性，否则应用主题与系统主题不一致时又会出现明显的页面割裂。
+            forwardingHostTree->setProperty("hostIconSurfaceColor", surfaceBackground);
+            forwardingHostTree->setProperty("hostHoverBackgroundColor",
+                                             hostTreeHoverBackground);
+            forwardingHostTree->viewport()->update();
         }
     }
 

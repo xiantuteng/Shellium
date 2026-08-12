@@ -7,13 +7,18 @@
 #include "terminal/TerminalView.h"
 
 #include <QCheckBox>
+#include <QComboBox>
+#include <QFormLayout>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QPushButton>
 #include <QSignalSpy>
 #include <QTest>
+#include <QTextEdit>
+#include <QToolButton>
 #include <QTreeWidget>
+#include <QVBoxLayout>
 
 #include <memory>
 
@@ -61,6 +66,9 @@ private slots:
      * 没有说明时要退化显示命令，分组节点则完全不设置这个角色。
      */
     void snippetTreeIsSingleColumnWithDescriptionFallbackToCommand();
+
+    /** @brief 效率工具的管理按钮、编辑表单和筛选器必须在 260px 侧栏中保持单列布局。 */
+    void widgetUsesNarrowSidebarLayouts();
 
     /** @brief 嵌套路由必须保留远端密钥 SFTP 兜底所需的外层认证配置与内层端口。 */
     void tunnelBrokerReturnsRemoteSftpRelayEndpoints();
@@ -372,6 +380,46 @@ void ProductivityTest::snippetTreeIsSingleColumnWithDescriptionFallbackToCommand
     QTreeWidgetItem *withoutDescItem = findTreeItem(folderItem, withoutDescription.id);
     QVERIFY(withoutDescItem != nullptr);
     QCOMPARE(withoutDescItem->data(0, kPreviewRole).toString(), withoutDescription.command);
+}
+
+void ProductivityTest::widgetUsesNarrowSidebarLayouts()
+{
+    ProductivityWidget widget(m_model.get());
+    widget.resize(260, 720);
+
+    // 三个树管理动作必须都是图标按钮；完整名称保留在 accessibleName 中，既节省宽度，
+    // 又不会让键盘或辅助技术用户失去动作语义。
+    const QStringList toolButtonNames = {
+        QStringLiteral("productivityNewGroup"),
+        QStringLiteral("productivityNewSnippet"),
+        QStringLiteral("productivityRemoveSnippet")};
+    for (const QString &objectName : toolButtonNames) {
+        auto *button = widget.findChild<QToolButton *>(objectName);
+        QVERIFY2(button != nullptr, qPrintable(QStringLiteral("缺少工具按钮：%1").arg(objectName)));
+        QCOMPARE(button->toolButtonStyle(), Qt::ToolButtonIconOnly);
+        QVERIFY2(!button->accessibleName().isEmpty(), "图标按钮必须提供完整无障碍名称");
+    }
+
+    auto *editorLayout = widget.findChild<QFormLayout *>(
+        QStringLiteral("productivitySnippetEditorLayout"));
+    auto *commandEdit = widget.findChild<QTextEdit *>(
+        QStringLiteral("productivityCommandEdit"));
+    QVERIFY(editorLayout != nullptr);
+    QVERIFY(commandEdit != nullptr);
+    QCOMPARE(editorLayout->rowWrapPolicy(), QFormLayout::WrapAllRows);
+
+    // 历史页必须由纵向布局直接承载两个筛选器。检查布局拓扑而非窗口几何，可以在没有
+    // 图形屏幕的 CI 环境中稳定运行，也不绑定平台字体产生的像素差异。
+    auto *historyPage = widget.findChild<QWidget *>(QStringLiteral("productivityHistoryPage"));
+    auto *historyHost = widget.findChild<QComboBox *>(QStringLiteral("productivityHistoryHost"));
+    auto *historyPrefix = widget.findChild<QLineEdit *>(QStringLiteral("productivityHistoryPrefix"));
+    QVERIFY(historyPage != nullptr);
+    QVERIFY(historyHost != nullptr);
+    QVERIFY(historyPrefix != nullptr);
+    auto *historyLayout = qobject_cast<QVBoxLayout *>(historyPage->layout());
+    QVERIFY(historyLayout != nullptr);
+    QVERIFY2(historyLayout->indexOf(historyHost) < historyLayout->indexOf(historyPrefix),
+             "主机筛选与命令前缀筛选必须上下堆叠，不能在窄侧栏中并排互相挤压");
 }
 
 void ProductivityTest::tunnelBrokerReturnsRemoteSftpRelayEndpoints()

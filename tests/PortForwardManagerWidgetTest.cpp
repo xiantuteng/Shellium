@@ -5,9 +5,13 @@
 
 #include <QComboBox>
 #include <QFrame>
+#include <QHBoxLayout>
+#include <QItemSelectionModel>
 #include <QLabel>
 #include <QListWidget>
+#include <QPushButton>
 #include <QSet>
+#include <QStyle>
 #include <QTest>
 #include <QTreeWidget>
 #include <QTreeWidgetItemIterator>
@@ -43,6 +47,12 @@ private slots:
 
     /** @brief 运行时失败后卡片必须直接展示具体原因，不能只把错误藏在悬停提示里。 */
     void failedRuleCardDisplaysConcreteReason();
+
+    /** @brief 工具栏只保留新建与靠右的紧凑批量启停按钮，不再常驻编辑和删除。 */
+    void toolbarKeepsOnlyAddAndRightAlignedCompactRuntimeActions();
+
+    /** @brief 异步状态刷新重建卡片列表后，必须按稳定规则 id 恢复用户选择。 */
+    void runtimeRefreshPreservesSelectedRule();
 
 private:
     /** @brief 递归查找控件树中第一个显示指定文本的 QLabel。 */
@@ -140,6 +150,8 @@ void PortForwardManagerWidgetTest::ruleListRendersEachRuleAsACardWithStableIdAnd
 
         QWidget *rowWidget = list->itemWidget(item);
         QVERIFY2(rowWidget != nullptr, "每一行都必须挂一个自定义卡片控件，不能是裸文字项");
+        QVERIFY2(rowWidget->testAttribute(Qt::WA_TransparentForMouseEvents),
+                 "卡片内容必须透传鼠标事件，否则点击文字区域无法稳定选中列表项");
     }
     QCOMPARE(seenIds, QSet<QString>({localRule.id, dynamicRule.id}));
 
@@ -280,12 +292,15 @@ void PortForwardManagerWidgetTest::hostSelectorUsesNonSelectableTreeGroupsAndDis
     QCOMPARE(nestedItem->parent()->text(0), databaseGroup.name);
     QVERIFY(nestedItem->parent()->parent() != nullptr);
     QCOMPARE(nestedItem->parent()->parent()->text(0), productionGroup.name);
-    QCOMPARE(nestedItem->text(0), QStringLiteral("核心 MySQL  (2)"));
+    QCOMPARE(nestedItem->text(0), nestedHost.name);
+    constexpr int kForwardingCountRole = Qt::UserRole + 34;
+    QCOMPARE(nestedItem->data(0, kForwardingCountRole).toInt(), 2);
 
     QTreeWidgetItem *rootItem = findHostTreeItem(hostTree, rootHost.id);
     QVERIFY(rootItem != nullptr);
     QVERIFY(rootItem->parent() == nullptr);
-    QCOMPARE(rootItem->text(0), QStringLiteral("独立跳板机  (0)"));
+    QCOMPARE(rootItem->text(0), rootHost.name);
+    QCOMPARE(rootItem->data(0, kForwardingCountRole).toInt(), 0);
 
     constexpr int kHostIdRole = Qt::UserRole + 32;
     QTreeWidgetItem *topGroupItem = nestedItem->parent()->parent();
@@ -299,7 +314,14 @@ void PortForwardManagerWidgetTest::hostSelectorUsesNonSelectableTreeGroupsAndDis
     QCOMPARE(hostCombo->itemText(nestedComboIndex), QStringLiteral("核心 MySQL  (2)"));
     const int rootComboIndex = hostCombo->findData(rootHost.id);
     QVERIFY(rootComboIndex >= 0);
-    QCOMPARE(hostCombo->itemText(rootComboIndex), QStringLiteral("独立跳板机  (0)"));
+    QCOMPARE(hostCombo->itemText(rootComboIndex), rootHost.name);
+
+    // 与主机管理一样关闭平台分支装饰，并使用单列委托统一绘制箭头、层级线和圆角选中态。
+    QVERIFY(!hostTree->rootIsDecorated());
+    QCOMPARE(hostTree->columnCount(), 1);
+    QCOMPARE(hostTree->indentation(), 32);
+    QCOMPARE(QString::fromLatin1(hostTree->itemDelegate()->metaObject()->className()),
+             QStringLiteral("QStyledItemDelegate"));
 }
 
 void PortForwardManagerWidgetTest::emptyStateShowsGuidanceWhenNoHostsSaved()
@@ -354,8 +376,86 @@ void PortForwardManagerWidgetTest::failedRuleCardDisplaysConcreteReason()
     QCOMPARE(errorLabel->text(),
              QStringLiteral("失败原因：监听 127.0.0.1:8080 失败：Address already in use 请更换端口"));
     QVERIFY2(errorLabel->wordWrap(), "较长失败原因必须允许换行，不能在窄侧栏中被直接裁掉");
-    QVERIFY2(findLabelWithText(list, QStringLiteral("失败 / 0")) != nullptr,
-             "展示失败原因时不能丢失原有状态与活动连接数");
+    // 设计稿只在确有活动连接时追加数量；失败态的零连接没有决策价值，显示“· 0”反而会
+    // 干扰用户优先阅读失败原因。因此这里验证简化后的状态文本，同时继续要求原因可见。
+    QVERIFY2(findLabelWithText(list, QStringLiteral("失败")) != nullptr,
+             "展示失败原因时不能丢失原有状态");
+}
+
+void PortForwardManagerWidgetTest::toolbarKeepsOnlyAddAndRightAlignedCompactRuntimeActions()
+{
+    PortForwardManagerWidget widget(m_database.get());
+    widget.resize(260, 600);
+
+    auto *addButton = widget.findChild<QPushButton *>(QStringLiteral("AddPortForwardButton"));
+    auto *startButton = widget.findChild<QPushButton *>(
+        QStringLiteral("StartAllPortForwardsButton"));
+    auto *stopButton = widget.findChild<QPushButton *>(
+        QStringLiteral("StopAllPortForwardsButton"));
+    auto *ruleList = widget.findChild<QListWidget *>(QStringLiteral("PortForwardRuleList"));
+    QVERIFY(addButton != nullptr);
+    QVERIFY2(widget.findChild<QWidget *>(QStringLiteral("EditPortForwardButton")) == nullptr,
+             "新建按钮右侧不应继续常驻编辑按钮");
+    QVERIFY2(widget.findChild<QWidget *>(QStringLiteral("DeletePortForwardButton")) == nullptr,
+             "新建按钮右侧不应继续常驻删除按钮");
+    QVERIFY(startButton != nullptr);
+    QVERIFY(stopButton != nullptr);
+    QVERIFY(ruleList != nullptr);
+
+    // 四个可见入口必须处于同一布局，且伸缩项位于新建和启停之间，由此保证启停靠右。
+    auto *managementLayout = widget.findChild<QHBoxLayout *>(
+        QStringLiteral("PortForwardManagementLayout"));
+    QVERIFY(managementLayout != nullptr);
+    QVERIFY(managementLayout->indexOf(addButton) >= 0);
+    QVERIFY(managementLayout->indexOf(startButton) > managementLayout->indexOf(addButton));
+    QVERIFY(managementLayout->indexOf(stopButton) > managementLayout->indexOf(startButton));
+    QCOMPARE(startButton->width(), 66);
+    QCOMPARE(stopButton->width(), 66);
+}
+
+void PortForwardManagerWidgetTest::runtimeRefreshPreservesSelectedRule()
+{
+    HostRecord host;
+    host.id = QStringLiteral("selection-host");
+    host.kind = HostNodeKind::Host;
+    host.name = QStringLiteral("选择测试主机");
+    host.host = QStringLiteral("10.0.0.12");
+    QString error;
+    QVERIFY2(m_database->saveHost(host, &error), qPrintable(error));
+
+    for (int index = 0; index < 2; ++index) {
+        PortForwardRule rule;
+        rule.id = QStringLiteral("selection-rule-%1").arg(index);
+        rule.hostId = host.id;
+        rule.name = QStringLiteral("选择规则 %1").arg(index + 1);
+        rule.bindPort = static_cast<quint16>(8100 + index);
+        rule.targetHost = QStringLiteral("127.0.0.1");
+        rule.targetPort = 80;
+        QVERIFY2(m_database->savePortForward(rule, &error), qPrintable(error));
+    }
+
+    PortForwardManagerWidget widget(m_database.get());
+    auto *list = widget.findChild<QListWidget *>(QStringLiteral("PortForwardRuleList"));
+    QVERIFY(list != nullptr);
+    QCOMPARE(list->count(), 2);
+    constexpr int kRuleIdRole = Qt::UserRole + 31;
+    QListWidgetItem *selectedItem = list->item(1);
+    const QString selectedRuleId = selectedItem->data(kRuleIdRole).toString();
+    list->setCurrentItem(selectedItem, QItemSelectionModel::ClearAndSelect);
+    QVERIFY(selectedItem->isSelected());
+
+    PortForwardStatistics statistics;
+    statistics.state = PortForwardState::Starting;
+    QVERIFY2(QMetaObject::invokeMethod(&widget,
+                                       "applyRuntimeStatistics",
+                                       Qt::DirectConnection,
+                                       Q_ARG(QString, selectedRuleId),
+                                       Q_ARG(PortForwardStatistics, statistics)),
+             "测试无法触发模拟异步状态刷新");
+
+    QVERIFY2(list->currentItem() != nullptr, "状态刷新后当前选择不得变为空");
+    QCOMPARE(list->currentItem()->data(kRuleIdRole).toString(), selectedRuleId);
+    QVERIFY2(list->currentItem()->isSelected(), "恢复 currentItem 时也必须恢复实际选中标记");
 }
 
 QTEST_MAIN(PortForwardManagerWidgetTest)

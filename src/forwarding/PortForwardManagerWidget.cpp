@@ -6,12 +6,14 @@
 #include "ui/UiIcons.h"
 
 #include <QAction>
+#include <QApplication>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QFormLayout>
 #include <QFrame>
+#include <QFileIconProvider>
 #include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QKeyEvent>
@@ -20,18 +22,22 @@
 #include <QListWidget>
 #include <QMessageBox>
 #include <QMenu>
+#include <QMouseEvent>
+#include <QPainter>
+#include <QPolygonF>
 #include <QPushButton>
 #include <QScreen>
 #include <QSignalBlocker>
 #include <QSpinBox>
 #include <QStringList>
-#include <QToolButton>
+#include <QStyledItemDelegate>
 #include <QTreeWidget>
 #include <QTreeWidgetItemIterator>
 #include <QVBoxLayout>
 #include <QUuid>
 
 #include <algorithm>
+#include <functional>
 #include <utility>
 
 #include <unistd.h>
@@ -46,6 +52,315 @@ constexpr int kHostIdRole = Qt::UserRole + 32;
 
 /** @brief 主机树节点保存 HostNodeKind 的角色，供键盘激活时区分分组与可选主机。 */
 constexpr int kHostKindRole = Qt::UserRole + 33;
+
+/** @brief 主机树节点保存端口转发规则数量；零值不追加任何显示文本。 */
+constexpr int kForwardingCountRole = Qt::UserRole + 34;
+
+/**
+ * @brief 返回与主机管理选中卡片一致的品牌绿色。
+ *
+ * 端口转发控件的独立测试目标没有链接 SettingsWidgets.cpp，不能为了一个纯展示色引入整个
+ * 设置组件依赖。这里使用应用主题的稳定品牌色，并仍通过透明度区分背景与描边。
+ */
+QColor forwardingAccentColor()
+{
+    return QColor(QStringLiteral("#2bd981"));
+}
+
+/**
+ * @brief 返回与主机管理及本地文件树同源的系统文件夹图标。
+ * @param context 平台图标不可用时提供主题色的上下文控件。
+ * @return 系统文件夹图标；不可用时退回 Shellium 文件夹图标。
+ *
+ * 使用 QFileIconProvider 能让端口转发下拉树与主机管理的分组图标完全一致，而不是继续
+ * 使用一枚颜色和线宽不同的自绘图标，造成两个页面像来自不同产品。
+ */
+QIcon forwardingFolderIcon(const QWidget *context)
+{
+    Q_ASSERT(context != nullptr);
+    static QFileIconProvider iconProvider;
+    const QIcon platformFolder = iconProvider.icon(QFileIconProvider::Folder);
+    return platformFolder.isNull()
+        ? UiIcons::symbol(context,
+                          UiIcons::Symbol::Folder,
+                          context->palette().color(QPalette::WindowText),
+                          QSize(18, 18))
+        : platformFolder;
+}
+
+/** @brief 端口转发主机树的分组行固定高度，与主机管理保持一致。 */
+constexpr int kForwardingFolderRowHeight = 34;
+
+/** @brief 端口转发主机树的主机行固定高度；单行内容无需沿用主机管理的双行 50px。 */
+constexpr int kForwardingHostRowHeight = 38;
+
+/**
+ * @brief 以主机管理树的视觉规则绘制端口转发主机选择树。
+ *
+ * 分组使用“箭头—系统文件夹—粗体名称”，主机使用圆角图标容器、常规字重名称和低对比
+ * 数量文字。选中与悬停背景仅绘制在实际节点区域，层级线保持中性，避免原生分支样式形成
+ * 黑色双边框、整行直角选中色以及过密的树状线。
+ */
+class PortForwardHostDelegate final : public QStyledItemDelegate {
+public:
+    using QStyledItemDelegate::QStyledItemDelegate;
+
+    /** @brief 点击分组左侧展开热区时由宿主切换展开状态。 */
+    std::function<void(const QModelIndex &)> onToggleRequested;
+
+protected:
+    void paint(QPainter *painter,
+               const QStyleOptionViewItem &option,
+               const QModelIndex &index) const override
+    {
+        if (static_cast<HostNodeKind>(index.data(kHostKindRole).toInt())
+            == HostNodeKind::Folder) {
+            paintFolder(painter, option, index);
+            return;
+        }
+        paintHost(painter, option, index);
+    }
+
+    QSize sizeHint(const QStyleOptionViewItem &option, const QModelIndex &index) const override
+    {
+        QSize hint = QStyledItemDelegate::sizeHint(option, index);
+        hint.setHeight(static_cast<HostNodeKind>(index.data(kHostKindRole).toInt())
+                               == HostNodeKind::Folder
+                           ? kForwardingFolderRowHeight
+                           : kForwardingHostRowHeight);
+        return hint;
+    }
+
+    bool editorEvent(QEvent *event,
+                     QAbstractItemModel *model,
+                     const QStyleOptionViewItem &option,
+                     const QModelIndex &index) override
+    {
+        if (event != nullptr && event->type() == QEvent::MouseButtonRelease
+            && onToggleRequested
+            && static_cast<HostNodeKind>(index.data(kHostKindRole).toInt())
+                   == HostNodeKind::Folder) {
+            auto *mouseEvent = static_cast<QMouseEvent *>(event);
+            const QRect toggleArea(option.rect.left(), option.rect.top(), 26, option.rect.height());
+            if (mouseEvent->button() == Qt::LeftButton
+                && toggleArea.contains(mouseEvent->position().toPoint())) {
+                onToggleRequested(index);
+                return true;
+            }
+        }
+        return QStyledItemDelegate::editorEvent(event, model, option, index);
+    }
+
+private:
+    /** @brief 清除平台 item 文本和交互态，只保留透明基础背景。 */
+    static void paintBase(QPainter *painter,
+                          const QStyleOptionViewItem &option,
+                          const QModelIndex &index)
+    {
+        QStyleOptionViewItem background = option;
+        background.text.clear();
+        background.icon = {};
+        background.features &= ~QStyleOptionViewItem::HasDecoration;
+        background.state &= ~(QStyle::State_Selected | QStyle::State_MouseOver);
+        const QWidget *widget = option.widget;
+        QStyle *style = widget != nullptr ? widget->style() : QApplication::style();
+        style->drawControl(QStyle::CE_ItemViewItem, &background, painter, widget);
+
+        const bool selected = option.state.testFlag(QStyle::State_Selected);
+        const bool hovered = option.state.testFlag(QStyle::State_MouseOver);
+        if (!selected && !hovered) {
+            return;
+        }
+
+        painter->save();
+        painter->setRenderHint(QPainter::Antialiasing, true);
+        QColor fill;
+        QColor border;
+        if (selected) {
+            fill = forwardingAccentColor();
+            fill.setAlphaF(0.13F);
+            border = forwardingAccentColor();
+            border.setAlphaF(0.42F);
+        } else if (widget != nullptr) {
+            fill = QColor(widget->property("hostHoverBackgroundColor").toString());
+        }
+        if (!fill.isValid()) {
+            fill = QColor(QStringLiteral("#e1e7eb"));
+        }
+        painter->setPen(selected ? QPen(border, 1) : Qt::NoPen);
+        painter->setBrush(fill);
+        painter->drawRoundedRect(option.rect.adjusted(0, 2, -1, -2), 9, 9);
+        painter->restore();
+    }
+
+    /** @brief 为所有非顶层节点绘制与主机管理相同的低透明度父子引导线。 */
+    static void paintGuideLine(QPainter *painter,
+                               const QStyleOptionViewItem &option,
+                               const QModelIndex &index)
+    {
+        if (!index.parent().isValid()) {
+            return;
+        }
+        QColor lineColor = option.palette.color(QPalette::Text);
+        lineColor.setAlphaF(0.14F);
+        const int lineX = option.rect.left() - 15;
+        painter->save();
+        painter->setPen(QPen(lineColor, 1));
+        painter->drawLine(lineX, option.rect.top(), lineX, option.rect.bottom());
+        painter->drawLine(lineX, option.rect.center().y(), option.rect.left() - 3,
+                          option.rect.center().y());
+        painter->restore();
+    }
+
+    /** @brief 绘制分组的箭头、系统文件夹图标与粗体名称。 */
+    static void paintFolder(QPainter *painter,
+                            const QStyleOptionViewItem &option,
+                            const QModelIndex &index)
+    {
+        paintBase(painter, option, index);
+        paintGuideLine(painter, option, index);
+        const QColor textColor = option.palette.color(QPalette::Text);
+        const bool hasChildren = index.model() != nullptr && index.model()->rowCount(index) > 0;
+
+        painter->save();
+        painter->setRenderHint(QPainter::Antialiasing, true);
+        if (hasChildren) {
+            QColor arrowColor = textColor;
+            arrowColor.setAlphaF(0.55F);
+            painter->setPen(Qt::NoPen);
+            painter->setBrush(arrowColor);
+            const QPointF center(option.rect.left() + 12, option.rect.center().y());
+            QPolygonF arrow;
+            if (option.state.testFlag(QStyle::State_Open)) {
+                arrow << QPointF(center.x() - 4, center.y() - 2)
+                      << QPointF(center.x() + 4, center.y() - 2)
+                      << QPointF(center.x(), center.y() + 3);
+            } else {
+                arrow << QPointF(center.x() - 2, center.y() - 4)
+                      << QPointF(center.x() - 2, center.y() + 4)
+                      << QPointF(center.x() + 3, center.y());
+            }
+            painter->drawPolygon(arrow);
+        }
+
+        qvariant_cast<QIcon>(index.data(Qt::DecorationRole))
+            .paint(painter,
+                   QRect(option.rect.left() + 29, option.rect.center().y() - 9, 18, 18),
+                   Qt::AlignCenter);
+        QFont font = option.font;
+        font.setBold(true);
+        painter->setFont(font);
+        painter->setPen(textColor);
+        const QRect textRect(option.rect.left() + 52,
+                             option.rect.top(),
+                             std::max(0, option.rect.width() - 60),
+                             option.rect.height());
+        painter->drawText(textRect,
+                          Qt::AlignLeft | Qt::AlignVCenter,
+                          QFontMetrics(font).elidedText(index.data(Qt::DisplayRole).toString(),
+                                                        Qt::ElideRight,
+                                                        textRect.width()));
+        painter->restore();
+    }
+
+    /** @brief 绘制主机图标容器、名称，以及仅在非零时出现的灰色数量文字。 */
+    static void paintHost(QPainter *painter,
+                          const QStyleOptionViewItem &option,
+                          const QModelIndex &index)
+    {
+        paintBase(painter, option, index);
+        paintGuideLine(painter, option, index);
+        const bool selected = option.state.testFlag(QStyle::State_Selected);
+        const QWidget *widget = option.widget;
+        const QRect iconBox(option.rect.left() + 6,
+                            option.rect.center().y() - 13,
+                            26,
+                            26);
+        QColor iconFill = selected ? forwardingAccentColor() : QColor();
+        if (!selected && widget != nullptr) {
+            iconFill = QColor(widget->property("hostIconSurfaceColor").toString());
+        }
+        if (!iconFill.isValid()) {
+            iconFill = option.palette.color(QPalette::Base);
+        }
+
+        painter->save();
+        painter->setRenderHint(QPainter::Antialiasing, true);
+        QColor iconBorder = option.palette.color(QPalette::Text);
+        iconBorder.setAlphaF(selected ? 0.0F : 0.12F);
+        painter->setPen(selected ? Qt::NoPen : QPen(iconBorder, 1));
+        painter->setBrush(iconFill);
+        painter->drawRoundedRect(iconBox.adjusted(0, 0, -1, -1), 8, 8);
+        UiIcons::symbol(widget,
+                        UiIcons::Symbol::HostItem,
+                        selected ? QColor(QStringLiteral("#0c2f24"))
+                                 : option.palette.color(QPalette::Text),
+                        QSize(14, 14))
+            .paint(painter, iconBox.adjusted(6, 6, -6, -6), Qt::AlignCenter);
+
+        QFont nameFont = option.font;
+        nameFont.setBold(false);
+        const QFontMetrics nameMetrics(nameFont);
+        const int count = index.data(kForwardingCountRole).toInt();
+        const QString countText = count > 0 ? QStringLiteral("(%1)").arg(count) : QString();
+        // 数量只是名称后的次要文字，保持同字号并降低透明度即可；不强行缩小可以避免像素
+        // 字体或系统字体没有有效 pointSizeF 时触发无效字号，同时更接近主机管理的标签节奏。
+        const QFont countFont = nameFont;
+        const QFontMetrics countMetrics(countFont);
+        const int countWidth = countText.isEmpty()
+            ? 0
+            : countMetrics.horizontalAdvance(countText) + 8;
+        const int textLeft = option.rect.left() + 42;
+        const QRect nameRect(textLeft,
+                             option.rect.top(),
+                             std::max(0, option.rect.right() - textLeft - countWidth - 8),
+                             option.rect.height());
+        painter->setFont(nameFont);
+        painter->setPen(option.palette.color(QPalette::Text));
+        painter->drawText(nameRect,
+                          Qt::AlignLeft | Qt::AlignVCenter,
+                          nameMetrics.elidedText(index.data(Qt::DisplayRole).toString(),
+                                                 Qt::ElideRight,
+                                                 nameRect.width()));
+
+        if (!countText.isEmpty()) {
+            QColor countColor = option.palette.color(QPalette::Text);
+            countColor.setAlphaF(0.52F);
+            painter->setFont(countFont);
+            painter->setPen(countColor);
+            painter->drawText(QRect(nameRect.right() + 6,
+                                    option.rect.top(),
+                                    countWidth,
+                                    option.rect.height()),
+                              Qt::AlignLeft | Qt::AlignVCenter,
+                              countText);
+        }
+        painter->restore();
+    }
+};
+
+/**
+ * @brief 关闭平台原生分支绘制的端口转发主机树。
+ *
+ * 箭头和层级线已经由 PortForwardHostDelegate 按主机管理规范绘制；若继续让 QTreeWidget
+ * 绘制平台分支，macOS 会叠加黑色竖线、原生箭头和缩进区选中底色，正是上一版显得突兀
+ * 的主要原因。这里只禁用分支绘制，不改变滚动、选择或键盘导航行为。
+ */
+class PortForwardHostTree final : public QTreeWidget {
+public:
+    using QTreeWidget::QTreeWidget;
+
+protected:
+    /** @brief 保持分支区透明；实际箭头和引导线统一由项目委托绘制。 */
+    void drawBranches(QPainter *painter,
+                      const QRect &rect,
+                      const QModelIndex &index) const override
+    {
+        Q_UNUSED(painter)
+        Q_UNUSED(rect)
+        Q_UNUSED(index)
+    }
+};
 
 /**
  * @brief 端口转发专用的树形主机下拉框。
@@ -65,7 +380,7 @@ public:
     explicit HostTreeComboBox(QWidget *parent = nullptr)
         : QComboBox(parent)
         , m_popup(new QFrame(this, Qt::Popup | Qt::FramelessWindowHint))
-        , m_tree(new QTreeWidget(m_popup))
+        , m_tree(new PortForwardHostTree(m_popup))
     {
         setObjectName(QStringLiteral("PortForwardHostCombo"));
         setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
@@ -79,7 +394,9 @@ public:
         m_popup->setAttribute(Qt::WA_TranslucentBackground, false);
         m_popup->setAttribute(Qt::WA_StyledBackground, true);
         m_popup->setAutoFillBackground(true);
-        m_popup->setFrameShape(QFrame::StyledPanel);
+        // 外框完全交给应用 QSS 绘制。StyledPanel 在 macOS 上会额外叠一层原生黑框，形成
+        // 截图中的双边界，与主机管理的轻量表面卡片明显不一致。
+        m_popup->setFrameShape(QFrame::NoFrame);
         m_popup->setFrameShadow(QFrame::Plain);
         auto *popupLayout = new QVBoxLayout(m_popup);
         // 内容与外框之间保留 5px 安全区，滚动时文字和选中背景不会覆盖边框。
@@ -92,13 +409,24 @@ public:
         m_tree->viewport()->setAttribute(Qt::WA_StyledBackground, true);
         m_tree->viewport()->setAutoFillBackground(true);
         m_tree->setHeaderHidden(true);
-        m_tree->setRootIsDecorated(true);
+        m_tree->setColumnCount(1);
+        // 与主机管理一致：平台分支装饰关闭，由委托统一画箭头、圆角选中背景和轻量连线。
+        // 这样不会出现原生黑框、直角选中条和重复箭头，也不会为徽章第二列牺牲名称宽度。
+        m_tree->setRootIsDecorated(false);
         m_tree->setItemsExpandable(true);
         m_tree->setExpandsOnDoubleClick(true);
-        m_tree->setIndentation(18);
+        m_tree->setIndentation(32);
+        m_tree->setIconSize(QSize(18, 18));
         m_tree->setUniformRowHeights(true);
         m_tree->setSelectionMode(QAbstractItemView::SingleSelection);
         m_tree->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        m_tree->setProperty("hostIconSurfaceColor", QStringLiteral("#ffffff"));
+        m_tree->setProperty("hostHoverBackgroundColor", QStringLiteral("#e1e7eb"));
+        auto *treeDelegate = new PortForwardHostDelegate(m_tree);
+        treeDelegate->onToggleRequested = [this](const QModelIndex &index) {
+            m_tree->setExpanded(index, !m_tree->isExpanded(index));
+        };
+        m_tree->setItemDelegate(treeDelegate);
         m_tree->installEventFilter(this);
         popupLayout->addWidget(m_tree);
 
@@ -136,7 +464,7 @@ public:
                             UiIcons::Symbol::HostItem,
                             palette().color(QPalette::WindowText),
                             QSize(16, 16)),
-                        tr("%1  (%2)").arg(record.name).arg(count),
+                        count > 0 ? tr("%1  (%2)").arg(record.name).arg(count) : record.name,
                         record.id);
             }
         }
@@ -150,13 +478,11 @@ public:
             for (const HostRecord &record : children) {
                 const int count = forwardingCounts.value(record.id, 0);
                 auto *item = new QTreeWidgetItem;
-                item->setText(0,
-                              record.kind == HostNodeKind::Host
-                                  ? tr("%1  (%2)").arg(record.name).arg(count)
-                                  : record.name);
+                item->setText(0, record.name);
                 item->setData(0, kHostKindRole, static_cast<int>(record.kind));
                 if (record.kind == HostNodeKind::Host) {
                     item->setData(0, kHostIdRole, record.id);
+                    item->setData(0, kForwardingCountRole, count);
                     item->setIcon(0, UiIcons::symbol(
                                          this,
                                          UiIcons::Symbol::HostItem,
@@ -164,11 +490,7 @@ public:
                                          QSize(16, 16)));
                     item->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
                 } else {
-                    item->setIcon(0, UiIcons::symbol(
-                                         this,
-                                         UiIcons::Symbol::Folder,
-                                         palette().color(QPalette::WindowText),
-                                         QSize(16, 16)));
+                    item->setIcon(0, forwardingFolderIcon(this));
                     // 分组只承担组织和展开功能，主动移除 ItemIsSelectable 可以同时阻止
                     // 鼠标和键盘把它写入当前 hostId，符合数据库端“规则不能绑定分组”的约束。
                     item->setFlags(Qt::ItemIsEnabled);
@@ -182,6 +504,7 @@ public:
                 if (record.kind == HostNodeKind::Folder) {
                     self(self, item, record.id);
                 }
+
             }
         };
         appendChildren(appendChildren, nullptr, QString());
@@ -207,6 +530,8 @@ protected:
         m_popup->setPalette(popupPalette);
         m_tree->setPalette(popupPalette);
         m_tree->viewport()->setPalette(popupPalette);
+        // MainWindow 会像主机管理一样把应用主题的表面色写入动态属性；这里不再从操作系统
+        // 调色板反推，否则“系统深色 + 应用浅色”等组合会覆盖正确属性并造成两页风格割裂。
 
         const QPoint belowField = mapToGlobal(QPoint(0, height() + 4));
         QScreen *screen = QGuiApplication::screenAt(belowField);
@@ -316,27 +641,6 @@ private:
 };
 
 /**
- * @brief 将端口转发侧栏的次要动作配置为紧凑图标按钮。
- * @param button 待配置按钮；不得为空。
- * @param accessibleName 完整动作名称，用于 Tooltip 与辅助技术。
- *
- * 端口转发默认位于窄侧栏，即使用户可拖动加宽，五个文字按钮在最小宽度下仍会造成横向
- * 滚动。保留“新建”主操作文字，编辑、删除、启动和停止使用图标，并通过 Tooltip 与右键
- * 菜单提供完整动作名称。
- */
-void configureForwardingIconButton(QToolButton *button, const QString &accessibleName)
-{
-    Q_ASSERT(button != nullptr);
-    button->setProperty("compactIconButton", true);
-    button->setToolButtonStyle(Qt::ToolButtonIconOnly);
-    button->setAutoRaise(false);
-    button->setFixedSize(34, 34);
-    button->setIconSize(QSize(17, 17));
-    button->setToolTip(accessibleName);
-    button->setAccessibleName(accessibleName);
-}
-
-/**
  * @brief 新建/编辑单条转发规则的模态表单。
  *
  * 表单只产生经过基础校验的值对象，不直接写数据库或启动网络；这样取消不会留下半保存
@@ -354,8 +658,10 @@ public:
                    : QUuid::createUuid().toString(QUuid::WithoutBraces))
     {
         setWindowTitle(existing.has_value() ? tr("编辑端口转发") : tr("新建端口转发"));
+        setMinimumWidth(480);
         auto *layout = new QVBoxLayout(this);
         auto *form = new QFormLayout;
+        form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
         m_nameEdit = new QLineEdit(this);
         m_typeCombo = new QComboBox(this);
         m_typeCombo->addItem(tr("本地转发 (-L)"), static_cast<int>(PortForwardType::Local));
@@ -370,12 +676,30 @@ public:
         m_targetPortSpin->setRange(1, 65535);
         m_targetPortSpin->setValue(80);
         m_autoStartCheck = new QCheckBox(tr("根 SSH 连接成功后自动启动"), this);
+        // 地址与端口在语义上是同一个端点。组合为一行不仅贴近常见 host:port 写法，也让
+        // 用户能够横向对照监听端点和目标端点，避免在六行表单中串错端口。
+        auto *bindEndpoint = new QWidget(this);
+        auto *bindEndpointLayout = new QHBoxLayout(bindEndpoint);
+        bindEndpointLayout->setContentsMargins(0, 0, 0, 0);
+        bindEndpointLayout->setSpacing(8);
+        bindEndpointLayout->addWidget(m_bindHostEdit, 1);
+        bindEndpointLayout->addWidget(new QLabel(QStringLiteral(":"), bindEndpoint));
+        m_bindPortSpin->setFixedWidth(112);
+        bindEndpointLayout->addWidget(m_bindPortSpin);
+
+        auto *targetEndpoint = new QWidget(this);
+        auto *targetEndpointLayout = new QHBoxLayout(targetEndpoint);
+        targetEndpointLayout->setContentsMargins(0, 0, 0, 0);
+        targetEndpointLayout->setSpacing(8);
+        targetEndpointLayout->addWidget(m_targetHostEdit, 1);
+        targetEndpointLayout->addWidget(new QLabel(QStringLiteral(":"), targetEndpoint));
+        m_targetPortSpin->setFixedWidth(112);
+        targetEndpointLayout->addWidget(m_targetPortSpin);
+
         form->addRow(tr("名称："), m_nameEdit);
         form->addRow(tr("类型："), m_typeCombo);
-        form->addRow(tr("监听地址："), m_bindHostEdit);
-        form->addRow(tr("监听端口："), m_bindPortSpin);
-        form->addRow(tr("目标地址："), m_targetHostEdit);
-        form->addRow(tr("目标端口："), m_targetPortSpin);
+        form->addRow(tr("监听："), bindEndpoint);
+        form->addRow(tr("目标："), targetEndpoint);
         form->addRow(QString(), m_autoStartCheck);
         layout->addLayout(form);
 
@@ -383,6 +707,7 @@ public:
             tr("安全提示：把监听地址设为 0.0.0.0 或 :: 会向局域网/公网暴露端口；"
                "是否可达仍受系统防火墙和 SSH 服务端 GatewayPorts 限制。"),
             this);
+        securityNotice->setObjectName(QStringLiteral("PortForwardSecurityNotice"));
         securityNotice->setWordWrap(true);
         layout->addWidget(securityNotice);
 
@@ -455,7 +780,7 @@ private:
     QCheckBox *m_autoStartCheck = nullptr;
 };
 
-/** @brief 转发类型的紧凑表格文本。 */
+/** @brief 转发类型徽章使用的紧凑文本。 */
 QString typeText(const PortForwardType type)
 {
     switch (type) {
@@ -595,6 +920,10 @@ public:
                        QWidget *parent = nullptr)
         : QWidget(parent)
     {
+        // setItemWidget() 的内容控件会覆盖 QListWidget viewport。让卡片及其子标签对鼠标
+        // 透明，点击名称、地址或状态时事件才能稳定落到列表项上并建立选中态；否则只有
+        // 卡片边缘的少量空白可选中，看起来就像选中记录会随机取消或失效。
+        setAttribute(Qt::WA_TransparentForMouseEvents, true);
         auto *layout = new QVBoxLayout(this);
         layout->setContentsMargins(6, 5, 6, 5);
         layout->setSpacing(2);
@@ -624,8 +953,13 @@ public:
         auto *dotLabel = new QLabel(QStringLiteral("●"), this);
         dotLabel->setStyleSheet(
             QStringLiteral("color: %1; font-size: 9px;").arg(statusDotColor(state).name()));
+        // 连接数为零时不展示“· 0”，让停止、失败等静态状态保持简洁；只有存在活动连接时
+        // 才追加数量，和状态本身形成清楚的主次关系。
         auto *statusLabel = new QLabel(
-            tr("%1 / %2").arg(stateLabel).arg(activeConnections), this);
+            activeConnections > 0
+                ? tr("%1 · %2").arg(stateLabel).arg(activeConnections)
+                : stateLabel,
+            this);
         statusLabel->setStyleSheet(QStringLiteral("color: palette(mid); font-size: 11px;"));
         statusRow->addWidget(dotLabel, 0, Qt::AlignVCenter);
         statusRow->addWidget(statusLabel, 0, Qt::AlignVCenter);
@@ -670,11 +1004,15 @@ PortForwardManagerWidget::PortForwardManagerWidget(ApplicationDatabase *database
     Q_ASSERT(m_database != nullptr);
     auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
-    layout->setSpacing(8);
-    auto *hostRow = new QHBoxLayout;
-    hostRow->addWidget(new QLabel(tr("主机："), this));
-    hostRow->addWidget(m_hostCombo, 1);
-    layout->addLayout(hostRow);
+    layout->setSpacing(0);
+    auto *hostSection = new QVBoxLayout;
+    hostSection->setSpacing(6);
+    auto *hostLabel = new QLabel(tr("主机"), this);
+    hostLabel->setObjectName(QStringLiteral("PortForwardHostLabel"));
+    hostSection->addWidget(hostLabel);
+    hostSection->addWidget(m_hostCombo);
+    layout->addLayout(hostSection);
+    layout->addSpacing(12);
 
     // 原来的四列表格在默认 320px 侧栏里放不下，改成卡片式单列列表：每条规则用
     // PortForwardRuleRow 画成两行，天然不需要横向滚动，侧栏加宽后也只是卡片变宽。
@@ -683,33 +1021,24 @@ PortForwardManagerWidget::PortForwardManagerWidget(ApplicationDatabase *database
     m_ruleList->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_ruleList->setContextMenuPolicy(Qt::CustomContextMenu);
     m_ruleList->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    layout->addWidget(m_ruleList, 1);
-
-    auto *buttons = new QHBoxLayout;
+    auto *managementButtons = new QHBoxLayout;
+    managementButtons->setObjectName(QStringLiteral("PortForwardManagementLayout"));
+    managementButtons->setSpacing(6);
     auto *addButton = new QPushButton(tr("新建"), this);
+    addButton->setObjectName(QStringLiteral("AddPortForwardButton"));
     addButton->setProperty("primaryAction", true);
-    auto *editButton = new QToolButton(this);
-    editButton->setText(tr("编辑"));
-    auto *deleteButton = new QToolButton(this);
-    deleteButton->setText(tr("删除"));
-    auto *startButton = new QToolButton(this);
-    startButton->setText(tr("启动"));
+    auto *startButton = new QPushButton(tr("启动"), this);
     startButton->setObjectName(QStringLiteral("StartAllPortForwardsButton"));
-    auto *stopButton = new QToolButton(this);
-    stopButton->setText(tr("停止"));
+    startButton->setProperty("forwardingRuntimeAction", true);
+    startButton->setFixedWidth(66);
+    auto *stopButton = new QPushButton(tr("停止"), this);
     stopButton->setObjectName(QStringLiteral("StopAllPortForwardsButton"));
+    stopButton->setProperty("forwardingRuntimeAction", true);
+    stopButton->setFixedWidth(66);
     UiIcons::decorateButton(
         addButton,
         UiIcons::symbol(this, UiIcons::Symbol::Plus, this->palette().color(QPalette::WindowText)),
         tr("新建端口转发规则"));
-    UiIcons::decorateButton(
-        editButton,
-        UiIcons::symbol(this, UiIcons::Symbol::Edit, this->palette().color(QPalette::WindowText)),
-        tr("编辑当前选中的端口转发规则"));
-    UiIcons::decorateButton(
-        deleteButton,
-        UiIcons::symbol(this, UiIcons::Symbol::Trash, this->palette().color(QPalette::WindowText)),
-        tr("停止并删除当前规则"));
     UiIcons::decorateButton(
         startButton,
         UiIcons::symbol(this, UiIcons::Symbol::Play, this->palette().color(QPalette::WindowText)),
@@ -718,17 +1047,18 @@ PortForwardManagerWidget::PortForwardManagerWidget(ApplicationDatabase *database
         stopButton,
         UiIcons::symbol(this, UiIcons::Symbol::Stop, this->palette().color(QPalette::WindowText)),
         tr("停止当前主机的全部转发规则"));
-    configureForwardingIconButton(editButton, tr("编辑当前选中的端口转发规则"));
-    configureForwardingIconButton(deleteButton, tr("停止并删除当前规则"));
-    configureForwardingIconButton(startButton, tr("启动当前主机的全部转发规则"));
-    configureForwardingIconButton(stopButton, tr("停止当前主机的全部转发规则"));
-    buttons->addWidget(addButton);
-    buttons->addWidget(editButton);
-    buttons->addWidget(deleteButton);
-    buttons->addStretch(1);
-    buttons->addWidget(startButton);
-    buttons->addWidget(stopButton);
-    layout->addLayout(buttons);
+    managementButtons->addWidget(addButton);
+    managementButtons->addStretch(1);
+    managementButtons->addWidget(startButton);
+    managementButtons->addWidget(stopButton);
+    layout->addLayout(managementButtons);
+
+    // 编辑与删除不再占用常驻空间，仍可从规则右键菜单进入。批量启停收窄后位于同一行
+    // 最右侧，既保留高频入口，又把更多纵向空间交给规则列表。
+    layout->addSpacing(10);
+    layout->addWidget(m_ruleList, 1);
+
+    m_summaryLabel->setObjectName(QStringLiteral("PortForwardSummary"));
     m_summaryLabel->setWordWrap(true);
     layout->addWidget(m_summaryLabel);
 
@@ -736,28 +1066,16 @@ PortForwardManagerWidget::PortForwardManagerWidget(ApplicationDatabase *database
             this, [this](const int) { reloadRules(); });
     connect(addButton, &QPushButton::clicked,
             this, [this]() { editRule(); });
-    connect(editButton, &QToolButton::clicked, this, [this]() {
-        QString error;
-        const std::optional<PortForwardRule> rule =
-            m_database->findPortForward(selectedRuleId(), &error);
-        if (!rule.has_value()) {
-            emit statusMessage(error.isEmpty() ? tr("请选择要编辑的规则") : error);
-            return;
-        }
-        editRule(rule);
-    });
-    connect(deleteButton, &QToolButton::clicked,
-            this, &PortForwardManagerWidget::removeSelectedRule);
-    connect(startButton, &QToolButton::clicked,
+    connect(startButton, &QPushButton::clicked,
             this, &PortForwardManagerWidget::startAllRules);
-    connect(stopButton, &QToolButton::clicked,
+    connect(stopButton, &QPushButton::clicked,
             this, &PortForwardManagerWidget::stopAllRules);
     connect(m_ruleList, &QListWidget::itemDoubleClicked,
             this, [this](QListWidgetItem *) { startSelectedRule(); });
     connect(m_ruleList,
             &QWidget::customContextMenuRequested,
             this,
-            [this, addButton, editButton, deleteButton](const QPoint &position) {
+            [this, addButton](const QPoint &position) {
                 QListWidgetItem *item = m_ruleList->itemAt(position);
                 if (item != nullptr) {
                     m_ruleList->setCurrentItem(item);
@@ -783,16 +1101,26 @@ PortForwardManagerWidget::PortForwardManagerWidget(ApplicationDatabase *database
                     QAction *deleteAction = menu.addAction(
                         UiIcons::symbol(this, UiIcons::Symbol::Trash, this->palette().color(QPalette::WindowText)),
                         tr("删除"));
-                    // 底部图标现为当前主机的批量动作；右键菜单仍明确针对当前行，必须直接
-                    // 调用单条规则方法，不能再借用底部按钮，否则会意外操作整台主机。
+                    // 常驻编辑/删除按钮已移除，右键菜单直接调用单条规则方法；启动/停止也
+                    // 必须保持单条语义，不能借用顶部针对当前主机全部规则的批量按钮。
                     connect(startAction, &QAction::triggered,
                             this, &PortForwardManagerWidget::startSelectedRule);
                     connect(stopAction, &QAction::triggered,
                             this, &PortForwardManagerWidget::stopSelectedRule);
-                    connect(editAction, &QAction::triggered,
-                            editButton, &QToolButton::click);
+                    connect(editAction, &QAction::triggered, this, [this]() {
+                        QString error;
+                        const std::optional<PortForwardRule> rule =
+                            m_database->findPortForward(selectedRuleId(), &error);
+                        if (!rule.has_value()) {
+                            emit statusMessage(error.isEmpty()
+                                                   ? tr("请选择要编辑的规则")
+                                                   : error);
+                            return;
+                        }
+                        editRule(rule);
+                    });
                     connect(deleteAction, &QAction::triggered,
-                            deleteButton, &QToolButton::click);
+                            this, &PortForwardManagerWidget::removeSelectedRule);
                 }
                 menu.exec(m_ruleList->viewport()->mapToGlobal(position));
             });
@@ -936,6 +1264,7 @@ void PortForwardManagerWidget::reloadHosts()
 
 void PortForwardManagerWidget::reloadRules()
 {
+    const QString previouslySelectedRuleId = selectedRuleId();
     // QListWidget::clear() 只删除 QListWidgetItem 本身，不会删除 setItemWidget() 挂上去的
     // 卡片控件——那是单独 reparent 出去的子控件，clear() 之后仍留在列表里泄漏，且残留内容
     // 还会被 findChildren 之类的遍历重新找到。必须先逐个摘下并手动删除，再清空条目。
@@ -961,6 +1290,7 @@ void PortForwardManagerWidget::reloadRules()
 
     quint64 activeConnections = 0;
     quint64 totalTraffic = 0;
+    QListWidgetItem *restoredSelection = nullptr;
     for (const PortForwardRule &rule : rules) {
         const PortForwardStatistics statistics = m_statistics.value(rule.id);
 
@@ -976,17 +1306,30 @@ void PortForwardManagerWidget::reloadRules()
                                            m_ruleList);
         item->setSizeHint(row->sizeHint());
         m_ruleList->setItemWidget(item, row);
+        if (!previouslySelectedRuleId.isEmpty() && rule.id == previouslySelectedRuleId) {
+            restoredSelection = item;
+        }
 
         const quint64 traffic = statistics.bytesToTarget + statistics.bytesFromTarget;
         activeConnections += statistics.activeConnections;
         totalTraffic += traffic;
+    }
+
+    // 运行时统计、主机连接状态或数据库保存都会重建卡片列表。按稳定 ruleId 恢复选择，
+    // 避免用户刚选中的记录因异步状态刷新突然取消；规则已被删除或切换主机时则自然不恢复。
+    if (restoredSelection != nullptr) {
+        m_ruleList->setCurrentItem(restoredSelection,
+                                   QItemSelectionModel::ClearAndSelect);
+        m_ruleList->scrollToItem(restoredSelection, QAbstractItemView::EnsureVisible);
     }
     m_summaryLabel->setText(
         tr("%1 条规则，%2 条活动连接，累计流量 %3；%4")
             .arg(rules.size())
             .arg(activeConnections)
             .arg(formatBytes(totalTraffic))
-            .arg(availableSession(hostId) == nullptr ? tr("主机未连接") : tr("SSH 会话可用")));
+            .arg(availableSession(hostId) == nullptr
+                     ? tr("主机未连接 · SSH 会话不可用")
+                     : tr("主机已连接 · SSH 会话可用")));
 }
 
 void PortForwardManagerWidget::editRule(const std::optional<PortForwardRule> &existing)

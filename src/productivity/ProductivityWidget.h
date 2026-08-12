@@ -118,8 +118,16 @@ private:
     QTreeWidget *m_snippetTree = nullptr;
     QLineEdit *m_nameEdit = nullptr;
     QComboBox *m_parentGroupCombo = nullptr;
-    QLineEdit *m_commandEdit = nullptr;
-    QTextEdit *m_descriptionEdit = nullptr;
+    /**
+     * @brief 命令正文编辑器。
+     *
+     * 命令可能包含较长的管道和参数，使用多行编辑器可以在窄侧栏内自然换行，避免用户
+     * 只能依靠水平滚动检查内容。
+     */
+    QTextEdit *m_commandEdit = nullptr;
+
+    /** @brief 片段的一行简短说明；列表预览会优先展示该字段。 */
+    QLineEdit *m_descriptionEdit = nullptr;
     QPushButton *m_saveButton = nullptr;
     QListWidget *m_executionTargets = nullptr;
 
