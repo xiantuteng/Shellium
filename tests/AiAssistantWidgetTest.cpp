@@ -1,4 +1,6 @@
 #include "ai/AiAssistantWidget.h"
+#include "ai/AiChatTypes.h"
+#include "ai/AiClient.h"
 #include "ai/AiSettings.h"
 #include "ai/AiSettingsService.h"
 
@@ -9,6 +11,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLabel>
+#include <QPointer>
 #include <QPushButton>
 #include <QSharedPointer>
 #include <QSignalSpy>
@@ -116,6 +119,7 @@ private slots:
     void executingCommandAutoCapturesOutputAndContinuesConversation();
     void newSessionClearsHistoryAndReadPosition();
     void assistantNarrativeRendersAsMarkdown();
+    void aiClientParsesStreamingResponseIncrementally();
 };
 
 void AiAssistantWidgetTest::executingCommandAutoCapturesOutputAndContinuesConversation()
@@ -193,11 +197,17 @@ void AiAssistantWidgetTest::executingCommandAutoCapturesOutputAndContinuesConver
     // 第二轮回复没有代码块，不应该再多出一张可执行命令卡片。
     QCOMPARE(widget.findChildren<QPushButton *>(QStringLiteral("aiExecuteButton")).size(), 1);
 
-    // 真实命令输出只喂给模型，不应该在聊天区里额外冒出一条"已读取执行结果"气泡——那是
-    // 改版前的做法，现在应该完全无痕。
+    // 真实输出现在要合回命令卡片本身、成为同一块面板的一部分（参考设计的工具调用卡片），
+    // 而不是另起一条独立的"已读取执行结果"浮动气泡——所以断言的是"输出文本确实可见"，
+    // 而不是"完全不可见"；后者是改版前的行为，已经不再是目标状态。
+    bool foundOutputInUi = false;
     for (QLabel *label : widget.findChildren<QLabel *>()) {
         QVERIFY2(!label->text().contains(QStringLiteral("执行结果")), qPrintable(label->text()));
+        if (label->text().contains(QStringLiteral("nginx not found"))) {
+            foundOutputInUi = true;
+        }
     }
+    QVERIFY(foundOutputInUi);
 }
 
 /**
@@ -296,6 +306,61 @@ void AiAssistantWidgetTest::assistantNarrativeRendersAsMarkdown()
         }
     }
     QVERIFY(foundMarkdownBubble);
+}
+
+/**
+ * @brief 流式解析必须真的按增量到达处理，而不是"凑巧因为整包一次性到达才工作"。
+ *
+ * 手动分两次往 socket 里写数据，中间用 QTRY 强制事件循环先跑一轮——这样能确认
+ * processStreamBuffer() 在缓冲区里只躺着半包数据时会正确等待，不会提前把不完整的
+ * SSE 事件当成完整的解析掉，也不会在第二批字节到达后重复处理第一批已经消费过的内容。
+ */
+void AiAssistantWidgetTest::aiClientParsesStreamingResponseIncrementally()
+{
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+
+    QPointer<QTcpSocket> serverSide;
+    connect(&server, &QTcpServer::newConnection, &server, [&]() {
+        serverSide = server.nextPendingConnection();
+    });
+
+    AiClient client;
+    AiSettings settings;
+    settings.endpointUrl = QStringLiteral("http://127.0.0.1:%1").arg(server.serverPort());
+    settings.model = QStringLiteral("test-model");
+
+    QSignalSpy chunkSpy(&client, &AiClient::replyChunkReceived);
+    QSignalSpy finishedSpy(&client, &AiClient::replyFinished);
+
+    client.sendMessage(settings, QList<AiChatMessage>{AiChatMessage{AiChatRole::User, QStringLiteral("hi")}});
+
+    QTRY_VERIFY_WITH_TIMEOUT(!serverSide.isNull(), 5000);
+
+    const QByteArray ssePart1 = "data: {\"choices\":[{\"delta\":{\"content\":\"你好\"}}]}\n\n";
+    const QByteArray ssePart2 = "data: {\"choices\":[{\"delta\":{\"content\":\"，世界\"}}]}\n\n"
+                                "data: [DONE]\n\n";
+    const QByteArray header = "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\n"
+                              "Content-Length: "
+        + QByteArray::number(ssePart1.size() + ssePart2.size()) + "\r\nConnection: close\r\n\r\n";
+
+    serverSide->write(header + ssePart1);
+    serverSide->flush();
+
+    // 第一批字节只包含一个完整事件；此时必须只看到第一段增量，第二段还没发出去。
+    QTRY_COMPARE_WITH_TIMEOUT(chunkSpy.count(), 1, 5000);
+    QCOMPARE(chunkSpy.at(0).at(0).toString(), QStringLiteral("你好"));
+    QCOMPARE(finishedSpy.count(), 0);
+
+    serverSide->write(ssePart2);
+    serverSide->flush();
+    serverSide->disconnectFromHost();
+
+    QTRY_COMPARE_WITH_TIMEOUT(finishedSpy.count(), 1, 5000);
+    QCOMPARE(chunkSpy.count(), 2);
+    // 每次信号都带的是"累计到目前为止"的完整文本，不是单独的增量片段。
+    QCOMPARE(chunkSpy.at(1).at(0).toString(), QStringLiteral("你好，世界"));
+    QCOMPARE(finishedSpy.at(0).at(0).toString(), QStringLiteral("你好，世界"));
 }
 
 QTEST_MAIN(AiAssistantWidgetTest)

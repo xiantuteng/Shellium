@@ -104,6 +104,7 @@ void AiClient::sendMessage(const AiSettings &settings, const QList<AiChatMessage
     body.insert(QStringLiteral("model"), settings.model);
     body.insert(QStringLiteral("messages"), messageArray);
     body.insert(QStringLiteral("temperature"), 0.2);
+    body.insert(QStringLiteral("stream"), true);
 
     QNetworkRequest request(
         QUrl(normalizedBase(settings.endpointUrl) + QStringLiteral("/chat/completions")));
@@ -112,7 +113,17 @@ void AiClient::sendMessage(const AiSettings &settings, const QList<AiChatMessage
         request.setRawHeader("Authorization", "Bearer " + settings.apiKey.trimmed().toUtf8());
     }
 
+    m_streamBuffer.clear();
+    m_streamAccumulatedContent.clear();
+
     m_activeChatReply = m_network->post(request, QJsonDocument(body).toJson(QJsonDocument::Compact));
+    connect(m_activeChatReply, &QNetworkReply::readyRead, this, [this]() {
+        if (m_activeChatReply == nullptr) {
+            return;
+        }
+        m_streamBuffer.append(m_activeChatReply->readAll());
+        processStreamBuffer();
+    });
     connect(m_activeChatReply, &QNetworkReply::finished, this, [this]() {
         QNetworkReply *reply = m_activeChatReply;
         m_activeChatReply = nullptr;
@@ -124,8 +135,17 @@ void AiClient::sendMessage(const AiSettings &settings, const QList<AiChatMessage
             emit replyFailed(tr("请求失败：%1").arg(reply->errorString()));
             return;
         }
-        const QByteArray responseBody = reply->readAll();
-        const QJsonDocument document = QJsonDocument::fromJson(responseBody);
+        // 收尾前再扫一遍缓冲区：readyRead 可能还没来得及处理最后一批到达的字节。
+        processStreamBuffer();
+        if (!m_streamAccumulatedContent.isEmpty()) {
+            emit replyFinished(m_streamAccumulatedContent);
+            return;
+        }
+
+        // 走到这里说明缓冲区里从头到尾没有出现过一个完整的 SSE 事件（没有"data: "开头、
+        // 以空行结束的分段）——网关没有真的流式返回，stream 参数被当成未知字段忽略了，
+        // 缓冲区里躺着的其实是一次性吐回来的完整 JSON。退回旧的非流式解析方式。
+        const QJsonDocument document = QJsonDocument::fromJson(m_streamBuffer);
         if (!document.isObject()) {
             emit replyFailed(tr("网关返回了无法解析的响应"));
             return;
@@ -143,6 +163,45 @@ void AiClient::sendMessage(const AiSettings &settings, const QList<AiChatMessage
                                     .value(QStringLiteral("content")).toString();
         emit replyFinished(content);
     });
+}
+
+void AiClient::processStreamBuffer()
+{
+    while (true) {
+        const int boundary = m_streamBuffer.indexOf("\n\n");
+        if (boundary < 0) {
+            return;
+        }
+        const QByteArray eventBlock = m_streamBuffer.left(boundary);
+        m_streamBuffer.remove(0, boundary + 2);
+
+        for (const QByteArray &rawLine : eventBlock.split('\n')) {
+            const QByteArray line = rawLine.trimmed();
+            if (!line.startsWith("data:")) {
+                continue;
+            }
+            const QByteArray payload = line.mid(5).trimmed();
+            if (payload.isEmpty() || payload == "[DONE]") {
+                continue;
+            }
+            const QJsonDocument document = QJsonDocument::fromJson(payload);
+            if (!document.isObject()) {
+                continue;
+            }
+            const QJsonArray choices = document.object().value(QStringLiteral("choices")).toArray();
+            if (choices.isEmpty()) {
+                continue;
+            }
+            const QString delta = choices.first().toObject()
+                                       .value(QStringLiteral("delta")).toObject()
+                                       .value(QStringLiteral("content")).toString();
+            if (delta.isEmpty()) {
+                continue;
+            }
+            m_streamAccumulatedContent += delta;
+            emit replyChunkReceived(m_streamAccumulatedContent);
+        }
+    }
 }
 
 void AiClient::abortActiveRequest()

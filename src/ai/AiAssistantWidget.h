@@ -5,6 +5,7 @@
 
 #include <QElapsedTimer>
 #include <QList>
+#include <QPointer>
 #include <QString>
 #include <QWidget>
 #include <functional>
@@ -13,6 +14,7 @@ class AiClient;
 class AiSettingsService;
 struct AiSettings;
 class QCheckBox;
+class QFrame;
 class QLabel;
 class QPushButton;
 class QTextEdit;
@@ -98,14 +100,22 @@ private:
     /** @brief 把一条用户消息追加到聊天区。 */
     void appendUserBubble(const QString &text);
 
-    /** @brief 把一段助手文本（已剔除代码块）追加到聊天区；空文本不追加。 */
+    /** @brief 把一段助手文本（已剔除代码块）以头像+正文的形式追加到聊天区；空文本不追加。 */
     void appendAssistantBubble(const QString &text);
 
-    /** @brief 把一条建议命令渲染成带风险徽标和操作按钮的卡片。 */
+    /**
+     * @brief 把一条建议命令渲染成带风险徽标和操作按钮的卡片。
+     *
+     * 命令、执行后的真实输出、操作按钮都装在同一张卡片里——参考图里的工具调用是一个完整
+     * 板块，不是散落的几条独立气泡；beginOutputCapture() 后续会把输出直接插回这张卡片。
+     */
     void appendCommandCard(const QString &command);
 
     /** @brief 把一条纯状态提示（如错误信息）追加到聊天区。 */
     void appendNoticeBubble(const QString &text, bool isError);
+
+    /** @brief 构建"AI 图标闪烁 + 正在分析…"的等待指示器，图标透明度循环呼吸。 */
+    QWidget *buildThinkingIndicator();
 
     /**
      * @brief 返回终端自上次读取位置以来新增的纯文本，并把读取位置推进到当前末尾；不追加
@@ -126,17 +136,23 @@ private:
     /** @brief 按当前是否有进行中的请求切换输入区可用状态。 */
     void setBusy(bool busy);
 
-    /** @brief 滚动聊天区到底部，新消息追加后调用。 */
-    void scrollToBottom();
+    /**
+     * @brief 滚动聊天区到底部。
+     * @param force true 无条件滚动（用户自己发消息时调用）；false 只在用户此前就停留在
+     *        底部附近时才跟随滚动——用户手动往上翻看历史时不能被新内容硬拽回底部。
+     */
+    void scrollToBottom(bool force = false);
 
     /**
      * @brief 命令卡片点击"执行"后调用，开始轮询终端快照直到新增输出稳定或超时。
      * @param command 已下发的命令文本，仅用于回填续问消息。
+     * @param card 命令所在的卡片，捕获结束后把真实输出插回这张卡片；为空则跳过界面更新。
+     * @param actionsRow 卡片底部的操作按钮行，输出要插在它前面，不能插到按钮下面去。
      *
      * 没有终端上下文提供者时静默跳过——命令仍会照常执行，只是不会自动续问，行为退化为
      * 一次性建议卡片。
      */
-    void beginOutputCapture(const QString &command);
+    void beginOutputCapture(const QString &command, QFrame *card, QWidget *actionsRow);
 
     /** @brief 捕获定时器每次触发调用，判断是否已经可以收尾。 */
     void pollCaptureTick();
@@ -157,11 +173,24 @@ private:
     QVBoxLayout *m_chatLayout = nullptr;
     QWidget *m_thinkingBubble = nullptr;
     class QScrollArea *m_chatScroll = nullptr;
+    /**
+     * @brief 用户此前是否停留在聊天区底部附近；由滚动条 valueChanged 持续更新。
+     *
+     * 只有用户自己拖动或程序自己滚到底部才会改变这个值——单纯因为新内容让 maximum() 变大
+     * 不会触发 valueChanged，因此"用户手动往上翻"这件事不会被内容增长悄悄抹掉。
+     */
+    bool m_stickyBottom = true;
+    /** @brief 流式回复期间实时更新的预览气泡；收到完整回复后销毁，改由结构化渲染接管。 */
+    QLabel *m_streamingPreviewLabel = nullptr;
 
     /** @brief 命令执行后等待输出稳定期间为真；本控件同一时间只支持一次捕获。 */
     bool m_captureInFlight = false;
     QTimer *m_captureTimer = nullptr;
-    QLabel *m_captureNoticeBubble = nullptr;
+    /** @brief 本次捕获对应的命令卡片和按钮行；捕获结束后真实输出要插回这张卡片。 */
+    QPointer<QFrame> m_captureCardFrame;
+    QPointer<QWidget> m_captureCardActionsRow;
+    /** @brief 卡片里"等待输出…"的占位行；捕获结束后被真实输出替换掉。 */
+    QPointer<QLabel> m_captureWaitingLabel;
     QString m_captureCommand;
     /**
      * @brief 轮询期间用来判断"是否还在变化"的终端快照；不用于最终提取，最终内容由

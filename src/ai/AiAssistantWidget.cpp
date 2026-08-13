@@ -8,12 +8,14 @@
 
 #include <QCheckBox>
 #include <QFrame>
+#include <QGraphicsOpacityEffect>
 #include <QGuiApplication>
 #include <QClipboard>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QMessageBox>
 #include <QPointer>
+#include <QPropertyAnimation>
 #include <QPushButton>
 #include <QRegularExpression>
 #include <QScrollArea>
@@ -142,10 +144,31 @@ AiAssistantWidget::AiAssistantWidget(AiSettingsService *settingsService, QWidget
     Q_ASSERT(m_settingsService != nullptr);
     buildUi();
 
+    // 流式增量到达前先撤掉"正在分析…"指示器，换成实时增长的纯文本预览——流式协议的价值
+    // 就在于让用户马上看到内容在长出来，用富文本/分段解析中途渲染反而容易因为围栏代码块
+    // 还没收全而显示错乱，纯文本预览完，全量回复到达后再整体交给 renderAssistantReply。
+    connect(m_client, &AiClient::replyChunkReceived, this, [this](const QString &accumulated) {
+        if (m_thinkingBubble != nullptr) {
+            m_thinkingBubble->deleteLater();
+            m_thinkingBubble = nullptr;
+        }
+        if (m_streamingPreviewLabel == nullptr) {
+            m_streamingPreviewLabel = new QLabel(m_chatContainer);
+            m_streamingPreviewLabel->setWordWrap(true);
+            m_streamingPreviewLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+            m_chatLayout->insertWidget(m_chatLayout->count() - 1, m_streamingPreviewLabel);
+        }
+        m_streamingPreviewLabel->setText(accumulated);
+        scrollToBottom();
+    });
     connect(m_client, &AiClient::replyFinished, this, [this](const QString &content) {
         if (m_thinkingBubble != nullptr) {
             m_thinkingBubble->deleteLater();
             m_thinkingBubble = nullptr;
+        }
+        if (m_streamingPreviewLabel != nullptr) {
+            m_streamingPreviewLabel->deleteLater();
+            m_streamingPreviewLabel = nullptr;
         }
         m_history.append(AiChatMessage{AiChatRole::Assistant, content});
         renderAssistantReply(content);
@@ -156,6 +179,10 @@ AiAssistantWidget::AiAssistantWidget(AiSettingsService *settingsService, QWidget
         if (m_thinkingBubble != nullptr) {
             m_thinkingBubble->deleteLater();
             m_thinkingBubble = nullptr;
+        }
+        if (m_streamingPreviewLabel != nullptr) {
+            m_streamingPreviewLabel->deleteLater();
+            m_streamingPreviewLabel = nullptr;
         }
         appendNoticeBubble(message, true);
         setBusy(false);
@@ -218,6 +245,12 @@ void AiAssistantWidget::buildUi()
     m_chatLayout->addStretch(1);
     m_chatScroll->setWidget(m_chatContainer);
     root->addWidget(m_chatScroll, 1);
+    // 只有用户自己拖动滚动条才会改变这个值；单纯因为新内容让 maximum() 变大不会触发
+    // valueChanged，所以"用户手动往上翻"这件事不会被内容增长悄悄抹掉——见 scrollToBottom()。
+    connect(m_chatScroll->verticalScrollBar(), &QScrollBar::valueChanged, this, [this](int value) {
+        QScrollBar *bar = m_chatScroll->verticalScrollBar();
+        m_stickyBottom = bar == nullptr || value >= bar->maximum() - 24;
+    });
 
     // 附加终端上下文的勾选行，紧贴输入框上方。
     auto *attachRow = new QWidget(this);
@@ -309,7 +342,10 @@ void AiAssistantWidget::startNewSession()
         }
     }
     m_thinkingBubble = nullptr;
-    m_captureNoticeBubble = nullptr;
+    m_streamingPreviewLabel = nullptr;
+    m_captureCardFrame.clear();
+    m_captureCardActionsRow.clear();
+    m_captureWaitingLabel.clear();
 
     if (m_inputEdit != nullptr) {
         m_inputEdit->clear();
@@ -375,8 +411,7 @@ void AiAssistantWidget::sendMessageInternal(const QString &historyText,
     m_history.append(AiChatMessage{AiChatRole::User, historyText});
 
     setBusy(true);
-    m_thinkingBubble = new QLabel(tr("AI 正在处理…"), m_chatContainer);
-    m_thinkingBubble->setStyleSheet(QStringLiteral("color: palette(mid); font-style: italic;"));
+    m_thinkingBubble = buildThinkingIndicator();
     m_chatLayout->insertWidget(m_chatLayout->count() - 1, m_thinkingBubble);
     scrollToBottom();
 
@@ -391,7 +426,37 @@ void AiAssistantWidget::appendUserBubble(const QString &text)
         "background: rgba(21,154,96,0.14); border: 1px solid rgba(21,154,96,0.35);"
         "border-radius: 10px; padding: 8px 11px;"));
     m_chatLayout->insertWidget(m_chatLayout->count() - 1, bubble);
-    scrollToBottom();
+    // 用户刚提交的消息必须立刻可见：无条件滚到底，不受"用户此前往上翻"状态影响。
+    scrollToBottom(true);
+}
+
+QWidget *AiAssistantWidget::buildThinkingIndicator()
+{
+    auto *row = new QWidget(m_chatContainer);
+    auto *rowLayout = new QHBoxLayout(row);
+    rowLayout->setContentsMargins(0, 0, 0, 0);
+    rowLayout->setSpacing(6);
+
+    auto *icon = new QLabel(QStringLiteral("✨"), row);
+    icon->setStyleSheet(QStringLiteral("color: #159a60;"));
+    rowLayout->addWidget(icon);
+    auto *text = new QLabel(tr("正在分析…"), row);
+    text->setStyleSheet(QStringLiteral("color: palette(mid); font-style: italic;"));
+    rowLayout->addWidget(text);
+    rowLayout->addStretch(1);
+
+    // 图标透明度循环呼吸，给用户"模型正在动"的直观反馈——比一句静态文案更能传达"没卡住"。
+    auto *effect = new QGraphicsOpacityEffect(icon);
+    icon->setGraphicsEffect(effect);
+    auto *animation = new QPropertyAnimation(effect, "opacity", row);
+    animation->setStartValue(1.0);
+    animation->setKeyValueAt(0.5, 0.25);
+    animation->setEndValue(1.0);
+    animation->setDuration(1100);
+    animation->setLoopCount(-1);
+    animation->start();
+
+    return row;
 }
 
 void AiAssistantWidget::appendAssistantBubble(const QString &text)
@@ -399,7 +464,17 @@ void AiAssistantWidget::appendAssistantBubble(const QString &text)
     if (text.trimmed().isEmpty()) {
         return;
     }
-    auto *bubble = new QLabel(m_chatContainer);
+    // 参考设计里助手的解说文字是头像+纯文本，没有气泡边框——边框留给下面真正的工具调用
+    // 卡片，两者要能一眼区分开：这一段是"助手在说话"，卡片才是"发生了一次操作"。
+    auto *row = new QWidget(m_chatContainer);
+    auto *rowLayout = new QHBoxLayout(row);
+    rowLayout->setContentsMargins(0, 0, 0, 0);
+    rowLayout->setSpacing(6);
+    auto *avatar = new QLabel(QStringLiteral("✨"), row);
+    avatar->setStyleSheet(QStringLiteral("color: #159a60;"));
+    rowLayout->addWidget(avatar, 0, Qt::AlignTop);
+
+    auto *bubble = new QLabel(row);
     // 模型回复本来就是 Markdown（表格、加粗、列表都很常见），按纯文本显示会把 **、| 这些
     // 语法符号原样甩给用户；QLabel 从 Qt 5.14 起能直接解析 Markdown，不需要额外依赖。
     bubble->setTextFormat(Qt::MarkdownText);
@@ -407,10 +482,9 @@ void AiAssistantWidget::appendAssistantBubble(const QString &text)
     bubble->setWordWrap(true);
     bubble->setTextInteractionFlags(Qt::TextSelectableByMouse | Qt::LinksAccessibleByMouse);
     bubble->setOpenExternalLinks(true);
-    bubble->setStyleSheet(QStringLiteral(
-        "background: palette(base); border: 1px solid palette(mid);"
-        "border-radius: 10px; padding: 8px 11px;"));
-    m_chatLayout->insertWidget(m_chatLayout->count() - 1, bubble);
+    rowLayout->addWidget(bubble, 1);
+
+    m_chatLayout->insertWidget(m_chatLayout->count() - 1, row);
 }
 
 void AiAssistantWidget::appendNoticeBubble(const QString &text, const bool isError)
@@ -443,6 +517,12 @@ void AiAssistantWidget::appendCommandCard(const QString &command)
         .arg(QColor(accent.red(), accent.green(), accent.blue(), 36).name(QColor::HexArgb)));
     auto *headerLayout = new QHBoxLayout(header);
     headerLayout->setContentsMargins(10, 6, 10, 6);
+    auto *statusLabel = new QLabel(tr("建议命令"), header);
+    QFont statusFont = statusLabel->font();
+    statusFont.setBold(true);
+    statusLabel->setFont(statusFont);
+    headerLayout->addWidget(statusLabel);
+    headerLayout->addStretch(1);
     auto *badge = new QLabel(CommandRiskClassifier::label(level), header);
     QFont badgeFont = badge->font();
     badgeFont.setBold(true);
@@ -450,7 +530,6 @@ void AiAssistantWidget::appendCommandCard(const QString &command)
     badge->setFont(badgeFont);
     badge->setStyleSheet(QStringLiteral("color: %1;").arg(accent.name()));
     headerLayout->addWidget(badge);
-    headerLayout->addStretch(1);
     cardLayout->addWidget(header);
 
     auto *commandLabel = new QLabel(insertSoftBreakpoints(command), card);
@@ -502,7 +581,8 @@ void AiAssistantWidget::appendCommandCard(const QString &command)
     connect(copyButton, &QPushButton::clicked, this, [command]() {
         QGuiApplication::clipboard()->setText(command);
     });
-    connect(executeButton, &QPushButton::clicked, this, [this, command, level, executeButton]() {
+    connect(executeButton, &QPushButton::clicked, this,
+            [this, command, level, executeButton, statusLabel, card, actions]() {
         if (m_captureInFlight) {
             emit statusMessage(tr("上一条命令还在等待输出，请稍候再执行"));
             return;
@@ -524,9 +604,10 @@ void AiAssistantWidget::appendCommandCard(const QString &command)
         executeButton->setStyleSheet(QStringLiteral(
             "QPushButton:disabled { background: palette(mid); color: palette(dark);"
             "border: none; border-radius: 6px; padding: 5px 12px; font-weight: 600; }"));
+        statusLabel->setText(tr("已执行"));
         emit commandExecutionRequested(command, QStringList{});
         emit statusMessage(tr("已发送到当前终端执行"));
-        beginOutputCapture(command);
+        beginOutputCapture(command, card, actions);
     });
 
     m_chatLayout->insertWidget(m_chatLayout->count() - 1, card);
@@ -566,7 +647,7 @@ void AiAssistantWidget::setBusy(const bool busy)
     }
 }
 
-void AiAssistantWidget::beginOutputCapture(const QString &command)
+void AiAssistantWidget::beginOutputCapture(const QString &command, QFrame *card, QWidget *actionsRow)
 {
     if (m_captureInFlight) {
         return;
@@ -577,6 +658,8 @@ void AiAssistantWidget::beginOutputCapture(const QString &command)
     }
 
     m_captureCommand = command;
+    m_captureCardFrame = card;
+    m_captureCardActionsRow = actionsRow;
     m_captureLastText = m_terminalContextProvider();
     m_captureStartLength = m_captureLastText.length();
     // 把读取位置推进到命令下发前的这一刻：命令的输出从这里才真正开始，之前的旧内容
@@ -590,9 +673,20 @@ void AiAssistantWidget::beginOutputCapture(const QString &command)
         m_sendButton->setEnabled(false);
     }
 
-    m_captureNoticeBubble = new QLabel(tr("等待命令执行结果…"), m_chatContainer);
-    m_captureNoticeBubble->setStyleSheet(QStringLiteral("color: palette(mid); font-style: italic;"));
-    m_chatLayout->insertWidget(m_chatLayout->count() - 1, m_captureNoticeBubble);
+    // "等待输出…"占位行直接插进命令卡片本身，插在按钮行前面；捕获结束后被真实输出替换，
+    // 整条链路自始至终只有这一张卡片，不再冒出独立的浮动提示。
+    if (card != nullptr && actionsRow != nullptr) {
+        auto *cardLayout = qobject_cast<QVBoxLayout *>(card->layout());
+        if (cardLayout != nullptr) {
+            auto *waitingLabel = new QLabel(tr("等待输出…"), card);
+            waitingLabel->setStyleSheet(
+                QStringLiteral("color: palette(mid); font-style: italic; padding: 4px 11px;"));
+            const int actionsIndex = cardLayout->indexOf(actionsRow);
+            cardLayout->insertWidget(actionsIndex < 0 ? cardLayout->count() : actionsIndex,
+                                     waitingLabel);
+            m_captureWaitingLabel = waitingLabel;
+        }
+    }
     scrollToBottom();
 
     if (m_captureTimer == nullptr) {
@@ -634,10 +728,6 @@ void AiAssistantWidget::finishOutputCapture(const bool timedOut)
         m_captureTimer->stop();
     }
     m_captureInFlight = false;
-    if (m_captureNoticeBubble != nullptr) {
-        m_captureNoticeBubble->deleteLater();
-        m_captureNoticeBubble = nullptr;
-    }
     if (m_sendButton != nullptr) {
         m_sendButton->setEnabled(!m_requestInFlight);
     }
@@ -649,6 +739,29 @@ void AiAssistantWidget::finishOutputCapture(const bool timedOut)
         output = tr("(无输出)");
     }
 
+    if (!m_captureWaitingLabel.isNull()) {
+        m_captureWaitingLabel->deleteLater();
+    }
+    if (!m_captureCardFrame.isNull() && !m_captureCardActionsRow.isNull()) {
+        auto *cardLayout = qobject_cast<QVBoxLayout *>(m_captureCardFrame->layout());
+        if (cardLayout != nullptr) {
+            auto *outputLabel = new QLabel(insertSoftBreakpoints(output), m_captureCardFrame);
+            outputLabel->setWordWrap(true);
+            outputLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+            QFont monoFont(QStringLiteral("Menlo"));
+            monoFont.setStyleHint(QFont::Monospace);
+            outputLabel->setFont(monoFont);
+            outputLabel->setStyleSheet(QStringLiteral(
+                "color: palette(text); background: rgba(0,0,0,0.035); padding: 8px 11px;"));
+            const int actionsIndex = cardLayout->indexOf(m_captureCardActionsRow);
+            cardLayout->insertWidget(actionsIndex < 0 ? cardLayout->count() : actionsIndex,
+                                     outputLabel);
+        }
+    }
+    m_captureCardFrame.clear();
+    m_captureCardActionsRow.clear();
+    m_captureWaitingLabel.clear();
+
     const QString marker = timedOut
         ? tr("[命令 `%1` 的执行结果（等待输出超时，可能仍在运行或没有更多输出）]\n%2")
               .arg(m_captureCommand, output)
@@ -656,9 +769,13 @@ void AiAssistantWidget::finishOutputCapture(const bool timedOut)
     sendMessageInternal(marker);
 }
 
-void AiAssistantWidget::scrollToBottom()
+void AiAssistantWidget::scrollToBottom(const bool force)
 {
     if (m_chatScroll == nullptr) {
+        return;
+    }
+    if (!force && !m_stickyBottom) {
+        // 用户此前主动往上翻查看历史，新内容不该把视口硬拽回底部。
         return;
     }
     // 布局在新增子控件后要等下一次事件循环才会重新计算滚动范围，同步 setValue 会拿到

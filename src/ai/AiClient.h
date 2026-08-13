@@ -3,6 +3,7 @@
 #include "ai/AiChatTypes.h"
 #include "ai/AiSettings.h"
 
+#include <QByteArray>
 #include <QList>
 #include <QObject>
 #include <QString>
@@ -36,12 +37,18 @@ public:
     void testConnection(const AiSettings &settings);
 
     /**
-     * @brief 发起一次对话请求。
+     * @brief 发起一次对话请求，按 SSE 流式协议提交（请求体 stream: true）。
      * @param settings 当前生效的端点、密钥、模型配置；调用前应确认 isConfigured()。
      * @param messages 完整对话历史，包含本次待发送的最新一条用户消息。
      *
-     * 结果通过 replyFinished 或 replyFailed 异步返回；调用方需要等待其中之一发出后才能
-     * 发起下一次请求，避免同一实例上的两次请求互相覆盖响应处理状态。
+     * 每收到一段增量文本就发出一次 replyChunkReceived（携带累计到目前为止的完整内容），
+     * 供界面边到边渲染，不需要等全部生成完才有反应。最终结果仍通过 replyFinished 或
+     * replyFailed 异步返回；调用方需要等待其中之一发出后才能发起下一次请求，避免同一
+     * 实例上的两次请求互相覆盖响应处理状态。
+     *
+     * 网关不支持流式、把 stream 参数当作未知字段忽略、直接吐回完整 JSON 的情况也会被
+     * 兼容：这种响应体里找不到任何 SSE 事件边界，replyChunkReceived 不会触发，最终仍从
+     * 缓冲区里按一次性响应解析出内容，正常发出 replyFinished。
      */
     void sendMessage(const AiSettings &settings, const QList<AiChatMessage> &messages);
 
@@ -51,6 +58,13 @@ public:
 signals:
     /** @brief 连通性探测完成；ok 为 true 时 message 是模型数量之类的简短摘要。 */
     void testConnectionFinished(bool ok, const QString &message);
+
+    /**
+     * @brief 流式响应每到一段新增量就触发一次。
+     * @param accumulatedContent 从本次请求开始到目前为止拼接出的完整文本，不是单独的增量
+     *        片段——调用方直接拿去替换上一次显示的内容即可，不需要自己做拼接。
+     */
+    void replyChunkReceived(const QString &accumulatedContent);
 
     /** @brief 对话请求成功，content 是模型返回的完整文本。 */
     void replyFinished(const QString &content);
@@ -65,7 +79,20 @@ private:
     /** @brief 把对话角色枚举转成 OpenAI 兼容协议要求的字符串。 */
     [[nodiscard]] static QString roleName(AiChatRole role);
 
+    /**
+     * @brief 从 m_streamBuffer 里取出所有已经凑齐的 SSE 事件，逐个解析并发出增量信号。
+     *
+     * 一次 TCP 分片不一定凑够一个完整事件（以空行分隔），因此每次读到新字节都要重新扫描
+     * 缓冲区，把能确定已经收全的事件消费掉，不能确定的部分留在缓冲区里等下一批字节。
+     */
+    void processStreamBuffer();
+
     QNetworkAccessManager *m_network = nullptr;
     QNetworkReply *m_activeTestReply = nullptr;
     QNetworkReply *m_activeChatReply = nullptr;
+
+    /** @brief 当前请求尚未被 processStreamBuffer 消费掉的原始字节。 */
+    QByteArray m_streamBuffer;
+    /** @brief 当前请求已经从 SSE 增量里拼出的完整文本；非空即说明网关确实在走流式协议。 */
+    QString m_streamAccumulatedContent;
 };
