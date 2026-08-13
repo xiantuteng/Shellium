@@ -20,6 +20,7 @@ class QPushButton;
 class QTextEdit;
 class QTimer;
 class QVBoxLayout;
+class QEvent;
 
 /**
  * @brief AI 助手侧栏页面：与主机管理、效率工具、端口转发同级的第四个侧栏页面。
@@ -32,8 +33,9 @@ class QVBoxLayout;
  * 的展示与按钮颜色，不会有任何命令在用户点击"执行"之前被下发。
  *
  * 对话流程是单步交互式的：模型每轮最多给出一条命令，用户点击"执行"后命令被发往当前终端，
- * 随后本控件轮询 terminalPlainText() 快照直到新增输出稳定或超时，把差量文本整理成一条
- * "执行结果"消息自动续问模型，模型据此给出下一条命令或收尾说明。这条捕获路径依赖终端本身
+ * 随后本控件轮询 terminalPlainText() 快照直到 Shell 提示符重新出现，把差量文本作为隐藏的
+ * "执行结果"观察自动续问模型，模型据此给出下一条命令或收尾说明；原始输出不会回显到聊天区。
+ * 这条捕获路径依赖终端本身
  * 的纯文本快照，不新增独立的 exec 通道，因此对本地 Shell 和任意深度的嵌套 SSH 层都同样
  * 适用；代价是它只能感知"终端屏幕上出现了什么"，不能像独立 exec 那样拿到精确的退出码。
  */
@@ -80,12 +82,50 @@ signals:
      */
     void commandExecutionRequested(const QString &command, const QStringList &targetIds);
 
+    /**
+     * @brief 请求把命令文本插入当前终端输入行，但不发送回车、不执行。
+     * @param command 待插入的单行命令文本。
+     * @param targetIds 恒为空列表，由主窗口路由到当前活动终端。
+     *
+     * 插入与执行必须使用不同信号，防止界面上的“插入/修改”动作误走 executeCommand() 并产生
+     * 不可撤回的远端副作用。
+     */
+    void commandInsertionRequested(const QString &command, const QStringList &targetIds);
+
     /** @brief 可展示在主窗口顶部非阻塞提示区的状态或错误信息。 */
     void statusMessage(const QString &message);
 
 private:
     /** @brief 构建上下文条、聊天区和输入区，构造函数只调用一次。 */
     void buildUi();
+
+    /**
+     * @brief 处理输入框键盘交互：Enter 发送，Shift+Enter 保留为换行。
+     * @param watched 产生事件的对象，仅处理 m_inputEdit。
+     * @param event Qt 输入事件。
+     * @return 已消费普通 Enter 时返回 true；其他事件交回 QWidget 默认处理。
+     *
+     * 使用事件过滤器而不是监听 textChanged 后删除换行，可以在输入法提交、自动重复按键和
+     * Shift 修饰键场景下保持行为确定，也不会让用户看到“先换行再消失”的界面闪动。
+     */
+    bool eventFilter(QObject *watched, QEvent *event) override;
+
+    /**
+     * @brief 按当前文本的实际排版高度调整输入框，范围限制为 1～10 行。
+     *
+     * 高度依据 QTextDocument 布局结果计算，因此自动换行和手工 Shift+Enter 都能触发增长；
+     * 超过十行后固定高度并开启内部滚动条，防止输入区继续挤压聊天历史。
+     */
+    void updateInputEditorHeight();
+
+    /**
+     * @brief 执行当前会话中最后一条仍可操作的建议命令。
+     *
+     * 该方法由 Command+Enter 快捷键调用。每轮智能体只生成一条命令，但历史中可能保留多张
+     * 卡片，因此必须从后向前查找“可见且启用”的执行按钮；找不到时只提示状态，不会误触
+     * 已执行的历史命令，也不会把输入框内容当作命令直接下发。
+     */
+    void executeLatestPendingCommand();
 
     /** @brief 发送当前输入框内容：拼装历史、可选终端上下文，交给 AiClient。 */
     void sendCurrentInput();
@@ -97,6 +137,27 @@ private:
      */
     void sendMessageInternal(const QString &historyText, const QString &ephemeralContext = QString());
 
+    /**
+     * @brief 校验并处理模型返回的单步智能体响应。
+     * @param content 模型本轮返回的完整原始内容。
+     *
+     * 该入口只接受“当前一步命令 / 已完成 / 需要用户输入”三种结构化响应。任何包含完整
+     * 操作计划、多条命令或格式损坏的响应都不会直接展示，而是触发一次协议纠正请求，避免
+     * 用户先看到十步教程、随后客户端才在末尾提示“只执行第一条”的错误体验。
+     */
+    void handleAgentReply(const QString &content);
+
+    /**
+     * @brief 要求模型把违规响应重新整理成单步协议。
+     * @param invalidContent 未通过校验的模型原始响应，仅用于本次纠正请求。
+     * @param validationError 具体校验错误，帮助模型有针对性地修正。
+     *
+     * 纠正消息属于智能体控制层，不写入可见聊天历史。达到最大重试次数后会给用户显示明确
+     * 错误并停止，绝不把无法确认边界的多步骤内容降级展示。
+     */
+    void requestAgentProtocolRepair(const QString &invalidContent,
+                                    const QString &validationError);
+
     /** @brief 把一条用户消息追加到聊天区。 */
     void appendUserBubble(const QString &text);
 
@@ -106,10 +167,12 @@ private:
     /**
      * @brief 把一条建议命令渲染成带风险徽标和操作按钮的卡片。
      *
-     * 命令、执行后的真实输出、操作按钮都装在同一张卡片里——参考图里的工具调用是一个完整
-     * 板块，不是散落的几条独立气泡；beginOutputCapture() 后续会把输出直接插回这张卡片。
+     * 卡片只展示执行意图、命令和操作按钮。真实终端输出属于终端本身，只作为智能体的隐藏
+     * 观察值使用，不回显进聊天区，避免大段日志挤占对话空间或泄露终端中的敏感内容。
      */
-    void appendCommandCard(const QString &command);
+    void appendCommandCard(const QString &command,
+                           const QString &title = QString(),
+                           const QString &reason = QString());
 
     /** @brief 把一条纯状态提示（如错误信息）追加到聊天区。 */
     void appendNoticeBubble(const QString &text, bool isError);
@@ -127,12 +190,6 @@ private:
      */
     [[nodiscard]] QString consumeNewTerminalOutput();
 
-    /**
-     * @brief 拆分模型回复：围栏代码块视为待执行命令，其余文本作为普通助手消息。
-     * @param content 模型返回的完整文本。
-     */
-    void renderAssistantReply(const QString &content);
-
     /** @brief 按当前是否有进行中的请求切换输入区可用状态。 */
     void setBusy(bool busy);
 
@@ -144,21 +201,21 @@ private:
     void scrollToBottom(bool force = false);
 
     /**
-     * @brief 命令卡片点击"执行"后调用，开始轮询终端快照直到新增输出稳定或超时。
+     * @brief 命令卡片点击"执行"后调用，轮询终端快照直到 Shell 提示符重新出现。
      * @param command 已下发的命令文本，仅用于回填续问消息。
-     * @param card 命令所在的卡片，捕获结束后把真实输出插回这张卡片；为空则跳过界面更新。
-     * @param actionsRow 卡片底部的操作按钮行，输出要插在它前面，不能插到按钮下面去。
+     * @param card 命令所在的卡片，等待状态显示在该卡片内部；为空则只进行后台捕获。
+     * @param actionsRow 卡片底部的操作按钮行，等待状态插在它前面。
      *
-     * 没有终端上下文提供者时静默跳过——命令仍会照常执行，只是不会自动续问，行为退化为
-     * 一次性建议卡片。
+     * 不能以“输出暂时不再变化”判断完成，因为安装、编译和下载可能长时间没有输出。开始时
+     * 记录当前 Shell 提示符，后续只有观察到终端变化且提示符重新出现在末行才进入下一轮。
      */
     void beginOutputCapture(const QString &command, QFrame *card, QWidget *actionsRow);
 
     /** @brief 捕获定时器每次触发调用，判断是否已经可以收尾。 */
     void pollCaptureTick();
 
-    /** @brief 结束一次输出捕获：整理差量文本，追加气泡并自动续问模型。 */
-    void finishOutputCapture(bool timedOut);
+    /** @brief 结束一次输出捕获：把隐藏的终端差量交给智能体并自动续问，不在聊天区回显。 */
+    void finishOutputCapture();
 
     AiSettingsService *m_settingsService = nullptr;
     AiClient *m_client = nullptr;
@@ -166,6 +223,15 @@ private:
 
     ConnectionTarget m_activeTarget;
     QList<AiChatMessage> m_history;
+    /**
+     * @brief 当前智能体决策请求的完整消息快照，包含系统规则和一次性终端观察。
+     *
+     * 协议纠正时必须复用这份快照；如果只从持久历史重建，一次性的命令执行输出会丢失，模型
+     * 就可能在没有真实观察的情况下猜测下一步。
+     */
+    QList<AiChatMessage> m_lastAgentRequestMessages;
+    /** @brief 当前决策已经进行的协议纠正次数；新任务或新终端观察到来时归零。 */
+    int m_agentProtocolRepairCount = 0;
     bool m_requestInFlight = false;
 
     QLabel *m_contextTargetLabel = nullptr;
@@ -180,16 +246,17 @@ private:
      * 不会触发 valueChanged，因此"用户手动往上翻"这件事不会被内容增长悄悄抹掉。
      */
     bool m_stickyBottom = true;
-    /** @brief 流式回复期间实时更新的预览气泡；收到完整回复后销毁，改由结构化渲染接管。 */
-    QLabel *m_streamingPreviewLabel = nullptr;
-
-    /** @brief 命令执行后等待输出稳定期间为真；本控件同一时间只支持一次捕获。 */
+    /**
+     * @brief 程序主动滚动期间为 true，防止 valueChanged 把自动滚动误认为用户改变阅读位置。
+     */
+    bool m_programmaticChatScroll = false;
+    /** @brief 命令执行后等待 Shell 提示符重新出现期间为真；本控件同一时间只支持一次捕获。 */
     bool m_captureInFlight = false;
     QTimer *m_captureTimer = nullptr;
-    /** @brief 本次捕获对应的命令卡片和按钮行；捕获结束后真实输出要插回这张卡片。 */
+    /** @brief 本次捕获对应的命令卡片和按钮行，用于在卡片内维护等待状态。 */
     QPointer<QFrame> m_captureCardFrame;
     QPointer<QWidget> m_captureCardActionsRow;
-    /** @brief 卡片里"等待输出…"的占位行；捕获结束后被真实输出替换掉。 */
+    /** @brief 卡片里的动态等待状态；捕获结束后移除，原始终端输出不会替换进来。 */
     QPointer<QLabel> m_captureWaitingLabel;
     QString m_captureCommand;
     /**
@@ -199,10 +266,17 @@ private:
     QString m_captureLastText;
     /** @brief 捕获开始那一刻的快照长度，用来判断"相对开始时是否变化过"。 */
     int m_captureStartLength = 0;
-    /** @brief 快照连续多少个轮询周期未变化；配合 m_captureEverChanged 判定"已经稳定"。 */
-    int m_captureStableTicks = 0;
     /** @brief 是否已经观察到快照相对捕获开始时发生过变化；避免命令刚发出、回显未到达就被误判完成。 */
     bool m_captureEverChanged = false;
+    /**
+     * @brief 命令下发前终端末行的 Shell 提示符。
+     *
+     * 大多数命令结束后会回到完全相同的提示符；它比“输出静止一段时间”更可靠。若命令改变
+     * 目录或身份导致提示符变化，轮询逻辑还会使用保守的通用提示符形态作为兼容判断。
+     */
+    QString m_captureBaselinePrompt;
+    /** @brief 上一次刷新等待秒数，用来避免 300ms 轮询周期内重复设置相同文案。 */
+    int m_captureLastReportedSecond = -1;
     QElapsedTimer m_captureElapsed;
 
     /**

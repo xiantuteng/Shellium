@@ -138,6 +138,14 @@ public slots:
      */
     void executeCommand(const QString &command);
 
+    /**
+     * @brief 把命令插入当前终端输入行但不执行，供 AI 助手“插入/修改”动作使用。
+     * @param command 不含结尾回车的单行命令。
+     *
+     * 该入口委托 TerminalView 同步 PTY 字节与当前命令状态，不能用 sendInputBytes() 代替。
+     */
+    void insertCommandText(const QString &command);
+
 signals:
     /**
      * @brief 用户从会话顶部状态栏请求显示或隐藏远程文件管理区。

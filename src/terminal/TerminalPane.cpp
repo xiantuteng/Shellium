@@ -844,6 +844,16 @@ void TerminalPane::executeCommand(const QString &command)
     m_terminalView->submitCommand(command);
 }
 
+void TerminalPane::insertCommandText(const QString &command)
+{
+    if (!m_shellReady || command.isEmpty()) {
+        emit statusMessage(tr("当前终端尚未就绪，无法插入命令"));
+        return;
+    }
+    m_terminalView->insertCommandText(command);
+    focusTerminal();
+}
+
 void TerminalPane::recordSubmittedCommand(const QString &command)
 {
     if (m_commandHistoryDatabase == nullptr || command.trimmed().isEmpty()

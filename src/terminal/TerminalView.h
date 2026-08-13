@@ -116,6 +116,15 @@ public:
     void submitCommand(const QString &command);
 
     /**
+     * @brief 把命令文本插入当前终端输入行，但不提交执行。
+     * @param command 不含回车的命令文本；空字符串会被忽略。
+     *
+     * 除了把 UTF-8 字节发送给 PTY，还同步更新 m_currentCommand，使用户随后继续键入、使用补全
+     * 或按回车提交时，命令历史和嵌套 SSH 识别能拿到完整命令，而不是只看到后续手输部分。
+     */
+    void insertCommandText(const QString &command);
+
+    /**
      * @brief 实时应用终端外观与行为设置。
      * @param settings 已规范化或待规范化的设置快照。
      *

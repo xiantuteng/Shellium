@@ -6,19 +6,24 @@
 
 #include <QApplication>
 #include <QCheckBox>
+#include <QClipboard>
 #include <QHostAddress>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLabel>
+#include <QInputDialog>
 #include <QPointer>
 #include <QPushButton>
+#include <QScrollArea>
+#include <QScrollBar>
 #include <QSharedPointer>
 #include <QSignalSpy>
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QTest>
 #include <QTextEdit>
+#include <QTimer>
 
 namespace {
 
@@ -108,9 +113,10 @@ private:
  * @brief 覆盖 AI 助手改版后的单步交互回路：执行命令后自动读取终端真实输出并续问模型。
  *
  * 这是发现"命令执行完不会自动续问"这一体验问题后补的用例：改版前客户端只把建议命令展示
- * 给用户，从不读取真实执行结果；现在改成轮询 terminalPlainText() 快照，稳定后把差量文本
- * 整理成"[命令 ... 的执行结果]"自动发给模型。这里用一个手写的极简 HTTP 服务器顶替真实网关，
- * 断言第二次请求体里确实带着"命令执行后新增的那部分文本"，而不是完整历史或空上下文。
+ * 给用户，从不读取真实执行结果；现在改成轮询 terminalPlainText() 快照，等待 Shell 提示符
+ * 重新出现后把差量文本作为隐藏观察自动发给模型。这里用一个手写的极简 HTTP 服务器顶替
+ * 真实网关，断言长命令的短暂停顿不会触发下一轮、第二次请求确实带着新增终端文本，同时这些
+ * 原始输出不会回显到聊天框。
  */
 class AiAssistantWidgetTest final : public QObject {
     Q_OBJECT
@@ -119,6 +125,11 @@ private slots:
     void executingCommandAutoCapturesOutputAndContinuesConversation();
     void newSessionClearsHistoryAndReadPosition();
     void assistantNarrativeRendersAsMarkdown();
+    void multiStepResponseIsRejectedAndRepairedBeforeDisplay();
+    void inputEditorSendsOnEnterAndGrowsToTenLines();
+    void commandEnterExecutesLatestPendingCommand();
+    void commandCardInsertModifyAndCopyUseCorrectRoutes();
+    void chatAutoScrollResumesAfterUserReturnsToBottom();
     void aiClientParsesStreamingResponseIncrementally();
 };
 
@@ -126,9 +137,10 @@ void AiAssistantWidgetTest::executingCommandAutoCapturesOutputAndContinuesConver
 {
     MiniAiServer server;
     QVERIFY(server.isListening());
-    server.responses.append(chatCompletionBody(
-        QStringLiteral("先检查是否已安装：\n```bash\nwhich nginx\n```")));
-    server.responses.append(chatCompletionBody(QStringLiteral("已确认未安装，任务先到这里。")));
+    server.responses.append(chatCompletionBody(QStringLiteral(
+        R"JSON({"state":"command","title":"确认 Nginx 是否已安装","reason":"先读取当前环境，避免重复安装或覆盖已有版本。","command":"which nginx"})JSON")));
+    server.responses.append(chatCompletionBody(QStringLiteral(
+        R"JSON({"state":"complete","message":"根据真实输出已确认当前未安装 Nginx，本次检查目标已完成。"})JSON")));
 
     AiSettingsService settingsService(nullptr, nullptr);
     AiSettings settings;
@@ -175,13 +187,28 @@ void AiAssistantWidgetTest::executingCommandAutoCapturesOutputAndContinuesConver
     QVERIFY(!executeButton->isEnabled());
     QCOMPARE(executeButton->text(), QStringLiteral("已执行"));
 
-    // 模拟命令已经在终端里真实跑完：新增一段输出，随后不再变化。
-    terminalText += QStringLiteral("which nginx\nnginx not found\n[user@host ~]$ ");
+    // 先模拟一个仍在运行但暂时没有新输出的长命令。旧实现只等待 900ms 的“输出稳定”，会在
+    // 此处错误地认为命令已经完成；新实现必须继续等待提示符回归并给出明确等待状态。
+    terminalText += QStringLiteral("which nginx\n正在执行耗时检查");
+    QTest::qWait(1300);
+    QCOMPARE(server.capturedBodies.size(), 1);
+    QVERIFY(!sendButton->isEnabled());
+    auto *waitingLabel = widget.findChild<QLabel *>(QStringLiteral("aiCommandWaitingLabel"));
+    QVERIFY(waitingLabel != nullptr);
+    QVERIFY(waitingLabel->text().contains(QStringLiteral("正在等待命令执行完成")));
+    QVERIFY(waitingLabel->text().contains(QStringLiteral("无需复制")));
+
+    // 提示符重新出现才代表交互式 Shell 已重新接管输入，此时客户端应自动读取隐藏差量并续问。
+    terminalText += QStringLiteral("\nnginx not found\n[user@host ~]$ ");
 
     QTRY_COMPARE_WITH_TIMEOUT(server.capturedBodies.size(), 2, 5000);
 
     const QJsonArray secondMessages = requestMessages(server.capturedBodies.at(1));
     QVERIFY(!secondMessages.isEmpty());
+    // 系统级智能体规则必须每轮都携带；若第二轮丢失，模型在看到终端输出后很容易退回一次性
+    // 输出完整教程的普通问答模式。
+    QCOMPARE(secondMessages.first().toObject().value(QStringLiteral("role")).toString(),
+             QStringLiteral("system"));
     const QString lastMessage =
         secondMessages.last().toObject().value(QStringLiteral("content")).toString();
     QVERIFY2(lastMessage.contains(QStringLiteral("[命令 `which nginx` 的执行结果]")),
@@ -197,17 +224,22 @@ void AiAssistantWidgetTest::executingCommandAutoCapturesOutputAndContinuesConver
     // 第二轮回复没有代码块，不应该再多出一张可执行命令卡片。
     QCOMPARE(widget.findChildren<QPushButton *>(QStringLiteral("aiExecuteButton")).size(), 1);
 
-    // 真实输出现在要合回命令卡片本身、成为同一块面板的一部分（参考设计的工具调用卡片），
-    // 而不是另起一条独立的"已读取执行结果"浮动气泡——所以断言的是"输出文本确实可见"，
-    // 而不是"完全不可见"；后者是改版前的行为，已经不再是目标状态。
-    bool foundOutputInUi = false;
+    // 原始终端输出只能作为发给智能体的隐藏观察存在，聊天区不得重复显示命令回显、日志或
+    // 提示符。最终完成说明可以概括结论，但不能把原始 `nginx not found` 文本直接贴回来。
     for (QLabel *label : widget.findChildren<QLabel *>()) {
         QVERIFY2(!label->text().contains(QStringLiteral("执行结果")), qPrintable(label->text()));
-        if (label->text().contains(QStringLiteral("nginx not found"))) {
-            foundOutputInUi = true;
+        QVERIFY2(!label->text().contains(QStringLiteral("nginx not found")), qPrintable(label->text()));
+        QVERIFY2(!label->text().contains(QStringLiteral("正在执行耗时检查")), qPrintable(label->text()));
+        QVERIFY2(!label->text().contains(QStringLiteral("[user@host ~]$")), qPrintable(label->text()));
+    }
+
+    bool foundCurrentStepReason = false;
+    for (QLabel *label : widget.findChildren<QLabel *>()) {
+        if (label->text().contains(QStringLiteral("避免重复安装"))) {
+            foundCurrentStepReason = true;
         }
     }
-    QVERIFY(foundOutputInUi);
+    QVERIFY(foundCurrentStepReason);
 }
 
 /**
@@ -221,8 +253,10 @@ void AiAssistantWidgetTest::newSessionClearsHistoryAndReadPosition()
 {
     MiniAiServer server;
     QVERIFY(server.isListening());
-    server.responses.append(chatCompletionBody(QStringLiteral("好的，已经记下这个任务。")));
-    server.responses.append(chatCompletionBody(QStringLiteral("这是全新会话里的第一条回复。")));
+    server.responses.append(chatCompletionBody(QStringLiteral(
+        R"JSON({"state":"complete","message":"好的，已经记下这个任务。"})JSON")));
+    server.responses.append(chatCompletionBody(QStringLiteral(
+        R"JSON({"state":"complete","message":"这是全新会话里的第一条回复。"})JSON")));
 
     AiSettingsService settingsService(nullptr, nullptr);
     AiSettings settings;
@@ -278,8 +312,8 @@ void AiAssistantWidgetTest::assistantNarrativeRendersAsMarkdown()
 {
     MiniAiServer server;
     QVERIFY(server.isListening());
-    server.responses.append(
-        chatCompletionBody(QStringLiteral("**已完成**，共 3 步：\n1. 检查\n2. 安装\n3. 验证")));
+    server.responses.append(chatCompletionBody(QStringLiteral(
+        R"JSON({"state":"complete","message":"**已完成**，服务状态正常。"})JSON")));
 
     AiSettingsService settingsService(nullptr, nullptr);
     AiSettings settings;
@@ -306,6 +340,295 @@ void AiAssistantWidgetTest::assistantNarrativeRendersAsMarkdown()
         }
     }
     QVERIFY(foundMarkdownBubble);
+}
+
+/**
+ * @brief 模型即使输出完整教程，界面也不能先展示再在末尾提示“已忽略”。
+ *
+ * 第一份响应故意使用旧式 Markdown 并包含三条命令；客户端应把它视为协议违规，在后台追加
+ * 一条纠正请求。只有第二份合法 JSON 中的单个检查命令可以进入界面和执行按钮，原教程里的
+ * 安装、启动命令及说明均不得出现在任何可见标签中。
+ */
+void AiAssistantWidgetTest::multiStepResponseIsRejectedAndRepairedBeforeDisplay()
+{
+    MiniAiServer server;
+    QVERIFY(server.isListening());
+    server.responses.append(chatCompletionBody(QStringLiteral(
+        "1. 检查系统\n```bash\ncat /etc/os-release\n```\n"
+        "2. 安装 Nginx\n```bash\nyum install -y nginx\n```\n"
+        "3. 启动服务\n```bash\nsystemctl start nginx\n```")));
+    server.responses.append(chatCompletionBody(QStringLiteral(
+        R"JSON({"state":"command","title":"识别操作系统","reason":"需要先确认发行版，才能在下一轮选择正确的包管理器。","command":"cat /etc/os-release"})JSON")));
+
+    AiSettingsService settingsService(nullptr, nullptr);
+    AiSettings settings;
+    settings.endpointUrl = QStringLiteral("http://127.0.0.1:%1").arg(server.port());
+    settings.model = QStringLiteral("test-model");
+    QVERIFY(settingsService.save(settings));
+
+    AiAssistantWidget widget(&settingsService);
+    auto *inputEdit = widget.findChild<QTextEdit *>(QStringLiteral("aiInputEdit"));
+    auto *sendButton = widget.findChild<QPushButton *>(QStringLiteral("aiSendButton"));
+    QVERIFY(inputEdit != nullptr);
+    QVERIFY(sendButton != nullptr);
+
+    inputEdit->setPlainText(QStringLiteral("帮我安装 Nginx"));
+    sendButton->click();
+
+    // 两次请求分别是原始决策和客户端自动发起的协议纠正；用户不需要手工重试。
+    QTRY_COMPARE_WITH_TIMEOUT(server.capturedBodies.size(), 2, 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(sendButton->isEnabled(), 5000);
+    QCOMPARE(widget.findChildren<QPushButton *>(QStringLiteral("aiExecuteButton")).size(), 1);
+
+    bool foundReason = false;
+    for (QLabel *label : widget.findChildren<QLabel *>()) {
+        const QString visibleText = label->text();
+        QVERIFY2(!visibleText.contains(QStringLiteral("yum install")), qPrintable(visibleText));
+        QVERIFY2(!visibleText.contains(QStringLiteral("systemctl start")), qPrintable(visibleText));
+        if (visibleText.contains(QStringLiteral("确认发行版"))) {
+            foundReason = true;
+        }
+    }
+    QVERIFY(foundReason);
+
+    const QJsonArray repairMessages = requestMessages(server.capturedBodies.at(1));
+    QCOMPARE(repairMessages.first().toObject().value(QStringLiteral("role")).toString(),
+             QStringLiteral("system"));
+    QVERIFY(repairMessages.last().toObject().value(QStringLiteral("content")).toString().contains(
+        QStringLiteral("违反了单步协议")));
+}
+
+/**
+ * @brief 输入框应使用桌面聊天工具的键盘语义，并按内容高度增长但不超过十行。
+ *
+ * 先用 Shift+Enter 验证换行不会发送，再用 Enter 验证完整两行文本只发出一次请求。随后在
+ * 请求结束后写入十二行草稿，确认输入框达到十行上限后启用内部滚动，而不是继续挤压聊天区。
+ */
+void AiAssistantWidgetTest::inputEditorSendsOnEnterAndGrowsToTenLines()
+{
+    MiniAiServer server;
+    QVERIFY(server.isListening());
+    server.responses.append(chatCompletionBody(QStringLiteral(
+        R"JSON({"state":"complete","message":"已收到任务。"})JSON")));
+
+    AiSettingsService settingsService(nullptr, nullptr);
+    AiSettings settings;
+    settings.endpointUrl = QStringLiteral("http://127.0.0.1:%1").arg(server.port());
+    settings.model = QStringLiteral("test-model");
+    QVERIFY(settingsService.save(settings));
+
+    AiAssistantWidget widget(&settingsService);
+    widget.resize(420, 640);
+    widget.show();
+    auto *inputEdit = widget.findChild<QTextEdit *>(QStringLiteral("aiInputEdit"));
+    QVERIFY(inputEdit != nullptr);
+    const int initialHeight = inputEdit->height();
+
+    inputEdit->setFocus();
+    // QtTest::keyClicks 仅支持 ASCII 键表，中文文本使用编辑器 API 注入；Enter/Shift+Enter 仍用
+    // 真实键事件触发，测试目标（事件过滤器是否发送或换行）不受影响。
+    inputEdit->setPlainText(QStringLiteral("第一行"));
+    inputEdit->moveCursor(QTextCursor::End);
+    QTest::keyClick(inputEdit, Qt::Key_Return, Qt::ShiftModifier);
+    inputEdit->insertPlainText(QStringLiteral("第二行"));
+    QCOMPARE(server.capturedBodies.size(), 0);
+    QVERIFY(inputEdit->toPlainText().contains(QLatin1Char('\n')));
+    QTRY_VERIFY(inputEdit->height() > initialHeight);
+
+    QTest::keyClick(inputEdit, Qt::Key_Return);
+    QTRY_COMPARE_WITH_TIMEOUT(server.capturedBodies.size(), 1, 5000);
+    QVERIFY(inputEdit->toPlainText().isEmpty());
+    QTRY_VERIFY_WITH_TIMEOUT(widget.findChild<QPushButton *>(QStringLiteral("aiSendButton"))->isEnabled(),
+                             5000);
+
+    QStringList twelveLines;
+    for (int index = 1; index <= 12; ++index) {
+        twelveLines.append(QStringLiteral("第 %1 行").arg(index));
+    }
+    inputEdit->setPlainText(twelveLines.join(QLatin1Char('\n')));
+    QTRY_VERIFY(inputEdit->verticalScrollBarPolicy() == Qt::ScrollBarAsNeeded);
+    const int tenLineUpperBound = inputEdit->fontMetrics().lineSpacing() * 10 + 16;
+    QVERIFY2(inputEdit->height() <= tenLineUpperBound,
+             qPrintable(QStringLiteral("height=%1 upper=%2")
+                            .arg(inputEdit->height()).arg(tenLineUpperBound)));
+}
+
+/**
+ * @brief Command+Enter 必须执行最后一条待确认命令，而不是发送输入框草稿。
+ *
+ * 输入框保留一段未发送文字，然后触发 Meta+Return：执行信号应携带智能体建议命令，输入草稿
+ * 仍应原样保留。按钮同时要展示快捷键提示；执行后再次按快捷键不会重复触发已经禁用的命令。
+ */
+void AiAssistantWidgetTest::commandEnterExecutesLatestPendingCommand()
+{
+    MiniAiServer server;
+    QVERIFY(server.isListening());
+    server.responses.append(chatCompletionBody(QStringLiteral(
+        R"JSON({"state":"command","title":"检查 Nginx","reason":"先确认当前安装状态。","command":"which nginx"})JSON")));
+
+    AiSettingsService settingsService(nullptr, nullptr);
+    AiSettings settings;
+    settings.endpointUrl = QStringLiteral("http://127.0.0.1:%1").arg(server.port());
+    settings.model = QStringLiteral("test-model");
+    QVERIFY(settingsService.save(settings));
+
+    AiAssistantWidget widget(&settingsService);
+    widget.resize(420, 640);
+    widget.show();
+    QString terminalText = QStringLiteral("[user@host ~]$ ");
+    widget.setTerminalContextProvider([&terminalText]() { return terminalText; });
+
+    auto *inputEdit = widget.findChild<QTextEdit *>(QStringLiteral("aiInputEdit"));
+    auto *sendButton = widget.findChild<QPushButton *>(QStringLiteral("aiSendButton"));
+    QVERIFY(inputEdit != nullptr);
+    QVERIFY(sendButton != nullptr);
+    QSignalSpy execSpy(&widget, &AiAssistantWidget::commandExecutionRequested);
+
+    inputEdit->setPlainText(QStringLiteral("帮我检查 nginx"));
+    sendButton->click();
+    QTRY_COMPARE_WITH_TIMEOUT(server.capturedBodies.size(), 1, 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(
+        !widget.findChildren<QPushButton *>(QStringLiteral("aiExecuteButton")).isEmpty(), 5000);
+
+    QPushButton *executeButton =
+        widget.findChildren<QPushButton *>(QStringLiteral("aiExecuteButton")).last();
+    QVERIFY(executeButton->text().contains(QStringLiteral("⌘")));
+    QVERIFY(executeButton->toolTip().contains(QStringLiteral("Command+Enter")));
+
+    inputEdit->setPlainText(QStringLiteral("这段草稿不能被发送"));
+    inputEdit->setFocus();
+    QTest::keyClick(inputEdit, Qt::Key_Return, Qt::MetaModifier);
+    QTRY_COMPARE(execSpy.count(), 1);
+    QCOMPARE(execSpy.at(0).at(0).toString(), QStringLiteral("which nginx"));
+    QCOMPARE(inputEdit->toPlainText(), QStringLiteral("这段草稿不能被发送"));
+    QVERIFY(!executeButton->isEnabled());
+
+    QTest::keyClick(inputEdit, Qt::Key_Return, Qt::MetaModifier);
+    QTest::qWait(50);
+    QCOMPARE(execSpy.count(), 1);
+}
+
+/**
+ * @brief 命令卡片的插入、修改、复制必须各走独立且可感知的交互路径。
+ *
+ * “插入”直接发出终端插入信号且不改变 AI 输入框；“修改”弹出编辑对话框，确认后发送修改值；
+ * “复制”只写剪贴板并产生成功提示。三者都不能触发 commandExecutionRequested。
+ */
+void AiAssistantWidgetTest::commandCardInsertModifyAndCopyUseCorrectRoutes()
+{
+    MiniAiServer server;
+    QVERIFY(server.isListening());
+    server.responses.append(chatCompletionBody(QStringLiteral(
+        R"JSON({"state":"command","title":"检查服务","reason":"读取当前服务状态。","command":"systemctl status nginx"})JSON")));
+
+    AiSettingsService settingsService(nullptr, nullptr);
+    AiSettings settings;
+    settings.endpointUrl = QStringLiteral("http://127.0.0.1:%1").arg(server.port());
+    settings.model = QStringLiteral("test-model");
+    QVERIFY(settingsService.save(settings));
+
+    AiAssistantWidget widget(&settingsService);
+    widget.resize(420, 640);
+    widget.show();
+    auto *inputEdit = widget.findChild<QTextEdit *>(QStringLiteral("aiInputEdit"));
+    auto *sendButton = widget.findChild<QPushButton *>(QStringLiteral("aiSendButton"));
+    QVERIFY(inputEdit != nullptr);
+    QVERIFY(sendButton != nullptr);
+    QSignalSpy insertSpy(&widget, &AiAssistantWidget::commandInsertionRequested);
+    QSignalSpy executeSpy(&widget, &AiAssistantWidget::commandExecutionRequested);
+    QSignalSpy statusSpy(&widget, &AiAssistantWidget::statusMessage);
+
+    inputEdit->setPlainText(QStringLiteral("检查 nginx"));
+    sendButton->click();
+    QTRY_COMPARE_WITH_TIMEOUT(server.capturedBodies.size(), 1, 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(
+        widget.findChild<QPushButton *>(QStringLiteral("aiInsertButton")) != nullptr, 5000);
+
+    inputEdit->setPlainText(QStringLiteral("保留的聊天草稿"));
+    widget.findChild<QPushButton *>(QStringLiteral("aiInsertButton"))->click();
+    QCOMPARE(insertSpy.count(), 1);
+    QCOMPARE(insertSpy.at(0).at(0).toString(), QStringLiteral("systemctl status nginx"));
+    QCOMPARE(inputEdit->toPlainText(), QStringLiteral("保留的聊天草稿"));
+    QCOMPARE(executeSpy.count(), 0);
+
+    widget.findChild<QPushButton *>(QStringLiteral("aiCopyButton"))->click();
+    QCOMPARE(QGuiApplication::clipboard()->text(), QStringLiteral("systemctl status nginx"));
+    QVERIFY(!statusSpy.isEmpty());
+    QCOMPARE(statusSpy.last().at(0).toString(), QStringLiteral("命令已复制到剪贴板"));
+
+    // QInputDialog::getText 使用嵌套事件循环；预先排队的回调在对话框显示后填入修改值并确认，
+    // 从而覆盖真实的弹窗交互，而不是直接调用内部信号绕过实现。
+    QTimer::singleShot(0, &widget, []() {
+        for (QWidget *topLevel : QApplication::topLevelWidgets()) {
+            auto *dialog = qobject_cast<QInputDialog *>(topLevel);
+            if (dialog != nullptr && dialog->isVisible()) {
+                dialog->setTextValue(QStringLiteral("systemctl is-active nginx"));
+                dialog->accept();
+                return;
+            }
+        }
+    });
+    widget.findChild<QPushButton *>(QStringLiteral("aiModifyButton"))->click();
+    QCOMPARE(insertSpy.count(), 2);
+    QCOMPARE(insertSpy.at(1).at(0).toString(), QStringLiteral("systemctl is-active nginx"));
+    QCOMPARE(executeSpy.count(), 0);
+}
+
+/**
+ * @brief 用户上滚时暂停自动跟随，重新滚到底部后必须恢复自动贴底。
+ *
+ * 用多轮 complete 消息制造可滚动内容。第一次手动上滚后新增消息不应改变视口位置；用户再把
+ * 滑块拖到底部，下一条消息到达后滚动条应跟随新的 maximum，而不是停在旧的底部位置。
+ */
+void AiAssistantWidgetTest::chatAutoScrollResumesAfterUserReturnsToBottom()
+{
+    MiniAiServer server;
+    QVERIFY(server.isListening());
+    for (int index = 0; index < 14; ++index) {
+        server.responses.append(chatCompletionBody(QStringLiteral(
+            R"JSON({"state":"complete","message":"这是一段用于验证聊天滚动行为的较长回复内容。"})JSON")));
+    }
+
+    AiSettingsService settingsService(nullptr, nullptr);
+    AiSettings settings;
+    settings.endpointUrl = QStringLiteral("http://127.0.0.1:%1").arg(server.port());
+    settings.model = QStringLiteral("test-model");
+    QVERIFY(settingsService.save(settings));
+
+    AiAssistantWidget widget(&settingsService);
+    widget.resize(360, 360);
+    widget.show();
+    auto *inputEdit = widget.findChild<QTextEdit *>(QStringLiteral("aiInputEdit"));
+    auto *sendButton = widget.findChild<QPushButton *>(QStringLiteral("aiSendButton"));
+    auto *chatScroll = widget.findChild<QScrollArea *>(QStringLiteral("AiChatScroll"));
+    QVERIFY(inputEdit != nullptr);
+    QVERIFY(sendButton != nullptr);
+    QVERIFY(chatScroll != nullptr);
+
+    for (int index = 0; index < 7; ++index) {
+        inputEdit->setPlainText(QStringLiteral("消息 %1").arg(index));
+        sendButton->click();
+        QTRY_COMPARE_WITH_TIMEOUT(server.capturedBodies.size(), index + 1, 5000);
+        QTRY_VERIFY_WITH_TIMEOUT(sendButton->isEnabled(), 5000);
+    }
+    QScrollBar *bar = chatScroll->verticalScrollBar();
+    QTRY_VERIFY(bar->maximum() > 0);
+    QTRY_COMPARE(bar->value(), bar->maximum());
+
+    bar->setValue(0);
+    inputEdit->setPlainText(QStringLiteral("上滚后新增消息"));
+    sendButton->click();
+    QTRY_COMPARE_WITH_TIMEOUT(server.capturedBodies.size(), 8, 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(sendButton->isEnabled(), 5000);
+    QCOMPARE(bar->value(), 0);
+
+    // 用户重新拖到底部后，下一轮消息应跟随增长后的新 maximum，证明自动跟随已经恢复。
+    bar->setValue(bar->maximum());
+    inputEdit->setPlainText(QStringLiteral("回到底部后新增消息"));
+    sendButton->click();
+    QTRY_COMPARE_WITH_TIMEOUT(server.capturedBodies.size(), 9, 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(sendButton->isEnabled(), 5000);
+    QTRY_COMPARE(bar->value(), bar->maximum());
 }
 
 /**

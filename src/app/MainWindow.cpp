@@ -315,9 +315,8 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     m_sidebarPanel->setObjectName(QStringLiteral("SidebarPanel"));
     m_sidebarPanel->setMinimumWidth(kSidebarMinimumWidth);
     auto *sidebarLayout = new QVBoxLayout(m_sidebarPanel);
-    // 四个侧栏页面（主机、效率工具、端口转发、AI 助手）共享这一层外边距，压缩它相当于
-    // 一次性把空间让给全部页面的内容，不需要逐个页面单独调整。标题和搜索框仍使用同一
-    // 左右基线，树内再通过委托建立箭头、图标与文字层级，不需要在外层堆叠额外缩进。
+    // 四个侧栏页面共享同一容器和同一条标题栏；AI 助手页只在标题栏下方额外插入一条自己的
+    // 上下文行（当前服务器 + 新会话），不再重复渲染页面标题本身。
     sidebarLayout->setContentsMargins(10, 10, 10, 8);
     sidebarLayout->setSpacing(8);
     m_sidebarTitle = new QLabel(tr("主机"), m_sidebarPanel);
@@ -854,6 +853,25 @@ MainWindow::MainWindow(ApplicationDatabase *database,
             &AiAssistantWidget::commandExecutionRequested,
             this,
             &MainWindow::executeOnTargets);
+    connect(m_aiAssistantWidget,
+            &AiAssistantWidget::commandInsertionRequested,
+            this,
+            [this](const QString &command, const QStringList &targetIds) {
+        // AI 助手当前只允许操作活动终端；保留 targetIds 参数是为了与执行信号保持一致的
+        // 扩展边界。未来若支持多目标插入，可在此集中路由而无需让 AI 控件持有 TerminalPane。
+        if (!targetIds.isEmpty()) {
+            showTransientMessage(tr("暂不支持向多个终端插入未执行命令"), 5000);
+            return;
+        }
+        TerminalWorkspace *workspace = activeWorkspace();
+        TerminalPane *pane = workspace == nullptr ? nullptr : workspace->activePane();
+        if (pane == nullptr) {
+            showTransientMessage(tr("当前没有可插入命令的终端"), 5000);
+            return;
+        }
+        pane->insertCommandText(command);
+        showTransientMessage(tr("命令已插入当前终端，按回车执行"), 5000);
+    });
     m_aiAssistantWidget->setTerminalContextProvider([this]() -> QString {
         TerminalWorkspace *workspace = activeWorkspace();
         TerminalPane *pane = workspace == nullptr ? nullptr : workspace->activePane();
@@ -1015,6 +1033,10 @@ void MainWindow::showSidebarPage(const int pageIndex)
     if (m_hostHeaderActions != nullptr) {
         m_hostHeaderActions->setVisible(pageIndex == HostsPage);
     }
+
+    // 四个侧栏页面共用同一条标题栏和外边距——AI 助手不再自带独立顶栏，题图要求的正是
+    // "顶部标题栏与主机侧边栏风格保持一致"，与其在页面内部复刻一份相近的样式，不如直接
+    // 复用同一个 SidebarHeader 标签，保证像素级一致且未来主题调整只需改一处。
 
     // QButtonGroup 已设置互斥，但菜单触发并不会自动点击按钮，因此这里显式同步选中态。
     // 使用信号阻断避免 setChecked 再次触发页面切换，保持状态流只有一个入口。

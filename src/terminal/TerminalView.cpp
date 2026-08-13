@@ -807,6 +807,17 @@ void TerminalView::submitCommand(const QString &command)
     m_commandCompleter->popup()->hide();
 }
 
+void TerminalView::insertCommandText(const QString &command)
+{
+    if (m_localCapture || command.isEmpty()) {
+        return;
+    }
+    // 这里只写命令本身，绝不追加 CR/LF；是否执行完全交由用户在终端中按回车决定。
+    emit inputBytes(command.toUtf8());
+    m_currentCommand += command;
+    updateCompletionPopup();
+}
+
 QRect TerminalView::visualCursorRect() const
 {
     const int position = m_vtermBridge->renderedCursorPosition();
