@@ -2,6 +2,7 @@
 
 #include "core/HostRecord.h"
 
+#include <QHash>
 #include <QWidget>
 
 class ApplicationDatabase;
@@ -39,8 +40,9 @@ public:
      * @brief 重新读取主机树，并按数据库稳定主键恢复刷新前选中的主机或分组。
      *
      * 主机树刷新会销毁旧 QTreeWidgetItem，因此不能依赖节点指针保留界面状态。本方法会在
-     * 重建前记录当前记录 id 和垂直滚动位置，重建后恢复高亮、当前项及其祖先展开状态；若
-     * 记录已被删除或不再满足当前搜索条件，则保持无选中项，避免错误选中另一条记录。
+     * 重建前记录当前记录 id 和垂直滚动位置，重建后恢复高亮、当前项，并按持久化偏好恢复
+     * 各目录的展开/折叠状态；若记录已被删除或不再满足当前搜索条件，则保持无选中项，避免
+     * 错误选中另一条记录。
      */
     void refresh();
 
@@ -93,6 +95,32 @@ private:
      * 较少、主机较多时会让分组散落在主机中间，不利于识别"这是组织结构还是可连接目标"。
      */
     bool appendRootLevel(QString *errorMessage);
+
+    /**
+     * @brief 从应用设置表加载各主机目录上次保存的展开/折叠状态。
+     *
+     * 状态以目录的数据库稳定 id 为键，因此目录改名、排序或移动后仍能命中原记录。设置不存在、
+     * 版本不兼容或内容损坏时采用“目录默认展开”的兼容行为，避免纯界面偏好阻断主机列表启动。
+     */
+    void loadFolderExpansionState();
+
+    /**
+     * @brief 把已加载的目录展开状态应用到刚重建完成的完整主机树。
+     *
+     * 恢复期间会阻断树的展开/折叠信号，防止程序恢复动作被误判成用户操作并立即反向写库。
+     * 尚无历史记录的新目录默认展开，以延续 Shellium 原有行为并确保新建内容立即可见。
+     */
+    void restoreFolderExpansionState();
+
+    /**
+     * @brief 记录并立即持久化一次目录展开状态变化。
+     * @param item 发生展开或折叠的树节点；非目录或缺少稳定 id 的展示节点会被安全忽略。
+     * @param expanded true 表示展开，false 表示折叠。
+     *
+     * Qt 的 itemExpanded/itemCollapsed 同时覆盖鼠标、键盘和辅助功能入口，因此统一监听这两个
+     * 信号比只在自绘箭头点击回调中保存更完整。写入失败会向用户显示数据库错误，不静默丢状态。
+     */
+    void persistFolderExpansionState(QTreeWidgetItem *item, bool expanded);
 
     /** @brief 根据搜索框内容展示完整树、名称地址搜索结果或精确标签结果。 */
     void applyFilter();
@@ -185,6 +213,13 @@ private:
     QLineEdit *m_searchEdit = nullptr;
     QTreeWidget *m_tree = nullptr;
     QWidget *m_headerActions = nullptr;
+    /**
+     * @brief 目录稳定 id 到展开状态的内存快照。
+     *
+     * 该快照既承接启动加载，也会在每次真实操作后整体写回 settings 表。没有出现在快照中的
+     * 新目录按展开处理，避免应用升级后已有用户配置让后来创建的目录意外默认折叠。
+     */
+    QHash<QString, bool> m_folderExpansionState;
     /** @brief 最近一次完整统计得到的主机数量；搜索过滤不会改变该值。 */
     int m_hostCount = 0;
 };

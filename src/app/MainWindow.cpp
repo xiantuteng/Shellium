@@ -316,7 +316,7 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     m_sidebarPanel->setMinimumWidth(kSidebarMinimumWidth);
     auto *sidebarLayout = new QVBoxLayout(m_sidebarPanel);
     // 四个侧栏页面共享同一容器和同一条标题栏；AI 助手页只在标题栏下方额外插入一条自己的
-    // 上下文行（当前服务器 + 新会话），不再重复渲染页面标题本身。
+    // 目标与会话动作行，不再重复渲染页面标题本身。
     sidebarLayout->setContentsMargins(10, 10, 10, 8);
     sidebarLayout->setSpacing(8);
     m_sidebarTitle = new QLabel(tr("主机"), m_sidebarPanel);
@@ -343,11 +343,15 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     if (!m_aiSettingsService->load(&aiSettingsLoadError)) {
         showTransientMessage(tr("读取 AI 助手配置失败：%1").arg(aiSettingsLoadError), 0);
     }
-    m_aiAssistantWidget = new AiAssistantWidget(m_aiSettingsService, m_sidebarStack);
+    // AI 页本身是一个与终端标签索引同步的内部栈，每个标签稍后在 createWorkspaceTab() 中
+    // 创建独立 AiAssistantWidget。不能只创建一个全局控件再替换 m_history：旧标签的异步
+    // 模型回复和终端捕获仍可能落入新标签，独立 QObject/AiClient 才能彻底隔离状态。
+    m_aiAssistantStack = new QStackedWidget(m_sidebarStack);
+    m_aiAssistantStack->setObjectName(QStringLiteral("AiAssistantStack"));
     m_sidebarStack->addWidget(m_hostManager);
     m_sidebarStack->addWidget(m_productivityWidget);
     m_sidebarStack->addWidget(m_portForwardManager);
-    m_sidebarStack->addWidget(m_aiAssistantWidget);
+    m_sidebarStack->addWidget(m_aiAssistantStack);
     sidebarLayout->addWidget(m_sidebarStack, 1);
 
     // HostManagerWidget 在构造末尾已完成首次刷新，该次信号早于 MainWindow 的连接，因此先
@@ -710,7 +714,19 @@ MainWindow::MainWindow(ApplicationDatabase *database,
                 // 外部标题栏已经完成自身移动；同步移动 QTabWidget 的隐藏标签会由 Qt 原生
                 // 逻辑连同页面一起重排，避免手动移除页面导致会话短暂失去父对象。
                 m_tabs->tabBar()->moveTab(from, to);
+                if (m_aiAssistantStack != nullptr
+                    && from < m_aiAssistantStack->count()
+                    && to < m_aiAssistantStack->count()) {
+                    // QStackedWidget 没有 moveWidget API；先移除再按目标索引插入不会销毁页面，
+                    // 与终端标签执行完全相同的移动后，两套索引仍一一对应。
+                    QWidget *assistantPage = m_aiAssistantStack->widget(from);
+                    m_aiAssistantStack->removeWidget(assistantPage);
+                    m_aiAssistantStack->insertWidget(to, assistantPage);
+                }
                 m_tabs->setCurrentIndex(m_titleTabBar->currentIndex());
+                if (m_aiAssistantStack != nullptr) {
+                    m_aiAssistantStack->setCurrentIndex(m_tabs->currentIndex());
+                }
             });
     connect(m_titleTabBar,
             &QWidget::customContextMenuRequested,
@@ -845,38 +861,6 @@ MainWindow::MainWindow(ApplicationDatabase *database,
                         : tr("实时广播已关闭"),
                     5000);
             });
-    connect(m_aiAssistantWidget,
-            &AiAssistantWidget::statusMessage,
-            this,
-            [this](const QString &message) { showTransientMessage(message, 8000); });
-    connect(m_aiAssistantWidget,
-            &AiAssistantWidget::commandExecutionRequested,
-            this,
-            &MainWindow::executeOnTargets);
-    connect(m_aiAssistantWidget,
-            &AiAssistantWidget::commandInsertionRequested,
-            this,
-            [this](const QString &command, const QStringList &targetIds) {
-        // AI 助手当前只允许操作活动终端；保留 targetIds 参数是为了与执行信号保持一致的
-        // 扩展边界。未来若支持多目标插入，可在此集中路由而无需让 AI 控件持有 TerminalPane。
-        if (!targetIds.isEmpty()) {
-            showTransientMessage(tr("暂不支持向多个终端插入未执行命令"), 5000);
-            return;
-        }
-        TerminalWorkspace *workspace = activeWorkspace();
-        TerminalPane *pane = workspace == nullptr ? nullptr : workspace->activePane();
-        if (pane == nullptr) {
-            showTransientMessage(tr("当前没有可插入命令的终端"), 5000);
-            return;
-        }
-        pane->insertCommandText(command);
-        showTransientMessage(tr("命令已插入当前终端，按回车执行"), 5000);
-    });
-    m_aiAssistantWidget->setTerminalContextProvider([this]() -> QString {
-        TerminalWorkspace *workspace = activeWorkspace();
-        TerminalPane *pane = workspace == nullptr ? nullptr : workspace->activePane();
-        return pane == nullptr ? QString() : pane->terminalPlainText();
-    });
     refreshProductivityTargets();
 
     // 默认使用 CredentialVault 的 15 分钟阈值。每 15 秒检查一次只决定锁定延迟上界，
@@ -969,6 +953,9 @@ void MainWindow::closeWorkspaceTab(const int index, const bool allowLast)
     }
 
     QWidget *page = m_tabs->widget(index);
+    QWidget *assistantPage = m_aiAssistantStack != nullptr
+        && index < m_aiAssistantStack->count()
+        ? m_aiAssistantStack->widget(index) : nullptr;
     if (m_titleTabBar != nullptr && index < m_titleTabBar->count()) {
         // 删除镜像标签时临时阻断 currentChanged；随后 QTabWidget 会选出真实的新当前页面，
         // 它的 currentChanged 回调再统一更新标题栏，避免中间索引落到另一个会话。
@@ -976,8 +963,17 @@ void MainWindow::closeWorkspaceTab(const int index, const bool allowLast)
         m_titleTabBar->removeTab(index);
     }
     m_tabs->removeTab(index);
+    if (assistantPage != nullptr) {
+        // AI 页面与终端页面共享同一索引生命周期；关闭标签后立即从可见栈移除，再延迟析构
+        // 其 AiClient 和历史记录，确保新当前索引不会短暂显示已关闭标签的会话。
+        m_aiAssistantStack->removeWidget(assistantPage);
+        assistantPage->deleteLater();
+    }
     if (m_titleTabBar != nullptr) {
         m_titleTabBar->setCurrentIndex(m_tabs->currentIndex());
+    }
+    if (m_aiAssistantStack != nullptr) {
+        m_aiAssistantStack->setCurrentIndex(m_tabs->currentIndex());
     }
 
     // 会话清理可能等待 SSH/SFTP/转发线程；deleteLater 先让当前菜单或快捷键回调返回，页面
@@ -2341,6 +2337,57 @@ void MainWindow::recordConnectionDisconnected(TerminalPane *pane,
     }
 }
 
+void MainWindow::configureAiAssistant(AiAssistantWidget *assistant, TerminalPane *pane)
+{
+    Q_ASSERT(assistant != nullptr);
+    Q_ASSERT(pane != nullptr);
+
+    QPointer<TerminalPane> guardedPane(pane);
+    connect(assistant,
+            &AiAssistantWidget::statusMessage,
+            this,
+            [this](const QString &message) { showTransientMessage(message, 8000); });
+    connect(assistant,
+            &AiAssistantWidget::commandExecutionRequested,
+            this,
+            [this, guardedPane](const QString &command, const QStringList &targetIds) {
+        // 单标签 AI 助手不支持广播目标；命令必须投递给创建它时绑定的终端，而不是槽执行
+        // 瞬间的 activeWorkspace()。这样即使点击事件与标签切换落在同一事件循环，也不会
+        // 把旧聊天里的命令发到新标签。
+        if (!targetIds.isEmpty()) {
+            showTransientMessage(tr("AI 助手暂不支持向多个终端执行命令"), 5000);
+            return;
+        }
+        if (guardedPane.isNull()) {
+            showTransientMessage(tr("对应的终端标签已经关闭"), 5000);
+            return;
+        }
+        guardedPane->executeCommand(command);
+    });
+    connect(assistant,
+            &AiAssistantWidget::commandInsertionRequested,
+            this,
+            [this, guardedPane](const QString &command, const QStringList &targetIds) {
+        // 插入与执行共享同一绑定规则，但仍保持两个独立信号，避免“修改”动作误带回车执行。
+        if (!targetIds.isEmpty()) {
+            showTransientMessage(tr("暂不支持向多个终端插入未执行命令"), 5000);
+            return;
+        }
+        if (guardedPane.isNull()) {
+            showTransientMessage(tr("对应的终端标签已经关闭"), 5000);
+            return;
+        }
+        guardedPane->insertCommandText(command);
+        showTransientMessage(tr("命令已插入对应终端，按回车执行"), 5000);
+    });
+    assistant->setTerminalContextProvider([guardedPane]() -> QString {
+        // QPointer 在标签关闭后自动归零；回调即使被延迟的捕获定时器触发，也只返回空文本，
+        // 不会解引用已经析构的 TerminalPane。
+        return guardedPane.isNull() ? QString() : guardedPane->terminalPlainText();
+    });
+    assistant->setActiveTarget(pane->activeTarget());
+}
+
 TerminalWorkspace *MainWindow::createWorkspaceTab(const QString &title)
 {
     auto *workspace = new TerminalWorkspace(m_tabs);
@@ -2354,9 +2401,20 @@ TerminalWorkspace *MainWindow::createWorkspaceTab(const QString &title)
         // 会话栏构造时统一镜像，因此这里需要允许指针为空。
         m_titleTabBar->insertTab(index, terminalIcon, title);
     }
+
+    TerminalPane *pane = workspace->activePane();
+    AiAssistantWidget *assistant = nullptr;
+    if (m_aiAssistantStack != nullptr && m_aiSettingsService != nullptr) {
+        assistant = new AiAssistantWidget(m_aiSettingsService, m_aiAssistantStack);
+        configureAiAssistant(assistant, pane);
+        m_aiAssistantStack->insertWidget(index, assistant);
+    }
     m_tabs->setCurrentIndex(index);
     if (m_titleTabBar != nullptr) {
         m_titleTabBar->setCurrentIndex(index);
+    }
+    if (m_aiAssistantStack != nullptr) {
+        m_aiAssistantStack->setCurrentIndex(index);
     }
 
     connect(workspace,
@@ -2367,13 +2425,19 @@ TerminalWorkspace *MainWindow::createWorkspaceTab(const QString &title)
                     showTransientMessage(message, 8000);
                 }
             });
-    TerminalPane *pane = workspace->activePane();
     pane->setCommandHistoryDatabase(m_database);
     pane->applyTerminalSettings(m_settingsService->currentSettings());
     connect(workspace,
             &TerminalWorkspace::activeTargetsChanged,
             this,
-            [this](TerminalPane *) { refreshProductivityTargets(); });
+            [this, assistant](TerminalPane *changedPane) {
+                // 每个 AI 页面直接跟随自己终端的目标变化，即使该标签当前隐藏也保持上下文
+                // 名称准确；效率工具的全局目标集合仍由统一刷新路径维护。
+                if (assistant != nullptr && changedPane != nullptr) {
+                    assistant->setActiveTarget(changedPane->activeTarget());
+                }
+                refreshProductivityTargets();
+            });
     connect(pane,
             &TerminalPane::commandHistoryChanged,
             this,
@@ -2534,11 +2598,21 @@ void MainWindow::refreshProductivityTargets()
     }
     m_productivityWidget->setExecutionTargets(targets);
 
-    if (m_aiAssistantWidget != nullptr) {
-        TerminalWorkspace *workspace = activeWorkspace();
-        TerminalPane *pane = workspace == nullptr ? nullptr : workspace->activePane();
-        m_aiAssistantWidget->setActiveTarget(
-            pane == nullptr ? ConnectionTarget{} : pane->activeTarget());
+    if (m_aiAssistantStack != nullptr) {
+        const int currentIndex = m_tabs == nullptr ? -1 : m_tabs->currentIndex();
+        if (currentIndex >= 0 && currentIndex < m_aiAssistantStack->count()) {
+            // AI 栈与终端标签使用相同索引；切换标签只改变当前页，不复制任何 m_history，因而
+            // 每个实例的会话列表、进行中请求和终端读取位置都留在自己的标签中。
+            m_aiAssistantStack->setCurrentIndex(currentIndex);
+            auto *assistant = qobject_cast<AiAssistantWidget *>(
+                m_aiAssistantStack->widget(currentIndex));
+            TerminalWorkspace *workspace = activeWorkspace();
+            TerminalPane *pane = workspace == nullptr ? nullptr : workspace->activePane();
+            if (assistant != nullptr) {
+                assistant->setActiveTarget(
+                    pane == nullptr ? ConnectionTarget{} : pane->activeTarget());
+            }
+        }
     }
 }
 

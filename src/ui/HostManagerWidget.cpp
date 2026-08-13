@@ -11,6 +11,7 @@
 #include <QAction>
 #include <QApplication>
 #include <QDateTime>
+#include <QDebug>
 #include <QDialog>
 #include <QDragMoveEvent>
 #include <QDropEvent>
@@ -21,6 +22,8 @@
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QInputDialog>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
@@ -61,6 +64,18 @@ constexpr int HostDetailRole = Qt::UserRole + 2;
 
 /** @brief 主机节点保存解析继承后的标签列表，委托用第一枚标签绘制紧凑状态徽章。 */
 constexpr int HostTagsRole = Qt::UserRole + 3;
+
+/**
+ * @brief 主机目录展开状态在 settings 表中的稳定键名。
+ *
+ * 键名带版本后缀，是因为该值包含结构化 JSON；未来若更换结构，可以新增 v2 并保留明确的
+ * 迁移边界，而不必猜测旧值究竟采用哪种格式。
+ */
+const QString kHostTreeExpansionSettingKey =
+    QStringLiteral("ui/host_tree_folder_expansion_v1");
+
+/** @brief 当前主机目录展开状态 JSON 结构版本。 */
+constexpr int kHostTreeExpansionStateVersion = 1;
 
 /**
  * @brief “未分组”分区标题伪节点在 HostKindRole 里存放的哨兵值。
@@ -2304,6 +2319,17 @@ HostManagerWidget::HostManagerWidget(ApplicationDatabase *database,
     };
     m_tree->setItemDelegate(itemDelegate);
 
+    // 监听 QTreeWidget 的最终状态信号，而不是只监听上方自绘箭头。这样鼠标双击、键盘左右键、
+    // 辅助功能以及将来新增的“全部展开/折叠”入口都会自动保存，且每一次有效状态变化只写一次。
+    connect(m_tree,
+            &QTreeWidget::itemExpanded,
+            this,
+            [this](QTreeWidgetItem *item) { persistFolderExpansionState(item, true); });
+    connect(m_tree,
+            &QTreeWidget::itemCollapsed,
+            this,
+            [this](QTreeWidgetItem *item) { persistFolderExpansionState(item, false); });
+
     // 拖拽排序/跨分组移动：Qt 负责实际挪动 QTreeWidgetItem，HostTreeWidget 只负责合法性
     // 校验，真正的持久化在下面的 onDropped 回调里完成。搜索结果是扁平视图，与真实父子
     // 关系无关，applyFilter() 会在搜索时临时关闭拖放，避免把搜索命中的顺序误写回数据库。
@@ -2395,6 +2421,8 @@ HostManagerWidget::HostManagerWidget(ApplicationDatabase *database,
         menu.exec(m_tree->viewport()->mapToGlobal(position));
     });
 
+    // 必须先加载持久化快照再首次刷新；否则首屏会按默认值构建，随后再恢复时产生可见跳变。
+    loadFolderExpansionState();
     refresh();
 }
 
@@ -2513,13 +2541,8 @@ void HostManagerWidget::refresh()
 
     QTreeWidgetItem *restoredItem = findTreeItemByRecordId(m_tree, selectedRecordId);
     if (restoredItem != nullptr) {
-        // 完整树当前默认 expandAll()，这里仍显式展开祖先：若以后改为记忆分组折叠状态，或
-        // 从扁平搜索切回层级树，恢复的选中节点也不会藏在折叠分组里而让用户误以为已丢失。
-        for (QTreeWidgetItem *ancestor = restoredItem->parent();
-             ancestor != nullptr;
-             ancestor = ancestor->parent()) {
-            ancestor->setExpanded(true);
-        }
+        // 只恢复选择，不再强制展开祖先目录。强制展开会覆盖用户刚保存的折叠偏好；即使当前
+        // 记录位于折叠目录内，也应由用户下次主动展开，而不是让普通刷新悄悄改变目录状态。
         m_tree->setCurrentItem(restoredItem);
         restoredItem->setSelected(true);
     }
@@ -2605,8 +2628,136 @@ bool HostManagerWidget::appendRootLevel(QString *errorMessage)
     return true;
 }
 
+void HostManagerWidget::loadFolderExpansionState()
+{
+    m_folderExpansionState.clear();
+
+    QString error;
+    const std::optional<QString> storedValue =
+        m_database->setting(kHostTreeExpansionSettingKey, &error);
+    if (!error.isEmpty()) {
+        // 展开状态只是界面偏好，读取失败不能阻断主机管理器启动。数据库层已给出可诊断文本，
+        // 这里记录日志并回退到全部默认展开；后续用户操作仍会尝试重新写入以实现自动修复。
+        qWarning().noquote() << tr("读取主机目录展开状态失败：%1").arg(error);
+        return;
+    }
+    if (!storedValue.has_value()) {
+        // 全新安装或升级前从未保存过状态时保持历史行为：所有目录默认展开。
+        return;
+    }
+
+    QJsonParseError parseError;
+    const QJsonDocument document =
+        QJsonDocument::fromJson(storedValue->toUtf8(), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
+        // 损坏的纯界面设置不值得阻塞启动；忽略整个值比部分猜测更可预测，下次真实操作会用
+        // 当前支持的结构覆盖它。日志保留偏移和原因，方便排查手工改库或异常写入。
+        qWarning().noquote()
+            << tr("主机目录展开状态格式损坏，已采用默认展开：%1（偏移 %2）")
+                   .arg(parseError.errorString())
+                   .arg(parseError.offset);
+        return;
+    }
+
+    const QJsonObject rootObject = document.object();
+    const QJsonValue versionValue = rootObject.value(QStringLiteral("version"));
+    const QJsonValue foldersValue = rootObject.value(QStringLiteral("folders"));
+    if (!versionValue.isDouble()
+        || versionValue.toInt() != kHostTreeExpansionStateVersion
+        || !foldersValue.isObject()) {
+        // 版本或结构不受支持时保留默认展开。显式校验可避免未来格式升级后把任意 JSON 字段
+        // 错当成目录 id，进而产生难以解释的随机折叠状态。
+        qWarning().noquote()
+            << tr("主机目录展开状态版本或结构不受支持，已采用默认展开");
+        return;
+    }
+
+    const QJsonObject folderStates = foldersValue.toObject();
+    for (auto iterator = folderStates.constBegin(); iterator != folderStates.constEnd(); ++iterator) {
+        // 单个无效条目不影响其他目录的合法状态。稳定 id 不能为空，值也必须是真正的 JSON
+        // 布尔值；拒绝 0/1 和字符串可防止宽松转换把损坏数据解释成用户偏好。
+        if (!iterator.key().isEmpty() && iterator.value().isBool()) {
+            m_folderExpansionState.insert(iterator.key(), iterator.value().toBool());
+        }
+    }
+}
+
+void HostManagerWidget::restoreFolderExpansionState()
+{
+    // setExpanded() 会正常发出 itemExpanded/itemCollapsed。恢复属于程序重建而不是用户操作，
+    // 必须阻断信号，否则启动时就会为每个目录同步写库，甚至覆盖尚未应用完的其他目录状态。
+    const QSignalBlocker expansionSignalBlocker(m_tree);
+
+    QList<QTreeWidgetItem *> pendingItems;
+    pendingItems.reserve(m_tree->topLevelItemCount());
+    for (int index = 0; index < m_tree->topLevelItemCount(); ++index) {
+        pendingItems.append(m_tree->topLevelItem(index));
+    }
+
+    while (!pendingItems.isEmpty()) {
+        QTreeWidgetItem *item = pendingItems.takeLast();
+        const auto kind = static_cast<HostNodeKind>(item->data(0, HostKindRole).toInt());
+        if (kind == HostNodeKind::Folder) {
+            const QString folderId = item->data(0, HostIdRole).toString();
+            if (!folderId.isEmpty()) {
+                // 未出现过的新目录使用 true，并把默认值纳入内存快照。此后用户操作任意目录时，
+                // 会把当前树中所有已知目录一起保存，确保展开与折叠状态形成完整、一致的快照。
+                const bool expanded = m_folderExpansionState.value(folderId, true);
+                m_folderExpansionState.insert(folderId, expanded);
+                item->setExpanded(expanded);
+            }
+        }
+
+        // 使用显式栈覆盖任意深度的嵌套目录，避免实现只对顶层分组有效。
+        for (int childIndex = 0; childIndex < item->childCount(); ++childIndex) {
+            pendingItems.append(item->child(childIndex));
+        }
+    }
+}
+
+void HostManagerWidget::persistFolderExpansionState(QTreeWidgetItem *item, const bool expanded)
+{
+    if (item == nullptr
+        || static_cast<HostNodeKind>(item->data(0, HostKindRole).toInt())
+            != HostNodeKind::Folder) {
+        // 搜索结果或“未分组”标题等展示节点不是持久化目录，不能污染设置快照。
+        return;
+    }
+
+    const QString folderId = item->data(0, HostIdRole).toString();
+    if (folderId.isEmpty()) {
+        // 真实目录理论上始终有数据库 id；防御性忽略异常节点，避免把空键写入后让多个目录
+        // 共享同一状态。主机数据本身不在这里修改，因此无需冒险尝试自动修复。
+        return;
+    }
+    m_folderExpansionState.insert(folderId, expanded);
+
+    QJsonObject folderStates;
+    for (auto iterator = m_folderExpansionState.constBegin();
+         iterator != m_folderExpansionState.constEnd();
+         ++iterator) {
+        folderStates.insert(iterator.key(), iterator.value());
+    }
+
+    QJsonObject rootObject;
+    rootObject.insert(QStringLiteral("version"), kHostTreeExpansionStateVersion);
+    rootObject.insert(QStringLiteral("folders"), folderStates);
+    const QString serializedState = QString::fromUtf8(
+        QJsonDocument(rootObject).toJson(QJsonDocument::Compact));
+
+    QString error;
+    if (!m_database->setSetting(kHostTreeExpansionSettingKey, serializedState, &error)) {
+        // 状态已留在内存中，因此当前会话交互仍正确；明确提示落库失败，让用户知道下次启动
+        // 可能无法恢复，而不是把持久化故障伪装成保存成功。
+        showDatabaseError(tr("保存主机目录展开状态"), error);
+    }
+}
+
 void HostManagerWidget::applyFilter()
 {
+    // clear() 和后续状态恢复都属于模型重建，不应被 itemCollapsed/itemExpanded 监听器当成用户
+    // 操作。这里覆盖整个重建过程；restoreFolderExpansionState() 内的阻断器允许安全嵌套。
+    const QSignalBlocker treeRebuildSignalBlocker(m_tree);
     m_tree->clear();
     const QString query = m_searchEdit->text().trimmed();
     QString error;
@@ -2621,7 +2772,7 @@ void HostManagerWidget::applyFilter()
             showDatabaseError(tr("加载主机树"), error);
             return;
         }
-        m_tree->expandAll();
+        restoreFolderExpansionState();
         return;
     }
 

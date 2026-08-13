@@ -131,6 +131,16 @@ private:
     TerminalWorkspace *createWorkspaceTab(const QString &title);
 
     /**
+     * @brief 为一个终端标签配置其专属 AI 助手及命令路由。
+     * @param assistant 归属于该标签的 AI 助手实例，不可为空。
+     * @param pane 同一标签内的终端面板，不可为空；助手终端上下文始终从它读取。
+     *
+     * 每个标签使用独立助手实例，才能保证模型异步回复、输出捕获和最近十次会话在切换标签
+     * 后仍留在原标签。命令也直接路由到绑定 pane，避免用户点击后恰逢标签切换而发错终端。
+     */
+    void configureAiAssistant(AiAssistantWidget *assistant, TerminalPane *pane);
+
+    /**
      * @brief 关闭指定会话标签并同步标题栏标签模型。
      * @param index 待关闭标签索引。
      * @param allowLast true 表示工作区整体替换时允许移除最后一个标签；普通交互必须为 false。
@@ -276,7 +286,13 @@ private:
     ProductivityModel *m_productivityModel = nullptr;
     ProductivityWidget *m_productivityWidget = nullptr;
     AiSettingsService *m_aiSettingsService = nullptr;
-    AiAssistantWidget *m_aiAssistantWidget = nullptr;
+    /**
+     * @brief 与终端 QTabWidget 索引严格同步的 AI 助手页面栈。
+     *
+     * 栈中每个页面都是一个独立 AiAssistantWidget；新建、移动、关闭终端标签时必须执行
+     * 相同的插入、移动、删除操作，currentIndex 也必须同步，防止显示其他标签的聊天记录。
+     */
+    QStackedWidget *m_aiAssistantStack = nullptr;
     TerminalSettingsService *m_settingsService = nullptr;
     QTimer *m_vaultIdleTimer = nullptr;
 

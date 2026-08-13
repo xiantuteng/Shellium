@@ -4,6 +4,7 @@
 #include "core/ConnectionTarget.h"
 
 #include <QElapsedTimer>
+#include <QDateTime>
 #include <QList>
 #include <QPointer>
 #include <QString>
@@ -19,6 +20,7 @@ class QLabel;
 class QPushButton;
 class QTextEdit;
 class QTimer;
+class QToolButton;
 class QVBoxLayout;
 class QEvent;
 
@@ -27,8 +29,9 @@ class QEvent;
  *
  * 与 ProductivityWidget 的关系约定完全一致：本控件不持有 TerminalPane，只携带稳定
  * 目标信息和命令文本通过信号交给 MainWindow 路由，因此同一份实现可以在测试或未来的
- * 浮动窗口中复用。当前版本对话历史是进程内单一会话（不按主机拆分、不持久化），上下文
- * 条只反映"当前绑定的终端"，是否把该终端最新输出主动附加到普通提问由用户在输入框下方的
+ * 浮动窗口中复用。每个终端标签页拥有一个独立实例，因此聊天、模型请求和终端读取进度不会
+ * 跨标签串线；单个实例内部保留最近十次会话，可通过顶部历史菜单恢复。上下文条只反映当前
+ * 实例绑定的终端，是否把该终端最新输出主动附加到普通提问由用户在输入框下方的
  * 勾选框显式决定——这是"最小上下文"默认值的直接体现；"只读/需审批"分级只影响建议命令卡片
  * 的展示与按钮颜色，不会有任何命令在用户点击"执行"之前被下发。
  *
@@ -67,7 +70,7 @@ public:
 
 public slots:
     /**
-     * @brief 清空对话历史和聊天区，开启一轮全新会话。
+     * @brief 把当前非空会话归档到最近记录，清空聊天区并开启一轮全新会话。
      *
      * 同时把终端读取位置归零：新会话不应该带着上一轮已经读过的旧输出增量，下一次读取
      * （无论是自动续问还是手动勾选附加）都会从终端当前内容重新起算。
@@ -169,13 +172,49 @@ private:
      *
      * 卡片只展示执行意图、命令和操作按钮。真实终端输出属于终端本身，只作为智能体的隐藏
      * 观察值使用，不回显进聊天区，避免大段日志挤占对话空间或泄露终端中的敏感内容。
+     * @param command 待展示且可能由用户执行的单条命令。
+     * @param title 可选的命令目的说明；为空时不创建卡片内说明区。
+     * @param reason 可选的执行原因说明；为空时不创建对应标签。
+     * @param alreadyExecuted true 表示从历史恢复的命令已执行，执行按钮会保持禁用；false
+     *        表示仍等待用户确认。
      */
     void appendCommandCard(const QString &command,
                            const QString &title = QString(),
-                           const QString &reason = QString());
+                           const QString &reason = QString(),
+                           bool alreadyExecuted = false);
 
     /** @brief 把一条纯状态提示（如错误信息）追加到聊天区。 */
     void appendNoticeBubble(const QString &text, bool isError);
+
+    /** @brief 清空聊天区的可见消息控件，但保留末尾负责吸收空白的伸缩项。 */
+    void clearChatContent();
+
+    /**
+     * @brief 把当前运行态写回最近会话列表，并把它移动到列表首位。
+     *
+     * 空白会话不会进入历史；超过十条时删除最久未访问的一条。该方法只复制模型上下文和
+     * 终端读取位置，不接触终端对象或网络请求。
+     */
+    void synchronizeActiveConversation();
+
+    /** @brief 根据当前会话列表重建历史下拉菜单，最多显示十条并标记当前项。 */
+    void populateConversationHistoryMenu();
+
+    /**
+     * @brief 加载指定历史会话并重建聊天区。
+     * @param conversationId 会话稳定 UUID；不存在或当前正忙时不切换。
+     */
+    void loadConversation(const QString &conversationId);
+
+    /** @brief 根据 m_history 中已校验的协议消息重建用户气泡、助手说明和命令卡片。 */
+    void renderActiveConversation();
+
+    /**
+     * @brief 从会话的第一条普通用户消息生成历史菜单标题。
+     * @param history 已校验并写入上下文的消息序列。
+     * @return 单行、最多 28 个字符的标题；没有普通用户消息时返回“未命名会话”。
+     */
+    [[nodiscard]] QString conversationTitle(const QList<AiChatMessage> &history) const;
 
     /** @brief 构建"AI 图标闪烁 + 正在分析…"的等待指示器，图标透明度循环呼吸。 */
     QWidget *buildThinkingIndicator();
@@ -230,11 +269,34 @@ private:
      * 就可能在没有真实观察的情况下猜测下一步。
      */
     QList<AiChatMessage> m_lastAgentRequestMessages;
+
+    /**
+     * @brief 单次聊天会话的可恢复快照。
+     *
+     * history 保存实际提交给模型的长期上下文；lastReadPosition 保证恢复旧会话后不会重新
+     * 附加已经消费过的终端输出。标题从第一条用户任务生成，updatedAt 用于历史菜单展示。
+     */
+    struct ConversationSnapshot {
+        QString id;
+        QString title;
+        QList<AiChatMessage> history;
+        int lastReadPosition = 0;
+        QDateTime updatedAt;
+    };
+
+    /** @brief 最近访问优先的会话快照，始终限制为最多十条。 */
+    QList<ConversationSnapshot> m_recentConversations;
+    /** @brief 当前会话 UUID；空白新会话虽未进入列表，也预先持有稳定 id。 */
+    QString m_activeConversationId;
     /** @brief 当前决策已经进行的协议纠正次数；新任务或新终端观察到来时归零。 */
     int m_agentProtocolRepairCount = 0;
     bool m_requestInFlight = false;
 
     QLabel *m_contextTargetLabel = nullptr;
+    /** @brief 打开当前标签页最近十次 AI 会话的图标按钮。 */
+    QToolButton *m_historyButton = nullptr;
+    /** @brief 由 populateConversationHistoryMenu() 在每次打开前重建的历史菜单。 */
+    class QMenu *m_historyMenu = nullptr;
     QWidget *m_chatContainer = nullptr;
     QVBoxLayout *m_chatLayout = nullptr;
     QWidget *m_thinkingBubble = nullptr;

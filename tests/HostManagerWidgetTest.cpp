@@ -76,6 +76,9 @@ private slots:
     /** @brief 编辑保存和手动刷新重建树后，必须按稳定 id 恢复原主机的选中高亮。 */
     void selectionSurvivesHostEditAndManualRefresh();
 
+    /** @brief 目录每次展开/折叠都应立即保存，并在刷新、改名和下次启动时按稳定 id 恢复。 */
+    void folderExpansionStatePersistsAcrossRefreshAndRestart();
+
     /** @brief 新建主机保存后的自动连接必须打开新标签，不得覆盖当前会话。 */
     void newlySavedHostRequestsConnectionInNewTab();
 
@@ -784,6 +787,69 @@ void HostManagerWidgetTest::selectionSurvivesHostEditAndManualRefresh()
     QCOMPARE(itemAfterManualRefresh->data(0, Qt::UserRole).toString(), host.id);
     QCOMPARE(tree->currentItem(), itemAfterManualRefresh);
     QVERIFY2(itemAfterManualRefresh->isSelected(), "手动刷新主机列表后选中高亮丢失");
+}
+
+void HostManagerWidgetTest::folderExpansionStatePersistsAcrossRefreshAndRestart()
+{
+    HostRecord group;
+    group.id = QStringLiteral("remembered-expansion-group-id");
+    group.kind = HostNodeKind::Folder;
+    group.name = QStringLiteral("待记忆展开状态的目录");
+    QString error;
+    QVERIFY2(m_database->saveHost(group, &error), qPrintable(error));
+
+    HostRecord child;
+    child.id = QStringLiteral("remembered-expansion-child-id");
+    child.parentId = group.id;
+    child.kind = HostNodeKind::Host;
+    child.name = QStringLiteral("用于显示展开箭头的子主机");
+    child.host = QStringLiteral("192.0.2.91");
+    QVERIFY2(m_database->saveHost(child, &error), qPrintable(error));
+
+    {
+        HostManagerWidget widget(m_database.get(), m_vault.get());
+        QTreeWidgetItem *groupItem = findItem(widget, group.name);
+        QVERIFY(groupItem != nullptr);
+        QVERIFY2(groupItem->isExpanded(), "从未保存状态的新目录没有沿用默认展开行为");
+
+        // setExpanded() 与鼠标、键盘入口最终发出相同的 itemCollapsed 信号。直接调用可以稳定
+        // 验证业务监听与同步写库，不让测试依赖某个平台的箭头点击几何。
+        groupItem->setExpanded(false);
+        QVERIFY2(!groupItem->isExpanded(), "测试前置操作未能折叠目录");
+
+        const std::optional<QString> storedState = m_database->setting(
+            QStringLiteral("ui/host_tree_folder_expansion_v1"), &error);
+        QVERIFY2(error.isEmpty(), qPrintable(error));
+        QVERIFY2(storedState.has_value(), "折叠目录后没有立即创建持久化设置");
+        QVERIFY2(storedState->contains(group.id), "持久化设置没有使用目录稳定 id");
+
+        // 普通刷新会销毁全部 QTreeWidgetItem；新节点仍应按内存快照恢复为折叠状态。
+        widget.refresh();
+        groupItem = findItem(widget, group.name);
+        QVERIFY(groupItem != nullptr);
+        QVERIFY2(!groupItem->isExpanded(), "刷新主机树后目录折叠状态丢失");
+    }
+
+    // 模拟应用退出后目录改名：状态键必须依赖稳定 id，不能依赖已经变化的显示名称。
+    group.name = QStringLiteral("改名后仍应保持折叠的目录");
+    QVERIFY2(m_database->saveHost(group, &error), qPrintable(error));
+    {
+        HostManagerWidget restartedWidget(m_database.get(), m_vault.get());
+        QTreeWidgetItem *groupItem = findItem(restartedWidget, group.name);
+        QVERIFY(groupItem != nullptr);
+        QVERIFY2(!groupItem->isExpanded(), "重新启动或目录改名后没有恢复折叠状态");
+
+        // 再次展开也必须立即覆盖之前的 false，确保记忆功能不是只能保存折叠的单向状态。
+        groupItem->setExpanded(true);
+        QVERIFY2(groupItem->isExpanded(), "测试前置操作未能重新展开目录");
+    }
+
+    {
+        HostManagerWidget restartedAgainWidget(m_database.get(), m_vault.get());
+        QTreeWidgetItem *groupItem = findItem(restartedAgainWidget, group.name);
+        QVERIFY(groupItem != nullptr);
+        QVERIFY2(groupItem->isExpanded(), "重新启动后没有恢复最近一次展开状态");
+    }
 }
 
 void HostManagerWidgetTest::newlySavedHostRequestsConnectionInNewTab()

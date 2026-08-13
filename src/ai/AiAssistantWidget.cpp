@@ -6,6 +6,7 @@
 #include "ai/CommandRiskClassifier.h"
 #include "ui/UiIcons.h"
 
+#include <QAction>
 #include <QCheckBox>
 #include <QAbstractTextDocumentLayout>
 #include <QEvent>
@@ -22,6 +23,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
+#include <QMenu>
 #include <QPointer>
 #include <QPropertyAnimation>
 #include <QPushButton>
@@ -30,10 +32,16 @@
 #include <QScrollBar>
 #include <QSet>
 #include <QShortcut>
+#include <QSizePolicy>
 #include <QTextEdit>
 #include <QTextDocument>
 #include <QTimer>
+#include <QToolButton>
 #include <QVBoxLayout>
+#include <QUuid>
+
+#include <algorithm>
+#include <utility>
 
 namespace {
 
@@ -83,6 +91,8 @@ constexpr int kCapturePollIntervalMs = 300;
 constexpr int kInputMinimumHeight = 42;
 /** @brief 输入框允许显示的最大文本行数，超过后改为输入框内部滚动。 */
 constexpr int kInputMaximumVisibleLines = 10;
+/** @brief 单个终端标签最多保留的 AI 会话数，避免长期操作后历史菜单和内存无限增长。 */
+constexpr int kMaximumRecentConversations = 10;
 
 /**
  * @brief 返回当前平台上物理 Command 键在 Qt 键盘事件中的修饰键表示。
@@ -327,6 +337,9 @@ AiAssistantWidget::AiAssistantWidget(AiSettingsService *settingsService, QWidget
     , m_client(new AiClient(this))
 {
     Q_ASSERT(m_settingsService != nullptr);
+    // 空白新会话也预先分配稳定 id；只有产生了模型上下文后才会写入最近会话列表，避免用户
+    // 连续点击“新会话”制造一串没有内容的历史项。
+    m_activeConversationId = QUuid::createUuid().toString(QUuid::WithoutBraces);
     buildUi();
 
     // 智能体使用机器可校验的 JSON 协议。流式过程中 JSON 必然是不完整的，直接预览会把
@@ -418,8 +431,8 @@ void AiAssistantWidget::buildUi()
     root->setSpacing(10);
 
     // 页面标题本身复用侧栏共享的 SidebarHeader（"AI 助手"三字），不在这里重复渲染；
-    // 这一行只承载 AI 助手特有的上下文——当前绑定的服务器，以及开启新会话的入口，风格上
-    // 对应 HostManagerWidget 标题栏下方那条主机操作行，同属于"标题共享、动作各自"的约定。
+    // 这一行只保留当前标签的目标名称和会话动作。按设计要求移除“当前服务器”前缀，让窄
+    // 侧栏把更多横向空间留给真实目标名，同时仍用服务器图标表达字段语义。
     auto *contextBar = new QWidget(this);
     auto *contextLayout = new QHBoxLayout(contextBar);
     contextLayout->setContentsMargins(0, 0, 0, 0);
@@ -428,15 +441,37 @@ void AiAssistantWidget::buildUi()
     serverIcon->setPixmap(UiIcons::renderSymbolPixmap(
         UiIcons::Symbol::HostItem, palette().color(QPalette::WindowText), QSize(14, 14), devicePixelRatioF()));
     contextLayout->addWidget(serverIcon);
-    auto *contextCaption = new QLabel(tr("当前服务器"), contextBar);
-    contextCaption->setStyleSheet(QStringLiteral("color: palette(mid);"));
-    contextLayout->addWidget(contextCaption);
     m_contextTargetLabel = new QLabel(tr("未连接终端"), contextBar);
     QFont targetFont = m_contextTargetLabel->font();
     targetFont.setBold(true);
     m_contextTargetLabel->setFont(targetFont);
     m_contextTargetLabel->setWordWrap(true);
     contextLayout->addWidget(m_contextTargetLabel, 1);
+
+    // 历史按钮使用“时钟”语义图标并采用即时弹出模式：一次点击就能看到当前终端标签最近
+    // 十次会话，不额外占用文字宽度。菜单在每次打开前重建，以便当前会话的最新标题、时间
+    // 和选中状态立即反映出来。
+    m_historyButton = new QToolButton(contextBar);
+    m_historyButton->setObjectName(QStringLiteral("aiHistoryButton"));
+    m_historyButton->setAccessibleName(tr("聊天历史"));
+    m_historyButton->setToolTip(tr("查看当前标签页的聊天历史"));
+    m_historyButton->setCursor(Qt::PointingHandCursor);
+    m_historyButton->setAutoRaise(false);
+    m_historyButton->setFixedSize(32, 32);
+    m_historyButton->setIcon(UiIcons::symbol(
+        this, UiIcons::Symbol::Clock, palette().color(QPalette::WindowText)));
+    m_historyButton->setIconSize(QSize(17, 17));
+    m_historyMenu = new QMenu(m_historyButton);
+    m_historyMenu->setObjectName(QStringLiteral("aiConversationHistoryMenu"));
+    m_historyButton->setMenu(m_historyMenu);
+    m_historyButton->setPopupMode(QToolButton::InstantPopup);
+    m_historyButton->setStyleSheet(QStringLiteral(
+        "QToolButton { color: palette(text); background: transparent;"
+        "border: 1px solid palette(mid); border-radius: 9px; padding: 5px; }"
+        "QToolButton:hover, QToolButton:pressed { background: rgba(0,0,0,0.06); }"
+        "QToolButton::menu-indicator { image: none; width: 0; }"));
+    contextLayout->addWidget(m_historyButton);
+
     m_newSessionButton = new QPushButton(tr("新会话"), contextBar);
     m_newSessionButton->setObjectName(QStringLiteral("aiNewSessionButton"));
     m_newSessionButton->setCursor(Qt::PointingHandCursor);
@@ -541,6 +576,10 @@ void AiAssistantWidget::buildUi()
 
     connect(m_sendButton, &QPushButton::clicked, this, &AiAssistantWidget::sendCurrentInput);
     connect(m_newSessionButton, &QPushButton::clicked, this, &AiAssistantWidget::startNewSession);
+    connect(m_historyMenu,
+            &QMenu::aboutToShow,
+            this,
+            &AiAssistantWidget::populateConversationHistoryMenu);
     connect(m_inputEdit, &QTextEdit::textChanged, this, &AiAssistantWidget::updateInputEditorHeight);
 
     // 快捷键作用于 AI 助手及其全部子控件，所以焦点在输入框、聊天区或命令卡片上都能执行
@@ -650,22 +689,16 @@ void AiAssistantWidget::startNewSession()
         return;
     }
 
+    // 先把旧会话的最终上下文和终端读取位置保存到当前标签自己的最近记录中，再创建一个
+    // 全新 id。空白会话由 synchronizeActiveConversation() 自动忽略，因此反复点击不会污染
+    // 历史菜单。
+    synchronizeActiveConversation();
+    m_activeConversationId = QUuid::createUuid().toString(QUuid::WithoutBraces);
     m_history.clear();
     m_lastAgentRequestMessages.clear();
     m_agentProtocolRepairCount = 0;
     m_lastReadPosition = 0;
-
-    if (m_chatLayout != nullptr) {
-        // 末尾那个伸缩项要留着吸收多余空间，其余全部清空——从头数第 0 项开始删，删到只剩
-        // 伸缩项为止。
-        while (m_chatLayout->count() > 1) {
-            QLayoutItem *item = m_chatLayout->takeAt(0);
-            if (item->widget() != nullptr) {
-                item->widget()->deleteLater();
-            }
-            delete item;
-        }
-    }
+    clearChatContent();
     m_thinkingBubble = nullptr;
     m_captureCardFrame.clear();
     m_captureCardActionsRow.clear();
@@ -674,6 +707,167 @@ void AiAssistantWidget::startNewSession()
     if (m_inputEdit != nullptr) {
         m_inputEdit->clear();
     }
+}
+
+void AiAssistantWidget::clearChatContent()
+{
+    if (m_chatLayout == nullptr) {
+        return;
+    }
+    // 末尾伸缩项负责让短对话贴在聊天区顶部，必须保留；其余行都属于当前会话的可重建
+    // 展示内容。deleteLater() 允许正在返回的按钮/菜单事件先安全结束，下一轮事件循环再释放。
+    while (m_chatLayout->count() > 1) {
+        QLayoutItem *item = m_chatLayout->takeAt(0);
+        if (item->widget() != nullptr) {
+            // 先隐藏可避免历史切换后的一个事件循环内，旧控件仍按原几何位置与新消息重叠闪烁。
+            item->widget()->hide();
+            item->widget()->deleteLater();
+        }
+        delete item;
+    }
+}
+
+QString AiAssistantWidget::conversationTitle(const QList<AiChatMessage> &history) const
+{
+    for (const AiChatMessage &message : history) {
+        if (message.role != AiChatRole::User) {
+            continue;
+        }
+        const QString normalized = message.content.simplified();
+        // 命令执行结果是隐藏观察，不是用户发起的新任务，绝不能拿它当历史标题或显示在聊天区。
+        if (normalized.isEmpty() || normalized.startsWith(QStringLiteral("[命令 `"))) {
+            continue;
+        }
+        constexpr int kMaximumTitleCharacters = 28;
+        return normalized.size() > kMaximumTitleCharacters
+            ? normalized.left(kMaximumTitleCharacters - 1) + QChar(0x2026)
+            : normalized;
+    }
+    return tr("未命名会话");
+}
+
+void AiAssistantWidget::synchronizeActiveConversation()
+{
+    if (m_history.isEmpty()) {
+        return;
+    }
+
+    ConversationSnapshot snapshot;
+    snapshot.id = m_activeConversationId;
+    snapshot.title = conversationTitle(m_history);
+    snapshot.history = m_history;
+    snapshot.lastReadPosition = m_lastReadPosition;
+    snapshot.updatedAt = QDateTime::currentDateTimeUtc();
+
+    // 先移除旧位置，再把当前项放到列表首位，列表顺序因此同时代表“最近访问”顺序。按 id
+    // 更新而不是按标题更新，可让两个相同问题保持为两次独立会话。
+    for (int index = 0; index < m_recentConversations.size(); ++index) {
+        if (m_recentConversations.at(index).id == m_activeConversationId) {
+            m_recentConversations.removeAt(index);
+            break;
+        }
+    }
+    m_recentConversations.prepend(std::move(snapshot));
+    while (m_recentConversations.size() > kMaximumRecentConversations) {
+        m_recentConversations.removeLast();
+    }
+}
+
+void AiAssistantWidget::populateConversationHistoryMenu()
+{
+    if (m_historyMenu == nullptr) {
+        return;
+    }
+    synchronizeActiveConversation();
+    m_historyMenu->clear();
+
+    if (m_recentConversations.isEmpty()) {
+        QAction *emptyAction = m_historyMenu->addAction(tr("暂无聊天记录"));
+        emptyAction->setEnabled(false);
+        return;
+    }
+
+    for (const ConversationSnapshot &conversation : std::as_const(m_recentConversations)) {
+        const QString localTime = conversation.updatedAt.toLocalTime().toString(
+            QStringLiteral("MM-dd HH:mm"));
+        QAction *action = m_historyMenu->addAction(
+            tr("%1  ·  %2").arg(conversation.title, localTime));
+        action->setData(conversation.id);
+        action->setCheckable(true);
+        action->setChecked(conversation.id == m_activeConversationId);
+        action->setEnabled(!m_requestInFlight && !m_captureInFlight);
+        connect(action, &QAction::triggered, this, [this, conversationId = conversation.id]() {
+            loadConversation(conversationId);
+        });
+    }
+}
+
+void AiAssistantWidget::loadConversation(const QString &conversationId)
+{
+    if (m_requestInFlight || m_captureInFlight) {
+        emit statusMessage(tr("当前会话仍在处理中，请稍候再切换聊天记录"));
+        return;
+    }
+    synchronizeActiveConversation();
+
+    auto selected = std::find_if(
+        m_recentConversations.cbegin(),
+        m_recentConversations.cend(),
+        [&conversationId](const ConversationSnapshot &conversation) {
+            return conversation.id == conversationId;
+        });
+    if (selected == m_recentConversations.cend() || conversationId == m_activeConversationId) {
+        return;
+    }
+
+    const ConversationSnapshot snapshot = *selected;
+    m_activeConversationId = snapshot.id;
+    m_history = snapshot.history;
+    m_lastReadPosition = snapshot.lastReadPosition;
+    m_lastAgentRequestMessages.clear();
+    m_agentProtocolRepairCount = 0;
+    clearChatContent();
+    renderActiveConversation();
+    // 加载也属于一次访问；立即同步会把选中项移到菜单首位，并更新时间，符合“最近记录”语义。
+    synchronizeActiveConversation();
+}
+
+void AiAssistantWidget::renderActiveConversation()
+{
+    for (int index = 0; index < m_history.size(); ++index) {
+        const AiChatMessage &message = m_history.at(index);
+        if (message.role == AiChatRole::User) {
+            // 命令输出只作为模型观察存在，恢复历史时也必须继续隐藏，避免敏感终端内容从聊天
+            // 记录中重新暴露；普通用户任务则恢复成右侧气泡。
+            if (!message.content.startsWith(QStringLiteral("[命令 `"))) {
+                appendUserBubble(message.content);
+            }
+            continue;
+        }
+        if (message.role != AiChatRole::Assistant) {
+            continue;
+        }
+
+        AgentReply reply;
+        QString validationError;
+        if (!parseAgentReply(message.content, &reply, &validationError)) {
+            // m_history 原则上只保存已通过校验的响应；若内存因未来版本格式变化出现旧记录，
+            // 安全地跳过无法确认的命令，不能把未校验文本降级成可执行卡片。
+            continue;
+        }
+        if (reply.state == AgentReplyState::Command) {
+            appendAssistantBubble(tr("%1  %2").arg(reply.title, reply.reason));
+            const bool alreadyExecuted = index + 1 < m_history.size()
+                && m_history.at(index + 1).role == AiChatRole::User
+                && m_history.at(index + 1).content.startsWith(
+                    tr("[命令 `%1` 的执行结果]").arg(reply.command));
+            appendCommandCard(reply.command, QString(), QString(), alreadyExecuted);
+        } else {
+            appendAssistantBubble(reply.message);
+        }
+    }
+    m_stickyBottom = true;
+    scrollToBottom(true);
 }
 
 void AiAssistantWidget::sendCurrentInput()
@@ -733,6 +927,8 @@ void AiAssistantWidget::sendMessageInternal(const QString &historyText,
     }
     outgoing.append(AiChatMessage{AiChatRole::User, historyText});
     m_history.append(AiChatMessage{AiChatRole::User, historyText});
+    // 每次长期上下文变化都同步快照，使历史菜单即使在模型返回前打开，也能看到刚提交的任务。
+    synchronizeActiveConversation();
     m_lastAgentRequestMessages = outgoing;
     m_agentProtocolRepairCount = 0;
 
@@ -756,6 +952,7 @@ void AiAssistantWidget::handleAgentReply(const QString &content)
     // 只有本地验证通过的决策才进入长期历史。这样后续轮次看到的是明确的单步状态，而不是
     // 曾被拒绝的十步教程，避免违规内容继续污染模型上下文并诱发下一轮重复违规。
     m_history.append(AiChatMessage{AiChatRole::Assistant, content.trimmed()});
+    synchronizeActiveConversation();
     m_agentProtocolRepairCount = 0;
 
     switch (reply.state) {
@@ -808,19 +1005,29 @@ void AiAssistantWidget::requestAgentProtocolRepair(const QString &invalidContent
 void AiAssistantWidget::appendUserBubble(const QString &text)
 {
     auto *row = new QWidget(m_chatContainer);
+    row->setObjectName(QStringLiteral("AiUserMessageRow"));
     auto *rowLayout = new QHBoxLayout(row);
-    rowLayout->setContentsMargins(52, 0, 0, 0);
+    rowLayout->setContentsMargins(0, 0, 0, 0);
     rowLayout->setSpacing(0);
-    rowLayout->addStretch(1);
+
+    // 用户消息固定采用“左侧 30% 留白 + 右侧 70% 气泡”的响应式比例。旧实现只限制最大
+    // 宽度为 680px，QLabel 仍会按短文本的自然宽度收缩，导致一句话气泡仅占聊天区约三成；
+    // 通过布局伸缩因子分配可用空间后，短消息和长消息都会保持约 70% 宽度，并能随侧栏或
+    // 浮动窗口缩放，不依赖某个特定屏幕尺寸。这里不再保留固定 52px 左边距，否则它会先
+    // 扣减可用空间，再计算 3:7，最终气泡占整个聊天区的比例会明显低于 70%。
+    rowLayout->addStretch(3);
 
     auto *bubble = new QLabel(text, row);
+    bubble->setObjectName(QStringLiteral("AiUserMessageBubble"));
     bubble->setWordWrap(true);
     bubble->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    // Expanding 是比例布局生效的必要条件：若继续使用 QLabel 默认的 Preferred 策略，短文本
+    // 会优先停留在 sizeHint() 宽度，右侧 70% 的布局份额无法真正填满。
+    bubble->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     bubble->setStyleSheet(QStringLiteral(
         "color: #1d2939; background: #e6f2ec; border: 1px solid #c6dfd3;"
         "border-radius: 10px; padding: 9px 13px; font-size: 14px; font-weight: 600;"));
-    bubble->setMaximumWidth(680);
-    rowLayout->addWidget(bubble, 0, Qt::AlignTop);
+    rowLayout->addWidget(bubble, 7);
     m_chatLayout->insertWidget(m_chatLayout->count() - 1, row);
     // 默认让新消息贴底；但用户已明确上滚查看历史时继续尊重该位置。只有用户把滚动条重新
     // 拉到底部，valueChanged 才会恢复自动跟随，完全符合效果图这类长对话的阅读习惯。
@@ -909,7 +1116,8 @@ void AiAssistantWidget::appendNoticeBubble(const QString &text, const bool isErr
 
 void AiAssistantWidget::appendCommandCard(const QString &command,
                                           const QString &title,
-                                          const QString &reason)
+                                          const QString &reason,
+                                          const bool alreadyExecuted)
 {
     const CommandRiskLevel level = CommandRiskClassifier::classify(command);
     const QColor accent = riskAccentColor(level);
@@ -1006,6 +1214,13 @@ void AiAssistantWidget::appendCommandCard(const QString &command,
         button->setCursor(Qt::PointingHandCursor);
     }
     executeButton->setProperty("aiPrimaryAction", true);
+    if (alreadyExecuted) {
+        // 从历史记录恢复的已执行命令只能保留查看、复制和再次插入能力，不能重新出现为待确认
+        // 状态；否则用户可能把一次旧操作误认为当前智能体刚提出的新步骤并重复执行。
+        statusLabel->setText(tr("已执行"));
+        executeButton->setText(tr("已执行"));
+        executeButton->setEnabled(false);
+    }
     actionsLayout->addWidget(insertButton);
     actionsLayout->addWidget(copyButton);
     actionsLayout->addWidget(modifyButton);

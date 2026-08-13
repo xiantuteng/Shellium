@@ -4,6 +4,7 @@
 #include "ai/AiSettings.h"
 #include "ai/AiSettingsService.h"
 
+#include <QAction>
 #include <QApplication>
 #include <QCheckBox>
 #include <QClipboard>
@@ -13,6 +14,7 @@
 #include <QJsonObject>
 #include <QLabel>
 #include <QInputDialog>
+#include <QMenu>
 #include <QPointer>
 #include <QPushButton>
 #include <QScrollArea>
@@ -24,6 +26,7 @@
 #include <QTest>
 #include <QTextEdit>
 #include <QTimer>
+#include <QToolButton>
 
 namespace {
 
@@ -127,6 +130,8 @@ private slots:
     void assistantNarrativeRendersAsMarkdown();
     void multiStepResponseIsRejectedAndRepairedBeforeDisplay();
     void inputEditorSendsOnEnterAndGrowsToTenLines();
+    void userMessageBubbleUsesSeventyPercentOfChatWidth();
+    void conversationHistoryRestoresPreviousSession();
     void commandEnterExecutesLatestPendingCommand();
     void commandCardInsertModifyAndCopyUseCorrectRoutes();
     void chatAutoScrollResumesAfterUserReturnsToBottom();
@@ -451,6 +456,131 @@ void AiAssistantWidgetTest::inputEditorSendsOnEnterAndGrowsToTenLines()
     QVERIFY2(inputEdit->height() <= tenLineUpperBound,
              qPrintable(QStringLiteral("height=%1 upper=%2")
                             .arg(inputEdit->height()).arg(tenLineUpperBound)));
+}
+
+/**
+ * @brief 用户消息气泡应响应式占据消息行约 70% 宽度。
+ *
+ * 使用短文本覆盖最容易退化的场景：QLabel 的自然宽度远小于聊天区时，气泡仍须由 3:7
+ * 伸缩布局扩展到目标比例。测试同时以消息行而非整个窗口为基准，避免标题栏、滚动条和聊天
+ * 容器内边距影响断言；保留少量像素级容差，以兼容不同平台 Qt 布局舍入方式。
+ */
+void AiAssistantWidgetTest::userMessageBubbleUsesSeventyPercentOfChatWidth()
+{
+    AiSettingsService settingsService(nullptr, nullptr);
+    AiAssistantWidget widget(&settingsService);
+    widget.resize(800, 640);
+    widget.show();
+
+    auto *inputEdit = widget.findChild<QTextEdit *>(QStringLiteral("aiInputEdit"));
+    auto *sendButton = widget.findChild<QPushButton *>(QStringLiteral("aiSendButton"));
+    QVERIFY(inputEdit != nullptr);
+    QVERIFY(sendButton != nullptr);
+
+    // 即使未配置模型，发送动作也会先渲染用户消息，再显示配置提示，足以独立验证本地布局，
+    // 且不会引入网络请求或依赖测试服务器。
+    inputEdit->setPlainText(QStringLiteral("短消息"));
+    sendButton->click();
+
+    auto *messageRow = widget.findChild<QWidget *>(QStringLiteral("AiUserMessageRow"));
+    auto *messageBubble = widget.findChild<QLabel *>(QStringLiteral("AiUserMessageBubble"));
+    QVERIFY(messageRow != nullptr);
+    QVERIFY(messageBubble != nullptr);
+    QTRY_VERIFY(messageRow->width() > 0);
+    // 新消息插入后 Qt 会在下一轮事件循环才激活嵌套布局；等待左侧留白实际分配完成，避免
+    // 读取到 QLabel 创建时继承的临时全宽几何尺寸。
+    QTRY_VERIFY(messageBubble->width() < messageRow->width());
+
+    const qreal bubbleWidthRatio = static_cast<qreal>(messageBubble->width())
+        / static_cast<qreal>(messageRow->contentsRect().width());
+    QVERIFY2(bubbleWidthRatio >= 0.68 && bubbleWidthRatio <= 0.72,
+             qPrintable(QStringLiteral("用户消息气泡宽度比例应约为 70%，实际为 %1")
+                            .arg(bubbleWidthRatio, 0, 'f', 3)));
+}
+
+/**
+ * @brief 历史按钮应列出当前标签最近会话，并能完整恢复选中的旧聊天。
+ *
+ * 先完成一轮旧会话，再新建并完成第二轮；菜单应同时显示两条记录且标题来自各自第一条用户
+ * 消息。选中旧记录后，聊天区只能显示旧用户气泡，证明加载的不是全局共享历史或仅修改菜单
+ * 勾选状态。测试还断言上下文行不再出现“当前服务器”固定前缀。
+ */
+void AiAssistantWidgetTest::conversationHistoryRestoresPreviousSession()
+{
+    MiniAiServer server;
+    QVERIFY(server.isListening());
+    server.responses.append(chatCompletionBody(QStringLiteral(
+        R"JSON({"state":"complete","message":"旧会话已经完成。"})JSON")));
+    server.responses.append(chatCompletionBody(QStringLiteral(
+        R"JSON({"state":"complete","message":"新会话已经完成。"})JSON")));
+
+    AiSettingsService settingsService(nullptr, nullptr);
+    AiSettings settings;
+    settings.endpointUrl = QStringLiteral("http://127.0.0.1:%1").arg(server.port());
+    settings.model = QStringLiteral("test-model");
+    QVERIFY(settingsService.save(settings));
+
+    AiAssistantWidget widget(&settingsService);
+    widget.resize(620, 640);
+    widget.show();
+    auto *inputEdit = widget.findChild<QTextEdit *>(QStringLiteral("aiInputEdit"));
+    auto *sendButton = widget.findChild<QPushButton *>(QStringLiteral("aiSendButton"));
+    auto *newSessionButton =
+        widget.findChild<QPushButton *>(QStringLiteral("aiNewSessionButton"));
+    auto *historyButton = widget.findChild<QToolButton *>(QStringLiteral("aiHistoryButton"));
+    auto *historyMenu = widget.findChild<QMenu *>(QStringLiteral("aiConversationHistoryMenu"));
+    QVERIFY(inputEdit != nullptr);
+    QVERIFY(sendButton != nullptr);
+    QVERIFY(newSessionButton != nullptr);
+    QVERIFY(historyButton != nullptr);
+    QVERIFY(historyMenu != nullptr);
+
+    for (const QLabel *label : widget.findChildren<QLabel *>()) {
+        QVERIFY2(label->text() != QStringLiteral("当前服务器"),
+                 "AI 助手上下文行不应继续显示固定的“当前服务器”前缀");
+    }
+
+    inputEdit->setPlainText(QStringLiteral("旧会话任务"));
+    sendButton->click();
+    QTRY_COMPARE_WITH_TIMEOUT(server.capturedBodies.size(), 1, 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(sendButton->isEnabled(), 5000);
+    newSessionButton->click();
+
+    inputEdit->setPlainText(QStringLiteral("新会话任务"));
+    sendButton->click();
+    QTRY_COMPARE_WITH_TIMEOUT(server.capturedBodies.size(), 2, 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(sendButton->isEnabled(), 5000);
+
+    // aboutToShow 是菜单刷新历史快照的唯一入口；直接经元对象触发可避免离屏测试依赖真实
+    // 鼠标弹窗，同时仍覆盖生产环境点击按钮时执行的同一信号槽连接。
+    QVERIFY(QMetaObject::invokeMethod(historyMenu, "aboutToShow", Qt::DirectConnection));
+    QCOMPARE(historyMenu->actions().size(), 2);
+    QAction *oldConversationAction = nullptr;
+    for (QAction *action : historyMenu->actions()) {
+        if (action->text().contains(QStringLiteral("旧会话任务"))) {
+            oldConversationAction = action;
+            break;
+        }
+    }
+    QVERIFY(oldConversationAction != nullptr);
+    oldConversationAction->trigger();
+
+    // clearChatContent() 使用 deleteLater() 保证菜单回调安全返回；这里只统计可见气泡，既
+    // 验证恢复结果，也不会把等待下一事件循环析构的旧控件误算进去。
+    QTRY_VERIFY([&widget]() {
+        bool oldMessageVisible = false;
+        bool newMessageVisible = false;
+        const QList<QLabel *> bubbles =
+            widget.findChildren<QLabel *>(QStringLiteral("AiUserMessageBubble"));
+        for (const QLabel *bubble : bubbles) {
+            if (!bubble->isVisible()) {
+                continue;
+            }
+            oldMessageVisible = oldMessageVisible || bubble->text() == QStringLiteral("旧会话任务");
+            newMessageVisible = newMessageVisible || bubble->text() == QStringLiteral("新会话任务");
+        }
+        return oldMessageVisible && !newMessageVisible;
+    }());
 }
 
 /**
