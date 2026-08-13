@@ -79,7 +79,13 @@ enum class Symbol {
     FullscreenExit,
     Copy,
     File,
-    Clock
+    Clock,
+    /** @brief AI 助手侧栏入口与消息发送方标记，四角星形状。 */
+    Sparkle,
+    /** @brief “最小上下文”一类安全/权限提示徽标。 */
+    Shield,
+    /** @brief 附加终端输出等回形针式“附件”动作。 */
+    Paperclip
 };
 
 /**
@@ -448,6 +454,58 @@ enum class Symbol {
         painter.drawEllipse(QRectF(4.0, 4.0, 16.0, 16.0));
         painter.drawLine(QPointF(12.0, 12.0), QPointF(12.0, 7.5));
         painter.drawLine(QPointF(12.0, 12.0), QPointF(16.0, 14.0));
+        break;
+    case Symbol::Sparkle: {
+        // 大星主锋芒 + 两颗小星，呼应参考设计里的 AI 头像符号；四条曲线锋芒比直线菱形
+        // 更接近常见的“闪光”语义，在 16~24px 下也不会糊成一个十字。
+        QPainterPath big;
+        big.moveTo(12.5, 3.0);
+        big.cubicTo(12.9, 8.0, 13.8, 10.4, 19.5, 11.5);
+        big.cubicTo(13.8, 12.6, 12.9, 15.0, 12.5, 20.0);
+        big.cubicTo(12.1, 15.0, 11.2, 12.6, 5.5, 11.5);
+        big.cubicTo(11.2, 10.4, 12.1, 8.0, 12.5, 3.0);
+        big.closeSubpath();
+        painter.setBrush(painter.pen().color());
+        painter.drawPath(big);
+        painter.setBrush(Qt::NoBrush);
+        QPainterPath small;
+        small.moveTo(5.2, 15.0);
+        small.cubicTo(5.4, 16.8, 5.8, 17.6, 8.0, 18.0);
+        small.cubicTo(5.8, 18.4, 5.4, 19.2, 5.2, 21.0);
+        small.cubicTo(5.0, 19.2, 4.6, 18.4, 2.4, 18.0);
+        small.cubicTo(4.6, 17.6, 5.0, 16.8, 5.2, 15.0);
+        small.closeSubpath();
+        painter.drawPath(small);
+        break;
+    }
+    case Symbol::Shield:
+        painter.drawPath([]() {
+            QPainterPath path;
+            path.moveTo(12.0, 2.8);
+            path.lineTo(19.5, 5.5);
+            path.lineTo(19.5, 11.5);
+            path.cubicTo(19.5, 16.5, 16.3, 19.8, 12.0, 21.2);
+            path.cubicTo(7.7, 19.8, 4.5, 16.5, 4.5, 11.5);
+            path.lineTo(4.5, 5.5);
+            path.closeSubpath();
+            return path;
+        }());
+        painter.drawPolyline(QVector<QPointF>{
+            QPointF(8.7, 12.0), QPointF(10.8, 14.2), QPointF(15.3, 9.2)}.data(), 3);
+        break;
+    case Symbol::Paperclip:
+        painter.drawPath([]() {
+            QPainterPath path;
+            path.moveTo(16.5, 8.0);
+            path.lineTo(9.5, 15.0);
+            path.cubicTo(7.9, 16.6, 7.9, 19.0, 9.5, 20.5);
+            path.cubicTo(11.1, 22.0, 13.5, 22.0, 15.0, 20.5);
+            path.lineTo(20.5, 15.0);
+            path.cubicTo(23.0, 12.5, 23.0, 8.5, 20.5, 6.0);
+            path.cubicTo(18.0, 3.5, 14.0, 3.5, 11.5, 6.0);
+            path.lineTo(6.5, 11.0);
+            return path;
+        }());
         break;
     }
     painter.end();

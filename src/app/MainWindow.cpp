@@ -1,5 +1,7 @@
 #include "app/MainWindow.h"
 
+#include "ai/AiAssistantWidget.h"
+#include "ai/AiSettingsService.h"
 #include "core/ActivityLog.h"
 #include "forwarding/PortForwardManagerWidget.h"
 #include "productivity/ProductivityModel.h"
@@ -163,7 +165,8 @@ protected:
 enum SidebarPageIndex {
     HostsPage = 0,
     ProductivityPage = 1,
-    ForwardingPage = 2
+    ForwardingPage = 2,
+    AiPage = 3
 };
 
 } // namespace
@@ -262,8 +265,8 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     auto *navigationGroup = new QButtonGroup(this);
     navigationGroup->setExclusive(true);
     const QStringList navigationTooltips = {
-        tr("主机"), tr("效率工具"), tr("端口转发")};
-    for (int pageIndex = HostsPage; pageIndex <= ForwardingPage; ++pageIndex) {
+        tr("主机"), tr("效率工具"), tr("端口转发"), tr("AI 助手")};
+    for (int pageIndex = HostsPage; pageIndex <= AiPage; ++pageIndex) {
         auto *button = new QToolButton(m_navigationRail);
         button->setProperty("navButton", true);
         button->setCheckable(true);
@@ -312,10 +315,11 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     m_sidebarPanel->setObjectName(QStringLiteral("SidebarPanel"));
     m_sidebarPanel->setMinimumWidth(kSidebarMinimumWidth);
     auto *sidebarLayout = new QVBoxLayout(m_sidebarPanel);
-    // 参考图的内容相对侧栏边缘保留约 18px 呼吸区。标题和搜索框使用同一左右基线，树内
-    // 再通过委托建立箭头、图标与文字层级，不需要在外层堆叠额外缩进。
-    sidebarLayout->setContentsMargins(18, 16, 18, 14);
-    sidebarLayout->setSpacing(14);
+    // 四个侧栏页面（主机、效率工具、端口转发、AI 助手）共享这一层外边距，压缩它相当于
+    // 一次性把空间让给全部页面的内容，不需要逐个页面单独调整。标题和搜索框仍使用同一
+    // 左右基线，树内再通过委托建立箭头、图标与文字层级，不需要在外层堆叠额外缩进。
+    sidebarLayout->setContentsMargins(10, 10, 10, 8);
+    sidebarLayout->setSpacing(8);
     m_sidebarTitle = new QLabel(tr("主机"), m_sidebarPanel);
     m_sidebarTitle->setObjectName(QStringLiteral("SidebarHeader"));
     m_hostCountLabel = new QLabel(tr("0 台"), m_sidebarPanel);
@@ -335,9 +339,16 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     m_hostManager = new HostManagerWidget(m_database, m_credentialVault, m_sidebarStack);
     m_productivityWidget = new ProductivityWidget(m_productivityModel, m_sidebarStack);
     m_portForwardManager = new PortForwardManagerWidget(m_database, m_sidebarStack);
+    m_aiSettingsService = new AiSettingsService(m_database, m_credentialVault, this);
+    QString aiSettingsLoadError;
+    if (!m_aiSettingsService->load(&aiSettingsLoadError)) {
+        showTransientMessage(tr("读取 AI 助手配置失败：%1").arg(aiSettingsLoadError), 0);
+    }
+    m_aiAssistantWidget = new AiAssistantWidget(m_aiSettingsService, m_sidebarStack);
     m_sidebarStack->addWidget(m_hostManager);
     m_sidebarStack->addWidget(m_productivityWidget);
     m_sidebarStack->addWidget(m_portForwardManager);
+    m_sidebarStack->addWidget(m_aiAssistantWidget);
     sidebarLayout->addWidget(m_sidebarStack, 1);
 
     // HostManagerWidget 在构造末尾已完成首次刷新，该次信号早于 MainWindow 的连接，因此先
@@ -569,6 +580,9 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     QAction *showForwardingAction = viewMenu->addAction(
         UiIcons::symbol(this, UiIcons::Symbol::Forwarding, this->palette().color(QPalette::WindowText)),
         tr("端口转发"));
+    QAction *showAiAction = viewMenu->addAction(
+        UiIcons::symbol(this, UiIcons::Symbol::Sparkle, this->palette().color(QPalette::WindowText)),
+        tr("AI 助手"));
     // 视图菜单与导航轨都只切换同一个 QStackedWidget，防止出现菜单显示某个 Dock、导航轨
     // 却高亮另一个页面的双重状态。
     connect(showHostsAction,
@@ -583,6 +597,10 @@ MainWindow::MainWindow(ApplicationDatabase *database,
             &QAction::triggered,
             this,
             [this]() { showSidebarPage(ForwardingPage); });
+    connect(showAiAction,
+            &QAction::triggered,
+            this,
+            [this]() { showSidebarPage(AiPage); });
 
     QMenu *terminalMenu = menuBar()->addMenu(tr("终端"));
     terminalMenu->addAction(searchTerminalAction);
@@ -755,7 +773,7 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     connect(commandPaletteAction, &QAction::triggered,
             this, &MainWindow::openCommandPalette);
     connect(settingsAction, &QAction::triggered, this, [this]() {
-        SettingsDialog dialog(m_settingsService, m_credentialVault, this);
+        SettingsDialog dialog(m_settingsService, m_credentialVault, m_aiSettingsService, this);
         dialog.exec();
     });
     connect(m_settingsService,
@@ -828,6 +846,19 @@ MainWindow::MainWindow(ApplicationDatabase *database,
                         : tr("实时广播已关闭"),
                     5000);
             });
+    connect(m_aiAssistantWidget,
+            &AiAssistantWidget::statusMessage,
+            this,
+            [this](const QString &message) { showTransientMessage(message, 8000); });
+    connect(m_aiAssistantWidget,
+            &AiAssistantWidget::commandExecutionRequested,
+            this,
+            &MainWindow::executeOnTargets);
+    m_aiAssistantWidget->setTerminalContextProvider([this]() -> QString {
+        TerminalWorkspace *workspace = activeWorkspace();
+        TerminalPane *pane = workspace == nullptr ? nullptr : workspace->activePane();
+        return pane == nullptr ? QString() : pane->terminalPlainText();
+    });
     refreshProductivityTargets();
 
     // 默认使用 CredentialVault 的 15 分钟阈值。每 15 秒检查一次只决定锁定延迟上界，
@@ -970,7 +1001,7 @@ void MainWindow::showSidebarPage(const int pageIndex)
     }
 
     static const QStringList pageTitles = {
-        tr("主机"), tr("效率工具"), tr("端口转发")};
+        tr("主机"), tr("效率工具"), tr("端口转发"), tr("AI 助手")};
     m_activeSidebarPage = pageIndex;
     m_sidebarStack->setCurrentIndex(pageIndex);
     if (m_sidebarTitle != nullptr) {
@@ -1994,7 +2025,8 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
     const QList<UiIcons::Symbol> navigationSymbols = {
         UiIcons::Symbol::Hosts,
         UiIcons::Symbol::Snippets,
-        UiIcons::Symbol::Forwarding};
+        UiIcons::Symbol::Forwarding,
+        UiIcons::Symbol::Sparkle};
     for (int index = 0;
          index < m_navigationButtons.size() && index < navigationSymbols.size();
          ++index) {
@@ -2479,6 +2511,13 @@ void MainWindow::refreshProductivityTargets()
         targets.append(std::move(target));
     }
     m_productivityWidget->setExecutionTargets(targets);
+
+    if (m_aiAssistantWidget != nullptr) {
+        TerminalWorkspace *workspace = activeWorkspace();
+        TerminalPane *pane = workspace == nullptr ? nullptr : workspace->activePane();
+        m_aiAssistantWidget->setActiveTarget(
+            pane == nullptr ? ConnectionTarget{} : pane->activeTarget());
+    }
 }
 
 void MainWindow::applyConfiguredShortcuts()

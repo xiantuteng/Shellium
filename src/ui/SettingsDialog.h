@@ -13,6 +13,7 @@ class QLineEdit;
 class QKeySequenceEdit;
 class QLabel;
 class QListWidget;
+class QPushButton;
 class QSpinBox;
 class QStackedWidget;
 class SegmentedControl;
@@ -21,6 +22,8 @@ class TerminalSettingsService;
 class CredentialVault;
 class ThemeSwatchButton;
 class ToggleSwitch;
+class AiClient;
+class AiSettingsService;
 
 /**
  * @brief 编辑主题、终端外观、滚动行为、铃声和全局快捷键的设置窗口。
@@ -55,6 +58,19 @@ public:
                    CredentialVault *credentialVault,
                    QWidget *parent);
 
+    /**
+     * @brief 创建同时管理 AI 助手配置的设置对话框。
+     * @param service 应用级设置服务，生命周期必须覆盖本对话框且不可为空。
+     * @param credentialVault 应用共享凭据保险库；AI Key 的加密存取同样经它完成。
+     * @param aiSettingsService 应用级 AI 配置服务，生命周期必须覆盖本对话框；为空时不显示
+     *        “AI 助手”分类页，供尚未接入该服务的测试或旧调用点使用。
+     * @param parent Qt 父窗口。
+     */
+    SettingsDialog(TerminalSettingsService *service,
+                   CredentialVault *credentialVault,
+                   AiSettingsService *aiSettingsService,
+                   QWidget *parent);
+
     /** @brief 返回当前控件组成的设置快照，主要供测试和扩展页复用。 */
     [[nodiscard]] TerminalSettings editedSettings() const;
 
@@ -85,6 +101,12 @@ private:
 
     /** @brief 构建“快捷键”页：按稳定动作 ID 列出全部可配置动作。 */
     QWidget *buildShortcutPage();
+
+    /** @brief 构建“AI 助手”页：大模型地址、密钥、模型名称及连通性测试。 */
+    QWidget *buildAiPage();
+
+    /** @brief 把当前三个输入框的值写入 AiSettingsService；失败时用消息框提示原因。 */
+    void persistAiSettings();
 
     /** @brief 把页面包进滚动区，保证小屏幕上底部按钮不会被卡片挤出窗口。 */
     QWidget *wrapInScrollArea(QWidget *page);
@@ -150,4 +172,15 @@ private:
 
     /** @brief 以稳定动作 ID 索引快捷键编辑器，保存时无需依赖界面显示文本。 */
     QHash<QString, QKeySequenceEdit *> m_shortcutEditors;
+
+    /** @brief 应用级 AI 配置服务；为空时“AI 助手”页不会被构建。 */
+    AiSettingsService *m_aiSettingsService = nullptr;
+    /** @brief 本对话框专用的测试客户端，与聊天面板的 AiClient 实例互不干扰。 */
+    AiClient *m_aiTestClient = nullptr;
+    QLineEdit *m_aiEndpointEdit = nullptr;
+    QLineEdit *m_aiApiKeyEdit = nullptr;
+    QLineEdit *m_aiModelEdit = nullptr;
+    QPushButton *m_aiTestButton = nullptr;
+    QPushButton *m_aiSaveButton = nullptr;
+    QLabel *m_aiStatusLabel = nullptr;
 };

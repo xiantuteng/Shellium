@@ -1,5 +1,8 @@
 #include "ui/SettingsDialog.h"
 
+#include "ai/AiClient.h"
+#include "ai/AiSettings.h"
+#include "ai/AiSettingsService.h"
 #include "settings/TerminalSettings.h"
 #include "security/Vault.h"
 #include "ui/SettingsWidgets.h"
@@ -51,7 +54,8 @@ enum SettingsPage {
     AppearancePage = 0,
     TerminalPage,
     ConnectionPage,
-    ShortcutPage
+    ShortcutPage,
+    AiPage
 };
 
 /** @brief 返回指定终端配色在当前主题下的实际颜色，供色板卡真实预览。 */
@@ -65,12 +69,20 @@ TerminalPalette paletteForScheme(const TerminalSettings &base, const QString &co
 } // namespace
 
 SettingsDialog::SettingsDialog(TerminalSettingsService *service, QWidget *parent)
-    : SettingsDialog(service, nullptr, parent)
+    : SettingsDialog(service, nullptr, nullptr, parent)
 {
 }
 
 SettingsDialog::SettingsDialog(TerminalSettingsService *service,
                                CredentialVault *credentialVault,
+                               QWidget *parent)
+    : SettingsDialog(service, credentialVault, nullptr, parent)
+{
+}
+
+SettingsDialog::SettingsDialog(TerminalSettingsService *service,
+                               CredentialVault *credentialVault,
+                               AiSettingsService *aiSettingsService,
                                QWidget *parent)
     : QDialog(parent)
     , m_service(service)
@@ -94,6 +106,8 @@ SettingsDialog::SettingsDialog(TerminalSettingsService *service,
     , m_reconnectBaseDelaySpin(new QSpinBox(this))
     , m_previewLabel(new QLabel(this))
     , m_credentialVault(credentialVault)
+    , m_aiSettingsService(aiSettingsService)
+    , m_aiTestClient(new AiClient(this))
 {
     Q_ASSERT(m_service != nullptr);
     setObjectName(QStringLiteral("SettingsDialog"));
@@ -136,6 +150,7 @@ SettingsDialog::SettingsDialog(TerminalSettingsService *service,
     m_pages->addWidget(wrapInScrollArea(buildTerminalPage()));
     m_pages->addWidget(wrapInScrollArea(buildConnectionPage()));
     m_pages->addWidget(wrapInScrollArea(buildShortcutPage()));
+    m_pages->addWidget(wrapInScrollArea(buildAiPage()));
     buildNavigation();
 
     auto *footer = new QWidget(this);
@@ -217,6 +232,7 @@ void SettingsDialog::buildNavigation()
     m_navigationList->addItem(tr("终端"));
     m_navigationList->addItem(tr("连接与安全"));
     m_navigationList->addItem(tr("快捷键"));
+    m_navigationList->addItem(tr("AI 助手"));
     for (int row = 0; row < m_navigationList->count(); ++row) {
         m_navigationList->item(row)->setSizeHint(QSize(0, 38));
     }
@@ -524,6 +540,116 @@ QWidget *SettingsDialog::buildShortcutPage()
 
     layout->addStretch(1);
     return page;
+}
+
+QWidget *SettingsDialog::buildAiPage()
+{
+    auto *page = new QWidget(m_pages);
+    page->setObjectName(QStringLiteral("SettingsPage"));
+    auto *layout = new QVBoxLayout(page);
+    layout->setContentsMargins(24, 22, 24, 22);
+    layout->setSpacing(16);
+
+    auto *card = new SettingsCard(tr("大模型连接"), page);
+    m_aiEndpointEdit = new QLineEdit(card);
+    m_aiEndpointEdit->setObjectName(QStringLiteral("aiEndpointEdit"));
+    m_aiEndpointEdit->setPlaceholderText(QStringLiteral("https://your-gateway/v1"));
+    card->addRow(tr("服务地址"),
+                m_aiEndpointEdit,
+                tr("兼容 OpenAI Chat Completions 协议的网关根地址，不含 /chat/completions。"));
+
+    m_aiApiKeyEdit = new QLineEdit(card);
+    m_aiApiKeyEdit->setObjectName(QStringLiteral("aiApiKeyEdit"));
+    m_aiApiKeyEdit->setEchoMode(QLineEdit::Password);
+    m_aiApiKeyEdit->setPlaceholderText(tr("留空表示网关不要求鉴权"));
+    card->addRow(tr("API Key"), m_aiApiKeyEdit, tr("以 Bearer Token 形式随请求发送，加密保存在凭据保险库。"));
+
+    m_aiModelEdit = new QLineEdit(card);
+    m_aiModelEdit->setObjectName(QStringLiteral("aiModelEdit"));
+    m_aiModelEdit->setPlaceholderText(QStringLiteral("gpt-4o-mini / deepseek-chat / ..."));
+    card->addRow(tr("模型名称"), m_aiModelEdit);
+
+    m_aiStatusLabel = new QLabel(card);
+    m_aiStatusLabel->setWordWrap(true);
+    m_aiStatusLabel->setObjectName(QStringLiteral("SettingsRowHint"));
+    card->addFullWidthWidget(m_aiStatusLabel);
+
+    auto *buttonRow = new QWidget(card);
+    auto *buttonLayout = new QHBoxLayout(buttonRow);
+    buttonLayout->setContentsMargins(0, 4, 0, 0);
+    m_aiTestButton = new QPushButton(tr("测试连接"), buttonRow);
+    m_aiSaveButton = new QPushButton(tr("保存"), buttonRow);
+    m_aiSaveButton->setObjectName(QStringLiteral("settingsAiSave"));
+    buttonLayout->addWidget(m_aiTestButton);
+    buttonLayout->addWidget(m_aiSaveButton);
+    buttonLayout->addStretch(1);
+    card->addFullWidthWidget(buttonRow);
+    layout->addWidget(card);
+
+    card->addNote(
+        tr("地址和密钥的改动不会像其他设置项那样逐字符自动保存，需要点击“保存”，避免"
+           "每敲一个字符都触发一次加密写入。"));
+
+    const bool available = m_aiSettingsService != nullptr;
+    for (QWidget *field : {static_cast<QWidget *>(m_aiEndpointEdit),
+                           static_cast<QWidget *>(m_aiApiKeyEdit),
+                           static_cast<QWidget *>(m_aiModelEdit),
+                           static_cast<QWidget *>(m_aiTestButton),
+                           static_cast<QWidget *>(m_aiSaveButton)}) {
+        field->setEnabled(available);
+    }
+    if (available) {
+        const AiSettings current = m_aiSettingsService->currentSettings();
+        m_aiEndpointEdit->setText(current.endpointUrl);
+        m_aiApiKeyEdit->setText(current.apiKey);
+        m_aiModelEdit->setText(current.model);
+    } else {
+        m_aiStatusLabel->setText(tr("AI 助手配置服务不可用"));
+    }
+
+    connect(m_aiTestButton, &QPushButton::clicked, this, [this]() {
+        if (m_aiSettingsService == nullptr) {
+            return;
+        }
+        AiSettings probe;
+        probe.endpointUrl = m_aiEndpointEdit->text();
+        probe.apiKey = m_aiApiKeyEdit->text();
+        probe.model = m_aiModelEdit->text();
+        m_aiTestButton->setEnabled(false);
+        m_aiStatusLabel->setText(tr("正在测试连接…"));
+        m_aiTestClient->testConnection(probe);
+    });
+    connect(m_aiTestClient, &AiClient::testConnectionFinished, this,
+            [this](const bool ok, const QString &message) {
+                m_aiTestButton->setEnabled(true);
+                m_aiStatusLabel->setStyleSheet(
+                    ok ? QString() : QStringLiteral("color: #d84a41;"));
+                m_aiStatusLabel->setText(message);
+            });
+    connect(m_aiSaveButton, &QPushButton::clicked, this, &SettingsDialog::persistAiSettings);
+
+    layout->addStretch(1);
+    return page;
+}
+
+void SettingsDialog::persistAiSettings()
+{
+    if (m_aiSettingsService == nullptr) {
+        return;
+    }
+    AiSettings settings;
+    settings.endpointUrl = m_aiEndpointEdit->text().trimmed();
+    settings.apiKey = m_aiApiKeyEdit->text();
+    settings.model = m_aiModelEdit->text().trimmed();
+
+    QString errorMessage;
+    if (m_aiSettingsService->save(settings, &errorMessage)) {
+        m_aiStatusLabel->setStyleSheet(QString());
+        m_aiStatusLabel->setText(tr("已保存"));
+    } else {
+        m_aiStatusLabel->setStyleSheet(QStringLiteral("color: #d84a41;"));
+        m_aiStatusLabel->setText(tr("保存失败：%1").arg(errorMessage));
+    }
 }
 
 TerminalSettings SettingsDialog::editedSettings() const

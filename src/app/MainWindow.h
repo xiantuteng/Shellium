@@ -6,6 +6,8 @@
 #include <QStringList>
 
 class ApplicationDatabase;
+class AiAssistantWidget;
+class AiSettingsService;
 class ConnectionTarget;
 class CredentialVault;
 class HostManagerWidget;
@@ -190,7 +192,13 @@ private:
     /** @brief 收集所有已打开标签的终端面板；返回值不转移所有权。 */
     [[nodiscard]] QList<TerminalPane *> allTerminalPanes() const;
 
-    /** @brief 根据当前可交互标签刷新效率工具的主机选择器。 */
+    /**
+     * @brief 根据当前可交互标签刷新效率工具的主机选择器，并把当前标签同步给 AI 助手。
+     *
+     * 两者共用同一个"当前标签变化"信号源：效率工具需要全部已连接标签的列表，AI 助手只
+     * 需要当前激活的单个标签，因此在同一个方法里一并处理，不新增第二条几乎相同的信号
+     * 连接链。
+     */
     void refreshProductivityTargets();
 
     /** @brief 把设置服务中的快捷键映射到实际 QAction。 */
@@ -267,6 +275,8 @@ private:
     PortForwardManagerWidget *m_portForwardManager = nullptr;
     ProductivityModel *m_productivityModel = nullptr;
     ProductivityWidget *m_productivityWidget = nullptr;
+    AiSettingsService *m_aiSettingsService = nullptr;
+    AiAssistantWidget *m_aiAssistantWidget = nullptr;
     TerminalSettingsService *m_settingsService = nullptr;
     QTimer *m_vaultIdleTimer = nullptr;
 

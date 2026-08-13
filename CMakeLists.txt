@@ -31,6 +31,16 @@ qt_add_executable(Shellium
     src/main.cpp
     src/app/MainWindow.cpp
     src/app/MainWindow.h
+    src/ai/AiAssistantWidget.cpp
+    src/ai/AiAssistantWidget.h
+    src/ai/AiChatTypes.h
+    src/ai/AiClient.cpp
+    src/ai/AiClient.h
+    src/ai/AiSettings.h
+    src/ai/AiSettingsService.cpp
+    src/ai/AiSettingsService.h
+    src/ai/CommandRiskClassifier.cpp
+    src/ai/CommandRiskClassifier.h
     src/core/ActivityLog.cpp
     src/core/ActivityLog.h
     src/core/ConnectionTarget.cpp
@@ -405,6 +415,11 @@ if(BUILD_TESTING)
     # 正式保险库流程，因此目标需链接 Vault、VaultDialog 与 libsodium，避免测试使用假实现。
     qt_add_executable(ShelliumSettingsUiTests
         tests/SettingsUiTest.cpp
+        src/ai/AiClient.cpp
+        src/ai/AiClient.h
+        src/ai/AiSettings.h
+        src/ai/AiSettingsService.cpp
+        src/ai/AiSettingsService.h
         src/core/ConnectionTarget.cpp
         src/core/ConnectionTarget.h
         src/core/HostRecord.h
@@ -425,8 +440,36 @@ if(BUILD_TESTING)
     )
     target_include_directories(ShelliumSettingsUiTests PRIVATE src)
     target_link_libraries(ShelliumSettingsUiTests PRIVATE
-        Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Sql Qt6::Test PkgConfig::LIBSODIUM)
+        Qt6::Core Qt6::Gui Qt6::Network Qt6::Widgets Qt6::Sql Qt6::Test PkgConfig::LIBSODIUM)
     add_test(NAME ShelliumSettingsUiTests COMMAND ShelliumSettingsUiTests)
+
+    # AI 助手改版成单步交互回路后，"执行完命令自动读取真实输出并续问模型"这条链路完全靠
+    # 轮询终端快照实现，没有任何一处是纯逻辑、可以脱离真实控件测试的。用手写的极简 HTTP
+    # 服务器顶替真实网关，覆盖这条端到端路径。
+    qt_add_executable(ShelliumAiAssistantTests
+        tests/AiAssistantWidgetTest.cpp
+        src/ai/AiAssistantWidget.cpp
+        src/ai/AiAssistantWidget.h
+        src/ai/AiClient.cpp
+        src/ai/AiClient.h
+        src/ai/AiChatTypes.h
+        src/ai/AiSettings.h
+        src/ai/AiSettingsService.cpp
+        src/ai/AiSettingsService.h
+        src/ai/CommandRiskClassifier.cpp
+        src/ai/CommandRiskClassifier.h
+        src/core/ConnectionTarget.cpp
+        src/core/ConnectionTarget.h
+        src/core/HostRecord.h
+        src/security/Vault.cpp
+        src/security/Vault.h
+        src/storage/ApplicationDatabase.cpp
+        src/storage/ApplicationDatabase.h
+    )
+    target_include_directories(ShelliumAiAssistantTests PRIVATE src)
+    target_link_libraries(ShelliumAiAssistantTests PRIVATE
+        Qt6::Core Qt6::Gui Qt6::Network Qt6::Widgets Qt6::Sql Qt6::Test PkgConfig::LIBSODIUM)
+    add_test(NAME ShelliumAiAssistantTests COMMAND ShelliumAiAssistantTests)
 
     # 运行日志是界面提示条移除后唯一的消息去路：写入一旦静默失败，用户既看不到提示也查
     # 不到记录。只依赖 Core/Test，单独成目标同样是为了避开重复 main。
