@@ -497,13 +497,20 @@ void AiAssistantWidgetTest::commandEnterExecutesLatestPendingCommand()
 
     inputEdit->setPlainText(QStringLiteral("这段草稿不能被发送"));
     inputEdit->setFocus();
-    QTest::keyClick(inputEdit, Qt::Key_Return, Qt::MetaModifier);
+    // Qt/macOS 把物理 Command 映射为 ControlModifier；测试必须模拟真实平台事件，不能使用
+    // MetaModifier（它在 macOS 对应物理 Control），否则会再次掩盖实机快捷键失效的问题。
+#if defined(Q_OS_MACOS)
+    constexpr Qt::KeyboardModifier commandModifier = Qt::ControlModifier;
+#else
+    constexpr Qt::KeyboardModifier commandModifier = Qt::MetaModifier;
+#endif
+    QTest::keyClick(inputEdit, Qt::Key_Return, commandModifier);
     QTRY_COMPARE(execSpy.count(), 1);
     QCOMPARE(execSpy.at(0).at(0).toString(), QStringLiteral("which nginx"));
     QCOMPARE(inputEdit->toPlainText(), QStringLiteral("这段草稿不能被发送"));
     QVERIFY(!executeButton->isEnabled());
 
-    QTest::keyClick(inputEdit, Qt::Key_Return, Qt::MetaModifier);
+    QTest::keyClick(inputEdit, Qt::Key_Return, commandModifier);
     QTest::qWait(50);
     QCOMPARE(execSpy.count(), 1);
 }

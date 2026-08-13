@@ -84,6 +84,31 @@ constexpr int kInputMinimumHeight = 42;
 /** @brief 输入框允许显示的最大文本行数，超过后改为输入框内部滚动。 */
 constexpr int kInputMaximumVisibleLines = 10;
 
+/**
+ * @brief 返回当前平台上物理 Command 键在 Qt 键盘事件中的修饰键表示。
+ *
+ * Qt 为了让通用的 Ctrl 系列快捷键在 macOS 上自动对应 Command，会交换 Control 与 Meta
+ * 的平台语义：macOS 的物理 Command 是 ControlModifier，物理 Control 才是 MetaModifier。
+ * 这里集中定义映射，避免快捷键注册和输入框事件过滤使用不同修饰键，造成“测试可用、实机
+ * 无效”或 Command+Enter 被误当成普通 Enter 发送聊天消息。
+ */
+#if defined(Q_OS_MACOS)
+constexpr Qt::KeyboardModifier kCommandKeyModifier = Qt::ControlModifier;
+#else
+constexpr Qt::KeyboardModifier kCommandKeyModifier = Qt::MetaModifier;
+#endif
+
+/**
+ * @brief 判断键盘事件是否按下了当前平台的物理 Command 键。
+ * @param event 待检查的按键事件，调用方保证指针有效。
+ * @return 按下物理 Command 键时返回 true，否则返回 false。
+ */
+bool hasCommandKeyModifier(const QKeyEvent *event)
+{
+    Q_ASSERT(event != nullptr);
+    return event->modifiers().testFlag(kCommandKeyModifier);
+}
+
 /** @brief 单步智能体响应的状态类型。 */
 enum class AgentReplyState {
     Command,
@@ -519,8 +544,8 @@ void AiAssistantWidget::buildUi()
     connect(m_inputEdit, &QTextEdit::textChanged, this, &AiAssistantWidget::updateInputEditorHeight);
 
     // 快捷键作用于 AI 助手及其全部子控件，所以焦点在输入框、聊天区或命令卡片上都能执行
-    // 最后一条待处理命令。使用 MetaModifier 明确对应 macOS Command 键，不占用普通 Enter
-    // 的“发送消息”语义，也不改变 Windows/Linux 上常见的 Ctrl+Enter 习惯。
+    // 最后一条待处理命令。macOS 不能直接使用 MetaModifier：Qt 在该平台把物理 Command
+    // 映射成 ControlModifier；复用上方统一映射可确保注册的序列与真实键盘事件完全一致。
     auto registerExecuteShortcut = [this](const QKeySequence &sequence,
                                           const QString &objectName) {
         auto *shortcut = new QShortcut(sequence, this);
@@ -529,11 +554,13 @@ void AiAssistantWidget::buildUi()
         connect(shortcut, &QShortcut::activated,
                 this, &AiAssistantWidget::executeLatestPendingCommand);
     };
-    registerExecuteShortcut(QKeySequence(Qt::META | Qt::Key_Return),
+    registerExecuteShortcut(
+        QKeySequence(static_cast<int>(kCommandKeyModifier) | Qt::Key_Return),
                             QStringLiteral("aiExecuteLatestReturnShortcut"));
     // Qt 区分主键盘 Return 与数字键盘 Enter；两者都注册，用户看到的“Command+Enter”在
     // 外接全尺寸键盘和笔记本键盘上保持一致行为。
-    registerExecuteShortcut(QKeySequence(Qt::META | Qt::Key_Enter),
+    registerExecuteShortcut(
+        QKeySequence(static_cast<int>(kCommandKeyModifier) | Qt::Key_Enter),
                             QStringLiteral("aiExecuteLatestKeypadShortcut"));
     updateInputEditorHeight();
 }
@@ -544,7 +571,14 @@ bool AiAssistantWidget::eventFilter(QObject *watched, QEvent *event)
         auto *keyEvent = static_cast<QKeyEvent *>(event);
         const bool isEnter = keyEvent->key() == Qt::Key_Return || keyEvent->key() == Qt::Key_Enter;
         const bool shiftPressed = keyEvent->modifiers().testFlag(Qt::ShiftModifier);
-        const bool commandPressed = keyEvent->modifiers().testFlag(Qt::MetaModifier);
+        const bool commandPressed = hasCommandKeyModifier(keyEvent);
+        if (isEnter && commandPressed) {
+            // 在输入框层再提供一条确定性的执行路径：部分平台/输入法会先由 QTextEdit 消费
+            // Return，导致父级 QShortcut 收不到激活事件。直接消费该组合既能可靠执行，也能
+            // 保证聊天草稿不会被发送或插入换行；按钮 click() 内部仍保留原有风险审批流程。
+            executeLatestPendingCommand();
+            return true;
+        }
         if (isEnter && !shiftPressed && !commandPressed) {
             // 发送后阻止 QTextEdit 插入换行；输入为空或当前忙碌时 sendCurrentInput 会安全忽略，
             // 事件仍被消费，避免在不可发送状态下无意产生空行。
