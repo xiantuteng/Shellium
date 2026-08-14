@@ -593,4 +593,57 @@ if(BUILD_TESTING)
     endif()
 
     add_test(NAME ShelliumSshIntegrationTests COMMAND ShelliumSshIntegrationTests)
+
+    # 上传流水线（sftp_aio 多请求并发）的字节级回归：只有真实 SFTP 服务器才能验证服务端按
+    # max_write_length 截断单次写请求时，新写的偏移续传逻辑是否正确拼接，桩替身测不出这类
+    # 时序相关的正确性问题。缺少 SHELLIUM_IT_* 环境变量时测试自行跳过。
+    qt_add_executable(ShelliumSftpUploadPipelineTests
+        tests/SftpUploadPipelineTest.cpp
+        src/core/ConnectionTarget.cpp
+        src/core/ConnectionTarget.h
+        src/core/HostRecord.h
+        src/storage/ApplicationDatabase.cpp
+        src/storage/ApplicationDatabase.h
+        src/sftp/SftpService.cpp
+        src/sftp/SftpService.h
+        src/ssh/ShellShim.cpp
+        src/ssh/ShellShim.h
+        src/ssh/SshSessionNode.cpp
+        src/ssh/SshSessionNode.h
+        src/ssh/SshSessionStack.cpp
+        src/ssh/SshSessionStack.h
+        src/ssh/SshTunnelBroker.cpp
+        src/ssh/SshTunnelBroker.h
+        src/ssh/SshCommandParser.cpp
+        src/ssh/SshCommandParser.h
+        src/terminal/TerminalEchoFilter.cpp
+        src/terminal/TerminalEchoFilter.h
+        src/terminal/TerminalPane.cpp
+        src/terminal/TerminalPane.h
+        src/terminal/TerminalView.cpp
+        src/terminal/TerminalView.h
+        src/terminal/VtermBridge.cpp
+        src/terminal/VtermBridge.h
+        src/terminal/LocalShellWorker.cpp
+        src/terminal/LocalShellWorker.h
+        src/settings/TerminalSettings.cpp
+        src/settings/TerminalSettings.h
+        src/ui/SettingsWidgets.cpp
+        src/ui/SettingsWidgets.h
+    )
+    target_include_directories(ShelliumSftpUploadPipelineTests PRIVATE src)
+    target_link_libraries(ShelliumSftpUploadPipelineTests PRIVATE
+        Qt6::Core
+        Qt6::Concurrent
+        Qt6::Gui
+        Qt6::Sql
+        Qt6::Widgets
+        Qt6::Test
+        PkgConfig::LIBSSH
+        PkgConfig::LIBVTERM
+    )
+    if(UNIX AND NOT APPLE)
+        target_link_libraries(ShelliumSftpUploadPipelineTests PRIVATE util)
+    endif()
+    add_test(NAME ShelliumSftpUploadPipelineTests COMMAND ShelliumSftpUploadPipelineTests)
 endif()

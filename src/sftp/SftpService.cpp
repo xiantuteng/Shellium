@@ -14,6 +14,7 @@
 #include <QtConcurrentRun>
 
 #include <algorithm>
+#include <deque>
 #include <functional>
 #include <memory>
 
@@ -756,6 +757,15 @@ using CancelProbe = std::function<bool()>;
 constexpr qint64 kTransferChunkBytes = 64 * 1024;
 
 /**
+ * @brief 上传流水线深度：允许同时有多少个 SSH_FXP_WRITE 请求处于未确认状态。
+ *
+ * sftp_write() 是同步的，每写一个约 32KB 的协议包就要等服务端确认，吞吐量因此被单次
+ * RTT 卡死而不是被带宽卡死。用 sftp_aio_begin_write/sftp_aio_wait_write 维持多个
+ * in-flight 请求，才能把吞吐量提到带宽上限。
+ */
+constexpr int kUploadPipelineDepth = 16;
+
+/**
  * @brief 把一个本地文件写到远端路径。
  *
  * 递归上传与单文件上传共用同一实现：两条路径若各写一份，超时、部分写和取消这些边界条件
@@ -819,33 +829,85 @@ TransferOutcome writeRemoteFile(SftpConnection *connection,
         sftp_seek64(remoteFile, resumePlan.offset);
     }
 
+    struct InFlightWrite {
+        sftp_aio aio = nullptr;
+        size_t requestedLen = 0;
+    };
+
+    std::deque<InFlightWrite> inFlight;
+    QByteArray carry;
+    qsizetype carryOffset = 0;
+    bool localEof = false;
     TransferOutcome outcome = TransferOutcome::Ok;
-    while (!localFile.atEnd()) {
+
+    // 把最旧的未确认写请求等到完成；出错时仍会消耗掉 aio 句柄，避免内存泄漏和会话错乱。
+    const auto drainOne = [&]() -> bool {
+        InFlightWrite front = inFlight.front();
+        inFlight.pop_front();
+        const ssize_t written = sftp_aio_wait_write(&front.aio);
+        if (written < 0 || static_cast<size_t>(written) != front.requestedLen) {
+            *errorMessage = QObject::tr("上传 %1 失败：%2")
+                                .arg(remotePath, connection->lastError());
+            return false;
+        }
+        if (onProgress) {
+            onProgress(static_cast<quint64>(written));
+        }
+        return true;
+    };
+
+    while (outcome == TransferOutcome::Ok) {
         if (isCancelled && isCancelled()) {
             outcome = TransferOutcome::Cancelled;
             break;
         }
-        const QByteArray chunk = localFile.read(kTransferChunkBytes);
-        qsizetype offset = 0;
-        while (offset < chunk.size()) {
-            const ssize_t written = sftp_write(remoteFile,
-                                               chunk.constData() + offset,
-                                               static_cast<size_t>(chunk.size() - offset));
-            if (written < 0) {
+
+        if (carryOffset >= carry.size() && !localEof) {
+            carry = localFile.read(kTransferChunkBytes);
+            carryOffset = 0;
+            if (carry.isEmpty()) {
+                localEof = true;
+            }
+        }
+
+        const bool haveData = carryOffset < carry.size();
+        if (haveData && static_cast<int>(inFlight.size()) < kUploadPipelineDepth) {
+            sftp_aio aio = nullptr;
+            const ssize_t requested = sftp_aio_begin_write(remoteFile,
+                                                            carry.constData() + carryOffset,
+                                                            static_cast<size_t>(carry.size() - carryOffset),
+                                                            &aio);
+            if (requested < 0) {
                 *errorMessage = QObject::tr("上传 %1 失败：%2")
                                     .arg(remotePath, connection->lastError());
                 outcome = TransferOutcome::Failed;
                 break;
             }
-            offset += written;
-            if (onProgress) {
-                onProgress(static_cast<quint64>(written));
-            }
+            carryOffset += requested;
+            inFlight.push_back({aio, static_cast<size_t>(requested)});
+            continue;
         }
-        if (outcome != TransferOutcome::Ok) {
+
+        if (!inFlight.empty()) {
+            if (!drainOne()) {
+                outcome = TransferOutcome::Failed;
+                break;
+            }
+            continue;
+        }
+
+        if (!haveData) {
             break;
         }
     }
+
+    // 未确认的请求必须逐一 wait 掉（即便传输已失败/取消），否则 aio 句柄内存泄漏。
+    while (!inFlight.empty()) {
+        InFlightWrite front = inFlight.front();
+        inFlight.pop_front();
+        sftp_aio_wait_write(&front.aio);
+    }
+
     sftp_close(remoteFile);
     return outcome;
 }
