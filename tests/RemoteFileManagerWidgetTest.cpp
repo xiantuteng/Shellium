@@ -5,6 +5,7 @@
 #include <QFrame>
 #include <QHeaderView>
 #include <QHBoxLayout>
+#include <QLineEdit>
 #include <QListWidget>
 #include <QProgressBar>
 #include <QResizeEvent>
@@ -116,6 +117,12 @@ private slots:
     /** @brief 远端 SFTP 中继命令必须保留端口和用户名，并阻断 Shell 参数注入。 */
     void remoteSftpRelayCommandQuotesEveryUntrustedArgument();
 
+    /** @brief 只有开关开启且上报服务器就是当前选中服务器时，路径框才会跳转。 */
+    void followsTerminalWorkingDirectoryOnlyWhenEnabledAndMatchingTarget();
+
+    /** @brief 面板变窄时"名称"列不能被压缩到低于最小宽度，多余内容改用横向滚动条。 */
+    void remoteNameColumnNeverShrinksBelowMinimumWidth();
+
 private:
     /**
      * @brief 断言指定工具栏的直接布局顺序与设计稿一致。
@@ -185,7 +192,8 @@ void RemoteFileManagerWidgetTest::fullScreenSwitchesFromRemoteOnlyToSymmetricDua
         {QStringLiteral("SftpPaneLabel"),
          QStringLiteral("SftpRemoteUpButton"),
          QStringLiteral("SftpRemoteRefreshButton"),
-         QStringLiteral("SftpRemotePathEdit")});
+         QStringLiteral("SftpRemotePathEdit"),
+         QStringLiteral("SftpFollowTerminalCwdCheck")});
 
     auto *localTree = widget.findChild<QTreeView *>(QStringLiteral("LocalFileTree"));
     QVERIFY(localTree != nullptr);
@@ -223,17 +231,90 @@ void RemoteFileManagerWidgetTest::remoteSftpRelayCommandQuotesEveryUntrustedArgu
             "-s -- '192.168.1.27;touch /tmp/should-not-run' sftp"));
 }
 
+void RemoteFileManagerWidgetTest::followsTerminalWorkingDirectoryOnlyWhenEnabledAndMatchingTarget()
+{
+    RemoteFileManagerWidget widget;
+
+    ConnectionTarget target;
+    target.id = QStringLiteral("layer-1");
+    target.displayName = QStringLiteral("test-host");
+    // 127.0.0.1 上几乎不会有服务监听 1 号端口：真正触发的后台 SFTP 连接会立即被拒绝，
+    // 不会挂起或打到外部网络，测试因此可以直接检查同步完成的路径框状态。
+    target.host = QStringLiteral("127.0.0.1");
+    target.port = 1;
+    target.username = QStringLiteral("tester");
+
+    widget.setAvailableTargets({target});
+
+    auto *pathEdit = widget.findChild<QLineEdit *>(QStringLiteral("SftpRemotePathEdit"));
+    auto *followCheck =
+        widget.findChild<QCheckBox *>(QStringLiteral("SftpFollowTerminalCwdCheck"));
+    QVERIFY(pathEdit != nullptr);
+    QVERIFY(followCheck != nullptr);
+    QVERIFY2(!followCheck->isChecked(), "跟随终端目录默认必须关闭，避免存量用户被突然改变行为");
+
+    const QString stableKey = target.stableKey();
+    pathEdit->setText(QStringLiteral("/initial"));
+
+    // 开关关闭时，即使上报服务器与当前选中一致也不能跳转。
+    widget.followTerminalWorkingDirectory(stableKey, QStringLiteral("/srv/app"));
+    QCOMPARE(pathEdit->text(), QStringLiteral("/initial"));
+
+    followCheck->setChecked(true);
+
+    // 上报服务器不是当前选中的服务器时不能跳转，否则用户正在看的目录会被意外顶掉。
+    widget.followTerminalWorkingDirectory(QStringLiteral("other-layer"),
+                                          QStringLiteral("/srv/other"));
+    QCOMPARE(pathEdit->text(), QStringLiteral("/initial"));
+
+    // 开关开启且服务器匹配：路径框必须立即跳转。
+    widget.followTerminalWorkingDirectory(stableKey, QStringLiteral("/srv/app"));
+    QCOMPARE(pathEdit->text(), QStringLiteral("/srv/app"));
+}
+
 void RemoteFileManagerWidgetTest::remoteFileTableUsesReferenceColumns()
 {
     RemoteFileManagerWidget widget;
     auto *remoteTree = widget.findChild<QTreeWidget *>(QStringLiteral("RemoteFileTree"));
     QVERIFY(remoteTree != nullptr);
-    QCOMPARE(remoteTree->columnCount(), 4);
+    QCOMPARE(remoteTree->columnCount(), 5);
     QCOMPARE(remoteTree->headerItem()->text(0), QStringLiteral("名称"));
     QCOMPARE(remoteTree->headerItem()->text(1), QStringLiteral("大小"));
-    QCOMPARE(remoteTree->headerItem()->text(2), QStringLiteral("权限"));
-    QCOMPARE(remoteTree->headerItem()->text(3), QStringLiteral("所有者"));
-    QCOMPARE(remoteTree->header()->sectionResizeMode(0), QHeaderView::Stretch);
+    QCOMPARE(remoteTree->headerItem()->text(2), QStringLiteral("修改时间"));
+    QCOMPARE(remoteTree->headerItem()->text(3), QStringLiteral("权限"));
+    QCOMPARE(remoteTree->headerItem()->text(4), QStringLiteral("所有者"));
+    // 名称列宽度由 updateRemoteNameColumnWidth() 手动管理（保底 + 横向滚动），不再用
+    // Qt 内置的 Stretch——Stretch 会在面板变窄时把它一路压到 setMinimumSectionSize 的下限。
+    QCOMPARE(remoteTree->header()->sectionResizeMode(0), QHeaderView::Interactive);
+}
+
+void RemoteFileManagerWidgetTest::remoteNameColumnNeverShrinksBelowMinimumWidth()
+{
+    // 190px 与 RemoteFileManagerWidget.cpp 中 kRemoteNameColumnMinWidth 保持一致。
+    constexpr int kExpectedMinWidth = 190;
+
+    RemoteFileManagerWidget widget;
+    auto *remoteTree = widget.findChild<QTreeWidget *>(QStringLiteral("RemoteFileTree"));
+    QVERIFY(remoteTree != nullptr);
+
+    // 无桌面的 CI 节点上不能 show() 顶层窗口，隐藏控件的内层 QSplitter 也就不会真正重新
+    // 分配像素——remoteTree 的实际尺寸会停留在构造时的初始值，不随顶层 resize 变化。因此
+    // 这里直接摆布 updateRemoteNameColumnWidth() 真正读取的输入（视口宽度），仍然只通过
+    // RemoteFileManagerWidget 的公开虚函数入口（resizeEvent）触发计算，不直接调用私有方法。
+    remoteTree->viewport()->resize(80, 400);
+    QResizeEvent narrowResizeEvent(widget.size(), widget.size());
+    QCoreApplication::sendEvent(&widget, &narrowResizeEvent);
+    QCoreApplication::processEvents();
+    QVERIFY2(remoteTree->columnWidth(0) >= kExpectedMinWidth,
+             qPrintable(QStringLiteral("视口极窄时名称列只有 %1px").arg(remoteTree->columnWidth(0))));
+    QCOMPARE(remoteTree->horizontalScrollBarPolicy(), Qt::ScrollBarAsNeeded);
+
+    remoteTree->viewport()->resize(3000, 400);
+    QResizeEvent wideResizeEvent(widget.size(), widget.size());
+    QCoreApplication::sendEvent(&widget, &wideResizeEvent);
+    QCoreApplication::processEvents();
+    QVERIFY2(remoteTree->columnWidth(0) > kExpectedMinWidth,
+             "视口足够宽时名称列应当吃掉多余空间，而不是停留在最小宽度");
 }
 
 void RemoteFileManagerWidgetTest::actionBarRespondsToAvailableWidth()

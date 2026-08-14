@@ -1040,6 +1040,10 @@ void TerminalPane::inspectSubmittedCommand(const QString &command)
 void TerminalPane::handleShellIntegrationEvent(const QByteArray &payload)
 {
     const ShellShim::Event event = ShellShim::parseEvent(payload);
+    if (event.kind == ShellShim::Event::Kind::Cwd) {
+        emit remoteWorkingDirectoryChanged(activeTarget().stableKey(), event.workingDirectory);
+        return;
+    }
     if (event.kind != ShellShim::Event::Kind::Connect) {
         return;
     }

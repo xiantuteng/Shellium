@@ -410,6 +410,25 @@ namespace SftpUiState {
 }
 
 /**
+ * @brief 判断一次终端 cwd 上报是否应当应用到文件管理器的当前路径框。
+ * @param followEnabled 用户是否已开启"跟随终端目录"。
+ * @param eventStableKey 上报该 cwd 的服务器稳定键。
+ * @param selectedStableKey 文件管理器当前选中服务器的稳定键。
+ * @param workingDirectory 上报的绝对路径。
+ *
+ * 关闭跟随、路径为空、或上报来自当前未选中的服务器（比如用户正浏览外层，cwd 事件却来自
+ * 内层）时都不应用，否则会在用户没有察觉的情况下把路径框跳到另一台服务器。
+ */
+[[nodiscard]] inline bool shouldFollowTerminalWorkingDirectory(const bool followEnabled,
+                                                                const QString &eventStableKey,
+                                                                const QString &selectedStableKey,
+                                                                const QString &workingDirectory)
+{
+    return followEnabled && !workingDirectory.isEmpty() && !selectedStableKey.isEmpty()
+        && eventStableKey == selectedStableKey;
+}
+
+/**
  * @brief 远程文件列表的排序状态。
  *
  * column 为 -1 表示"还原默认"，即保持服务器返回的原始顺序。必须显式区分它与"按第 0 列

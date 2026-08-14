@@ -900,6 +900,20 @@ quint64 SshSessionNode::beginForward(const QString &host,
                                .arg(m_target.connectionSpecifier(true), lastError()));
     }
 
+    // 工作线程的轮询循环每约 10ms 才会调用一次 pumpForwards() 搬运这对 socket 里的数据
+    // （交互终端空闲时尤其如此，参见 SshSessionStack::pumpLoop 的轮询节流）。内核默认的
+    // socketpair 缓冲区往往只有几十 KB，SFTP 一侧的阻塞写会在缓冲区写满后卡住，直到下一次
+    // 轮询才被排空——相当于把吞吐量摊薄到"缓冲区大小 / 10ms"，SFTP 流水线再深也无济于事。
+    // 显式调大到 4MiB 让缓冲区能吸收多个轮询周期的数据量，轮询间隔就不再是瓶颈；
+    // setsockopt 失败时保持系统默认值，不影响功能正确性。
+    constexpr int kForwardSocketBufferBytes = 4 * 1024 * 1024;
+    for (const int fd : socketPair) {
+        ::setsockopt(fd, SOL_SOCKET, SO_SNDBUF,
+                    &kForwardSocketBufferBytes, sizeof(kForwardSocketBufferBytes));
+        ::setsockopt(fd, SOL_SOCKET, SO_RCVBUF,
+                    &kForwardSocketBufferBytes, sizeof(kForwardSocketBufferBytes));
+    }
+
     // 工作线程一侧必须非阻塞，否则轮询循环会被没有数据的隧道读操作卡住。
     fcntl(socketPair[0], F_SETFL, fcntl(socketPair[0], F_GETFL, 0) | O_NONBLOCK);
     if (nonBlockingCaller) {

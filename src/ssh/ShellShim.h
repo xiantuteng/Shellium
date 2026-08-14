@@ -27,12 +27,16 @@ public:
         enum class Kind {
             None,
             /** @brief 用户执行了 ssh，请求 Shellium 接管这一层。 */
-            Connect
+            Connect,
+            /** @brief 远端 Shell 的工作目录发生了变化（提示符刷新时上报）。 */
+            Cwd
         };
 
         Kind kind = Kind::None;
-        /** @brief 远端 Shell 展开后的完整 argv，不含 `ssh` 本身。 */
+        /** @brief 远端 Shell 展开后的完整 argv，不含 `ssh` 本身；仅 Connect 事件有效。 */
         QStringList arguments;
+        /** @brief 远端 Shell 上报的当前工作目录绝对路径；仅 Cwd 事件有效。 */
+        QString workingDirectory;
     };
 
     /**

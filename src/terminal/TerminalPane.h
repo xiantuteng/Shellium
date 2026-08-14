@@ -168,6 +168,16 @@ signals:
     /** @brief 嵌套 SSH 进入或退出导致可选服务器链发生变化。 */
     void targetsChanged(TerminalPane *pane);
 
+    /**
+     * @brief 当前自持层的远端 Shell 工作目录发生变化。
+     * @param stableKey 上报该 cwd 的服务器稳定键（activeTarget().stableKey()）。
+     * @param workingDirectory 远端 Shell 提示符刷新时上报的绝对路径。
+     *
+     * 只有由 Shellium 亲自注入 shim 的自持层才会产生该信号；推测层没有 shim，不会污染
+     * 文件管理器的自动跟随。
+     */
+    void remoteWorkingDirectoryChanged(const QString &stableKey, const QString &workingDirectory);
+
     /** @brief 连接状态文字发生变化，供主窗口顶部非阻塞提示区展示。 */
     void statusMessage(const QString &message);
 

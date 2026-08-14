@@ -64,6 +64,10 @@ private slots:
 
     /** @brief 列头点击必须按 升序→降序→默认 三态循环，换列则重新从升序开始。 */
     void cyclesColumnSortThroughAscendingDescendingDefault();
+
+    /** @brief 只有开关开启且上报服务器与当前选中一致时才应跟随终端 cwd。 */
+    void decidesWhenToFollowTerminalWorkingDirectory_data();
+    void decidesWhenToFollowTerminalWorkingDirectory();
 };
 
 namespace {
@@ -437,6 +441,45 @@ void SftpRecursiveTest::cyclesColumnSortThroughAscendingDescendingDefault()
     const SortState otherColumn = nextSortState(descending, 2);
     QCOMPARE(otherColumn.column, 2);
     QCOMPARE(otherColumn.order, Qt::AscendingOrder);
+}
+
+void SftpRecursiveTest::decidesWhenToFollowTerminalWorkingDirectory_data()
+{
+    QTest::addColumn<bool>("followEnabled");
+    QTest::addColumn<QString>("eventStableKey");
+    QTest::addColumn<QString>("selectedStableKey");
+    QTest::addColumn<QString>("workingDirectory");
+    QTest::addColumn<bool>("expected");
+
+    QTest::newRow("开关开且同一服务器")
+        << true << QStringLiteral("host-a") << QStringLiteral("host-a")
+        << QStringLiteral("/srv/app") << true;
+    QTest::newRow("开关关闭")
+        << false << QStringLiteral("host-a") << QStringLiteral("host-a")
+        << QStringLiteral("/srv/app") << false;
+    // 用户正浏览外层服务器时，内层终端的 cwd 上报不该把路径框跳到另一台机器。
+    QTest::newRow("上报服务器与当前选中不一致")
+        << true << QStringLiteral("host-inner") << QStringLiteral("host-outer")
+        << QStringLiteral("/srv/app") << false;
+    QTest::newRow("路径为空")
+        << true << QStringLiteral("host-a") << QStringLiteral("host-a")
+        << QString() << false;
+    QTest::newRow("尚未选中任何服务器")
+        << true << QStringLiteral("host-a") << QString()
+        << QStringLiteral("/srv/app") << false;
+}
+
+void SftpRecursiveTest::decidesWhenToFollowTerminalWorkingDirectory()
+{
+    QFETCH(bool, followEnabled);
+    QFETCH(QString, eventStableKey);
+    QFETCH(QString, selectedStableKey);
+    QFETCH(QString, workingDirectory);
+    QFETCH(bool, expected);
+
+    QCOMPARE(SftpUiState::shouldFollowTerminalWorkingDirectory(
+                 followEnabled, eventStableKey, selectedStableKey, workingDirectory),
+             expected);
 }
 
 QTEST_MAIN(SftpRecursiveTest)

@@ -134,6 +134,12 @@ private slots:
     /** @brief 安装命令必须拒绝不兼容 Shell，且只在成功时落下权限受限的脚本。 */
     void shellShimInstallGuardsUnsupportedShells();
 
+    /** @brief cwd 上报载荷必须解析出 Kind::Cwd 与原始路径，空路径视为无效事件。 */
+    void shellShimParsesCwdEvent();
+
+    /** @brief 注入脚本必须为 bash 和 zsh 分别挂好去重的 cwd 上报钩子。 */
+    void shellShimRegistersCwdHookForBothShells();
+
     /** @brief -i 指向远端私钥，绝不能被本机 libssh 当作本地路径使用。 */
     void neverUsesRemoteIdentityFileLocally();
 
@@ -984,6 +990,42 @@ void SshCommandParserTest::shellShimInstallGuardsUnsupportedShells()
     const QFile::Permissions permissions = scriptFile.permissions();
     QVERIFY(!(permissions & (QFileDevice::ReadGroup | QFileDevice::WriteGroup
                              | QFileDevice::ReadOther | QFileDevice::WriteOther)));
+}
+
+void SshCommandParserTest::shellShimParsesCwdEvent()
+{
+    const ShellShim::Event event =
+        ShellShim::parseEvent(QByteArrayLiteral("cwd;/srv/app"));
+    QCOMPARE(event.kind, ShellShim::Event::Kind::Cwd);
+    QCOMPARE(event.workingDirectory, QStringLiteral("/srv/app"));
+    QVERIFY(event.arguments.isEmpty());
+
+    // 路径本身允许包含分号，解析时不能在第一个 ';' 之后继续拆分。
+    const ShellShim::Event withSemicolon =
+        ShellShim::parseEvent(QByteArrayLiteral("cwd;/srv/weird;name"));
+    QCOMPARE(withSemicolon.kind, ShellShim::Event::Kind::Cwd);
+    QCOMPARE(withSemicolon.workingDirectory, QStringLiteral("/srv/weird;name"));
+
+    // 空路径不是一次有效上报，不能被当作"跳转到根目录"处理。
+    const ShellShim::Event empty = ShellShim::parseEvent(QByteArrayLiteral("cwd;"));
+    QCOMPARE(empty.kind, ShellShim::Event::Kind::None);
+}
+
+void SshCommandParserTest::shellShimRegistersCwdHookForBothShells()
+{
+    const QByteArray script = ShellShim::scriptBody();
+
+    // 上报函数必须复用既有的私有 OSC 编号，且携带 cwd 前缀，否则 TerminalPane 无法
+    // 与 connect 事件区分开。
+    QVERIFY(script.contains(QByteArrayLiteral("]6773;cwd;%s\\007")));
+    QVERIFY(script.contains(QByteArrayLiteral("_shellium_report_cwd")));
+
+    // bash 追加到 PROMPT_COMMAND、zsh 追加到 precmd_functions，且都先查重，
+    // 避免同一层被多次 source 后钩子重复挂载导致重复上报。
+    QVERIFY(script.contains(QByteArrayLiteral("PROMPT_COMMAND=")));
+    QVERIFY(script.contains(QByteArrayLiteral("precmd_functions+=(_shellium_report_cwd)")));
+    QVERIFY(script.contains(QByteArrayLiteral("*\";_shellium_report_cwd;\"*")));
+    QVERIFY(script.contains(QByteArrayLiteral("*\" _shellium_report_cwd \"*")));
 }
 
 void SshCommandParserTest::terminalViewDetectsFinalAuthenticationFailure()

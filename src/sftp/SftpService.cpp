@@ -762,8 +762,13 @@ constexpr qint64 kTransferChunkBytes = 64 * 1024;
  * sftp_write() 是同步的，每写一个约 32KB 的协议包就要等服务端确认，吞吐量因此被单次
  * RTT 卡死而不是被带宽卡死。用 sftp_aio_begin_write/sftp_aio_wait_write 维持多个
  * in-flight 请求，才能把吞吐量提到带宽上限。
+ *
+ * 经跳板链或经远端 OpenSSH 中继（openViaRemoteOpenSsh）的连接，有效往返时延比直连明显
+ * 更高：带宽时延积（带宽 × 往返时延）可能超出较浅的流水线所能覆盖的在途字节数，届时
+ * 吞吐量又会退化成被往返时延卡死。64 与 OpenSSH 自带 sftp 客户端的默认并发请求数
+ * （-R 64）一致，是经过大规模验证的取值，服务端不会因此感到意外。
  */
-constexpr int kUploadPipelineDepth = 16;
+constexpr int kUploadPipelineDepth = 64;
 
 /**
  * @brief 把一个本地文件写到远端路径。

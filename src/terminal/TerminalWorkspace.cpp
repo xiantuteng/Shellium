@@ -49,6 +49,10 @@ TerminalWorkspace::TerminalWorkspace(QWidget *parent)
     });
     connect(m_pane, &TerminalPane::statusMessage, this, &TerminalWorkspace::statusMessage);
     connect(m_pane,
+            &TerminalPane::remoteWorkingDirectoryChanged,
+            m_fileManager,
+            &RemoteFileManagerWidget::followTerminalWorkingDirectory);
+    connect(m_pane,
             &TerminalPane::fileManagerVisibilityRequested,
             this,
             &TerminalWorkspace::setFileManagerVisible);

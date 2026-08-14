@@ -56,8 +56,21 @@ namespace {
  */
 constexpr int kOriginalIndexRole = Qt::UserRole + 5;
 
-/** @brief 条目修改时间的结构化原值；列表不显示该列，但详情功能仍可直接复用。 */
+/**
+ * @brief 条目修改时间的结构化原值，用于按时间排序。
+ *
+ * 排序必须比较 QDateTime 原值而不是格式化后的文本：按字典序比较字符串会把跨年份、
+ * 跨月份的日期排错。
+ */
 constexpr int kModifiedAtRole = Qt::UserRole + 6;
+
+/**
+ * @brief 远程文件树"名称"列允许收缩到的最小宽度。
+ *
+ * 名称是唯一无法预估长度、也最需要看全的一列；面板变窄时其余列已经按内容取了最小宽度，
+ * 不能再从名称列这里继续挤占空间——宁可出现横向滚动条，也不能让文件名缩到看不清。
+ */
+constexpr int kRemoteNameColumnMinWidth = 190;
 
 /**
  * @brief 三路比较，返回负/零/正，供排序比较器统一表达"小于/等于/大于"。
@@ -485,6 +498,7 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     : QWidget(parent)
     , m_targetCombo(new QComboBox(this))
     , m_followInnermostCheck(new QCheckBox(tr("自动跟随最内层"), this))
+    , m_followTerminalCwdCheck(new QCheckBox(tr("跟随终端目录"), this))
     , m_fullScreenButton(new QToolButton(this))
     , m_localPathEdit(new QLineEdit(QDir::homePath(), this))
     , m_localModel(new LocalizedLocalFileSystemModel(this))
@@ -640,35 +654,37 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
         UiIcons::symbol(this, UiIcons::Symbol::Refresh, this->palette().color(QPalette::WindowText)),
         tr("刷新当前远程目录"));
     m_pathEdit->setObjectName(QStringLiteral("SftpRemotePathEdit"));
+    m_followTerminalCwdCheck->setObjectName(QStringLiteral("SftpFollowTerminalCwdCheck"));
+    m_followTerminalCwdCheck->setChecked(false);
+    m_followTerminalCwdCheck->setToolTip(
+        tr("开启后，路径框会自动跳转到左侧终端当前所在的远端目录"));
     pathRow->addWidget(remoteCaption);
     pathRow->addWidget(upButton);
     pathRow->addWidget(refreshButton);
     pathRow->addWidget(m_pathEdit, 1);
+    pathRow->addWidget(m_followTerminalCwdCheck);
     remoteLayout->addWidget(remoteToolbar);
 
-    // 目录/链接/普通文件已由名称列的图标区分，独立“类型”列没有保留价值。参考设计的远程
-    // 栏只显示名称、大小、权限、所有者：修改时间在双栏对拷的主要决策中优先级较低，去掉后
-    // 权限和所有者无需横向滚动即可看全。本地栏仍保留修改时间，便于判断待上传文件的新旧。
+    // 目录/链接/普通文件已由名称列的图标区分，独立“类型”列没有保留价值，因此不再单独占列。
     m_fileTree->setObjectName(QStringLiteral("RemoteFileTree"));
-    m_fileTree->setColumnCount(4);
+    m_fileTree->setColumnCount(5);
     m_fileTree->setHeaderLabels(
-        {tr("名称"), tr("大小"), tr("权限"), tr("所有者")});
+        {tr("名称"), tr("大小"), tr("修改时间"), tr("权限"), tr("所有者")});
     m_fileTree->setRootIsDecorated(false);
     m_fileTree->setAlternatingRowColors(false);
     m_fileTree->setUniformRowHeights(true);
     m_fileTree->setSelectionMode(QAbstractItemView::ExtendedSelection);
     m_fileTree->setContextMenuPolicy(Qt::CustomContextMenu);
     m_fileTree->header()->setStretchLastSection(false);
-    // 数据列允许用户拖拽调整；名称列随后设为 Stretch 以优先吃掉剩余空间，使单栏和双栏
-    // 两种宽度下表头都贴合面板，而不是在所有者列右侧留下大片空白。
+    // 所有列都交给 Interactive：名称列的宽度改由 updateRemoteNameColumnWidth() 按可用空间
+    // 手动计算并下限钳在 kRemoteNameColumnMinWidth，而不是用 Stretch——Stretch 会在面板变
+    // 窄时把名称列一路压到 setMinimumSectionSize 的下限，文件名会被挤成看不清的几个字符。
     for (int column = 0; column < m_fileTree->columnCount(); ++column) {
         m_fileTree->header()->setSectionResizeMode(column, QHeaderView::Interactive);
     }
-    m_fileTree->header()->setSectionResizeMode(0, QHeaderView::Stretch);
     m_fileTree->header()->setMinimumSectionSize(40);
     // 除名称外的每一列都按"最长的真实内容"取宽，而不是拍脑袋给一个整数：面板本来就只占
-    // 窗口的三分之一，多给出去的每一像素都是从文件名那里抢来的。名称列吃掉剩余空间，因为
-    // 它是唯一无法预估长度、也最需要看全的一列。
+    // 窗口的三分之一，多给出去的每一像素都是从文件名那里抢来的。
     const QFontMetrics columnMetrics(m_fileTree->font());
     const auto columnWidthFor = [&columnMetrics](const QString &widestContent,
                                                  const QString &header) {
@@ -679,8 +695,9 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
             + kCellPadding;
     };
     const QList<int> defaultColumnWidths = {
-        190,
+        kRemoteNameColumnMinWidth,
         columnWidthFor(QStringLiteral("1023.9 MiB"), tr("大小")),
+        columnWidthFor(QStringLiteral("2026-08-09 23:56:28"), tr("修改时间")),
         columnWidthFor(QStringLiteral("drwxrwxrwt"), tr("权限")),
         columnWidthFor(QStringLiteral("root"), tr("所有者")),
     };
@@ -1088,16 +1105,19 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
                         0,
                         remoteFileEntryIcon(m_fileTree, entry.isDirectory));
                     item->setText(1, entry.isDirectory ? QStringLiteral("—") : formatSize(entry.size));
-                    item->setText(2, entry.permissionText());
-                    item->setText(3, entry.owner);
+                    item->setText(2, entry.modifiedAt.isValid()
+                                          ? entry.modifiedAt.toString(QStringLiteral("yyyy-MM-dd HH:mm:ss"))
+                                          : QString());
+                    item->setText(3, entry.permissionText());
+                    item->setText(4, entry.owner);
                     item->setData(0, Qt::UserRole, entry.path);
                     item->setData(0, Qt::UserRole + 1, entry.isDirectory);
                     item->setData(0, Qt::UserRole + 2, QVariant::fromValue(entry.size));
                     item->setData(0, Qt::UserRole + 3, QVariant::fromValue(entry.permissions));
                     item->setData(0, Qt::UserRole + 4, entry.isSymbolicLink);
                     // 大小排序必须比较真实字节值，否则 "9 B" 会大于 "10 MiB"；权限同样
-                    // 比较原始位掩码。修改时间不显示，但继续保存在角色中，避免结构化信息因
-                    // UI 精简而丢失，并为后续详情面板复用保留数据。
+                    // 比较原始位掩码；修改时间排序按 QDateTime 原值比较，而不是格式化后的
+                    // 字符串——字符串按字典序排会把跨年份、跨月份的日期排错。
                     item->setData(0, kOriginalIndexRole, originalIndex++);
                     item->setData(0, kModifiedAtRole, entry.modifiedAt);
                 }
@@ -1244,12 +1264,30 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     rebuildTransferQueueView();
     updateFullScreenIcon();
     updateResponsiveActionButtons();
+    updateRemoteNameColumnWidth();
 }
 
 void RemoteFileManagerWidget::resizeEvent(QResizeEvent *event)
 {
     QWidget::resizeEvent(event);
     updateResponsiveActionButtons();
+    updateRemoteNameColumnWidth();
+}
+
+void RemoteFileManagerWidget::updateRemoteNameColumnWidth()
+{
+    QHeaderView *header = m_fileTree->header();
+    if (header->count() < 1) {
+        return;
+    }
+    int othersWidth = 0;
+    for (int column = 1; column < header->count(); ++column) {
+        othersWidth += header->sectionSize(column);
+    }
+    // 视口宽度足够时名称列吃掉剩余空间；不够时钳在下限，交给横向滚动条呈现被挤出的部分，
+    // 而不是继续压缩名称列本身。
+    const int available = m_fileTree->viewport()->width() - othersWidth;
+    header->resizeSection(0, std::max(kRemoteNameColumnMinWidth, available));
 }
 
 void RemoteFileManagerWidget::updateResponsiveActionButtons()
@@ -1346,11 +1384,15 @@ void RemoteFileManagerWidget::applyRemoteSort()
                                        right->data(0, Qt::UserRole + 2).toULongLong());
             break;
         case 2:
+            comparison = compareValues(left->data(0, kModifiedAtRole).toDateTime(),
+                                       right->data(0, kModifiedAtRole).toDateTime());
+            break;
+        case 3:
             comparison = compareValues(left->data(0, Qt::UserRole + 3).toUInt(),
                                        right->data(0, Qt::UserRole + 3).toUInt());
             break;
-        case 3:
-            comparison = QString::compare(left->text(3), right->text(3), Qt::CaseInsensitive);
+        case 4:
+            comparison = QString::compare(left->text(4), right->text(4), Qt::CaseInsensitive);
             break;
         case 0:
         default:
@@ -1735,6 +1777,23 @@ void RemoteFileManagerWidget::downloadRemoteEntryToDirectory(
     transfer.description = tr("下载 %1 → %2")
                                .arg(entry.name, destinationInfo.absoluteFilePath());
     enqueueTransfer(std::move(transfer));
+}
+
+void RemoteFileManagerWidget::followTerminalWorkingDirectory(const QString &stableKey,
+                                                              const QString &workingDirectory)
+{
+    const ConnectionTarget target = selectedTarget();
+    if (!SftpUiState::shouldFollowTerminalWorkingDirectory(
+            m_followTerminalCwdCheck->isChecked(), stableKey, target.stableKey(),
+            workingDirectory)) {
+        return;
+    }
+    if (m_pathEdit->text().trimmed() == workingDirectory) {
+        // 提示符每次刷新都会上报一次；路径没变时不必重新拉取目录列表。
+        return;
+    }
+    m_pathEdit->setText(workingDirectory);
+    refreshDirectory();
 }
 
 void RemoteFileManagerWidget::restorePathForSelectedTarget()

@@ -70,6 +70,11 @@ QByteArray ShellShim::scriptBody()
     //     的 password 提示前面凭空多出一段"[root@outer ~]# "。行为上这也与真正的 ssh 一致
     //     ——外层 Shell 本就应当在内层会话期间挂起。即使 Shellium 意外退出也不会卡死：
     //     用户敲一次回车就能让 read 返回。
+    //   * cwd 上报钩子（_shellium_report_cwd）挂在 PROMPT_COMMAND/precmd_functions 上，
+    //     每次提示符刷新前都会重新上报，且注册前先查重，重复 source 不会挂两次。追加而不
+    //     是覆盖：用户自己的 PROMPT_COMMAND/precmd 钩子必须继续生效。刻意不对 $PWD 做
+    //     shell 转义/编码——多数路径不含会打断 OSC 帧的控制字符，换取实现和调用方解析都
+    //     保持简单；真出现异常路径，后果只是这一次 cwd 上报被丢弃，不影响其余功能。
     return QByteArrayLiteral(
         "if [ -n \"${BASH_VERSION-}${ZSH_VERSION-}\" ]; then"
         " if [ -n \"${BASH_VERSION-}\" ]; then"
@@ -96,6 +101,20 @@ QByteArray ShellShim::scriptBody()
         " unset _shellium_r; return 0; fi;"
         " unset _shellium_r; command ssh \"$@\";"
         " };"
+        " _shellium_report_cwd() { printf '\\033]") + kOscNumber + QByteArrayLiteral(
+        ";cwd;%s\\007' \"$PWD\" > /dev/tty 2>/dev/null; };"
+        " if [ -n \"${BASH_VERSION-}\" ]; then"
+        " case \";${PROMPT_COMMAND-};\" in"
+        " *\";_shellium_report_cwd;\"*) ;;"
+        " *) PROMPT_COMMAND=\"${PROMPT_COMMAND:+$PROMPT_COMMAND;}_shellium_report_cwd\";;"
+        " esac;"
+        " elif [ -n \"${ZSH_VERSION-}\" ]; then"
+        " case \" ${precmd_functions[*]-} \" in"
+        " *\" _shellium_report_cwd \"*) ;;"
+        " *) precmd_functions+=(_shellium_report_cwd);;"
+        " esac;"
+        " fi;"
+        " _shellium_report_cwd;"
         " fi");
 }
 
@@ -145,7 +164,21 @@ ShellShim::Event ShellShim::parseEvent(const QByteArray &payload)
     if (separator < 0) {
         return event;
     }
-    if (payload.left(separator) != QByteArrayLiteral("connect")) {
+    const QByteArray kind = payload.left(separator);
+
+    if (kind == QByteArrayLiteral("cwd")) {
+        // 载荷是远端 Shell 未经转义的 $PWD 原文；不做 base64，只要求不含破坏 OSC 帧的
+        // 控制字符。此处不再按 ';' 二次拆分——路径本身允许包含分号。
+        const QByteArray path = payload.mid(separator + 1);
+        if (path.isEmpty()) {
+            return event;
+        }
+        event.workingDirectory = QString::fromUtf8(path);
+        event.kind = Event::Kind::Cwd;
+        return event;
+    }
+
+    if (kind != QByteArrayLiteral("connect")) {
         return event;
     }
 

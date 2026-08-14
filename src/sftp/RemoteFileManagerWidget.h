@@ -53,6 +53,16 @@ public:
     void requestUploadToCurrentDirectory();
 
     /**
+     * @brief 终端自持层上报了工作目录变化，按需跟随。
+     * @param stableKey 上报该 cwd 的服务器稳定键。
+     * @param workingDirectory 远端 Shell 当前的绝对路径。
+     *
+     * 只有在"跟随终端目录"开关开启、且上报服务器与当前选中服务器一致时才会跳转，
+     * 判定逻辑见 SftpUiState::shouldFollowTerminalWorkingDirectory。
+     */
+    void followTerminalWorkingDirectory(const QString &stableKey, const QString &workingDirectory);
+
+    /**
      * @brief 退出全屏并恢复终端显示。
      *
      * 供 TerminalWorkspace 在整体隐藏文件管理时调用：若不同步复位，终端会因为仍处于
@@ -220,6 +230,14 @@ private:
     /** @brief 按当前宽度刷新操作栏按钮的文字/图标展示方式。 */
     void updateResponsiveActionButtons();
 
+    /**
+     * @brief 按可用空间重新计算远程文件树"名称"列宽度，并钳在最小值以下不再收缩。
+     *
+     * 面板足够宽时名称列吃掉剩余空间；不够宽时钳在 kRemoteNameColumnMinWidth，多出的
+     * 内容交给横向滚动条，而不是继续压缩文件名直到看不清。
+     */
+    void updateRemoteNameColumnWidth();
+
     /** @brief SFTP 操作成功后刷新目录并显示结果。 */
     void handleOperationSuccess(quint64 requestId, const QString &description);
 
@@ -253,6 +271,14 @@ private:
      * 该控件不显示在界面上，仅作为内部状态载体：默认行为固定为跟随最内层。
      */
     QCheckBox *m_followInnermostCheck = nullptr;
+
+    /**
+     * @brief 用户可见的"跟随终端目录"开关；默认关闭。
+     *
+     * 开启后，收到当前选中服务器发来的 cwd 上报就自动跳转路径框，判定逻辑见
+     * SftpUiState::shouldFollowTerminalWorkingDirectory。
+     */
+    QCheckBox *m_followTerminalCwdCheck = nullptr;
 
     /** @brief 本地文件面板容器；仅在全屏时显示，默认隐藏。 */
     QWidget *m_localPanel = nullptr;
