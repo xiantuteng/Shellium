@@ -554,20 +554,26 @@ QWidget *SettingsDialog::buildAiPage()
     m_aiEndpointEdit = new QLineEdit(card);
     m_aiEndpointEdit->setObjectName(QStringLiteral("aiEndpointEdit"));
     m_aiEndpointEdit->setPlaceholderText(QStringLiteral("https://your-gateway/v1"));
-    card->addRow(tr("服务地址"),
-                m_aiEndpointEdit,
-                tr("兼容 OpenAI Chat Completions 协议的网关根地址，不含 /chat/completions。"));
+    // 服务地址、API Key 和模型名称都可能显著长于普通设置值，因此使用上下排列的宽表单行。
+    // 输入框会占满卡片内容区并随窗口伸缩，用户无需把光标放进窄框后逐字符横向滚动确认配置。
+    card->addWideRow(
+        tr("服务地址"),
+        m_aiEndpointEdit,
+        tr("兼容 OpenAI Chat Completions 协议的网关根地址，不含 /chat/completions。"));
 
     m_aiApiKeyEdit = new QLineEdit(card);
     m_aiApiKeyEdit->setObjectName(QStringLiteral("aiApiKeyEdit"));
     m_aiApiKeyEdit->setEchoMode(QLineEdit::Password);
     m_aiApiKeyEdit->setPlaceholderText(tr("留空表示网关不要求鉴权"));
-    card->addRow(tr("API Key"), m_aiApiKeyEdit, tr("以 Bearer Token 形式随请求发送，加密保存在凭据保险库。"));
+    card->addWideRow(
+        tr("API Key"),
+        m_aiApiKeyEdit,
+        tr("以 Bearer Token 形式随请求发送，加密保存在凭据保险库。"));
 
     m_aiModelEdit = new QLineEdit(card);
     m_aiModelEdit->setObjectName(QStringLiteral("aiModelEdit"));
     m_aiModelEdit->setPlaceholderText(QStringLiteral("gpt-4o-mini / deepseek-chat / ..."));
-    card->addRow(tr("模型名称"), m_aiModelEdit);
+    card->addWideRow(tr("模型名称"), m_aiModelEdit);
 
     m_aiStatusLabel = new QLabel(card);
     m_aiStatusLabel->setWordWrap(true);

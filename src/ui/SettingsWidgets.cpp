@@ -706,6 +706,33 @@ QWidget *SettingsCard::addRow(const QString &label, QWidget *field, const QStrin
     return field;
 }
 
+QWidget *SettingsCard::addWideRow(const QString &label, QWidget *field, const QString &hint)
+{
+    Q_ASSERT(field != nullptr);
+    auto *row = new QWidget(this);
+    auto *rowLayout = new QVBoxLayout(row);
+    rowLayout->setContentsMargins(0, 0, 0, 0);
+    rowLayout->setSpacing(6);
+
+    auto *labelWidget = new QLabel(label, row);
+    labelWidget->setObjectName(QStringLiteral("SettingsRowLabel"));
+    rowLayout->addWidget(labelWidget);
+    if (!hint.isEmpty()) {
+        auto *hintWidget = new QLabel(hint, row);
+        hintWidget->setObjectName(QStringLiteral("SettingsRowHint"));
+        hintWidget->setWordWrap(true);
+        rowLayout->addWidget(hintWidget);
+    }
+
+    field->setParent(row);
+    // 不设置固定宽度，而是交给垂直布局填满整行：这样设置窗口放大时能展示更多长内容，
+    // 缩小时又会随卡片收窄，不会因为某个像素常量导致水平滚动或挤压页面。
+    field->setSizePolicy(QSizePolicy::Expanding, field->sizePolicy().verticalPolicy());
+    rowLayout->addWidget(field);
+    m_layout->addWidget(row);
+    return field;
+}
+
 void SettingsCard::addFullWidthWidget(QWidget *widget)
 {
     Q_ASSERT(widget != nullptr);

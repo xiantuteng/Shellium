@@ -54,6 +54,8 @@ private slots:
     void unknownColorSchemeIdFallsBackToDefault();
     void colorSchemeSwitchKeepsApplicationTextColors();
     void fontComboOffersRecommendedFamiliesAndKeepsMissingOne();
+    /** @brief AI 连接配置的长文本输入框必须占用卡片整行宽度，不能退回默认窄尺寸。 */
+    void aiConnectionFieldsFillCardWidth();
 
 private:
     /** @brief 返回步进器里指定角色（increase/decrease）的按钮。 */
@@ -664,6 +666,35 @@ void SettingsUiTest::fontComboOffersRecommendedFamiliesAndKeepsMissingOne()
     auto *fontCombo = reopened.findChild<QComboBox *>(QStringLiteral("terminalFontCombo"));
     QCOMPARE(fontCombo->currentData().toString(), QStringLiteral("Shellium Nonexistent Mono"));
     QCOMPARE(reopened.editedSettings().fontFamily, QStringLiteral("Shellium Nonexistent Mono"));
+}
+
+void SettingsUiTest::aiConnectionFieldsFillCardWidth()
+{
+    auto service = makeService();
+    SettingsDialog dialog(service.get());
+    auto *navigation = dialog.findChild<QListWidget *>(QStringLiteral("SettingsNav"));
+    QVERIFY(navigation != nullptr);
+
+    // AI 页不是默认页，必须先切换并显示窗口，Qt 才会为滚动区内的控件计算最终几何尺寸。
+    navigation->setCurrentRow(navigation->count() - 1);
+    dialog.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&dialog));
+
+    const QList<QString> fieldNames = {QStringLiteral("aiEndpointEdit"),
+                                       QStringLiteral("aiApiKeyEdit"),
+                                       QStringLiteral("aiModelEdit")};
+    for (const QString &fieldName : fieldNames) {
+        auto *field = dialog.findChild<QLineEdit *>(fieldName);
+        QVERIFY2(field != nullptr, qPrintable(fieldName));
+        QVERIFY(field->parentWidget() != nullptr);
+        // 宽表单行的布局边距为零，因此输入框应基本等于行容器宽度；保留 2 像素容差，兼容
+        // 不同平台样式对控件边框和高 DPI 像素取整造成的微小差异。
+        QVERIFY2(field->width() >= field->parentWidget()->contentsRect().width() - 2,
+                 qPrintable(QStringLiteral("%1 仍未占满配置行：字段 %2，行 %3")
+                                .arg(fieldName)
+                                .arg(field->width())
+                                .arg(field->parentWidget()->contentsRect().width())));
+    }
 }
 
 QTEST_MAIN(SettingsUiTest)

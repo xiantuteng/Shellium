@@ -257,6 +257,19 @@ public:
     QWidget *addRow(const QString &label, QWidget *field, const QString &hint = QString());
 
     /**
+     * @brief 追加一行“上方说明 + 下方全宽控件”，用于需要展示长内容的输入项。
+     * @param label 行标签文本。
+     * @param field 占用卡片可用宽度的控件，不可为空；会被重新父子化到卡片。
+     * @param hint 标签下方、控件上方的次要说明，可为空。
+     * @return 传入的控件，便于调用方继续设置属性或保存指针。
+     *
+     * 普通 addRow() 特意让开关、步进器等紧凑控件靠右显示，但地址、令牌和模型名称可能很长，
+     * 若沿用紧凑布局就只能得到控件的默认建议宽度。此接口把说明和控件改为上下排列，使输入框
+     * 能随卡片一起伸缩，避免通过硬编码固定宽度来适配某一种窗口尺寸。
+     */
+    QWidget *addWideRow(const QString &label, QWidget *field, const QString &hint = QString());
+
+    /**
      * @brief 追加一个占满整行宽度的控件（色板网格、预览区、长段说明等）。
      * @param widget 目标控件，不可为空；会被重新父子化到卡片。
      */
