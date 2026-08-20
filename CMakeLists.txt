@@ -27,6 +27,36 @@ pkg_check_modules(LIBVTERM REQUIRED IMPORTED_TARGET vterm>=0.3)
 pkg_check_modules(LIBSODIUM REQUIRED IMPORTED_TARGET libsodium>=1.0.18)
 pkg_check_modules(SPDLOG REQUIRED IMPORTED_TARGET spdlog>=1.12)
 
+# 终端等宽字体随可执行文件一起分发，不依赖用户机器上装了什么。只要走系统字体，缺字体的机器
+# 会被静默替换成别的字形，字宽与行高随之改变，终端网格就对不齐了。列表与 BundledFonts.cpp 的
+# 清单必须保持一致；许可证与两个 Medium 改名的原因见 resources/fonts/NOTICE.md。
+set(SHELLIUM_BUNDLED_FONT_FILES
+    resources/fonts/SourceCodePro-Regular.ttf
+    resources/fonts/SourceCodeProMedium-Regular.ttf
+    resources/fonts/FiraMono-Regular.ttf
+    resources/fonts/FiraMonoMedium-Regular.ttf
+    resources/fonts/Inconsolata-g.ttf
+    resources/fonts/AnonymousPro-Regular.ttf
+    resources/fonts/UbuntuMono-Regular.ttf
+    resources/fonts/DroidSansMono.ttf
+    resources/fonts/DejaVuSansMono.ttf
+    resources/fonts/PTMono-Regular.ttf
+    resources/fonts/CascadiaCode-Regular.ttf
+    resources/fonts/FiraCode-Regular.ttf
+    resources/fonts/JetBrainsMono-Regular.ttf
+    resources/fonts/MesloLGS-Regular.ttf
+)
+
+# 字体资源需要同时编进正式程序和设置界面测试目标，否则测试里 BundledFonts::registerAll()
+# 会因为资源缺失而全部失败，测出来的“没有内置字体”只是构建配置问题，不是真实回归。
+function(shellium_add_bundled_fonts target)
+    qt_add_resources("${target}" "shellium_bundled_fonts"
+        PREFIX "/"
+        BASE "${CMAKE_CURRENT_SOURCE_DIR}"
+        FILES ${SHELLIUM_BUNDLED_FONT_FILES}
+    )
+endfunction()
+
 qt_add_executable(Shellium
     src/main.cpp
     src/app/MainWindow.cpp
@@ -62,6 +92,8 @@ qt_add_executable(Shellium
     src/security/Vault.h
     src/security/SshKeyManager.cpp
     src/security/SshKeyManager.h
+    src/settings/BundledFonts.cpp
+    src/settings/BundledFonts.h
     src/settings/TerminalSettings.cpp
     src/settings/TerminalSettings.h
     src/storage/ApplicationDatabase.cpp
@@ -124,6 +156,8 @@ qt_add_resources(Shellium "shellium_brand_assets"
         resources/icons/chevron-down-light.svg
         resources/icons/shellium-app-icon-macos-512.png
 )
+
+shellium_add_bundled_fonts(Shellium)
 
 target_include_directories(Shellium PRIVATE src)
 target_link_libraries(Shellium PRIVATE
@@ -425,6 +459,8 @@ if(BUILD_TESTING)
         src/core/HostRecord.h
         src/security/Vault.cpp
         src/security/Vault.h
+        src/settings/BundledFonts.cpp
+        src/settings/BundledFonts.h
         src/settings/TerminalSettings.cpp
         src/settings/TerminalSettings.h
         src/storage/ApplicationDatabase.cpp
@@ -438,6 +474,7 @@ if(BUILD_TESTING)
         src/ui/VaultDialog.cpp
         src/ui/VaultDialog.h
     )
+    shellium_add_bundled_fonts(ShelliumSettingsUiTests)
     target_include_directories(ShelliumSettingsUiTests PRIVATE src)
     target_link_libraries(ShelliumSettingsUiTests PRIVATE
         Qt6::Core Qt6::Gui Qt6::Network Qt6::Widgets Qt6::Sql Qt6::Test PkgConfig::LIBSODIUM)

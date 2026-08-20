@@ -1,3 +1,4 @@
+#include "settings/BundledFonts.h"
 #include "settings/TerminalSettings.h"
 #include "security/Vault.h"
 #include "storage/ApplicationDatabase.h"
@@ -11,6 +12,7 @@
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QFontDatabase>
+#include <QFontInfo>
 #include <QGridLayout>
 #include <QLineEdit>
 #include <QSet>
@@ -56,6 +58,8 @@ private slots:
     void unknownColorSchemeIdFallsBackToDefault();
     void colorSchemeSwitchKeepsApplicationTextColors();
     void fontComboOffersRecommendedFamiliesAndKeepsMissingOne();
+    /** @brief 内置字体必须真的注册进 QFontDatabase，并排在字体下拉框最前面。 */
+    void bundledFontsResolveToThemselvesAndLeadTheFontCombo();
     /** @brief AI 连接配置的长文本输入框必须占用卡片整行宽度，不能退回默认窄尺寸。 */
     void aiConnectionFieldsFillCardWidth();
 
@@ -584,6 +588,13 @@ void SettingsUiTest::referenceThemesCarryTheirPublishedAnsiPalette()
                  QColor(QLatin1String(expectation.hex)));
     }
 
+    // 默认（跟随明暗）的深色调色板同样对着参考截图定过 4 号蓝：`ls` 的目录名用的就是它，
+    // 退回偏暗或偏灰的蓝正是"终端文字看不清"最先被看出来的地方。
+    TerminalSettings builtin;
+    builtin.themeMode = ThemeMode::Dark;
+    QCOMPARE(builtin.normalized().effectivePalette().ansi.value(4),
+             QColor(QStringLiteral("#015fff")));
+
     // Hacker 系是单色主题：参考图里连目录名都只是同一色系的另一档亮度，出现互补色就说明
     // 有人把通用调色板塞了进来。
     TerminalSettings hacker;
@@ -696,10 +707,12 @@ void SettingsUiTest::colorSchemeSwitchKeepsApplicationTextColors()
 void SettingsUiTest::fontComboOffersRecommendedFamiliesAndKeepsMissingOne()
 {
     auto service = makeService();
+    const QStringList bundled = BundledFonts::registerAll();
     const QStringList installed = QFontDatabase::families();
     QStringList expectedRecommended;
     for (const QString &family : TerminalSettings::recommendedFontFamilies()) {
-        if (installed.contains(family)) {
+        // 内置字体自成一组排在更前面，不应在推荐组里重复出现。
+        if (installed.contains(family) && !bundled.contains(family)) {
             expectedRecommended.append(family);
         }
     }
@@ -709,11 +722,14 @@ void SettingsUiTest::fontComboOffersRecommendedFamiliesAndKeepsMissingOne()
         SettingsDialog dialog(service.get());
         auto *fontCombo = dialog.findChild<QComboBox *>(QStringLiteral("terminalFontCombo"));
         QVERIFY(fontCombo != nullptr);
-        // 推荐字体必须排在最前面，且顺序与推荐列表一致；否则用户仍要在几百个字体里翻找。
+        // 推荐字体紧跟在内置字体分组和分隔条之后，且顺序与推荐列表一致；否则用户仍要在
+        // 几百个字体里翻找。
+        const int recommendedOffset = bundled.size() + 1;
         for (int index = 0; index < expectedRecommended.size(); ++index) {
-            QCOMPARE(fontCombo->itemData(index).toString(), expectedRecommended.at(index));
+            QCOMPARE(fontCombo->itemData(recommendedOffset + index).toString(),
+                     expectedRecommended.at(index));
         }
-        QVERIFY(fontCombo->count() > expectedRecommended.size());
+        QVERIFY(fontCombo->count() > recommendedOffset + expectedRecommended.size());
 
         // 条目文本与 data 分离：data 才是写进设置的字体族名。
         const QString target = expectedRecommended.last();
@@ -731,6 +747,49 @@ void SettingsUiTest::fontComboOffersRecommendedFamiliesAndKeepsMissingOne()
     auto *fontCombo = reopened.findChild<QComboBox *>(QStringLiteral("terminalFontCombo"));
     QCOMPARE(fontCombo->currentData().toString(), QStringLiteral("Shellium Nonexistent Mono"));
     QCOMPARE(reopened.editedSettings().fontFamily, QStringLiteral("Shellium Nonexistent Mono"));
+}
+
+void SettingsUiTest::bundledFontsResolveToThemselvesAndLeadTheFontCombo()
+{
+    const QStringList bundled = BundledFonts::registerAll();
+    QCOMPARE(bundled, BundledFonts::familyNames());
+
+    // 这几款必须随程序分发：机器上没装时若退回系统字体，字宽会变、终端网格就对不齐了。
+    // 名字写死是刻意的——族名（而不是文件名）才是设置里持久化的那个字符串，"Meslo LG S"
+    // 之类一旦写错，注册环节会静默跳过，界面上只是少一项，不会有任何报错。
+    for (const char *required : {"Source Code Pro", "Fira Mono", "Anonymous Pro", "Ubuntu Mono",
+                                 "Droid Sans Mono", "DejaVu Sans Mono", "PT Mono",
+                                 "Cascadia Code", "Fira Code", "JetBrains Mono", "Meslo LG S"}) {
+        QVERIFY2(bundled.contains(QString::fromLatin1(required)), required);
+    }
+
+    const QStringList installed = QFontDatabase::families();
+    for (const QString &family : bundled) {
+        QVERIFY2(installed.contains(family),
+                 qPrintable(QStringLiteral("内置字体未进入字体数据库：%1").arg(family)));
+        // 只看 families() 不够：上游的 Medium 文件仍声明自己属于基础族，Qt 会把它并进基础
+        // 族，于是 QFont("Fira Mono Medium") 被静默替换成别的字体。QFontInfo 解析出的实际
+        // 族名才能挡住这类回归。
+        QCOMPARE(QFontInfo(QFont(family)).family(), family);
+    }
+
+    // 重复注册必须幂等：设置对话框每次构造都会调用一次，否则同一族会越堆越多。
+    QCOMPARE(BundledFonts::registerAll(), bundled);
+
+    auto service = makeService();
+    SettingsDialog dialog(service.get());
+    auto *fontCombo = dialog.findChild<QComboBox *>(QStringLiteral("terminalFontCombo"));
+    QVERIFY(fontCombo != nullptr);
+    for (int index = 0; index < bundled.size(); ++index) {
+        QCOMPARE(fontCombo->itemData(index).toString(), bundled.at(index));
+    }
+    // 内置字体组之后必须是分隔条，而不是把系统字体直接接在后面。
+    QVERIFY(!fontCombo->itemData(bundled.size()).isValid());
+
+    // 选中的内置字体要能原样写进设置，不带任何展示后缀。
+    const QString target = bundled.last();
+    fontCombo->setCurrentIndex(fontCombo->findData(target));
+    QCOMPARE(dialog.editedSettings().fontFamily, target);
 }
 
 void SettingsUiTest::aiConnectionFieldsFillCardWidth()

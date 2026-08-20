@@ -4,7 +4,9 @@
 #include "ssh/SshSessionNode.h"
 
 #include <QByteArray>
+#include <QElapsedTimer>
 #include <QList>
+#include <QSet>
 #include <QHash>
 #include <QMutex>
 #include <QSharedPointer>
@@ -363,6 +365,22 @@ private:
     /** @brief 经独立 exec 通道把 Shell 集成脚本写入远端临时文件。 */
     void beginShellIntegrationInstall(SshSessionNode &node);
 
+    /**
+     * @brief 远端交互 Shell 静默后，才把 source 命令下发给栈顶。
+     * @param top 当前栈顶，必须已就绪。
+     *
+     * 脚本装好的那一刻远端往往还在跑登录脚本，PTY 尚未被 readline 接管。此时写进去的
+     * 一行会被行规程按普通输入回显一次，readline 随后把它当预输入连同提示符**再重画
+     * 一次**——本地过滤器只登记了一次，扣掉一次后剩下的那次就明晃晃留在屏幕上，正是
+     * "重连后多出一条 `. /tmp/.shm-xxxxxxxx`"的成因（真机抓包实测：提示符后写入回显
+     * 一次，提示符前写入回显两次）。更早一些甚至会被 tcflush 整行丢弃，Shell 集成会
+     * 静默失效。等输出静默即等到提示符画完——提示符正是 readline 自己打印的。
+     */
+    void serviceDeferredShellIntegration(SshSessionNode &top);
+
+    /** @brief 该层已经不在栈上时撤销它待下发的 source 命令。 */
+    void discardPendingShellIntegration(const SshSessionNode &node);
+
     /** @brief 丢弃尚未被消费的层凭据；新建层、层失败与退层时都必须调用。 */
     void discardPendingCredential();
 
@@ -387,6 +405,17 @@ private:
 
     /** @brief 栈底就绪信号是否已发出，保证 shellConnected 在一次运行中只发一次。 */
     bool m_rootAnnounced = false;
+
+    /**
+     * @brief 脚本已装好、正等待远端静默的层目标 id。
+     *
+     * 存 id 而不是节点指针：层随时可能被弹出销毁，指针会悬空，而 id 本来就是脚本路径的
+     * 来源，拿它反查路径不需要任何额外状态。
+     */
+    QSet<QString> m_pendingShellIntegration;
+
+    /** @brief 距上次收到交互 Shell 输出的时间；用于判断远端是否已回到提示符。 */
+    QElapsedTimer m_shellOutputClock;
 
     /** @brief 计划内转发在压入下一层前失败时保存原因，由主循环统一作为致命错误退出。 */
     QString m_plannedFailure;

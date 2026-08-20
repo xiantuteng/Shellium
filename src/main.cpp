@@ -1,5 +1,6 @@
 #include "app/MainWindow.h"
 #include "security/Vault.h"
+#include "settings/BundledFonts.h"
 #include "storage/ApplicationDatabase.h"
 #include "ui/VaultDialog.h"
 
@@ -177,6 +178,11 @@ int main(int argc, char *argv[])
     // 多分辨率图层的原生 .icns，两条路径在不同展示尺寸下保持同一视觉比例。
     application.setWindowIcon(
         QIcon(QStringLiteral(":/resources/icons/shellium-app-icon-macos-512.png")));
+
+    // 内置终端字体必须在任何界面构造之前注册：设置对话框在构造时就会向 QFontDatabase 查询
+    // 可用字体族，终端视图也会在首帧按已保存的族名建 QFont。晚一步注册，用户上次选中的内置
+    // 字体这一轮就会被静默替换成系统兜底字体，直到重启才恢复。
+    BundledFonts::registerAll();
 
     // UI 预览模式只供开发和自动化视觉验收使用。最重要的安全边界是：一旦开启就强制
     // 使用内存数据库，后续即使初始化逻辑发生变化，也不能读取或覆盖用户真实主机、凭据

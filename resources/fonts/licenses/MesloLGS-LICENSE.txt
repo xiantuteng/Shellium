@@ -1,0 +1,3 @@
+Meslo LG — Copyright 2009, 2010, 2013 André Berg
+Licensed under the Apache License, Version 2.0: http://www.apache.org/licenses/LICENSE-2.0
+上游未在仓库内附带 LICENSE 文件，声明见 https://github.com/andreberg/Meslo-Font 的 README.textile。

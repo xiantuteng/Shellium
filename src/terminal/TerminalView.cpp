@@ -37,6 +37,7 @@
 #include <QRawFont>
 #include <QStringListModel>
 #include <QTextBlock>
+#include <QTextFragment>
 #include <QTextCursor>
 #include <QTextDocument>
 #include <QTextLayout>
@@ -630,21 +631,35 @@ QVector<QPair<QChar, QFont>> TerminalView::buildLineAnchors() const
     return anchors;
 }
 
-QString TerminalView::stripLineAnchors(const QString &text)
+QString TerminalView::textWithoutLineAnchors(const int from, const int to) const
 {
-    // 只能剥掉行尾那一段完全吻合的后缀：U+3000 是合法正文字符，用户自己敲的表意空格
-    // 必须原样保留，无差别删除会悄悄改掉复制出去的内容。
-    const QString suffix = VtermBridge::lineAnchorSuffix();
-    if (suffix.isEmpty()) {
+    QString text;
+    if (to <= from) {
         return text;
     }
-    QStringList lines = text.split(QLatin1Char('\n'));
-    for (QString &line : lines) {
-        if (line.endsWith(suffix)) {
-            line.chop(suffix.size());
+    // 锚点各自成为独立的 fragment（插入时带着专用字符格式），因此按 fragment 取舍即可，
+    // 不必逐字符探格式。段与段之间补回换行，与 toPlainText()/selectedText() 的形态一致。
+    for (QTextBlock block = document()->findBlock(from);
+         block.isValid() && block.position() < to;
+         block = block.next()) {
+        if (block.position() > from) {
+            text += QLatin1Char('\n');
+        }
+        for (QTextBlock::iterator part = block.begin(); !part.atEnd(); ++part) {
+            const QTextFragment fragment = part.fragment();
+            if (!fragment.isValid()
+                || VtermBridge::isLineAnchorFormat(fragment.charFormat())) {
+                continue;
+            }
+            const int start = std::max(fragment.position(), from);
+            const int end = std::min(fragment.position() + fragment.length(), to);
+            if (end <= start) {
+                continue;
+            }
+            text += fragment.text().mid(start - fragment.position(), end - start);
         }
     }
-    return lines.join(QLatin1Char('\n'));
+    return text;
 }
 
 int TerminalView::computeCellHeight() const
@@ -768,11 +783,9 @@ QMimeData *TerminalView::createMimeDataFromSelection() const
     // 锚点字符，三条路径就一次性都干净了——否则粘到编辑器或聊天窗口里会多出看不见却真实
     // 存在的脏字符。
     auto *mime = new QMimeData;
-    // selectedText() 用 U+2029 表示段落分隔，先换回真正的换行符，再按行剔除锚点后缀。
-    QString text = textCursor().selectedText();
-    text.replace(QChar(QChar::ParagraphSeparator), QLatin1Char('\n'));
-    text = stripLineAnchors(text);
-    mime->setText(text);
+    const QTextCursor selection = textCursor();
+    mime->setText(
+        textWithoutLineAnchors(selection.selectionStart(), selection.selectionEnd()));
     return mime;
 }
 
@@ -780,8 +793,8 @@ QString TerminalView::terminalPlainText() const
 {
     // 导出与日志读取的是文档全文，欠着的那一帧必须先落进文档，否则会漏掉最后一屏输出。
     const_cast<TerminalView *>(this)->flushPendingRender();
-    // 行高锚点是渲染用的零宽字符，不属于终端内容，导出前必须剔除。
-    return stripLineAnchors(document()->toPlainText());
+    // 行高锚点是渲染用的占位字符，不属于终端内容，导出前必须剔除。
+    return textWithoutLineAnchors(0, document()->characterCount());
 }
 
 void TerminalView::setCommandCompletions(const QStringList &commands)

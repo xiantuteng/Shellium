@@ -257,7 +257,10 @@ void VtermBridge::setLineAnchors(const QVector<QPair<QChar, QFont>> &anchors)
 
 QString VtermBridge::lineAnchorSuffix()
 {
-    // 顺序必须和 writeRenderedLine() 的追加顺序完全一致，剔除时才能精确匹配行尾。
+    // 这是锚点的**上限集合**，不是某次渲染的实际结果：实际追加哪几个由 TerminalView 按
+    // 本机字体探测决定（emoji 后备字体与 CJK 相同时就只有一个"中"）。因此它只能用来做
+    // 断言与自检，绝不能拿去剔除锚点——剔除只认字符格式，见 TerminalView 的
+    // textWithoutLineAnchors()。
     // U+4E2D 是真实汉字：只有真实汉字才会走到和正文中文完全相同的后备字体，度量才严格
     // 一致（U+3000/U+200B 这类特殊空白在某些字体里不存在，会被换成另一个字体，差 1px）。
     // U+200B 取 emoji 字体的度量且不占宽度。两者合起来才覆盖到最高的那种字体。

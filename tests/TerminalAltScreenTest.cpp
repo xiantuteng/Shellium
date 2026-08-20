@@ -7,6 +7,7 @@
 #include <QScrollBar>
 #include <QSignalSpy>
 #include <QTextBlock>
+#include <QTextFragment>
 #include <QTextDocument>
 #include <QtTest>
 
@@ -124,6 +125,8 @@ private slots:
     void selectionSurvivesCursorBlinkRepaint();
     /** @brief 行高锚点在普通与选中状态下都不得暴露真实“中”字或进入剪贴板。 */
     void selectedLineHeightAnchorsRemainInvisible();
+    /** @brief 选区停在锚点之间时，复制出去的内容里也不能残留任何锚点字符。 */
+    void partialSelectionDropsLineHeightAnchors();
     void insertClipboardShortcutsBypassRemoteInsertKey();
     void incrementalRenderMatchesFullRebuild();
     void cursorBlinkLeavesDocumentUntouched();
@@ -477,6 +480,51 @@ void TerminalAltScreenTest::selectedLineHeightAnchorsRemainInvisible()
     const QString copied = QGuiApplication::clipboard()->text();
     QVERIFY(!copied.contains(anchorMarker));
     QCOMPARE(copied, QStringLiteral("plain ascii line\nsecond line"));
+}
+
+void TerminalAltScreenTest::partialSelectionDropsLineHeightAnchors()
+{
+    TerminalView view;
+    QVERIFY(showAndSettle(view));
+    view.appendTerminalOutput(
+        QByteArrayLiteral("plain ascii line\r\nsecond line\x1b[1;1H"));
+    QTest::qWait(100);
+
+    // 找到首段的第一个锚点字符。锚点具体有几个由本机字体探测决定，用例不能假定个数——
+    // 正是那个假定（写死“中”+U+200B 的后缀）让只有一个锚点时“中”被复制了出去。
+    const QTextBlock firstBlock = view.document()->firstBlock();
+    int anchorOffset = -1;
+    for (QTextBlock::iterator part = firstBlock.begin(); !part.atEnd(); ++part) {
+        const QTextFragment fragment = part.fragment();
+        if (fragment.isValid() && VtermBridge::isLineAnchorFormat(fragment.charFormat())) {
+            anchorOffset = fragment.position();
+            break;
+        }
+    }
+    QVERIFY2(anchorOffset >= 0, "测试内容没有生成行高锚点");
+
+    // 选到第一个锚点之后就停下：用户拖选到行尾时选区常常正好落在锚点之间，此时行尾与
+    // 任何写死的锚点后缀都对不上。
+    QTextCursor selection(view.document());
+    selection.setPosition(firstBlock.position());
+    selection.setPosition(anchorOffset + 1, QTextCursor::KeepAnchor);
+    view.setTextCursor(selection);
+
+    QGuiApplication::clipboard()->setText(QStringLiteral("stale clipboard"));
+    pressCopyShortcut(view);
+    const QString copied = QGuiApplication::clipboard()->text();
+    QVERIFY2(!copied.contains(QChar(0x4E2D)),
+             qPrintable(QStringLiteral("锚点“中”进入了剪贴板：[%1]").arg(copied)));
+    QVERIFY2(!copied.contains(QChar(0x200B)),
+             qPrintable(QStringLiteral("零宽锚点进入了剪贴板：[%1]").arg(copied)));
+    QCOMPARE(copied, QStringLiteral("plain ascii line"));
+
+    // 导出路径同样只认字符格式，不得因锚点个数不同而漏剔。
+    const QString exported = view.terminalPlainText();
+    QVERIFY2(!exported.contains(QChar(0x4E2D)),
+             qPrintable(QStringLiteral("锚点“中”泄漏到导出文本：[%1]").arg(exported)));
+    QVERIFY2(!exported.contains(QChar(0x200B)),
+             qPrintable(QStringLiteral("零宽锚点泄漏到导出文本：[%1]").arg(exported)));
 }
 
 void TerminalAltScreenTest::insertClipboardShortcutsBypassRemoteInsertKey()

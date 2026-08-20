@@ -115,6 +115,12 @@ private slots:
     /** @brief 注入 shim 后屏幕上只能留下一个提示符，不能新旧两个并排。 */
     void shellIntegrationInjectionLeavesSinglePrompt();
 
+    /** @brief readline 接管前抵达时远端会回显两次，屏幕上同样不能留下注入行。 */
+    void shellIntegrationInjectionSurvivesDoubleEcho();
+
+    /** @brief 可选期望没有兑现时不得扣留任何字节，也不得改变输出。 */
+    void optionalEchoExpectationCostsNothingWhenAbsent();
+
     /** @brief 双宽字符（中日韩）不得在每个字后面多渲染一个占位字符。 */
     void terminalViewRendersWideCharacters();
 
@@ -829,6 +835,67 @@ void SshCommandParserTest::shellIntegrationInjectionLeavesSinglePrompt()
     // 擦掉的必须只是提示符那一行：登录横幅是远端的正常输出，一个字也不能被连带清掉。
     QVERIFY2(rendered.contains(QStringLiteral("Last login: Mon Aug 10 09:01:14 2026")),
              qPrintable(QStringLiteral("登录横幅被误擦：[%1]").arg(rendered)));
+}
+
+void SshCommandParserTest::shellIntegrationInjectionSurvivesDoubleEcho()
+{
+    const QByteArray path = QByteArrayLiteral("/tmp/.shm-604e3e15");
+    const QByteArray injection = ShellShim::sourceCommand(path);
+    const QByteArray prompt = QByteArrayLiteral("[root@tidb01 ~]# ");
+
+    TerminalEchoFilter filter;
+    // 与 TerminalPane 收到 shellIntegrationPathReady 时的登记完全一致。
+    filter.expect(injection + QByteArrayLiteral("\r\n"),
+                  ShellShim::sourceCommandEchoReplacement());
+    filter.expectOptional(injection + QByteArrayLiteral("\r\n"),
+                          ShellShim::sourceCommandEchoReplacement());
+
+    TerminalView view;
+    // 真机抓包（root@10.194.135.11，bash 5）：注入行赶在 readline 接管 PTY 之前抵达时，
+    // 行规程先按普通输入回显一次，readline 随后把它当预输入连同提示符再重画一次。
+    view.appendTerminalOutput(
+        filter.filter(QByteArrayLiteral("Last login: Thu Aug 20 15:59:09 2026\r\r\n")));
+    view.appendTerminalOutput(filter.filter(injection + QByteArrayLiteral("\r\n")));
+    view.appendTerminalOutput(filter.filter(prompt + injection
+                                            + QByteArrayLiteral("\r\n")));
+    view.appendTerminalOutput(filter.filter(prompt));
+
+    QTest::qWait(80);
+
+    const QString rendered = view.terminalPlainText();
+    QVERIFY2(!rendered.contains(QStringLiteral(".shm-604e3e15")),
+             qPrintable(QStringLiteral("注入行泄漏到屏幕：[%1]").arg(rendered)));
+    QVERIFY2(rendered.count(QStringLiteral("[root@tidb01 ~]#")) == 1,
+             qPrintable(QStringLiteral("提示符出现了 %1 次：[%2]")
+                            .arg(rendered.count(QStringLiteral("[root@tidb01 ~]#")))
+                            .arg(rendered)));
+    QVERIFY2(rendered.contains(QStringLiteral("Last login: Thu Aug 20 15:59:09 2026")),
+             qPrintable(QStringLiteral("登录横幅被误擦：[%1]").arg(rendered)));
+}
+
+void SshCommandParserTest::optionalEchoExpectationCostsNothingWhenAbsent()
+{
+    const QByteArray injection =
+        ShellShim::sourceCommand(QByteArrayLiteral("/tmp/.shm-604e3e15"))
+        + QByteArrayLiteral("\r\n");
+
+    TerminalEchoFilter filter;
+    filter.expect(injection);
+    filter.expectOptional(injection);
+
+    // 单次回显是常态（会话栈等远端静默后才下发）。第一条兑现之后，只剩那条可选期望，
+    // 它绝不能扣留提示符末尾的空格——注入行以空格开头，一扣光标就停在 `#` 上不动了。
+    QCOMPARE(filter.filter(injection), QByteArray());
+    QCOMPARE(filter.filter(QByteArrayLiteral("[root@tidb01 ~]# ")),
+             QByteArrayLiteral("[root@tidb01 ~]# "));
+
+    // 迟迟不兑现的可选期望必须自行过期，不能在很久以后忽然扣掉一段同形的正常输出。
+    QByteArray produced;
+    for (int round = 0; round < 3; ++round) {
+        produced += filter.filter(QByteArray(512, 'x'));
+    }
+    QCOMPARE(produced.size(), 3 * 512);
+    QCOMPARE(filter.filter(injection), injection);
 }
 
 void SshCommandParserTest::terminalViewRendersWideCharacters()

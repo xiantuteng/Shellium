@@ -809,12 +809,14 @@ QStringList TerminalSettings::recommendedFontFamilies()
 QVector<QColor> TerminalSettings::defaultAnsiPalette(const bool dark)
 {
     // 这两套值不属于任何一款上游主题，只承担一件事：让没有单独调过 16 色的预设也保持可读。
-    // 深色一套整体抬到 VGA 之上（蓝色 #61afef 而非 #0000cd），浅色一套则压到白底之下。
+    // 深色一套整体抬到 VGA 之上（蓝色 #015fff 而非 #0000e0），浅色一套则压到白底之下。
+    // 4 号蓝取 #015fff 是对着参考截图定的：`ls` 的目录名用的正是这一号色，它同时要在近黑
+    // 背景上足够亮、又不能褪成青灰，把饱和度留住比单纯抬明度更接近参考图的观感。
     if (dark) {
         return ansiFrom({"#21252b", "#e06c75", "#98c379", "#e5c07b",
-                         "#61afef", "#c678dd", "#56b6c2", "#c8ccd4",
+                         "#015fff", "#c678dd", "#56b6c2", "#c8ccd4",
                          "#5c6370", "#ff7b86", "#b5e08c", "#f2d68f",
-                         "#82c8ff", "#dc98ee", "#74d3de", "#f2f4f8"});
+                         "#4d8cff", "#dc98ee", "#74d3de", "#f2f4f8"});
     }
     return ansiFrom({"#2b2f36", "#c62828", "#2e7d32", "#8f6b00",
                      "#1a5fb4", "#8e24aa", "#00727c", "#5a6270",

@@ -963,6 +963,12 @@ void SshSessionStackIntegrationTest::suppressesOwnEchoInTerminal()
                  qPrintable(QStringLiteral("终端里出现了注入行片段：%1").arg(fragment)));
     }
 
+    // source 命令是本程序注入的，同样一个字都不该出现。它在 readline 接管 PTY 之前抵达
+    // 时会被远端回显两次，只扣一次就会在屏幕上留下一条 `. /tmp/.shm-xxxxxxxx`。
+    QVERIFY2(!screen.contains(QStringLiteral("/tmp/.shm-")),
+             qPrintable(QStringLiteral("终端里出现了 Shell 集成的 source 命令：[%1]")
+                            .arg(screen)));
+
     // 真正的远端输出必须完好——过滤不能把用户内容一起吞掉。
     QVERIFY2(screen.contains(QStringLiteral("ssh root@") + m_secondLayerHost),
              "用户自己敲的命令被过滤掉了");

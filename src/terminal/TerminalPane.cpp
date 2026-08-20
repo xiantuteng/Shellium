@@ -375,8 +375,14 @@ void TerminalPane::connectToHosts(const QList<ConnectionTarget> &connectionPlan)
         // 但只扣回显还不够：远端执行完这条命令必然再打印一个提示符，于是登录时的提示符和
         // 它并排出现，用户看到的就是两个 `[root@host ~]#`。用擦行序列替换被扣掉的回显，让
         // 新提示符补在旧提示符原位，净效果仍是一个。
-        m_echoFilter.expect(ShellShim::sourceCommand(path) + QByteArrayLiteral("\r\n"),
-                            ShellShim::sourceCommandEchoReplacement());
+        const QByteArray sourceEcho =
+            ShellShim::sourceCommand(path) + QByteArrayLiteral("\r\n");
+        m_echoFilter.expect(sourceEcho, ShellShim::sourceCommandEchoReplacement());
+        // 兜底第二次回显：会话栈会等远端 Shell 静默后才下发，正常情况下 readline 已经
+        // 接管、只回显一次；但登录脚本中途停顿超过静默阈值时，这条命令仍可能赶在 readline
+        // 之前抵达，于是行规程回显一次、readline 连同提示符再重画一次。第二次登记成可选，
+        // 没发生就悄无声息地过期，发生了才把它连同被重画的那个提示符一起收拾掉。
+        m_echoFilter.expectOptional(sourceEcho, ShellShim::sourceCommandEchoReplacement());
     });
     connect(m_sessionStack,
             &SshSessionStack::shellIntegrationFailed,

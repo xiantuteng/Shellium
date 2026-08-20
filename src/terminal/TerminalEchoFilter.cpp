@@ -15,6 +15,15 @@ namespace {
 constexpr qsizetype kScanBudget = 8192;
 
 /**
+ * @brief 可选期望放弃前允许扫过的字节上限。
+ *
+ * 可选期望描述的是"紧接着可能再来一次的重复回显"：真会发生的话，两次之间只隔着一个
+ * 提示符，几十到几百字节就够了。窗口开得越大，越可能在很久以后误扣掉一段恰好同形的
+ * 远端输出，因此给它一个远小于必然期望的预算。
+ */
+constexpr qsizetype kOptionalScanBudget = 1024;
+
+/**
  * @brief 求 buffer 的最长后缀，使其同时是 needle 的前缀。
  * @return 应当扣留的字节数；无部分匹配时为 0。
  *
@@ -36,10 +45,39 @@ qsizetype partialSuffixLength(const QByteArray &buffer, const QByteArray &needle
 
 void TerminalEchoFilter::expect(const QByteArray &text, const QByteArray &replacement)
 {
+    append(text, replacement, false);
+}
+
+void TerminalEchoFilter::expectOptional(const QByteArray &text,
+                                        const QByteArray &replacement)
+{
+    append(text, replacement, true);
+}
+
+void TerminalEchoFilter::append(const QByteArray &text,
+                                const QByteArray &replacement,
+                                const bool optional)
+{
     if (text.isEmpty()) {
         return;
     }
-    m_expected.append(Expectation{text, replacement});
+    m_expected.append(Expectation{text, replacement, optional, 0});
+}
+
+void TerminalEchoFilter::releaseUnclaimedHold(QByteArray &output)
+{
+    if (m_held.isEmpty()) {
+        return;
+    }
+    qsizetype keep = 0;
+    for (const Expectation &candidate : std::as_const(m_expected)) {
+        if (candidate.optional) {
+            continue;
+        }
+        keep = std::max(keep, partialSuffixLength(m_held, candidate.needle));
+    }
+    output += m_held.left(m_held.size() - keep);
+    m_held = m_held.right(keep);
 }
 
 QByteArray TerminalEchoFilter::filter(const QByteArray &incoming)
@@ -78,26 +116,32 @@ QByteArray TerminalEchoFilter::filter(const QByteArray &incoming)
             output += m_expected.at(bestIndex).replacement;
             buffer.remove(0, bestAt + m_expected.at(bestIndex).needle.size());
             m_expected.removeAt(bestIndex);
-            m_scanned = 0;
             continue;
         }
 
-        // 没有完整命中：按所有期望串里最长的那个部分后缀扣留，任何一个都不能被截断。
+        // 没有完整命中：按必然期望里最长的那个部分后缀扣留，任何一个都不能被截断。可选
+        // 期望不参与扣留——它多半不会兑现，为它扣住字节等于让常态输出替例外情形买单。
         qsizetype keep = 0;
         for (const Expectation &candidate : std::as_const(m_expected)) {
+            if (candidate.optional) {
+                continue;
+            }
             keep = std::max(keep, partialSuffixLength(buffer, candidate.needle));
         }
         const qsizetype releasable = buffer.size() - keep;
         output += buffer.left(releasable);
         m_held = buffer.mid(releasable);
-        m_scanned += releasable;
 
-        if (m_scanned > kScanBudget) {
-            output += m_held;
-            m_held.clear();
-            m_expected.clear();
-            m_scanned = 0;
+        // 预算逐条计：一条期望被远端改写而永远匹配不上，不该连累其他还有机会兑现的。
+        for (qsizetype index = m_expected.size() - 1; index >= 0; --index) {
+            Expectation &candidate = m_expected[index];
+            candidate.scanned += releasable;
+            if (candidate.scanned > (candidate.optional ? kOptionalScanBudget
+                                                        : kScanBudget)) {
+                m_expected.removeAt(index);
+            }
         }
+        releaseUnclaimedHold(output);
         break;
     }
     return output;
@@ -108,6 +152,5 @@ QByteArray TerminalEchoFilter::reset()
     const QByteArray pending = m_held;
     m_held.clear();
     m_expected.clear();
-    m_scanned = 0;
     return pending;
 }

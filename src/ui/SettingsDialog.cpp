@@ -3,6 +3,7 @@
 #include "ai/AiClient.h"
 #include "ai/AiSettings.h"
 #include "ai/AiSettingsService.h"
+#include "settings/BundledFonts.h"
 #include "settings/TerminalSettings.h"
 #include "security/Vault.h"
 #include "ui/SettingsWidgets.h"
@@ -287,7 +288,6 @@ void SettingsDialog::populateFontCombo()
 {
     // 每个条目都用它自己的字体渲染，用户不必逐个选中试看效果；data 里存纯字体族名，与显示
     // 文本解耦，因此“（本机未安装）”一类后缀不会写进设置。
-    const QStringList installed = QFontDatabase::families();
     const auto appendFamily = [this](const QString &family) {
         QFont itemFont(family);
         itemFont.setPointSize(12);
@@ -295,11 +295,23 @@ void SettingsDialog::populateFontCombo()
         m_fontCombo->setItemData(m_fontCombo->count() - 1, itemFont, Qt::FontRole);
     };
 
+    // 内置字体排在最前，并且不与本机安装求交集：它们随程序分发，一定可用。这里主动注册一次
+    // 而不是假设 main() 已经注册过，是为了让只构造对话框的界面测试也走同一条真实路径。
+    const QStringList bundled = BundledFonts::registerAll();
+    for (const QString &family : bundled) {
+        appendFamily(family);
+    }
+
+    const QStringList installed = QFontDatabase::families();
     QStringList recommended;
     for (const QString &family : TerminalSettings::recommendedFontFamilies()) {
-        if (installed.contains(family)) {
+        // 内置字体注册后同样会出现在 QFontDatabase 里，不排除就会在两个分组各出现一次。
+        if (installed.contains(family) && !bundled.contains(family)) {
             recommended.append(family);
         }
+    }
+    if (!recommended.isEmpty() && !bundled.isEmpty()) {
+        m_fontCombo->insertSeparator(m_fontCombo->count());
     }
     for (const QString &family : std::as_const(recommended)) {
         appendFamily(family);
@@ -307,13 +319,14 @@ void SettingsDialog::populateFontCombo()
 
     QStringList others;
     for (const QString &family : installed) {
-        if (!recommended.contains(family) && isLikelyMonospaceFamily(family)) {
+        if (!bundled.contains(family) && !recommended.contains(family)
+            && isLikelyMonospaceFamily(family)) {
             others.append(family);
         }
     }
     others.sort(Qt::CaseInsensitive);
-    if (!others.isEmpty() && !recommended.isEmpty()) {
-        // 分隔条目：不可选，只用来区分“推荐编程字体”和本机其余等宽字体。
+    if (!others.isEmpty() && (!recommended.isEmpty() || !bundled.isEmpty())) {
+        // 分隔条目：不可选，只用来区分“内置/推荐编程字体”和本机其余等宽字体。
         m_fontCombo->insertSeparator(m_fontCombo->count());
     }
     for (const QString &family : std::as_const(others)) {

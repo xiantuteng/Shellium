@@ -288,11 +288,10 @@ bool SshSessionStack::pumpLoop()
             QString installError;
             if (layer->takeExecResult(&installed, &installError)) {
                 if (installed) {
-                    const QByteArray path = shimPathFor(*layer);
-                    // 只有远端明确返回退出码 0 才加载脚本。先发路径事件再排队 source：两条
-                    // 信号与后续 outputReady 同源有序，GUI 可在回显到达前登记过滤规则。
-                    emit shellIntegrationPathReady(path);
-                    layer->queueOutgoing(ShellShim::sourceCommand(path) + "\n");
+                    // 只有远端明确返回退出码 0 才加载脚本。这里只登记意图：真正下发要等
+                    // 交互 Shell 静默，理由见 serviceDeferredShellIntegration()。
+                    m_pendingShellIntegration.insert(layer->target().id);
+                    m_shellOutputClock.start();
                 } else {
                     emit shellIntegrationFailed(
                         layer->target(),
@@ -347,6 +346,8 @@ bool SshSessionStack::pumpLoop()
         // 至此栈顶确定未变且已就绪，才可以安全地长期持有引用。
         SshSessionNode &top = *m_layers.back();
 
+        serviceDeferredShellIntegration(top);
+
         QByteArray pendingInput;
         int columns = 0;
         int rows = 0;
@@ -398,6 +399,8 @@ bool SshSessionStack::pumpLoop()
                     readBuffer.data(), static_cast<int>(readBuffer.size()), stderrStream);
                 if (bytesRead > 0) {
                     receivedData = true;
+                    // 只要还在出字节，远端就仍在跑登录脚本或上一条命令，注入必须继续等。
+                    m_shellOutputClock.start();
                     emit outputReady(QByteArray(readBuffer.constData(), bytesRead));
                 } else {
                     break;
@@ -497,6 +500,7 @@ bool SshSessionStack::advanceEstablishingLayers()
     if (m_layers.size() > 1) {
         const ConnectionTarget failedTarget = node.target();
         const bool releaseOuterShim = node.outerShimSuspended();
+        discardPendingShellIntegration(node);
         m_layers.pop_back();
         discardPendingCredential();
         if (releaseOuterShim && !m_layers.empty()) {
@@ -716,6 +720,33 @@ QByteArray SshSessionStack::shimPathFor(const SshSessionNode &node)
     // 每层一个独立文件名，避免同一台主机上的多个会话互相覆盖。取 UUID 前 8 位即可，
     // 路径要尽量短——终端里那条 source 命令越短越不会折行，也就越容易被精确扣掉。
     return "/tmp/.shm-" + node.target().id.left(8).toUtf8();
+}
+
+void SshSessionStack::serviceDeferredShellIntegration(SshSessionNode &top)
+{
+    if (m_pendingShellIntegration.isEmpty()
+        || !m_pendingShellIntegration.contains(top.target().id)) {
+        return;
+    }
+    // 静默阈值：登录横幅与提示符之间的间隔远小于它，而 readline 打印完提示符后就不会
+    // 再有输出，因此"安静这么久"实际等价于"提示符已经画完、远端正在等键盘"。
+    constexpr qint64 kShellIdleBeforeSourceMs = 300;
+    if (!m_shellOutputClock.isValid()
+        || m_shellOutputClock.elapsed() < kShellIdleBeforeSourceMs) {
+        return;
+    }
+    m_pendingShellIntegration.remove(top.target().id);
+
+    const QByteArray path = shimPathFor(top);
+    // 先发路径事件再排队 source：两条信号与后续 outputReady 同源有序，GUI 得以在回显
+    // 到达前登记过滤规则。
+    emit shellIntegrationPathReady(path);
+    top.queueOutgoing(ShellShim::sourceCommand(path) + "\n");
+}
+
+void SshSessionStack::discardPendingShellIntegration(const SshSessionNode &node)
+{
+    m_pendingShellIntegration.remove(node.target().id);
 }
 
 void SshSessionStack::beginShellIntegrationInstall(SshSessionNode &node)
@@ -939,6 +970,7 @@ ConnectionTarget SshSessionStack::popTopLayer()
     }
     ConnectionTarget target = m_layers.back()->target();
     const bool releaseOuterShim = m_layers.back()->outerShimSuspended();
+    discardPendingShellIntegration(*m_layers.back());
     m_layers.back()->closeShell();
     m_layers.pop_back();
     if (releaseOuterShim && !m_layers.empty()) {

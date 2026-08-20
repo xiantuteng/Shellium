@@ -462,8 +462,18 @@ private:
      */
     [[nodiscard]] QVector<QPair<QChar, QFont>> buildLineAnchors() const;
 
-    /** @brief 按行剔除行尾的锚点后缀；正文中间同样的字符必须保留。 */
-    [[nodiscard]] static QString stripLineAnchors(const QString &text);
+    /**
+     * @brief 取出 [from, to) 区间的文本，并剔除其中的行高锚点。
+     * @param from 起始文档位置。
+     * @param to 结束文档位置（不含）。
+     *
+     * 以字符格式而不是行尾字符串判定锚点。锚点用的"中"是合法正文字符，按字符串剔除就
+     * 必须精确匹配整段后缀，而实际写进文档的锚点是按本机字体探测结果动态决定的——emoji
+     * 后备字体与 CJK 相同时就只有一个"中"，与写死的后缀对不上，于是那个本该看不见的
+     * "中"被原样复制进剪贴板。选区停在锚点中间时同样对不上。字符格式是渲染层自己盖的
+     * 章，两种情形都不会漏，也绝不会误伤用户真正输入的"中"。
+     */
+    [[nodiscard]] QString textWithoutLineAnchors(int from, int to) const;
 
     /**
      * @brief 渲染后复核真实行高，与当前网格不符时纠正一次。
