@@ -100,6 +100,7 @@ SettingsDialog::SettingsDialog(TerminalSettingsService *service,
     , m_scrollbackSpin(new QSpinBox(this))
     , m_audibleBellToggle(new ToggleSwitch(this))
     , m_commandAutoCompletionToggle(new ToggleSwitch(this))
+    , m_multiLinePasteConfirmationToggle(new ToggleSwitch(this))
     , m_automaticReconnectToggle(new ToggleSwitch(this))
     , m_vaultPasswordEnabledToggle(new ToggleSwitch(this))
     , m_reconnectMaxAttemptsSpin(new QSpinBox(this))
@@ -204,6 +205,7 @@ SettingsDialog::SettingsDialog(TerminalSettingsService *service,
          {m_cursorBlinkToggle,
           m_audibleBellToggle,
           m_commandAutoCompletionToggle,
+          m_multiLinePasteConfirmationToggle,
           m_automaticReconnectToggle}) {
         connect(toggle, &ToggleSwitch::toggled, this, [this](bool) { persistChanges(); });
     }
@@ -452,6 +454,8 @@ QWidget *SettingsDialog::buildTerminalPage()
     m_audibleBellToggle->setObjectName(QStringLiteral("audibleBellToggle"));
     m_commandAutoCompletionToggle->setObjectName(
         QStringLiteral("commandAutoCompletionToggle"));
+    m_multiLinePasteConfirmationToggle->setObjectName(
+        QStringLiteral("multiLinePasteConfirmationToggle"));
 
     auto *sessionCard = new SettingsCard(tr("会话"), page);
     sessionCard->addRow(tr("滚动缓冲"),
@@ -464,6 +468,11 @@ QWidget *SettingsDialog::buildTerminalPage()
         tr("命令行自动提示"),
         m_commandAutoCompletionToggle,
         tr("输入至少两个字符后，根据当前主机的命令历史自动显示候选；默认关闭。"));
+    sessionCard->addRow(
+        tr("多行粘贴确认"),
+        m_multiLinePasteConfirmationToggle,
+        tr("粘贴多行内容前先展示完整内容并要求确认；默认关闭，即直接粘贴。"
+           "内容含可注入终端控制序列的不可见字符时仍会强制确认。"));
     layout->addWidget(sessionCard);
 
     layout->addStretch(1);
@@ -680,6 +689,7 @@ TerminalSettings SettingsDialog::editedSettings() const
     settings.scrollbackLines = m_scrollbackSpin->value();
     settings.audibleBell = m_audibleBellToggle->isChecked();
     settings.commandAutoCompletion = m_commandAutoCompletionToggle->isChecked();
+    settings.multiLinePasteConfirmation = m_multiLinePasteConfirmationToggle->isChecked();
     settings.automaticReconnect = m_automaticReconnectToggle->isChecked();
     settings.vaultPasswordEnabled = m_vaultPasswordEnabledToggle->isChecked();
     settings.reconnectMaxAttempts = m_reconnectMaxAttemptsSpin->value();
@@ -817,6 +827,7 @@ void SettingsDialog::populateControls(const TerminalSettings &settings)
     m_scrollbackSpin->setValue(normalized.scrollbackLines);
     m_audibleBellToggle->setChecked(normalized.audibleBell);
     m_commandAutoCompletionToggle->setChecked(normalized.commandAutoCompletion);
+    m_multiLinePasteConfirmationToggle->setChecked(normalized.multiLinePasteConfirmation);
     m_automaticReconnectToggle->setChecked(normalized.automaticReconnect);
     m_vaultPasswordEnabledToggle->setChecked(normalized.vaultPasswordEnabled);
     m_reconnectMaxAttemptsSpin->setValue(normalized.reconnectMaxAttempts);

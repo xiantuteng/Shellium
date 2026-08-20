@@ -7,6 +7,7 @@
 #include <QObject>
 #include <QString>
 #include <QStringList>
+#include <QVector>
 
 class ApplicationDatabase;
 class QApplication;
@@ -47,6 +48,19 @@ struct TerminalPalette {
     QColor cursor;
     QColor selection;
     QColor link;
+
+    /**
+     * @brief ANSI 0-15 号色，顺序为黑红绿黄蓝品青白再加八个亮色。
+     *
+     * 远端用 SGR 30-37/90-97 指定的颜色如果交给 libvterm 的内置默认表，得到的是 1980 年代
+     * VGA 那套值（蓝色是 #0000cd）。在任何一套现代深色主题上，`ls` 的目录名都会暗到几乎读
+     * 不出来，而这与用户选了哪套主题无关——默认表根本不看主题。因此每套主题都必须自带一份
+     * 与其背景配平过的 16 色表，终端才会真的呈现出参考配色。
+     *
+     * 恒为 16 项：effectivePalette() 会为没有显式给出该表的预设按明暗补一份通用表，因此
+     * 渲染侧不需要处理空表或长度不足的情况。
+     */
+    QVector<QColor> ansi;
 };
 
 /**
@@ -117,6 +131,15 @@ struct TerminalSettings {
     bool commandAutoCompletion = false;
 
     /**
+     * @brief 粘贴多行内容时是否先弹出确认框，默认关闭。
+     *
+     * 关闭时多行内容直接送入终端，与其他终端模拟器的默认行为一致；开启后会先展示清理
+     * 后的完整内容供用户核对。该开关只影响"多行"这一项风险：剪贴板里含有可注入终端控制
+     * 序列的不可见字符时，无论开关如何都必须确认，因为那不是用户能从内容本身看出来的。
+     */
+    bool multiLinePasteConfirmation = false;
+
+    /**
      * @brief 已建立会话因网络异常退出时是否自动重连。
      *
      * 只对服务器未给出退出状态（-1）的异常断线生效；正常 exit、用户主动切换和首次认证
@@ -161,6 +184,15 @@ struct TerminalSettings {
      * @return 命中的预设指针；未知 id 返回 nullptr，返回值指向静态表，可长期持有。
      */
     [[nodiscard]] static const TerminalThemePreset *themePreset(const QString &id);
+
+    /**
+     * @brief 未自带 16 色表的预设所使用的通用 ANSI 调色板。
+     * @param dark true 返回适合深色背景的亮色系，false 返回适合浅色背景的深色系。
+     *
+     * 同一套 ANSI 色不可能在黑底和白底上同时可读：深色背景需要抬高明度，浅色背景则需要
+     * 压低明度，否则黄色和青色会直接消失在背景里。
+     */
+    [[nodiscard]] static QVector<QColor> defaultAnsiPalette(bool dark);
 
     /**
      * @brief 返回推荐的等宽/编程字体族名列表，顺序即推荐优先级。

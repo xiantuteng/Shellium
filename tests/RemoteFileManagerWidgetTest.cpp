@@ -123,6 +123,9 @@ private slots:
     /** @brief 面板变窄时"名称"列不能被压缩到低于最小宽度，多余内容改用横向滚动条。 */
     void remoteNameColumnNeverShrinksBelowMinimumWidth();
 
+    /** @brief 顶栏全屏按钮右侧必须有关闭按钮，点击只上报请求、不自行隐藏。 */
+    void closeButtonSitsNextToFullScreenAndOnlyRequestsClose();
+
 private:
     /**
      * @brief 断言指定工具栏的直接布局顺序与设计稿一致。
@@ -375,6 +378,34 @@ void RemoteFileManagerWidgetTest::transferWidgetsShareOneHiddenInformationBand()
     QVERIFY2(queue->parentWidget() == transferBand, "传输队列必须属于统一传输信息带");
     QVERIFY2(!progress->isTextVisible(), "细进度条只表达比例，明细应放在独立状态行");
     QVERIFY2(resume->isChecked(), "断点续传必须沿用现有默认开启语义");
+}
+
+void RemoteFileManagerWidgetTest::closeButtonSitsNextToFullScreenAndOnlyRequestsClose()
+{
+    RemoteFileManagerWidget widget;
+    auto *fullScreenButton = widget.findChild<QToolButton *>(QStringLiteral("SftpFullScreenButton"));
+    auto *closeButton = widget.findChild<QToolButton *>(QStringLiteral("SftpCloseButton"));
+    QVERIFY(fullScreenButton != nullptr);
+    QVERIFY2(closeButton != nullptr, "顶栏必须提供关闭远程文件管理的入口");
+
+    // 位置是需求的一部分：关闭必须紧挨在全屏右边，而不是散落到别的工具栏里。
+    auto *topBarLayout = qobject_cast<QHBoxLayout *>(
+        widget.findChild<QWidget *>(QStringLiteral("SftpTopBar"))->layout());
+    QVERIFY(topBarLayout != nullptr);
+    const int fullScreenIndex = topBarLayout->indexOf(fullScreenButton);
+    QVERIFY(fullScreenIndex >= 0);
+    QCOMPARE(topBarLayout->indexOf(closeButton), fullScreenIndex + 1);
+
+    QVERIFY(!closeButton->icon().isNull());
+
+    // 控件不能自行隐藏：显隐由 TerminalWorkspace 统一处理，它还要同步退出全屏并回写终端
+    // 顶部按钮。自行 hide() 会让那两处状态与实际显示脱节。
+    QSignalSpy closeSpy(&widget, &RemoteFileManagerWidget::closeRequested);
+    // 用例不 show()（CI 可能没有屏幕），因此比较点击前后的显隐意图，而不是绝对可见性。
+    const bool hiddenBeforeClick = widget.isHidden();
+    closeButton->click();
+    QCOMPARE(closeSpy.count(), 1);
+    QCOMPARE(widget.isHidden(), hiddenBeforeClick);
 }
 
 QTEST_MAIN(RemoteFileManagerWidgetTest)

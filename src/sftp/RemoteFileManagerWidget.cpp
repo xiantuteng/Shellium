@@ -500,6 +500,7 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     , m_followInnermostCheck(new QCheckBox(tr("自动跟随最内层"), this))
     , m_followTerminalCwdCheck(new QCheckBox(tr("跟随终端目录"), this))
     , m_fullScreenButton(new QToolButton(this))
+    , m_closeButton(new QToolButton(this))
     , m_localPathEdit(new QLineEdit(QDir::homePath(), this))
     , m_localModel(new LocalizedLocalFileSystemModel(this))
     , m_localTree(new LocalDropTree(this))
@@ -548,8 +549,19 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     m_fullScreenButton->setObjectName(QStringLiteral("SftpFullScreenButton"));
     m_fullScreenButton->setToolTip(tr("全屏显示文件管理，并展开本地文件用于双栏对拷"));
     m_fullScreenButton->setAccessibleName(tr("全屏"));
+    m_closeButton->setAutoRaise(true);
+    m_closeButton->setIconSize(QSize(18, 18));
+    m_closeButton->setFixedSize(32, 32);
+    m_closeButton->setProperty("sftpFullScreenAction", true);
+    m_closeButton->setObjectName(QStringLiteral("SftpCloseButton"));
+    m_closeButton->setToolTip(tr("关闭远程文件管理，宽度全部还给终端"));
+    m_closeButton->setAccessibleName(tr("关闭"));
+    m_closeButton->setIcon(
+        UiIcons::symbol(this, UiIcons::Symbol::Close, this->palette().color(QPalette::WindowText)));
+    connect(m_closeButton, &QToolButton::clicked, this, &RemoteFileManagerWidget::closeRequested);
     targetRowLayout->addStretch(1);
     targetRowLayout->addWidget(m_fullScreenButton);
+    targetRowLayout->addWidget(m_closeButton);
     mainLayout->addWidget(m_targetRow);
 
     auto *contentSplitter = new QSplitter(Qt::Horizontal, this);

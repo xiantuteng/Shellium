@@ -50,6 +50,8 @@ private slots:
     void restoreDefaultsPersistsImmediately();
     void connectionDialogToggleRoundTripsLegacyHmac();
     void everyThemePresetGetsUniqueSwatchAndPalette();
+    /** @brief 参考图里那几套主题必须使用与其上游一致的 16 色，不能只对上背景色。 */
+    void referenceThemesCarryTheirPublishedAnsiPalette();
     void colorSchemeFilterKeepsVisibleSwatchesPacked();
     void unknownColorSchemeIdFallsBackToDefault();
     void colorSchemeSwitchKeepsApplicationTextColors();
@@ -142,8 +144,11 @@ void SettingsUiTest::togglesRoundTripBooleanSettings()
     auto *blinkToggle = dialog.findChild<ToggleSwitch *>(QStringLiteral("cursorBlinkToggle"));
     auto *completionToggle =
         dialog.findChild<ToggleSwitch *>(QStringLiteral("commandAutoCompletionToggle"));
+    auto *pasteConfirmToggle =
+        dialog.findChild<ToggleSwitch *>(QStringLiteral("multiLinePasteConfirmationToggle"));
     auto *vaultPasswordToggle =
         dialog.findChild<ToggleSwitch *>(QStringLiteral("vaultPasswordEnabledToggle"));
+    QVERIFY(pasteConfirmToggle != nullptr);
     QVERIFY(bellToggle != nullptr);
     QVERIFY(blinkToggle != nullptr);
     QVERIFY(completionToggle != nullptr);
@@ -154,6 +159,9 @@ void SettingsUiTest::togglesRoundTripBooleanSettings()
     // 命令自动提示属于可能打断既有输入习惯的新功能，首次启动和恢复默认都必须保持关闭。
     QVERIFY(!service->currentSettings().commandAutoCompletion);
     QVERIFY(!completionToggle->isChecked());
+    // 多行粘贴确认默认关闭，即直接粘贴；这是与其他终端一致的开箱行为。
+    QVERIFY(!service->currentSettings().multiLinePasteConfirmation);
+    QVERIFY(!pasteConfirmToggle->isChecked());
     QVERIFY(!vaultPasswordToggle->isChecked());
 
     // 点击开关会立即保存并改写服务里的运行设置，因此期望值必须取点击前的快照，不能在
@@ -163,9 +171,11 @@ void SettingsUiTest::togglesRoundTripBooleanSettings()
     bellToggle->click();
     blinkToggle->click();
     completionToggle->click();
+    pasteConfirmToggle->click();
     QCOMPARE(dialog.editedSettings().audibleBell, !originalBell);
     QCOMPARE(dialog.editedSettings().cursorBlink, !originalBlink);
     QVERIFY(dialog.editedSettings().commandAutoCompletion);
+    QVERIFY(dialog.editedSettings().multiLinePasteConfirmation);
     // 该用例使用不带 CredentialVault 的兼容构造入口，因此不触发需要密码交互的安全开关。
     // 默认关闭值仍必须正确显示并持久化，真正的双向密码迁移由 CredentialVault 专项用例覆盖。
     QVERIFY(!dialog.editedSettings().vaultPasswordEnabled);
@@ -175,6 +185,9 @@ void SettingsUiTest::togglesRoundTripBooleanSettings()
     QCOMPARE(m_database->setting(QStringLiteral("terminal/audible_bell")).value_or(QString()),
              expectedBell ? QStringLiteral("1") : QStringLiteral("0"));
     QCOMPARE(m_database->setting(QStringLiteral("terminal/command_auto_completion"))
+                 .value_or(QString()),
+             QStringLiteral("1"));
+    QCOMPARE(m_database->setting(QStringLiteral("terminal/multi_line_paste_confirmation"))
                  .value_or(QString()),
              QStringLiteral("1"));
     QCOMPARE(m_database->setting(QStringLiteral("security/vault_password_enabled"))
@@ -521,11 +534,63 @@ void SettingsUiTest::everyThemePresetGetsUniqueSwatchAndPalette()
                      && palette.link.isValid(),
                  qPrintable(preset.id));
         QVERIFY2(palette.background != palette.foreground, qPrintable(preset.id));
+        // 16 色表必须齐全：远端用 SGR 30-37/90-97 着色的输出（`ls`、grep、vim）在缺表时会
+        // 退回 libvterm 的 VGA 值，深色主题上的蓝色目录名几乎看不见。
+        QCOMPARE(palette.ansi.size(), 16);
+        for (int index = 0; index < palette.ansi.size(); ++index) {
+            const QColor &color = palette.ansi.at(index);
+            const QString where = QStringLiteral("%1 ansi[%2]").arg(preset.id).arg(index);
+            QVERIFY2(color.isValid(), qPrintable(where));
+            // 0 号（黑）在深色主题上贴着背景是正常的，其余各号与背景完全相同则意味着该号
+            // 色的输出会整段消失。
+            if (index == 0 || index == 8) {
+                continue;
+            }
+            QVERIFY2(color != palette.background, qPrintable(where));
+        }
         // 除“默认”外，预设颜色不随主题模式改变。
         if (preset.id != QLatin1String("default")) {
             probe.themeMode = ThemeMode::Light;
             QCOMPARE(probe.normalized().effectivePalette().background, palette.background);
         }
+    }
+}
+
+void SettingsUiTest::referenceThemesCarryTheirPublishedAnsiPalette()
+{
+    // 逐色核对过的主题必须和上游（或参考截图）完全一致：这些值一旦被"顺手调亮一点"，
+    // 用户看到的就不再是他选的那套配色。抽查每套主题最容易被看出来的几号色。
+    struct Expectation {
+        const char *id;
+        int index;
+        const char *hex;
+    };
+    static const Expectation expectations[] = {
+        {"kanagawa_wave", 4, "#7e9cd8"},   // 目录名用的 ANSI 蓝
+        {"kanagawa_wave", 2, "#76946a"},
+        {"kanagawa_dragon", 1, "#c4746e"},
+        {"kanagawa_lotus", 4, "#4d699b"},
+        {"flexoki_dark", 4, "#4385be"},
+        {"flexoki_dark", 1, "#d14d41"},
+        {"flexoki_light", 4, "#205ea6"},
+        {"termius_dark", 4, "#4aa3ff"},
+        {"termius_light", 4, "#2f6fd0"},
+    };
+    for (const Expectation &expectation : expectations) {
+        TerminalSettings probe;
+        probe.colorSchemeId = QString::fromLatin1(expectation.id);
+        const TerminalPalette palette = probe.normalized().effectivePalette();
+        QCOMPARE(palette.ansi.value(expectation.index),
+                 QColor(QLatin1String(expectation.hex)));
+    }
+
+    // Hacker 系是单色主题：参考图里连目录名都只是同一色系的另一档亮度，出现互补色就说明
+    // 有人把通用调色板塞了进来。
+    TerminalSettings hacker;
+    hacker.colorSchemeId = QStringLiteral("hacker_green");
+    for (const QColor &color : hacker.normalized().effectivePalette().ansi) {
+        QVERIFY2(color.green() >= color.red() && color.green() >= color.blue(),
+                 qPrintable(color.name()));
     }
 }
 

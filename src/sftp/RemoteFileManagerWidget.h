@@ -80,6 +80,14 @@ signals:
      */
     void fullScreenChanged(bool fullScreen);
 
+    /**
+     * @brief 用户请求关闭远程文件管理面板。
+     *
+     * 控件不自行隐藏：显隐由 TerminalWorkspace 统一管理，它还要同步退出全屏并回写终端
+     * 顶部的文件管理按钮状态。自行 hide() 会让那两处状态与实际显示脱节。
+     */
+    void closeRequested();
+
 protected:
     /**
      * @brief 根据可用宽度在完整文字动作和紧凑图标动作之间切换。
@@ -264,6 +272,9 @@ private:
      * 因此本地面板的显隐直接绑定在该开关上，不再单独提供本地文件按钮。
      */
     QToolButton *m_fullScreenButton = nullptr;
+
+    /** @brief 关闭开关：收起整个远程文件管理面板，把宽度还给终端。 */
+    QToolButton *m_closeButton = nullptr;
 
     /**
      * @brief 当前标签页独立的自动跟随偏好；手选外层后保持关闭直至连接链重建。

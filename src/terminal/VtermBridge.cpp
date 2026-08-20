@@ -156,6 +156,36 @@ void VtermBridge::setDefaultColors(const QColor &foreground, const QColor &backg
     invalidateDocument();
 }
 
+void VtermBridge::setAnsiPalette(const QVector<QColor> &colors)
+{
+    // 半套调色板比不换更糟：前景换了背景没换会直接把文字和底色刷成同一个颜色。宁可整体
+    // 忽略，让终端保持上一套自洽的配色。
+    if (colors.size() != 16) {
+        return;
+    }
+    for (const QColor &color : colors) {
+        if (!color.isValid()) {
+            return;
+        }
+    }
+
+    VTermState *state = vterm_obtain_state(m_vterm);
+    if (state == nullptr) {
+        return;
+    }
+    for (int index = 0; index < colors.size(); ++index) {
+        const QColor &color = colors.at(index);
+        VTermColor native;
+        vterm_color_rgb(&native,
+                        static_cast<uint8_t>(color.red()),
+                        static_cast<uint8_t>(color.green()),
+                        static_cast<uint8_t>(color.blue()));
+        vterm_state_set_palette_color(state, index, &native);
+    }
+    // 已渲染的段保存的是解析后的 RGB，调色板换了它们不会自己更新。
+    invalidateDocument();
+}
+
 void VtermBridge::refreshPenDefaultColors()
 {
     // libvterm 把"默认色"在两个地方各存了一份：一份是 state 里的 default_fg/default_bg，

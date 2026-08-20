@@ -138,6 +138,8 @@ private slots:
     void everyRenderedLineHasIdenticalHeightRegardlessOfContent();
     void gridFillsViewportWithoutWastedRows();
     void themeBackgroundSurvivesLeavingFullScreenApplication();
+    /** @brief 主题自带的 16 色表必须真正替换 libvterm 的 VGA 默认值，并随主题切换刷新。 */
+    void themeAnsiPaletteReplacesVgaDefaults();
     /** @brief 自动提示必须默认关闭；开启后的弹层字体、行高和位置要符合终端视觉约束。 */
     void commandCompletionHonorsSwitchAndUsesCompactTerminalLayout();
 };
@@ -240,6 +242,57 @@ void TerminalAltScreenTest::themeBackgroundSurvivesLeavingFullScreenApplication(
     bridge.setDefaultColors(themeForeground, QColor(QStringLiteral("#101820")));
     bridge.feed(QByteArrayLiteral("still-red"));
     QCOMPARE(backgroundOfLastLine(), explicitRed);
+}
+
+void TerminalAltScreenTest::themeAnsiPaletteReplacesVgaDefaults()
+{
+    // `ls` 给目录名用的正是 SGR 34（ANSI 蓝）。libvterm 内置的是 VGA 那套值 #0000e0，它在
+    // 任何深色主题上都暗到读不出来，而且完全不随用户所选主题变化——只改默认前景背景色的
+    // 主题实现修不掉这个问题。
+    const QColor vgaBlue(0, 0, 224);
+
+    VtermBridge bridge;
+    bridge.resize(10, 40);
+    bridge.setDefaultColors(QColor(QStringLiteral("#dcd7ba")),
+                            QColor(QStringLiteral("#1f1f28")));
+
+    const auto foregroundOfLastLine = [&bridge]() {
+        QTextDocument document;
+        bridge.render(&document);
+        return document.lastBlock().begin().fragment().charFormat().foreground().color();
+    };
+
+    bridge.feed(QByteArrayLiteral("\x1b[34mmysqldata\x1b[0m"));
+    QCOMPARE(foregroundOfLastLine(), vgaBlue);
+
+    TerminalSettings wave;
+    wave.colorSchemeId = QStringLiteral("kanagawa_wave");
+    bridge.setAnsiPalette(wave.effectivePalette().ansi);
+    QCOMPARE(foregroundOfLastLine(), QColor(QStringLiteral("#7e9cd8")));
+
+    // 换主题时已经渲染出来的行必须一起跟着变，否则同一屏里会并存两套配色。
+    TerminalSettings flexoki;
+    flexoki.colorSchemeId = QStringLiteral("flexoki_dark");
+    bridge.setAnsiPalette(flexoki.effectivePalette().ansi);
+    QCOMPARE(foregroundOfLastLine(), QColor(QStringLiteral("#4385be")));
+
+    // 不完整或含无效色的调色板整体忽略：只换一半会把前景和背景刷成同一个颜色。
+    bridge.setAnsiPalette({QColor(QStringLiteral("#ff0000"))});
+    bridge.setAnsiPalette(QVector<QColor>(16, QColor()));
+    // 被忽略的调色板不会让文档失效，而 render() 默认走增量、需要文档里已有上一次的内容。
+    // 这里显式整体重建，比较的才是 libvterm 当前调色板解析出来的颜色。
+    bridge.invalidateDocument();
+    QCOMPARE(foregroundOfLastLine(), QColor(QStringLiteral("#4385be")));
+
+    // 端到端：主题选择要真的经由 TerminalView 传到桥接层，而不是只存在设置结构里。
+    TerminalView view;
+    TerminalSettings settings;
+    settings.colorSchemeId = QStringLiteral("kanagawa_wave");
+    view.applySettings(settings);
+    view.appendTerminalOutput(QByteArrayLiteral("\x1b[34mmysqldata\x1b[0m"));
+    QTest::qWait(50);
+    QCOMPARE(view.document()->lastBlock().begin().fragment().charFormat().foreground().color(),
+             QColor(QStringLiteral("#7e9cd8")));
 }
 
 void TerminalAltScreenTest::incrementalRenderMatchesFullRebuild()

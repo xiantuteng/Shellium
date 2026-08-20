@@ -44,6 +44,15 @@ public:
      */
     void setDefaultColors(const QColor &foreground, const QColor &background);
 
+    /**
+     * @brief 覆盖 ANSI 0-15 号色，使远端显式着色的文本也跟随当前主题。
+     * @param colors 恰好 16 个有效颜色；数量不足或含无效色时整体忽略，保留上一次的调色板。
+     *
+     * libvterm 内置的是 VGA 那套值，其中 ANSI 蓝 (#0000cd) 落在任何深色背景上都几乎读不出
+     * 来——`ls` 的目录名正是用它。主题只改默认前景背景色是不够的，必须连这 16 号色一起换。
+     */
+    void setAnsiPalette(const QVector<QColor> &colors);
+
     /** @brief 设置滚动历史上限，并立即丢弃超过新上限的最旧行。 */
     void setScrollbackLimit(int lineCount);
 

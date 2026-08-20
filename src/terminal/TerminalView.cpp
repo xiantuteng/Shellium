@@ -23,7 +23,11 @@
 #include <QKeySequence>
 #include <QListView>
 #include <QMenu>
-#include <QMessageBox>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QLabel>
+#include <QPushButton>
+#include <QVBoxLayout>
 #include <QPainter>
 #include <QPaintEvent>
 #include <QAbstractItemView>
@@ -419,6 +423,7 @@ void TerminalView::applySettings(const TerminalSettings &settings)
     // 字体族、字号和字符间距都与终端一致，设置页实时预览及快捷键缩放也不会产生两套字形。
     m_commandCompleter->popup()->setFont(terminalFont);
     m_commandCompletionEnabled = normalized.commandAutoCompletion;
+    m_multiLinePasteConfirmation = normalized.multiLinePasteConfirmation;
     if (!m_commandCompletionEnabled) {
         // 设置实时关闭时立即收起已经显示的弹层；仅阻止后续 updateCompletionPopup 不足以
         // 清理当前顶层窗口，会让用户误以为开关没有生效。
@@ -431,6 +436,7 @@ void TerminalView::applySettings(const TerminalSettings &settings)
     m_cursorColor = terminalPalette.cursor;
     m_cursorPhaseVisible = true;
     m_vtermBridge->setDefaultColors(terminalPalette.foreground, terminalPalette.background);
+    m_vtermBridge->setAnsiPalette(terminalPalette.ansi);
     m_vtermBridge->setScrollbackLimit(normalized.scrollbackLines);
     m_vtermBridge->setLineHeightPercent(normalized.lineHeightPercent);
     // 锚点字体依赖当前字体（要取它的 CJK 后备），必须在 setFont() 之后重新求一次。
@@ -874,6 +880,53 @@ void TerminalView::acceptCompletion(const QString &completion)
     m_commandCompleter->popup()->hide();
 }
 
+bool TerminalView::confirmPaste(const PastePreparation &prepared)
+{
+    QStringList riskDescriptions;
+    if (prepared.containsLineBreak) {
+        riskDescriptions.append(tr("内容包含 %1 行，发送后可能立即执行多条命令。")
+                                    .arg(prepared.text.count(QLatin1Char('\n')) + 1));
+    }
+    if (prepared.removedControlCharacters > 0) {
+        riskDescriptions.append(tr("已移除 %1 个可能注入终端控制序列的不可见字符。")
+                                    .arg(prepared.removedControlCharacters));
+    }
+    riskDescriptions.append(tr("确认将以下内容发送到当前终端吗？"));
+
+    QDialog dialog(this);
+    dialog.setObjectName(QStringLiteral("TerminalPasteConfirmDialog"));
+    dialog.setWindowTitle(tr("确认终端粘贴"));
+    auto *layout = new QVBoxLayout(&dialog);
+    auto *summary = new QLabel(riskDescriptions.join(QLatin1Char('\n')), &dialog);
+    summary->setWordWrap(true);
+    layout->addWidget(summary);
+
+    // 只有把真正会被发送的文本摆出来，"确认"才是一次有依据的判断而不是盲签。展示的是
+    // 清理后的 prepared.text，与随后写入 PTY 的字节完全一致。
+    auto *preview = new QPlainTextEdit(prepared.text, &dialog);
+    preview->setObjectName(QStringLiteral("TerminalPasteConfirmPreview"));
+    preview->setReadOnly(true);
+    preview->setLineWrapMode(QPlainTextEdit::NoWrap);
+    preview->setFont(font());
+    // 不接受焦点是回车能直达默认按钮的前提：只要预览框拿到焦点，回车就变成"在只读文本框里
+    // 换行"，用户会看到按下回车毫无反应。滚动仍可用鼠标滚轮与滚动条完成。
+    preview->setFocusPolicy(Qt::NoFocus);
+    preview->setMinimumHeight(120);
+    layout->addWidget(preview, 1);
+
+    auto *buttons = new QDialogButtonBox(QDialogButtonBox::Cancel, &dialog);
+    QPushButton *pasteButton = buttons->addButton(tr("粘贴"), QDialogButtonBox::AcceptRole);
+    pasteButton->setDefault(true);
+    pasteButton->setAutoDefault(true);
+    pasteButton->setFocus();
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    layout->addWidget(buttons);
+
+    dialog.resize(560, 320);
+    return dialog.exec() == QDialog::Accepted;
+}
+
 TerminalView::PastePreparation TerminalView::prepareClipboardPaste(
     const QString &clipboardText)
 {
@@ -1137,27 +1190,9 @@ void TerminalView::keyPressEvent(QKeyEvent *event)
             return;
         }
 
-        if (prepared.requiresConfirmation()) {
-            QStringList riskDescriptions;
-            if (prepared.containsLineBreak) {
-                riskDescriptions.append(tr("内容包含 %1 行，发送后可能立即执行多条命令。")
-                                            .arg(prepared.text.count(QLatin1Char('\n')) + 1));
-            }
-            if (prepared.removedControlCharacters > 0) {
-                riskDescriptions.append(tr("已移除 %1 个可能注入终端控制序列的不可见字符。")
-                                            .arg(prepared.removedControlCharacters));
-            }
-            riskDescriptions.append(tr("确认将清理后的内容发送到当前终端吗？"));
-            const QMessageBox::StandardButton answer = QMessageBox::warning(
-                this,
-                tr("确认终端粘贴"),
-                riskDescriptions.join(QLatin1Char('\n')),
-                QMessageBox::Yes | QMessageBox::Cancel,
-                QMessageBox::Cancel);
-            if (answer != QMessageBox::Yes) {
-                event->accept();
-                return;
-            }
+        if (prepared.requiresConfirmation(m_multiLinePasteConfirmation) && !confirmPaste(prepared)) {
+            event->accept();
+            return;
         }
 
         // 多行能力仍然保留，但只有用户看见风险并明确确认后才会进入 PTY。命令缓冲只保留

@@ -42,6 +42,12 @@ TerminalWorkspace::TerminalWorkspace(QWidget *parent)
             &RemoteFileManagerWidget::fullScreenChanged,
             this,
             [this](const bool fullScreen) { m_pane->setVisible(!fullScreen); });
+    // 面板自带的关闭按钮与终端顶部的文件管理按钮必须落到同一条路径上：只有经过
+    // setFileManagerVisible，才会顺带退出全屏并把终端按钮的选中态改回未展开。
+    connect(m_fileManager,
+            &RemoteFileManagerWidget::closeRequested,
+            this,
+            [this] { setFileManagerVisible(false); });
     connect(m_pane, &TerminalPane::targetsChanged, this, [this](TerminalPane *pane) {
         synchronizeFileManager(true);
         emitTerminalStatus();

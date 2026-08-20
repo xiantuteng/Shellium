@@ -106,6 +106,8 @@ private slots:
 
     /** @brief 普通粘贴必须保留多行能力，同时移除可注入终端状态的危险控制字符。 */
     void terminalViewPreparesClipboardTextSafely();
+    /** @brief 多行粘贴确认默认关闭：多行内容必须直接进入 PTY，不弹任何模态窗口。 */
+    void terminalViewMultiLinePasteConfirmationFollowsSetting();
 
     /** @brief 回显过滤器要能扣掉整段、跨块的期望串，并在匹配不上时如数放行。 */
     void echoFilterRemovesExpectedEcho();
@@ -657,7 +659,9 @@ void SshCommandParserTest::terminalViewPreparesClipboardTextSafely()
     QCOMPARE(prepared.text, QStringLiteral("echo first\necho second\targ"));
     QVERIFY(prepared.containsLineBreak);
     QCOMPARE(prepared.removedControlCharacters, qsizetype(3));
-    QVERIFY(prepared.requiresConfirmation());
+    QVERIFY(prepared.requiresConfirmation(true));
+    // 控制字符是用户从剪贴板内容表面看不出来的改动，即使关闭了"多行粘贴确认"也必须确认。
+    QVERIFY(prepared.requiresConfirmation(false));
 
     // 普通单行文本无需打断用户；该快速路径也是最常见的复制命令使用方式。
     const TerminalView::PastePreparation ordinary =
@@ -665,13 +669,52 @@ void SshCommandParserTest::terminalViewPreparesClipboardTextSafely()
     QCOMPARE(ordinary.text, QStringLiteral("ls -la /srv/app"));
     QVERIFY(!ordinary.containsLineBreak);
     QCOMPARE(ordinary.removedControlCharacters, qsizetype(0));
-    QVERIFY(!ordinary.requiresConfirmation());
+    QVERIFY(!ordinary.requiresConfirmation(true));
+    QVERIFY(!ordinary.requiresConfirmation(false));
 
     // 裸 CR 同样代表换行，不能因来源平台不同而悄悄变成普通字符或重复两次换行。
     const TerminalView::PastePreparation legacyMac =
         TerminalView::prepareClipboardPaste(QStringLiteral("one\rtwo"));
     QCOMPARE(legacyMac.text, QStringLiteral("one\ntwo"));
-    QVERIFY(legacyMac.requiresConfirmation());
+    QVERIFY(legacyMac.requiresConfirmation(true));
+    // 纯多行、无控制字符：确认与否完全由设置决定，默认关闭时直接粘贴。
+    QVERIFY(!legacyMac.requiresConfirmation(false));
+}
+
+void SshCommandParserTest::terminalViewMultiLinePasteConfirmationFollowsSetting()
+{
+    QGuiApplication::clipboard()->setText(QStringLiteral("echo one\necho two\necho three"));
+
+    TerminalView view;
+    TerminalSettings settings;
+    // 默认值本身就是"关闭"，显式写出是为了让用例在默认值哪天被改动时立刻失败。
+    QVERIFY(!settings.multiLinePasteConfirmation);
+    view.applySettings(settings);
+
+    // exec() 会阻塞在事件循环里，因此不能在粘贴之后再检查是否弹窗——那行代码永远等不到。
+    // 用定时器在事件循环内部观察：一旦出现模态窗口就记录并关掉它，用例才能给出可读的失败
+    // 而不是整体挂死。
+    bool modalAppeared = false;
+    QTimer modalWatcher;
+    modalWatcher.setInterval(20);
+    QObject::connect(&modalWatcher, &QTimer::timeout, [&modalAppeared] {
+        if (QWidget *modal = QApplication::activeModalWidget(); modal != nullptr) {
+            // 记录布尔而不是 QPointer：确认框是 confirmPaste() 的栈对象，exec() 一返回就析构，
+            // QPointer 会自动清空，断言反而永远看不到它曾经出现过。
+            modalAppeared = true;
+            modal->close();
+        }
+    });
+    modalWatcher.start();
+
+    QSignalSpy inputSpy(&view, &TerminalView::inputBytes);
+    QTest::keySequence(&view, QKeySequence(QKeySequence::Paste));
+    modalWatcher.stop();
+
+    QVERIFY2(!modalAppeared, "多行粘贴确认默认关闭时不得弹出确认框");
+    QCOMPARE(inputSpy.size(), 1);
+    QCOMPARE(inputSpy.at(0).at(0).toByteArray(),
+             QByteArrayLiteral("echo one\necho two\necho three"));
 }
 
 void SshCommandParserTest::echoFilterRemovesExpectedEcho()

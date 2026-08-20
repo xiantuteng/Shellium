@@ -10,6 +10,7 @@
 #include <QThread>
 
 #include <algorithm>
+#include <initializer_list>
 #include <cmath>
 
 namespace {
@@ -27,6 +28,9 @@ const QString kScrollbackKey = QStringLiteral("terminal/scrollback_lines");
 const QString kAudibleBellKey = QStringLiteral("terminal/audible_bell");
 /** @brief 命令行历史自动提示开关；缺失该键时由结构默认值保持关闭。 */
 const QString kCommandAutoCompletionKey = QStringLiteral("terminal/command_auto_completion");
+/** @brief 多行粘贴确认开关；缺失该键时由结构默认值保持关闭（直接粘贴）。 */
+const QString kMultiLinePasteConfirmationKey =
+    QStringLiteral("terminal/multi_line_paste_confirmation");
 const QString kAutomaticReconnectKey = QStringLiteral("connection/automatic_reconnect");
 /** @brief 是否启用用户主密码保护凭据；与透明的本机密钥保存模式相互切换。 */
 const QString kVaultPasswordEnabledKey = QStringLiteral("security/vault_password_enabled");
@@ -154,6 +158,24 @@ QPalette createApplicationPalette(const bool dark)
     palette.setColor(QPalette::Disabled, QPalette::Text, disabled);
     palette.setColor(QPalette::Disabled, QPalette::ButtonText, disabled);
     return palette;
+}
+
+/**
+ * @brief 把 16 个十六进制字符串转成 ANSI 调色板。
+ *
+ * 主题表里逐个写 QColor(QStringLiteral(...)) 会让每套主题占满 8 行，配色之间无法对齐着
+ * 读；集中转换后一套主题的 16 色排成两行，与上游主题文档的顺序一一对应，抄错一位能一眼
+ * 看出来。
+ */
+QVector<QColor> ansiFrom(const std::initializer_list<const char *> hex)
+{
+    Q_ASSERT(hex.size() == 16);
+    QVector<QColor> colors;
+    colors.reserve(static_cast<qsizetype>(hex.size()));
+    for (const char *value : hex) {
+        colors.append(QColor(QLatin1String(value)));
+    }
+    return colors;
 }
 
 } // namespace
@@ -304,63 +326,103 @@ const QList<TerminalThemePreset> &TerminalSettings::themePresets()
         {QStringLiteral("termius_dark"),
          QStringLiteral("Termius Dark"),
          true,
-         {QColor(QStringLiteral("#131a24")), QColor(QStringLiteral("#d5dae1")),
+         {QColor(QStringLiteral("#131a24")), QColor(QStringLiteral("#3ecf8f")),
           QColor(QStringLiteral("#2bd981")), QColor(QStringLiteral("#26303f")),
-          QColor(QStringLiteral("#4aa3ff"))}},
+          QColor(QStringLiteral("#4aa3ff")),
+          ansiFrom({"#1c2532", "#ff6b6b", "#2bd981", "#f3d27a",
+                    "#4aa3ff", "#c792ea", "#4fd6d6", "#d5dae1",
+                    "#46536b", "#ff8c8c", "#6ff0ac", "#ffe29a",
+                    "#7ec0ff", "#dcb0ff", "#86ecec", "#f2f5f8"})}},
         {QStringLiteral("termius_light"),
          QStringLiteral("Termius Light"),
          false,
          {QColor(QStringLiteral("#c9d0d7")), QColor(QStringLiteral("#2c3542")),
           QColor(QStringLiteral("#1f8f56")), QColor(QStringLiteral("#b3bcc6")),
-          QColor(QStringLiteral("#0b57d0"))}},
+          QColor(QStringLiteral("#0b57d0")),
+          ansiFrom({"#2c3542", "#c0392b", "#1f8f56", "#9a6b00",
+                    "#2f6fd0", "#8e44ad", "#167c80", "#5a6675",
+                    "#56637a", "#e05a4a", "#2aa86a", "#b8860b",
+                    "#4a8ae6", "#a45ec4", "#1f9aa0", "#1b2430"})}},
         {QStringLiteral("flexoki_dark"),
          QStringLiteral("Flexoki Dark"),
          true,
          {QColor(QStringLiteral("#100f0f")), QColor(QStringLiteral("#cecdc3")),
           QColor(QStringLiteral("#879a39")), QColor(QStringLiteral("#282726")),
-          QColor(QStringLiteral("#4385be"))}},
+          QColor(QStringLiteral("#4385be")),
+          ansiFrom({"#100f0f", "#d14d41", "#879a39", "#d0a215",
+                    "#4385be", "#ce5d97", "#3aa99f", "#cecdc3",
+                    "#575653", "#e8705f", "#a0af54", "#e0b33c",
+                    "#66a0d8", "#e07bb0", "#5abfb4", "#fffcf0"})}},
         {QStringLiteral("flexoki_light"),
          QStringLiteral("Flexoki Light"),
          false,
          {QColor(QStringLiteral("#fffcf0")), QColor(QStringLiteral("#100f0f")),
           QColor(QStringLiteral("#879a39")), QColor(QStringLiteral("#e6e4d9")),
-          QColor(QStringLiteral("#205ea6"))}},
+          QColor(QStringLiteral("#205ea6")),
+          ansiFrom({"#100f0f", "#af3029", "#66800b", "#ad8301",
+                    "#205ea6", "#a02f6f", "#24837b", "#6f6e69",
+                    "#575653", "#d14d41", "#879a39", "#d0a215",
+                    "#4385be", "#ce5d97", "#3aa99f", "#1c1b1a"})}},
         {QStringLiteral("kanagawa_wave"),
          QStringLiteral("Kanagawa Wave"),
          true,
          {QColor(QStringLiteral("#1f1f28")), QColor(QStringLiteral("#dcd7ba")),
           QColor(QStringLiteral("#c8c093")), QColor(QStringLiteral("#2d4f67")),
-          QColor(QStringLiteral("#7e9cd8"))}},
+          QColor(QStringLiteral("#7e9cd8")),
+          ansiFrom({"#090618", "#c34043", "#76946a", "#c0a36e",
+                    "#7e9cd8", "#957fb8", "#6a9589", "#c8c093",
+                    "#727169", "#e82424", "#98bb6c", "#e6c384",
+                    "#7fb4ca", "#938aa9", "#7aa89f", "#dcd7ba"})}},
         {QStringLiteral("kanagawa_dragon"),
          QStringLiteral("Kanagawa Dragon"),
          true,
          {QColor(QStringLiteral("#181616")), QColor(QStringLiteral("#c5c9c5")),
           QColor(QStringLiteral("#c8c093")), QColor(QStringLiteral("#2d4f67")),
-          QColor(QStringLiteral("#8ba4b0"))}},
+          QColor(QStringLiteral("#8ba4b0")),
+          ansiFrom({"#0d0c0c", "#c4746e", "#8a9a7b", "#c4b28a",
+                    "#8ba4b0", "#a292a3", "#8ea4a2", "#c8c093",
+                    "#a6a69c", "#e46876", "#87a987", "#e6c384",
+                    "#7fb4ca", "#938aa9", "#7aa89f", "#c5c9c5"})}},
         {QStringLiteral("kanagawa_lotus"),
          QStringLiteral("Kanagawa Lotus"),
          false,
          {QColor(QStringLiteral("#f2ecbc")), QColor(QStringLiteral("#545464")),
           QColor(QStringLiteral("#43436c")), QColor(QStringLiteral("#dcd7ba")),
-          QColor(QStringLiteral("#4d699b"))}},
+          QColor(QStringLiteral("#4d699b")),
+          ansiFrom({"#1f1f28", "#c84053", "#6f894e", "#77713f",
+                    "#4d699b", "#b35b79", "#597b75", "#545464",
+                    "#8a8980", "#d7474b", "#6e915f", "#836f4a",
+                    "#6693bf", "#624c83", "#5e857a", "#43436c"})}},
         {QStringLiteral("hacker_blue"),
          QStringLiteral("Hacker Blue"),
          true,
          {QColor(QStringLiteral("#030814")), QColor(QStringLiteral("#29b6ff")),
           QColor(QStringLiteral("#29b6ff")), QColor(QStringLiteral("#0b2a44")),
-          QColor(QStringLiteral("#7fdcff"))}},
+          QColor(QStringLiteral("#7fdcff")),
+          ansiFrom({"#08203a", "#1c72c4", "#2f9fe0", "#56b8f0",
+                    "#3f8fdd", "#6ac4ff", "#86d4ff", "#29b6ff",
+                    "#10406e", "#3f9ce0", "#57bdf5", "#8ad4ff",
+                    "#6bb6ff", "#9fdcff", "#b6e6ff", "#d8f2ff"})}},
         {QStringLiteral("hacker_green"),
          QStringLiteral("Hacker Green"),
          true,
          {QColor(QStringLiteral("#001400")), QColor(QStringLiteral("#22dd22")),
           QColor(QStringLiteral("#33ff33")), QColor(QStringLiteral("#0b3d0b")),
-          QColor(QStringLiteral("#66ff88"))}},
+          QColor(QStringLiteral("#66ff88")),
+          ansiFrom({"#0b3d0b", "#1aa61a", "#22dd22", "#4de84d",
+                    "#2fc94f", "#5cff8f", "#8affb0", "#33ff33",
+                    "#146414", "#3fd63f", "#5cff5c", "#86ff86",
+                    "#6dffa0", "#a6ffc4", "#c2ffd8", "#e0ffe8"})}},
         {QStringLiteral("hacker_red"),
          QStringLiteral("Hacker Red"),
          true,
          {QColor(QStringLiteral("#150000")), QColor(QStringLiteral("#d22b2b")),
           QColor(QStringLiteral("#ff3b3b")), QColor(QStringLiteral("#3d0b0b")),
-          QColor(QStringLiteral("#ff7a7a"))}},
+          QColor(QStringLiteral("#ff7a7a")),
+          ansiFrom({"#3d0b0b", "#a61f1f", "#d22b2b", "#ef4b4b",
+                    "#c93a3a", "#ff6b6b", "#ff9090", "#ff3b3b",
+                    "#641414", "#d63f3f", "#ff5c5c", "#ff8686",
+                    "#ff7a7a", "#ffa6a6", "#ffc2c2", "#ffe0e0"})}},
         {QStringLiteral("everforest_dark"),
          QStringLiteral("Everforest Dark"),
          true,
@@ -744,13 +806,35 @@ QStringList TerminalSettings::recommendedFontFamilies()
     };
 }
 
+QVector<QColor> TerminalSettings::defaultAnsiPalette(const bool dark)
+{
+    // 这两套值不属于任何一款上游主题，只承担一件事：让没有单独调过 16 色的预设也保持可读。
+    // 深色一套整体抬到 VGA 之上（蓝色 #61afef 而非 #0000cd），浅色一套则压到白底之下。
+    if (dark) {
+        return ansiFrom({"#21252b", "#e06c75", "#98c379", "#e5c07b",
+                         "#61afef", "#c678dd", "#56b6c2", "#c8ccd4",
+                         "#5c6370", "#ff7b86", "#b5e08c", "#f2d68f",
+                         "#82c8ff", "#dc98ee", "#74d3de", "#f2f4f8"});
+    }
+    return ansiFrom({"#2b2f36", "#c62828", "#2e7d32", "#8f6b00",
+                     "#1a5fb4", "#8e24aa", "#00727c", "#5a6270",
+                     "#4a515c", "#d8453f", "#3a8f3f", "#a67c00",
+                     "#2b74d4", "#a13cc0", "#0d8a94", "#1b1f26"});
+}
+
 TerminalPalette TerminalSettings::effectivePalette() const
 {
     // "default" 之外的配色都是搭配好的一整套固定主题（对应主流终端模拟器的同名预设），不随
     // 浅色/深色切换而改变，因此命中预设后直接返回，不看 effectiveThemeMode()。
     if (colorSchemeId != QLatin1String("default")) {
         if (const TerminalThemePreset *preset = themePreset(colorSchemeId)) {
-            return preset->palette;
+            TerminalPalette palette = preset->palette;
+            // 预设表里只有对着参考配色逐色核对过的主题才写了 16 色；其余按自身明暗补一份
+            // 通用表，避免它们退回 libvterm 的 VGA 默认值。
+            if (palette.ansi.size() != 16) {
+                palette.ansi = defaultAnsiPalette(preset->dark);
+            }
+            return palette;
         }
     }
 
@@ -761,6 +845,7 @@ TerminalPalette TerminalSettings::effectivePalette() const
             QColor(QStringLiteral("#f6c85f")),
             QColor(QStringLiteral("#34598a")),
             QColor(QStringLiteral("#66b3ff")),
+            defaultAnsiPalette(true),
         };
     }
     return {
@@ -769,6 +854,7 @@ TerminalPalette TerminalSettings::effectivePalette() const
         QColor(QStringLiteral("#0b57d0")),
         QColor(QStringLiteral("#b8d5ff")),
         QColor(QStringLiteral("#0057b8")),
+        defaultAnsiPalette(false),
     };
 }
 
@@ -785,6 +871,7 @@ bool TerminalSettings::operator==(const TerminalSettings &other) const
         && scrollbackLines == other.scrollbackLines
         && audibleBell == other.audibleBell
         && commandAutoCompletion == other.commandAutoCompletion
+        && multiLinePasteConfirmation == other.multiLinePasteConfirmation
         && automaticReconnect == other.automaticReconnect
         && vaultPasswordEnabled == other.vaultPasswordEnabled
         && reconnectMaxAttempts == other.reconnectMaxAttempts
@@ -926,6 +1013,7 @@ bool TerminalSettingsService::load(QString *errorMessage)
     assignInteger(kScrollbackKey, &loaded.scrollbackLines);
     assignBoolean(kAudibleBellKey, &loaded.audibleBell);
     assignBoolean(kCommandAutoCompletionKey, &loaded.commandAutoCompletion);
+    assignBoolean(kMultiLinePasteConfirmationKey, &loaded.multiLinePasteConfirmation);
     assignBoolean(kAutomaticReconnectKey, &loaded.automaticReconnect);
     const std::optional<QString> vaultPasswordSetting =
         readValue(kVaultPasswordEnabledKey, &queryFailed);
@@ -1030,6 +1118,8 @@ bool TerminalSettingsService::save(const TerminalSettings &settings, QString *er
                 || !write(kAudibleBellKey, serializeBool(normalizedSettings.audibleBell))
                 || !write(kCommandAutoCompletionKey,
                           serializeBool(normalizedSettings.commandAutoCompletion))
+                || !write(kMultiLinePasteConfirmationKey,
+                          serializeBool(normalizedSettings.multiLinePasteConfirmation))
                 || !write(kAutomaticReconnectKey,
                           serializeBool(normalizedSettings.automaticReconnect))
                 || !write(kVaultPasswordEnabledKey,

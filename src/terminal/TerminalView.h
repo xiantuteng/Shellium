@@ -45,10 +45,18 @@ public:
         /** @brief 清理后的内容是否仍含换行；含换行意味着可能一次执行多条命令。 */
         bool containsLineBreak = false;
 
-        /** @brief 是否存在需要用户确认的多行或控制字符风险。 */
-        [[nodiscard]] bool requiresConfirmation() const
+        /**
+         * @brief 是否存在需要用户确认的风险。
+         * @param multiLineConfirmationEnabled 用户是否开启了"多行粘贴确认"设置。
+         *
+         * 被移除的控制字符始终需要确认：那是用户从剪贴板内容表面看不出来的改动，静默放行
+         * 等于替他做了一次安全决定。多行则相反——用户复制的就是自己看得见的多行脚本，是否
+         * 打断由设置决定，默认直接粘贴。
+         */
+        [[nodiscard]] bool requiresConfirmation(const bool multiLineConfirmationEnabled) const
         {
-            return containsLineBreak || removedControlCharacters > 0;
+            return (containsLineBreak && multiLineConfirmationEnabled)
+                || removedControlCharacters > 0;
         }
     };
 
@@ -280,6 +288,16 @@ private:
     void updateCompletionPopup();
 
     /**
+     * @brief 弹出粘贴确认框，展示风险说明与清理后的完整内容。
+     * @param prepared 已清理并完成风险判定的粘贴内容。
+     * @return 用户确认发送返回 true；取消或关闭窗口返回 false。
+     *
+     * 内容区只读且不接受焦点，因此回车不会被文本框吞掉，而是直接触发默认的"粘贴"按钮——
+     * 这是本对话框最常见的操作，不该强迫用户离开键盘去点按钮。
+     */
+    [[nodiscard]] bool confirmPaste(const PastePreparation &prepared);
+
+    /**
      * @brief 计算 libvterm 视觉光标对应的文档光标矩形，供 paintEvent 与补全弹层共用。
      * @return 有效位置时返回对应矩形；无法取得有效位置（vterm 尚未渲染或位置越界）时返回空 QRect。
      */
@@ -350,6 +368,9 @@ private:
      * 持久化等职责；这里只控制自动弹层，不能用清空命令缓冲的方式实现开关。
      */
     bool m_commandCompletionEnabled = false;
+
+    /** @brief 粘贴多行内容前是否先展示内容并要求确认；默认关闭，即直接粘贴。 */
+    bool m_multiLinePasteConfirmation = false;
 
     /** @brief 基于当前主机持久命令历史的弹出式补全器。 */
     QCompleter *m_commandCompleter = nullptr;
