@@ -296,6 +296,40 @@ void TerminalAltScreenTest::themeAnsiPaletteReplacesVgaDefaults()
     QTest::qWait(50);
     QCOMPARE(view.document()->lastBlock().begin().fragment().charFormat().foreground().color(),
              QColor(QStringLiteral("#7e9cd8")));
+
+    // Linux 的 `ls --color` 通常用 `01;34` 呈现目录名。单独覆盖这条带粗体的
+    // 实际序列，可以防止测试只验证 SGR 34，却漏掉用户真正看到的着色路径。
+    TerminalView termiusView;
+    settings.colorSchemeId = QStringLiteral("termius_dark");
+    termiusView.applySettings(settings);
+    termiusView.appendTerminalOutput(QByteArrayLiteral("\x1b[01;34mlog\x1b[0m"));
+    QTest::qWait(50);
+    QCOMPARE(termiusView.document()->lastBlock().begin().fragment().charFormat()
+                 .foreground().color(),
+             QColor(QStringLiteral("#015fff")));
+
+    // 用户的 `ll` 实际通过 xterm 256 色 27 号（`38;5;27`）输出目录名，
+    // 该索引不在主题的 ANSI 0-15 号表内。这条回归测试保证 #015fff
+    // 覆盖到实际路径，而不是再次只修改不会被远端命中的 4/12 号色槽。
+    TerminalView indexedColorView;
+    indexedColorView.applySettings(settings);
+    indexedColorView.appendTerminalOutput(
+        QByteArrayLiteral("\x1b[38;5;27mindexed-log\x1b[0m"));
+    QTest::qWait(50);
+    QCOMPARE(indexedColorView.document()->lastBlock().begin().fragment().charFormat()
+                 .foreground().color(),
+             QColor(QStringLiteral("#015fff")));
+
+    // 部分 LS_COLORS 配置会把同一个 `#005fff` 写成 TrueColor；必须与 256 色
+    // 分支得到一致结果，否则服务器换一种等价的转义写法后问题会再现。
+    TerminalView trueColorView;
+    trueColorView.applySettings(settings);
+    trueColorView.appendTerminalOutput(
+        QByteArrayLiteral("\x1b[38;2;0;95;255mtruecolor-log\x1b[0m"));
+    QTest::qWait(50);
+    QCOMPARE(trueColorView.document()->lastBlock().begin().fragment().charFormat()
+                 .foreground().color(),
+             QColor(QStringLiteral("#015fff")));
 }
 
 void TerminalAltScreenTest::incrementalRenderMatchesFullRebuild()

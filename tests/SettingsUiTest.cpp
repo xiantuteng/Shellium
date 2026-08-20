@@ -577,7 +577,10 @@ void SettingsUiTest::referenceThemesCarryTheirPublishedAnsiPalette()
         {"flexoki_dark", 4, "#4385be"},
         {"flexoki_dark", 1, "#d14d41"},
         {"flexoki_light", 4, "#205ea6"},
-        {"termius_dark", 4, "#4aa3ff"},
+        // `ll` 可能通过普通蓝或粗体亮蓝呈现目录名，两个色槽必须
+        // 都保持为用户指定的 #015fff，避免远端配置差异改变目录名颜色。
+        {"termius_dark", 4, "#015fff"},
+        {"termius_dark", 12, "#015fff"},
         {"termius_light", 4, "#2f6fd0"},
     };
     for (const Expectation &expectation : expectations) {

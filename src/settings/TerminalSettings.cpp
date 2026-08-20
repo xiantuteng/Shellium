@@ -329,10 +329,13 @@ const QList<TerminalThemePreset> &TerminalSettings::themePresets()
          {QColor(QStringLiteral("#131a24")), QColor(QStringLiteral("#3ecf8f")),
           QColor(QStringLiteral("#2bd981")), QColor(QStringLiteral("#26303f")),
           QColor(QStringLiteral("#4aa3ff")),
+          // 4 号普通蓝和 12 号亮蓝统一使用 #015fff。常见 DIR_COLORS 使用
+          // `01;34`，其中粗体可能会把蓝色映射到 12 号亮色槽；两个色槽保持
+          // 一致可避免同类目录名因远端粗体策略不同而出现两种蓝色。
           ansiFrom({"#1c2532", "#ff6b6b", "#2bd981", "#f3d27a",
-                    "#4aa3ff", "#c792ea", "#4fd6d6", "#d5dae1",
+                    "#015fff", "#c792ea", "#4fd6d6", "#d5dae1",
                     "#46536b", "#ff8c8c", "#6ff0ac", "#ffe29a",
-                    "#7ec0ff", "#dcb0ff", "#86ecec", "#f2f5f8"})}},
+                    "#015fff", "#dcb0ff", "#86ecec", "#f2f5f8"})}},
         {QStringLiteral("termius_light"),
          QStringLiteral("Termius Light"),
          false,

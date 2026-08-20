@@ -169,7 +169,7 @@ int main(int argc, char *argv[])
 {
     QApplication application(argc, argv);
     QCoreApplication::setApplicationName(QStringLiteral("Shellium"));
-    QCoreApplication::setApplicationVersion(QStringLiteral("0.1.8"));
+    QCoreApplication::setApplicationVersion(QStringLiteral("0.1.9"));
     QCoreApplication::setOrganizationName(QStringLiteral("Shellium"));
 
     // Qt 资源中的 PNG 使用与 macOS Bundle 相同的圆角方形设计，并保留透明外围安全区；它会

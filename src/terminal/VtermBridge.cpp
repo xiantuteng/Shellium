@@ -25,6 +25,32 @@ QColor toQColor(const VTermScreen *screen, VTermColor color)
     return QColor(color.rgb.red, color.rgb.green, color.rgb.blue);
 }
 
+/**
+ * @brief 解析前景色，并将 `ll` 常用的目录蓝统一为 `#015fff`。
+ * @param screen libvterm 屏幕实例，用于把索引色解析为 RGB。
+ * @param color 单元格原始前景色，可能是 ANSI/256 色索引，也可能是 TrueColor。
+ * @return 交给 Qt 绘制的前景色；命中目录蓝时返回 `#015fff`。
+ *
+ * 服务器的 LS_COLORS 可以使用 `38;5;27`，这不属于主题可覆盖的 ANSI 0-15 号色。
+ * libvterm 会把 27 号色解析为 `#005fff`，所以只修改 TerminalPalette::ansi 不会对
+ * 这类 `ll` 输出生效。同时检查原始索引和解析后 RGB，是为了兼容远端改用
+ * `38;2;0;95;255` TrueColor 表达同一颜色的情况。
+ */
+QColor toForegroundQColor(const VTermScreen *screen, const VTermColor color)
+{
+    constexpr uint8_t kXtermDirectoryBlueIndex = 27;
+    const bool usesXtermDirectoryBlue =
+        VTERM_COLOR_IS_INDEXED(&color) && color.indexed.idx == kXtermDirectoryBlueIndex;
+    const QColor resolved = toQColor(screen, color);
+
+    // 256 色 27 号本身解析为 #005fff；此处把索引色和等价 TrueColor
+    // 写法统一调整为用户指定的 #015fff，避免两种 LS_COLORS 表达产生色差。
+    if (usesXtermDirectoryBlue || resolved == QColor(QStringLiteral("#005fff"))) {
+        return QColor(QStringLiteral("#015fff"));
+    }
+    return resolved;
+}
+
 } // namespace
 
 VtermBridge::VtermBridge(QObject *parent)
@@ -678,7 +704,7 @@ VtermBridge::Cell VtermBridge::convertCell(const VTermScreenCell &cell) const
         converted.text = QString::fromUcs4(
             reinterpret_cast<const char32_t *>(cell.chars), characterCount);
     }
-    converted.foreground = toQColor(m_screen, cell.fg);
+    converted.foreground = toForegroundQColor(m_screen, cell.fg);
     converted.background = toQColor(m_screen, cell.bg);
     converted.bold = cell.attrs.bold;
     converted.italic = cell.attrs.italic;
