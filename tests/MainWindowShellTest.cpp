@@ -7,11 +7,15 @@
 
 #include <QLabel>
 #include <QStackedWidget>
+#include <QSplitter>
+#include <QSplitterHandle>
 #include <QStandardPaths>
 #include <QTabBar>
 #include <QTabWidget>
 #include <QTest>
 #include <QToolButton>
+
+#include <optional>
 
 /**
  * @brief 覆盖主窗口外壳的三条会话入口规则：启动空态、"+"新建、"+"的位置。
@@ -30,6 +34,7 @@ private slots:
     void manualRecoveryCloseKeyClosesTheTab();
     void destroyingWindowWithOpenTabsIsSafe();
     void emptyStateKeepsNewTabButtonNextToTheSidebarToggle();
+    void sidebarWidthIsRestoredOnNextLaunch();
 
 private:
     ApplicationDatabase *m_database = nullptr;
@@ -205,6 +210,50 @@ void MainWindowShellTest::emptyStateKeepsNewTabButtonNextToTheSidebarToggle()
     QVERIFY2(buttonLeft - sidebarRight < 24,
              qPrintable(QStringLiteral("空态下新建按钮与侧栏开关之间空出 %1 像素")
                             .arg(buttonLeft - sidebarRight)));
+}
+
+void MainWindowShellTest::sidebarWidthIsRestoredOnNextLaunch()
+{
+    int draggedWidth = 0;
+    {
+        MainWindow window(m_database, m_vault);
+        window.resize(1400, 800);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+        auto *splitter = window.findChild<QSplitter *>(QStringLiteral("SidebarSplitter"));
+        QVERIFY(splitter != nullptr);
+        QSplitterHandle *handle = splitter->handle(1);
+        QVERIFY(handle != nullptr);
+
+        // 通过真实拖动把手改变宽度，而不是直接 setSizes：只有拖动才会发出 splitterMoved，
+        // 用例必须覆盖"用户拖动 → 落库"这条完整路径，否则漏掉信号连接照样能通过。
+        const QPoint grabPoint = handle->rect().center();
+        QTest::mousePress(handle, Qt::LeftButton, Qt::NoModifier, grabPoint);
+        QTest::mouseMove(handle, grabPoint + QPoint(90, 0));
+        QTest::mouseRelease(handle, Qt::LeftButton, Qt::NoModifier, grabPoint + QPoint(90, 0));
+
+        draggedWidth = splitter->sizes().constFirst();
+        QVERIFY2(draggedWidth > 320,
+                 qPrintable(QStringLiteral("拖动后侧栏宽度仍是 %1，用例没有真正改变宽度")
+                                .arg(draggedWidth)));
+
+        // 析构会补写尚未超时的防抖定时器，这里同时覆盖"拖完立刻关窗"的路径。
+    }
+
+    QString error;
+    const std::optional<int> stored =
+        m_database->intSetting(QStringLiteral("layout/sidebar_width"), &error);
+    QVERIFY2(stored.has_value(), qPrintable(error));
+    QCOMPARE(*stored, draggedWidth);
+
+    MainWindow restarted(m_database, m_vault);
+    restarted.resize(1400, 800);
+    restarted.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&restarted));
+    auto *restoredSplitter = restarted.findChild<QSplitter *>(QStringLiteral("SidebarSplitter"));
+    QVERIFY(restoredSplitter != nullptr);
+    QCOMPARE(restoredSplitter->sizes().constFirst(), draggedWidth);
 }
 
 QTEST_MAIN(MainWindowShellTest)

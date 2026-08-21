@@ -63,6 +63,7 @@
 #include <QUuid>
 
 #include <algorithm>
+#include <optional>
 #include <utility>
 
 namespace {
@@ -83,6 +84,20 @@ constexpr int kSidebarDefaultWidth = 320;
 
 /** @brief 终端工作区的最小宽度，确保侧栏拖动后终端仍可进行基本交互。 */
 constexpr int kWorkspaceMinimumWidth = 420;
+
+/**
+ * @brief 侧栏宽度允许恢复到的上限。
+ *
+ * 用户可能在超宽显示器上把侧栏拖得很宽，再换到笔记本屏幕启动。上限保证恢复出来的侧栏
+ * 不会挤掉整个终端区，同时仍远大于默认宽度，正常的加宽习惯不会被悄悄改小。
+ */
+constexpr int kSidebarMaximumWidth = 900;
+
+/** @brief 侧栏宽度的设置键；数值以像素为单位。 */
+constexpr auto kSidebarWidthSettingKey = "layout/sidebar_width";
+
+/** @brief 拖动停止后延迟落库的毫秒数，用于合并一次拖动中的大量 splitterMoved。 */
+constexpr int kSidebarWidthPersistDelayMs = 300;
 
 /**
  * @brief 从标题区事件源启动操作系统级窗口移动。
@@ -385,7 +400,20 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     m_sidebarSplitter->addWidget(m_workspaceStack);
     m_sidebarSplitter->setStretchFactor(0, 0);
     m_sidebarSplitter->setStretchFactor(1, 1);
-    m_sidebarSplitter->setSizes({kSidebarDefaultWidth, 1000});
+    restoreSidebarWidth();
+
+    // 拖动本身实时生效，落库延后合并：定时器在拖动停止后写一次，析构时再补写未触发的一次。
+    m_sidebarWidthPersistTimer = new QTimer(this);
+    m_sidebarWidthPersistTimer->setSingleShot(true);
+    m_sidebarWidthPersistTimer->setInterval(kSidebarWidthPersistDelayMs);
+    connect(m_sidebarWidthPersistTimer,
+            &QTimer::timeout,
+            this,
+            &MainWindow::persistSidebarWidth);
+    connect(m_sidebarSplitter,
+            &QSplitter::splitterMoved,
+            this,
+            [this]() { m_sidebarWidthPersistTimer->start(); });
 
     bodyLayout->addWidget(m_navigationRail);
     bodyLayout->addWidget(m_sidebarSplitter, 1);
@@ -904,6 +932,13 @@ MainWindow::~MainWindow()
     // 显式移除可以保证析构期间后续控件事件不会回调一个已开始释放成员的 MainWindow。
     qApp->removeEventFilter(this);
 
+    // 拖动后不足防抖间隔就退出应用时，定时器永远等不到超时。这里补写最后一次宽度，
+    // 否则"拖完立刻关窗"这条最常见的路径恰好是唯一丢失设置的路径。
+    if (m_sidebarWidthPersistTimer != nullptr && m_sidebarWidthPersistTimer->isActive()) {
+        m_sidebarWidthPersistTimer->stop();
+        persistSidebarWidth();
+    }
+
     // 标签页是本窗口的子控件，直到基类 ~QWidget 阶段才被删除——那时本类的成员（连接历史
     // 哈希、数据库指针）已经析构完毕。面板此刻发出的 QObject::destroyed 仍会命中登记在
     // MainWindow 上的槽，槽再去访问已释放的容器，进程就在退出的最后一步崩溃。断开以本窗口
@@ -1028,6 +1063,51 @@ void MainWindow::setWorkspaceTabText(const int index, const QString &title)
     if (m_titleTabBar != nullptr && index < m_titleTabBar->count()) {
         m_titleTabBar->setTabText(index, title);
         m_titleTabBar->setTabToolTip(index, title);
+    }
+}
+
+void MainWindow::restoreSidebarWidth()
+{
+    int sidebarWidth = kSidebarDefaultWidth;
+    QString error;
+    if (const std::optional<int> storedWidth =
+            m_database->intSetting(QString::fromLatin1(kSidebarWidthSettingKey), &error);
+        storedWidth.has_value()) {
+        sidebarWidth = qBound(kSidebarMinimumWidth, *storedWidth, kSidebarMaximumWidth);
+    } else if (!error.isEmpty()) {
+        // 读取失败与"用户从未拖动过"必须区分：前者说明磁盘上的值不可信，提示一次比静默
+        // 套用默认宽度更诚实，用户至少知道这次布局没有按上次的来。
+        showTransientMessage(tr("读取侧栏宽度失败：%1").arg(error), 10000);
+    }
+
+    // 第二项只表达"剩余空间归终端"，QSplitter 会按窗口实际宽度整体缩放这组比例。
+    m_sidebarSplitter->setSizes({sidebarWidth, 1000});
+}
+
+void MainWindow::persistSidebarWidth()
+{
+    if (m_sidebarSplitter == nullptr
+        || m_sidebarPanel == nullptr
+        || !m_sidebarPanel->isVisible()) {
+        return;
+    }
+
+    const QList<int> sizes = m_sidebarSplitter->sizes();
+    if (sizes.isEmpty()) {
+        return;
+    }
+    const int sidebarWidth = sizes.constFirst();
+    if (sidebarWidth < kSidebarMinimumWidth) {
+        // 收起动画或窗口过窄导致的临时挤压不代表用户意图，保存它会让下次启动的侧栏
+        // 停在一个用户没选过的宽度上。
+        return;
+    }
+
+    QString error;
+    if (!m_database->setIntSetting(QString::fromLatin1(kSidebarWidthSettingKey),
+                                   qMin(sidebarWidth, kSidebarMaximumWidth),
+                                   &error)) {
+        showTransientMessage(tr("保存侧栏宽度失败：%1").arg(error), 10000);
     }
 }
 

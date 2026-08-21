@@ -190,6 +190,22 @@ private:
     void showSidebarPage(int pageIndex);
 
     /**
+     * @brief 读取上次持久化的侧栏宽度并应用到分隔器。
+     *
+     * 读取失败或数值越界都退回默认宽度，而不是把损坏值原样交给 QSplitter：一个过小或
+     * 过大的宽度会让侧栏或终端在启动后完全无法使用，用户也没有入口修正它。
+     */
+    void restoreSidebarWidth();
+
+    /**
+     * @brief 把分隔器当前的侧栏宽度写入数据库设置。
+     *
+     * 只在侧栏可见且宽度不小于最小值时写入。侧栏被收起时 QSplitter 会把它的尺寸压成 0，
+     * 若照单保存，下次启动恢复出来的就是一条看不见的侧栏。
+     */
+    void persistSidebarWidth();
+
+    /**
      * @brief 根据当前设置应用窗口级现代化视觉系统。
      * @param settings 已规范化的终端设置快照。
      *
@@ -301,6 +317,13 @@ private:
      * 时 Qt 会自动隐藏对应把手，再次展开时恢复用户上一次拖动后的宽度。
      */
     QSplitter *m_sidebarSplitter = nullptr;
+    /**
+     * @brief 侧栏宽度落库的防抖定时器。
+     *
+     * 分隔器为实时拖动，splitterMoved 会在一次拖动中发出上百次；逐次写库既拖慢拖动手感，
+     * 也在磁盘上留下大量无意义事务。定时器只在拖动停下后写一次最终宽度。
+     */
+    QTimer *m_sidebarWidthPersistTimer = nullptr;
     /** @brief 承载主机、效率工具和端口转发三个互斥页面。 */
     QStackedWidget *m_sidebarStack = nullptr;
     /** @brief 当前侧栏页面标题。 */
