@@ -137,6 +137,9 @@ private slots:
     /** @brief 名称行的分组下拉必须真正改变主机归属，而不只是显示用的装饰。 */
     void groupComboMovesHostIntoSelectedGroup();
 
+    /** @brief 分组下拉框的顺序必须与侧边栏主机树一致（按 sortOrder），而不是按名称字母排序。 */
+    void groupComboOrderMatchesSidebarTreeOrder();
+
 private:
     [[nodiscard]] QTreeWidgetItem *findItem(const HostManagerWidget &widget,
                                             const QString &name) const;
@@ -2060,18 +2063,11 @@ void HostManagerWidgetTest::tagEditorPersistsTagWithChosenColorAndOffersHistory(
             auto *chooser = tagDialog == nullptr
                 ? nullptr
                 : tagDialog->findChild<QWidget *>(QStringLiteral("hostTagColorChooser"));
-            auto *addTag = tagDialog == nullptr
-                ? nullptr
-                : tagDialog->findChild<QPushButton *>(QStringLiteral("hostTagAddButton"));
-            auto *selected = tagDialog == nullptr
-                ? nullptr
-                : tagDialog->findChild<QListWidget *>(QStringLiteral("hostTagSelectedList"));
             auto *accept = tagDialog == nullptr
                 ? nullptr
                 : tagDialog->findChild<QPushButton *>(QStringLiteral("hostTagAcceptButton"));
-            if (tagName == nullptr || chooser == nullptr || addTag == nullptr
-                || selected == nullptr || accept == nullptr) {
-                failure = QStringLiteral("标签窗口缺少名称、配色、添加或确定入口");
+            if (tagName == nullptr || chooser == nullptr || accept == nullptr) {
+                failure = QStringLiteral("标签窗口缺少名称、配色或确定入口");
                 if (tagDialog != nullptr) {
                     tagDialog->reject();
                 }
@@ -2089,14 +2085,9 @@ void HostManagerWidgetTest::tagEditorPersistsTagWithChosenColorAndOffersHistory(
             picked->setChecked(true);
             chosenColor = picked->toolTip();
             tagName->setText(QStringLiteral("生产"));
-            addTag->click();
-            if (selected->count() != 1
-                || selected->item(0)->text() != QStringLiteral("生产")) {
-                failure = QStringLiteral("添加后的标签没有进入本机标签列表");
-                tagDialog->reject();
-                return;
-            }
-            accept->click();
+            // 添加按钮和中间提交步骤都已去掉：回车与点击"确定"等价，直接按名称框和颜色
+            // 选择器的当前内容确认并关闭窗口。
+            QTest::keyClick(tagName, Qt::Key_Return);
         });
         tagButton->click();
         if (!failure.isEmpty()) {
@@ -2149,11 +2140,18 @@ void HostManagerWidgetTest::tagEditorPersistsTagWithChosenColorAndOffersHistory(
             auto *tagDialog = qobject_cast<QDialog *>(QApplication::activeModalWidget());
             auto *history = tagDialog == nullptr
                 ? nullptr
-                : tagDialog->findChild<QListWidget *>(QStringLiteral("hostTagHistoryList"));
+                : tagDialog->findChild<QWidget *>(QStringLiteral("hostTagHistoryFlow"));
             if (history == nullptr) {
-                historyFailure = QStringLiteral("标签窗口缺少历史标签列表");
-            } else if (history->findItems(QStringLiteral("生产"), Qt::MatchExactly).isEmpty()) {
-                historyFailure = QStringLiteral("历史标签列表没有列出已在别处使用过的标签");
+                historyFailure = QStringLiteral("标签窗口缺少历史标签流式布局");
+            } else {
+                const QList<QToolButton *> chips =
+                    history->findChildren<QToolButton *>(QStringLiteral("hostTagChip"));
+                const bool found = std::any_of(chips.begin(), chips.end(), [](const QToolButton *chip) {
+                    return chip->text() == QStringLiteral("#生产");
+                });
+                if (!found) {
+                    historyFailure = QStringLiteral("历史标签胶囊没有列出已在别处使用过的标签");
+                }
             }
             if (tagDialog != nullptr) {
                 tagDialog->reject();
@@ -2226,6 +2224,63 @@ void HostManagerWidgetTest::groupComboMovesHostIntoSelectedGroup()
     QVERIFY2(movedItem->parent() != nullptr
                  && movedItem->parent()->text(0) == QStringLiteral("目标分组"),
              "改组保存后主机没有出现在目标分组下");
+}
+
+void HostManagerWidgetTest::groupComboOrderMatchesSidebarTreeOrder()
+{
+    // sortOrder 故意与名称字母序相反：侧边栏应按 sortOrder 显示 Zeta 在前、Alpha 在后，
+    // 而按字母排序会得到相反结果——用这个反例才能分辨下拉框到底依据哪一种顺序。
+    HostRecord zeta;
+    zeta.id = QStringLiteral("zeta-group-id");
+    zeta.kind = HostNodeKind::Folder;
+    zeta.name = QStringLiteral("Zeta");
+    zeta.sortOrder = 0;
+    QString error;
+    QVERIFY2(m_database->saveHost(zeta, &error), qPrintable(error));
+
+    HostRecord alpha;
+    alpha.id = QStringLiteral("alpha-group-id");
+    alpha.kind = HostNodeKind::Folder;
+    alpha.name = QStringLiteral("Alpha");
+    alpha.sortOrder = 1;
+    QVERIFY2(m_database->saveHost(alpha, &error), qPrintable(error));
+
+    HostRecord host;
+    host.id = QStringLiteral("order-check-host-id");
+    host.kind = HostNodeKind::Host;
+    host.name = QStringLiteral("顺序检查主机");
+    host.host = QStringLiteral("192.0.2.60");
+    QVERIFY2(m_database->saveHost(host, &error), qPrintable(error));
+
+    HostManagerWidget widget(m_database.get(), m_vault.get());
+    QTreeWidgetItem *item = findItem(widget, host.name);
+    QVERIFY(item != nullptr);
+    widget.findChild<QTreeWidget *>()->setCurrentItem(item);
+
+    QString failure;
+    QStringList observedOrder;
+    QTimer::singleShot(0, [&failure, &observedOrder]() {
+        auto *dialog = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+        auto *groupCombo = dialog == nullptr
+            ? nullptr
+            : dialog->findChild<QComboBox *>(QStringLiteral("hostRecordGroupCombo"));
+        if (groupCombo == nullptr) {
+            failure = QStringLiteral("编辑窗口缺少分组下拉框");
+            if (dialog != nullptr) {
+                dialog->reject();
+            }
+            return;
+        }
+        for (int i = 0; i < groupCombo->count(); ++i) {
+            observedOrder.append(groupCombo->itemText(i));
+        }
+        dialog->reject();
+    });
+    widget.editSelected();
+    QVERIFY2(failure.isEmpty(), qPrintable(failure));
+
+    QCOMPARE(observedOrder,
+             QStringList({QStringLiteral("未分组"), QStringLiteral("Zeta"), QStringLiteral("Alpha")}));
 }
 
 QTEST_MAIN(HostManagerWidgetTest)

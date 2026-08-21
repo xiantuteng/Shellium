@@ -3,12 +3,18 @@
 
 #include <QCheckBox>
 #include <QDir>
+#include <QDragEnterEvent>
+#include <QDragLeaveEvent>
+#include <QDropEvent>
 #include <QFile>
+#include <QFocusEvent>
 #include <QFrame>
 #include <QHeaderView>
 #include <QHBoxLayout>
+#include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QMimeData>
 #include <QProgressBar>
 #include <QRegularExpression>
 #include <QResizeEvent>
@@ -18,6 +24,7 @@
 #include <QToolButton>
 #include <QTreeView>
 #include <QTreeWidget>
+#include <QUrl>
 
 /**
  * @brief 为远程文件管理界面提供不访问网络的隧道 Broker 测试替身。
@@ -117,6 +124,15 @@ private slots:
 
     /** @brief 本地栏不再有 QFileSystemModel 惰性懒加载兜底，构造完成时必须已列出主目录。 */
     void localFileTreePopulatesHomeDirectoryImmediatelyOnConstruction();
+
+    /** @brief 合法拖拽悬停在文件栏上方时必须显示放置目标框，离开或落下后必须撤销。 */
+    void fileTreesShowDropTargetHighlightWhileDraggingAndClearItAfterward();
+
+    /** @brief 拖放必须一律落到当前浏览目录，不能按鼠标悬停的具体条目重新定向。 */
+    void droppingOntoFileTreeAlwaysTargetsCurrentDirectoryNotHoveredItem();
+
+    /** @brief 本地/远程路径框获得焦点时必须自动全选已有文字，方便整段替换。 */
+    void pathEditsSelectAllExistingTextWhenFocused();
 
     /** @brief 宽窗口展示动作文字，窄窗口保留语义和提示但改用紧凑图标。 */
     void actionBarRespondsToAvailableWidth();
@@ -394,6 +410,130 @@ void RemoteFileManagerWidgetTest::localFileTreePopulatesHomeDirectoryImmediately
     QCOMPARE(pathEdit->text(), QDir(homeDir.path()).absolutePath());
     QCOMPARE(localTree->topLevelItemCount(), 1);
     QCOMPARE(localTree->topLevelItem(0)->text(0), QStringLiteral("probe.txt"));
+}
+
+void RemoteFileManagerWidgetTest::fileTreesShowDropTargetHighlightWhileDraggingAndClearItAfterward()
+{
+    // 与 RemoteFileManagerWidget.cpp 匿名命名空间里的 kRemotePathMimeType 保持一致；
+    // 该常量不对外暴露，测试只能按值复制一份。
+    constexpr char kRemotePathMimeType[] = "application/x-shellium-remote-path";
+
+    RemoteFileManagerWidget widget;
+    auto *remoteTree = widget.findChild<QTreeWidget *>(QStringLiteral("RemoteFileTree"));
+    auto *localTree = widget.findChild<QTreeWidget *>(QStringLiteral("LocalFileTree"));
+    QVERIFY(remoteTree != nullptr);
+    QVERIFY(localTree != nullptr);
+    QVERIFY2(!remoteTree->property("dragActive").toBool(), "远程栏初始状态不应显示放置目标框");
+    QVERIFY2(!localTree->property("dragActive").toBool(), "本地栏初始状态不应显示放置目标框");
+
+    // 远程栏接收操作系统/本地栏拖来的本地文件 URL。
+    QMimeData localFileMimeData;
+    localFileMimeData.setUrls({QUrl::fromLocalFile(QDir::tempPath())});
+    QDragEnterEvent remoteEnter(QPoint(5, 5), Qt::CopyAction, &localFileMimeData,
+                                Qt::LeftButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(remoteTree->viewport(), &remoteEnter);
+    QVERIFY2(remoteTree->property("dragActive").toBool(),
+             "本地文件拖入远程栏时必须显示放置目标框");
+
+    QDragLeaveEvent remoteLeave;
+    QCoreApplication::sendEvent(remoteTree->viewport(), &remoteLeave);
+    QVERIFY2(!remoteTree->property("dragActive").toBool(),
+             "拖拽离开远程栏而未落下时必须撤销放置目标框");
+
+    // 本地栏接收远程栏拖来的自定义远程条目格式。
+    QMimeData remoteEntryMimeData;
+    remoteEntryMimeData.setData(kRemotePathMimeType, QByteArrayLiteral("/root/a.txt"));
+    QDragEnterEvent localEnter(QPoint(5, 5), Qt::CopyAction, &remoteEntryMimeData,
+                               Qt::LeftButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(localTree->viewport(), &localEnter);
+    QVERIFY2(localTree->property("dragActive").toBool(),
+             "远程条目拖入本地栏时必须显示放置目标框");
+
+    QDropEvent localDrop(QPoint(5, 5), Qt::CopyAction, &remoteEntryMimeData,
+                         Qt::LeftButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(localTree->viewport(), &localDrop);
+    QVERIFY2(!localTree->property("dragActive").toBool(),
+             "落下后必须立即撤销放置目标框，不能停留到下一次拖拽");
+}
+
+void RemoteFileManagerWidgetTest::droppingOntoFileTreeAlwaysTargetsCurrentDirectoryNotHoveredItem()
+{
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    QFile payload(tempDir.filePath(QStringLiteral("payload.txt")));
+    QVERIFY(payload.open(QIODevice::WriteOnly));
+    payload.write(QByteArrayLiteral("x"));
+    payload.close();
+
+    ConnectionTarget target;
+    target.id = QStringLiteral("layer-1");
+    target.displayName = QStringLiteral("test-host");
+    // 与本文件其它用例一致：127.0.0.1 上几乎不会有服务监听 1 号端口，真正的连接尝试会
+    // 立即失败，不影响下面同步完成的入队断言。
+    target.host = QStringLiteral("127.0.0.1");
+    target.port = 1;
+    target.username = QStringLiteral("tester");
+
+    RemoteFileManagerWidget widget;
+    widget.setAvailableTargets({target});
+
+    auto *pathEdit = widget.findChild<QLineEdit *>(QStringLiteral("SftpRemotePathEdit"));
+    auto *remoteTree = widget.findChild<QTreeWidget *>(QStringLiteral("RemoteFileTree"));
+    auto *queueList = widget.findChild<QListWidget *>(QStringLiteral("SftpTransferQueue"));
+    QVERIFY(pathEdit != nullptr);
+    QVERIFY(remoteTree != nullptr);
+    QVERIFY(queueList != nullptr);
+
+    pathEdit->setText(QStringLiteral("/current"));
+
+    // 手工塞一个"另一个目录"条目，模拟拖拽时鼠标恰好悬停在别的子目录行上——旧实现会把
+    // 上传目标错误地重定向到这个悬停条目，而不是地址框显示的当前目录。
+    auto *decoyItem = new QTreeWidgetItem(remoteTree);
+    decoyItem->setText(0, QStringLiteral("decoy"));
+    decoyItem->setData(0, Qt::UserRole, QStringLiteral("/current/decoy"));
+    decoyItem->setData(0, Qt::UserRole + 1, true);
+    const QRect decoyRect = remoteTree->visualItemRect(decoyItem);
+    QVERIFY2(!decoyRect.isEmpty(), "测试条目必须先出现在可见视口内才能被拖放命中");
+
+    QMimeData mimeData;
+    mimeData.setUrls({QUrl::fromLocalFile(payload.fileName())});
+    // QAbstractItemView 的拖放状态机要求先有 DragEnter 才会在 viewportEvent 里转发
+    // 随后的 Drop；直接发 Drop 会被内部状态判定为"不在拖拽中"而静默忽略。
+    QDragEnterEvent dragEnter(decoyRect.center(), Qt::CopyAction, &mimeData,
+                              Qt::LeftButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(remoteTree->viewport(), &dragEnter);
+
+    QDropEvent dropEvent(decoyRect.center(), Qt::CopyAction, &mimeData,
+                         Qt::LeftButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(remoteTree->viewport(), &dropEvent);
+
+    QCOMPARE(queueList->count(), 1);
+    auto *nameLabel = queueList->findChild<QLabel *>(QStringLiteral("SftpQueueItemName"));
+    QVERIFY(nameLabel != nullptr);
+    QCOMPARE(nameLabel->text(), QStringLiteral("上传 payload.txt → /current"));
+}
+
+void RemoteFileManagerWidgetTest::pathEditsSelectAllExistingTextWhenFocused()
+{
+    RemoteFileManagerWidget widget;
+    auto *localPathEdit = widget.findChild<QLineEdit *>(QStringLiteral("SftpLocalPathEdit"));
+    auto *remotePathEdit = widget.findChild<QLineEdit *>(QStringLiteral("SftpRemotePathEdit"));
+    QVERIFY(localPathEdit != nullptr);
+    QVERIFY(remotePathEdit != nullptr);
+
+    for (QLineEdit *pathEdit : {localPathEdit, remotePathEdit}) {
+        pathEdit->setText(QStringLiteral("/var/www/html"));
+        pathEdit->deselect();
+        QVERIFY2(pathEdit->selectedText().isEmpty(),
+                 "测试前置条件：焦点事件之前不应该已经选中文字");
+
+        QFocusEvent focusIn(QEvent::FocusIn, Qt::MouseFocusReason);
+        QCoreApplication::sendEvent(pathEdit, &focusIn);
+        // 全选被安排在 QTimer::singleShot(0, ...) 里执行，必须先把事件循环转一圈。
+        QCoreApplication::processEvents();
+
+        QCOMPARE(pathEdit->selectedText(), QStringLiteral("/var/www/html"));
+    }
 }
 
 void RemoteFileManagerWidgetTest::remoteNameColumnNeverShrinksBelowMinimumWidth()

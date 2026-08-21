@@ -23,11 +23,13 @@
 #include <QFontDatabase>
 #include <QFrame>
 #include <QHBoxLayout>
+#include <QIcon>
 #include <QInputDialog>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLabel>
+#include <QLayout>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QMenu>
@@ -51,6 +53,7 @@
 
 #include <algorithm>
 #include <functional>
+#include <tuple>
 
 namespace {
 
@@ -179,6 +182,29 @@ bool saveTagColors(ApplicationDatabase *database, const QHash<QString, QString> 
 {
     const QColor stored(colors.value(tag));
     return stored.isValid() ? stored : ShelliumUi::accentColor();
+}
+
+/**
+ * @brief 按标签实际配色生成药丸按钮的样式表，供名称框入口和标签编辑器的历史胶囊共用。
+ * @param color 标签颜色。
+ * @param highlighted 是否处于"当前正被编辑"的高亮态；只调深底色透明度，不引入描边，
+ *        避免边框改变按钮几何尺寸导致流式布局在切换态之间跳动。
+ * @return 可直接传给 QToolButton::setStyleSheet() 的样式表。
+ */
+[[nodiscard]] QString tagPillStyleSheet(const QColor &color, bool highlighted = false)
+{
+    QColor fill = color;
+    fill.setAlphaF(highlighted ? 0.32F : 0.16F);
+    const QColor text = color.darker(135);
+    return QStringLiteral(
+        "QToolButton { border: none; background: rgba(%1,%2,%3,%4); color: %5;"
+        " border-radius: 8px; min-height: 24px; max-height: 24px; padding: 0 7px;"
+        " font-size: 12px; font-weight: 600; }")
+        .arg(fill.red())
+        .arg(fill.green())
+        .arg(fill.blue())
+        .arg(fill.alphaF())
+        .arg(text.name());
 }
 
 /**
@@ -967,6 +993,89 @@ void configureSidebarIconButton(QToolButton *button, const QString &accessibleNa
 }
 
 /**
+ * @brief 极简流式布局：子控件从左到右排列，超出可用宽度后自动换到下一行。
+ *
+ * 历史标签数量不固定，用普通的 QHBoxLayout 只会把多余标签挤出可视区域或产生横向滚动条；
+ * Qt 没有内置的流式布局，这里按官方示例精简实现一份，仅服务于标签胶囊的排列场景。
+ */
+class FlowLayout final : public QLayout {
+public:
+    explicit FlowLayout(QWidget *parent, int hSpacing = 8, int vSpacing = 8)
+        : QLayout(parent)
+        , m_hSpace(hSpacing)
+        , m_vSpace(vSpacing)
+    {
+    }
+
+    ~FlowLayout() override
+    {
+        QLayoutItem *item = nullptr;
+        while ((item = takeAt(0)) != nullptr) {
+            delete item;
+        }
+    }
+
+    void addItem(QLayoutItem *item) override { m_items.append(item); }
+    [[nodiscard]] int count() const override { return m_items.size(); }
+    [[nodiscard]] QLayoutItem *itemAt(int index) const override { return m_items.value(index); }
+    QLayoutItem *takeAt(int index) override
+    {
+        return (index >= 0 && index < m_items.size()) ? m_items.takeAt(index) : nullptr;
+    }
+    [[nodiscard]] Qt::Orientations expandingDirections() const override { return {}; }
+    [[nodiscard]] bool hasHeightForWidth() const override { return true; }
+    [[nodiscard]] int heightForWidth(int width) const override
+    {
+        return doLayout(QRect(0, 0, width, 0), true);
+    }
+    void setGeometry(const QRect &rect) override
+    {
+        QLayout::setGeometry(rect);
+        std::ignore = doLayout(rect, false);
+    }
+    [[nodiscard]] QSize sizeHint() const override { return minimumSize(); }
+    [[nodiscard]] QSize minimumSize() const override
+    {
+        QSize size;
+        for (const QLayoutItem *item : m_items) {
+            size = size.expandedTo(item->minimumSize());
+        }
+        const QMargins margins = contentsMargins();
+        size += QSize(margins.left() + margins.right(), margins.top() + margins.bottom());
+        return size;
+    }
+
+private:
+    [[nodiscard]] int doLayout(const QRect &rect, bool testOnly) const
+    {
+        const QMargins margins = contentsMargins();
+        const QRect area = rect.adjusted(margins.left(), margins.top(), -margins.right(), -margins.bottom());
+        int x = area.x();
+        int y = area.y();
+        int lineHeight = 0;
+        for (QLayoutItem *item : m_items) {
+            int nextX = x + item->sizeHint().width() + m_hSpace;
+            if (nextX - m_hSpace > area.right() && lineHeight > 0) {
+                x = area.x();
+                y += lineHeight + m_vSpace;
+                nextX = x + item->sizeHint().width() + m_hSpace;
+                lineHeight = 0;
+            }
+            if (!testOnly) {
+                item->setGeometry(QRect(QPoint(x, y), item->sizeHint()));
+            }
+            x = nextX;
+            lineHeight = std::max(lineHeight, item->sizeHint().height());
+        }
+        return y + lineHeight - rect.y() + margins.bottom();
+    }
+
+    QList<QLayoutItem *> m_items;
+    int m_hSpace;
+    int m_vSpace;
+};
+
+/**
  * @brief 标签配色选择用的小圆点按钮。
  *
  * 用自绘按钮而不是带背景色样式表的 QPushButton：样式表里的背景色会被全局主题的按钮规则
@@ -976,7 +1085,7 @@ class TagColorSwatch final : public QAbstractButton {
 public:
     /**
      * @brief 创建一个展示指定颜色的可选中圆点。
-     * @param color 该分段代表的标签颜色。
+     * @param color 该分段代表的颜色。
      * @param parent Qt 父控件。
      */
     TagColorSwatch(const QColor &color, QWidget *parent = nullptr)
@@ -985,7 +1094,9 @@ public:
     {
         setCheckable(true);
         setCursor(Qt::PointingHandCursor);
-        setFixedSize(28, 28);
+        // 选中态要在圆点外面再画一圈描边，固定尺寸必须比圆点本身留出至少一圈的余量，
+        // 否则描边会顶到控件边界，抗锯齿处理后看起来像被裁掉了一截、圆环不闭合。
+        setFixedSize(32, 32);
         setToolTip(color.name());
         setAccessibleName(tr("标签颜色 %1").arg(color.name()));
     }
@@ -1004,38 +1115,18 @@ protected:
         painter.setBrush(m_color);
         painter.drawEllipse(center, 9.0, 9.0);
         if (isChecked()) {
-            // 选中态用同色外圈而不是勾号：圆点只有 18 像素，勾号会盖住正在挑选的颜色本身。
+            // 选中态用同色外圈而不是勾号：圆点很小，勾号会盖住正在挑选的颜色本身。
             QPen ring(m_color);
             ring.setWidthF(2.0);
             painter.setPen(ring);
             painter.setBrush(Qt::NoBrush);
-            painter.drawEllipse(center, 12.0, 12.0);
+            painter.drawEllipse(center, 13.0, 13.0);
         }
     }
 
 private:
     QColor m_color;
 };
-
-/**
- * @brief 生成标签列表项左侧的实心圆点图标。
- * @param color 标签颜色。
- * @return 与当前设备像素比匹配的圆点位图。
- */
-[[nodiscard]] QPixmap tagColorDot(const QColor &color)
-{
-    constexpr int kLogicalSize = 12;
-    const qreal ratio = qApp == nullptr ? 1.0 : qApp->devicePixelRatio();
-    QPixmap pixmap(QSize(kLogicalSize, kLogicalSize) * ratio);
-    pixmap.setDevicePixelRatio(ratio);
-    pixmap.fill(Qt::transparent);
-    QPainter painter(&pixmap);
-    painter.setRenderHint(QPainter::Antialiasing, true);
-    painter.setPen(Qt::NoPen);
-    painter.setBrush(color);
-    painter.drawEllipse(QRectF(1.0, 1.0, kLogicalSize - 2.0, kLogicalSize - 2.0));
-    return pixmap;
-}
 
 /**
  * @brief 主机标签编辑器：新增标签、选择配色并复用历史标签。
@@ -1073,10 +1164,7 @@ public:
         setObjectName(QStringLiteral("ConnectionDialog"));
         setWindowTitle(tr("标签"));
         setMinimumWidth(420);
-        // 卡片里的换行说明按更宽的行宽估算高度，导致布局最小高度比真实需要略小；窗口若刚好
-        // 以最小高度打开，颜色圆点会被行边界裁掉下半圈。这里给出略大的初始尺寸，用户仍可
-        // 自由缩放。
-        resize(440, 720);
+        resize(440, 480);
 
         m_nameEdit = new QLineEdit(this);
         m_nameEdit->setObjectName(QStringLiteral("hostTagNameEdit"));
@@ -1087,7 +1175,7 @@ public:
         colorRow->setObjectName(QStringLiteral("hostTagColorChooser"));
         // 圆点是自绘的固定尺寸控件：不锁定行高，外层布局在窗口偏矮时会把整行压扁，圆点被
         // 裁掉下半部分，看上去像一排半圆而不是颜色。
-        colorRow->setFixedHeight(28);
+        colorRow->setFixedHeight(32);
         auto *colorLayout = new QHBoxLayout(colorRow);
         colorLayout->setContentsMargins(0, 0, 0, 0);
         colorLayout->setSpacing(6);
@@ -1105,46 +1193,17 @@ public:
         colorLayout->addStretch(1);
         m_swatches.constFirst()->setChecked(true);
 
-        auto *addButton = new QPushButton(tr("添加"), this);
-        addButton->setObjectName(QStringLiteral("hostTagAddButton"));
-        addButton->setProperty("primaryAction", true);
-        UiIcons::decorateButton(
-            addButton,
-            UiIcons::symbol(this, UiIcons::Symbol::Check, QColor(QStringLiteral("#0c2f24"))),
-            tr("将当前名称和颜色设为本机标签（替换原有标签）"));
+        m_historyFlowWidget = new QWidget(this);
+        m_historyFlowWidget->setObjectName(QStringLiteral("hostTagHistoryFlow"));
+        new FlowLayout(m_historyFlowWidget);
 
-        auto *nameContainer = new QWidget(this);
-        auto *nameContainerLayout = new QHBoxLayout(nameContainer);
-        nameContainerLayout->setContentsMargins(0, 0, 0, 0);
-        nameContainerLayout->setSpacing(8);
-        nameContainerLayout->addWidget(m_nameEdit, 1);
-        nameContainerLayout->addWidget(addButton);
-
-        auto *editorCard = new SettingsCard(tr("新增标签"), this);
-        editorCard->addWideRow(tr("名称"), nameContainer);
-        editorCard->addWideRow(
-            tr("颜色"), colorRow, tr("同名标签在所有主机上共用同一种颜色。"));
-
-        m_selectedList = new QListWidget(this);
-        m_selectedList->setObjectName(QStringLiteral("hostTagSelectedList"));
-        m_selectedList->setMinimumHeight(84);
-        auto *removeButton = new QPushButton(tr("移除"), this);
-        removeButton->setObjectName(QStringLiteral("hostTagRemoveButton"));
-        UiIcons::decorateButton(
-            removeButton,
-            UiIcons::symbol(
-                this, UiIcons::Symbol::Cancel, this->palette().color(QPalette::WindowText)),
-            tr("从本机移除选中的标签"));
-        auto *selectedCard = new SettingsCard(tr("本机标签"), this);
-        selectedCard->addFullWidthWidget(m_selectedList);
-        selectedCard->addFullWidthWidget(removeButton);
-
-        m_historyList = new QListWidget(this);
-        m_historyList->setObjectName(QStringLiteral("hostTagHistoryList"));
-        m_historyList->setMinimumHeight(84);
-        auto *historyCard = new SettingsCard(tr("历史标签"), this);
-        historyCard->addFullWidthWidget(m_historyList);
-        historyCard->addNote(tr("双击历史标签即可加入本机；单击则载入名称与颜色以便修改。"));
+        // 卡片不设标题：窗口标题已经是"标签"，名称、颜色和历史标签又是同一件事——挑一个
+        // 名称和颜色——没有必要在正文里再重复一次这个词。
+        auto *editorCard = new SettingsCard(QString(), this);
+        editorCard->addWideRow(tr("名称"), m_nameEdit);
+        editorCard->addWideRow(tr("颜色"), colorRow);
+        editorCard->addFullWidthWidget(m_historyFlowWidget);
+        editorCard->addNote(tr("点击标签可将其名称与颜色载入上方，供编辑或直接确认。"));
 
         auto *footer = new QWidget(this);
         footer->setObjectName(QStringLiteral("SettingsFooter"));
@@ -1178,52 +1237,20 @@ public:
         bodyLayout->setContentsMargins(22, 20, 22, 18);
         bodyLayout->setSpacing(16);
         bodyLayout->addWidget(editorCard);
-        bodyLayout->addWidget(selectedCard);
-        bodyLayout->addWidget(historyCard);
+        bodyLayout->addStretch(1);
         layout->addWidget(body, 1);
         layout->addWidget(footer);
 
-        connect(addButton, &QPushButton::clicked, this, [this]() { commitEditedTag(); });
-        // 回车是输入标签名后最自然的确认动作；若交给对话框默认按钮，会直接关窗并丢掉刚
-        // 输入的名称。
-        connect(m_nameEdit, &QLineEdit::returnPressed, this, [this]() { commitEditedTag(); });
-        connect(removeButton, &QPushButton::clicked, this, [this]() {
-            const QListWidgetItem *current = m_selectedList->currentItem();
-            if (current == nullptr) {
-                return;
-            }
-            m_tags.removeAll(current->text());
-            refreshLists();
-        });
-        connect(m_selectedList, &QListWidget::itemClicked, this, [this](QListWidgetItem *item) {
-            loadTagIntoEditor(item->text());
-        });
-        connect(m_historyList, &QListWidget::itemClicked, this, [this](QListWidgetItem *item) {
-            loadTagIntoEditor(item->text());
-        });
-        connect(m_historyList, &QListWidget::itemDoubleClicked, this, [this](QListWidgetItem *item) {
-            loadTagIntoEditor(item->text());
-            commitEditedTag();
-        });
+        // 回车等价于点击"确定"：保存动作统一只读名称框和颜色选择器的当前内容，不需要
+        // 单独的中间提交步骤。
+        connect(m_nameEdit, &QLineEdit::returnPressed, this, [this]() { accept(); });
         connect(cancelButton, &QPushButton::clicked, this, &QDialog::reject);
         connect(acceptButton, &QPushButton::clicked, this, &QDialog::accept);
 
-        // 全局样式表只覆盖具名列表；这里按当前调色板补一份同样的卡片式外观，避免两个列表在
-        // 深色主题下退化成系统默认的浅色方框。颜色全部取自 QPalette，主题切换后自动跟随。
-        QColor listBorder = palette().color(QPalette::WindowText);
-        listBorder.setAlphaF(0.18F);
-        setStyleSheet(QStringLiteral(
-            "QListWidget#hostTagSelectedList, QListWidget#hostTagHistoryList {"
-            " background: %1; color: %2; border: 1px solid rgba(%3,%4,%5,%6);"
-            " border-radius: 11px; outline: 0; padding: 0; }")
-                          .arg(palette().color(QPalette::Base).name(),
-                               palette().color(QPalette::Text).name())
-                          .arg(listBorder.red())
-                          .arg(listBorder.green())
-                          .arg(listBorder.blue())
-                          .arg(listBorder.alphaF()));
-
         m_history = collectKnownTags(m_database);
+        if (!m_tags.isEmpty()) {
+            loadTagIntoEditor(m_tags.constFirst());
+        }
         refreshLists();
     }
 
@@ -1234,9 +1261,32 @@ public:
     [[nodiscard]] QHash<QString, QString> tagColors() const { return m_colors; }
 
 protected:
-    /** @brief 确认时先落盘配色，保证同名标签在所有主机上立刻统一为新颜色。 */
+    /**
+     * @brief 确认时把名称框和颜色选择器的当前内容写成本机标签，再落盘配色。
+     *
+     * 保存永远只认editor 里此刻的文本和颜色，不管它是刚输入的新名称、还是点击历史胶囊
+     * 载入的旧名称——两者走的是同一条路径，用户不需要区分"新增"和"复用"两种操作。
+     */
     void accept() override
     {
+        const QString name = m_nameEdit->text().trimmed();
+        if (name.contains(QLatin1Char(','))) {
+            // 标签在数据库里以逗号连接存入同一列，含逗号的名称会被拆成两个假标签。
+            QMessageBox::warning(this, tr("标签不合法"), tr("标签名称不能包含逗号。"));
+            m_nameEdit->setFocus();
+            return;
+        }
+        if (name.isEmpty()) {
+            // 名称框留空表示"这台主机不挂标签"，而不是拒绝确认。
+            m_tags.clear();
+        } else {
+            m_tags = {name};
+            m_colors.insert(name, selectedColor().name());
+            if (!m_history.contains(name)) {
+                m_history.append(name);
+                std::sort(m_history.begin(), m_history.end());
+            }
+        }
         if (!saveTagColors(m_database, m_colors)) {
             // 配色失败不阻断标签本身：标签是筛选与识别的主体，颜色只是附加信号。
             qWarning() << "无法保存标签配色";
@@ -1270,51 +1320,40 @@ private:
     }
 
     /**
-     * @brief 把编辑区内容写入标签列表与配色表。
+     * @brief 把某个历史标签渲染成一枚"#标签"胶囊按钮，样式与名称框内的标签入口共用同一
+     * 套按实际颜色渲染的公式。
      *
-     * 标签重复时不再追加，而是只更新配色：用户重复输入同一个名称的真实意图几乎总是改色，
-     * 直接拒绝会让“怎么改颜色”变成一个没有出口的问题。
+     * 点击只把该标签的名称和颜色载入上方编辑区，不直接改动本机标签——是否真的采用，由
+     * 用户接下来点"确定"（或按回车）决定，与直接输入新名称走的是同一条确认路径。
      */
-    void commitEditedTag()
+    [[nodiscard]] QToolButton *buildTagChip(const QString &tag)
     {
-        const QString name = m_nameEdit->text().trimmed();
-        if (name.isEmpty()) {
-            QMessageBox::warning(this, tr("标签不完整"), tr("请输入标签名称。"));
-            m_nameEdit->setFocus();
-            return;
-        }
-        if (name.contains(QLatin1Char(','))) {
-            // 标签在数据库里以逗号连接存入同一列，含逗号的名称会被拆成两个假标签。
-            QMessageBox::warning(this, tr("标签不合法"), tr("标签名称不能包含逗号。"));
-            m_nameEdit->setFocus();
-            return;
-        }
-        // 一台主机只允许挂一个标签：新提交的名称直接替换掉原有标签，而不是追加。
-        m_tags = {name};
-        m_colors.insert(name, selectedColor().name());
-        if (!m_history.contains(name)) {
-            m_history.append(name);
-            std::sort(m_history.begin(), m_history.end());
-        }
-        m_nameEdit->clear();
-        refreshLists();
+        const bool highlighted = m_nameEdit->text().trimmed() == tag;
+        auto *chip = new QToolButton(m_historyFlowWidget);
+        chip->setObjectName(QStringLiteral("hostTagChip"));
+        chip->setText(QStringLiteral("#%1").arg(tag));
+        chip->setStyleSheet(tagPillStyleSheet(resolveTagColor(m_colors, tag), highlighted));
+        chip->setCursor(Qt::PointingHandCursor);
+        chip->setToolTip(tr("载入名称与颜色"));
+        connect(chip, &QToolButton::clicked, this, [this, tag]() {
+            loadTagIntoEditor(tag);
+            refreshLists();
+        });
+        return chip;
     }
 
-    /** @brief 按当前标签与配色重建两个列表，并让历史列表跳过已选标签。 */
+    /** @brief 按当前历史标签重建胶囊流式布局，并高亮与名称框当前内容一致的那一个。 */
     void refreshLists()
     {
-        m_selectedList->clear();
-        for (const QString &tag : m_tags) {
-            auto *item = new QListWidgetItem(tagColorDot(resolveTagColor(m_colors, tag)), tag);
-            m_selectedList->addItem(item);
+        QLayout *flow = m_historyFlowWidget->layout();
+        Q_ASSERT(flow != nullptr);
+        QLayoutItem *item = nullptr;
+        while ((item = flow->takeAt(0)) != nullptr) {
+            delete item->widget();
+            delete item;
         }
-        m_historyList->clear();
         for (const QString &tag : m_history) {
-            if (m_tags.contains(tag)) {
-                continue;
-            }
-            m_historyList->addItem(
-                new QListWidgetItem(tagColorDot(resolveTagColor(m_colors, tag)), tag));
+            flow->addWidget(buildTagChip(tag));
         }
     }
 
@@ -1325,8 +1364,7 @@ private:
     QLineEdit *m_nameEdit = nullptr;
     QButtonGroup *m_colorGroup = nullptr;
     QList<TagColorSwatch *> m_swatches;
-    QListWidget *m_selectedList = nullptr;
-    QListWidget *m_historyList = nullptr;
+    QWidget *m_historyFlowWidget = nullptr;
 };
 
 /**
@@ -1363,6 +1401,18 @@ public:
         setText(text);
         applyGeometry();
     }
+
+    /**
+     * @brief 按标签实际配色渲染入口，与主机树上的标签徽章使用同一套底色/文字公式。
+     * @param color 标签在标签编辑器里选定的颜色。
+     *
+     * 全局样式表里的灰色药丸只适合"未选标签"的占位态；一旦选定了标签，入口必须能让用户
+     * 一眼看出这台主机具体挂的是哪种颜色的标签，而不是所有标签看起来都一样。
+     */
+    void setTagColor(const QColor &color) { setStyleSheet(tagPillStyleSheet(color)); }
+
+    /** @brief 清除按标签配色的局部样式，回落到全局灰色药丸占位态。 */
+    void clearTagColor() { setStyleSheet(QString()); }
 
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override
@@ -1423,6 +1473,7 @@ public:
         , m_credentialVault(credentialVault)
         , m_nameEdit(new QLineEdit(initial.name, this))
         , m_tags(initial.tags)
+        , m_tagColors(loadTagColors(database))
     {
         Q_ASSERT(m_database != nullptr);
         Q_ASSERT(m_credentialVault != nullptr);
@@ -1939,8 +1990,11 @@ private:
     /**
      * @brief 用库中全部分组填充下拉框，并选中当前记录的父分组。
      *
-     * 条目文本采用"父分组 / 子分组"的完整路径，因为同名子分组在不同父级下完全合法，只显示
-     * 末级名称会让用户无法区分。解析路径时带环检测：数据损坏产生的父子环不应让窗口卡死。
+     * 条目顺序必须与主界面侧边栏一致，因此不按字母排序，而是复用侧边栏同款的
+     * listHostsInGroup(parentId) 逐层遍历（按 sort_order、name 排列子节点），只是深度优先
+     * 展开时把子孙分组紧跟在父分组之后。条目文本采用"父分组 / 子分组"的完整路径，因为同名
+     * 子分组在不同父级下完全合法，只显示末级名称会让用户无法区分。递归带深度/环兜底：数据
+     * 损坏产生的父子环不应让窗口卡死。
      */
     void populateGroupChoices()
     {
@@ -1948,28 +2002,9 @@ private:
         m_groupCombo->clear();
         m_groupCombo->addItem(tr("未分组"), QString{});
 
-        bool ok = false;
-        QHash<QString, HostRecord> folders;
-        for (const HostRecord &record : m_database->searchHosts(QString{}, &ok)) {
-            if (record.kind == HostNodeKind::Folder) {
-                folders.insert(record.id, record);
-            }
-        }
-
         QList<QPair<QString, QString>> entries;
-        entries.reserve(folders.size());
-        for (auto folder = folders.constBegin(); folder != folders.constEnd(); ++folder) {
-            QStringList segments;
-            QSet<QString> visited;
-            for (QString cursor = folder.key();
-                 !cursor.isEmpty() && folders.contains(cursor) && !visited.contains(cursor);) {
-                visited.insert(cursor);
-                segments.prepend(folders.value(cursor).name);
-                cursor = folders.value(cursor).parentId;
-            }
-            entries.append({segments.join(QStringLiteral(" / ")), folder.key()});
-        }
-        std::sort(entries.begin(), entries.end());
+        QSet<QString> visited;
+        collectGroupChoices(QString{}, QString{}, visited, entries);
         for (const auto &entry : entries) {
             m_groupCombo->addItem(entry.first, entry.second);
         }
@@ -1977,6 +2012,32 @@ private:
         const int currentIndex = m_groupCombo->findData(m_initial.parentId);
         // 父分组可能已被删除；此时回落到"未分组"，保存后记录也就真正回到根层级。
         m_groupCombo->setCurrentIndex(currentIndex >= 0 ? currentIndex : 0);
+    }
+
+    /**
+     * @brief 深度优先收集某一父分组下的所有子分组，顺序与侧边栏树一致。
+     *
+     * @param parentId 要展开的父分组 id；空串代表根层级。
+     * @param parentPath 到 parentId 为止的显示路径（不含 parentId 自身），用于拼出完整路径。
+     * @param visited 已访问过的分组 id，防止数据损坏形成的父子环导致无限递归。
+     */
+    void collectGroupChoices(const QString &parentId,
+                              const QString &parentPath,
+                              QSet<QString> &visited,
+                              QList<QPair<QString, QString>> &entries)
+    {
+        bool ok = false;
+        for (const HostRecord &record : m_database->listHostsInGroup(parentId, &ok)) {
+            if (record.kind != HostNodeKind::Folder || visited.contains(record.id)) {
+                continue;
+            }
+            visited.insert(record.id);
+            const QString path = parentPath.isEmpty()
+                ? record.name
+                : parentPath + QStringLiteral(" / ") + record.name;
+            entries.append({path, record.id});
+            collectGroupChoices(record.id, path, visited, entries);
+        }
     }
 
     /**
@@ -2005,14 +2066,15 @@ private:
             return;
         }
         m_tags = dialog.tags();
+        m_tagColors = dialog.tagColors();
         refreshTagButton();
     }
 
     /**
-     * @brief 让名称框内的入口显示当前标签，而不是永远只写"#标签"。
+     * @brief 让名称框内的入口显示当前标签及其配色，而不是永远只写"#标签"。
      *
-     * 标签一旦保存就只在主机树的小徽章里出现；如果配置窗口不回显，用户每次都得点开弹窗
-     * 才能确认这台机器到底带没带"生产"标记。
+     * 标签一旦保存就只在主机树的小徽章里出现；如果配置窗口不回显文字与颜色，用户每次都得
+     * 点开弹窗才能确认这台机器到底带没带"生产"标记、以及它是不是真的还是那个颜色。
      */
     void refreshTagButton()
     {
@@ -2021,8 +2083,10 @@ private:
         }
         if (m_tags.isEmpty()) {
             m_tagButton->updateText(tr("#标签"));
+            m_tagButton->clearTagColor();
         } else {
             m_tagButton->updateText(QStringLiteral("#%1").arg(m_tags.constFirst()));
+            m_tagButton->setTagColor(resolveTagColor(m_tagColors, m_tags.constFirst()));
         }
     }
 
@@ -2348,7 +2412,9 @@ private:
     QLineEdit *m_nameEdit = nullptr;
     /** @brief 当前草稿的标签；仅在主机窗口中由标签编辑器修改，分组窗口保持原值。 */
     QStringList m_tags;
-    /** @brief 名称框内部右端的标签入口，回显当前首枚标签。 */
+    /** @brief 标签名到配色的映射，用于按标签实际颜色渲染名称框内的入口。 */
+    QHash<QString, QString> m_tagColors;
+    /** @brief 名称框内部右端的标签入口，回显当前首枚标签及其配色。 */
     InlineFieldButton *m_tagButton = nullptr;
     /** @brief 名称框左侧的所属分组下拉框；数据项保存目标 parentId。 */
     QComboBox *m_groupCombo = nullptr;

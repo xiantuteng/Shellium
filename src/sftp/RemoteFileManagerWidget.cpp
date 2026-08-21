@@ -13,6 +13,7 @@
 #include <QFileDialog>
 #include <QFileIconProvider>
 #include <QFileInfo>
+#include <QFocusEvent>
 #include <QFontMetrics>
 #include <QFrame>
 #include <QHBoxLayout>
@@ -270,15 +271,34 @@ QFrame *createOperationRowSeparator(QWidget *parent)
 }
 
 /**
+ * @brief 切换文件树的拖放高亮动态属性，并让样式表立即按新状态重新生效。
+ * @param tree 目标文件树；本地栏、远程栏共用同一份逻辑。
+ * @param active true 表示合法拖拽正悬停在该栏上方，应显示放置目标框。
+ *
+ * setProperty 之后必须 unpolish/polish 才能让 QSS 的属性选择器（如
+ * `[dragActive="true"]`）重新求值——仅调用 update() 只会重绘已经算好的样式。
+ */
+void setDragTargetActive(QWidget *tree, const bool active)
+{
+    if (tree->property("dragActive").toBool() == active) {
+        return;
+    }
+    tree->setProperty("dragActive", active);
+    tree->style()->unpolish(tree);
+    tree->style()->polish(tree);
+    tree->update();
+}
+
+/**
  * @brief 支持把本地文件系统 URL 拖入的远程文件树。
  *
- * 控件只负责把 Qt 拖放事件转换成路径和落点；服务器选择、路径校验和实际 SFTP 操作仍由
- * RemoteFileManagerWidget 统一处理，避免视图类持有凭据或网络对象。
+ * 控件只负责把 Qt 拖放事件转换成路径列表；服务器选择、路径校验和实际 SFTP 操作仍由
+ * RemoteFileManagerWidget 统一处理，避免视图类持有凭据或网络对象。落点始终是当前浏览
+ * 目录（见 dropEvent），因此不再需要解析鼠标悬停的具体条目。
  */
 class RemoteDropTree final : public QTreeWidget {
 public:
-    using LocalDropHandler =
-        std::function<void(const QStringList &localPaths, QTreeWidgetItem *dropItem)>;
+    using LocalDropHandler = std::function<void(const QStringList &localPaths)>;
 
     explicit RemoteDropTree(QWidget *parent = nullptr)
         : QTreeWidget(parent)
@@ -300,6 +320,7 @@ protected:
     void dragEnterEvent(QDragEnterEvent *event) override
     {
         if (event->mimeData()->hasUrls()) {
+            setDragTargetActive(this, true);
             event->acceptProposedAction();
             return;
         }
@@ -316,9 +337,23 @@ protected:
         event->ignore();
     }
 
-    /** @brief 收集本地绝对路径，并把鼠标下的远程目录节点一并交给业务层。 */
+    /** @brief 拖拽离开控件而未落下时撤销放置反馈，避免高亮框一直停留在栏上。 */
+    void dragLeaveEvent(QDragLeaveEvent *event) override
+    {
+        setDragTargetActive(this, false);
+        QTreeWidget::dragLeaveEvent(event);
+    }
+
+    /**
+     * @brief 收集本地绝对路径，一律上传到当前远程目录。
+     *
+     * 刻意不看鼠标落在哪个条目上：目录列表随时可能因为刷新、排序而与用户记忆中的
+     * 行位置错位，"永远拖到当前目录"比"猜测悬停的文件夹"更可预期，也和大多数文件
+     * 管理器窗口内拖拽的直觉一致。
+     */
     void dropEvent(QDropEvent *event) override
     {
+        setDragTargetActive(this, false);
         if (!event->mimeData()->hasUrls() || !m_localDropHandler) {
             event->ignore();
             return;
@@ -333,7 +368,7 @@ protected:
             event->ignore();
             return;
         }
-        m_localDropHandler(localPaths, itemAt(event->position().toPoint()));
+        m_localDropHandler(localPaths);
         event->setDropAction(Qt::CopyAction);
         event->accept();
     }
@@ -367,15 +402,12 @@ private:
  * @brief 接收 Shellium 远程条目并把目标解析为本地目录的文件树。
  *
  * 拖入动作仅代表“下载副本”，绝不会调用本地移动或删除；这对运维文件管理尤为重要，因为
- * 一次误判为 MoveAction 就可能破坏用户本机原文件。落点目录的最终解析（含"落在空白处"
- * 的兜底）交给外层持有 m_localPathEdit 的回调，本控件只负责传出落点条目本身。
+ * 一次误判为 MoveAction 就可能破坏用户本机原文件。落点一律是外层持有的 m_localPathEdit
+ * 当前目录，不解析鼠标悬停的具体条目——见 dropEvent 注释。
  */
 class LocalDropTree final : public QTreeWidget {
 public:
-    using RemoteDropHandler =
-        std::function<void(const QString &remotePath,
-                           bool directory,
-                           QTreeWidgetItem *dropItem)>;
+    using RemoteDropHandler = std::function<void(const QString &remotePath, bool directory)>;
 
     explicit LocalDropTree(QWidget *parent = nullptr)
         : QTreeWidget(parent)
@@ -397,6 +429,7 @@ protected:
     void dragEnterEvent(QDragEnterEvent *event) override
     {
         if (event->mimeData()->hasFormat(kRemotePathMimeType)) {
+            setDragTargetActive(this, true);
             event->acceptProposedAction();
             return;
         }
@@ -413,9 +446,23 @@ protected:
         event->ignore();
     }
 
-    /** @brief 把落点条目（可能为空）连同远程路径一并交给业务层解析目标目录。 */
+    /** @brief 拖拽离开控件而未落下时撤销放置反馈，避免高亮框一直停留在栏上。 */
+    void dragLeaveEvent(QDragLeaveEvent *event) override
+    {
+        setDragTargetActive(this, false);
+        QTreeWidget::dragLeaveEvent(event);
+    }
+
+    /**
+     * @brief 把远程路径交给业务层，一律下载到当前本地目录。
+     *
+     * 与 RemoteDropTree::dropEvent 对称：不再按鼠标落点是否为目录条目决定目标，始终
+     * 下载到 m_localPathEdit 显示的当前目录，避免"以为拖进了子目录，其实那一行早已
+     * 因为排序或刷新挪了位置"这种误操作。
+     */
     void dropEvent(QDropEvent *event) override
     {
+        setDragTargetActive(this, false);
         if (!event->mimeData()->hasFormat(kRemotePathMimeType)
             || !m_remoteDropHandler) {
             event->ignore();
@@ -425,7 +472,7 @@ protected:
             event->mimeData()->data(kRemotePathMimeType));
         const bool directory =
             event->mimeData()->data(kRemoteDirectoryMimeType) == QByteArrayLiteral("1");
-        m_remoteDropHandler(remotePath, directory, itemAt(event->position().toPoint()));
+        m_remoteDropHandler(remotePath, directory);
         event->setDropAction(Qt::CopyAction);
         event->accept();
     }
@@ -448,6 +495,26 @@ protected:
 private:
     /** @brief 收到合法远程条目拖入后调用的业务回调。 */
     RemoteDropHandler m_remoteDropHandler;
+};
+
+/**
+ * @brief 获得焦点时自动全选已有文字的路径输入框。
+ *
+ * 本地/远程路径框里几乎总是装着一条完整绝对路径；用户点进去多半是想整段替换成新路径，
+ * 而不是在中间插入光标手动删。全选放在 QTimer::singleShot(0, ...) 里执行，是因为
+ * focusInEvent 触发时鼠标点击导致的光标定位还没发生——同帧内 selectAll 会被那次定位
+ * 覆盖掉，必须让它排到事件队列最后才能生效。
+ */
+class SelectAllOnFocusLineEdit final : public QLineEdit {
+public:
+    using QLineEdit::QLineEdit;
+
+protected:
+    void focusInEvent(QFocusEvent *event) override
+    {
+        QLineEdit::focusInEvent(event);
+        QTimer::singleShot(0, this, &QLineEdit::selectAll);
+    }
 };
 
 /**
@@ -554,9 +621,9 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     , m_followTerminalCwdCheck(new QCheckBox(tr("跟随终端目录"), this))
     , m_fullScreenButton(new QToolButton(this))
     , m_closeButton(new QToolButton(this))
-    , m_localPathEdit(new QLineEdit(QDir::homePath(), this))
+    , m_localPathEdit(new SelectAllOnFocusLineEdit(QDir::homePath(), this))
     , m_localTree(new LocalDropTree(this))
-    , m_pathEdit(new QLineEdit(QStringLiteral("/"), this))
+    , m_pathEdit(new SelectAllOnFocusLineEdit(QStringLiteral("/"), this))
     , m_fileTree(new RemoteDropTree(this))
     , m_statusLabel(new QLabel(tr("请选择终端服务器"), this))
     , m_progressBar(new QProgressBar(this))
@@ -1135,34 +1202,19 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
             });
 
     auto *remoteDropTree = static_cast<RemoteDropTree *>(m_fileTree);
-    remoteDropTree->setLocalDropHandler(
-        [this](const QStringList &localPaths, QTreeWidgetItem *dropItem) {
-            QString remoteDirectory = m_pathEdit->text().trimmed();
-            const std::optional<RemoteFileInfo> dropEntry = fileFromItem(dropItem);
-            if (dropEntry.has_value() && dropEntry->isDirectory) {
-                remoteDirectory = dropEntry->path;
-            }
-            uploadLocalPaths(localPaths, remoteDirectory);
-        });
+    remoteDropTree->setLocalDropHandler([this](const QStringList &localPaths) {
+        // 一律上传到当前远程目录，不按鼠标落点猜测目标子目录——见 RemoteDropTree::dropEvent。
+        uploadLocalPaths(localPaths, m_pathEdit->text().trimmed());
+    });
     auto *localDropTree = static_cast<LocalDropTree *>(m_localTree);
     localDropTree->setRemoteDropHandler(
-        [this](const QString &remotePath, const bool directory, QTreeWidgetItem *dropItem) {
-            // 落在某个本地目录条目上时下载到该目录；落在文件上或空白处则回落到当前
-            // 浏览目录，与远程栏 setLocalDropHandler 的兜底逻辑对称。
-            QString localDirectory = m_localPathEdit->text().trimmed();
-            if (dropItem != nullptr) {
-                const QString itemPath = dropItem->data(0, Qt::UserRole).toString();
-                if (dropItem->data(0, Qt::UserRole + 1).toBool()) {
-                    localDirectory = itemPath;
-                } else {
-                    localDirectory = QFileInfo(itemPath).absolutePath();
-                }
-            }
+        [this](const QString &remotePath, const bool directory) {
+            // 一律下载到当前本地目录，与远程栏的落点语义对称——见 LocalDropTree::dropEvent。
             RemoteFileInfo entry;
             entry.path = remotePath;
             entry.name = remotePath.section(QLatin1Char('/'), -1);
             entry.isDirectory = directory;
-            downloadRemoteEntryToDirectory(entry, localDirectory);
+            downloadRemoteEntryToDirectory(entry, m_localPathEdit->text().trimmed());
         });
 
     connect(m_service,
