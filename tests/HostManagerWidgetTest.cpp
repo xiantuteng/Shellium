@@ -113,6 +113,9 @@ private slots:
     /** @brief 搜索框右侧的标签胶囊必须进入 #标签 查询模式并保留焦点。 */
     void tagShortcutEntersTagSearchMode();
 
+    /** @brief 进入 #标签 模式后必须弹出全部已知标签供快捷选择，点击胶囊即完成精确筛选。 */
+    void tagSearchModeShowsSuggestionPopupForQuickPick();
+
     /** @brief 同一个自绘图标实例必须在主题切换后改用新前景色，显式品牌色则保持不变。 */
     void semanticIconsFollowLightAndDarkPalettes();
 
@@ -1767,6 +1770,76 @@ void HostManagerWidgetTest::tagShortcutEntersTagSearchMode()
     searchEdit->setText(QStringLiteral("#生产"));
     tagButton->click();
     QCOMPARE(searchEdit->text(), QStringLiteral("#生产"));
+}
+
+void HostManagerWidgetTest::tagSearchModeShowsSuggestionPopupForQuickPick()
+{
+    HostRecord prodHost;
+    prodHost.id = QStringLiteral("tag-suggest-prod");
+    prodHost.kind = HostNodeKind::Host;
+    prodHost.name = QStringLiteral("生产入口");
+    prodHost.host = QStringLiteral("10.0.9.1");
+    prodHost.tags = QStringList{QStringLiteral("生产")};
+    QString error;
+    QVERIFY2(m_database->saveHost(prodHost, &error), qPrintable(error));
+
+    HostRecord testHost;
+    testHost.id = QStringLiteral("tag-suggest-test");
+    testHost.kind = HostNodeKind::Host;
+    testHost.name = QStringLiteral("测试入口");
+    testHost.host = QStringLiteral("10.0.9.2");
+    testHost.tags = QStringList{QStringLiteral("测试")};
+    QVERIFY2(m_database->saveHost(testHost, &error), qPrintable(error));
+
+    HostManagerWidget widget(m_database.get(), m_vault.get());
+    widget.resize(320, 400);
+    widget.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&widget));
+
+    auto *searchEdit = widget.findChild<QLineEdit *>(QStringLiteral("HostSearchEdit"));
+    auto *tagButton = widget.findChild<QToolButton *>(QStringLiteral("HostTagFilterButton"));
+    auto *tree = widget.findChild<QTreeWidget *>();
+    QVERIFY(searchEdit != nullptr);
+    QVERIFY(tagButton != nullptr);
+    QVERIFY(tree != nullptr);
+
+    auto *popup = widget.findChild<QFrame *>(QStringLiteral("HostTagSuggestionsPopup"));
+    QVERIFY2(popup != nullptr, "缺少标签建议悬浮面板，无法在 #标签 模式下快捷选择");
+    QVERIFY2(!popup->isVisible(), "尚未进入标签模式时不应提前显示建议面板");
+
+    tagButton->click();
+    QCOMPARE(searchEdit->text(), QStringLiteral("#"));
+    QVERIFY2(popup->isVisible(), "点击 #标签 后应立即弹出全部已知标签供选择");
+
+    const auto chips = popup->findChildren<QToolButton *>(QStringLiteral("hostTagChip"));
+    QStringList chipTexts;
+    for (QToolButton *chip : chips) {
+        chipTexts.append(chip->text());
+    }
+    chipTexts.sort();
+    QCOMPARE(chipTexts, (QStringList{QStringLiteral("#测试"), QStringLiteral("#生产")}));
+
+    QToolButton *prodChip = nullptr;
+    for (QToolButton *chip : chips) {
+        if (chip->text() == QStringLiteral("#生产")) {
+            prodChip = chip;
+            break;
+        }
+    }
+    QVERIFY2(prodChip != nullptr, "建议面板没有列出已存在的 生产 标签");
+    prodChip->click();
+
+    QCOMPARE(searchEdit->text(), QStringLiteral("#生产"));
+    QVERIFY2(!popup->isVisible(), "点击某个标签胶囊后建议面板应自动收起");
+    QCOMPARE(tree->topLevelItemCount(), 1);
+    QCOMPARE(tree->topLevelItem(0)->text(0), QStringLiteral("生产入口"));
+
+    // 清空搜索框回到浏览态后再次进入标签模式，建议面板必须能重新弹出，而不是只在首次
+    // 点击时生效。
+    searchEdit->clear();
+    QVERIFY2(!popup->isVisible(), "清空搜索框应连同建议面板一起退出标签模式");
+    tagButton->click();
+    QVERIFY2(popup->isVisible(), "再次点击 #标签 入口必须能重新唤出建议面板");
 }
 
 void HostManagerWidgetTest::ungroupedHostsFollowFoldersBehindSectionHeader()

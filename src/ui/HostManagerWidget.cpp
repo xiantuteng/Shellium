@@ -28,6 +28,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QKeyEvent>
 #include <QLabel>
 #include <QLayout>
 #include <QLineEdit>
@@ -1225,6 +1226,15 @@ public:
             acceptButton,
             UiIcons::symbol(this, UiIcons::Symbol::Check, QColor(QStringLiteral("#0c2f24"))),
             tr("确认标签与配色"));
+        auto *deleteButton = new QPushButton(tr("删除标签"), footer);
+        deleteButton->setObjectName(QStringLiteral("hostTagDeleteButton"));
+        // 只有本机已经挂着标签时，"删除"才有意义；新增场景下留白反而更清楚。
+        deleteButton->setEnabled(!m_tags.isEmpty());
+        UiIcons::decorateButton(
+            deleteButton,
+            UiIcons::symbol(this, UiIcons::Symbol::Trash, this->palette().color(QPalette::WindowText)),
+            tr("删除本机的标签"));
+        footerLayout->addWidget(deleteButton);
         footerLayout->addStretch(1);
         footerLayout->addWidget(cancelButton);
         footerLayout->addWidget(acceptButton);
@@ -1246,6 +1256,11 @@ public:
         connect(m_nameEdit, &QLineEdit::returnPressed, this, [this]() { accept(); });
         connect(cancelButton, &QPushButton::clicked, this, &QDialog::reject);
         connect(acceptButton, &QPushButton::clicked, this, &QDialog::accept);
+        connect(deleteButton, &QPushButton::clicked, this, [this]() {
+            // 复用 accept() 里"名称为空即删除标签"的路径，删除和确认走同一条持久化逻辑。
+            m_nameEdit->clear();
+            accept();
+        });
 
         m_history = collectKnownTags(m_database);
         if (!m_tags.isEmpty()) {
@@ -3057,6 +3072,23 @@ HostManagerWidget::HostManagerWidget(ApplicationDatabase *database,
     tagFilterButton->setAccessibleName(tr("按标签精确筛选主机"));
     tagFilterButton->setCursor(Qt::PointingHandCursor);
     searchBarLayout->addWidget(tagFilterButton, 0, Qt::AlignVCenter);
+    m_searchBar = searchBar;
+
+    // 建议面板用 Qt::Tool + WA_ShowWithoutActivating：既不抢主窗口的键盘焦点（用户在弹出面板
+    // 悬浮期间仍能继续在搜索框里敲字过滤标签），又不像子控件那样被主机树裁剪，可以画到列表
+    // 上方。是否收起由下面安装的全局事件过滤器（点击面板外）和 Esc 按键统一处理。
+    m_tagSuggestionsPopup = new QFrame(this);
+    m_tagSuggestionsPopup->setObjectName(QStringLiteral("HostTagSuggestionsPopup"));
+    m_tagSuggestionsPopup->setWindowFlags(Qt::Tool | Qt::FramelessWindowHint
+                                          | Qt::NoDropShadowWindowHint);
+    m_tagSuggestionsPopup->setAttribute(Qt::WA_ShowWithoutActivating);
+    auto *popupLayout = new QVBoxLayout(m_tagSuggestionsPopup);
+    popupLayout->setContentsMargins(10, 10, 10, 10);
+    m_tagSuggestionsFlow = new QWidget(m_tagSuggestionsPopup);
+    new FlowLayout(m_tagSuggestionsFlow, 8, 8);
+    popupLayout->addWidget(m_tagSuggestionsFlow);
+    m_tagSuggestionsPopup->hide();
+    qApp->installEventFilter(this);
 
     // 为主机树设置稳定的对象名，供应用级样式表只增强主机选中态。不能直接加深所有
     // QTreeView 的选中色，否则设置页、效率工具等无关列表也会被意外改变视觉层级。
@@ -3179,7 +3211,10 @@ HostManagerWidget::HostManagerWidget(ApplicationDatabase *database,
     // 这一行只是在挤占本就紧张的纵向空间。
     layout->addWidget(m_tree, 1);
 
-    connect(m_searchEdit, &QLineEdit::textChanged, this, [this]() { applyFilter(); });
+    connect(m_searchEdit, &QLineEdit::textChanged, this, [this]() {
+        applyFilter();
+        updateTagSuggestions();
+    });
     connect(tagFilterButton, &QToolButton::clicked, this, [this]() {
         // “#标签”是搜索语法的可发现入口：若当前不是标签查询就写入前缀，随后把焦点和光标
         // 交还输入框，让用户继续输入标签名；已有标签查询则只聚焦，不破坏用户内容。
@@ -3188,6 +3223,9 @@ HostManagerWidget::HostManagerWidget(ApplicationDatabase *database,
         }
         m_searchEdit->setFocus(Qt::ShortcutFocusReason);
         m_searchEdit->setCursorPosition(m_searchEdit->text().size());
+        // 文本未变化时上面的 setText() 不会触发 textChanged，这里显式补一次，保证已处于
+        // "#xxx" 查询状态时再次点击入口也能唤出建议面板，而不是必须先清空重打。
+        updateTagSuggestions();
     });
     connect(addGroupButton, &QToolButton::clicked, this, &HostManagerWidget::addGroup);
     connect(addHostButton, &QPushButton::clicked, this, &HostManagerWidget::addHost);
@@ -3580,6 +3618,97 @@ void HostManagerWidget::applyFilter()
     for (const HostRecord &record : results) {
         m_tree->addTopLevelItem(createTreeItem(record));
     }
+}
+
+QToolButton *HostManagerWidget::buildTagSuggestionChip(const QString &tag)
+{
+    auto *chip = new QToolButton(m_tagSuggestionsFlow);
+    chip->setObjectName(QStringLiteral("hostTagChip"));
+    chip->setText(QStringLiteral("#%1").arg(tag));
+    chip->setStyleSheet(tagPillStyleSheet(resolveTagColor(m_tagColors, tag)));
+    chip->setCursor(Qt::PointingHandCursor);
+    chip->setToolTip(tr("按此标签精确筛选主机"));
+    // 点击直接把完整"#标签名"写回搜索框：既复用 applyFilter() 已有的精确匹配路径，也让
+    // 面板本身不必重复一份筛选逻辑。写入会经 textChanged 关闭面板（前缀不再是待选状态）。
+    connect(chip, &QToolButton::clicked, this, [this, tag]() {
+        m_searchEdit->setText(QStringLiteral("#%1").arg(tag));
+        m_searchEdit->setFocus(Qt::ShortcutFocusReason);
+        m_searchEdit->setCursorPosition(m_searchEdit->text().size());
+        hideTagSuggestions();
+    });
+    return chip;
+}
+
+void HostManagerWidget::updateTagSuggestions()
+{
+    const QString query = m_searchEdit->text().trimmed();
+    if (!query.startsWith(QLatin1Char('#'))) {
+        hideTagSuggestions();
+        return;
+    }
+
+    const QString prefix = query.mid(1);
+    QStringList matches;
+    for (const QString &tag : collectKnownTags(m_database)) {
+        if (prefix.isEmpty() || tag.contains(prefix, Qt::CaseInsensitive)) {
+            matches.append(tag);
+        }
+    }
+
+    QLayout *flow = m_tagSuggestionsFlow->layout();
+    Q_ASSERT(flow != nullptr);
+    QLayoutItem *item = nullptr;
+    while ((item = flow->takeAt(0)) != nullptr) {
+        delete item->widget();
+        delete item;
+    }
+    if (matches.isEmpty()) {
+        // 没有任何标签可选（库中尚无标签，或输入的前缀未命中任何历史标签）时不展示空面板，
+        // 一个只有内边距的空框只会让用户误以为程序卡住了。
+        hideTagSuggestions();
+        return;
+    }
+    for (const QString &tag : matches) {
+        flow->addWidget(buildTagSuggestionChip(tag));
+    }
+
+    m_tagSuggestionsPopup->adjustSize();
+    const int width = std::max(m_searchBar->width(), m_tagSuggestionsPopup->sizeHint().width());
+    m_tagSuggestionsPopup->setFixedWidth(width);
+    m_tagSuggestionsPopup->adjustSize();
+    const QPoint anchor = m_searchBar->mapToGlobal(QPoint(0, m_searchBar->height() + 4));
+    m_tagSuggestionsPopup->move(anchor);
+    m_tagSuggestionsPopup->show();
+    m_tagSuggestionsPopup->raise();
+}
+
+void HostManagerWidget::hideTagSuggestions()
+{
+    if (m_tagSuggestionsPopup != nullptr) {
+        m_tagSuggestionsPopup->hide();
+    }
+}
+
+bool HostManagerWidget::eventFilter(QObject *watched, QEvent *event)
+{
+    if (m_tagSuggestionsPopup != nullptr && m_tagSuggestionsPopup->isVisible()) {
+        if (event->type() == QEvent::MouseButtonPress) {
+            auto *mouseEvent = static_cast<QMouseEvent *>(event);
+            auto *clicked = QApplication::widgetAt(mouseEvent->globalPosition().toPoint());
+            const bool insidePopup = clicked != nullptr
+                && (clicked == m_tagSuggestionsPopup || m_tagSuggestionsPopup->isAncestorOf(clicked));
+            const bool insideSearchBar = clicked != nullptr
+                && (clicked == m_searchBar || m_searchBar->isAncestorOf(clicked));
+            if (!insidePopup && !insideSearchBar) {
+                hideTagSuggestions();
+            }
+        } else if (watched == m_searchEdit && event->type() == QEvent::KeyPress) {
+            if (static_cast<QKeyEvent *>(event)->key() == Qt::Key_Escape) {
+                hideTagSuggestions();
+            }
+        }
+    }
+    return QWidget::eventFilter(watched, event);
 }
 
 void HostManagerWidget::addGroup()

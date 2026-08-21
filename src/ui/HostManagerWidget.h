@@ -7,8 +7,10 @@
 
 class ApplicationDatabase;
 class CredentialVault;
+class QFrame;
 class QLineEdit;
 class QMenu;
+class QToolButton;
 class QTreeWidget;
 class QTreeWidgetItem;
 
@@ -125,6 +127,23 @@ private:
     /** @brief 根据搜索框内容展示完整树、名称地址搜索结果或精确标签结果。 */
     void applyFilter();
 
+    /**
+     * @brief 按搜索框当前的"#前缀"重建标签建议悬浮面板，并据此显示或隐藏它。
+     *
+     * 面板列出库中全部已知标签（含仅剩配色、已无主机在用的历史标签），随"#"后的输入
+     * 实时按前缀过滤，点击某个胶囊等价于手动敲完整个"#标签名"。
+     */
+    void updateTagSuggestions();
+
+    /** @brief 隐藏标签建议悬浮面板；面板本身不销毁，供下次显示复用。 */
+    void hideTagSuggestions();
+
+    /** @brief 把一个已知标签渲染成建议面板里可点击的胶囊按钮。 */
+    [[nodiscard]] QToolButton *buildTagSuggestionChip(const QString &tag);
+
+    /** @brief 拦截全局鼠标点击与搜索框的 Esc 键，用于在点击面板外或取消时收起建议面板。 */
+    bool eventFilter(QObject *watched, QEvent *event) override;
+
     /** @brief 弹出名称输入框并在当前分组下新建子分组。 */
     void addGroup();
 
@@ -211,8 +230,13 @@ private:
     ApplicationDatabase *m_database = nullptr;
     CredentialVault *m_credentialVault = nullptr;
     QLineEdit *m_searchEdit = nullptr;
+    QFrame *m_searchBar = nullptr;
     QTreeWidget *m_tree = nullptr;
     QWidget *m_headerActions = nullptr;
+    /** @brief 标签建议悬浮面板；懒加载，构造时创建一次，之后按内容重建胶囊并显示/隐藏。 */
+    QFrame *m_tagSuggestionsPopup = nullptr;
+    /** @brief 承载建议面板内标签胶囊的流式布局容器。 */
+    QWidget *m_tagSuggestionsFlow = nullptr;
     /**
      * @brief 目录稳定 id 到展开状态的内存快照。
      *

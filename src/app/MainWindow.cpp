@@ -1340,6 +1340,11 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
             min-height: 28px;
             padding: 2px 3px;
         }
+        QFrame#HostTagSuggestionsPopup {
+            background: @SURFACE@;
+            border: 1px solid @BORDER@;
+            border-radius: 10px;
+        }
         QToolButton#HostTagFilterButton {
             color: @MUTED@;
             background: @RAISED@;
