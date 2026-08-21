@@ -220,6 +220,13 @@ private:
      * 新目录按展开处理，避免应用升级后已有用户配置让后来创建的目录意外默认折叠。
      */
     QHash<QString, bool> m_folderExpansionState;
+    /**
+     * @brief 标签名到 "#rrggbb" 的配色快照，每次重建主机树前刷新一次。
+     *
+     * 缓存的原因是配色存放在 settings 表：若在 createTreeItem() 里按节点读取，一棵有上百
+     * 台主机的树每次刷新都会产生上百次相同的 SQL 查询。
+     */
+    QHash<QString, QString> m_tagColors;
     /** @brief 最近一次完整统计得到的主机数量；搜索过滤不会改变该值。 */
     int m_hostCount = 0;
 };

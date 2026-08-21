@@ -8,6 +8,7 @@
 #include <QAbstractButton>
 #include <QApplication>
 #include <QColor>
+#include <QComboBox>
 #include <QDialog>
 #include <QDragEnterEvent>
 #include <QDragMoveEvent>
@@ -126,6 +127,15 @@ private slots:
 
     /** @brief 同组主机之间的首个拖动事件必须立即生效，不得要求先悬停到任意分组刷新落点。 */
     void sameGroupReorderAcceptsFirstDragMove();
+
+    /** @brief 名称行必须排在端口下方，并在左侧带分组下拉、框内右端带标签入口且宽度不变。 */
+    void hostDialogPlacesNameBelowPortWithGroupAndTagEntry();
+
+    /** @brief 标签编辑器写入的标签与配色必须落库，并在主机树徽章与历史候选中生效。 */
+    void tagEditorPersistsTagWithChosenColorAndOffersHistory();
+
+    /** @brief 名称行的分组下拉必须真正改变主机归属，而不只是显示用的装饰。 */
+    void groupComboMovesHostIntoSelectedGroup();
 
 private:
     [[nodiscard]] QTreeWidgetItem *findItem(const HostManagerWidget &widget,
@@ -1947,6 +1957,275 @@ void HostManagerWidgetTest::sameGroupReorderAcceptsFirstDragMove()
 
     QVERIFY2(dragMoveEvent.isAccepted(),
              "同组排序的首个有效拖动事件应被接受，不能依赖此前悬停过分组节点");
+}
+
+void HostManagerWidgetTest::hostDialogPlacesNameBelowPortWithGroupAndTagEntry()
+{
+    HostRecord group;
+    group.id = QStringLiteral("name-row-group");
+    group.kind = HostNodeKind::Folder;
+    group.name = QStringLiteral("名称行分组");
+    QString error;
+    QVERIFY2(m_database->saveHost(group, &error), qPrintable(error));
+
+    HostManagerWidget widget(m_database.get(), m_vault.get());
+    QString failure;
+    QTimer::singleShot(0, [&failure]() {
+        auto *dialog = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+        if (dialog == nullptr) {
+            failure = QStringLiteral("主机配置窗口未打开");
+            return;
+        }
+        auto *name = dialog->findChild<QLineEdit *>(QStringLiteral("hostRecordNameEdit"));
+        auto *address = dialog->findChild<QLineEdit *>(QStringLiteral("hostAddressEdit"));
+        auto *port = dialog->findChild<QSpinBox *>(QStringLiteral("hostPortSpin"));
+        auto *groupCombo = dialog->findChild<QComboBox *>(
+            QStringLiteral("hostRecordGroupCombo"));
+        auto *tagButton = dialog->findChild<QToolButton *>(
+            QStringLiteral("hostRecordTagButton"));
+        if (name == nullptr || address == nullptr || port == nullptr || groupCombo == nullptr
+            || tagButton == nullptr) {
+            failure = QStringLiteral("名称行缺少分组下拉框或框内标签入口");
+            dialog->reject();
+            return;
+        }
+
+        const int addressTop = address->mapTo(dialog, QPoint{}).y();
+        const int portTop = port->mapTo(dialog, QPoint{}).y();
+        const int nameTop = name->mapTo(dialog, QPoint{}).y();
+        if (!(addressTop < portTop && portTop < nameTop)) {
+            failure = QStringLiteral("名称没有排在主机地址与端口的下方");
+        }
+        if (failure.isEmpty()
+            && groupCombo->mapTo(dialog, QPoint{}).x() >= name->mapTo(dialog, QPoint{}).x()) {
+            failure = QStringLiteral("分组下拉框没有位于名称输入框左侧");
+        }
+        // 分组下拉必须真的列出库中分组，否则用户只能看到一个永远选不到目标的空壳。
+        if (failure.isEmpty() && groupCombo->findData(QStringLiteral("name-row-group")) < 0) {
+            failure = QStringLiteral("分组下拉框没有列出已有分组");
+        }
+        if (failure.isEmpty() && name->minimumWidth() != 260) {
+            failure = QStringLiteral("名称输入框宽度被新增控件改变");
+        }
+        if (failure.isEmpty()
+            && (tagButton->parentWidget() != name || tagButton->text() != QStringLiteral("#标签"))) {
+            failure = QStringLiteral("标签入口没有嵌在名称输入框内部");
+        }
+        // 入口必须贴在输入框右端，并为文本让出等宽的右边距，长名称才不会画到按钮下面。
+        if (failure.isEmpty()
+            && (tagButton->geometry().right() > name->width()
+                || tagButton->geometry().left() < name->width() / 2
+                || name->textMargins().right() < tagButton->width())) {
+            failure = QStringLiteral("标签入口没有停靠在名称输入框最右侧或未预留文本边距");
+        }
+        dialog->reject();
+    });
+    widget.addHost();
+    QVERIFY2(failure.isEmpty(), qPrintable(failure));
+}
+
+void HostManagerWidgetTest::tagEditorPersistsTagWithChosenColorAndOffersHistory()
+{
+    HostManagerWidget widget(m_database.get(), m_vault.get());
+    QString failure;
+    QString chosenColor;
+    QTimer::singleShot(0, [&failure, &chosenColor]() {
+        auto *dialog = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+        auto *name = dialog == nullptr
+            ? nullptr
+            : dialog->findChild<QLineEdit *>(QStringLiteral("hostRecordNameEdit"));
+        auto *address = dialog == nullptr
+            ? nullptr
+            : dialog->findChild<QLineEdit *>(QStringLiteral("hostAddressEdit"));
+        auto *tagButton = dialog == nullptr
+            ? nullptr
+            : dialog->findChild<QToolButton *>(QStringLiteral("hostRecordTagButton"));
+        auto *save = dialog == nullptr
+            ? nullptr
+            : dialog->findChild<QPushButton *>(QStringLiteral("hostRecordSaveButton"));
+        if (name == nullptr || address == nullptr || tagButton == nullptr || save == nullptr) {
+            failure = QStringLiteral("主机配置窗口缺少标签入口或保存按钮");
+            if (dialog != nullptr) {
+                dialog->reject();
+            }
+            return;
+        }
+
+        // 标签窗口以模态方式弹在主机窗口之上；先排好回调再点击，回调会在其嵌套事件循环里执行。
+        QTimer::singleShot(0, [&failure, &chosenColor]() {
+            auto *tagDialog = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+            auto *tagName = tagDialog == nullptr
+                ? nullptr
+                : tagDialog->findChild<QLineEdit *>(QStringLiteral("hostTagNameEdit"));
+            auto *chooser = tagDialog == nullptr
+                ? nullptr
+                : tagDialog->findChild<QWidget *>(QStringLiteral("hostTagColorChooser"));
+            auto *addTag = tagDialog == nullptr
+                ? nullptr
+                : tagDialog->findChild<QPushButton *>(QStringLiteral("hostTagAddButton"));
+            auto *selected = tagDialog == nullptr
+                ? nullptr
+                : tagDialog->findChild<QListWidget *>(QStringLiteral("hostTagSelectedList"));
+            auto *accept = tagDialog == nullptr
+                ? nullptr
+                : tagDialog->findChild<QPushButton *>(QStringLiteral("hostTagAcceptButton"));
+            if (tagName == nullptr || chooser == nullptr || addTag == nullptr
+                || selected == nullptr || accept == nullptr) {
+                failure = QStringLiteral("标签窗口缺少名称、配色、添加或确定入口");
+                if (tagDialog != nullptr) {
+                    tagDialog->reject();
+                }
+                return;
+            }
+
+            const QList<QAbstractButton *> swatches = chooser->findChildren<QAbstractButton *>();
+            if (swatches.size() < 4) {
+                failure = QStringLiteral("标签窗口没有提供可选配色");
+                tagDialog->reject();
+                return;
+            }
+            // 故意不取第一个色块：默认色与强调色相同，选它无法证明用户选择真的被采用。
+            QAbstractButton *picked = swatches.at(3);
+            picked->setChecked(true);
+            chosenColor = picked->toolTip();
+            tagName->setText(QStringLiteral("生产"));
+            addTag->click();
+            if (selected->count() != 1
+                || selected->item(0)->text() != QStringLiteral("生产")) {
+                failure = QStringLiteral("添加后的标签没有进入本机标签列表");
+                tagDialog->reject();
+                return;
+            }
+            accept->click();
+        });
+        tagButton->click();
+        if (!failure.isEmpty()) {
+            dialog->reject();
+            return;
+        }
+        if (tagButton->text() != QStringLiteral("#生产")) {
+            failure = QStringLiteral("名称框内的入口没有回显已选标签");
+            dialog->reject();
+            return;
+        }
+
+        address->setText(QStringLiteral("192.0.2.44"));
+        name->setText(QStringLiteral("带标签的主机"));
+        save->click();
+    });
+    widget.addHost();
+    QVERIFY2(failure.isEmpty(), qPrintable(failure));
+    QVERIFY(!chosenColor.isEmpty());
+
+    bool ok = false;
+    QString error;
+    const QList<HostRecord> saved =
+        m_database->hostsWithTag(QStringLiteral("生产"), &ok, &error);
+    QVERIFY2(ok, qPrintable(error));
+    QCOMPARE(saved.size(), 1);
+    QCOMPARE(saved.constFirst().name, QStringLiteral("带标签的主机"));
+
+    // 徽章颜色来自全局配色表；主机树必须按用户所选颜色而不是固定强调色绘制。
+    QTreeWidgetItem *item = findItem(widget, QStringLiteral("带标签的主机"));
+    QVERIFY(item != nullptr);
+    const QColor badgeColor = qvariant_cast<QColor>(item->data(0, Qt::UserRole + 4));
+    QCOMPARE(badgeColor.name(), chosenColor);
+
+    // 另一台主机打开标签窗口时，必须能直接从历史候选里复用同一个标签，而不是重新拼写。
+    QString historyFailure;
+    QTimer::singleShot(0, [&historyFailure]() {
+        auto *dialog = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+        auto *tagButton = dialog == nullptr
+            ? nullptr
+            : dialog->findChild<QToolButton *>(QStringLiteral("hostRecordTagButton"));
+        if (tagButton == nullptr) {
+            historyFailure = QStringLiteral("第二台主机的配置窗口缺少标签入口");
+            if (dialog != nullptr) {
+                dialog->reject();
+            }
+            return;
+        }
+        QTimer::singleShot(0, [&historyFailure]() {
+            auto *tagDialog = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+            auto *history = tagDialog == nullptr
+                ? nullptr
+                : tagDialog->findChild<QListWidget *>(QStringLiteral("hostTagHistoryList"));
+            if (history == nullptr) {
+                historyFailure = QStringLiteral("标签窗口缺少历史标签列表");
+            } else if (history->findItems(QStringLiteral("生产"), Qt::MatchExactly).isEmpty()) {
+                historyFailure = QStringLiteral("历史标签列表没有列出已在别处使用过的标签");
+            }
+            if (tagDialog != nullptr) {
+                tagDialog->reject();
+            }
+        });
+        tagButton->click();
+        dialog->reject();
+    });
+    widget.addHost();
+    QVERIFY2(historyFailure.isEmpty(), qPrintable(historyFailure));
+}
+
+void HostManagerWidgetTest::groupComboMovesHostIntoSelectedGroup()
+{
+    HostRecord group;
+    group.id = QStringLiteral("target-group-id");
+    group.kind = HostNodeKind::Folder;
+    group.name = QStringLiteral("目标分组");
+    QString error;
+    QVERIFY2(m_database->saveHost(group, &error), qPrintable(error));
+
+    HostRecord host;
+    host.id = QStringLiteral("regrouped-host-id");
+    host.kind = HostNodeKind::Host;
+    host.name = QStringLiteral("待改组主机");
+    host.host = QStringLiteral("192.0.2.55");
+    QVERIFY2(m_database->saveHost(host, &error), qPrintable(error));
+
+    HostManagerWidget widget(m_database.get(), m_vault.get());
+    auto *tree = widget.findChild<QTreeWidget *>();
+    QVERIFY(tree != nullptr);
+    QTreeWidgetItem *item = findItem(widget, host.name);
+    QVERIFY(item != nullptr);
+    tree->setCurrentItem(item);
+
+    QString failure;
+    QTimer::singleShot(0, [&failure]() {
+        auto *dialog = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+        auto *groupCombo = dialog == nullptr
+            ? nullptr
+            : dialog->findChild<QComboBox *>(QStringLiteral("hostRecordGroupCombo"));
+        auto *save = dialog == nullptr
+            ? nullptr
+            : dialog->findChild<QPushButton *>(QStringLiteral("hostRecordSaveButton"));
+        if (groupCombo == nullptr || save == nullptr) {
+            failure = QStringLiteral("编辑窗口缺少分组下拉框或保存按钮");
+            if (dialog != nullptr) {
+                dialog->reject();
+            }
+            return;
+        }
+        const int targetIndex = groupCombo->findData(QStringLiteral("target-group-id"));
+        if (targetIndex < 0) {
+            failure = QStringLiteral("分组下拉框没有列出目标分组");
+            dialog->reject();
+            return;
+        }
+        groupCombo->setCurrentIndex(targetIndex);
+        save->click();
+    });
+    widget.editSelected();
+    QVERIFY2(failure.isEmpty(), qPrintable(failure));
+
+    const std::optional<HostRecord> stored = m_database->findHost(host.id, &error);
+    QVERIFY2(stored.has_value(), qPrintable(error));
+    QCOMPARE(stored->parentId, QStringLiteral("target-group-id"));
+
+    QTreeWidgetItem *movedItem = findItem(widget, host.name);
+    QVERIFY(movedItem != nullptr);
+    QVERIFY2(movedItem->parent() != nullptr
+                 && movedItem->parent()->text(0) == QStringLiteral("目标分组"),
+             "改组保存后主机没有出现在目标分组下");
 }
 
 QTEST_MAIN(HostManagerWidgetTest)
