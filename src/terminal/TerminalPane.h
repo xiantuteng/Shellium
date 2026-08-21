@@ -67,6 +67,14 @@ public:
     /** @brief 返回连接链最内层目标；尚未连接时返回无效目标。 */
     [[nodiscard]] ConnectionTarget activeTarget() const;
 
+    /**
+     * @brief 返回当前会话赖以建立的受管连接计划；本地 Shell 或尚未连接时为空。
+     *
+     * 与 targets() 不同，这里保留受管跳板层、剔除推测层，因此可以原样交给另一个面板
+     * 重新拨号——复制标签正是靠它避免再走一遍主机链解析与保险库解锁。
+     */
+    [[nodiscard]] QList<ConnectionTarget> connectionPlan() const;
+
     /** @brief 判断当前远程或本地终端是否已经完成启动并可交互。 */
     [[nodiscard]] bool isConnected() const;
 

@@ -638,6 +638,13 @@ QList<ConnectionTarget> TerminalPane::targets() const
     return combined;
 }
 
+QList<ConnectionTarget> TerminalPane::connectionPlan() const
+{
+    // SSH 正常退出后面板会退回本地 zsh，但整条计划仍留给手动重连复用。若只看计划非空，
+    // 复制一个早已回到本机的标签会凭空再拨一条 SSH，因此以当前是否跑着本地 Shell 为准。
+    return m_localWorker != nullptr ? QList<ConnectionTarget>{} : m_connectionPlan;
+}
+
 ConnectionTarget TerminalPane::activeTarget() const
 {
     if (!m_inferredTargets.isEmpty()) {

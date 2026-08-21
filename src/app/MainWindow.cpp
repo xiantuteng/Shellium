@@ -2191,7 +2191,15 @@ void MainWindow::showSessionTabContextMenu(const QPoint &position)
         return;
     }
     const int index = m_titleTabBar->tabAt(position);
-    QMenu menu(this);
+    QMenu *menu = createSessionTabMenu(index, this);
+    menu->exec(m_titleTabBar->mapToGlobal(position));
+    delete menu;
+}
+
+QMenu *MainWindow::createSessionTabMenu(const int index, QWidget *parent)
+{
+    auto *menuPointer = new QMenu(parent);
+    QMenu &menu = *menuPointer;
     UiIcons::modernizePopup(&menu);
     QAction *newAction = menu.addAction(
         UiIcons::symbol(this, UiIcons::Symbol::Plus, this->palette().color(QPalette::WindowText)),
@@ -2203,8 +2211,17 @@ void MainWindow::showSessionTabContextMenu(const QPoint &position)
     });
 
     if (index >= 0) {
-        m_titleTabBar->setCurrentIndex(index);
+        if (m_titleTabBar != nullptr) {
+            m_titleTabBar->setCurrentIndex(index);
+        }
         menu.addSeparator();
+        QAction *duplicateAction = menu.addAction(
+            UiIcons::symbol(this, UiIcons::Symbol::Copy, this->palette().color(QPalette::WindowText)),
+            tr("复制标签"));
+        connect(duplicateAction,
+                &QAction::triggered,
+                this,
+                [this, index]() { duplicateWorkspaceTab(index); });
         QAction *renameAction = menu.addAction(
             UiIcons::symbol(this, UiIcons::Symbol::Edit, this->palette().color(QPalette::WindowText)),
             tr("重命名"));
@@ -2242,7 +2259,46 @@ void MainWindow::showSessionTabContextMenu(const QPoint &position)
             }
         });
     }
-    menu.exec(m_titleTabBar->mapToGlobal(position));
+    return menuPointer;
+}
+
+void MainWindow::duplicateWorkspaceTab(const int index)
+{
+    auto *source = qobject_cast<TerminalWorkspace *>(m_tabs->widget(index));
+    TerminalPane *sourcePane = source == nullptr ? nullptr : source->activePane();
+    if (sourcePane == nullptr) {
+        return;
+    }
+    const QList<ConnectionTarget> connectionPlan = sourcePane->connectionPlan();
+
+    TerminalWorkspace *copy = createWorkspaceTab(m_tabs->tabText(index));
+    copy->setFileManagerVisible(source->isFileManagerVisible());
+    m_tabs->setCurrentWidget(copy);
+    TerminalPane *pane = copy->activePane();
+    if (pane == nullptr) {
+        return;
+    }
+    if (connectionPlan.isEmpty() || !connectionPlan.constLast().isValid()) {
+        pane->openLocalShell();
+        return;
+    }
+
+    // 计划里已经带着逐跳解析好的凭据，副本因此不必重新解锁保险库；只有当根目标确实是
+    // 主机树里的持久化记录时才登记连接历史，临时连接的随机 UUID 写进去会成为悬空外键。
+    const QString rootHostId = connectionPlan.constLast().id;
+    QString lookupError;
+    if (!rootHostId.isEmpty()
+        && m_database->findHost(rootHostId, &lookupError).has_value()) {
+        m_pendingHistoryHosts.insert(pane, rootHostId);
+        m_pendingHistoryStartedAt.insert(pane, QDateTime::currentDateTimeUtc());
+    }
+    pane->connectToHosts(connectionPlan);
+
+    const int copyIndex = m_tabs->indexOf(copy);
+    if (copyIndex >= 0 && m_titleTabBar != nullptr) {
+        m_titleTabBar->setTabConnectionState(copyIndex,
+                                             SessionTabBar::ConnectionState::Connecting);
+    }
 }
 
 void MainWindow::showTransientMessage(const QString &message, int)

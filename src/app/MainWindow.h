@@ -18,6 +18,7 @@ struct TerminalSettings;
 class QAction;
 class QEvent;
 class QLabel;
+class QMenu;
 class QObject;
 class QPoint;
 class QResizeEvent;
@@ -52,6 +53,16 @@ public:
                         CredentialVault *credentialVault,
                         QWidget *parent = nullptr);
     ~MainWindow() override;
+
+    /**
+     * @brief 构建标题栏标签的右键菜单。
+     * @param index 被右键的标签索引；小于 0 表示点在空白处，只保留"新建终端标签"。
+     * @param parent 菜单的父控件，由调用方决定生命周期。
+     * @return 已装配好全部动作的菜单，调用方负责弹出或直接触发其中的动作。
+     *
+     * 菜单构建与弹出分离，用例才能在不进入 exec() 阻塞事件循环的前提下触发同一批动作。
+     */
+    [[nodiscard]] QMenu *createSessionTabMenu(int index, QWidget *parent);
 
 protected:
     /**
@@ -173,6 +184,15 @@ private:
      * @param title 经过调用方校验的非空显示名称。
      */
     void setWorkspaceTabText(int index, const QString &title);
+
+    /**
+     * @brief 在新标签中再打开一份与指定标签相同的会话。
+     * @param index 被复制的标签索引。
+     *
+     * 直接复用源面板已解析好的整条受管计划（含逐跳凭据），因此复制远程标签不会再次触发
+     * 主机链解析和保险库解锁；源标签跑的是本地 Shell 时，副本同样只是本地 Shell。
+     */
+    void duplicateWorkspaceTab(int index);
 
     /**
      * @brief 显示或隐藏左侧单一内容侧栏。

@@ -5,7 +5,9 @@
 #include "terminal/TerminalView.h"
 #include "terminal/TerminalWorkspace.h"
 
+#include <QAction>
 #include <QLabel>
+#include <QMenu>
 #include <QStackedWidget>
 #include <QSplitter>
 #include <QSplitterHandle>
@@ -15,6 +17,7 @@
 #include <QTest>
 #include <QToolButton>
 
+#include <memory>
 #include <optional>
 
 /**
@@ -35,6 +38,7 @@ private slots:
     void destroyingWindowWithOpenTabsIsSafe();
     void emptyStateKeepsNewTabButtonNextToTheSidebarToggle();
     void sidebarWidthIsRestoredOnNextLaunch();
+    void duplicateMenuItemOpensASecondCopyOfTheTab();
 
 private:
     ApplicationDatabase *m_database = nullptr;
@@ -254,6 +258,52 @@ void MainWindowShellTest::sidebarWidthIsRestoredOnNextLaunch()
     auto *restoredSplitter = restarted.findChild<QSplitter *>(QStringLiteral("SidebarSplitter"));
     QVERIFY(restoredSplitter != nullptr);
     QCOMPARE(restoredSplitter->sizes().constFirst(), draggedWidth);
+}
+
+void MainWindowShellTest::duplicateMenuItemOpensASecondCopyOfTheTab()
+{
+    MainWindow window(m_database, m_vault);
+    window.resize(1200, 800);
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+    auto *tabs = window.findChild<QTabWidget *>(QStringLiteral("TerminalPages"));
+    auto *tabBar = window.findChild<QTabBar *>(QStringLiteral("SessionTitleTabs"));
+    auto *newTabButton = window.findChild<QToolButton *>(QStringLiteral("TitleNewTabButton"));
+    QVERIFY(tabs != nullptr && tabBar != nullptr && newTabButton != nullptr);
+    QTest::mouseClick(newTabButton, Qt::LeftButton);
+    auto *source = qobject_cast<TerminalWorkspace *>(tabs->widget(0));
+    QVERIFY(source != nullptr);
+    QTRY_VERIFY_WITH_TIMEOUT(source->activePane()->isConnected(), 8000);
+    const QString sourceTitle = tabs->tabText(0);
+
+    // 空白处右键只应给出"新建"，不能提供无从下手的"复制标签"。
+    std::unique_ptr<QMenu> blankMenu(window.createSessionTabMenu(-1, &window));
+    for (const QAction *action : blankMenu->actions()) {
+        QVERIFY2(action->text() != QStringLiteral("复制标签"),
+                 "标题栏空白处的菜单不应包含复制标签");
+    }
+
+    std::unique_ptr<QMenu> menu(window.createSessionTabMenu(0, &window));
+    QAction *duplicateAction = nullptr;
+    for (QAction *action : menu->actions()) {
+        if (action->text() == QStringLiteral("复制标签")) {
+            duplicateAction = action;
+        }
+    }
+    QVERIFY2(duplicateAction != nullptr, "标签右键菜单缺少复制标签");
+    duplicateAction->trigger();
+
+    QCOMPARE(tabs->count(), 2);
+    QCOMPARE(tabBar->count(), 2);
+    QCOMPARE(tabs->tabText(1), sourceTitle);
+    auto *copy = qobject_cast<TerminalWorkspace *>(tabs->widget(1));
+    QVERIFY(copy != nullptr);
+    QCOMPARE(tabs->currentWidget(), copy);
+    QVERIFY(copy->activePane() != source->activePane());
+    // 副本必须真的起了一个可交互的会话，而不是留下空面板等用户再点一次。
+    QTRY_VERIFY_WITH_TIMEOUT(copy->activePane()->isConnected(), 8000);
+    QVERIFY(source->activePane()->isConnected());
 }
 
 QTEST_MAIN(MainWindowShellTest)
