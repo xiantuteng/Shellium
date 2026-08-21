@@ -574,7 +574,15 @@ void AiAssistantWidget::buildUi()
     disclaimer->setContentsMargins(0, 0, 0, 4);
     root->addWidget(disclaimer);
 
-    connect(m_sendButton, &QPushButton::clicked, this, &AiAssistantWidget::sendCurrentInput);
+    connect(m_sendButton, &QPushButton::clicked, this, [this]() {
+        // 同一个按钮承担两种语义，路由必须以运行态为准而不是以图标为准：图标只是运行态
+        // 的呈现，若两者判断依据不同，某次漏刷新图标就会变成"看着是停止、点下去却重发"。
+        if (m_requestInFlight || m_captureInFlight) {
+            stopActiveWork();
+            return;
+        }
+        sendCurrentInput();
+    });
     connect(m_newSessionButton, &QPushButton::clicked, this, &AiAssistantWidget::startNewSession);
     connect(m_historyMenu,
             &QMenu::aboutToShow,
@@ -602,6 +610,7 @@ void AiAssistantWidget::buildUi()
         QKeySequence(static_cast<int>(kCommandKeyModifier) | Qt::Key_Enter),
                             QStringLiteral("aiExecuteLatestKeypadShortcut"));
     updateInputEditorHeight();
+    updateSendButtonMode();
 }
 
 bool AiAssistantWidget::eventFilter(QObject *watched, QEvent *event)
@@ -1289,9 +1298,76 @@ void AiAssistantWidget::appendCommandCard(const QString &command,
 void AiAssistantWidget::setBusy(const bool busy)
 {
     m_requestInFlight = busy;
-    if (m_sendButton != nullptr) {
-        m_sendButton->setEnabled(!busy && !m_captureInFlight);
+    updateSendButtonMode();
+}
+
+void AiAssistantWidget::updateSendButtonMode()
+{
+    if (m_sendButton == nullptr) {
+        return;
     }
+    const bool stoppable = m_requestInFlight || m_captureInFlight;
+    m_sendButton->setEnabled(true);
+    m_sendButton->setProperty("aiButtonMode",
+                              stoppable ? QStringLiteral("stop") : QStringLiteral("send"));
+    m_sendButton->setIcon(UiIcons::symbol(this,
+                                          stoppable ? UiIcons::Symbol::Stop
+                                                    : UiIcons::Symbol::ArrowUp,
+                                          QColor(Qt::white)));
+    m_sendButton->setToolTip(stoppable ? tr("停止") : tr("发送（Enter）"));
+    m_sendButton->setStyleSheet(
+        stoppable
+            ? QStringLiteral(
+                  "QPushButton { background: #b42318; border: none; border-radius: 9px; }")
+            : QStringLiteral(
+                  "QPushButton { background: #159a60; border: none; border-radius: 9px; }"
+                  "QPushButton:disabled { background: palette(mid); }"));
+}
+
+void AiAssistantWidget::stopActiveWork()
+{
+    if (m_requestInFlight) {
+        // 先落 UI 状态再中止：AiClient 在用户主动中止后不会再发任何信号，界面收尾只能
+        // 由这里完成。
+        m_client->abortActiveRequest();
+        if (m_thinkingBubble != nullptr) {
+            m_thinkingBubble->deleteLater();
+            m_thinkingBubble = nullptr;
+        }
+        m_agentProtocolRepairCount = 0;
+        setBusy(false);
+        appendNoticeBubble(tr("已停止本次分析。可以补充说明后重新发送。"), false);
+        emit statusMessage(tr("已停止 AI 分析"));
+        scrollToBottom();
+        return;
+    }
+    if (m_captureInFlight) {
+        cancelOutputCapture();
+    }
+}
+
+void AiAssistantWidget::cancelOutputCapture()
+{
+    if (!m_captureInFlight) {
+        return;
+    }
+    if (m_captureTimer != nullptr) {
+        m_captureTimer->stop();
+    }
+    m_captureInFlight = false;
+    if (!m_captureWaitingLabel.isNull()) {
+        m_captureWaitingLabel->deleteLater();
+    }
+    m_captureCardFrame.clear();
+    m_captureCardActionsRow.clear();
+    m_captureWaitingLabel.clear();
+    // 读取位置保持在停止的这一刻，不回退：这段输出用户已经能在终端里看到，下一次请求
+    // 若把它重新灌给模型，等于把用户刚刚放弃的那一轮又拉回上下文。
+    updateSendButtonMode();
+    appendNoticeBubble(
+        tr("已停止等待命令执行结果，命令仍在终端继续运行。"), false);
+    emit statusMessage(tr("已停止等待命令执行结果"));
+    scrollToBottom();
 }
 
 void AiAssistantWidget::beginOutputCapture(const QString &command, QFrame *card, QWidget *actionsRow)
@@ -1319,9 +1395,7 @@ void AiAssistantWidget::beginOutputCapture(const QString &command, QFrame *card,
     m_captureLastReportedSecond = -1;
     m_captureInFlight = true;
     m_captureElapsed.start();
-    if (m_sendButton != nullptr) {
-        m_sendButton->setEnabled(false);
-    }
+    updateSendButtonMode();
 
     // 等待状态直接插进命令卡片并动态显示耗时。命令完成后只移除状态，不把终端输出替换
     // 进来；用户在聊天区看到的是流程状态，原始日志仍只存在于终端。
@@ -1385,9 +1459,7 @@ void AiAssistantWidget::finishOutputCapture()
         m_captureTimer->stop();
     }
     m_captureInFlight = false;
-    if (m_sendButton != nullptr) {
-        m_sendButton->setEnabled(!m_requestInFlight);
-    }
+    updateSendButtonMode();
 
     // 终端差量只作为智能体观察值。这里刻意不创建 QLabel、不改命令卡片正文，避免输出
     // 在终端和聊天区重复出现，也避免密码、令牌、数据库结果等内容被长期留在对话界面。

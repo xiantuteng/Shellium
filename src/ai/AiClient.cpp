@@ -115,6 +115,7 @@ void AiClient::sendMessage(const AiSettings &settings, const QList<AiChatMessage
 
     m_streamBuffer.clear();
     m_streamAccumulatedContent.clear();
+    m_chatAbortRequested = false;
 
     m_activeChatReply = m_network->post(request, QJsonDocument(body).toJson(QJsonDocument::Compact));
     connect(m_activeChatReply, &QNetworkReply::readyRead, this, [this]() {
@@ -131,6 +132,12 @@ void AiClient::sendMessage(const AiSettings &settings, const QList<AiChatMessage
             return;
         }
         reply->deleteLater();
+        if (m_chatAbortRequested) {
+            // 用户主动停止：本次请求的任何结果都已经作废，界面也已由调用方收尾。这里
+            // 连部分累积的流式内容都不发出，避免停止之后又冒出半句回答。
+            m_chatAbortRequested = false;
+            return;
+        }
         if (reply->error() != QNetworkReply::NoError) {
             emit replyFailed(tr("请求失败：%1").arg(reply->errorString()));
             return;
@@ -206,7 +213,10 @@ void AiClient::processStreamBuffer()
 
 void AiClient::abortActiveRequest()
 {
-    if (m_activeChatReply != nullptr) {
-        m_activeChatReply->abort();
+    if (m_activeChatReply == nullptr) {
+        return;
     }
+    m_chatAbortRequested = true;
+    // abort() 会同步或异步触发 finished，其中的分支据此保持沉默。
+    m_activeChatReply->abort();
 }

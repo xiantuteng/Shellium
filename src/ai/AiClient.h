@@ -52,7 +52,13 @@ public:
      */
     void sendMessage(const AiSettings &settings, const QList<AiChatMessage> &messages);
 
-    /** @brief 中止当前进行中的对话请求；用户切换上下文或关闭面板时调用。 */
+    /**
+     * @brief 中止当前进行中的对话请求；用户主动停止、切换上下文或关闭面板时调用。
+     *
+     * 中止后本次请求不再发出 replyFinished / replyFailed：用户按下"停止"是一次成功的
+     * 交互，把底层的"Operation canceled"当成请求失败弹给用户只会制造一条假故障。调用方
+     * 因此必须在调用处自行收尾界面状态，不能等待信号。没有进行中的请求时调用无副作用。
+     */
     void abortActiveRequest();
 
 signals:
@@ -90,6 +96,9 @@ private:
     QNetworkAccessManager *m_network = nullptr;
     QNetworkReply *m_activeTestReply = nullptr;
     QNetworkReply *m_activeChatReply = nullptr;
+
+    /** @brief 当前对话请求是否由 abortActiveRequest() 主动中止，用于抑制随之而来的失败信号。 */
+    bool m_chatAbortRequested = false;
 
     /** @brief 当前请求尚未被 processStreamBuffer 消费掉的原始字节。 */
     QByteArray m_streamBuffer;

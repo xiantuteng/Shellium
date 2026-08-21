@@ -39,6 +39,18 @@ QByteArray chatCompletionBody(const QString &content)
     return QJsonDocument(root).toJson(QJsonDocument::Compact);
 }
 
+/**
+ * @brief 判断助手是否已回到空闲态。
+ *
+ * 忙碌时发送按钮不再置灰，而是就地变成停止入口，因此"按钮可点"不再等于"这一轮结束了"；
+ * 用例统一按按钮形态判断空闲，避免在模型还在分析时就去断言渲染结果。
+ */
+bool aiIsIdle(const QPushButton *sendButton)
+{
+    return sendButton != nullptr
+        && sendButton->property("aiButtonMode").toString() == QStringLiteral("send");
+}
+
 QJsonArray requestMessages(const QByteArray &requestBody)
 {
     return QJsonDocument::fromJson(requestBody).object().value(QStringLiteral("messages")).toArray();
@@ -69,6 +81,13 @@ public:
 
     QList<QByteArray> responses;
     QList<QByteArray> capturedBodies;
+    /**
+     * @brief 收到请求后故意不应答，用来模拟"模型迟迟不返回"的长分析。
+     *
+     * 连接保持打开而不是断开：断开会让客户端立刻收到网络错误，那测的就是失败路径，
+     * 而不是用户在漫长等待中按下停止的这条路径。
+     */
+    bool holdRequests = false;
 
 private:
     void acceptConnection()
@@ -94,6 +113,9 @@ private:
                     return;
                 }
                 capturedBodies.append(buffer->mid(bodyStart, contentLength));
+                if (holdRequests) {
+                    return;
+                }
 
                 const QByteArray responseBody =
                     responses.isEmpty() ? QByteArrayLiteral("{}") : responses.takeFirst();
@@ -136,6 +158,7 @@ private slots:
     void commandCardInsertModifyAndCopyUseCorrectRoutes();
     void chatAutoScrollResumesAfterUserReturnsToBottom();
     void aiClientParsesStreamingResponseIncrementally();
+    void stopButtonEndsLongRunningAnalysis();
 };
 
 void AiAssistantWidgetTest::executingCommandAutoCapturesOutputAndContinuesConversation()
@@ -197,7 +220,9 @@ void AiAssistantWidgetTest::executingCommandAutoCapturesOutputAndContinuesConver
     terminalText += QStringLiteral("which nginx\n正在执行耗时检查");
     QTest::qWait(1300);
     QCOMPARE(server.capturedBodies.size(), 1);
-    QVERIFY(!sendButton->isEnabled());
+    // 等待命令执行期间按钮同样切换成停止形态：它保持可点，但点下去是中止等待而不是发送。
+    QVERIFY(!aiIsIdle(sendButton));
+    QVERIFY(sendButton->isEnabled());
     auto *waitingLabel = widget.findChild<QLabel *>(QStringLiteral("aiCommandWaitingLabel"));
     QVERIFY(waitingLabel != nullptr);
     QVERIFY(waitingLabel->text().contains(QStringLiteral("正在等待命令执行完成")));
@@ -227,7 +252,7 @@ void AiAssistantWidgetTest::executingCommandAutoCapturesOutputAndContinuesConver
              qPrintable(lastMessage));
 
     // 第二轮回复处理完毕后输入区应当恢复可用，不能停留在"AI 正在处理…"的忙碌态。
-    QTRY_VERIFY_WITH_TIMEOUT(sendButton->isEnabled(), 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(aiIsIdle(sendButton), 5000);
     // 第二轮回复没有代码块，不应该再多出一张可执行命令卡片。
     QCOMPARE(widget.findChildren<QPushButton *>(QStringLiteral("aiExecuteButton")).size(), 1);
 
@@ -287,7 +312,7 @@ void AiAssistantWidgetTest::newSessionClearsHistoryAndReadPosition()
     inputEdit->setPlainText(QStringLiteral("这是旧会话的提问"));
     sendButton->click();
     QTRY_COMPARE_WITH_TIMEOUT(server.capturedBodies.size(), 1, 5000);
-    QTRY_VERIFY_WITH_TIMEOUT(sendButton->isEnabled(), 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(aiIsIdle(sendButton), 5000);
 
     newSessionButton->click();
     // 聊天区应当清空回只剩末尾的伸缩项，不再残留上一轮的气泡或命令卡片。
@@ -337,7 +362,7 @@ void AiAssistantWidgetTest::assistantNarrativeRendersAsMarkdown()
     inputEdit->setPlainText(QStringLiteral("总结一下"));
     sendButton->click();
     QTRY_COMPARE_WITH_TIMEOUT(server.capturedBodies.size(), 1, 5000);
-    QTRY_VERIFY_WITH_TIMEOUT(sendButton->isEnabled(), 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(aiIsIdle(sendButton), 5000);
 
     bool foundMarkdownBubble = false;
     for (QLabel *label : widget.findChildren<QLabel *>()) {
@@ -384,7 +409,7 @@ void AiAssistantWidgetTest::multiStepResponseIsRejectedAndRepairedBeforeDisplay(
 
     // 两次请求分别是原始决策和客户端自动发起的协议纠正；用户不需要手工重试。
     QTRY_COMPARE_WITH_TIMEOUT(server.capturedBodies.size(), 2, 5000);
-    QTRY_VERIFY_WITH_TIMEOUT(sendButton->isEnabled(), 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(aiIsIdle(sendButton), 5000);
     QCOMPARE(widget.findChildren<QPushButton *>(QStringLiteral("aiExecuteButton")).size(), 1);
 
     bool foundReason = false;
@@ -545,13 +570,13 @@ void AiAssistantWidgetTest::conversationHistoryRestoresPreviousSession()
     inputEdit->setPlainText(QStringLiteral("旧会话任务"));
     sendButton->click();
     QTRY_COMPARE_WITH_TIMEOUT(server.capturedBodies.size(), 1, 5000);
-    QTRY_VERIFY_WITH_TIMEOUT(sendButton->isEnabled(), 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(aiIsIdle(sendButton), 5000);
     newSessionButton->click();
 
     inputEdit->setPlainText(QStringLiteral("新会话任务"));
     sendButton->click();
     QTRY_COMPARE_WITH_TIMEOUT(server.capturedBodies.size(), 2, 5000);
-    QTRY_VERIFY_WITH_TIMEOUT(sendButton->isEnabled(), 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(aiIsIdle(sendButton), 5000);
 
     // aboutToShow 是菜单刷新历史快照的唯一入口；直接经元对象触发可避免离屏测试依赖真实
     // 鼠标弹窗，同时仍覆盖生产环境点击按钮时执行的同一信号槽连接。
@@ -748,7 +773,7 @@ void AiAssistantWidgetTest::chatAutoScrollResumesAfterUserReturnsToBottom()
         inputEdit->setPlainText(QStringLiteral("消息 %1").arg(index));
         sendButton->click();
         QTRY_COMPARE_WITH_TIMEOUT(server.capturedBodies.size(), index + 1, 5000);
-        QTRY_VERIFY_WITH_TIMEOUT(sendButton->isEnabled(), 5000);
+        QTRY_VERIFY_WITH_TIMEOUT(aiIsIdle(sendButton), 5000);
     }
     QScrollBar *bar = chatScroll->verticalScrollBar();
     QTRY_VERIFY(bar->maximum() > 0);
@@ -758,7 +783,7 @@ void AiAssistantWidgetTest::chatAutoScrollResumesAfterUserReturnsToBottom()
     inputEdit->setPlainText(QStringLiteral("上滚后新增消息"));
     sendButton->click();
     QTRY_COMPARE_WITH_TIMEOUT(server.capturedBodies.size(), 8, 5000);
-    QTRY_VERIFY_WITH_TIMEOUT(sendButton->isEnabled(), 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(aiIsIdle(sendButton), 5000);
     QCOMPARE(bar->value(), 0);
 
     // 用户重新拖到底部后，下一轮消息应跟随增长后的新 maximum，证明自动跟随已经恢复。
@@ -766,7 +791,7 @@ void AiAssistantWidgetTest::chatAutoScrollResumesAfterUserReturnsToBottom()
     inputEdit->setPlainText(QStringLiteral("回到底部后新增消息"));
     sendButton->click();
     QTRY_COMPARE_WITH_TIMEOUT(server.capturedBodies.size(), 9, 5000);
-    QTRY_VERIFY_WITH_TIMEOUT(sendButton->isEnabled(), 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(aiIsIdle(sendButton), 5000);
     QTRY_COMPARE(bar->value(), bar->maximum());
 }
 
@@ -823,6 +848,70 @@ void AiAssistantWidgetTest::aiClientParsesStreamingResponseIncrementally()
     // 每次信号都带的是"累计到目前为止"的完整文本，不是单独的增量片段。
     QCOMPARE(chunkSpy.at(1).at(0).toString(), QStringLiteral("你好，世界"));
     QCOMPARE(finishedSpy.at(0).at(0).toString(), QStringLiteral("你好，世界"));
+}
+
+
+void AiAssistantWidgetTest::stopButtonEndsLongRunningAnalysis()
+{
+    MiniAiServer server;
+    QVERIFY(server.isListening());
+    // 网关收下请求后一直不回，正是用户看到"正在分析…"停在那里不动的现场。
+    server.holdRequests = true;
+
+    AiSettingsService settingsService(nullptr, nullptr);
+    AiSettings settings;
+    settings.endpointUrl = QStringLiteral("http://127.0.0.1:%1").arg(server.port());
+    settings.model = QStringLiteral("test-model");
+    QVERIFY(settingsService.save(settings));
+
+    AiAssistantWidget widget(&settingsService);
+    widget.resize(420, 640);
+    widget.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&widget));
+
+    auto *inputEdit = widget.findChild<QTextEdit *>(QStringLiteral("aiInputEdit"));
+    auto *sendButton = widget.findChild<QPushButton *>(QStringLiteral("aiSendButton"));
+    QVERIFY(inputEdit != nullptr && sendButton != nullptr);
+
+    const auto labelWithText = [&widget](const QString &needle) {
+        for (const QLabel *label : widget.findChildren<QLabel *>()) {
+            if (label->text().contains(needle)) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    inputEdit->setPlainText(QStringLiteral("查看一下集群状态"));
+    sendButton->click();
+    QTRY_COMPARE_WITH_TIMEOUT(server.capturedBodies.size(), 1, 5000);
+    QTRY_VERIFY(labelWithText(QStringLiteral("正在分析")));
+
+    // 等待期间按钮不能是灰的：它必须就地变成停止入口，否则用户只能干等或关掉整个标签。
+    QVERIFY(sendButton->isEnabled());
+    QCOMPARE(sendButton->property("aiButtonMode").toString(), QStringLiteral("stop"));
+
+    sendButton->click();
+
+    QTRY_VERIFY2(!labelWithText(QStringLiteral("正在分析")), "停止后等待指示器必须消失");
+    QVERIFY(labelWithText(QStringLiteral("已停止本次分析")));
+    QCOMPARE(sendButton->property("aiButtonMode").toString(), QStringLiteral("send"));
+    QVERIFY(sendButton->isEnabled());
+
+    // 中止会让底层 QNetworkReply 以 OperationCanceledError 收尾。若这条错误照常上抛，
+    // 用户主动停止之后会平白多出一条"请求失败"，这里确认它被判定为正常结束而不是故障。
+    QTest::qWait(300);
+    QVERIFY2(!labelWithText(QStringLiteral("请求失败")),
+             "用户主动停止不应该显示成网络请求失败");
+
+    // 停止之后必须能立刻发起下一轮，而不是把面板永久锁在忙碌态。
+    server.holdRequests = false;
+    server.responses.append(chatCompletionBody(QStringLiteral(
+        R"JSON({"state":"complete","message":"已重新确认集群状态。"})JSON")));
+    inputEdit->setPlainText(QStringLiteral("再试一次"));
+    sendButton->click();
+    QTRY_COMPARE_WITH_TIMEOUT(server.capturedBodies.size(), 2, 5000);
+    QTRY_VERIFY(labelWithText(QStringLiteral("已重新确认集群状态")));
 }
 
 QTEST_MAIN(AiAssistantWidgetTest)
