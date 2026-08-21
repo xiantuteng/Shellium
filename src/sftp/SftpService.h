@@ -571,10 +571,10 @@ struct TransferDecision {
  * 三条不可让步的规则：
  * 1. **绝不在正式文件上续写**。续传只发生在 .part 残片上，因此"目标比源小就接着写"这种
  *    会把两个不同文件拼成一个的路径根本不存在。
- * 2. **大小相同不等于内容相同**。跳过必须拿到证据：要么两端完整哈希一致；要么账本存档
- *    证明"上次正是我们把这一版写到那里"——源的**毫秒级**时间戳与存档一致（秒级判据在
- *    同一秒内改成另一份等长内容时会漏判），且目标端时间戳仍等于我们当时的回读值（被别人
- *    改过就不再相等），且该目标端确实能存住时间戳（mtimeTrusted）。没有证据就重传。
+ * 2. **大小相同不等于内容相同**。跳过必须拿到证据，且证据分强弱：两端完整哈希是强证据，
+ *    拿得到就以它为准；拿不到才退到账本存档（源的毫秒级时间戳 + 目标端时间戳仍等于回读值
+ *    + 该目标端确实能存住时间戳）。存档判据挡不住"别人用等长内容覆盖且时间戳恰好同秒"，
+ *    因此绝不能用它去否决哈希给出的结论。
  * 3. **凭据必须证明残片属于当前这个源**。账本里记的源大小、哈希（或退化到修改时间）与
  *    现在的源不符，残片一律作废——源在中断期间被改过，续传只会产出"旧头 + 新尾"。
  *
@@ -594,23 +594,29 @@ struct TransferDecision {
 
     // ---- 跳过判定：只认证据，不认巧合 ----
     if (destination.exists && destination.size == source.size) {
-        if (!source.contentHash.isEmpty() && !destination.contentHash.isEmpty()
-            && source.contentHash == destination.contentHash) {
-            return {TransferAction::SkipIdentical, 0, QObject::tr("内容哈希一致")};
-        }
-
-        // 没有哈希可比时，唯一可接受的证据是"上次正是我们把这一版写到那里的"：源的毫秒级
-        // 时间戳与存档一致（同一秒内的二次改写会在这里被识破），且目标端的时间戳仍等于我们
-        // 当时回读到的值（被别人动过就不再相等）。
-        const bool archiveProvesIdentical = ledger.has_value()
-            && ledger->kind == SftpResume::RecordKind::Complete
-            && mtimeTrusted
-            && ledger->sourceSize == source.size
-            && source.mtimeMs >= 0 && ledger->sourceMtimeMs == source.mtimeMs
-            && ledger->destinationMtime >= 0
-            && ledger->destinationMtime == destination.mtime;
-        if (archiveProvesIdentical) {
-            return {TransferAction::SkipIdentical, 0, QObject::tr("与上次同步记录一致")};
+        // 两端内容哈希都拿得到时，它是唯一权威：哈希说不一样就必须重传，绝不能再回头去看
+        // 时间戳类的弱证据——那等于用一个可能被撞上的巧合去否决一个确凿的事实。
+        if (!source.contentHash.isEmpty() && !destination.contentHash.isEmpty()) {
+            if (source.contentHash == destination.contentHash) {
+                return {TransferAction::SkipIdentical, 0, QObject::tr("内容哈希一致")};
+            }
+        } else {
+            // 算不出哈希时（服务器没有 sha256sum/shasum）才退到存档判据：源的毫秒级时间戳与
+            // 存档一致，且目标端时间戳仍等于我们当时回读到的值。
+            //
+            // 必须清楚这条判据的边界：它防不住"别人用一份等长内容覆盖了远端、且其修改时间
+            // 恰好与我们记录的秒数相同"——两个文件在同一秒内被写出就会撞上。所以它只是没有
+            // 哈希可用时的退路，不是首选。
+            const bool archiveProvesIdentical = ledger.has_value()
+                && ledger->kind == SftpResume::RecordKind::Complete
+                && mtimeTrusted
+                && ledger->sourceSize == source.size
+                && source.mtimeMs >= 0 && ledger->sourceMtimeMs == source.mtimeMs
+                && ledger->destinationMtime >= 0
+                && ledger->destinationMtime == destination.mtime;
+            if (archiveProvesIdentical) {
+                return {TransferAction::SkipIdentical, 0, QObject::tr("与上次同步记录一致")};
+            }
         }
     }
 

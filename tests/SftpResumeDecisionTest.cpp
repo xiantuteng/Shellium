@@ -39,6 +39,9 @@ private slots:
     /** @brief 哈希不一致必须重传，即使大小完全相同。 */
     void retransmitsWhenContentHashesDiffer();
 
+    /** @brief 哈希与存档冲突时，必须以哈希为准，不得因存档"看起来一致"而跳过。 */
+    void letsContentHashOverrideArchiveEvidence();
+
     /** @brief 目标比源小但没有残片和凭据时，绝不允许在正式文件上续写。 */
     void neverResumesOntoTheFinalFile();
 
@@ -240,6 +243,22 @@ void SftpResumeDecisionTest::retransmitsWhenContentHashesDiffer()
         makeDestination("ffffff", kSourceMtime),
         PartialSnapshot{},
         std::nullopt,
+        ExistingFilePolicy::ResumeWhenPossible,
+        true);
+
+    QCOMPARE(decision.action, TransferAction::FullTransfer);
+}
+
+void SftpResumeDecisionTest::letsContentHashOverrideArchiveEvidence()
+{
+    // 别人用一份等长内容覆盖了远端，而他写入的修改时间恰好与我们记录的秒数相同（两个文件在
+    // 同一秒内被写出就会撞上）——存档判据在这里会认为"没人动过"，只有哈希能给出确凿结论。
+    // 因此两端哈希都在场时，存档不得再有发言权。
+    const SftpTransfer::TransferDecision decision = SftpTransfer::decideTransfer(
+        makeSource("mine"),
+        makeDestination("theirs"),
+        PartialSnapshot{},
+        makeArchive(),
         ExistingFilePolicy::ResumeWhenPossible,
         true);
 

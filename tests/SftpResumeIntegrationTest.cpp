@@ -46,6 +46,12 @@ private slots:
     /** @brief 替换：远端多出来的文件必须被删除，结果与本地严格一致。 */
     void replaceRemovesExtraRemoteFiles();
 
+    /** @brief 别人改过远端文件后，本地即使没变也必须重新上传，不能被判成"内容一致"。 */
+    void uploadsAgainAfterSomeoneElseReplacedRemoteFile();
+
+    /** @brief 别人的覆盖恰好保持了相同大小与相同修改时间时，是否还能被发现。 */
+    void detectsForeignOverwriteThatKeptSizeAndMtime();
+
 private:
     [[nodiscard]] static ConnectionTarget testTarget();
 
@@ -113,7 +119,8 @@ RequestOutcome awaitRequest(SftpService &service, const quint64 requestId, const
 /** @brief 等待递归传输结束并取回汇总；连接阶段失败时返回空值。 */
 std::optional<SftpRecursive::TransferSummary> awaitRecursive(SftpService &service,
                                                              const quint64 requestId,
-                                                             const int timeoutMs = 180000)
+                                                             const int timeoutMs = 180000,
+                                                             QString *failureMessage = nullptr)
 {
     std::optional<SftpRecursive::TransferSummary> summary;
     QEventLoop loop;
@@ -128,10 +135,15 @@ std::optional<SftpRecursive::TransferSummary> awaitRecursive(SftpService &servic
         });
     const QMetaObject::Connection failConnection = QObject::connect(
         &service, &SftpService::operationFailed, &loop,
-        [&](const quint64 id, const ConnectionTarget &, SftpService::ErrorKind, const QString &) {
-            if (id == requestId) {
-                loop.quit();
+        [&](const quint64 id, const ConnectionTarget &, SftpService::ErrorKind,
+            const QString &message) {
+            if (id != requestId) {
+                return;
             }
+            if (failureMessage != nullptr) {
+                *failureMessage = message;
+            }
+            loop.quit();
         });
     QTimer::singleShot(timeoutMs, &loop, &QEventLoop::quit);
     loop.exec();
@@ -184,11 +196,14 @@ void SftpResumeIntegrationTest::ensureRemoteRoot()
 
     SftpService service;
     service.setResumeLedgerPath(m_ledgerDirectory.filePath(QStringLiteral("bootstrap.json")));
+    QString failure;
     const std::optional<SftpRecursive::TransferSummary> summary = awaitRecursive(
         service, service.uploadDirectory(testTarget(), localRoot, QStringLiteral("/tmp"),
                                          SftpTransfer::ExistingFilePolicy::Overwrite,
-                                         SftpTransfer::DirectoryConflictPolicy::Merge));
-    QVERIFY2(summary.has_value(), "无法在远端创建测试目录");
+                                         SftpTransfer::DirectoryConflictPolicy::Merge),
+        180000, &failure);
+    QVERIFY2(summary.has_value(),
+             qPrintable(QStringLiteral("无法在远端创建测试目录：") + failure));
 }
 
 void SftpResumeIntegrationTest::cleanupTestCase()
@@ -556,6 +571,102 @@ void SftpResumeIntegrationTest::replaceRemovesExtraRemoteFiles()
         QDir(scratch.path()).filePath(QStringLiteral("deep.bin")));
     QVERIFY(keptBytes.has_value());
     QCOMPARE(keptBytes->size(), 3072);
+}
+
+void SftpResumeIntegrationTest::uploadsAgainAfterSomeoneElseReplacedRemoteFile()
+{
+    QTemporaryDir localDirectory;
+    QVERIFY(localDirectory.isValid());
+    const ConnectionTarget target = testTarget();
+    const QString remotePath = remoteRoot() + QStringLiteral("/foreign.bin");
+
+    // 我这一侧：上传一次，留下"上次正是我把这一版写到那里"的存档。
+    SftpService mine;
+    mine.setResumeLedgerPath(m_ledgerDirectory.filePath(QStringLiteral("mine.json")));
+    const qint64 size = 48 * 1024 + 5;
+    const QByteArray minePayload = makePayload(size, 21);
+    const QString minePath = QDir(localDirectory.path()).filePath(QStringLiteral("mine.bin"));
+    writeLocalFile(minePath, minePayload);
+    RequestOutcome outcome = awaitRequest(
+        mine, mine.uploadFile(target, minePath, remotePath,
+                              SftpTransfer::ExistingFilePolicy::ResumeWhenPossible));
+    QVERIFY2(outcome.finished && outcome.succeeded, qPrintable(outcome.message));
+
+    // 别人那一侧：另一台机器、另一份账本，把同样长度的另一份内容覆盖上去。
+    SftpService theirs;
+    theirs.setResumeLedgerPath(m_ledgerDirectory.filePath(QStringLiteral("theirs.json")));
+    const QByteArray theirPayload = makePayload(size, 22);
+    const QString theirPath = QDir(localDirectory.path()).filePath(QStringLiteral("theirs.bin"));
+    writeLocalFile(theirPath, theirPayload);
+    outcome = awaitRequest(
+        theirs, theirs.uploadFile(target, theirPath, remotePath,
+                                  SftpTransfer::ExistingFilePolicy::ResumeWhenPossible));
+    QVERIFY2(outcome.finished && outcome.succeeded, qPrintable(outcome.message));
+
+    // 我的本地文件一个字节都没动，再同步一次：远端已经不是我写的那一版了，必须重新上传。
+    outcome = awaitRequest(
+        mine, mine.uploadFile(target, minePath, remotePath,
+                              SftpTransfer::ExistingFilePolicy::ResumeWhenPossible));
+    QVERIFY2(outcome.finished && outcome.succeeded, qPrintable(outcome.message));
+
+    const std::optional<QByteArray> remoteBytes = fetchRemoteBytes(
+        mine, target, remotePath,
+        QDir(localDirectory.path()).filePath(QStringLiteral("verify.bin")));
+    QVERIFY(remoteBytes.has_value());
+    QVERIFY2(*remoteBytes == minePayload,
+             "别人改过远端文件后，本地未改动的文件没有被重新上传");
+}
+
+void SftpResumeIntegrationTest::detectsForeignOverwriteThatKeptSizeAndMtime()
+{
+    QTemporaryDir localDirectory;
+    QVERIFY(localDirectory.isValid());
+    const ConnectionTarget target = testTarget();
+    const QString remotePath = remoteRoot() + QStringLiteral("/foreign-same-mtime.bin");
+
+    SftpService mine;
+    mine.setResumeLedgerPath(m_ledgerDirectory.filePath(QStringLiteral("mine-same.json")));
+    const qint64 size = 48 * 1024 + 9;
+    const QByteArray minePayload = makePayload(size, 23);
+    const QString minePath = QDir(localDirectory.path()).filePath(QStringLiteral("mine.bin"));
+    writeLocalFile(minePath, minePayload);
+    RequestOutcome outcome = awaitRequest(
+        mine, mine.uploadFile(target, minePath, remotePath,
+                              SftpTransfer::ExistingFilePolicy::ResumeWhenPossible));
+    QVERIFY2(outcome.finished && outcome.succeeded, qPrintable(outcome.message));
+
+    // 最刁钻的一种：别人覆盖上去的文件不但长度相同，连修改时间都与我这一版完全一致（可重复
+    // 构建、解压带时间戳的归档、rsync -t 都会产生这种情况）。此时秒级时间戳和大小全部对得上，
+    // 只有内容哈希能分辨。
+    const QByteArray theirPayload = makePayload(size, 24);
+    const QString theirPath = QDir(localDirectory.path()).filePath(QStringLiteral("theirs.bin"));
+    writeLocalFile(theirPath, theirPayload);
+    QFile theirFile(theirPath);
+    QVERIFY(theirFile.open(QIODevice::ReadWrite));
+    QVERIFY(theirFile.setFileTime(QFileInfo(minePath).lastModified(),
+                                  QFileDevice::FileModificationTime));
+    theirFile.close();
+    QCOMPARE(QFileInfo(theirPath).lastModified().toSecsSinceEpoch(),
+             QFileInfo(minePath).lastModified().toSecsSinceEpoch());
+
+    SftpService theirs;
+    theirs.setResumeLedgerPath(m_ledgerDirectory.filePath(QStringLiteral("theirs-same.json")));
+    outcome = awaitRequest(
+        theirs, theirs.uploadFile(target, theirPath, remotePath,
+                                  SftpTransfer::ExistingFilePolicy::ResumeWhenPossible));
+    QVERIFY2(outcome.finished && outcome.succeeded, qPrintable(outcome.message));
+
+    outcome = awaitRequest(
+        mine, mine.uploadFile(target, minePath, remotePath,
+                              SftpTransfer::ExistingFilePolicy::ResumeWhenPossible));
+    QVERIFY2(outcome.finished && outcome.succeeded, qPrintable(outcome.message));
+
+    const std::optional<QByteArray> remoteBytes = fetchRemoteBytes(
+        mine, target, remotePath,
+        QDir(localDirectory.path()).filePath(QStringLiteral("verify.bin")));
+    QVERIFY(remoteBytes.has_value());
+    QVERIFY2(*remoteBytes == minePayload,
+             "远端被同长度同时间戳的另一份内容覆盖后没有被纠正回来");
 }
 
 QTEST_MAIN(SftpResumeIntegrationTest)

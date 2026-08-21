@@ -983,6 +983,37 @@ QByteArray hashLocalFile(const QString &path)
     return hash.result().toHex();
 }
 
+/**
+ * @brief 把本地文件的一段内容喂进已有的哈希器。
+ * @return 区间是否被完整读出；false 时哈希结果不可用。
+ *
+ * 续传时用来补齐"已经传过、这一轮不会再读"的前缀，使流式哈希仍能得到整份文件的摘要。
+ */
+bool appendFileRangeToHash(QCryptographicHash &hash,
+                           const QString &path,
+                           const quint64 offset,
+                           const quint64 length)
+{
+    if (length == 0) {
+        return true;
+    }
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly) || !file.seek(static_cast<qint64>(offset))) {
+        return false;
+    }
+    quint64 remaining = length;
+    while (remaining > 0) {
+        const QByteArray chunk = file.read(
+            std::min<qint64>(kTransferChunkBytes, static_cast<qint64>(remaining)));
+        if (chunk.isEmpty()) {
+            return false;
+        }
+        hash.addData(chunk);
+        remaining -= static_cast<quint64>(chunk.size());
+    }
+    return true;
+}
+
 /** @brief 计算本地文件某个区间的 SHA-256；区间不完整时返回空而不是部分结果。 */
 QByteArray hashLocalRange(const QString &path, const quint64 offset, const quint64 length)
 {
@@ -1147,34 +1178,38 @@ FileTransferResult writeRemoteFile(SftpConnection *connection,
         partial.size = partStat.size;
         record = context.ledger->lookup(ledgerKey);
 
-        // 残片凭据带哈希时，必须先算出源哈希才能判断残片还算不算数。
+        // 存档里已经记着"这份内容的哈希"，本地文件的大小与毫秒级时间戳都没变时可以直接复用，
+        // 省掉一次整文件读盘。
+        const bool archiveMatchesSource = record.has_value()
+            && record->kind == SftpResume::RecordKind::Complete
+            && record->sourceSize == localSize
+            && localMtimeMs >= 0 && record->sourceMtimeMs == localMtimeMs
+            && !record->sourceHash.isEmpty();
+
+        // 大小相同才有"可能不必重传"，这时优先向服务器要摘要：它只让服务端读一遍自己的盘，
+        // 不占带宽，却能给出确凿结论。时间戳类证据挡不住"别人用等长内容覆盖、且修改时间恰好
+        // 落在同一秒"，因此只要哈希拿得到就以哈希为准。
+        if (destination.exists && destination.size == localSize
+            && !(isCancelled && isCancelled())) {
+            destination.contentHash = connection->remoteSha256(remotePath);
+            if (!destination.contentHash.isEmpty()) {
+                source.contentHash = archiveMatchesSource ? record->sourceHash
+                                                          : hashLocalFile(localPath);
+            }
+        }
+
+        // 残片凭据带哈希时，同样必须算出源哈希才能判断残片还算不算数。
         const bool needHashForResume = partial.exists && record.has_value()
             && record->kind == SftpResume::RecordKind::Partial
             && !record->sourceHash.isEmpty();
-        if (needHashForResume && !(isCancelled && isCancelled())) {
+        if (source.contentHash.isEmpty() && needHashForResume
+            && !(isCancelled && isCancelled())) {
             source.contentHash = hashLocalFile(localPath);
         }
     }
 
-    SftpTransfer::TransferDecision decision = SftpTransfer::decideTransfer(
+    const SftpTransfer::TransferDecision decision = SftpTransfer::decideTransfer(
         source, destination, partial, record, context.policy, mtimeTrusted);
-
-    // 大小恰好相同却没有证据证明内容一致时，再花一次哈希去争取"不必重传"：哈希只让两端各
-    // 读一遍盘，不搬运任何字节，远比整份重传便宜。先问远端拿摘要，服务器没有该命令时就不必
-    // 白算本地哈希了。
-    if (decision.action == SftpTransfer::TransferAction::FullTransfer
-        && context.policy == SftpTransfer::ExistingFilePolicy::ResumeWhenPossible
-        && destination.exists && destination.size == localSize
-        && !(isCancelled && isCancelled())) {
-        destination.contentHash = connection->remoteSha256(remotePath);
-        if (!destination.contentHash.isEmpty()) {
-            if (source.contentHash.isEmpty()) {
-                source.contentHash = hashLocalFile(localPath);
-            }
-            decision = SftpTransfer::decideTransfer(
-                source, destination, partial, record, context.policy, mtimeTrusted);
-        }
-    }
     if (decision.action == SftpTransfer::TransferAction::SkipIdentical) {
         if (onProgress) {
             // 跳过的文件也要计入进度，否则整体百分比会永远停在不到 100% 的位置。
@@ -1246,6 +1281,12 @@ FileTransferResult writeRemoteFile(SftpConnection *connection,
     quint64 confirmedBytes = offset;
     quint64 lastCheckpoint = offset;
 
+    // 边传边算整份文件的摘要：这一轮无论如何都要把这些字节读一遍，顺手哈希不增加任何 I/O。
+    // 传完就能把摘要写进存档，于是下一次同步只需向服务器要一次摘要即可判定，连本地都不用再读。
+    QCryptographicHash streamHash(QCryptographicHash::Sha256);
+    bool streamHashValid = offset == 0
+        || appendFileRangeToHash(streamHash, localPath, 0, offset);
+
     // 只把"服务端已确认"的字节记入检查点：在途请求随时可能失败，把它们算进去会让下次从一个
     // 并不存在的位置续写。宁可记少，也绝不记多。
     const auto checkpoint = [&]() {
@@ -1290,6 +1331,8 @@ FileTransferResult writeRemoteFile(SftpConnection *connection,
             carryOffset = 0;
             if (carry.isEmpty()) {
                 localEof = true;
+            } else if (streamHashValid) {
+                streamHash.addData(carry);
             }
         }
 
@@ -1382,7 +1425,8 @@ FileTransferResult writeRemoteFile(SftpConnection *connection,
         archive.sourceSize = localSize;
         archive.sourceMtime = localMtime;
         archive.sourceMtimeMs = localMtimeMs;
-        archive.sourceHash = source.contentHash;
+        archive.sourceHash = streamHashValid ? streamHash.result().toHex() : source.contentHash;
+        archive.destinationSize = localSize;
         archive.destinationMtime = storedMtime;
         context.ledger->store(ledgerKey, archive);
     } else {
@@ -1451,32 +1495,35 @@ FileTransferResult readRemoteFile(SftpConnection *connection,
             : 0;
         record = context.ledger->lookup(ledgerKey);
 
+        // 本地目标文件自上次同步以来没被动过时，它的内容哈希就是存档里那一条，无需再读一遍盘。
+        const bool archiveMatchesDestination = record.has_value()
+            && record->kind == SftpResume::RecordKind::Complete
+            && !record->sourceHash.isEmpty()
+            && record->destinationSize == destination.size
+            && record->destinationMtime >= 0
+            && record->destinationMtime == destination.mtime;
+
+        // 与上传方向同理：大小相同才有跳过的余地，此时优先取远端摘要作为裁决依据。
+        if (destination.exists && destination.size == source.size
+            && !(isCancelled && isCancelled())) {
+            source.contentHash = connection->remoteSha256(remotePath);
+            if (!source.contentHash.isEmpty()) {
+                destination.contentHash = archiveMatchesDestination ? record->sourceHash
+                                                                    : hashLocalFile(localPath);
+            }
+        }
+
         const bool needHashForResume = partial.exists && record.has_value()
             && record->kind == SftpResume::RecordKind::Partial
             && !record->sourceHash.isEmpty();
-        if (needHashForResume && !(isCancelled && isCancelled())) {
+        if (source.contentHash.isEmpty() && needHashForResume
+            && !(isCancelled && isCancelled())) {
             source.contentHash = connection->remoteSha256(remotePath);
         }
     }
 
-    SftpTransfer::TransferDecision decision = SftpTransfer::decideTransfer(
+    const SftpTransfer::TransferDecision decision = SftpTransfer::decideTransfer(
         source, destination, partial, record, context.policy, mtimeTrusted);
-
-    // 与上传方向同理：大小恰好相同却无从证明内容一致时，用两端各读一遍盘换掉一次整份下载。
-    // 先问远端要摘要，服务器没有该命令就不必白算本地哈希。
-    if (decision.action == SftpTransfer::TransferAction::FullTransfer
-        && context.policy == SftpTransfer::ExistingFilePolicy::ResumeWhenPossible
-        && destination.exists && destination.size == source.size
-        && !(isCancelled && isCancelled())) {
-        if (source.contentHash.isEmpty()) {
-            source.contentHash = connection->remoteSha256(remotePath);
-        }
-        if (!source.contentHash.isEmpty()) {
-            destination.contentHash = hashLocalFile(localPath);
-            decision = SftpTransfer::decideTransfer(
-                source, destination, partial, record, context.policy, mtimeTrusted);
-        }
-    }
     if (decision.action == SftpTransfer::TransferAction::SkipIdentical) {
         if (onProgress) {
             onProgress(source.size);
@@ -1542,6 +1589,11 @@ FileTransferResult readRemoteFile(SftpConnection *connection,
     TransferOutcome outcome = TransferOutcome::Ok;
     quint64 confirmedBytes = offset;
     quint64 lastCheckpoint = offset;
+
+    // 与上传方向同理：这些字节反正要过一遍内存，顺手算出整份内容的摘要供下次同步判定。
+    QCryptographicHash streamHash(QCryptographicHash::Sha256);
+    bool streamHashValid = offset == 0
+        || appendFileRangeToHash(streamHash, partPath, 0, offset);
     while (true) {
         if (isCancelled && isCancelled()) {
             outcome = TransferOutcome::Cancelled;
@@ -1562,6 +1614,9 @@ FileTransferResult readRemoteFile(SftpConnection *connection,
                                 .arg(partPath, partialFile.errorString());
             outcome = TransferOutcome::Failed;
             break;
+        }
+        if (streamHashValid) {
+            streamHash.addData(QByteArrayView(buffer.constData(), bytesRead));
         }
         confirmedBytes += static_cast<quint64>(bytesRead);
         if (confirmedBytes - lastCheckpoint >= kLedgerCheckpointBytes) {
@@ -1653,7 +1708,8 @@ FileTransferResult readRemoteFile(SftpConnection *connection,
         archive.sourceSize = source.size;
         archive.sourceMtime = source.mtime;
         archive.sourceMtimeMs = source.mtimeMs;
-        archive.sourceHash = source.contentHash;
+        archive.sourceHash = streamHashValid ? streamHash.result().toHex() : source.contentHash;
+        archive.destinationSize = source.size;
         archive.destinationMtime = storedMtime;
         context.ledger->store(ledgerKey, archive);
     } else {

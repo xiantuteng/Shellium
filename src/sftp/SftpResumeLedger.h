@@ -81,6 +81,9 @@ struct LedgerRecord {
     /** @brief Partial：已确认落到 .part 上的字节数；只在检查点推进，宁可偏小不可偏大。 */
     quint64 bytesWritten = 0;
 
+    /** @brief Complete：写完时目标文件的大小，用于判断目标端是否仍是我们写下的那一份。 */
+    quint64 destinationSize = 0;
+
     /**
      * @brief Complete：写完后目标端实际保存下来的修改时间（Unix 秒）；-1 表示未知。
      *
@@ -261,6 +264,8 @@ private:
             record.sourceMtimeMs = static_cast<qint64>(
                 value.value(QStringLiteral("sourceMtimeMs")).toString().toLongLong());
             record.sourceHash = value.value(QStringLiteral("sourceHash")).toString().toLatin1();
+            record.destinationSize = static_cast<quint64>(
+                value.value(QStringLiteral("destinationSize")).toString().toULongLong());
             record.destinationMtime = static_cast<qint64>(
                 value.value(QStringLiteral("destinationMtime")).toString().toLongLong());
             record.bytesWritten = static_cast<quint64>(
@@ -316,6 +321,8 @@ private:
             value.insert(QStringLiteral("sourceMtime"), QString::number(record.sourceMtime));
             value.insert(QStringLiteral("sourceMtimeMs"), QString::number(record.sourceMtimeMs));
             value.insert(QStringLiteral("sourceHash"), QString::fromLatin1(record.sourceHash));
+            value.insert(QStringLiteral("destinationSize"),
+                         QString::number(record.destinationSize));
             value.insert(QStringLiteral("destinationMtime"),
                          QString::number(record.destinationMtime));
             value.insert(QStringLiteral("bytesWritten"), QString::number(record.bytesWritten));
