@@ -7,6 +7,7 @@
 namespace {
 const QString kEndpointKey = QStringLiteral("ai.endpointUrl");
 const QString kModelKey = QStringLiteral("ai.model");
+const QString kThinkingKey = QStringLiteral("ai.thinkingEnabled");
 } // namespace
 
 AiSettingsService::AiSettingsService(ApplicationDatabase *database,
@@ -30,6 +31,9 @@ bool AiSettingsService::load(QString *errorMessage)
     if (m_database != nullptr) {
         settings.endpointUrl = m_database->setting(kEndpointKey).value_or(QString());
         settings.model = m_database->setting(kModelKey).value_or(QString());
+        // 缺省视为关闭：没有这条记录的老库应当继续按"不发思考字段"的方式请求网关。
+        settings.thinkingEnabled =
+            m_database->setting(kThinkingKey).value_or(QStringLiteral("0")) == QStringLiteral("1");
     }
     if (m_credentialVault != nullptr) {
         QString secretError;
@@ -56,7 +60,11 @@ bool AiSettingsService::save(const AiSettings &settings, QString *errorMessage)
     if (m_database != nullptr) {
         QString dbError;
         if (!m_database->setSetting(kEndpointKey, settings.endpointUrl, &dbError)
-            || !m_database->setSetting(kModelKey, settings.model, &dbError)) {
+            || !m_database->setSetting(kModelKey, settings.model, &dbError)
+            || !m_database->setSetting(kThinkingKey,
+                                       settings.thinkingEnabled ? QStringLiteral("1")
+                                                                : QStringLiteral("0"),
+                                       &dbError)) {
             if (errorMessage != nullptr) {
                 *errorMessage = dbError;
             }

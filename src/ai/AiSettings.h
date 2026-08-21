@@ -20,6 +20,16 @@ struct AiSettings {
     /** @brief 鉴权密钥，以 Authorization: Bearer 形式发送；可为空表示网关不要求鉴权。 */
     QString apiKey;
 
+    /**
+     * @brief 是否要求模型开启"思考"（推理）模式。
+     *
+     * 关闭时请求体里完全不出现相关字段，与本开关引入之前的请求逐字节一致——OpenAI 这类
+     * 严格网关会对无法识别的请求字段直接返回 400，默认不发才能保证老配置不受影响。开启
+     * 时按 OpenAI 兼容生态里最通用的写法附加 enable_thinking: true（DashScope/Qwen、vLLM
+     * 及多数自建网关采用），不认识该字段的网关要么忽略、要么明确报错，由用户自行取舍。
+     */
+    bool thinkingEnabled = false;
+
     /** @brief 端点和模型均已填写，具备发起请求的最基本条件。 */
     [[nodiscard]] bool isConfigured() const
     {

@@ -7,6 +7,7 @@
 #include <QList>
 
 class QComboBox;
+class QToolButton;
 class QDoubleSpinBox;
 class QGridLayout;
 class QLineEdit;
@@ -105,7 +106,7 @@ private:
     /** @brief 构建“AI 助手”页：大模型地址、密钥、模型名称及连通性测试。 */
     QWidget *buildAiPage();
 
-    /** @brief 把当前三个输入框的值写入 AiSettingsService；失败时用消息框提示原因。 */
+    /** @brief 把当前 AI 页各控件的值写入 AiSettingsService；失败时把原因显示在状态行。 */
     void persistAiSettings();
 
     /** @brief 把页面包进滚动区，保证小屏幕上底部按钮不会被卡片挤出窗口。 */
@@ -181,7 +182,17 @@ private:
     AiClient *m_aiTestClient = nullptr;
     QLineEdit *m_aiEndpointEdit = nullptr;
     QLineEdit *m_aiApiKeyEdit = nullptr;
-    QLineEdit *m_aiModelEdit = nullptr;
+    /**
+     * @brief 模型名称输入框，可编辑的下拉框：既能手填，也能从拉取到的列表里选。
+     *
+     * 用 QComboBox 而不是 QLineEdit + 补全器，是因为网关返回的模型名往往互相之间只差一个
+     * 版本号后缀，用户需要的是"看到全部再挑一个"，而不是先猜前几个字符才看得到候选。
+     */
+    QComboBox *m_aiModelCombo = nullptr;
+    /** @brief 从服务端重新拉取模型列表的刷新按钮。 */
+    QToolButton *m_aiModelRefreshButton = nullptr;
+    /** @brief 是否要求模型开启思考模式的开关。 */
+    ToggleSwitch *m_aiThinkingToggle = nullptr;
     QPushButton *m_aiTestButton = nullptr;
     QPushButton *m_aiSaveButton = nullptr;
     QLabel *m_aiStatusLabel = nullptr;

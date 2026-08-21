@@ -82,6 +82,52 @@ void AiClient::testConnection(const AiSettings &settings)
     });
 }
 
+void AiClient::fetchModels(const AiSettings &settings)
+{
+    if (m_activeModelsReply != nullptr) {
+        m_activeModelsReply->abort();
+        m_activeModelsReply = nullptr;
+    }
+    if (settings.endpointUrl.trimmed().isEmpty()) {
+        emit modelsFetched(false, {}, tr("请先填写大模型服务地址"));
+        return;
+    }
+
+    QNetworkRequest request(QUrl(normalizedBase(settings.endpointUrl) + QStringLiteral("/models")));
+    if (!settings.apiKey.trimmed().isEmpty()) {
+        request.setRawHeader("Authorization", "Bearer " + settings.apiKey.trimmed().toUtf8());
+    }
+
+    m_activeModelsReply = m_network->get(request);
+    connect(m_activeModelsReply, &QNetworkReply::finished, this, [this]() {
+        QNetworkReply *reply = m_activeModelsReply;
+        m_activeModelsReply = nullptr;
+        if (reply == nullptr) {
+            return;
+        }
+        reply->deleteLater();
+        if (reply->error() != QNetworkReply::NoError) {
+            emit modelsFetched(false, {}, tr("获取模型列表失败：%1").arg(reply->errorString()));
+            return;
+        }
+        const QJsonDocument document = QJsonDocument::fromJson(reply->readAll());
+        QStringList models;
+        // 只认 OpenAI 协议规定的 {"data":[{"id":...}]}；有的网关会把 id 放在别的字段里，
+        // 那属于不兼容，与其猜测不如让用户继续手填模型名。
+        for (const QJsonValue &entry : document.object().value(QStringLiteral("data")).toArray()) {
+            const QString id = entry.toObject().value(QStringLiteral("id")).toString().trimmed();
+            if (!id.isEmpty() && !models.contains(id)) {
+                models.append(id);
+            }
+        }
+        if (models.isEmpty()) {
+            emit modelsFetched(false, {}, tr("网关没有返回任何模型"));
+            return;
+        }
+        emit modelsFetched(true, models, tr("已获取 %1 个模型").arg(models.size()));
+    });
+}
+
 void AiClient::sendMessage(const AiSettings &settings, const QList<AiChatMessage> &messages)
 {
     if (m_activeChatReply != nullptr) {
@@ -105,6 +151,11 @@ void AiClient::sendMessage(const AiSettings &settings, const QList<AiChatMessage
     body.insert(QStringLiteral("messages"), messageArray);
     body.insert(QStringLiteral("temperature"), 0.2);
     body.insert(QStringLiteral("stream"), true);
+    if (settings.thinkingEnabled) {
+        // 关闭时一个字段都不加：OpenAI 等严格网关会对未知字段直接返回 400，默认请求体必须
+        // 与本开关引入之前完全一致。
+        body.insert(QStringLiteral("enable_thinking"), true);
+    }
 
     QNetworkRequest request(
         QUrl(normalizedBase(settings.endpointUrl) + QStringLiteral("/chat/completions")));

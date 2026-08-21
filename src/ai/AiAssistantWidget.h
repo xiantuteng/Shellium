@@ -99,12 +99,57 @@ signals:
     void statusMessage(const QString &message);
 
 private:
+    /**
+     * @brief 面板在当前主题下使用的一整套颜色。
+     *
+     * 聊天气泡、命令卡片和紧凑按钮分散在多个 append*() 里，如果各自写死十六进制值，换成
+     * 深色主题时必然漏掉几处；集中成一张表后，新增控件只能从这里取色。
+     */
+    struct PanelColors {
+        /** @brief 当前解析结果属于深色主题；卡片强调色等少数分支仍需直接判定。 */
+        bool dark = false;
+        QString panel;
+        QString surface;
+        QString border;
+        QString text;
+        QString muted;
+        QString userBubble;
+        QString userBubbleBorder;
+        QString avatarTint;
+        QString accent;
+        QString codeBackground;
+        QString codeText;
+        /** @brief 通知气泡等处的半透明底色，深浅主题分别压黑与提亮。 */
+        QString overlay;
+        /** @brief 上下文条按钮的悬停底色。 */
+        QString hover;
+        QString actionBorder;
+        QString actionHover;
+        QString actionHoverBorder;
+        QString actionDisabledText;
+        QString actionDisabledBackground;
+        QString actionDisabledBorder;
+        QString warning;
+        QString danger;
+    };
+
+    /** @brief 按深/浅主题解析出整套面板配色。 */
+    [[nodiscard]] static PanelColors resolvePanelColors(bool dark);
+
+    /**
+     * @brief 依据应用调色板重新解析配色，刷新面板样式表并重绘已有消息。
+     *
+     * 深浅判定取自 qApp 调色板而不是另接一份终端设置：主题服务切换时会给 QApplication
+     * 换调色板，本控件只需在 ApplicationPaletteChange 中重新应用，无需新增依赖。
+     */
+    void applyPanelTheme();
+
     /** @brief 构建上下文条、聊天区和输入区，构造函数只调用一次。 */
     void buildUi();
 
     /**
-     * @brief 处理输入框键盘交互：Enter 发送，Shift+Enter 保留为换行。
-     * @param watched 产生事件的对象，仅处理 m_inputEdit。
+     * @brief 处理输入框键盘交互（Enter 发送、Shift+Enter 换行）与应用主题切换。
+     * @param watched 产生事件的对象，只处理 m_inputEdit 与 qApp。
      * @param event Qt 输入事件。
      * @return 已消费普通 Enter 时返回 true；其他事件交回 QWidget 默认处理。
      *
@@ -370,6 +415,14 @@ private:
      * 内容不会再出现在下一次请求里；开启新会话会归零。
      */
     int m_lastReadPosition = 0;
+
+    /** @brief 当前主题解析出的面板配色；buildUi() 前由 applyPanelTheme() 填好。 */
+    PanelColors m_colors;
+    /**
+     * @brief applyPanelTheme() 正在执行；用于挡住它自己 setStyleSheet() 引发的
+     * PaletteChange，否则 changeEvent 会无限递归。
+     */
+    bool m_applyingPanelTheme = false;
 
     QCheckBox *m_attachContextCheck = nullptr;
     QTextEdit *m_inputEdit = nullptr;

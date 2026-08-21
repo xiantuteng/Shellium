@@ -488,10 +488,11 @@ void TerminalPane::connectToHosts(const QList<ConnectionTarget> &connectionPlan)
                     return;
                 }
             }
-            QTimer::singleShot(0, this, [this, target, message, sessionGeneration]() {
+            QTimer::singleShot(0, this, [this, target, sessionGeneration]() {
                 if (sessionGeneration == m_sessionGeneration
                     && !m_remoteSessionEstablished) {
-                    beginManualRecovery(target, message);
+                    // 错误文本已在上面写入终端，提示只补按键说明。
+                    beginManualRecovery(target, QString());
                 }
             });
             return;
@@ -550,9 +551,9 @@ void TerminalPane::connectToHosts(const QList<ConnectionTarget> &connectionPlan)
 
         m_remoteSessionEstablished = false;
         m_shellReady = false;
-        // 退出状态 -1 表示链路异常断开，而不是用户在远端敲了 exit：前者的会话仍然"应该
-        // 存在"，回退到本地 zsh 只会掩盖故障；后者是明确的结束意图，本地 Shell 才是正确
-        // 的落点。两者必须分开处理。
+        // 退出状态 -1 表示链路异常断开，而不是用户在远端敲了 exit：前者可以自动重连，后者
+        // 不能。但两者都不再擅自退回本地 zsh——刚断开的服务器与本机毫无关系，顶上来的本地
+        // Shell 会让用户下一条命令打在错误的机器上，因此一律停在手动恢复提示。
         const bool abnormal = exitStatus == -1;
         const bool shouldReconnect = abnormal && m_automaticReconnectEnabled
             && m_reconnectMaxAttempts > 0;
@@ -560,7 +561,7 @@ void TerminalPane::connectToHosts(const QList<ConnectionTarget> &connectionPlan)
             ? tr("SSH 连接因网络异常中断，准备自动重连")
             : abnormal
                 ? tr("SSH 连接因网络异常中断")
-                : tr("SSH 连接已结束（退出状态 %1），正在退回本地 zsh").arg(exitStatus);
+                : tr("SSH 连接已结束（退出状态 %1）").arg(exitStatus);
         m_headerLabel->setText(message);
         m_terminalView->appendTerminalOutput((QStringLiteral("\r\n") + message
                                               + QStringLiteral("\r\n")).toUtf8());
@@ -578,15 +579,12 @@ void TerminalPane::connectToHosts(const QList<ConnectionTarget> &connectionPlan)
 
         // shellDisconnected 在工作线程 run() 返回前发出。延迟到下一轮事件循环后再停止并
         // 销毁旧 worker，可避免 GUI 线程在信号处理期间等待尚未完成的发射栈。
-        QTimer::singleShot(0, this, [this, target, abnormal, message, sessionGeneration]() {
+        QTimer::singleShot(0, this, [this, target, sessionGeneration]() {
             if (sessionGeneration != m_sessionGeneration || m_remoteSessionEstablished) {
                 return;
             }
-            if (abnormal) {
-                beginManualRecovery(target, message);
-                return;
-            }
-            openLocalShell();
+            // 断开原因刚刚已经写进终端，这里再传一次只会让同一句话连着出现两遍。
+            beginManualRecovery(target, QString());
         });
     });
     connect(m_sessionStack,
@@ -640,7 +638,7 @@ QList<ConnectionTarget> TerminalPane::targets() const
 
 QList<ConnectionTarget> TerminalPane::connectionPlan() const
 {
-    // SSH 正常退出后面板会退回本地 zsh，但整条计划仍留给手动重连复用。若只看计划非空，
+    // 面板可能已被用户切回本地 zsh，但整条计划仍留给手动重连复用。若只看计划非空，
     // 复制一个早已回到本机的标签会凭空再拨一条 SSH，因此以当前是否跑着本地 Shell 为准。
     return m_localWorker != nullptr ? QList<ConnectionTarget>{} : m_connectionPlan;
 }
@@ -807,9 +805,12 @@ void TerminalPane::beginManualRecovery(const ConnectionTarget &target,
                              .arg(target.connectionSpecifier());
     m_headerLabel->setText(hint);
     // 终端里必须使用 CRLF：裸 LF 只下移一行而不回到第 0 列，提示会从上一行末尾的列开始。
-    m_terminalView->appendTerminalOutput((QStringLiteral("\r\n") + reason
-                                          + QStringLiteral("\r\n") + hint
-                                          + QStringLiteral("\r\n")).toUtf8());
+    // 调用方若已把断开原因写进终端会传空字符串，此时不再重复一行，只补按键说明。
+    const QString banner = reason.isEmpty()
+        ? (QStringLiteral("\r\n") + hint + QStringLiteral("\r\n"))
+        : (QStringLiteral("\r\n") + reason + QStringLiteral("\r\n") + hint
+           + QStringLiteral("\r\n"));
+    m_terminalView->appendTerminalOutput(banner.toUtf8());
     emit statusMessage(hint);
     emit targetsChanged(this);
     focusTerminal();

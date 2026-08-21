@@ -12,6 +12,7 @@
 #include <QEvent>
 #include <QFrame>
 #include <QGraphicsOpacityEffect>
+#include <QApplication>
 #include <QGuiApplication>
 #include <QClipboard>
 #include <QHBoxLayout>
@@ -23,11 +24,13 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
+#include <QPalette>
 #include <QMenu>
 #include <QPointer>
 #include <QPropertyAnimation>
 #include <QPushButton>
 #include <QRegularExpression>
+#include <QScopeGuard>
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QSet>
@@ -231,16 +234,21 @@ bool parseAgentReply(const QString &content, AgentReply *reply, QString *error)
     return false;
 }
 
-/** @brief 风险分级对应的强调色，与效果图集使用的语义色保持一致。 */
-QColor riskAccentColor(const CommandRiskLevel level)
+/**
+ * @brief 风险分级对应的强调色，与效果图集使用的语义色保持一致。
+ *
+ * 深色面板上同一组语义色会明显发闷，因此三档各自提供一个提亮版本；色相保持不变，用户
+ * 在两套主题下仍然按“绿=只读、蓝=写入、红=高危”识别卡片。
+ */
+QColor riskAccentColor(const CommandRiskLevel level, const bool dark)
 {
     switch (level) {
     case CommandRiskLevel::ReadOnly:
-        return QColor(QStringLiteral("#159a60"));
+        return QColor(dark ? QStringLiteral("#35c98a") : QStringLiteral("#159a60"));
     case CommandRiskLevel::Write:
-        return QColor(QStringLiteral("#3b78c9"));
+        return QColor(dark ? QStringLiteral("#6aa9f0") : QStringLiteral("#3b78c9"));
     case CommandRiskLevel::HighRisk:
-        return QColor(QStringLiteral("#d84a41"));
+        return QColor(dark ? QStringLiteral("#ef776e") : QStringLiteral("#d84a41"));
     }
     return QColor(Qt::gray);
 }
@@ -341,6 +349,9 @@ AiAssistantWidget::AiAssistantWidget(AiSettingsService *settingsService, QWidget
     // 连续点击“新会话”制造一串没有内容的历史项。
     m_activeConversationId = QUuid::createUuid().toString(QUuid::WithoutBraces);
     buildUi();
+    if (qApp != nullptr) {
+        qApp->installEventFilter(this);
+    }
 
     // 智能体使用机器可校验的 JSON 协议。流式过程中 JSON 必然是不完整的，直接预览会把
     // state/command 等内部字段暴露给用户，也可能短暂显示后续违规内容，因此这里只维持
@@ -368,26 +379,68 @@ AiAssistantWidget::AiAssistantWidget(AiSettingsService *settingsService, QWidget
     });
 }
 
-void AiAssistantWidget::buildUi()
+AiAssistantWidget::PanelColors AiAssistantWidget::resolvePanelColors(const bool dark)
 {
-    setObjectName(QStringLiteral("AiAssistantPanel"));
-    // AI 页面使用效果图中的独立浅色工作台视觉。选择器全部限定在 AiAssistantPanel 子树，
-    // 不会改变主机管理、终端和设置页的全局按钮/输入框样式。
-    setStyleSheet(QStringLiteral(R"QSS(
+    PanelColors colors;
+    colors.dark = dark;
+    // 深色一组刻意与主窗口侧栏的 SIDEBAR/SURFACE/BORDER 取同一批灰蓝，避免 AI 面板在
+    // 侧栏里显出一块色温不同的方块。
+    colors.panel = dark ? QStringLiteral("#191f31") : QStringLiteral("#fbfcfd");
+    colors.surface = dark ? QStringLiteral("#21283b") : QStringLiteral("#ffffff");
+    colors.border = dark ? QStringLiteral("#30384f") : QStringLiteral("#cbd5e1");
+    colors.text = dark ? QStringLiteral("#f0f3fa") : QStringLiteral("#1d2939");
+    colors.muted = dark ? QStringLiteral("#929bb3") : QStringLiteral("#8a96a8");
+    colors.userBubble = dark ? QStringLiteral("#24413d") : QStringLiteral("#e6f2ec");
+    colors.userBubbleBorder = dark ? QStringLiteral("#2f6256") : QStringLiteral("#c6dfd3");
+    colors.avatarTint = dark ? QStringLiteral("#24413d") : QStringLiteral("#e1f2ea");
+    colors.accent = dark ? QStringLiteral("#2bd981") : QStringLiteral("#17834f");
+    colors.codeBackground = dark ? QStringLiteral("#151a2b") : QStringLiteral("#f1f4f7");
+    colors.codeText = dark ? QStringLiteral("#d7deec") : QStringLiteral("#263244");
+    // 深色下再压黑等于看不见，半透明层必须反向提亮才能保持同样的层次感。
+    colors.overlay = dark ? QStringLiteral("rgba(255,255,255,0.07)")
+                          : QStringLiteral("rgba(0,0,0,0.04)");
+    colors.hover = dark ? QStringLiteral("rgba(255,255,255,0.10)")
+                        : QStringLiteral("rgba(0,0,0,0.06)");
+    colors.actionBorder = dark ? QStringLiteral("#3c4560") : QStringLiteral("#ccd6e2");
+    colors.actionHover = dark ? QStringLiteral("#2e3852") : QStringLiteral("#f1f5f9");
+    colors.actionHoverBorder = dark ? QStringLiteral("#5a6480") : QStringLiteral("#94a3b8");
+    colors.actionDisabledText = dark ? QStringLiteral("#6b748c") : QStringLiteral("#94a3b8");
+    colors.actionDisabledBackground = dark ? QStringLiteral("#232a3d")
+                                           : QStringLiteral("#eef2f6");
+    colors.actionDisabledBorder = dark ? QStringLiteral("#333c54") : QStringLiteral("#d7dee7");
+    colors.warning = dark ? QStringLiteral("#e2a94f") : QStringLiteral("#b8791f");
+    colors.danger = dark ? QStringLiteral("#ef776e") : QStringLiteral("#d84a41");
+    return colors;
+}
+
+void AiAssistantWidget::applyPanelTheme()
+{
+    if (m_applyingPanelTheme) {
+        return;
+    }
+    m_applyingPanelTheme = true;
+    const auto releaseGuard = qScopeGuard([this]() { m_applyingPanelTheme = false; });
+    const bool dark =
+        QGuiApplication::palette().color(QPalette::Window).lightnessF() < 0.5;
+    m_colors = resolvePanelColors(dark);
+
+    // 选择器全部限定在 AiAssistantPanel 子树，不会改变主机管理、终端和设置页的全局按钮
+    // 与输入框样式。
+    QString styleSheet = QStringLiteral(R"QSS(
         QWidget#AiAssistantPanel,
         QWidget#AiChatContainer,
         QScrollArea#AiChatScroll,
         QScrollArea#AiChatScroll > QWidget > QWidget {
-            background: #fbfcfd;
-            color: #1d2939;
+            background: @PANEL@;
+            color: @TEXT@;
         }
         QFrame#AiComposer {
-            background: #ffffff;
-            border: 1px solid #cbd5e1;
+            background: @SURFACE@;
+            border: 1px solid @BORDER@;
             border-radius: 12px;
         }
         QFrame#AiComposer QTextEdit#aiInputEdit {
-            color: #1d2939;
+            color: @TEXT@;
             background: transparent;
             border: 0;
             border-radius: 0;
@@ -395,7 +448,7 @@ void AiAssistantWidget::buildUi()
             font-size: 14px;
         }
         QFrame#AiComposer QCheckBox {
-            color: #8a96a8;
+            color: @MUTED@;
             spacing: 6px;
             font-size: 12px;
         }
@@ -403,14 +456,14 @@ void AiAssistantWidget::buildUi()
             min-height: 20px;
             max-height: 20px;
             padding: 2px 8px;
-            border: 1px solid #ccd6e2;
+            border: 1px solid @ACTION_BORDER@;
             border-radius: 6px;
             font-size: 12px;
             font-weight: 600;
         }
         QPushButton[aiCompactAction="true"]:hover {
-            background: #f1f5f9;
-            border-color: #94a3b8;
+            background: @ACTION_HOVER@;
+            border-color: @ACTION_HOVER_BORDER@;
         }
         QPushButton[aiCompactAction="true"][aiPrimaryAction="true"] {
             color: #ffffff;
@@ -421,11 +474,59 @@ void AiAssistantWidget::buildUi()
             background: #126b40;
         }
         QPushButton[aiCompactAction="true"]:disabled {
-            color: #94a3b8;
-            background: #eef2f6;
-            border-color: #d7dee7;
+            color: @ACTION_DISABLED_TEXT@;
+            background: @ACTION_DISABLED_BG@;
+            border-color: @ACTION_DISABLED_BORDER@;
         }
-    )QSS"));
+    )QSS");
+    styleSheet.replace(QStringLiteral("@PANEL@"), m_colors.panel);
+    styleSheet.replace(QStringLiteral("@SURFACE@"), m_colors.surface);
+    styleSheet.replace(QStringLiteral("@BORDER@"), m_colors.border);
+    styleSheet.replace(QStringLiteral("@TEXT@"), m_colors.text);
+    styleSheet.replace(QStringLiteral("@MUTED@"), m_colors.muted);
+    styleSheet.replace(QStringLiteral("@ACTION_BORDER@"), m_colors.actionBorder);
+    styleSheet.replace(QStringLiteral("@ACTION_HOVER@"), m_colors.actionHover);
+    styleSheet.replace(QStringLiteral("@ACTION_HOVER_BORDER@"), m_colors.actionHoverBorder);
+    styleSheet.replace(QStringLiteral("@ACTION_DISABLED_TEXT@"), m_colors.actionDisabledText);
+    styleSheet.replace(QStringLiteral("@ACTION_DISABLED_BG@"), m_colors.actionDisabledBackground);
+    styleSheet.replace(QStringLiteral("@ACTION_DISABLED_BORDER@"), m_colors.actionDisabledBorder);
+    setStyleSheet(styleSheet);
+
+    // 图标是按当时的文字色离线渲染成位图的，不会跟随调色板重绘，必须显式重新生成。
+    if (auto *serverIcon = findChild<QLabel *>(QStringLiteral("aiContextServerIcon"))) {
+        serverIcon->setPixmap(UiIcons::renderSymbolPixmap(
+            UiIcons::Symbol::HostItem, QColor(m_colors.text), QSize(14, 14),
+            devicePixelRatioF()));
+    }
+    if (m_historyButton != nullptr) {
+        m_historyButton->setIcon(
+            UiIcons::symbol(this, UiIcons::Symbol::Clock, QColor(m_colors.text)));
+        m_historyButton->setStyleSheet(QStringLiteral(
+            "QToolButton { color: palette(text); background: transparent;"
+            "border: 1px solid palette(mid); border-radius: 9px; padding: 5px; }"
+            "QToolButton:hover, QToolButton:pressed { background: %1; }"
+            "QToolButton::menu-indicator { image: none; width: 0; }").arg(m_colors.hover));
+    }
+    if (m_newSessionButton != nullptr) {
+        m_newSessionButton->setStyleSheet(QStringLiteral(
+            "QPushButton { color: palette(text); background: transparent;"
+            "border: 1px solid palette(mid); border-radius: 9px; padding: 2px 9px; }"
+            "QPushButton:hover { background: %1; }").arg(m_colors.hover));
+    }
+
+    // 已经在屏幕上的气泡和卡片是构建时按旧配色写死的内联样式，只能整段重绘。请求或命令
+    // 捕获进行中时跳过：那些临时控件（思考动画、等待标签）不在会话历史里，重建会把它们
+    // 连同正在进行的状态一起抹掉。
+    if (m_chatLayout != nullptr && !m_requestInFlight && !m_captureInFlight) {
+        clearChatContent();
+        renderActiveConversation();
+    }
+}
+
+void AiAssistantWidget::buildUi()
+{
+    setObjectName(QStringLiteral("AiAssistantPanel"));
+    applyPanelTheme();
     auto *root = new QVBoxLayout(this);
     root->setContentsMargins(0, 0, 0, 0);
     root->setSpacing(10);
@@ -438,8 +539,9 @@ void AiAssistantWidget::buildUi()
     contextLayout->setContentsMargins(0, 0, 0, 0);
     contextLayout->setSpacing(6);
     auto *serverIcon = new QLabel(contextBar);
+    serverIcon->setObjectName(QStringLiteral("aiContextServerIcon"));
     serverIcon->setPixmap(UiIcons::renderSymbolPixmap(
-        UiIcons::Symbol::HostItem, palette().color(QPalette::WindowText), QSize(14, 14), devicePixelRatioF()));
+        UiIcons::Symbol::HostItem, QColor(m_colors.text), QSize(14, 14), devicePixelRatioF()));
     contextLayout->addWidget(serverIcon);
     m_contextTargetLabel = new QLabel(tr("未连接终端"), contextBar);
     QFont targetFont = m_contextTargetLabel->font();
@@ -458,8 +560,7 @@ void AiAssistantWidget::buildUi()
     m_historyButton->setCursor(Qt::PointingHandCursor);
     m_historyButton->setAutoRaise(false);
     m_historyButton->setFixedSize(32, 32);
-    m_historyButton->setIcon(UiIcons::symbol(
-        this, UiIcons::Symbol::Clock, palette().color(QPalette::WindowText)));
+    m_historyButton->setIcon(UiIcons::symbol(this, UiIcons::Symbol::Clock, QColor(m_colors.text)));
     m_historyButton->setIconSize(QSize(17, 17));
     m_historyMenu = new QMenu(m_historyButton);
     m_historyMenu->setObjectName(QStringLiteral("aiConversationHistoryMenu"));
@@ -468,17 +569,17 @@ void AiAssistantWidget::buildUi()
     m_historyButton->setStyleSheet(QStringLiteral(
         "QToolButton { color: palette(text); background: transparent;"
         "border: 1px solid palette(mid); border-radius: 9px; padding: 5px; }"
-        "QToolButton:hover, QToolButton:pressed { background: rgba(0,0,0,0.06); }"
-        "QToolButton::menu-indicator { image: none; width: 0; }"));
+        "QToolButton:hover, QToolButton:pressed { background: %1; }"
+        "QToolButton::menu-indicator { image: none; width: 0; }").arg(m_colors.hover));
     contextLayout->addWidget(m_historyButton);
 
     m_newSessionButton = new QPushButton(tr("新会话"), contextBar);
     m_newSessionButton->setObjectName(QStringLiteral("aiNewSessionButton"));
     m_newSessionButton->setCursor(Qt::PointingHandCursor);
     m_newSessionButton->setStyleSheet(QStringLiteral(
-        "QPushButton { color: palette(text); background: transparent; border: 1px solid palette(mid);"
-        "border-radius: 9px; padding: 2px 9px; }"
-        "QPushButton:hover { background: rgba(0,0,0,0.06); }"));
+        "QPushButton { color: palette(text); background: transparent;"
+        "border: 1px solid palette(mid); border-radius: 9px; padding: 2px 9px; }"
+        "QPushButton:hover { background: %1; }").arg(m_colors.hover));
     contextLayout->addWidget(m_newSessionButton);
     root->addWidget(contextBar);
 
@@ -546,12 +647,7 @@ void AiAssistantWidget::buildUi()
     auto *attachLayout = new QHBoxLayout(attachRow);
     attachLayout->setContentsMargins(3, 0, 0, 0);
     attachLayout->setSpacing(6);
-    auto *paperclip = new QLabel(attachRow);
-    paperclip->setPixmap(UiIcons::renderSymbolPixmap(
-        UiIcons::Symbol::Paperclip, palette().color(QPalette::WindowText).lighter(140),
-        QSize(13, 13), devicePixelRatioF()));
-    attachLayout->addWidget(paperclip);
-    m_attachContextCheck = new QCheckBox(tr("可添加终端新增输出"), attachRow);
+    m_attachContextCheck = new QCheckBox(tr("附带终端新增输出"), attachRow);
     attachLayout->addWidget(m_attachContextCheck);
     attachLayout->addStretch(1);
     m_sendButton = new QPushButton(attachRow);
@@ -615,6 +711,13 @@ void AiAssistantWidget::buildUi()
 
 bool AiAssistantWidget::eventFilter(QObject *watched, QEvent *event)
 {
+    // 主题切换只能从 QApplication 身上监听：本控件设置了自己的样式表，Qt 不会再把应用
+    // 调色板变化当作对它有效的 PaletteChange 送进来，changeEvent() 里等不到任何事件。
+    if (watched == qApp && event != nullptr
+        && event->type() == QEvent::ApplicationPaletteChange) {
+        applyPanelTheme();
+        return false;
+    }
     if (watched == m_inputEdit && event != nullptr && event->type() == QEvent::KeyPress) {
         auto *keyEvent = static_cast<QKeyEvent *>(event);
         const bool isEnter = keyEvent->key() == Qt::Key_Return || keyEvent->key() == Qt::Key_Enter;
@@ -1034,8 +1137,9 @@ void AiAssistantWidget::appendUserBubble(const QString &text)
     // 会优先停留在 sizeHint() 宽度，右侧 70% 的布局份额无法真正填满。
     bubble->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     bubble->setStyleSheet(QStringLiteral(
-        "color: #1d2939; background: #e6f2ec; border: 1px solid #c6dfd3;"
-        "border-radius: 10px; padding: 9px 13px; font-size: 14px; font-weight: 600;"));
+        "color: %1; background: %2; border: 1px solid %3;"
+        "border-radius: 10px; padding: 9px 13px; font-size: 14px; font-weight: 600;")
+        .arg(m_colors.text, m_colors.userBubble, m_colors.userBubbleBorder));
     rowLayout->addWidget(bubble, 7);
     m_chatLayout->insertWidget(m_chatLayout->count() - 1, row);
     // 默认让新消息贴底；但用户已明确上滚查看历史时继续尊重该位置。只有用户把滚动条重新
@@ -1054,9 +1158,10 @@ QWidget *AiAssistantWidget::buildThinkingIndicator()
     icon->setFixedSize(30, 30);
     icon->setAlignment(Qt::AlignCenter);
     icon->setPixmap(UiIcons::renderSymbolPixmap(
-        UiIcons::Symbol::Sparkle, QColor(QStringLiteral("#17834f")), QSize(18, 18),
+        UiIcons::Symbol::Sparkle, QColor(m_colors.accent), QSize(18, 18),
         devicePixelRatioF()));
-    icon->setStyleSheet(QStringLiteral("background: #e1f2ea; border-radius: 8px;"));
+    icon->setStyleSheet(
+        QStringLiteral("background: %1; border-radius: 8px;").arg(m_colors.avatarTint));
     rowLayout->addWidget(icon);
     auto *text = new QLabel(tr("正在分析…"), row);
     text->setStyleSheet(QStringLiteral("color: palette(mid); font-style: italic;"));
@@ -1092,9 +1197,10 @@ void AiAssistantWidget::appendAssistantBubble(const QString &text)
     avatar->setFixedSize(30, 30);
     avatar->setAlignment(Qt::AlignCenter);
     avatar->setPixmap(UiIcons::renderSymbolPixmap(
-        UiIcons::Symbol::Sparkle, QColor(QStringLiteral("#17834f")), QSize(18, 18),
+        UiIcons::Symbol::Sparkle, QColor(m_colors.accent), QSize(18, 18),
         devicePixelRatioF()));
-    avatar->setStyleSheet(QStringLiteral("background: #e1f2ea; border-radius: 8px;"));
+    avatar->setStyleSheet(
+        QStringLiteral("background: %1; border-radius: 8px;").arg(m_colors.avatarTint));
     rowLayout->addWidget(avatar, 0, Qt::AlignTop);
 
     auto *bubble = new QLabel(row);
@@ -1106,7 +1212,7 @@ void AiAssistantWidget::appendAssistantBubble(const QString &text)
     bubble->setTextInteractionFlags(Qt::TextSelectableByMouse | Qt::LinksAccessibleByMouse);
     bubble->setOpenExternalLinks(true);
     bubble->setStyleSheet(QStringLiteral(
-        "color: #1d2939; background: transparent; font-size: 14px;"));
+        "color: %1; background: transparent; font-size: 14px;").arg(m_colors.text));
     rowLayout->addWidget(bubble, 1);
 
     m_chatLayout->insertWidget(m_chatLayout->count() - 1, row);
@@ -1116,10 +1222,10 @@ void AiAssistantWidget::appendNoticeBubble(const QString &text, const bool isErr
 {
     auto *bubble = new QLabel(text, m_chatContainer);
     bubble->setWordWrap(true);
-    const QString color = isError ? QStringLiteral("#d84a41") : QStringLiteral("#b8791f");
+    const QString color = isError ? m_colors.danger : m_colors.warning;
     bubble->setStyleSheet(QStringLiteral(
-        "color: %1; background: rgba(0,0,0,0.04); border-left: 3px solid %1;"
-        "border-radius: 6px; padding: 7px 10px;").arg(color));
+        "color: %1; background: %2; border-left: 3px solid %1;"
+        "border-radius: 6px; padding: 7px 10px;").arg(color, m_colors.overlay));
     m_chatLayout->insertWidget(m_chatLayout->count() - 1, bubble);
 }
 
@@ -1129,7 +1235,7 @@ void AiAssistantWidget::appendCommandCard(const QString &command,
                                           const bool alreadyExecuted)
 {
     const CommandRiskLevel level = CommandRiskClassifier::classify(command);
-    const QColor accent = riskAccentColor(level);
+    const QColor accent = riskAccentColor(level, m_colors.dark);
 
     auto *cardRow = new QWidget(m_chatContainer);
     auto *cardRowLayout = new QHBoxLayout(cardRow);
@@ -1140,8 +1246,8 @@ void AiAssistantWidget::appendCommandCard(const QString &command,
     card->setObjectName(QStringLiteral("AiCommandCard"));
     card->setFrameShape(QFrame::StyledPanel);
     card->setStyleSheet(QStringLiteral(
-        "QFrame#AiCommandCard { border: 1px solid %1; border-radius: 10px; background: white; }")
-        .arg(accent.name()));
+        "QFrame#AiCommandCard { border: 1px solid %1; border-radius: 10px; background: %2; }")
+        .arg(accent.name(), m_colors.surface));
     auto *cardLayout = new QVBoxLayout(card);
     cardLayout->setContentsMargins(0, 0, 0, 0);
     cardLayout->setSpacing(0);
@@ -1201,7 +1307,8 @@ void AiAssistantWidget::appendCommandCard(const QString &command,
     monoFont.setStyleHint(QFont::Monospace);
     commandLabel->setFont(monoFont);
     commandLabel->setStyleSheet(QStringLiteral(
-        "color: #263244; background: #f1f4f7; border: 0; font-size: 13px;"));
+        "color: %1; background: %2; border: 0; font-size: 13px;")
+        .arg(m_colors.codeText, m_colors.codeBackground));
     commandLabel->setContentsMargins(12, 10, 12, 10);
     cardLayout->addWidget(commandLabel);
 
@@ -1405,7 +1512,8 @@ void AiAssistantWidget::beginOutputCapture(const QString &command, QFrame *card,
             auto *waitingLabel = new QLabel(tr("正在等待命令执行完成…"), card);
             waitingLabel->setObjectName(QStringLiteral("aiCommandWaitingLabel"));
             waitingLabel->setStyleSheet(
-                QStringLiteral("color: #b8791f; font-style: italic; padding: 5px 11px;"));
+                QStringLiteral("color: %1; font-style: italic; padding: 5px 11px;")
+                    .arg(m_colors.warning));
             const int actionsIndex = cardLayout->indexOf(actionsRow);
             cardLayout->insertWidget(actionsIndex < 0 ? cardLayout->count() : actionsIndex,
                                      waitingLabel);

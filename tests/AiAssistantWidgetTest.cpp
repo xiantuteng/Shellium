@@ -15,6 +15,7 @@
 #include <QLabel>
 #include <QInputDialog>
 #include <QMenu>
+#include <QPalette>
 #include <QPointer>
 #include <QPushButton>
 #include <QScrollArea>
@@ -159,6 +160,12 @@ private slots:
     void chatAutoScrollResumesAfterUserReturnsToBottom();
     void aiClientParsesStreamingResponseIncrementally();
     void stopButtonEndsLongRunningAnalysis();
+    /** @brief 思考开关关闭时请求体不得出现相关字段，打开后才附加。 */
+    void thinkingToggleControlsRequestField();
+    /** @brief 模型列表拉取要从 /models 响应里解析出全部模型 id。 */
+    void fetchModelsParsesGatewayModelIds();
+    /** @brief 切换到深色主题后面板与已有气泡都不能继续用浅色底。 */
+    void panelFollowsApplicationThemeToDark();
 };
 
 void AiAssistantWidgetTest::executingCommandAutoCapturesOutputAndContinuesConversation()
@@ -912,6 +919,126 @@ void AiAssistantWidgetTest::stopButtonEndsLongRunningAnalysis()
     sendButton->click();
     QTRY_COMPARE_WITH_TIMEOUT(server.capturedBodies.size(), 2, 5000);
     QTRY_VERIFY(labelWithText(QStringLiteral("已重新确认集群状态")));
+}
+
+void AiAssistantWidgetTest::thinkingToggleControlsRequestField()
+{
+    MiniAiServer server;
+    QVERIFY(server.isListening());
+    server.responses.append(chatCompletionBody(QStringLiteral("ok")));
+    server.responses.append(chatCompletionBody(QStringLiteral("ok")));
+
+    AiSettings settings;
+    settings.endpointUrl = QStringLiteral("http://127.0.0.1:%1").arg(server.port());
+    settings.model = QStringLiteral("test-model");
+
+    AiClient client;
+    const QList<AiChatMessage> messages{
+        AiChatMessage{AiChatRole::User, QStringLiteral("你好")}};
+
+    // 关闭思考：请求体必须与本开关引入之前完全一致，一个多余字段都不能有——OpenAI 这类
+    // 严格网关会对无法识别的字段直接返回 400。
+    QSignalSpy finishedSpy(&client, &AiClient::replyFinished);
+    client.sendMessage(settings, messages);
+    QTRY_COMPARE_WITH_TIMEOUT(finishedSpy.count(), 1, 5000);
+    const QJsonObject withoutThinking =
+        QJsonDocument::fromJson(server.capturedBodies.at(0)).object();
+    QVERIFY(!withoutThinking.contains(QStringLiteral("enable_thinking")));
+
+    settings.thinkingEnabled = true;
+    client.sendMessage(settings, messages);
+    QTRY_COMPARE_WITH_TIMEOUT(finishedSpy.count(), 2, 5000);
+    const QJsonObject withThinking = QJsonDocument::fromJson(server.capturedBodies.at(1)).object();
+    QCOMPARE(withThinking.value(QStringLiteral("enable_thinking")).toBool(), true);
+    // 其余字段不受影响，思考开关只是附加项。
+    QCOMPARE(withThinking.value(QStringLiteral("model")).toString(),
+             QStringLiteral("test-model"));
+}
+
+void AiAssistantWidgetTest::fetchModelsParsesGatewayModelIds()
+{
+    MiniAiServer server;
+    QVERIFY(server.isListening());
+    // 重复 id 只保留一条：有的网关会把同一个模型按多个 owner 列两次，下拉框里出现两个
+    // 一模一样的条目只会让人怀疑自己选错了。
+    server.responses.append(QByteArrayLiteral(
+        R"({"data":[{"id":"alpha"},{"id":"beta"},{"id":"alpha"},{"id":""}]})"));
+
+    AiSettings settings;
+    settings.endpointUrl = QStringLiteral("http://127.0.0.1:%1").arg(server.port());
+
+    AiClient client;
+    QSignalSpy spy(&client, &AiClient::modelsFetched);
+    client.fetchModels(settings);
+    QTRY_COMPARE_WITH_TIMEOUT(spy.count(), 1, 5000);
+    QVERIFY(spy.at(0).at(0).toBool());
+    QCOMPARE(spy.at(0).at(1).toStringList(), QStringList({QStringLiteral("alpha"),
+                                                          QStringLiteral("beta")}));
+
+    // 网关返回空列表时必须报错而不是"成功但没有模型"，否则用户会以为下拉框是界面卡了。
+    server.responses.append(QByteArrayLiteral(R"({"data":[]})"));
+    client.fetchModels(settings);
+    QTRY_COMPARE_WITH_TIMEOUT(spy.count(), 2, 5000);
+    QVERIFY(!spy.at(1).at(0).toBool());
+    QVERIFY(spy.at(1).at(1).toStringList().isEmpty());
+}
+
+/**
+ * @brief 深色主题下 AI 助手面板必须整体转深，而不是留一块白底。
+ *
+ * 面板样式表和每条消息的内联样式原先都写死浅色，主题切到深色时只有主窗口跟着变，侧栏里的
+ * AI 页面仍是白底黑字。这里在浅色主题下先渲染出一条用户消息，再换上深色应用调色板，断言
+ * 面板背景和已经存在的气泡都重新取了深色——只测面板不测气泡的话，"新消息变深、旧消息还白"
+ * 这种更常见的半吊子实现会被漏掉。
+ */
+void AiAssistantWidgetTest::panelFollowsApplicationThemeToDark()
+{
+    MiniAiServer server;
+    QVERIFY(server.isListening());
+    server.responses.append(chatCompletionBody(QStringLiteral(
+        R"JSON({"state":"complete","message":"当前目标已完成。"})JSON")));
+
+    AiSettingsService settingsService(nullptr, nullptr);
+    AiSettings settings;
+    settings.endpointUrl = QStringLiteral("http://127.0.0.1:%1").arg(server.port());
+    settings.model = QStringLiteral("test-model");
+    QVERIFY(settingsService.save(settings));
+
+    const QPalette originalPalette = QGuiApplication::palette();
+    QPalette lightPalette = originalPalette;
+    lightPalette.setColor(QPalette::Window, QColor(QStringLiteral("#f2f4f7")));
+    QApplication::setPalette(lightPalette);
+
+    AiAssistantWidget widget(&settingsService);
+    auto *inputEdit = widget.findChild<QTextEdit *>(QStringLiteral("aiInputEdit"));
+    auto *sendButton = widget.findChild<QPushButton *>(QStringLiteral("aiSendButton"));
+    QVERIFY(inputEdit != nullptr);
+    QVERIFY(sendButton != nullptr);
+    QVERIFY(widget.styleSheet().contains(QStringLiteral("#fbfcfd")));
+
+    inputEdit->setPlainText(QStringLiteral("看看磁盘占用"));
+    sendButton->click();
+    QTRY_COMPARE_WITH_TIMEOUT(server.capturedBodies.size(), 1, 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(aiIsIdle(sendButton), 5000);
+
+    const auto userBubbleStyle = [&widget]() {
+        auto *bubble = widget.findChild<QLabel *>(QStringLiteral("AiUserMessageBubble"));
+        return bubble == nullptr ? QString() : bubble->styleSheet();
+    };
+    QVERIFY(userBubbleStyle().contains(QStringLiteral("#e6f2ec")));
+
+    QPalette darkPalette = originalPalette;
+    darkPalette.setColor(QPalette::Window, QColor(QStringLiteral("#20232a")));
+    QApplication::setPalette(darkPalette);
+
+    QTRY_VERIFY_WITH_TIMEOUT(widget.styleSheet().contains(QStringLiteral("#191f31")), 2000);
+    QVERIFY(!widget.styleSheet().contains(QStringLiteral("#fbfcfd")));
+    // 换主题后旧气泡是重建出来的，findChild 会拿到新控件；等待一轮事件循环让 deleteLater
+    // 释放旧对象，避免断言命中即将销毁的浅色气泡。
+    QTRY_VERIFY_WITH_TIMEOUT(userBubbleStyle().contains(QStringLiteral("#24413d")), 2000);
+    QVERIFY(!userBubbleStyle().contains(QStringLiteral("#e6f2ec")));
+
+    QApplication::setPalette(originalPalette);
 }
 
 QTEST_MAIN(AiAssistantWidgetTest)

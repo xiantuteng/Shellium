@@ -1,3 +1,5 @@
+#include "ai/AiSettings.h"
+#include "ai/AiSettingsService.h"
 #include "settings/BundledFonts.h"
 #include "settings/TerminalSettings.h"
 #include "security/Vault.h"
@@ -23,7 +25,67 @@
 #include <QTest>
 #include <QTemporaryDir>
 #include <QTimer>
+#include <QHostAddress>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QSharedPointer>
+#include <QTcpServer>
+#include <QTcpSocket>
 #include <QToolButton>
+
+namespace {
+
+/**
+ * @brief 只应答 GET /models 的极简网关，用来驱动设置页的"刷新模型列表"。
+ *
+ * 手写而不是引入 mock HTTP 依赖：刷新按钮只发一个不带请求体的 GET，读到请求头结束的空行
+ * 就可以应答并关闭连接，不需要支持长连接、分块编码或任何其他路径。
+ */
+class MiniModelServer final : public QObject {
+    Q_OBJECT
+
+public:
+    explicit MiniModelServer(QObject *parent = nullptr)
+        : QObject(parent)
+    {
+        connect(&m_server, &QTcpServer::newConnection, this, [this]() {
+            while (m_server.hasPendingConnections()) {
+                QTcpSocket *socket = m_server.nextPendingConnection();
+                auto buffer = QSharedPointer<QByteArray>::create();
+                connect(socket, &QTcpSocket::readyRead, this, [this, socket, buffer]() {
+                    buffer->append(socket->readAll());
+                    if (!buffer->contains("\r\n\r\n")) {
+                        return;
+                    }
+                    requestPaths.append(QString::fromUtf8(buffer->split(' ').value(1)));
+                    const QByteArray response =
+                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: "
+                        + QByteArray::number(body.size()) + "\r\nConnection: close\r\n\r\n" + body;
+                    socket->write(response);
+                    socket->flush();
+                    socket->disconnectFromHost();
+                });
+                connect(socket, &QTcpSocket::disconnected, socket, &QTcpSocket::deleteLater);
+            }
+        });
+        m_server.listen(QHostAddress::LocalHost);
+    }
+
+    [[nodiscard]] bool isListening() const { return m_server.isListening(); }
+    [[nodiscard]] QString baseUrl() const
+    {
+        return QStringLiteral("http://127.0.0.1:%1").arg(m_server.serverPort());
+    }
+
+    QByteArray body = QByteArrayLiteral(R"({"data":[{"id":"alpha-1"},{"id":"beta-2"}]})");
+    QStringList requestPaths;
+
+private:
+    QTcpServer m_server;
+};
+
+} // namespace
 
 /**
  * @brief 覆盖设置界面改版后的控件接线：步进器、开关、配色色板与分类导航。
@@ -62,6 +124,10 @@ private slots:
     void bundledFontsResolveToThemselvesAndLeadTheFontCombo();
     /** @brief AI 连接配置的长文本输入框必须占用卡片整行宽度，不能退回默认窄尺寸。 */
     void aiConnectionFieldsFillCardWidth();
+    /** @brief 刷新按钮要把服务端模型填进下拉框，同时不覆盖用户已经手填的模型名。 */
+    void aiModelRefreshFillsComboWithoutDiscardingManualEntry();
+    /** @brief 模型名和思考开关都要能存进 AiSettingsService 并在重开设置页时回显。 */
+    void aiModelAndThinkingToggleRoundTrip();
 
 private:
     /** @brief 返回步进器里指定角色（increase/decrease）的按钮。 */
@@ -807,9 +873,20 @@ void SettingsUiTest::aiConnectionFieldsFillCardWidth()
     dialog.show();
     QVERIFY(QTest::qWaitForWindowExposed(&dialog));
 
+    // 模型名称行现在是"下拉框 + 刷新按钮"的组合控件，宽度由整行容器承担，因此单独校验。
+    auto *modelRow = dialog.findChild<QWidget *>(QStringLiteral("aiModelRow"));
+    auto *modelCombo = dialog.findChild<QComboBox *>(QStringLiteral("aiModelCombo"));
+    auto *refreshButton = dialog.findChild<QToolButton *>(QStringLiteral("aiModelRefreshButton"));
+    QVERIFY(modelRow != nullptr);
+    QVERIFY(modelCombo != nullptr);
+    QVERIFY(refreshButton != nullptr);
+    QVERIFY2(modelRow->width() >= modelRow->parentWidget()->contentsRect().width() - 2,
+             "模型名称行未占满配置行");
+    QVERIFY2(modelCombo->width() >= modelRow->width() - refreshButton->width() - 12,
+             "下拉框未吃掉刷新按钮之外的剩余宽度");
+
     const QList<QString> fieldNames = {QStringLiteral("aiEndpointEdit"),
-                                       QStringLiteral("aiApiKeyEdit"),
-                                       QStringLiteral("aiModelEdit")};
+                                       QStringLiteral("aiApiKeyEdit")};
     for (const QString &fieldName : fieldNames) {
         auto *field = dialog.findChild<QLineEdit *>(fieldName);
         QVERIFY2(field != nullptr, qPrintable(fieldName));
@@ -822,6 +899,78 @@ void SettingsUiTest::aiConnectionFieldsFillCardWidth()
                                 .arg(field->width())
                                 .arg(field->parentWidget()->contentsRect().width())));
     }
+}
+
+void SettingsUiTest::aiModelRefreshFillsComboWithoutDiscardingManualEntry()
+{
+    MiniModelServer server;
+    QVERIFY(server.isListening());
+
+    auto service = makeService();
+    AiSettingsService aiService(nullptr, nullptr);
+    SettingsDialog dialog(service.get(), nullptr, &aiService, nullptr);
+
+    auto *endpointEdit = dialog.findChild<QLineEdit *>(QStringLiteral("aiEndpointEdit"));
+    auto *modelCombo = dialog.findChild<QComboBox *>(QStringLiteral("aiModelCombo"));
+    auto *refreshButton = dialog.findChild<QToolButton *>(QStringLiteral("aiModelRefreshButton"));
+    QVERIFY(endpointEdit != nullptr);
+    QVERIFY(modelCombo != nullptr);
+    QVERIFY(refreshButton != nullptr);
+    // 手填必须一直可用：网关不实现 /models 时下拉框永远是空的，此时只剩手填这一条路。
+    QVERIFY(modelCombo->isEditable());
+
+    endpointEdit->setText(server.baseUrl());
+    modelCombo->setCurrentText(QStringLiteral("my-private-model"));
+    refreshButton->click();
+
+    QTRY_COMPARE_WITH_TIMEOUT(modelCombo->count(), 2, 5000);
+    QCOMPARE(modelCombo->itemText(0), QStringLiteral("alpha-1"));
+    QCOMPARE(modelCombo->itemText(1), QStringLiteral("beta-2"));
+    QCOMPARE(server.requestPaths.value(0), QStringLiteral("/models"));
+    // 刷新只是补齐候选，不是替用户改配置：正在生效的模型名必须原样留在编辑框里。
+    QCOMPARE(modelCombo->currentText(), QStringLiteral("my-private-model"));
+
+    modelCombo->setCurrentIndex(1);
+    QCOMPARE(modelCombo->currentText(), QStringLiteral("beta-2"));
+}
+
+void SettingsUiTest::aiModelAndThinkingToggleRoundTrip()
+{
+    auto service = makeService();
+    AiSettingsService aiService(m_database.get(), nullptr);
+    QString loadError;
+    QVERIFY2(aiService.load(&loadError), qPrintable(loadError));
+    QVERIFY(!aiService.currentSettings().thinkingEnabled);
+
+    {
+        SettingsDialog dialog(service.get(), nullptr, &aiService, nullptr);
+        auto *modelCombo = dialog.findChild<QComboBox *>(QStringLiteral("aiModelCombo"));
+        auto *thinkingToggle = dialog.findChild<ToggleSwitch *>(QStringLiteral("aiThinkingToggle"));
+        auto *saveButton = dialog.findChild<QAbstractButton *>(QStringLiteral("settingsAiSave"));
+        QVERIFY(modelCombo != nullptr);
+        QVERIFY(thinkingToggle != nullptr);
+        QVERIFY(saveButton != nullptr);
+        QVERIFY(!thinkingToggle->isChecked());
+
+        modelCombo->setCurrentText(QStringLiteral("thinking-model"));
+        thinkingToggle->click();
+        saveButton->click();
+    }
+
+    QCOMPARE(aiService.currentSettings().model, QStringLiteral("thinking-model"));
+    QVERIFY(aiService.currentSettings().thinkingEnabled);
+
+    // 换一个服务实例重新读库，确认开关不是只留在内存快照里。
+    AiSettingsService reloaded(m_database.get(), nullptr);
+    QVERIFY2(reloaded.load(&loadError), qPrintable(loadError));
+    QVERIFY(reloaded.currentSettings().thinkingEnabled);
+    QCOMPARE(reloaded.currentSettings().model, QStringLiteral("thinking-model"));
+
+    // 重开设置页必须回显持久化后的状态，而不是每次都从默认值起步。
+    SettingsDialog reopened(service.get(), nullptr, &reloaded, nullptr);
+    QCOMPARE(reopened.findChild<QComboBox *>(QStringLiteral("aiModelCombo"))->currentText(),
+             QStringLiteral("thinking-model"));
+    QVERIFY(reopened.findChild<ToggleSwitch *>(QStringLiteral("aiThinkingToggle"))->isChecked());
 }
 
 QTEST_MAIN(SettingsUiTest)

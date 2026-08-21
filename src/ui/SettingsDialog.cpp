@@ -26,6 +26,7 @@
 #include <QScrollArea>
 #include <QSpinBox>
 #include <QStackedWidget>
+#include <QToolButton>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -592,10 +593,48 @@ QWidget *SettingsDialog::buildAiPage()
         m_aiApiKeyEdit,
         tr("以 Bearer Token 形式随请求发送，加密保存在凭据保险库。"));
 
-    m_aiModelEdit = new QLineEdit(card);
-    m_aiModelEdit->setObjectName(QStringLiteral("aiModelEdit"));
-    m_aiModelEdit->setPlaceholderText(QStringLiteral("gpt-4o-mini / deepseek-chat / ..."));
-    card->addWideRow(tr("模型名称"), m_aiModelEdit);
+    // 模型名称行 = 可编辑下拉框 + 刷新按钮：网关列表拉得到就下拉选，拉不到（网关不实现
+    // /models、或者密钥还没填）也不能挡住用户手填一个模型名直接用。
+    auto *modelRow = new QWidget(card);
+    modelRow->setObjectName(QStringLiteral("aiModelRow"));
+    auto *modelLayout = new QHBoxLayout(modelRow);
+    modelLayout->setContentsMargins(0, 0, 0, 0);
+    modelLayout->setSpacing(8);
+    m_aiModelCombo = new QComboBox(modelRow);
+    m_aiModelCombo->setObjectName(QStringLiteral("aiModelCombo"));
+    m_aiModelCombo->setEditable(true);
+    // 不插入历史条目：下拉列表只应呈现服务端此刻真实提供的模型，用户敲进去的临时名字混在
+    // 其中会让"这个模型到底存不存在"无法分辨。
+    m_aiModelCombo->setInsertPolicy(QComboBox::NoInsert);
+    m_aiModelCombo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    m_aiModelCombo->lineEdit()->setObjectName(QStringLiteral("aiModelEdit"));
+    m_aiModelCombo->lineEdit()->setPlaceholderText(
+        QStringLiteral("gpt-4o-mini / deepseek-chat / ..."));
+    m_aiModelRefreshButton = new QToolButton(modelRow);
+    m_aiModelRefreshButton->setObjectName(QStringLiteral("aiModelRefreshButton"));
+    m_aiModelRefreshButton->setText(QStringLiteral("⟳"));
+    // 复用步进器按钮的视觉：设置页里所有"输入框旁边的小方按钮"共用一套圆角和描边，
+    // 不为刷新单独再造一种样式。
+    m_aiModelRefreshButton->setProperty("stepperButton", true);
+    m_aiModelRefreshButton->setCursor(Qt::PointingHandCursor);
+    m_aiModelRefreshButton->setFocusPolicy(Qt::NoFocus);
+    m_aiModelRefreshButton->setFixedSize(32, 32);
+    m_aiModelRefreshButton->setToolTip(tr("从服务端获取模型列表"));
+    m_aiModelRefreshButton->setAccessibleName(tr("刷新模型列表"));
+    modelLayout->addWidget(m_aiModelCombo, 1);
+    modelLayout->addWidget(m_aiModelRefreshButton, 0);
+    card->addWideRow(
+        tr("模型名称"),
+        modelRow,
+        tr("可直接手动填写，也可以点右侧刷新按钮拉取服务端模型列表后下拉选择。"));
+
+    m_aiThinkingToggle = new ToggleSwitch(card);
+    m_aiThinkingToggle->setObjectName(QStringLiteral("aiThinkingToggle"));
+    card->addRow(
+        tr("开启思考"),
+        m_aiThinkingToggle,
+        tr("请求模型先推理再作答，回答更稳但更慢；仅支持思考模式的网关有效，"
+           "关闭时请求体不含该字段。"));
 
     m_aiStatusLabel = new QLabel(card);
     m_aiStatusLabel->setWordWrap(true);
@@ -621,7 +660,9 @@ QWidget *SettingsDialog::buildAiPage()
     const bool available = m_aiSettingsService != nullptr;
     for (QWidget *field : {static_cast<QWidget *>(m_aiEndpointEdit),
                            static_cast<QWidget *>(m_aiApiKeyEdit),
-                           static_cast<QWidget *>(m_aiModelEdit),
+                           static_cast<QWidget *>(m_aiModelCombo),
+                           static_cast<QWidget *>(m_aiModelRefreshButton),
+                           static_cast<QWidget *>(m_aiThinkingToggle),
                            static_cast<QWidget *>(m_aiTestButton),
                            static_cast<QWidget *>(m_aiSaveButton)}) {
         field->setEnabled(available);
@@ -630,7 +671,10 @@ QWidget *SettingsDialog::buildAiPage()
         const AiSettings current = m_aiSettingsService->currentSettings();
         m_aiEndpointEdit->setText(current.endpointUrl);
         m_aiApiKeyEdit->setText(current.apiKey);
-        m_aiModelEdit->setText(current.model);
+        // 已保存的模型名此刻还不在候选列表里（列表要联网才拉得到），直接写进编辑框，
+        // 保证打开设置页看到的就是正在生效的配置。
+        m_aiModelCombo->setCurrentText(current.model);
+        m_aiThinkingToggle->setChecked(current.thinkingEnabled);
     } else {
         m_aiStatusLabel->setText(tr("AI 助手配置服务不可用"));
     }
@@ -642,11 +686,42 @@ QWidget *SettingsDialog::buildAiPage()
         AiSettings probe;
         probe.endpointUrl = m_aiEndpointEdit->text();
         probe.apiKey = m_aiApiKeyEdit->text();
-        probe.model = m_aiModelEdit->text();
+        probe.model = m_aiModelCombo->currentText();
         m_aiTestButton->setEnabled(false);
+        m_aiStatusLabel->setStyleSheet(QString());
         m_aiStatusLabel->setText(tr("正在测试连接…"));
         m_aiTestClient->testConnection(probe);
     });
+    connect(m_aiModelRefreshButton, &QToolButton::clicked, this, [this]() {
+        if (m_aiSettingsService == nullptr) {
+            return;
+        }
+        AiSettings probe;
+        // 用界面上当前填的地址和密钥，而不是已保存的那份：用户往往是先改地址再来刷新
+        // 列表，要求"先保存才能刷新"只会逼着人保存一份还没验证过的配置。
+        probe.endpointUrl = m_aiEndpointEdit->text();
+        probe.apiKey = m_aiApiKeyEdit->text();
+        m_aiModelRefreshButton->setEnabled(false);
+        m_aiStatusLabel->setStyleSheet(QString());
+        m_aiStatusLabel->setText(tr("正在获取模型列表…"));
+        m_aiTestClient->fetchModels(probe);
+    });
+    connect(m_aiTestClient, &AiClient::modelsFetched, this,
+            [this](const bool ok, const QStringList &models, const QString &message) {
+                m_aiModelRefreshButton->setEnabled(true);
+                m_aiStatusLabel->setStyleSheet(
+                    ok ? QString() : QStringLiteral("color: #d84a41;"));
+                m_aiStatusLabel->setText(message);
+                if (!ok) {
+                    return;
+                }
+                // 重填候选列表不能顺手改掉用户已选的模型：先记住当前文本，替换列表后原样
+                // 写回去，哪怕这个名字不在新列表里也保留——网关少列一个模型不代表它不可用。
+                const QString selected = m_aiModelCombo->currentText();
+                m_aiModelCombo->clear();
+                m_aiModelCombo->addItems(models);
+                m_aiModelCombo->setCurrentText(selected);
+            });
     connect(m_aiTestClient, &AiClient::testConnectionFinished, this,
             [this](const bool ok, const QString &message) {
                 m_aiTestButton->setEnabled(true);
@@ -668,7 +743,8 @@ void SettingsDialog::persistAiSettings()
     AiSettings settings;
     settings.endpointUrl = m_aiEndpointEdit->text().trimmed();
     settings.apiKey = m_aiApiKeyEdit->text();
-    settings.model = m_aiModelEdit->text().trimmed();
+    settings.model = m_aiModelCombo->currentText().trimmed();
+    settings.thinkingEnabled = m_aiThinkingToggle->isChecked();
 
     QString errorMessage;
     if (m_aiSettingsService->save(settings, &errorMessage)) {

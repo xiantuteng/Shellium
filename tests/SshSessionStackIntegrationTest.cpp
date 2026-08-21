@@ -114,6 +114,14 @@ private slots:
     /** @brief Shellium 自己写给远端的字节不得出现在用户屏幕上。 */
     void suppressesOwnEchoInTerminal();
 
+    /**
+     * @brief 用户在远端敲 exit 主动结束 SSH 后，面板必须停在手动恢复提示。
+     *
+     * 正常退出曾被直接接回本地 zsh：刚断开的服务器与本机毫无关系，顶上来的本地 Shell
+     * 会静默吞掉现场，用户下一条命令很可能打在自己电脑上。
+     */
+    void normalExitOffersManualRecoveryInsteadOfLocalShell();
+
 private:
     /** @brief 从环境变量装配第一层目标。 */
     [[nodiscard]] static ConnectionTarget firstLayerTarget();
@@ -918,6 +926,39 @@ void SshSessionStackIntegrationTest::terminalPaneHandlesTypedSshEndToEnd()
     const QList<ConnectionTarget> chain = pane.targets();
     QCOMPARE(chain.at(1).host, m_secondLayerHost);
     QCOMPARE(chain.at(1).confidence, ConnectionTarget::Confidence::Confirmed);
+}
+
+void SshSessionStackIntegrationTest::normalExitOffersManualRecoveryInsteadOfLocalShell()
+{
+    TerminalPane pane;
+    pane.resize(900, 500);
+    pane.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&pane));
+
+    auto *view = pane.findChild<TerminalView *>();
+    QVERIFY(view != nullptr);
+    view->setFocus(Qt::OtherFocusReason);
+
+    pane.connectToHost(firstLayerTarget());
+    QVERIFY2(waitFor([&]() { return pane.isConnected(); }, 40000), "第一层连接失败");
+    QVERIFY(waitFor([&]() { return pane.targets().size() == 1; }, 20000));
+    QTest::qWait(2500);
+
+    // 完全按用户的操作来：在远端 Shell 里敲 exit 主动结束这条 SSH。
+    QTest::keyClicks(view, QStringLiteral("exit"));
+    QTest::keyClick(view, Qt::Key_Return);
+
+    QVERIFY2(waitFor([&]() { return pane.isAwaitingManualRecovery(); }, 40000),
+             "远端 exit 后未进入手动恢复提示");
+    QVERIFY2(!pane.isConnected(), "提示状态下不应存在可交互会话");
+
+    const QString screen = pane.terminalPlainText();
+    QVERIFY2(screen.contains(QStringLiteral("按 r 重新连接")),
+             "结束后必须给出手动重连按键");
+    QVERIFY2(screen.contains(QStringLiteral("按 x 关闭")),
+             "结束后必须给出关闭标签页按键");
+    QVERIFY2(!screen.contains(QStringLiteral("正在启动本地 zsh")),
+             "主动结束 SSH 后不得擅自接回本地 zsh");
 }
 
 void SshSessionStackIntegrationTest::suppressesOwnEchoInTerminal()

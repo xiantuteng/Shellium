@@ -7,6 +7,7 @@
 #include <QList>
 #include <QObject>
 #include <QString>
+#include <QStringList>
 
 class QNetworkAccessManager;
 class QNetworkReply;
@@ -53,6 +54,16 @@ public:
     void sendMessage(const AiSettings &settings, const QList<AiChatMessage> &messages);
 
     /**
+     * @brief 拉取网关可用模型列表：GET {base}/models，取每个条目的 id。
+     * @param settings 待查询的端点、密钥；模型名不参与本次请求。
+     *
+     * 与 testConnection 共用同一个端点但各走各的请求：测试连接只回答"通不通"，这里要把
+     * 结果填进设置页的下拉框，两者可能被用户先后点击，互相中止会让先点的那个静默失败。
+     * 结果通过 modelsFetched 异步返回；重复调用会中止上一次未完成的拉取。
+     */
+    void fetchModels(const AiSettings &settings);
+
+    /**
      * @brief 中止当前进行中的对话请求；用户主动停止、切换上下文或关闭面板时调用。
      *
      * 中止后本次请求不再发出 replyFinished / replyFailed：用户按下"停止"是一次成功的
@@ -64,6 +75,14 @@ public:
 signals:
     /** @brief 连通性探测完成；ok 为 true 时 message 是模型数量之类的简短摘要。 */
     void testConnectionFinished(bool ok, const QString &message);
+
+    /**
+     * @brief 模型列表拉取结束。
+     * @param ok 请求成功且响应里确实解析出了模型 id 时为 true。
+     * @param models 按网关返回顺序排列的模型 id，ok 为 false 时为空。
+     * @param message 可读的结果说明，成功时是数量摘要，失败时是原因。
+     */
+    void modelsFetched(bool ok, const QStringList &models, const QString &message);
 
     /**
      * @brief 流式响应每到一段新增量就触发一次。
@@ -95,6 +114,7 @@ private:
 
     QNetworkAccessManager *m_network = nullptr;
     QNetworkReply *m_activeTestReply = nullptr;
+    QNetworkReply *m_activeModelsReply = nullptr;
     QNetworkReply *m_activeChatReply = nullptr;
 
     /** @brief 当前对话请求是否由 abortActiveRequest() 主动中止，用于抑制随之而来的失败信号。 */
