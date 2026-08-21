@@ -116,6 +116,9 @@ private slots:
     /** @brief 同一个自绘图标实例必须在主题切换后改用新前景色，显式品牌色则保持不变。 */
     void semanticIconsFollowLightAndDarkPalettes();
 
+    /** @brief 通用下拉弹层只能保留内部圆角列表，不得再由原生容器绘制直角外框。 */
+    void comboPopupRemovesOuterSquareFrame();
+
     /** @brief 无父分组的主机必须排在全部顶层分组之后，并由一个不可选中的"未分组"标题隔开。 */
     void ungroupedHostsFollowFoldersBehindSectionHeader();
 
@@ -1616,6 +1619,27 @@ void HostManagerWidgetTest::semanticIconsFollowLightAndDarkPalettes()
     QCOMPARE(strongestPixel(adaptive).rgb(), darkThemeIcon.rgb());
     // 主按钮的绿色背景不随主题改变，它的深色“+”属于显式品牌色，不能被全局前景色覆盖。
     QCOMPARE(strongestPixel(fixed).rgb(), fixedBrandIcon.rgb());
+}
+
+void HostManagerWidgetTest::comboPopupRemovesOuterSquareFrame()
+{
+    QComboBox combo;
+    UiIcons::modernizePopup(&combo);
+
+    // QComboBox 的内部视图与承载它的顶层容器不是同一个控件。视觉问题来自后者仍使用
+    // StyledPanel，因此回归必须直接检查容器，而不能只验证列表本身的 QSS 或圆角半径。
+    QAbstractItemView *view = combo.view();
+    QVERIFY2(view != nullptr, "下拉框必须创建候选项视图");
+    QWidget *container = view->window();
+    QVERIFY2(container != nullptr && container != view, "下拉列表必须具有独立顶层容器");
+    QVERIFY2(container->testAttribute(Qt::WA_TranslucentBackground),
+             "下拉容器背景必须透明，避免圆角之外重新露出方形底色");
+
+    auto *containerFrame = qobject_cast<QFrame *>(container);
+    QVERIFY2(containerFrame != nullptr, "Qt 下拉容器应为可关闭原生框架的 QFrame");
+    QCOMPARE(containerFrame->frameShape(), QFrame::NoFrame);
+    QCOMPARE(containerFrame->lineWidth(), 0);
+    QCOMPARE(containerFrame->midLineWidth(), 0);
 }
 
 void HostManagerWidgetTest::hostNameUsesRegularWeightWhileGroupRemainsEmphasized()

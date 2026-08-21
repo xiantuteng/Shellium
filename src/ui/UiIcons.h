@@ -4,6 +4,7 @@
 #include <QAbstractItemView>
 #include <QColor>
 #include <QComboBox>
+#include <QFrame>
 #include <QIcon>
 #include <QIconEngine>
 #include <QMenu>
@@ -724,10 +725,11 @@ inline void modernizePopup(QMenu *menu)
  * @param combo 已构造、尚未弹出过下拉列表的下拉框；不得为 nullptr。
  *
  * 原理与 modernizePopup(QMenu*) 相同：QComboBox 的下拉列表容器
- * （QComboBoxPrivateContainer）是一个独立的顶层窗口，样式表里的 border-radius
- * 只画在内容区域内，容器窗口默认不透明背景仍会在四角露出方形轮廓。必须在该顶层窗口
- * 创建原生句柄之前设置该属性才会生效；QComboBox::view() 会按需创建容器但不会显示它，
- * 因此在构造下拉框后立即调用本函数即可安全生效。
+ * （QComboBoxPrivateContainer）是一个独立的 QFrame 顶层窗口。样式表里的 border-radius
+ * 只画在内部列表上，而容器自己的 StyledPanel 框架仍会在外面绘制一圈直角边框；仅设置
+ * 透明背景只能消除四角底色，不能消除这道框线。因此这里同时关闭容器框架并启用透明背景，
+ * 最终只保留内部 QAbstractItemView 的圆角矩形。相关属性必须在该顶层窗口创建原生句柄之前
+ * 设置；QComboBox::view() 会按需创建容器但不会显示它，所以在构造下拉框后立即调用即可。
  */
 inline void modernizePopup(QComboBox *combo)
 {
@@ -735,6 +737,13 @@ inline void modernizePopup(QComboBox *combo)
     if (QAbstractItemView *view = combo->view()) {
         if (QWidget *container = view->window()) {
             container->setAttribute(Qt::WA_TranslucentBackground);
+            if (auto *containerFrame = qobject_cast<QFrame *>(container)) {
+                // 下拉容器默认的 StyledPanel 正是截图中包住圆角列表的直角矩形。关闭框架只会
+                // 移除容器装饰，不会影响内部列表由全局 QSS 绘制的圆角、边框和选中状态。
+                containerFrame->setFrameShape(QFrame::NoFrame);
+                containerFrame->setLineWidth(0);
+                containerFrame->setMidLineWidth(0);
+            }
         }
     }
 }
