@@ -102,6 +102,7 @@ set(SHELLIUM_APP_SOURCES
     src/storage/ApplicationDatabase.h
     src/sftp/RemoteFileManagerWidget.cpp
     src/sftp/RemoteFileManagerWidget.h
+    src/sftp/SftpResumeLedger.h
     src/sftp/SftpService.cpp
     src/sftp/SftpService.h
     src/ssh/ShellShim.cpp
@@ -637,6 +638,14 @@ if(BUILD_TESTING)
     target_link_libraries(ShelliumSftpRecursiveTests PRIVATE Qt6::Core Qt6::Test)
     add_test(NAME ShelliumSftpRecursiveTests COMMAND ShelliumSftpRecursiveTests)
 
+    # "该不该传、能不能续、可不可以跳过"的判定层。判错的后果是最恶劣的一类：文件没更新却
+    # 报告成功，或两个不同文件被拼成一个损坏文件，两者都不抛错。判定与续传账本都不依赖
+    # libssh 与网络，因此这里能把每条边界都钉死。
+    qt_add_executable(ShelliumSftpResumeTests tests/SftpResumeDecisionTest.cpp)
+    target_include_directories(ShelliumSftpResumeTests PRIVATE src)
+    target_link_libraries(ShelliumSftpResumeTests PRIVATE Qt6::Core Qt6::Test)
+    add_test(NAME ShelliumSftpResumeTests COMMAND ShelliumSftpResumeTests)
+
     # 远程文件管理改版不仅调整颜色，还改变默认单栏/全屏双栏、列结构、工具条顺序和窄宽度
     # 降级策略。这些契约必须通过真实 QWidget 构树验证。测试目标链接正式 SftpService 以确保
     # 控件与生产代码一致，但在测试文件中提供不会访问网络的 SshTunnelBroker 替身，因此运行
@@ -784,4 +793,57 @@ if(BUILD_TESTING)
         target_link_libraries(ShelliumSftpUploadPipelineTests PRIVATE util)
     endif()
     add_test(NAME ShelliumSftpUploadPipelineTests COMMAND ShelliumSftpUploadPipelineTests)
+
+    # 续传与"是否需要更新"的真实服务器回归：最终结果由服务端 stat、能否保存修改时间、
+    # rename 能否覆盖已存在文件、以及中断后残片实际留下多少字节共同决定，用桩替身模拟这些
+    # 环节等于把被测逻辑一起模拟掉。缺少 SHELLIUM_IT_* 环境变量时测试自行跳过。
+    qt_add_executable(ShelliumSftpResumeIntegrationTests
+        tests/SftpResumeIntegrationTest.cpp
+        src/core/ConnectionTarget.cpp
+        src/core/ConnectionTarget.h
+        src/core/HostRecord.h
+        src/storage/ApplicationDatabase.cpp
+        src/storage/ApplicationDatabase.h
+        src/sftp/SftpService.cpp
+        src/sftp/SftpService.h
+        src/ssh/ShellShim.cpp
+        src/ssh/ShellShim.h
+        src/ssh/SshSessionNode.cpp
+        src/ssh/SshSessionNode.h
+        src/ssh/SshSessionStack.cpp
+        src/ssh/SshSessionStack.h
+        src/ssh/SshTunnelBroker.cpp
+        src/ssh/SshTunnelBroker.h
+        src/ssh/SshCommandParser.cpp
+        src/ssh/SshCommandParser.h
+        src/terminal/TerminalEchoFilter.cpp
+        src/terminal/TerminalEchoFilter.h
+        src/terminal/TerminalPane.cpp
+        src/terminal/TerminalPane.h
+        src/terminal/TerminalView.cpp
+        src/terminal/TerminalView.h
+        src/terminal/VtermBridge.cpp
+        src/terminal/VtermBridge.h
+        src/terminal/LocalShellWorker.cpp
+        src/terminal/LocalShellWorker.h
+        src/settings/TerminalSettings.cpp
+        src/settings/TerminalSettings.h
+        src/ui/SettingsWidgets.cpp
+        src/ui/SettingsWidgets.h
+    )
+    target_include_directories(ShelliumSftpResumeIntegrationTests PRIVATE src)
+    target_link_libraries(ShelliumSftpResumeIntegrationTests PRIVATE
+        Qt6::Core
+        Qt6::Concurrent
+        Qt6::Gui
+        Qt6::Sql
+        Qt6::Widgets
+        Qt6::Test
+        PkgConfig::LIBSSH
+        PkgConfig::LIBVTERM
+    )
+    if(UNIX AND NOT APPLE)
+        target_link_libraries(ShelliumSftpResumeIntegrationTests PRIVATE util)
+    endif()
+    add_test(NAME ShelliumSftpResumeIntegrationTests COMMAND ShelliumSftpResumeIntegrationTests)
 endif()

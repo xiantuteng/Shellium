@@ -830,7 +830,8 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     m_resumeTransfersCheck->setObjectName(QStringLiteral("SftpResumeCheck"));
     m_resumeTransfersCheck->setText(tr("断点续传"));
     m_resumeTransfersCheck->setToolTip(
-        tr("开启时从已有较小文件继续；关闭时始终截断并覆盖重传。"));
+        tr("开启时：内容确实一致的文件跳过不传，中断留下的残片经校验后继续；\n"
+           "关闭时：无论内容是否相同，一律完整重传。"));
     // 操作行按"传输""文件操作""传输控制"三组用竖线隔开，从左到右符合从常用到不常用
     // 的操作频率，用户不用逐个图标猜边界。
     operationRow->addWidget(uploadButton);
@@ -1211,6 +1212,74 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
             &SftpService::recursiveTransferFinished,
             this,
             &RemoteFileManagerWidget::handleRecursiveTransferFinished);
+    connect(m_service,
+            &SftpService::pathStatReady,
+            this,
+            [this](const quint64 requestId,
+                   const ConnectionTarget &,
+                   const QString &,
+                   const bool exists,
+                   const bool isDirectory) {
+                const auto pending = m_pendingDirectoryChecks.find(requestId);
+                if (pending == m_pendingDirectoryChecks.end()) {
+                    return;
+                }
+                const PendingDirectoryUpload upload = pending.value();
+                m_pendingDirectoryChecks.erase(pending);
+
+                if (!exists) {
+                    // 远端还没有同名目录，没有冲突可言，直接按普通写入入队。
+                    enqueueDirectoryUpload(upload, SftpTransfer::DirectoryConflictPolicy::Merge);
+                    return;
+                }
+
+                QMessageBox box(this);
+                box.setIcon(QMessageBox::Question);
+                box.setWindowTitle(tr("远端已存在同名条目"));
+                if (!isDirectory) {
+                    // 同名的普通文件挡住了目录位置，"合并"无从谈起，只能替换或放弃。
+                    box.setText(tr("远端已存在同名文件：\n%1").arg(upload.remoteRoot));
+                    box.setInformativeText(
+                        tr("要上传目录就必须先删除这个文件。是否替换？"));
+                    QPushButton *replaceButton =
+                        box.addButton(tr("替换"), QMessageBox::DestructiveRole);
+                    box.addButton(tr("取消"), QMessageBox::RejectRole);
+                    box.setDefaultButton(replaceButton);
+                    box.exec();
+                    if (box.clickedButton() == replaceButton) {
+                        enqueueDirectoryUpload(upload,
+                                               SftpTransfer::DirectoryConflictPolicy::Replace);
+                    }
+                    return;
+                }
+
+                box.setText(tr("远端已存在同名目录：\n%1").arg(upload.remoteRoot));
+                // 两种语义的差别事后无法补救，必须在这里说清楚，而不是让用户凭按钮名去猜。
+                box.setInformativeText(
+                    tr("合并更新：逐个文件比对内容，只重传确实有变化的文件；远端多出来的"
+                       "文件会保留。\n\n"
+                       "替换：先删除远端整个目录再完整上传，结果与本地严格一致；远端多出来"
+                       "的文件会被永久删除。"));
+                QPushButton *mergeButton =
+                    box.addButton(tr("合并更新"), QMessageBox::AcceptRole);
+                QPushButton *replaceButton =
+                    box.addButton(tr("替换"), QMessageBox::DestructiveRole);
+                box.addButton(tr("取消"), QMessageBox::RejectRole);
+                box.setDefaultButton(
+                    m_lastDirectoryConflictChoice == SftpTransfer::DirectoryConflictPolicy::Replace
+                        ? replaceButton
+                        : mergeButton);
+                box.exec();
+
+                if (box.clickedButton() == mergeButton) {
+                    m_lastDirectoryConflictChoice = SftpTransfer::DirectoryConflictPolicy::Merge;
+                    enqueueDirectoryUpload(upload, SftpTransfer::DirectoryConflictPolicy::Merge);
+                } else if (box.clickedButton() == replaceButton) {
+                    m_lastDirectoryConflictChoice = SftpTransfer::DirectoryConflictPolicy::Replace;
+                    enqueueDirectoryUpload(upload, SftpTransfer::DirectoryConflictPolicy::Replace);
+                }
+                // 取消：既不入队也不改变默认项，用户的犹豫不该被记成一次选择。
+            });
     connect(m_service,
             &SftpService::filePreviewReady,
             this,
@@ -1606,7 +1675,8 @@ void RemoteFileManagerWidget::startNextQueuedTransfer()
         m_activeTransferRequest = m_service->uploadDirectory(transfer.target,
                                                              transfer.sourcePath,
                                                              transfer.destinationPath,
-                                                             transfer.policy);
+                                                             transfer.policy,
+                                                             transfer.conflictPolicy);
         break;
     case QueuedTransferKind::DownloadFile:
         m_activeTransferRequest = m_service->downloadFile(transfer.target,
@@ -1743,22 +1813,63 @@ void RemoteFileManagerWidget::uploadLocalPaths(const QStringList &localPaths,
     }
 
     const SftpTransfer::ExistingFilePolicy policy = selectedTransferPolicy();
+    qsizetype queuedNow = 0;
     for (const QFileInfo &info : std::as_const(acceptedEntries)) {
+        if (info.isDir()) {
+            // 目录要先问清楚"合并还是替换"，因此不能在这里直接入队；探测结果回来后才决定。
+            requestDirectoryUpload(target, info.absoluteFilePath(), remoteDirectory);
+            continue;
+        }
         QueuedTransfer transfer;
-        transfer.kind = info.isDir() ? QueuedTransferKind::UploadDirectory
-                                     : QueuedTransferKind::UploadFile;
+        transfer.kind = QueuedTransferKind::UploadFile;
         transfer.target = target;
         transfer.sourcePath = info.absoluteFilePath();
-        // 目录 API 接收远程父目录，文件 API 接收完整目标路径，两者不能混用。
-        transfer.destinationPath = info.isDir()
-            ? remoteDirectory
-            : joinRemotePath(remoteDirectory, info.fileName());
+        transfer.destinationPath = joinRemotePath(remoteDirectory, info.fileName());
         transfer.policy = policy;
         transfer.description = tr("上传 %1 → %2")
                                    .arg(info.fileName(), remoteDirectory);
         enqueueTransfer(std::move(transfer));
+        ++queuedNow;
     }
-    emit statusMessage(tr("已将 %1 个本地条目加入传输队列").arg(acceptedEntries.size()));
+    if (queuedNow > 0) {
+        emit statusMessage(tr("已将 %1 个本地文件加入传输队列").arg(queuedNow));
+    }
+}
+
+void RemoteFileManagerWidget::requestDirectoryUpload(const ConnectionTarget &target,
+                                                     const QString &localDirectory,
+                                                     const QString &remoteParentDirectory)
+{
+    PendingDirectoryUpload pending;
+    pending.target = target;
+    pending.localDirectory = localDirectory;
+    pending.remoteParentDirectory = remoteParentDirectory;
+    pending.remoteRoot = joinRemotePath(remoteParentDirectory, QDir(localDirectory).dirName());
+    pending.policy = selectedTransferPolicy();
+
+    const quint64 requestId = m_service->statPath(target, pending.remoteRoot);
+    m_pendingDirectoryChecks.insert(requestId, pending);
+}
+
+void RemoteFileManagerWidget::enqueueDirectoryUpload(
+    const PendingDirectoryUpload &pending,
+    const SftpTransfer::DirectoryConflictPolicy conflictPolicy)
+{
+    QueuedTransfer transfer;
+    transfer.kind = QueuedTransferKind::UploadDirectory;
+    transfer.target = pending.target;
+    transfer.sourcePath = pending.localDirectory;
+    // 目录 API 接收远程父目录，文件 API 接收完整目标路径，两者不能混用。
+    transfer.destinationPath = pending.remoteParentDirectory;
+    transfer.policy = pending.policy;
+    transfer.conflictPolicy = conflictPolicy;
+    transfer.description = conflictPolicy == SftpTransfer::DirectoryConflictPolicy::Replace
+        ? tr("替换上传 %1 → %2").arg(QDir(pending.localDirectory).dirName(),
+                                     pending.remoteParentDirectory)
+        : tr("上传 %1 → %2").arg(QDir(pending.localDirectory).dirName(),
+                                 pending.remoteParentDirectory);
+    enqueueTransfer(std::move(transfer));
+    emit statusMessage(tr("已将目录 %1 加入传输队列").arg(pending.remoteRoot));
 }
 
 void RemoteFileManagerWidget::downloadRemoteEntryToDirectory(
@@ -1902,7 +2013,8 @@ void RemoteFileManagerWidget::uploadSelectedDirectory()
     const QMessageBox::StandardButton choice = QMessageBox::question(
         this,
         tr("确认上传目录"),
-        tr("将递归上传本地目录：\n%1\n\n到远程位置：\n%2\n\n同名文件会按当前的断点续传设置处理。是否继续？")
+        tr("将递归上传本地目录：\n%1\n\n到远程位置：\n%2\n\n"
+           "远端若已存在同名目录，下一步会让你选择合并更新还是替换。是否继续？")
             .arg(QDir::toNativeSeparators(localDirectory), remoteRoot),
         QMessageBox::Yes | QMessageBox::No,
         QMessageBox::No);
@@ -2207,6 +2319,10 @@ void RemoteFileManagerWidget::handleOperationFailure(const quint64 requestId,
 {
     const bool wasActiveTransfer = requestId == m_activeTransferRequest;
     setBusy(false, message);
+
+    // 目录冲突探测失败时对应的待决目录上传不会再有结果回来，必须一并清掉，否则它会一直
+    // 挂在等待表里，而用户看到的是一个"点了上传却什么都没发生"的目录。
+    m_pendingDirectoryChecks.remove(requestId);
 
     // 单文件失败以及递归传输在连接/根目录阶段的失败都走本信号。先释放活动队列项，再让
     // 事件循环启动下一项；后续认证或错误对话框仍可完整展示，不会卡死整个队列。

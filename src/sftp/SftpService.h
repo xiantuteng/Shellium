@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/ConnectionTarget.h"
+#include "sftp/SftpResumeLedger.h"
 
 #include <QDateTime>
 #include <QMutex>
@@ -11,6 +12,7 @@
 #include <algorithm>
 #include <atomic>
 #include <memory>
+#include <optional>
 
 /** @brief 远端 OpenSSH SFTP 中继的纯命令构造逻辑，独立暴露以便安全回归测试。 */
 namespace SftpRemoteRelay {
@@ -151,6 +153,17 @@ struct TransferSummary {
     quint64 filesTransferred = 0;
     quint64 bytesTransferred = 0;
     quint64 fileTotal = 0;
+
+    /**
+     * @brief 已证明两端内容一致而未重传的文件数。
+     *
+     * 必须与"已传输"分开计数：把跳过的文件算进传输数，用户看到的就是一次干净的成功，
+     * 从而误以为远端已经更新。这两个数字合起来才等于处理过的文件总数。
+     */
+    quint64 filesSkippedIdentical = 0;
+
+    /** @brief 因选择"替换"而被删除的目标端多余条目数。 */
+    quint64 removedForReplace = 0;
     QList<SkippedEntry> skipped;
     QList<FailedEntry> failed;
     bool cancelled = false;
@@ -168,11 +181,22 @@ struct TransferSummary {
         if (cancelled) {
             lines.append(QObject::tr("传输已取消：%1").arg(rootDescription));
         } else {
-            lines.append(QObject::tr("已传输 %1：%2/%3 个文件，共 %4 字节")
-                             .arg(rootDescription)
-                             .arg(filesTransferred)
-                             .arg(fileTotal)
-                             .arg(bytesTransferred));
+            QString headline = QObject::tr("已传输 %1：%2/%3 个文件，共 %4 字节")
+                                   .arg(rootDescription)
+                                   .arg(filesTransferred)
+                                   .arg(fileTotal)
+                                   .arg(bytesTransferred);
+            if (filesSkippedIdentical > 0) {
+                // 必须并进首行：界面只把第一行放进状态栏，"0/5 个文件"单独出现会让用户以为
+                // 传输失败了，而真实情况是那 5 个文件本来就一模一样。
+                headline += QObject::tr("；另有 %1 个文件内容一致，未重传")
+                                .arg(filesSkippedIdentical);
+            }
+            lines.append(headline);
+        }
+        if (removedForReplace > 0) {
+            lines.append(QObject::tr("替换模式下已删除目标端 %1 个多余条目")
+                             .arg(removedForReplace));
         }
         const auto appendList = [&lines](const QString &title, const QStringList &details) {
             if (details.isEmpty()) {
@@ -478,43 +502,177 @@ enum class ExistingFilePolicy {
     Overwrite
 };
 
-/** @brief 根据源和目标大小计算出的续传动作。 */
-struct ResumePlan {
-    /** @brief 源端和目标端都应跳转到的字节偏移。 */
-    quint64 offset = 0;
+/** @brief 目录传输遇到同名远端目录时的处理方式，由用户在传输前明确选择。 */
+enum class DirectoryConflictPolicy {
+    /** @brief 合并更新：保留目标端已有条目，逐个文件按内容判定是否需要重传。 */
+    Merge,
+    /** @brief 替换：先递归删除目标端同名目录，再完整写入，结果与源端严格一致。 */
+    Replace
+};
 
-    /** @brief 打开目标时是否必须截断，防止异常偏大的旧文件残留尾部。 */
-    bool truncateDestination = true;
+/** @brief 对单个文件最终采取的动作。 */
+enum class TransferAction {
+    /** @brief 从头传输并截断目标，任何存疑情况都落到这里。 */
+    FullTransfer,
+    /** @brief 从已验证的偏移继续写入残片。 */
+    Resume,
+    /** @brief 已证明两端内容一致，不产生任何字节传输。 */
+    SkipIdentical
+};
 
-    /** @brief 两端大小已完全一致，可直接视为完成而无需发起读写。 */
-    bool alreadyComplete = false;
+/** @brief 源文件的身份快照；contentHash 为空表示这一侧算不出完整哈希。 */
+struct SourceSnapshot {
+    quint64 size = 0;
+
+    /** @brief 秒级修改时间，可与目标端（SFTP 只有秒精度）直接比较。 */
+    qint64 mtime = -1;
+
+    /**
+     * @brief 毫秒精度的修改时间，只与本地账本里的记录比较。
+     *
+     * 同一秒内把文件改成另一份等长内容时，秒数和大小都不变；只有毫秒精度能分辨出这是两次
+     * 不同的写入。远端源拿不到毫秒精度时填 mtime * 1000。
+     */
+    qint64 mtimeMs = -1;
+
+    QByteArray contentHash;
+};
+
+/** @brief 目标端**正式文件**的身份快照，用于判断是否可以整体跳过。 */
+struct DestinationSnapshot {
+    bool exists = false;
+    quint64 size = 0;
+    qint64 mtime = -1;
+    QByteArray contentHash;
+};
+
+/** @brief 目标端残片（.part）的现状；续传只可能发生在残片上。 */
+struct PartialSnapshot {
+    bool exists = false;
+    quint64 size = 0;
+};
+
+/** @brief 判定结果，reason 会如实呈现给用户，便于分辨"跳过"到底基于什么证据。 */
+struct TransferDecision {
+    TransferAction action = TransferAction::FullTransfer;
+    quint64 resumeOffset = 0;
+    QString reason;
 };
 
 /**
- * @brief 依据源文件大小、目标已有大小和用户策略制定续传动作。
- * @param sourceSize 完整源文件大小。
- * @param destinationSize 目标文件当前大小；不存在时传 0。
+ * @brief 决定对一个文件采取全量传输、续传还是跳过。
+ * @param source 源文件身份快照。
+ * @param destination 目标端正式文件快照；不存在时 exists 为 false。
+ * @param partial 目标端残片快照；不存在时 exists 为 false。
+ * @param ledger 本地账本中与该目的路径对应的记录：中断残片凭据，或上次同步的完成存档。
  * @param policy 用户选择的续传或覆盖策略。
- * @return 安全偏移、是否截断以及是否已完成。
+ * @param mtimeTrusted 目标端是否已被实测证明能可靠保存修改时间。
+ *
+ * 三条不可让步的规则：
+ * 1. **绝不在正式文件上续写**。续传只发生在 .part 残片上，因此"目标比源小就接着写"这种
+ *    会把两个不同文件拼成一个的路径根本不存在。
+ * 2. **大小相同不等于内容相同**。跳过必须拿到证据：要么两端完整哈希一致；要么账本存档
+ *    证明"上次正是我们把这一版写到那里"——源的**毫秒级**时间戳与存档一致（秒级判据在
+ *    同一秒内改成另一份等长内容时会漏判），且目标端时间戳仍等于我们当时的回读值（被别人
+ *    改过就不再相等），且该目标端确实能存住时间戳（mtimeTrusted）。没有证据就重传。
+ * 3. **凭据必须证明残片属于当前这个源**。账本里记的源大小、哈希（或退化到修改时间）与
+ *    现在的源不符，残片一律作废——源在中断期间被改过，续传只会产出"旧头 + 新尾"。
+ *
+ * 函数不访问文件系统与网络，全部边界都可以在没有 SFTP 服务器的情况下被单元测试覆盖。
  */
-[[nodiscard]] inline ResumePlan makeResumePlan(
-    const quint64 sourceSize,
-    const quint64 destinationSize,
-    const ExistingFilePolicy policy)
+[[nodiscard]] inline TransferDecision decideTransfer(
+    const SourceSnapshot &source,
+    const DestinationSnapshot &destination,
+    const PartialSnapshot &partial,
+    const std::optional<SftpResume::LedgerRecord> &ledger,
+    const ExistingFilePolicy policy,
+    const bool mtimeTrusted)
 {
-    if (policy == ExistingFilePolicy::Overwrite || destinationSize > sourceSize) {
-        // 目标比源更大时绝不能从源末尾继续写，否则旧尾部会保留并生成损坏文件。
-        return {.offset = 0, .truncateDestination = true, .alreadyComplete = false};
+    if (policy == ExistingFilePolicy::Overwrite) {
+        return {TransferAction::FullTransfer, 0, QObject::tr("已选择覆盖重传")};
     }
-    if (destinationSize == sourceSize) {
-        return {.offset = sourceSize,
-                .truncateDestination = false,
-                .alreadyComplete = true};
+
+    // ---- 跳过判定：只认证据，不认巧合 ----
+    if (destination.exists && destination.size == source.size) {
+        if (!source.contentHash.isEmpty() && !destination.contentHash.isEmpty()
+            && source.contentHash == destination.contentHash) {
+            return {TransferAction::SkipIdentical, 0, QObject::tr("内容哈希一致")};
+        }
+
+        // 没有哈希可比时，唯一可接受的证据是"上次正是我们把这一版写到那里的"：源的毫秒级
+        // 时间戳与存档一致（同一秒内的二次改写会在这里被识破），且目标端的时间戳仍等于我们
+        // 当时回读到的值（被别人动过就不再相等）。
+        const bool archiveProvesIdentical = ledger.has_value()
+            && ledger->kind == SftpResume::RecordKind::Complete
+            && mtimeTrusted
+            && ledger->sourceSize == source.size
+            && source.mtimeMs >= 0 && ledger->sourceMtimeMs == source.mtimeMs
+            && ledger->destinationMtime >= 0
+            && ledger->destinationMtime == destination.mtime;
+        if (archiveProvesIdentical) {
+            return {TransferAction::SkipIdentical, 0, QObject::tr("与上次同步记录一致")};
+        }
     }
-    return {.offset = destinationSize,
-            .truncateDestination = false,
-            .alreadyComplete = false};
+
+    // ---- 续传判定：残片 + 凭据 + 源未变，三者缺一不可 ----
+    if (partial.exists && ledger.has_value()
+        && ledger->kind == SftpResume::RecordKind::Partial) {
+        const SftpResume::LedgerRecord &record = *ledger;
+        const bool hashProvesSource = !record.sourceHash.isEmpty()
+            && !source.contentHash.isEmpty()
+            && record.sourceHash == source.contentHash;
+        // 没有哈希可比时退到"大小 + 修改时间"，这正是下载方向遇到没有 sha256 命令的服务器
+        // 时的情形；两项都必须已知且相等，未知（-1）绝不当作匹配。
+        const bool quickCheckProvesSource = record.sourceHash.isEmpty()
+            && record.sourceMtime >= 0 && source.mtime >= 0
+            && record.sourceMtime == source.mtime;
+        const bool sourceUnchanged = record.sourceSize == source.size
+            && (hashProvesSource || quickCheckProvesSource);
+
+        // 残片可以比检查点更长（最后一批写没来得及记账），但绝不能更短：更短说明有写入
+        // 没落盘或残片被外部改过。续传一律从检查点开始，检查点之后的字节会被重新写一遍。
+        const bool partialConsistent = record.bytesWritten > 0
+            && record.bytesWritten < source.size
+            && partial.size >= record.bytesWritten
+            && partial.size <= source.size;
+
+        if (sourceUnchanged && partialConsistent) {
+            return {TransferAction::Resume,
+                    record.bytesWritten,
+                    hashProvesSource ? QObject::tr("残片已按内容哈希验证")
+                                     : QObject::tr("残片已按大小与修改时间验证")};
+        }
+        if (!sourceUnchanged) {
+            return {TransferAction::FullTransfer, 0, QObject::tr("源文件已变化，残片作废")};
+        }
+        return {TransferAction::FullTransfer, 0, QObject::tr("残片与续传凭据不一致，重新传输")};
+    }
+
+    return {TransferAction::FullTransfer, 0, QObject::tr("无可用续传凭据")};
 }
+
+/** @brief 残片文件名后缀；与正式文件同目录，传完后原子改名覆盖正式文件。 */
+inline constexpr QLatin1String kPartialSuffix{".shellium-part"};
+
+/**
+ * @brief 由目的路径推导出同目录下的隐藏残片路径。
+ * @param destinationPath 正式目标文件的完整路径（远端用 /，本地用当前平台分隔符）。
+ * @param separator 路径分隔符。
+ *
+ * 残片必须与正式文件同目录：跨目录改名可能跨文件系统，从而失去原子性，正式文件也就可能
+ * 被观察到半写状态。
+ */
+[[nodiscard]] inline QString partialPathFor(const QString &destinationPath,
+                                            const QChar separator = QLatin1Char('/'))
+{
+    const qsizetype index = destinationPath.lastIndexOf(separator);
+    const QString directory = index < 0 ? QString{} : destinationPath.left(index + 1);
+    const QString name = index < 0 ? destinationPath : destinationPath.mid(index + 1);
+    return directory + QLatin1Char('.') + name + kPartialSuffix;
+}
+
+/** @brief 校验残片尾部时读取的窗口大小；半写损伤只可能发生在尾部边界。 */
+inline constexpr quint64 kTailVerificationBytes = 1ULL * 1024ULL * 1024ULL;
 
 /** @brief 安全预览允许读取的硬上限，调用方传入更大值也会被压到该范围。 */
 inline constexpr quint64 MaximumPreviewBytes = 2ULL * 1024ULL * 1024ULL;
@@ -585,15 +743,21 @@ public:
      * @brief 异步递归上传整个本地目录。
      * @param localDirectory 要上传的本地目录。
      * @param remoteParentDirectory 远端父目录；目录本身会以同名在其下创建。
+     * @param conflictPolicy 远端已存在同名目录时的处理方式，必须由用户显式选择。
      *
      * 遍历过程不跟随符号链接，单个文件失败不会中断整棵目录树，结果统一由
      * recursiveTransferFinished 汇总返回。
+     *
+     * Replace 会在写入前递归删除远端同名目录，因此源端已删除的文件不会残留；删除与写入
+     * 在同一个请求、同一条连接上完成，中间不存在"目录已删但上传没开始"的窗口。
      */
     quint64 uploadDirectory(const ConnectionTarget &target,
                             const QString &localDirectory,
                             const QString &remoteParentDirectory,
                             SftpTransfer::ExistingFilePolicy policy =
-                                SftpTransfer::ExistingFilePolicy::ResumeWhenPossible);
+                                SftpTransfer::ExistingFilePolicy::ResumeWhenPossible,
+                            SftpTransfer::DirectoryConflictPolicy conflictPolicy =
+                                SftpTransfer::DirectoryConflictPolicy::Merge);
 
     /**
      * @brief 异步递归下载整个远端目录。
@@ -647,6 +811,14 @@ public:
                        const QString &oldPath,
                        const QString &newPath);
 
+    /**
+     * @brief 异步探测一个远端路径是否存在及其类型。
+     *
+     * 目录传输在入队**之前**就必须知道远端有没有同名目录，否则只能事后才发现冲突，而那时
+     * 用户已经无从选择"合并还是替换"。结果由 pathStatReady 返回。
+     */
+    quint64 statPath(const ConnectionTarget &target, const QString &remotePath);
+
     /** @brief 异步删除文件或空目录；目录类型由界面明确传入。 */
     quint64 removePath(const ConnectionTarget &target,
                        const QString &path,
@@ -660,6 +832,14 @@ public:
      */
     void trustUnknownHost(const ConnectionTarget &target);
 
+    /**
+     * @brief 改用独立路径存放续传账本。
+     *
+     * 供测试隔离使用：账本记录着"哪些残片可以续传"，用真实用户账本跑测试既会污染用户数据，
+     * 也会让用例结果依赖上一次运行留下的状态。必须在发起任何传输之前调用。
+     */
+    void setResumeLedgerPath(const QString &path);
+
 signals:
     /** @brief 目录读取成功，requestId 用于丢弃过期响应。 */
     void directoryListed(quint64 requestId,
@@ -669,6 +849,17 @@ signals:
 
     /** @brief 上传、下载、重命名或删除成功。 */
     void operationSucceeded(quint64 requestId, const QString &description);
+
+    /**
+     * @brief 远端路径探测结果。
+     * @param exists 路径是否存在；不存在不是错误，因此不走 operationFailed。
+     * @param isDirectory 存在时是否为目录。
+     */
+    void pathStatReady(quint64 requestId,
+                       const ConnectionTarget &target,
+                       const QString &remotePath,
+                       bool exists,
+                       bool isDirectory);
 
     /** @brief 请求失败，并携带可用于恢复判断的结构化错误类别。 */
     void operationFailed(quint64 requestId,
@@ -725,6 +916,14 @@ private:
      * 销毁，而任务还需要用连接完成收尾。
      */
     std::shared_ptr<SftpConnectionPool> m_pool;
+
+    /**
+     * @brief 续传凭据账本。
+     *
+     * 与连接池同样用 shared_ptr：后台任务在服务销毁后仍需写入最终的已传字节数，否则一次
+     * 关标签页就会让整段残片失去凭据，下次只能从头再传。
+     */
+    std::shared_ptr<SftpResume::Ledger> m_ledger;
 
     mutable QMutex m_trustMutex;
     QSet<QString> m_temporarilyTrustedHosts;

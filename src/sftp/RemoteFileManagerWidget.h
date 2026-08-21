@@ -174,9 +174,44 @@ private:
         SftpTransfer::ExistingFilePolicy policy =
             SftpTransfer::ExistingFilePolicy::ResumeWhenPossible;
 
+        /** @brief 目录传输在入队前由用户就地选定的冲突处理方式。 */
+        SftpTransfer::DirectoryConflictPolicy conflictPolicy =
+            SftpTransfer::DirectoryConflictPolicy::Merge;
+
         /** @brief 可直接显示在队列中的简短说明，不包含凭据。 */
         QString description;
     };
+
+    /**
+     * @brief 一个已选好、但还在等待远端冲突探测结果的目录上传。
+     *
+     * 探测是异步的，期间用户可能切换服务器或改路径，因此这里完整复制目标与路径，不在回调
+     * 里重新读界面状态。
+     */
+    struct PendingDirectoryUpload {
+        ConnectionTarget target;
+        QString localDirectory;
+        QString remoteParentDirectory;
+        QString remoteRoot;
+
+        /** @brief 发起探测那一刻的续传策略；期间用户改动复选框不得影响这次传输。 */
+        SftpTransfer::ExistingFilePolicy policy =
+            SftpTransfer::ExistingFilePolicy::ResumeWhenPossible;
+    };
+
+    /**
+     * @brief 探测远端是否已有同名目录，据结果决定直接入队还是先问用户。
+     *
+     * 冲突必须在**入队前**问清楚："合并更新"和"替换"会得到完全不同的远端结果，事后无法
+     * 补救，也不该由程序替用户猜。
+     */
+    void requestDirectoryUpload(const ConnectionTarget &target,
+                                const QString &localDirectory,
+                                const QString &remoteParentDirectory);
+
+    /** @brief 把一个已确定冲突策略的目录上传放进队列。 */
+    void enqueueDirectoryUpload(const PendingDirectoryUpload &pending,
+                                SftpTransfer::DirectoryConflictPolicy conflictPolicy);
 
     /** @brief 返回界面当前选择的续传/覆盖策略。 */
     [[nodiscard]] SftpTransfer::ExistingFilePolicy selectedTransferPolicy() const;
@@ -388,6 +423,18 @@ private:
 
     /** @brief 为待处理队列项生成进程内唯一编号。 */
     quint64 m_nextTransferQueueId = 1;
+
+    /** @brief 等待远端冲突探测结果的目录上传，按 statPath 请求编号索引。 */
+    QHash<quint64, PendingDirectoryUpload> m_pendingDirectoryChecks;
+
+    /**
+     * @brief 上次选择的目录冲突处理方式，作为下一次对话框的默认项。
+     *
+     * 只在本控件生命周期内记忆，不持久化：跨会话沿用一个"替换"选择，风险远大于省下的一次
+     * 点击。
+     */
+    SftpTransfer::DirectoryConflictPolicy m_lastDirectoryConflictChoice =
+        SftpTransfer::DirectoryConflictPolicy::Merge;
 
     /** @brief 当前活动请求是否已由用户暂停，用于同步按钮文字。 */
     bool m_activeTransferPaused = false;
