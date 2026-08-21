@@ -70,6 +70,20 @@ public:
     /** @brief 判断当前远程或本地终端是否已经完成启动并可交互。 */
     [[nodiscard]] bool isConnected() const;
 
+    /**
+     * @brief 进入"等待用户决定"的断线恢复状态：终端只接受 r（重连）和 x（关闭）。
+     * @param target 断线前的根连接目标；按 r 时按原受管计划整链重连。
+     * @param reason 已经展示给用户的断线原因，作为提示的第一行再复述一次。
+     *
+     * 自动重连耗尽后不再擅自启动本地 zsh。本地 Shell 与刚刚断开的服务器毫无关系，却会
+     * 顶掉屏幕上的远端输出，用户下一条命令很可能就打在了本机上；把决定权交回用户，既
+     * 保留了现场，也保留了"再试一次"这个最可能的意图。
+     */
+    void beginManualRecovery(const ConnectionTarget &target, const QString &reason);
+
+    /** @brief 当前是否停在断线后的手动恢复提示上（等待 r 或 x）。 */
+    [[nodiscard]] bool isAwaitingManualRecovery() const;
+
     /** @brief 把键盘焦点交给终端显示区。 */
     void focusTerminal();
 
@@ -190,6 +204,15 @@ signals:
      */
     void broadcastSourceInput(TerminalPane *source, const QByteArray &bytes);
 
+    /**
+     * @brief 用户在断线恢复提示中按下 x，要求关闭该终端所在的标签页。
+     * @param pane 发出请求的面板；上层据此定位标签索引。
+     *
+     * 面板不自行 close()：它只是标签页里的一个子控件，销毁自己会留下一个空标签和一份
+     * 仍在栈中的 AI 助手页面。关闭动作必须回到统一管理标签生命周期的主窗口。
+     */
+    void closeRequested(TerminalPane *pane);
+
     /** @brief 一条非敏感命令成功写入持久历史，效率侧栏可按主机刷新。 */
     void commandHistoryChanged(const QString &hostId);
 
@@ -239,6 +262,15 @@ private slots:
     void inspectSubmittedCommand(const QString &command);
 
 private:
+    /**
+     * @brief 在手动恢复提示状态下解释键盘输入。
+     * @param bytes 来自 TerminalView 的原始输入字节。
+     *
+     * 此时没有任何 PTY 在运行，字节无处可去；不拦截的话按键会被静默丢弃，用户看到的是
+     * 一个完全没有反应的终端。
+     */
+    void handleManualRecoveryInput(const QByteArray &bytes);
+
     /** @brief 停止并销毁旧工作线程，供重连和析构共用。 */
     void stopWorker();
 
@@ -359,6 +391,11 @@ private:
      * 用户已经开始新连接后，旧 SSH 的排队信号又把界面切回本地终端。
      */
     quint64 m_sessionGeneration = 0;
+
+    /** @brief 是否停在断线后的手动恢复提示上；为真时终端只接受 r 和 x。 */
+    bool m_awaitingManualRecovery = false;
+    /** @brief 手动恢复提示对应的根目标；受管计划为空时作为重连兜底。 */
+    ConnectionTarget m_manualRecoveryTarget;
 
     /** @brief 当前设置是否允许异常网络断线后自动重连。 */
     bool m_automaticReconnectEnabled = true;

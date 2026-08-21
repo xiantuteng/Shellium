@@ -131,6 +131,23 @@ private:
     TerminalWorkspace *createWorkspaceTab(const QString &title);
 
     /**
+     * @brief 构建"没有任何标签页"时占据整个工作区的品牌空态页面。
+     * @return 由调用方加入工作区栈的空态控件。
+     *
+     * 启动时不再预先创建一个空终端：真正的默认状态是"还没有会话"。用一个独立页面表达
+     * 它，比留下一个连 Shell 都没启动的空标签更诚实，也避免用户误以为那是可用终端。
+     */
+    QWidget *createWorkspacePlaceholder();
+
+    /**
+     * @brief 按当前标签数量在品牌空态页与终端标签页之间切换工作区栈。
+     *
+     * 所有增删标签的路径都必须调用它；否则关闭最后一个标签后，QTabWidget 会留下一块
+     * 没有页面的空白区域，看起来像界面渲染失败。
+     */
+    void updateWorkspacePlaceholder();
+
+    /**
      * @brief 为一个终端标签配置其专属 AI 助手及命令路由。
      * @param assistant 归属于该标签的 AI 助手实例，不可为空。
      * @param pane 同一标签内的终端面板，不可为空；助手终端上下文始终从它读取。
@@ -143,7 +160,7 @@ private:
     /**
      * @brief 关闭指定会话标签并同步标题栏标签模型。
      * @param index 待关闭标签索引。
-     * @param allowLast true 表示工作区整体替换时允许移除最后一个标签；普通交互必须为 false。
+     * @param allowLast 保留参数：关闭最后一个标签现在会回到品牌空态页，两种取值行为相同。
      *
      * 标题栏 QTabBar 只是中央 QTabWidget 的视觉镜像，所有删除都必须经过这里，避免两个
      * 控件的索引错位后把连接、文件管理器或保存工作区操作路由到错误会话。
@@ -252,8 +269,25 @@ private:
 
     TerminalWorkspace *m_workspace = nullptr;
     QTabWidget *m_tabs = nullptr;
+    /**
+     * @brief 工作区区域的二选一容器：品牌空态页或终端标签页。
+     *
+     * 空态不是"隐藏 QTabWidget"，而是一个真实页面。这样分隔器的尺寸、最小宽度和拖动
+     * 行为在有无标签时完全一致，用户新建第一个标签时终端区不会突然跳一次宽度。
+     */
+    QStackedWidget *m_workspaceStack = nullptr;
+    /** @brief 没有任何会话标签时显示的产品图标与名称页面。 */
+    QWidget *m_workspacePlaceholder = nullptr;
     /** @brief 融入窗口标题栏的可交互会话标签，内容与 m_tabs 严格镜像。 */
     SessionTabBar *m_titleTabBar = nullptr;
+    /**
+     * @brief 标签栏两侧的外部滚动箭头。
+     *
+     * 溢出时它们使用 retainSizeWhenHidden 占位，防止显隐反过来改变溢出判定而抖动；一个
+     * 标签都没有时这份占位没有意义，必须连同标签栏一起彻底让出宽度。
+     */
+    QToolButton *m_tabScrollLeftButton = nullptr;
+    QToolButton *m_tabScrollRightButton = nullptr;
     /** @brief 覆盖 macOS 原生标题区的 52 像素会话导航容器。 */
     QWidget *m_titleChrome = nullptr;
     /** @brief 始终保留的窄图标导航轨，负责选择侧栏功能。 */

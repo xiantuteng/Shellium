@@ -1366,10 +1366,10 @@ void AiAssistantWidget::pollCaptureTick()
     const int elapsedSeconds = qMax(0, static_cast<int>(m_captureElapsed.elapsed() / 1000));
     if (!m_captureWaitingLabel.isNull() && elapsedSeconds != m_captureLastReportedSecond) {
         m_captureLastReportedSecond = elapsedSeconds;
+        // 等待状态只报"还在等、等了多久"这一件事。附带的操作说明每秒重绘一次，却在整个
+        // 等待期间一字不变，读一遍之后就只是把命令卡片撑高、把上一轮回答挤出视野。
         m_captureWaitingLabel->setText(
-            tr("正在等待命令执行完成… 已等待 %1 秒\n"
-               "完成后将自动分析，无需复制；如终端要求确认，请直接在终端操作。")
-                .arg(elapsedSeconds));
+            tr("正在等待命令执行完成… 已等待 %1 秒").arg(elapsedSeconds));
     }
 
     // 必须先观察到终端变化，再接受提示符回归；否则命令下发与第一次轮询之间的短暂窗口里，

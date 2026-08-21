@@ -38,6 +38,12 @@ signals:
     void statusMessage(const QString &message);
 
     /**
+     * @brief 用户在终端的断线恢复提示中选择了关闭本标签页。
+     * @param workspace 发出请求的工作区；主窗口据此定位标签索引。
+     */
+    void closeRequested(TerminalWorkspace *workspace);
+
+    /**
      * @brief 当前标签页的结构化终端状态发生变化。
      * @param server 当前服务器连接说明；本地终端和未连接会使用明确中文标识。
      * @param encoding 当前终端输入输出编码，现阶段固定为 UTF-8。

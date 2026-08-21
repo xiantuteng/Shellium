@@ -373,9 +373,16 @@ MainWindow::MainWindow(ApplicationDatabase *database,
 
     // 终端区保留最小操作宽度；侧栏不参与弹性扩张，只有用户拖动把手时才改变其宽度。
     // 初始尺寸中的较大第二项只是表达“剩余空间归终端”，QSplitter 会按窗口实际宽度缩放。
-    m_tabs->setMinimumWidth(kWorkspaceMinimumWidth);
+    // 空态页与标签页同处一个栈，因此最小宽度设在栈上；两种状态占据完全相同的位置，
+    // 用户新建第一个标签时不会看到终端区宽度跳变。
+    m_workspaceStack = new QStackedWidget(this);
+    m_workspaceStack->setObjectName(QStringLiteral("WorkspaceStack"));
+    m_workspacePlaceholder = createWorkspacePlaceholder();
+    m_workspaceStack->addWidget(m_workspacePlaceholder);
+    m_workspaceStack->addWidget(m_tabs);
+    m_workspaceStack->setMinimumWidth(kWorkspaceMinimumWidth);
     m_sidebarSplitter->addWidget(m_sidebarPanel);
-    m_sidebarSplitter->addWidget(m_tabs);
+    m_sidebarSplitter->addWidget(m_workspaceStack);
     m_sidebarSplitter->setStretchFactor(0, 0);
     m_sidebarSplitter->setStretchFactor(1, 1);
     m_sidebarSplitter->setSizes({kSidebarDefaultWidth, 1000});
@@ -385,7 +392,10 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     rootLayout->addWidget(workspaceBody, 1);
     setCentralWidget(root);
 
-    m_workspace = createWorkspaceTab(tr("终端 1"));
+    // 启动时刻意不创建任何标签页：默认状态是品牌空态页，用户按"+"或从主机树连接时
+    // 才会产生第一个会话。预置一个空标签既不代表任何服务器，也会让"新建标签"这一步
+    // 显得可有可无。
+    updateWorkspacePlaceholder();
 
     auto *connectAction = new QAction(tr("连接服务器"), this);
     connectAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+N")));
@@ -483,19 +493,23 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     scrollPolicy.setRetainSizeWhenHidden(true);
     scrollLeftButton->setSizePolicy(scrollPolicy);
     scrollLeftButton->hide();
+    m_tabScrollLeftButton = scrollLeftButton;
     titleLayout->addWidget(scrollLeftButton);
     m_chromeButtons.append(scrollLeftButton);
 
     m_titleTabBar = new SessionTabBar(m_titleChrome);
     m_titleTabBar->setObjectName(QStringLiteral("SessionTitleTabs"));
     m_titleTabBar->setContextMenuPolicy(Qt::CustomContextMenu);
-    m_titleTabBar->setMinimumWidth(260);
-    m_titleTabBar->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    // 标签栏只占标签自身需要的宽度，"+"因此紧贴最后一个标签的右侧，而不是被推到窗口
+    // 最右端。Maximum 策略允许在标签溢出时继续压缩标签栏，此时"+"自然停在标题行末尾，
+    // 不需要为"固定到最右边"再写一条特殊分支。
+    m_titleTabBar->setMinimumWidth(0);
+    m_titleTabBar->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
     for (int index = 0; index < m_tabs->count(); ++index) {
         m_titleTabBar->addTab(m_tabs->tabIcon(index), m_tabs->tabText(index));
     }
     m_titleTabBar->setCurrentIndex(m_tabs->currentIndex());
-    titleLayout->addWidget(m_titleTabBar, 1);
+    titleLayout->addWidget(m_titleTabBar);
 
     auto *scrollRightButton = new QToolButton(m_titleChrome);
     scrollRightButton->setProperty("chromeButton", true);
@@ -506,10 +520,12 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     scrollRightButton->setAccessibleName(tr("向右滚动标签"));
     scrollRightButton->setSizePolicy(scrollPolicy);
     scrollRightButton->hide();
+    m_tabScrollRightButton = scrollRightButton;
     titleLayout->addWidget(scrollRightButton);
     m_chromeButtons.append(scrollRightButton);
 
     auto *newTabButton = new QToolButton(m_titleChrome);
+    newTabButton->setObjectName(QStringLiteral("TitleNewTabButton"));
     newTabButton->setProperty("chromeButton", true);
     newTabButton->setProperty("chromeRole", QStringLiteral("newTab"));
     newTabButton->setDefaultAction(newTabAction);
@@ -517,6 +533,9 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     newTabButton->setFixedSize(38, 38);
     titleLayout->addWidget(newTabButton);
     m_chromeButtons.append(newTabButton);
+    // 剩余空白全部交给"+"右侧的弹性项：标签少时右边是留白，标签多到溢出时弹性项收缩为
+    // 零，"+"随之固定在标题行最右端。
+    titleLayout->addStretch(1);
 
     connect(scrollLeftButton, &QToolButton::clicked,
             m_titleTabBar, &SessionTabBar::scrollTabsLeft);
@@ -533,6 +552,10 @@ MainWindow::MainWindow(ApplicationDatabase *database,
                 scrollLeftButton->setEnabled(canScrollLeft);
                 scrollRightButton->setEnabled(canScrollRight);
             });
+
+    // 标题行的三个标签控件此刻才存在；构造早期那次调用只切换了工作区栈。再同步一次，
+    // 空态窗口才会真的把标签栏与滚动箭头的宽度让给"+"。
+    updateWorkspacePlaceholder();
 
     // 标题栏不再放置瞬时消息标签：它会遮挡标签页、在用户读完之前消失，而这些消息真正
     // 的用途是事后排查。全部改由 ActivityLog 落盘，界面不为其保留位置。
@@ -880,6 +903,23 @@ MainWindow::~MainWindow()
 {
     // 显式移除可以保证析构期间后续控件事件不会回调一个已开始释放成员的 MainWindow。
     qApp->removeEventFilter(this);
+
+    // 标签页是本窗口的子控件，直到基类 ~QWidget 阶段才被删除——那时本类的成员（连接历史
+    // 哈希、数据库指针）已经析构完毕。面板此刻发出的 QObject::destroyed 仍会命中登记在
+    // MainWindow 上的槽，槽再去访问已释放的容器，进程就在退出的最后一步崩溃。断开以本窗口
+    // 为接收者的连接必须发生在成员失效之前，也就是这里。
+    if (m_tabs != nullptr) {
+        for (int index = 0; index < m_tabs->count(); ++index) {
+            auto *workspace = qobject_cast<TerminalWorkspace *>(m_tabs->widget(index));
+            if (workspace == nullptr) {
+                continue;
+            }
+            if (TerminalPane *pane = workspace->activePane(); pane != nullptr) {
+                QObject::disconnect(pane, nullptr, this, nullptr);
+            }
+            QObject::disconnect(workspace, nullptr, this, nullptr);
+        }
+    }
 }
 
 bool MainWindow::eventFilter(QObject *watched, QEvent *event)
@@ -947,10 +987,7 @@ void MainWindow::closeWorkspaceTab(const int index, const bool allowLast)
     if (index < 0 || index >= m_tabs->count()) {
         return;
     }
-    if (!allowLast && m_tabs->count() <= 1) {
-        showTransientMessage(tr("至少保留一个终端标签"), 3000);
-        return;
-    }
+    Q_UNUSED(allowLast);
 
     QWidget *page = m_tabs->widget(index);
     QWidget *assistantPage = m_aiAssistantStack != nullptr
@@ -979,6 +1016,7 @@ void MainWindow::closeWorkspaceTab(const int index, const bool allowLast)
     // 会话清理可能等待 SSH/SFTP/转发线程；deleteLater 先让当前菜单或快捷键回调返回，页面
     // 又已从两个标签模型移除，不会在清理期间继续接收新的用户操作。
     page->deleteLater();
+    updateWorkspacePlaceholder();
 }
 
 void MainWindow::setWorkspaceTabText(const int index, const QString &title)
@@ -1190,9 +1228,20 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
             border: 0;
         }
         QTabWidget#TerminalPages::pane,
-        QStackedWidget#SidebarStack {
+        QStackedWidget#SidebarStack,
+        QStackedWidget#WorkspaceStack,
+        QWidget#WorkspacePlaceholder {
             border: 0;
             background: transparent;
+        }
+        QLabel#WorkspacePlaceholderTitle {
+            color: @TEXT@;
+            font-size: 30px;
+            font-weight: 600;
+        }
+        QLabel#WorkspacePlaceholderHint {
+            color: @MUTED@;
+            font-size: 13px;
         }
         QFrame#HostSearchBar {
             background: @SURFACE@;
@@ -2083,7 +2132,8 @@ void MainWindow::showSessionTabContextMenu(const QPoint &position)
             UiIcons::symbol(this, UiIcons::Symbol::Close, this->palette().color(QPalette::WindowText)),
             tr("关闭标签"));
         QAction *closeOthersAction = menu.addAction(tr("关闭其他标签"));
-        closeAction->setEnabled(m_tabs->count() > 1);
+        // 关闭最后一个标签会回到品牌空态页，因此不再禁用；"关闭其他"只有真的存在其他
+        // 标签时才有意义。
         closeOthersAction->setEnabled(m_tabs->count() > 1);
 
         connect(renameAction, &QAction::triggered, this, [this, index]() {
@@ -2388,6 +2438,70 @@ void MainWindow::configureAiAssistant(AiAssistantWidget *assistant, TerminalPane
     assistant->setActiveTarget(pane->activeTarget());
 }
 
+QWidget *MainWindow::createWorkspacePlaceholder()
+{
+    auto *placeholder = new QWidget(this);
+    placeholder->setObjectName(QStringLiteral("WorkspacePlaceholder"));
+    auto *layout = new QVBoxLayout(placeholder);
+    layout->setContentsMargins(24, 24, 24, 24);
+    layout->setSpacing(14);
+    layout->addStretch(1);
+
+    auto *iconLabel = new QLabel(placeholder);
+    iconLabel->setObjectName(QStringLiteral("WorkspacePlaceholderIcon"));
+    iconLabel->setAlignment(Qt::AlignCenter);
+    // 优先使用 QApplication 已设置的主图标，保证空态页与 Dock、任务切换器里看到的是
+    // 同一枚图标；测试或裁剪构建里没有设置时再退回编译进 qrc 的同一张位图。
+    QIcon brandIcon = QApplication::windowIcon();
+    if (brandIcon.isNull()) {
+        brandIcon = QIcon(QStringLiteral(":/resources/icons/shellium-app-icon-macos-512.png"));
+    }
+    iconLabel->setPixmap(brandIcon.pixmap(QSize(112, 112)));
+    layout->addWidget(iconLabel);
+
+    // 产品名写死为品牌名，不使用 QCoreApplication::applicationName()：后者默认取可执行
+    // 文件名，在测试构建或改名分发时会把一个内部名字直接印在空态页正中央。
+    auto *titleLabel = new QLabel(QStringLiteral("Shellium"), placeholder);
+    titleLabel->setObjectName(QStringLiteral("WorkspacePlaceholderTitle"));
+    titleLabel->setAlignment(Qt::AlignCenter);
+    layout->addWidget(titleLabel);
+
+    auto *hintLabel = new QLabel(
+        tr("按标题栏的 + 新建终端标签页，或从左侧主机列表连接服务器。"), placeholder);
+    hintLabel->setObjectName(QStringLiteral("WorkspacePlaceholderHint"));
+    hintLabel->setAlignment(Qt::AlignCenter);
+    hintLabel->setWordWrap(true);
+    layout->addWidget(hintLabel);
+
+    layout->addStretch(1);
+    return placeholder;
+}
+
+void MainWindow::updateWorkspacePlaceholder()
+{
+    if (m_workspaceStack == nullptr || m_tabs == nullptr) {
+        return;
+    }
+    const bool hasSessions = m_tabs->count() > 0;
+    m_workspaceStack->setCurrentWidget(hasSessions ? static_cast<QWidget *>(m_tabs)
+                                                   : m_workspacePlaceholder);
+
+    // 空标签栏并不是零宽：QTabBar 的 minimumSizeHint 与滚动箭头的隐藏占位加在一起，会在
+    // 侧栏开关和"+"之间留下一大段无法解释的空白。没有会话时把这三个控件整体移出布局，
+    // "+"才会紧贴侧栏开关。
+    if (m_titleTabBar != nullptr) {
+        m_titleTabBar->setVisible(hasSessions);
+    }
+    for (QToolButton *arrow : {m_tabScrollLeftButton, m_tabScrollRightButton}) {
+        if (arrow == nullptr) {
+            continue;
+        }
+        QSizePolicy policy = arrow->sizePolicy();
+        policy.setRetainSizeWhenHidden(hasSessions);
+        arrow->setSizePolicy(policy);
+    }
+}
+
 TerminalWorkspace *MainWindow::createWorkspaceTab(const QString &title)
 {
     auto *workspace = new TerminalWorkspace(m_tabs);
@@ -2396,6 +2510,7 @@ TerminalWorkspace *MainWindow::createWorkspaceTab(const QString &title)
     // QTabWidget 在从零恢复到第一个页面时可能重新计算标签栏可见性；每次新增后再次隐藏，
     // 保证中央区域永远只显示标题栏中的那一套会话标签。
     m_tabs->tabBar()->hide();
+    updateWorkspacePlaceholder();
     if (m_titleTabBar != nullptr) {
         // 运行期间创建的新工作区必须在标题栏加入同索引标签；初始工作区创建得更早，会在
         // 会话栏构造时统一镜像，因此这里需要允许指针为空。
@@ -2423,6 +2538,16 @@ TerminalWorkspace *MainWindow::createWorkspaceTab(const QString &title)
             [this, workspace](const QString &message) {
                 if (workspace == activeWorkspace()) {
                     showTransientMessage(message, 8000);
+                }
+            });
+    connect(workspace,
+            &TerminalWorkspace::closeRequested,
+            this,
+            [this](TerminalWorkspace *requester) {
+                // 索引必须现查：用户可能已经拖动过标签，创建时的那个 index 早已失效。
+                const int currentIndex = m_tabs->indexOf(requester);
+                if (currentIndex >= 0) {
+                    closeWorkspaceTab(currentIndex);
                 }
             });
     pane->setCommandHistoryDatabase(m_database);

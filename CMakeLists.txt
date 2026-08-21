@@ -57,8 +57,10 @@ function(shellium_add_bundled_fonts target)
     )
 endfunction()
 
-qt_add_executable(Shellium
-    src/main.cpp
+# 主窗口把标签页、终端、SSH、SFTP、端口转发和 AI 助手串在一起，任何界面级回归测试都必须
+# 链接同一套实现。源文件清单因此集中一处，测试目标复用它，避免清单在两处慢慢分叉后测试
+# 编译的是一个与正式程序不同的窗口。
+set(SHELLIUM_APP_SOURCES
     src/app/MainWindow.cpp
     src/app/MainWindow.h
     src/ai/AiAssistantWidget.cpp
@@ -139,6 +141,11 @@ qt_add_executable(Shellium
     src/ui/UiIcons.h
     src/ui/VaultDialog.cpp
     src/ui/VaultDialog.h
+)
+
+qt_add_executable(Shellium
+    src/main.cpp
+    ${SHELLIUM_APP_SOURCES}
 )
 
 # 将带透明圆角安全区的 512px 主图标编译进 Qt 资源系统，供 QApplication 在所有平台统一
@@ -393,6 +400,100 @@ if(BUILD_TESTING)
 
     # 标题栏标签控件测试需要真实的 QTabBar 布局与窗口曝光，因此依赖 Qt6::Widgets 和
     # 平台 GUI；macOS 上还需要 Objective-C++ 的原生标题栏桥接。
+    # 主窗口外壳回归：启动空态、"+"新建终端、"+"跟随最后一个标签，以及断线提示按 x 关闭
+    # 标签页这条跨 TerminalPane→TerminalWorkspace→MainWindow 的完整路径。目标复用正式程序
+    # 的源文件清单，因此测试到的就是用户实际启动的那个窗口。
+    qt_add_executable(ShelliumMainWindowShellTests
+        tests/MainWindowShellTest.cpp
+        ${SHELLIUM_APP_SOURCES}
+    )
+    qt_add_resources(ShelliumMainWindowShellTests "shellium_brand_assets_shell_tests"
+        PREFIX "/"
+        BASE "${CMAKE_CURRENT_SOURCE_DIR}"
+        FILES
+            resources/icons/chevron-down-dark.svg
+            resources/icons/chevron-down-light.svg
+            resources/icons/shellium-app-icon-macos-512.png
+    )
+    shellium_add_bundled_fonts(ShelliumMainWindowShellTests)
+    target_include_directories(ShelliumMainWindowShellTests PRIVATE src)
+    target_link_libraries(ShelliumMainWindowShellTests PRIVATE
+        Qt6::Core
+        Qt6::Concurrent
+        Qt6::Gui
+        Qt6::Network
+        Qt6::Sql
+        Qt6::Widgets
+        Qt6::Test
+        PkgConfig::LIBSSH
+        PkgConfig::LIBVTERM
+        PkgConfig::LIBSODIUM
+        PkgConfig::SPDLOG
+    )
+    if(UNIX AND NOT APPLE)
+        target_link_libraries(ShelliumMainWindowShellTests PRIVATE util)
+    endif()
+    if(APPLE)
+        target_sources(ShelliumMainWindowShellTests PRIVATE
+            src/ui/MacWindowChrome.h
+            src/ui/MacWindowChrome.mm
+        )
+        target_link_libraries(ShelliumMainWindowShellTests PRIVATE "-framework AppKit")
+    endif()
+    add_test(NAME ShelliumMainWindowShellTests COMMAND ShelliumMainWindowShellTests)
+
+    # SSH 异常断线后的手动恢复提示只涉及终端本地状态，因此单独成为一个轻量目标，用例
+    # 全程不发起网络连接。
+    qt_add_executable(ShelliumSessionRecoveryTests
+        tests/SessionRecoveryTest.cpp
+        src/core/ConnectionTarget.cpp
+        src/core/ConnectionTarget.h
+        src/core/HostRecord.h
+        src/storage/ApplicationDatabase.cpp
+        src/storage/ApplicationDatabase.h
+        src/sftp/SftpService.cpp
+        src/sftp/SftpService.h
+        src/ssh/ShellShim.cpp
+        src/ssh/ShellShim.h
+        src/ssh/SshCommandParser.cpp
+        src/ssh/SshCommandParser.h
+        src/ssh/SshSessionNode.cpp
+        src/ssh/SshSessionNode.h
+        src/ssh/SshSessionStack.cpp
+        src/ssh/SshSessionStack.h
+        src/ssh/SshTunnelBroker.cpp
+        src/ssh/SshTunnelBroker.h
+        src/terminal/LocalShellWorker.cpp
+        src/terminal/LocalShellWorker.h
+        src/terminal/TerminalEchoFilter.cpp
+        src/terminal/TerminalEchoFilter.h
+        src/terminal/TerminalPane.cpp
+        src/terminal/TerminalPane.h
+        src/terminal/TerminalView.cpp
+        src/terminal/TerminalView.h
+        src/terminal/VtermBridge.cpp
+        src/terminal/VtermBridge.h
+        src/settings/TerminalSettings.cpp
+        src/settings/TerminalSettings.h
+        src/ui/SettingsWidgets.cpp
+        src/ui/SettingsWidgets.h
+    )
+    target_include_directories(ShelliumSessionRecoveryTests PRIVATE src)
+    target_link_libraries(ShelliumSessionRecoveryTests PRIVATE
+        Qt6::Core
+        Qt6::Concurrent
+        Qt6::Gui
+        Qt6::Sql
+        Qt6::Widgets
+        Qt6::Test
+        PkgConfig::LIBSSH
+        PkgConfig::LIBVTERM
+    )
+    if(UNIX AND NOT APPLE)
+        target_link_libraries(ShelliumSessionRecoveryTests PRIVATE util)
+    endif()
+    add_test(NAME ShelliumSessionRecoveryTests COMMAND ShelliumSessionRecoveryTests)
+
     qt_add_executable(ShelliumSessionTabBarTests
         tests/SessionTabBarTest.cpp
         src/ui/SessionTabBar.cpp

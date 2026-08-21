@@ -54,6 +54,11 @@ TerminalWorkspace::TerminalWorkspace(QWidget *parent)
         emit activeTargetsChanged(pane);
     });
     connect(m_pane, &TerminalPane::statusMessage, this, &TerminalWorkspace::statusMessage);
+    connect(m_pane, &TerminalPane::closeRequested, this, [this](TerminalPane *) {
+        // 面板只知道"用户要关掉这里"，标签索引和 AI 助手页面都归主窗口管理；本工作区
+        // 只负责把请求换成自己的身份继续上报。
+        emit closeRequested(this);
+    });
     connect(m_pane,
             &TerminalPane::remoteWorkingDirectoryChanged,
             m_fileManager,

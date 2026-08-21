@@ -201,7 +201,9 @@ void AiAssistantWidgetTest::executingCommandAutoCapturesOutputAndContinuesConver
     auto *waitingLabel = widget.findChild<QLabel *>(QStringLiteral("aiCommandWaitingLabel"));
     QVERIFY(waitingLabel != nullptr);
     QVERIFY(waitingLabel->text().contains(QStringLiteral("正在等待命令执行完成")));
-    QVERIFY(waitingLabel->text().contains(QStringLiteral("无需复制")));
+    // 等待状态只保留一行：秒数在变，附带的固定操作说明已移除，卡片高度不再随等待增长。
+    QVERIFY(!waitingLabel->text().contains(QChar::fromLatin1('\n')));
+    QVERIFY(!waitingLabel->text().contains(QStringLiteral("无需复制")));
 
     // 提示符重新出现才代表交互式 Shell 已重新接管输入，此时客户端应自动读取隐藏差量并续问。
     terminalText += QStringLiteral("\nnginx not found\n[user@host ~]$ ");

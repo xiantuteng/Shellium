@@ -90,6 +90,12 @@ TerminalPane::TerminalPane(QWidget *parent)
             });
 
     connect(m_terminalView, &TerminalView::inputBytes, this, [this](const QByteArray &bytes) {
+        if (m_awaitingManualRecovery) {
+            // 断线提示期间的按键属于本地选择，不是会话输入：既不能写入任何 PTY，也绝不能
+            // 广播给其他面板——那会把一次"重连还是关闭"的抉择变成对所有服务器的误操作。
+            handleManualRecoveryInput(bytes);
+            return;
+        }
         // 先广播源输入，再写本终端；上层把相同字节送给其他面板时调用 sendInputBytes，后者
         // 不再次发信号，因此不会形成 A→B→A 的循环广播。
         emit broadcastSourceInput(this, bytes);
@@ -191,6 +197,7 @@ void TerminalPane::openLocalShell(const QString &shellPath)
     m_reconnectCycleActive = false;
     m_reconnectAttempts = 0;
     ++m_reconnectToken;
+    m_awaitingManualRecovery = false;
     // 主动打开本地终端代表开始新会话；递增代次后，旧 SSH 已排队的断开回调无法再触发
     // 自动回退，从而不会重复创建本地 zsh。
     const quint64 sessionGeneration = ++m_sessionGeneration;
@@ -283,6 +290,9 @@ void TerminalPane::connectToHosts(const QList<ConnectionTarget> &connectionPlan)
         return;
     }
     const ConnectionTarget target = connectionPlan.constLast();
+    // 无论重连由提示、菜单还是退避定时器发起，提示都已经完成使命；继续拦截键盘会让新
+    // 会话第一个字符消失。
+    m_awaitingManualRecovery = false;
     if (!m_automaticReconnectInvocation) {
         // 菜单、主机树或工作区发起的新连接代表用户改变意图，必须取消旧异常恢复周期。
         m_reconnectCycleActive = false;
@@ -478,10 +488,10 @@ void TerminalPane::connectToHosts(const QList<ConnectionTarget> &connectionPlan)
                     return;
                 }
             }
-            QTimer::singleShot(0, this, [this, sessionGeneration]() {
+            QTimer::singleShot(0, this, [this, target, message, sessionGeneration]() {
                 if (sessionGeneration == m_sessionGeneration
                     && !m_remoteSessionEstablished) {
-                    openLocalShell();
+                    beginManualRecovery(target, message);
                 }
             });
             return;
@@ -540,11 +550,17 @@ void TerminalPane::connectToHosts(const QList<ConnectionTarget> &connectionPlan)
 
         m_remoteSessionEstablished = false;
         m_shellReady = false;
-        const bool shouldReconnect = exitStatus == -1 && m_automaticReconnectEnabled
+        // 退出状态 -1 表示链路异常断开，而不是用户在远端敲了 exit：前者的会话仍然"应该
+        // 存在"，回退到本地 zsh 只会掩盖故障；后者是明确的结束意图，本地 Shell 才是正确
+        // 的落点。两者必须分开处理。
+        const bool abnormal = exitStatus == -1;
+        const bool shouldReconnect = abnormal && m_automaticReconnectEnabled
             && m_reconnectMaxAttempts > 0;
         const QString message = shouldReconnect
             ? tr("SSH 连接因网络异常中断，准备自动重连")
-            : tr("SSH 连接已结束（退出状态 %1），正在退回本地 zsh").arg(exitStatus);
+            : abnormal
+                ? tr("SSH 连接因网络异常中断")
+                : tr("SSH 连接已结束（退出状态 %1），正在退回本地 zsh").arg(exitStatus);
         m_headerLabel->setText(message);
         m_terminalView->appendTerminalOutput((QStringLiteral("\r\n") + message
                                               + QStringLiteral("\r\n")).toUtf8());
@@ -562,11 +578,15 @@ void TerminalPane::connectToHosts(const QList<ConnectionTarget> &connectionPlan)
 
         // shellDisconnected 在工作线程 run() 返回前发出。延迟到下一轮事件循环后再停止并
         // 销毁旧 worker，可避免 GUI 线程在信号处理期间等待尚未完成的发射栈。
-        QTimer::singleShot(0, this, [this, sessionGeneration]() {
-            if (sessionGeneration == m_sessionGeneration
-                && !m_remoteSessionEstablished) {
-                openLocalShell();
+        QTimer::singleShot(0, this, [this, target, abnormal, message, sessionGeneration]() {
+            if (sessionGeneration != m_sessionGeneration || m_remoteSessionEstablished) {
+                return;
             }
+            if (abnormal) {
+                beginManualRecovery(target, message);
+                return;
+            }
+            openLocalShell();
         });
     });
     connect(m_sessionStack,
@@ -763,6 +783,65 @@ void TerminalPane::updateFileManagerButtonIcon()
                         QSize(18, 18)));
 }
 
+void TerminalPane::beginManualRecovery(const ConnectionTarget &target,
+                                      const QString &reason)
+{
+    // 进入提示即视为本轮自动恢复结束：取消令牌可让仍排在事件队列里的旧退避任务直接退出，
+    // 否则它们会在用户还没做选择时突然发起一次连接。
+    m_reconnectCycleActive = false;
+    m_reconnectAttempts = 0;
+    ++m_reconnectToken;
+    m_shellReady = false;
+    m_remoteSessionEstablished = false;
+    m_awaitingManualRecovery = true;
+    m_manualRecoveryTarget = target;
+
+    const QString hint = tr("按 r 重新连接 %1，按 x 关闭该标签页")
+                             .arg(target.connectionSpecifier());
+    m_headerLabel->setText(hint);
+    // 终端里必须使用 CRLF：裸 LF 只下移一行而不回到第 0 列，提示会从上一行末尾的列开始。
+    m_terminalView->appendTerminalOutput((QStringLiteral("\r\n") + reason
+                                          + QStringLiteral("\r\n") + hint
+                                          + QStringLiteral("\r\n")).toUtf8());
+    emit statusMessage(hint);
+    emit targetsChanged(this);
+    focusTerminal();
+}
+
+bool TerminalPane::isAwaitingManualRecovery() const
+{
+    return m_awaitingManualRecovery;
+}
+
+void TerminalPane::handleManualRecoveryInput(const QByteArray &bytes)
+{
+    for (const char byte : bytes) {
+        if (byte == 'r' || byte == 'R') {
+            const ConnectionTarget target = m_manualRecoveryTarget;
+            const QList<ConnectionTarget> plan = m_connectionPlan.isEmpty()
+                ? QList<ConnectionTarget>{target}
+                : m_connectionPlan;
+            if (plan.isEmpty() || !plan.constLast().isValid()) {
+                // 没有可复用的目标时继续停留在提示上：静默什么都不做会让用户以为按键失灵。
+                m_terminalView->appendTerminalOutput(
+                    tr("\r\n没有可重连的服务器，请按 x 关闭该标签页\r\n").toUtf8());
+                return;
+            }
+            // connectToHosts 会清除提示状态；重连必须走整条受管计划，否则断线后会绕过跳板
+            // 直接从本机连同名私网地址。
+            m_terminalView->appendTerminalOutput(
+                tr("\r\n正在手动重连…\r\n").toUtf8());
+            connectToHosts(plan);
+            return;
+        }
+        if (byte == 'x' || byte == 'X') {
+            m_awaitingManualRecovery = false;
+            emit closeRequested(this);
+            return;
+        }
+    }
+}
+
 bool TerminalPane::scheduleAutomaticReconnect(const ConnectionTarget &target,
                                               const quint64 sessionGeneration)
 {
@@ -772,15 +851,11 @@ bool TerminalPane::scheduleAutomaticReconnect(const ConnectionTarget &target,
     }
     if (m_reconnectAttempts >= m_reconnectMaxAttempts) {
         m_reconnectCycleActive = false;
-        const QString exhausted = tr("自动重连已达到 %1 次上限，正在退回本地 zsh")
+        const QString exhausted = tr("自动重连已达到 %1 次上限")
                                       .arg(m_reconnectMaxAttempts);
-        m_headerLabel->setText(exhausted);
-        m_terminalView->appendTerminalOutput(
-            (QStringLiteral("\r\n") + exhausted + QStringLiteral("\r\n")).toUtf8());
-        emit statusMessage(exhausted);
-        QTimer::singleShot(0, this, [this, sessionGeneration]() {
+        QTimer::singleShot(0, this, [this, target, exhausted, sessionGeneration]() {
             if (sessionGeneration == m_sessionGeneration && !m_remoteSessionEstablished) {
-                openLocalShell();
+                beginManualRecovery(target, exhausted);
             }
         });
         return false;
