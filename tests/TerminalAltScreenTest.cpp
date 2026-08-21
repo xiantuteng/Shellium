@@ -134,6 +134,8 @@ private slots:
     void selectionAndScrollbackBlocksSurviveNewOutput();
     void lastRowStaysVisibleInsideFullScreenApplication();
     void scrollReturnsToBottomAfterLeavingFullScreenApplication();
+    /** @brief 上翻到顶部后，任何用户输入都必须把视图拉回输出末尾。 */
+    void typingWhileScrolledUpJumpsBackToOutputTail();
     void columnCountStaysReportedAfterScrollbarTogglesOnAltScreenEntry();
     void realCapturedVimByteStreamShowsStatusLine();
     void realChunkedSshByteStreamShowsStatusLine();
@@ -885,6 +887,46 @@ void TerminalAltScreenTest::scrollReturnsToBottomAfterLeavingFullScreenApplicati
     QTest::qWait(50);
 
     QCOMPARE(view.verticalScrollBar()->value(), view.verticalScrollBar()->maximum());
+}
+
+void TerminalAltScreenTest::typingWhileScrolledUpJumpsBackToOutputTail()
+{
+    TerminalView view;
+    QVERIFY(showAndSettle(view));
+
+    fillScrollback(view, view.terminalRows() * 3);
+    QScrollBar *bar = view.verticalScrollBar();
+    QVERIFY(bar->maximum() > 0);
+
+    // 用户上翻到最顶部阅读历史：此时命令行完全在视口之外。
+    bar->setValue(bar->minimum());
+    QCOMPARE(bar->value(), bar->minimum());
+
+    // 敲一个普通字符：输入必须把视图拉回末尾，否则用户看不到自己打的字。
+    QTest::keyClick(&view, Qt::Key_L);
+    QCOMPARE(bar->value(), bar->maximum());
+
+    // 远端回显随后到达，视图应继续贴底。
+    view.appendTerminalOutput(QByteArrayLiteral("l"));
+    QTest::qWait(50);
+    QCOMPARE(bar->value(), bar->maximum());
+
+    // 回车同样如此：再次上翻到顶部后按下回车，输出必须重新可见。
+    bar->setValue(bar->minimum());
+    QCOMPARE(bar->value(), bar->minimum());
+    QTest::keyClick(&view, Qt::Key_Return);
+    QCOMPARE(bar->value(), bar->maximum());
+
+    view.appendTerminalOutput(QByteArrayLiteral("\r\ncommand output\r\n"));
+    QTest::qWait(50);
+    QCOMPARE(bar->value(), bar->maximum());
+
+    // 备用屏不适用贴底语义：全屏程序里按键仍须保持第 0 行对齐视口顶部。
+    view.appendTerminalOutput(fullScreenApplicationFrame(view.terminalRows(), 1));
+    QTest::qWait(50);
+    QCOMPARE(bar->value(), 0);
+    QTest::keyClick(&view, Qt::Key_J);
+    QCOMPARE(bar->value(), 0);
 }
 
 void TerminalAltScreenTest::columnCountStaysReportedAfterScrollbarTogglesOnAltScreenEntry()

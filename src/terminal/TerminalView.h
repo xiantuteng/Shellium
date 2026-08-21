@@ -520,4 +520,22 @@ private:
 
     /** @brief 判断当前是否停在文档底部，作为重建后是否继续贴底的依据。 */
     [[nodiscard]] bool isScrolledToBottom() const;
+
+    /**
+     * @brief 把视图拉回输出末尾，使随后的重建继续贴底。
+     *
+     * 用户上翻阅读历史后再次输入时，光标所在的命令行在视口之外；不拉回底部的话他敲的
+     * 字符、按下回车后的输出全都发生在看不见的地方。备用屏例外：那里的文档整块对齐视口
+     * 顶部（见 renderPreservingScroll），贴底会把第 0 行连同光标推出视口。
+     */
+    void scrollToOutputTail();
+
+    /**
+     * @brief 发送用户输入的字节，并先把视图拉回输出末尾。
+     * @param bytes 已按终端协议编码好的字节。
+     *
+     * 所有源自用户交互的输入都必须走这里，任何绕过它的路径都会留下"输入了却看不见"的
+     * 死角。远端回显与输出属于被动到达，不适用本方法。
+     */
+    void sendUserInput(const QByteArray &bytes);
 };

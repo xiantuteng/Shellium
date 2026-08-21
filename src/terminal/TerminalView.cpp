@@ -512,6 +512,24 @@ bool TerminalView::isScrolledToBottom() const
     return bar->maximum() - bar->value() <= 1;
 }
 
+void TerminalView::scrollToOutputTail()
+{
+    if (m_vtermBridge->isAlternateScreen()) {
+        // 备用屏由 renderPreservingScroll 固定贴顶，这里贴底会把第 0 行推出视口。
+        return;
+    }
+    QScrollBar *bar = verticalScrollBar();
+    bar->setValue(bar->maximum());
+}
+
+void TerminalView::sendUserInput(const QByteArray &bytes)
+{
+    // 先贴底再发字节：随后的回显与输出经 renderPreservingScroll 重建时，isScrolledToBottom()
+    // 已经为真，会继续跟随末尾，用户敲的每个字符都留在视口内。
+    scrollToOutputTail();
+    emit inputBytes(bytes);
+}
+
 void TerminalView::renderPreservingScroll()
 {
     renderPreservingScroll(isScrolledToBottom(), verticalScrollBar()->value());
@@ -820,7 +838,7 @@ void TerminalView::submitCommand(const QString &command)
     }
     // 命令和回车合并发送可保持 worker 队列中的原子顺序；commandSubmitted 随后触发历史
     // 与嵌套识别，上层仍然看到和真实键盘回车完全一致的提交时点。
-    emit inputBytes(command.toUtf8() + QByteArrayLiteral("\r"));
+    sendUserInput(command.toUtf8() + QByteArrayLiteral("\r"));
     emit commandSubmitted(command);
     m_currentCommand.clear();
     m_commandCompleter->popup()->hide();
@@ -832,7 +850,7 @@ void TerminalView::insertCommandText(const QString &command)
         return;
     }
     // 这里只写命令本身，绝不追加 CR/LF；是否执行完全交由用户在终端中按回车决定。
-    emit inputBytes(command.toUtf8());
+    sendUserInput(command.toUtf8());
     m_currentCommand += command;
     updateCompletionPopup();
 }
@@ -887,7 +905,7 @@ void TerminalView::acceptCompletion(const QString &completion)
     }
     const QString suffix = completion.mid(m_currentCommand.size());
     if (!suffix.isEmpty()) {
-        emit inputBytes(suffix.toUtf8());
+        sendUserInput(suffix.toUtf8());
     }
     m_currentCommand = completion;
     m_commandCompleter->popup()->hide();
@@ -1114,6 +1132,9 @@ void TerminalView::keyPressEvent(QKeyEvent *event)
             event->accept();
             return;
         }
+        // 本地捕获同样是"用户正在输入"，即使不回显也要把提示行拉回视口：否则用户在
+        // 一片历史输出里对着看不见的密码提示打字。
+        scrollToOutputTail();
         if (isClipboardPasteShortcut(event)) {
             // 密码通常是从密码管理器粘贴进来的，必须在这里显式处理：macOS 上 Cmd+V 携带
             // Qt::ControlModifier，会被下面的"追加普通字符"分支排除，进而被整个吞掉；
@@ -1171,6 +1192,8 @@ void TerminalView::keyPressEvent(QKeyEvent *event)
             QPlainTextEdit::keyPressEvent(event);
             return;
         }
+        // 方向键等导航键的字节由 libvterm 生成，不经过 sendUserInput，但同样是用户输入。
+        scrollToOutputTail();
         m_vtermBridge->sendKey(*navigationKey, toVtermModifiers(event));
         event->accept();
         return;
@@ -1219,7 +1242,7 @@ void TerminalView::keyPressEvent(QKeyEvent *event)
         // 当成逐个按键：autoindent 给每一行再叠一层缩进，十行代码粘完成阶梯状。远端未
         // 开启该模式时 libvterm 不会产生任何标记字节，行为与此前完全一致。
         m_vtermBridge->beginPaste();
-        emit inputBytes(encoded);
+        sendUserInput(encoded);
         m_vtermBridge->endPaste();
         if (!alternateScreen) {
             updateCompletionPopup();
@@ -1238,7 +1261,7 @@ void TerminalView::keyPressEvent(QKeyEvent *event)
             if (event->modifiers().testFlag(Qt::AltModifier)) {
                 encoded.prepend('\x1b');
             }
-            emit inputBytes(encoded);
+            sendUserInput(encoded);
             event->accept();
             return;
         }
@@ -1257,7 +1280,7 @@ void TerminalView::keyPressEvent(QKeyEvent *event)
         if (event->modifiers().testFlag(Qt::AltModifier)) {
             encoded.prepend('\x1b');
         }
-        emit inputBytes(encoded);
+        sendUserInput(encoded);
         emit commandSubmitted(submittedCommand);
         event->accept();
         return;
@@ -1317,7 +1340,7 @@ void TerminalView::keyPressEvent(QKeyEvent *event)
     if (event->modifiers().testFlag(Qt::AltModifier) && !encoded.startsWith('\x1b')) {
         encoded.prepend('\x1b');
     }
-    emit inputBytes(encoded);
+    sendUserInput(encoded);
     // 普通字符、粘贴和退格会改变前缀；重复计算只涉及很小的内存模型，可换来所有输入路径的
     // 一致行为并避免漏掉输入法或未来新增按键分支。备用屏下没有命令行可补全。
     if (!alternateScreen) {
@@ -1525,6 +1548,7 @@ void TerminalView::inputMethodEvent(QInputMethodEvent *event)
             static_cast<long long>(event->preeditString().size()),
             int(m_localCapture));
     if (m_localCapture) {
+        scrollToOutputTail();
         // 输入法提交的字符同样只进本地缓冲；密码可能包含通过输入法输入的字符。
         for (const QChar character : committedText) {
             if (character == QLatin1Char('\r') || character == QLatin1Char('\n')) {
@@ -1541,7 +1565,7 @@ void TerminalView::inputMethodEvent(QInputMethodEvent *event)
         return;
     }
     if (!committedText.isEmpty()) {
-        emit inputBytes(committedText.toUtf8());
+        sendUserInput(committedText.toUtf8());
         // 输入法一次可能提交多个字符，因此按字符维护命令缓冲；换行代表提交当前命令。
         for (const QChar character : committedText) {
             if (character == QLatin1Char('\r') || character == QLatin1Char('\n')) {
