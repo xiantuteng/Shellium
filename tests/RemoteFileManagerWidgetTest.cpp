@@ -2,14 +2,18 @@
 #include "ssh/SshTunnelBroker.h"
 
 #include <QCheckBox>
+#include <QDir>
+#include <QFile>
 #include <QFrame>
 #include <QHeaderView>
 #include <QHBoxLayout>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QProgressBar>
+#include <QRegularExpression>
 #include <QResizeEvent>
 #include <QSignalSpy>
+#include <QTemporaryDir>
 #include <QTest>
 #include <QToolButton>
 #include <QTreeView>
@@ -108,6 +112,12 @@ private slots:
     /** @brief 远程表格必须只保留设计稿中的名称、大小、权限、所有者四列。 */
     void remoteFileTableUsesReferenceColumns();
 
+    /** @brief 本地栏须展示真实的权限与所有者列，且点击列头可按该列实际排序。 */
+    void localFileTableListsPermissionsOwnerAndSortsByClickedColumn();
+
+    /** @brief 本地栏不再有 QFileSystemModel 惰性懒加载兜底，构造完成时必须已列出主目录。 */
+    void localFileTreePopulatesHomeDirectoryImmediatelyOnConstruction();
+
     /** @brief 宽窗口展示动作文字，窄窗口保留语义和提示但改用紧凑图标。 */
     void actionBarRespondsToAvailableWidth();
 
@@ -198,15 +208,18 @@ void RemoteFileManagerWidgetTest::fullScreenSwitchesFromRemoteOnlyToSymmetricDua
          QStringLiteral("SftpRemotePathEdit"),
          QStringLiteral("SftpFollowTerminalCwdCheck")});
 
-    auto *localTree = widget.findChild<QTreeView *>(QStringLiteral("LocalFileTree"));
+    auto *localTree = widget.findChild<QTreeWidget *>(QStringLiteral("LocalFileTree"));
     QVERIFY(localTree != nullptr);
-    QVERIFY(!localTree->isColumnHidden(0));
-    QVERIFY(!localTree->isColumnHidden(1));
-    QVERIFY2(localTree->isColumnHidden(2), "名称图标已表达文件类型，不应再浪费一列重复展示");
-    QVERIFY(!localTree->isColumnHidden(3));
-    QCOMPARE(localTree->model()->headerData(0, Qt::Horizontal).toString(), QStringLiteral("名称"));
-    QCOMPARE(localTree->model()->headerData(1, Qt::Horizontal).toString(), QStringLiteral("大小"));
-    QCOMPARE(localTree->model()->headerData(3, Qt::Horizontal).toString(), QStringLiteral("修改时间"));
+    QCOMPARE(localTree->columnCount(), 5);
+    for (int column = 0; column < localTree->columnCount(); ++column) {
+        QVERIFY2(!localTree->isColumnHidden(column),
+                 "本地栏列布局须与远程栏对齐，不再隐藏任何一列");
+    }
+    QCOMPARE(localTree->headerItem()->text(0), QStringLiteral("名称"));
+    QCOMPARE(localTree->headerItem()->text(1), QStringLiteral("大小"));
+    QCOMPARE(localTree->headerItem()->text(2), QStringLiteral("修改时间"));
+    QCOMPARE(localTree->headerItem()->text(3), QStringLiteral("权限"));
+    QCOMPARE(localTree->headerItem()->text(4), QStringLiteral("所有者"));
 }
 
 void RemoteFileManagerWidgetTest::remoteSftpRelayCommandQuotesEveryUntrustedArgument()
@@ -289,6 +302,98 @@ void RemoteFileManagerWidgetTest::remoteFileTableUsesReferenceColumns()
     // 名称列宽度由 updateRemoteNameColumnWidth() 手动管理（保底 + 横向滚动），不再用
     // Qt 内置的 Stretch——Stretch 会在面板变窄时把它一路压到 setMinimumSectionSize 的下限。
     QCOMPARE(remoteTree->header()->sectionResizeMode(0), QHeaderView::Interactive);
+}
+
+void RemoteFileManagerWidgetTest::localFileTableListsPermissionsOwnerAndSortsByClickedColumn()
+{
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+
+    // 刻意让文件名的字母序与文件大小的顺序相反：默认列表按名称排列，只有真正按"大小"
+    // 排序时顺序才会翻转，否则退化成的名称排序也能碰巧通过测试。
+    QFile smallFile(tempDir.filePath(QStringLiteral("a_small.txt")));
+    QVERIFY(smallFile.open(QIODevice::WriteOnly));
+    smallFile.write(QByteArray(5, 'x'));
+    smallFile.close();
+
+    QFile bigFile(tempDir.filePath(QStringLiteral("z_big.txt")));
+    QVERIFY(bigFile.open(QIODevice::WriteOnly));
+    bigFile.write(QByteArray(500, 'y'));
+    bigFile.close();
+
+    RemoteFileManagerWidget widget;
+    auto *pathEdit = widget.findChild<QLineEdit *>(QStringLiteral("SftpLocalPathEdit"));
+    auto *localTree = widget.findChild<QTreeWidget *>(QStringLiteral("LocalFileTree"));
+    QVERIFY(pathEdit != nullptr);
+    QVERIFY(localTree != nullptr);
+
+    pathEdit->setText(tempDir.path());
+    emit pathEdit->returnPressed();
+
+    QCOMPARE(localTree->topLevelItemCount(), 2);
+    // 默认（未排序）状态沿用目录枚举顺序，即按名称升序。
+    QCOMPARE(localTree->topLevelItem(0)->text(0), QStringLiteral("a_small.txt"));
+    QCOMPARE(localTree->topLevelItem(1)->text(0), QStringLiteral("z_big.txt"));
+    QVERIFY2(QRegularExpression(QStringLiteral("^[-dl][-rwxsStT]{9}$"))
+                 .match(localTree->topLevelItem(0)->text(3))
+                 .hasMatch(),
+             qPrintable(QStringLiteral("权限列必须是 ls -l 风格的符号，实际为 %1")
+                            .arg(localTree->topLevelItem(0)->text(3))));
+    QCOMPARE(localTree->headerItem()->text(4), QStringLiteral("所有者"));
+
+    QHeaderView *header = localTree->header();
+    QVERIFY(header->sectionsClickable());
+
+    // 点击"大小"列头一次：升序，最小的文件排在最前——与按名称排序的结果一致，尚不能
+    // 单独证明确实比较了大小而非名称，因此还需要第二次点击。
+    emit header->sectionClicked(1);
+    QCOMPARE(localTree->topLevelItem(0)->text(0), QStringLiteral("a_small.txt"));
+    QCOMPARE(localTree->topLevelItem(1)->text(0), QStringLiteral("z_big.txt"));
+
+    // 再次点击同一列头切到降序：只有真的按字节数比较，最大的文件才会排到最前；
+    // 若退化成按名称排序，此时顺序不会变化，测试会在这里失败。
+    emit header->sectionClicked(1);
+    QCOMPARE(localTree->topLevelItem(0)->text(0), QStringLiteral("z_big.txt"));
+    QCOMPARE(localTree->topLevelItem(1)->text(0), QStringLiteral("a_small.txt"));
+
+    // 第三次点击回到"还原默认"，即重新按名称升序排列。
+    emit header->sectionClicked(1);
+    QCOMPARE(localTree->topLevelItem(0)->text(0), QStringLiteral("a_small.txt"));
+    QCOMPARE(localTree->topLevelItem(1)->text(0), QStringLiteral("z_big.txt"));
+}
+
+void RemoteFileManagerWidgetTest::localFileTreePopulatesHomeDirectoryImmediatelyOnConstruction()
+{
+    QTemporaryDir homeDir;
+    QVERIFY(homeDir.isValid());
+    QFile probeFile(homeDir.filePath(QStringLiteral("probe.txt")));
+    QVERIFY(probeFile.open(QIODevice::WriteOnly));
+    probeFile.write(QByteArrayLiteral("x"));
+    probeFile.close();
+
+    // 本地栏构造时用 QDir::homePath() 作为初始路径，因此临时接管 HOME 环境变量，让
+    // 断言不依赖运行测试的真实账户主目录里到底有什么文件。
+    const QByteArray originalHome = qgetenv("HOME");
+    qputenv("HOME", homeDir.path().toUtf8());
+
+    RemoteFileManagerWidget widget;
+
+    if (originalHome.isNull()) {
+        qunsetenv("HOME");
+    } else {
+        qputenv("HOME", originalHome);
+    }
+
+    auto *pathEdit = widget.findChild<QLineEdit *>(QStringLiteral("SftpLocalPathEdit"));
+    auto *localTree = widget.findChild<QTreeWidget *>(QStringLiteral("LocalFileTree"));
+    QVERIFY(pathEdit != nullptr);
+    QVERIFY(localTree != nullptr);
+
+    // 本地栏不再挂 QFileSystemModel 的按需加载，构造函数必须主动列一次主目录；否则用户
+    // 第一次展开本地面板时会看到空列表，得自己敲一次回车或点刷新才会加载出内容。
+    QCOMPARE(pathEdit->text(), QDir(homeDir.path()).absolutePath());
+    QCOMPARE(localTree->topLevelItemCount(), 1);
+    QCOMPARE(localTree->topLevelItem(0)->text(0), QStringLiteral("probe.txt"));
 }
 
 void RemoteFileManagerWidgetTest::remoteNameColumnNeverShrinksBelowMinimumWidth()

@@ -267,6 +267,7 @@ void ProductivityWidget::buildUi()
     editorLayout->setVerticalSpacing(6);
     m_nameEdit = new QLineEdit(editorBox);
     m_parentGroupCombo = new QComboBox(editorBox);
+    UiIcons::modernizePopup(m_parentGroupCombo);
     m_commandEdit = new QTextEdit(editorBox);
     m_commandEdit->setObjectName(QStringLiteral("productivityCommandEdit"));
     m_commandEdit->setAcceptRichText(false);
@@ -402,6 +403,7 @@ void ProductivityWidget::buildUi()
     historyLayout->setContentsMargins(0, 8, 0, 0);
     historyLayout->setSpacing(8);
     m_historyHostCombo = new QComboBox(historyPage);
+    UiIcons::modernizePopup(m_historyHostCombo);
     m_historyHostCombo->setObjectName(QStringLiteral("productivityHistoryHost"));
     m_historyPrefixEdit = new QLineEdit(historyPage);
     m_historyPrefixEdit->setObjectName(QStringLiteral("productivityHistoryPrefix"));

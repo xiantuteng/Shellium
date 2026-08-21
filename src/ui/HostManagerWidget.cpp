@@ -1040,8 +1040,9 @@ private:
 /**
  * @brief 主机标签编辑器：新增标签、选择配色并复用历史标签。
  *
+ * 一台主机只允许挂一个标签，因此提交新标签会替换掉本机原有的那一个，而不是追加。
  * 标签本身随 HostRecord 保存，配色则按标签名保存在全局设置里，因此本窗口确认时会立即写回
- * 配色，而标签列表交由调用方在保存主机时一并持久化。这样即使用户随后取消主机配置，已经
+ * 配色，而标签交由调用方在保存主机时一并持久化。这样即使用户随后取消主机配置，已经
  * 挑好的配色也不会丢；反之若把配色也推迟到主机保存，同一标签在不同主机上就会出现分歧。
  */
 class HostTagDialog final : public QDialog {
@@ -1058,10 +1059,12 @@ public:
         , m_colors(loadTagColors(database))
     {
         Q_ASSERT(m_database != nullptr);
+        // 一台主机只保留一个标签；旧数据若残留多个标签（改动前允许追加），只取第一个。
         for (const QString &tag : tags) {
             const QString normalized = tag.trimmed();
-            if (!normalized.isEmpty() && !m_tags.contains(normalized)) {
-                m_tags.append(normalized);
+            if (!normalized.isEmpty()) {
+                m_tags = {normalized};
+                break;
             }
         }
 
@@ -1108,7 +1111,7 @@ public:
         UiIcons::decorateButton(
             addButton,
             UiIcons::symbol(this, UiIcons::Symbol::Check, QColor(QStringLiteral("#0c2f24"))),
-            tr("把当前名称和颜色加入本机标签"));
+            tr("将当前名称和颜色设为本机标签（替换原有标签）"));
 
         auto *nameContainer = new QWidget(this);
         auto *nameContainerLayout = new QHBoxLayout(nameContainer);
@@ -1224,7 +1227,7 @@ public:
         refreshLists();
     }
 
-    /** @brief 返回确认后的标签列表，顺序即界面顺序；首枚标签决定主机树徽章。 */
+    /** @brief 返回确认后的标签列表；一台主机最多一个标签，用于主机树徽章。 */
     [[nodiscard]] QStringList tags() const { return m_tags; }
 
     /** @brief 返回确认后的全部标签配色，供调用方判断是否需要刷新界面。 */
@@ -1286,9 +1289,8 @@ private:
             m_nameEdit->setFocus();
             return;
         }
-        if (!m_tags.contains(name)) {
-            m_tags.append(name);
-        }
+        // 一台主机只允许挂一个标签：新提交的名称直接替换掉原有标签，而不是追加。
+        m_tags = {name};
         m_colors.insert(name, selectedColor().name());
         if (!m_history.contains(name)) {
             m_history.append(name);
@@ -1349,12 +1351,8 @@ public:
         setText(text);
         setCursor(Qt::ArrowCursor);
         setFocusPolicy(Qt::NoFocus);
-        // 输入框内部不能出现第二套边框和底色，否则看起来像输入框里嵌了另一个输入框。
-        setStyleSheet(QStringLiteral(
-            "QToolButton { border: none; background: transparent; padding: 0 6px; color: %1; }"
-            "QToolButton:hover { color: %2; }")
-                          .arg(ShelliumUi::accentColor().name(),
-                               ShelliumUi::accentColor().darker(120).name()));
+        // 外观交给全局样式表按 objectName 匹配（与侧栏 #标签 入口共用同一套药丸样式），这里
+        // 不再自带边框/底色，否则会盖住全局规则，让两处入口的样式无法保持一致。
         m_field->installEventFilter(this);
         applyGeometry();
     }
@@ -1909,6 +1907,7 @@ private:
     [[nodiscard]] QWidget *buildNameRow()
     {
         m_groupCombo = new QComboBox(this);
+        UiIcons::modernizePopup(m_groupCombo);
         m_groupCombo->setObjectName(QStringLiteral("hostRecordGroupCombo"));
         m_groupCombo->setMinimumWidth(150);
         m_groupCombo->setMaximumWidth(200);
@@ -2022,11 +2021,8 @@ private:
         }
         if (m_tags.isEmpty()) {
             m_tagButton->updateText(tr("#标签"));
-        } else if (m_tags.size() == 1) {
-            m_tagButton->updateText(QStringLiteral("#%1").arg(m_tags.constFirst()));
         } else {
-            m_tagButton->updateText(
-                tr("#%1 +%2").arg(m_tags.constFirst()).arg(m_tags.size() - 1));
+            m_tagButton->updateText(QStringLiteral("#%1").arg(m_tags.constFirst()));
         }
     }
 

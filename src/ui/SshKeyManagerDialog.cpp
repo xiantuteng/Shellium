@@ -1,6 +1,7 @@
 #include "ui/SshKeyManagerDialog.h"
 
 #include "security/SshKeyManager.h"
+#include "ui/UiIcons.h"
 
 #include <QApplication>
 #include <QClipboard>
@@ -55,6 +56,7 @@ SshKeyManagerDialog::SshKeyManagerDialog(QWidget *parent)
 {
     setWindowTitle(tr("SSH 密钥管理"));
     resize(720, 520);
+    UiIcons::modernizePopup(m_algorithmCombo);
     auto *rootLayout = new QVBoxLayout(this);
     auto *tabs = new QTabWidget(this);
     rootLayout->addWidget(tabs, 1);

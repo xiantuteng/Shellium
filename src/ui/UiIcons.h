@@ -1,7 +1,9 @@
 #pragma once
 
 #include <QAbstractButton>
+#include <QAbstractItemView>
 #include <QColor>
+#include <QComboBox>
 #include <QIcon>
 #include <QIconEngine>
 #include <QMenu>
@@ -715,6 +717,26 @@ inline void modernizePopup(QMenu *menu)
 {
     Q_ASSERT(menu != nullptr);
     menu->setAttribute(Qt::WA_TranslucentBackground);
+}
+
+/**
+ * @brief 让 QComboBox 弹出列表真正呈现圆角，而不是圆角内容叠在方形窗口背景上。
+ * @param combo 已构造、尚未弹出过下拉列表的下拉框；不得为 nullptr。
+ *
+ * 原理与 modernizePopup(QMenu*) 相同：QComboBox 的下拉列表容器
+ * （QComboBoxPrivateContainer）是一个独立的顶层窗口，样式表里的 border-radius
+ * 只画在内容区域内，容器窗口默认不透明背景仍会在四角露出方形轮廓。必须在该顶层窗口
+ * 创建原生句柄之前设置该属性才会生效；QComboBox::view() 会按需创建容器但不会显示它，
+ * 因此在构造下拉框后立即调用本函数即可安全生效。
+ */
+inline void modernizePopup(QComboBox *combo)
+{
+    Q_ASSERT(combo != nullptr);
+    if (QAbstractItemView *view = combo->view()) {
+        if (QWidget *container = view->window()) {
+            container->setAttribute(Qt::WA_TranslucentBackground);
+        }
+    }
 }
 
 inline void decorateButton(QAbstractButton *button,

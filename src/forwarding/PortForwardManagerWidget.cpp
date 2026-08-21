@@ -664,6 +664,7 @@ public:
         form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
         m_nameEdit = new QLineEdit(this);
         m_typeCombo = new QComboBox(this);
+        UiIcons::modernizePopup(m_typeCombo);
         m_typeCombo->addItem(tr("本地转发 (-L)"), static_cast<int>(PortForwardType::Local));
         m_typeCombo->addItem(tr("远程转发 (-R)"), static_cast<int>(PortForwardType::Remote));
         m_typeCombo->addItem(tr("动态 SOCKS5 (-D)"), static_cast<int>(PortForwardType::Dynamic));

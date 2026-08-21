@@ -11,8 +11,8 @@
 #include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QFileDialog>
+#include <QFileIconProvider>
 #include <QFileInfo>
-#include <QFileSystemModel>
 #include <QFontMetrics>
 #include <QFrame>
 #include <QHBoxLayout>
@@ -35,7 +35,6 @@
 #include <QSplitter>
 #include <QTimer>
 #include <QToolButton>
-#include <QTreeView>
 #include <QTreeWidget>
 #include <QUrl>
 #include <QVariant>
@@ -367,18 +366,19 @@ private:
 /**
  * @brief 接收 Shellium 远程条目并把目标解析为本地目录的文件树。
  *
- * QFileSystemModel 保持只读，拖入动作仅代表“下载副本”，绝不会调用本地移动或删除；这对
- * 运维文件管理尤为重要，因为一次误判为 MoveAction 就可能破坏用户本机原文件。
+ * 拖入动作仅代表“下载副本”，绝不会调用本地移动或删除；这对运维文件管理尤为重要，因为
+ * 一次误判为 MoveAction 就可能破坏用户本机原文件。落点目录的最终解析（含"落在空白处"
+ * 的兜底）交给外层持有 m_localPathEdit 的回调，本控件只负责传出落点条目本身。
  */
-class LocalDropTree final : public QTreeView {
+class LocalDropTree final : public QTreeWidget {
 public:
     using RemoteDropHandler =
         std::function<void(const QString &remotePath,
                            bool directory,
-                           const QString &localDirectory)>;
+                           QTreeWidgetItem *dropItem)>;
 
     explicit LocalDropTree(QWidget *parent = nullptr)
-        : QTreeView(parent)
+        : QTreeWidget(parent)
     {
         setAcceptDrops(true);
         setDragEnabled(true);
@@ -413,7 +413,7 @@ protected:
         event->ignore();
     }
 
-    /** @brief 将落点文件转换为其父目录，将落点目录作为直接下载目标。 */
+    /** @brief 把落点条目（可能为空）连同远程路径一并交给业务层解析目标目录。 */
     void dropEvent(QDropEvent *event) override
     {
         if (!event->mimeData()->hasFormat(kRemotePathMimeType)
@@ -421,25 +421,28 @@ protected:
             event->ignore();
             return;
         }
-        const auto *fileModel = qobject_cast<const QFileSystemModel *>(model());
-        if (fileModel == nullptr) {
-            event->ignore();
-            return;
-        }
-
-        const QModelIndex dropIndex = indexAt(event->position().toPoint());
-        QString localDirectory = fileModel->filePath(dropIndex.isValid() ? dropIndex
-                                                                         : rootIndex());
-        if (dropIndex.isValid() && !fileModel->isDir(dropIndex)) {
-            localDirectory = QFileInfo(localDirectory).absolutePath();
-        }
         const QString remotePath = QString::fromUtf8(
             event->mimeData()->data(kRemotePathMimeType));
         const bool directory =
             event->mimeData()->data(kRemoteDirectoryMimeType) == QByteArrayLiteral("1");
-        m_remoteDropHandler(remotePath, directory, localDirectory);
+        m_remoteDropHandler(remotePath, directory, itemAt(event->position().toPoint()));
         event->setDropAction(Qt::CopyAction);
         event->accept();
+    }
+
+    /** @brief 把当前选中本地条目编码为标准 file:// URL，供远程栏拖拽上传识别。 */
+    void startDrag(Qt::DropActions supportedActions) override
+    {
+        Q_UNUSED(supportedActions)
+        QTreeWidgetItem *item = currentItem();
+        if (item == nullptr) {
+            return;
+        }
+        auto *mimeData = new QMimeData;
+        mimeData->setUrls({QUrl::fromLocalFile(item->data(0, Qt::UserRole).toString())});
+        auto *drag = new QDrag(this);
+        drag->setMimeData(mimeData);
+        drag->exec(Qt::CopyAction);
     }
 
 private:
@@ -448,49 +451,99 @@ private:
 };
 
 /**
- * @brief 为本地文件栏提供稳定中文表头，并保留系统原生文件图标。
+ * @brief 把 QFileInfo::permissions() 换算成 POSIX 八进制权限位。
  *
- * 仅覆盖 headerData 的水平 DisplayRole；名称列 DecorationRole 完全交回
- * QFileSystemModel/QFileIconProvider。这样本地文件继续显示 Finder、Linux 桌面等系统提供的
- * 原始图标，与远程栏的 Shellium 线性图标形成明确区分，同时不会因缺少 Qt 翻译包而混入
- * 英文表头。
+ * Qt 的跨平台权限标志按 owner/group/other 三组暴露读写执行位，数值巧合地与 POSIX
+ * mode 位对齐，可以直接按位或拼出来复用 RemoteFileInfo::permissionText() 的符号
+ * 渲染；Qt 没有跨平台途径读取 setuid/setgid/sticky，因此这三位固定为 0。
  */
-class LocalizedLocalFileSystemModel final : public QFileSystemModel {
-public:
-    /**
-     * @brief 创建本地文件模型。
-     * @param parent Qt 父对象，负责释放模型。
-     */
-    explicit LocalizedLocalFileSystemModel(QObject *parent = nullptr)
-        : QFileSystemModel(parent)
-    {
+quint32 localPermissionBits(const QFileInfo &info)
+{
+    const QFileDevice::Permissions permissions = info.permissions();
+    quint32 bits = 0;
+    if (permissions & QFileDevice::ReadOwner) bits |= 0400U;
+    if (permissions & QFileDevice::WriteOwner) bits |= 0200U;
+    if (permissions & QFileDevice::ExeOwner) bits |= 0100U;
+    if (permissions & QFileDevice::ReadGroup) bits |= 0040U;
+    if (permissions & QFileDevice::WriteGroup) bits |= 0020U;
+    if (permissions & QFileDevice::ExeGroup) bits |= 0010U;
+    if (permissions & QFileDevice::ReadOther) bits |= 0004U;
+    if (permissions & QFileDevice::WriteOther) bits |= 0002U;
+    if (permissions & QFileDevice::ExeOther) bits |= 0001U;
+    return bits;
+}
+
+/**
+ * @brief 按 正序→倒序→默认 三态语义重排一棵文件树的顶层条目。
+ *
+ * 本地栏与远程栏的列布局（名称/大小/修改时间/权限/所有者）和条目角色数据完全一致，
+ * 比较逻辑因此可以共用同一份实现，不必为两棵树各写一遍。
+ * @param tree 待重排的文件树；名称在列 0，大小在列 1，修改时间在列 2，权限在列 3，
+ *             所有者在列 4，目录标记与原始序号见 kOriginalIndexRole 一带的角色约定。
+ * @param column 排序列，-1 表示还原为条目入树时的原始顺序。
+ * @param order 排序方向，仅在 column >= 0 时生效。
+ */
+void sortFileTreeItems(QTreeWidget *tree, const int column, const Qt::SortOrder order)
+{
+    if (tree->topLevelItemCount() == 0) {
+        return;
     }
 
-    /**
-     * @brief 返回本地文件表格的稳定中文表头。
-     * @param section QFileSystemModel 固定列号：0 名称、1 大小、2 类型、3 修改时间。
-     * @param orientation 表头方向；只有水平显示角色需要覆盖。
-     * @param role Qt 数据角色；非 DisplayRole 沿用系统模型数据。
-     * @return 产品统一中文表头，或 QFileSystemModel 的原始表头数据。
-     */
-    QVariant headerData(const int section,
-                        const Qt::Orientation orientation,
-                        const int role = Qt::DisplayRole) const override
-    {
-        if (orientation == Qt::Horizontal && role == Qt::DisplayRole) {
-            static const QStringList headers = {
-                QObject::tr("名称"),
-                QObject::tr("大小"),
-                QObject::tr("类型"),
-                QObject::tr("修改时间"),
-            };
-            if (section >= 0 && section < headers.size()) {
-                return headers.at(section);
-            }
-        }
-        return QFileSystemModel::headerData(section, orientation, role);
+    QList<QTreeWidgetItem *> items;
+    items.reserve(tree->topLevelItemCount());
+    while (tree->topLevelItemCount() > 0) {
+        items.append(tree->takeTopLevelItem(0));
     }
-};
+
+    const bool descending = order == Qt::DescendingOrder;
+    std::stable_sort(items.begin(), items.end(),
+                     [column, descending](const QTreeWidgetItem *left,
+                                          const QTreeWidgetItem *right) {
+        if (column < 0) {
+            // 还原默认：完全按入树顺序，不再做任何分组。
+            return left->data(0, kOriginalIndexRole).toInt()
+                < right->data(0, kOriginalIndexRole).toInt();
+        }
+
+        // 目录恒排在文件之前。文件管理的首要用途是逐层进入目录，若按大小排序把目录
+        // 冲散到列表中间，导航会变得非常费力；这也是各类文件管理器的一致做法。
+        const bool leftIsDirectory = left->data(0, Qt::UserRole + 1).toBool();
+        const bool rightIsDirectory = right->data(0, Qt::UserRole + 1).toBool();
+        if (leftIsDirectory != rightIsDirectory) {
+            return leftIsDirectory;
+        }
+
+        int comparison = 0;
+        switch (column) {
+        case 1:
+            comparison = compareValues(left->data(0, Qt::UserRole + 2).toULongLong(),
+                                       right->data(0, Qt::UserRole + 2).toULongLong());
+            break;
+        case 2:
+            comparison = compareValues(left->data(0, kModifiedAtRole).toDateTime(),
+                                       right->data(0, kModifiedAtRole).toDateTime());
+            break;
+        case 3:
+            comparison = compareValues(left->data(0, Qt::UserRole + 3).toUInt(),
+                                       right->data(0, Qt::UserRole + 3).toUInt());
+            break;
+        case 4:
+            comparison = QString::compare(left->text(4), right->text(4), Qt::CaseInsensitive);
+            break;
+        case 0:
+        default:
+            comparison = QString::compare(left->text(0), right->text(0), Qt::CaseInsensitive);
+            break;
+        }
+        if (comparison == 0) {
+            // 同值时回落到名称，保证结果稳定可预期，不随刷新前后跳动。
+            comparison = QString::compare(left->text(0), right->text(0), Qt::CaseInsensitive);
+        }
+        return descending ? comparison > 0 : comparison < 0;
+    });
+
+    tree->addTopLevelItems(items);
+}
 
 } // namespace
 
@@ -502,7 +555,6 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     , m_fullScreenButton(new QToolButton(this))
     , m_closeButton(new QToolButton(this))
     , m_localPathEdit(new QLineEdit(QDir::homePath(), this))
-    , m_localModel(new LocalizedLocalFileSystemModel(this))
     , m_localTree(new LocalDropTree(this))
     , m_pathEdit(new QLineEdit(QStringLiteral("/"), this))
     , m_fileTree(new RemoteDropTree(this))
@@ -528,6 +580,7 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     targetRowLayout->setSpacing(10);
     auto *serverLabel = new QLabel(tr("服务器"), m_targetRow);
     serverLabel->setObjectName(QStringLiteral("SftpServerLabel"));
+    UiIcons::modernizePopup(m_targetCombo);
     m_targetCombo->setObjectName(QStringLiteral("SftpTargetCombo"));
     m_targetCombo->setMinimumWidth(260);
     m_targetCombo->setMaximumWidth(520);
@@ -600,42 +653,44 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     localPathRow->addWidget(m_localPathEdit, 1);
     localLayout->addWidget(localToolbar);
 
-    // QFileSystemModel 自带按需加载和文件系统监听，适合大目录；保持只读可确保拖放只触发
-    // Shellium 的上传/下载，不会意外在本机执行移动、重命名或删除。
-    m_localModel->setReadOnly(true);
-    m_localModel->setFilter(QDir::AllEntries | QDir::NoDotAndDotDot | QDir::Hidden);
-    m_localModel->setRootPath(QDir::rootPath());
-    m_localTree->setModel(m_localModel);
+    // 本地栏按需重新列举目录内容，保持只读可确保拖放只触发 Shellium 的上传/下载，不会
+    // 意外在本机执行移动、重命名或删除。
     m_localTree->setObjectName(QStringLiteral("LocalFileTree"));
-    m_localTree->setRootIndex(m_localModel->index(QDir::homePath()));
+    m_localTree->setColumnCount(5);
+    // 双栏对拷时，本地侧和远程侧要回答同一个问题——"这两边是不是同一个文件"。列布局与
+    // 远程栏保持一致（名称/大小/修改时间/权限/所有者），排序比较逻辑因此可以共用
+    // sortFileTreeItems，两栏也能逐列直接对照。
+    m_localTree->setHeaderLabels(
+        {tr("名称"), tr("大小"), tr("修改时间"), tr("权限"), tr("所有者")});
+    m_localTree->setRootIsDecorated(false);
     m_localTree->setAlternatingRowColors(false);
     m_localTree->setUniformRowHeights(true);
     m_localTree->setSelectionMode(QAbstractItemView::SingleSelection);
     m_localTree->setContextMenuPolicy(Qt::CustomContextMenu);
-    // 双栏对拷时，本地侧和远程侧要回答同一个问题——"这两边是不是同一个文件"。只有名称就
-    // 只能靠猜，因此大小与修改时间必须同样可见。类型列仍然隐藏：名称列的图标已经区分了
-    // 目录与文件，"文档""文件夹"这类描述性文字只会白占宽度。
-    // QFileSystemModel 的列序固定为 0=名称 1=大小 2=类型 3=修改时间，未以具名枚举暴露。
-    constexpr int kNameColumn = 0;
-    constexpr int kSizeColumn = 1;
-    constexpr int kTypeColumn = 2;
-    constexpr int kLastModifiedColumn = 3;
-    m_localTree->setColumnHidden(kTypeColumn, true);
     const QFontMetrics localMetrics(m_localTree->font());
     constexpr int kLocalCellPadding = 18;
-    m_localTree->setColumnWidth(kNameColumn, 190);
+    m_localTree->setColumnWidth(0, 190);
     m_localTree->setColumnWidth(
-        kSizeColumn,
-        localMetrics.horizontalAdvance(QStringLiteral("1023.9 MiB")) + kLocalCellPadding);
+        1, localMetrics.horizontalAdvance(QStringLiteral("1023.9 MiB")) + kLocalCellPadding);
     m_localTree->setColumnWidth(
-        kLastModifiedColumn,
+        2,
         localMetrics.horizontalAdvance(QStringLiteral("2026-08-09 23:56:28"))
             + kLocalCellPadding);
+    m_localTree->setColumnWidth(
+        3, localMetrics.horizontalAdvance(QStringLiteral("drwxrwxrwt")) + kLocalCellPadding);
+    m_localTree->setColumnWidth(
+        4, localMetrics.horizontalAdvance(QStringLiteral("root")) + kLocalCellPadding);
     m_localTree->header()->setMinimumSectionSize(40);
     m_localTree->header()->setStretchLastSection(false);
-    for (int column = 0; column < m_localModel->columnCount(); ++column) {
+    for (int column = 0; column < m_localTree->columnCount(); ++column) {
         m_localTree->header()->setSectionResizeMode(column, QHeaderView::Interactive);
     }
+    // 与远程栏一样自行处理三态排序，而不是 setSortingEnabled 内置的两态排序。
+    m_localTree->setSortingEnabled(false);
+    m_localTree->header()->setSectionsClickable(true);
+    m_localTree->header()->setSortIndicatorShown(false);
+    connect(m_localTree->header(), &QHeaderView::sectionClicked,
+            this, &RemoteFileManagerWidget::cycleLocalSort);
     m_localTree->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     m_localTree->setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
     localLayout->addWidget(m_localTree, 1);
@@ -903,24 +958,25 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     connect(m_localPathEdit, &QLineEdit::returnPressed, this, [this]() {
         setLocalDirectory(m_localPathEdit->text().trimmed());
     });
-    connect(m_localTree, &QTreeView::doubleClicked, this, [this](const QModelIndex &index) {
-        if (m_localModel->isDir(index)) {
-            setLocalDirectory(m_localModel->filePath(index));
+    connect(m_localTree, &QTreeWidget::itemDoubleClicked, this,
+            [this](QTreeWidgetItem *item, int) {
+        if (item != nullptr && item->data(0, Qt::UserRole + 1).toBool()) {
+            setLocalDirectory(item->data(0, Qt::UserRole).toString());
         }
     });
     connect(m_localTree,
             &QWidget::customContextMenuRequested,
             this,
             [this](const QPoint &position) {
-                const QModelIndex index = m_localTree->indexAt(position);
-                if (index.isValid()) {
-                    m_localTree->setCurrentIndex(index);
+                QTreeWidgetItem *item = m_localTree->itemAt(position);
+                if (item != nullptr) {
+                    m_localTree->setCurrentItem(item);
                 }
                 QMenu menu(this);
                 UiIcons::modernizePopup(&menu);
-                if (index.isValid()) {
-                    const QString localPath = m_localModel->filePath(index);
-                    if (m_localModel->isDir(index)) {
+                if (item != nullptr) {
+                    const QString localPath = item->data(0, Qt::UserRole).toString();
+                    if (item->data(0, Qt::UserRole + 1).toBool()) {
                         QAction *openAction = menu.addAction(
                             UiIcons::symbol(this, UiIcons::Symbol::Folder, this->palette().color(QPalette::WindowText)),
                             tr("打开目录"));
@@ -1090,7 +1146,18 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
         });
     auto *localDropTree = static_cast<LocalDropTree *>(m_localTree);
     localDropTree->setRemoteDropHandler(
-        [this](const QString &remotePath, const bool directory, const QString &localDirectory) {
+        [this](const QString &remotePath, const bool directory, QTreeWidgetItem *dropItem) {
+            // 落在某个本地目录条目上时下载到该目录；落在文件上或空白处则回落到当前
+            // 浏览目录，与远程栏 setLocalDropHandler 的兜底逻辑对称。
+            QString localDirectory = m_localPathEdit->text().trimmed();
+            if (dropItem != nullptr) {
+                const QString itemPath = dropItem->data(0, Qt::UserRole).toString();
+                if (dropItem->data(0, Qt::UserRole + 1).toBool()) {
+                    localDirectory = itemPath;
+                } else {
+                    localDirectory = QFileInfo(itemPath).absolutePath();
+                }
+            }
             RemoteFileInfo entry;
             entry.path = remotePath;
             entry.name = remotePath.section(QLatin1Char('/'), -1);
@@ -1346,6 +1413,9 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     updateFullScreenIcon();
     updateResponsiveActionButtons();
     updateRemoteNameColumnWidth();
+    // 本地树不再由 QFileSystemModel 惰性懒加载，必须显式列一次主目录，否则本地面板在
+    // 首次展开全屏之前会一直是空的。
+    setLocalDirectory(m_localPathEdit->text());
 }
 
 void RemoteFileManagerWidget::resizeEvent(QResizeEvent *event)
@@ -1429,65 +1499,28 @@ void RemoteFileManagerWidget::cycleRemoteSort(const int column)
 
 void RemoteFileManagerWidget::applyRemoteSort()
 {
-    if (m_fileTree->topLevelItemCount() == 0) {
-        return;
+    sortFileTreeItems(m_fileTree, m_sortColumn, m_sortOrder);
+}
+
+void RemoteFileManagerWidget::cycleLocalSort(const int column)
+{
+    const SftpUiState::SortState next =
+        SftpUiState::nextSortState({m_localSortColumn, m_localSortOrder}, column);
+    m_localSortColumn = next.column;
+    m_localSortOrder = next.order;
+
+    if (m_localSortColumn < 0) {
+        m_localTree->header()->setSortIndicatorShown(false);
+    } else {
+        m_localTree->header()->setSortIndicatorShown(true);
+        m_localTree->header()->setSortIndicator(m_localSortColumn, m_localSortOrder);
     }
+    applyLocalSort();
+}
 
-    QList<QTreeWidgetItem *> items;
-    items.reserve(m_fileTree->topLevelItemCount());
-    while (m_fileTree->topLevelItemCount() > 0) {
-        items.append(m_fileTree->takeTopLevelItem(0));
-    }
-
-    const int column = m_sortColumn;
-    const bool descending = m_sortOrder == Qt::DescendingOrder;
-    std::stable_sort(items.begin(), items.end(),
-                     [column, descending](const QTreeWidgetItem *left,
-                                          const QTreeWidgetItem *right) {
-        if (column < 0) {
-            // 还原默认：完全按服务器返回顺序，不再做任何分组。
-            return left->data(0, kOriginalIndexRole).toInt()
-                < right->data(0, kOriginalIndexRole).toInt();
-        }
-
-        // 目录恒排在文件之前。文件管理的首要用途是逐层进入目录，若按大小排序把目录
-        // 冲散到列表中间，导航会变得非常费力；这也是各类 SFTP 客户端的一致做法。
-        const bool leftIsDirectory = left->data(0, Qt::UserRole + 1).toBool();
-        const bool rightIsDirectory = right->data(0, Qt::UserRole + 1).toBool();
-        if (leftIsDirectory != rightIsDirectory) {
-            return leftIsDirectory;
-        }
-
-        int comparison = 0;
-        switch (column) {
-        case 1:
-            comparison = compareValues(left->data(0, Qt::UserRole + 2).toULongLong(),
-                                       right->data(0, Qt::UserRole + 2).toULongLong());
-            break;
-        case 2:
-            comparison = compareValues(left->data(0, kModifiedAtRole).toDateTime(),
-                                       right->data(0, kModifiedAtRole).toDateTime());
-            break;
-        case 3:
-            comparison = compareValues(left->data(0, Qt::UserRole + 3).toUInt(),
-                                       right->data(0, Qt::UserRole + 3).toUInt());
-            break;
-        case 4:
-            comparison = QString::compare(left->text(4), right->text(4), Qt::CaseInsensitive);
-            break;
-        case 0:
-        default:
-            comparison = QString::compare(left->text(0), right->text(0), Qt::CaseInsensitive);
-            break;
-        }
-        if (comparison == 0) {
-            // 同值时回落到名称，保证结果稳定可预期，不随刷新前后跳动。
-            comparison = QString::compare(left->text(0), right->text(0), Qt::CaseInsensitive);
-        }
-        return descending ? comparison > 0 : comparison < 0;
-    });
-
-    m_fileTree->addTopLevelItems(items);
+void RemoteFileManagerWidget::applyLocalSort()
+{
+    sortFileTreeItems(m_localTree, m_localSortColumn, m_localSortOrder);
 }
 
 void RemoteFileManagerWidget::resetTransferSpeed()
@@ -1618,17 +1651,46 @@ void RemoteFileManagerWidget::setLocalDirectory(const QString &directory)
                              tr("本地目录不存在或不可访问：\n%1").arg(directory));
         return;
     }
-
-    const QString absolutePath = directoryInfo.absoluteFilePath();
-    const QModelIndex rootIndex = m_localModel->index(absolutePath);
-    if (!rootIndex.isValid()) {
+    const QDir directoryToList(directoryInfo.absoluteFilePath());
+    if (!directoryToList.isReadable()) {
         QMessageBox::warning(this,
                              tr("无法浏览本地目录"),
-                             tr("无法为该目录创建文件系统视图：\n%1").arg(absolutePath));
+                             tr("没有权限读取该目录：\n%1").arg(directoryToList.absolutePath()));
         return;
     }
+
+    const QString absolutePath = directoryToList.absolutePath();
     m_localPathEdit->setText(absolutePath);
-    m_localTree->setRootIndex(rootIndex);
+
+    m_localTree->clear();
+    static QFileIconProvider iconProvider;
+    // 与远程栏的排序稳定性要求一致：入树顺序即"还原默认"时的顺序，因此这里先固定按
+    // 目录优先、名称升序枚举一遍，而不是依赖文件系统的原始返回顺序。
+    const QFileInfoList entries = directoryToList.entryInfoList(
+        QDir::AllEntries | QDir::NoDotAndDotDot | QDir::Hidden,
+        QDir::DirsFirst | QDir::Name | QDir::IgnoreCase);
+    int originalIndex = 0;
+    for (const QFileInfo &info : entries) {
+        auto *item = new QTreeWidgetItem(m_localTree);
+        item->setText(0, info.fileName());
+        item->setIcon(0, iconProvider.icon(info));
+        item->setText(1, info.isDir() ? QStringLiteral("—") : formatSize(static_cast<quint64>(info.size())));
+        item->setText(2, info.lastModified().toString(QStringLiteral("yyyy-MM-dd HH:mm:ss")));
+        const quint32 permissionBits = localPermissionBits(info);
+        RemoteFileInfo permissionText;
+        permissionText.permissions = permissionBits;
+        permissionText.isDirectory = info.isDir();
+        permissionText.isSymbolicLink = info.isSymbolicLink();
+        item->setText(3, permissionText.permissionText());
+        item->setText(4, info.owner());
+        item->setData(0, Qt::UserRole, info.absoluteFilePath());
+        item->setData(0, Qt::UserRole + 1, info.isDir());
+        item->setData(0, Qt::UserRole + 2, QVariant::fromValue<quint64>(static_cast<quint64>(info.size())));
+        item->setData(0, Qt::UserRole + 3, QVariant::fromValue(permissionBits));
+        item->setData(0, kModifiedAtRole, info.lastModified());
+        item->setData(0, kOriginalIndexRole, originalIndex++);
+    }
+    applyLocalSort();
 }
 
 SftpTransfer::ExistingFilePolicy RemoteFileManagerWidget::selectedTransferPolicy() const

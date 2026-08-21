@@ -7,6 +7,7 @@
 #include "settings/TerminalSettings.h"
 #include "security/Vault.h"
 #include "ui/SettingsWidgets.h"
+#include "ui/UiIcons.h"
 #include "ui/VaultDialog.h"
 
 #include <QApplication>
@@ -113,6 +114,7 @@ SettingsDialog::SettingsDialog(TerminalSettingsService *service,
     , m_aiTestClient(new AiClient(this))
 {
     Q_ASSERT(m_service != nullptr);
+    UiIcons::modernizePopup(m_fontCombo);
     setObjectName(QStringLiteral("SettingsDialog"));
     setWindowTitle(tr("设置"));
     resize(880, 660);
@@ -601,6 +603,7 @@ QWidget *SettingsDialog::buildAiPage()
     modelLayout->setContentsMargins(0, 0, 0, 0);
     modelLayout->setSpacing(8);
     m_aiModelCombo = new QComboBox(modelRow);
+    UiIcons::modernizePopup(m_aiModelCombo);
     m_aiModelCombo->setObjectName(QStringLiteral("aiModelCombo"));
     m_aiModelCombo->setEditable(true);
     // 不插入历史条目：下拉列表只应呈现服务端此刻真实提供的模型，用户敲进去的临时名字混在

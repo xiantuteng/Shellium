@@ -11,7 +11,6 @@
 
 class QComboBox;
 class QCheckBox;
-class QFileSystemModel;
 class QFrame;
 class QLabel;
 class QLineEdit;
@@ -19,7 +18,6 @@ class QListWidget;
 class QProgressBar;
 class QResizeEvent;
 class QToolButton;
-class QTreeView;
 class QTreeWidget;
 class QTreeWidgetItem;
 
@@ -332,11 +330,8 @@ private:
     /** @brief 本地侧当前绝对目录输入框。 */
     QLineEdit *m_localPathEdit = nullptr;
 
-    /** @brief 只读、按需加载的本地文件系统模型。 */
-    QFileSystemModel *m_localModel = nullptr;
-
-    /** @brief 本地文件浏览树，同时作为远程条目的下载拖放目标。 */
-    QTreeView *m_localTree = nullptr;
+    /** @brief 本地文件浏览树，同时作为远程条目的下载拖放目标；列布局与远程树一致。 */
+    QTreeWidget *m_localTree = nullptr;
 
     /** @brief 远程侧当前绝对目录输入框。 */
     QLineEdit *m_pathEdit = nullptr;
@@ -355,6 +350,12 @@ private:
     /** @brief 当前排序方向，仅在 m_sortColumn >= 0 时有意义。 */
     Qt::SortOrder m_sortOrder = Qt::AscendingOrder;
 
+    /** @brief 本地文件树当前排序列，语义同 m_sortColumn，与远程树相互独立。 */
+    int m_localSortColumn = -1;
+
+    /** @brief 本地文件树当前排序方向，仅在 m_localSortColumn >= 0 时有意义。 */
+    Qt::SortOrder m_localSortOrder = Qt::AscendingOrder;
+
     /** @brief 按当前全屏状态刷新按钮图标（进入/退出用两个不同图形）。 */
     void updateFullScreenIcon();
 
@@ -363,6 +364,12 @@ private:
 
     /** @brief 处理列头点击，按 正序→倒序→默认 三态推进。 */
     void cycleRemoteSort(int column);
+
+    /** @brief 按当前 m_localSortColumn/m_localSortOrder 重排本地条目树。 */
+    void applyLocalSort();
+
+    /** @brief 处理本地栏列头点击，按 正序→倒序→默认 三态推进。 */
+    void cycleLocalSort(int column);
 
     /** @brief 计时起点与上一次采样，用于估算传输速度。 */
     QElapsedTimer m_transferClock;

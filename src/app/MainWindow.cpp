@@ -1359,6 +1359,25 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
             color: @TEXT@;
             background: @PROMINENT_SELECTION@;
         }
+        QToolButton#hostRecordTagButton {
+            color: @MUTED@;
+            background: @RAISED@;
+            border: 0;
+            border-radius: 8px;
+            min-height: 24px;
+            max-height: 24px;
+            padding: 0 7px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        QToolButton#hostRecordTagButton:hover {
+            color: @TEXT@;
+            background: @SELECTION@;
+        }
+        QToolButton#hostRecordTagButton:pressed {
+            color: @TEXT@;
+            background: @PROMINENT_SELECTION@;
+        }
         /* 远程文件管理器由顶栏、文件区、操作栏、传输信息带四段连续组成。选择器只匹配
            SFTP 命名控件，避免为了参考图的紧凑尺寸改变设置页或主机侧栏的通用控件。 */
         QWidget#RemoteFileManager {
