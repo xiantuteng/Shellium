@@ -69,6 +69,16 @@ private:
     /** @brief 根据当前连接层和最近字符尺寸发出结构化终端状态，供非视觉消费者复用。 */
     void emitTerminalStatus();
 
+    /**
+     * @brief 处理终端视图拖入的本地文件：确认后上传到当前活动层的当前目录。
+     * @param localPaths 已由 TerminalView 过滤为本地文件/目录的绝对路径列表。
+     *
+     * “当前活动层”严格取自 TerminalPane::activeTarget()/activeWorkingDirectory()，因此
+     * 嵌套第 2 层、第 N 层拖入时会落到该层自己的目录，而不是根连接的目录；未连接、本地
+     * 终端或尚未获取到 cwd 时只提示，不弹出确认框。
+     */
+    void handleFilesDropped(const QStringList &localPaths);
+
     QSplitter *m_pageSplitter = nullptr;
     RemoteFileManagerWidget *m_fileManager = nullptr;
     TerminalPane *m_pane = nullptr;

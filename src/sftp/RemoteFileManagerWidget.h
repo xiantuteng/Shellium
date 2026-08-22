@@ -51,6 +51,21 @@ public:
     void requestUploadToCurrentDirectory();
 
     /**
+     * @brief 把显式给定的本地文件上传到显式给定服务器和目录，不依赖面板自身的选中状态。
+     * @param target 上传目标服务器，通常是发起拖拽的终端面板当前所在层（可能是嵌套第 N 层）。
+     * @param remoteDirectory 该层当前的远程工作目录。
+     * @param localPaths 本地绝对文件或目录路径，如拖入终端窗口的文件。
+     *
+     * 供 TerminalView 的拖拽上传入口调用。与 requestUploadToCurrentDirectory 不同，本方法
+     * 不读取 m_pathEdit / selectedTarget()：文件管理面板可能处于隐藏、未展开或选中了另一台
+     * 服务器，只有调用方（掌握当前终端层信息的 TerminalWorkspace）传入的 target 和目录才
+     * 是可信的上传目标。
+     */
+    void uploadFilesToDirectory(const ConnectionTarget &target,
+                                const QString &remoteDirectory,
+                                const QStringList &localPaths);
+
+    /**
      * @brief 终端自持层上报了工作目录变化，按需跟随。
      * @param stableKey 上报该 cwd 的服务器稳定键。
      * @param workingDirectory 远端 Shell 当前的绝对路径。
@@ -233,14 +248,18 @@ private:
     void setLocalDirectory(const QString &directory);
 
     /**
-     * @brief 把本地拖拽条目上传到指定远程目录。
+     * @brief 把本地拖拽条目上传到指定服务器的指定远程目录。
+     * @param target 上传目标服务器；不一定是面板当前选中的服务器。
      * @param localPaths 本地绝对文件或目录路径。
      * @param remoteDirectory 远程目标目录。
      *
-     * 目录复用递归上传且同一时间只允许一个；普通文件可批量提交。这样拖拽入口与按钮入口
-     * 共享同一套路径校验、取消和进度状态，不会出现两种传输语义。
+     * 目录复用递归上传且同一时间只允许一个；普通文件可批量提交。target 由调用方显式传入
+     * 而不是内部读取 selectedTarget()，这样终端拖拽等外部入口才能精确路由到当前层，不受
+     * 面板自身选中状态或是否可见影响。
      */
-    void uploadLocalPaths(const QStringList &localPaths, const QString &remoteDirectory);
+    void uploadLocalPaths(const ConnectionTarget &target,
+                         const QStringList &localPaths,
+                         const QString &remoteDirectory);
 
     /**
      * @brief 把远程条目拖拽下载到指定本地目录。

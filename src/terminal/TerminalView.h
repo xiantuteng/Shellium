@@ -10,6 +10,9 @@ struct TerminalSettings;
 class QInputMethodEvent;
 class QCompleter;
 class QContextMenuEvent;
+class QDragEnterEvent;
+class QDragMoveEvent;
+class QDropEvent;
 class QMenu;
 class QMimeData;
 class QPaintEvent;
@@ -238,6 +241,16 @@ signals:
      */
     void uploadToCurrentDirectoryRequested();
 
+    /**
+     * @brief 用户把本地文件从系统文件管理器拖拽到本终端视图上。
+     * @param localPaths 拖拽条目对应的本地绝对文件或目录路径；已剔除非本地 URL。
+     *
+     * TerminalView 同样不持有服务器、路径或凭据，只负责识别拖拽是否携带本地文件；是否
+     * 已连接、上传到哪一层、哪个目录，全部交给同标签页的 TerminalWorkspace 判断，理由与
+     * uploadToCurrentDirectoryRequested 相同。
+     */
+    void filesDropped(const QStringList &localPaths);
+
 protected:
     /** @brief 将 Qt 键盘事件编码为常见的 xterm/VT 控制序列。 */
     void keyPressEvent(QKeyEvent *event) override;
@@ -282,6 +295,31 @@ protected:
      * 选择与连接校验由远程文件管理器完成。
      */
     void contextMenuEvent(QContextMenuEvent *event) override;
+
+    /**
+     * @brief 只接受携带本地文件 URL 的拖拽；文本等其他 MIME 类型交回默认处理。
+     * @param event Qt 拖入事件；只读取其 MIME 类型，不在此处消费文件。
+     */
+    void dragEnterEvent(QDragEnterEvent *event) override;
+
+    /**
+     * @brief 拖拽悬停期间持续接受携带本地文件 URL 的移动，维持"允许放下"的光标状态。
+     * @param event Qt 拖拽移动事件；在整个悬停过程中会持续多次触发，不止一次。
+     *
+     * QPlainTextEdit 自带一份按"能否作为纯文本插入"判定的 dragMoveEvent；本视图只读，
+     * 文件 URL 也不是可插入文本，继承实现会在每次移动时都拒绝，表现为鼠标一直显示禁止
+     * 图标、松手也不会触发 dropEvent。必须显式接管，理由与 dragEnterEvent 完全一致。
+     */
+    void dragMoveEvent(QDragMoveEvent *event) override;
+
+    /**
+     * @brief 提取拖拽携带的本地文件路径并转交给上层判断是否可以上传。
+     * @param event Qt 落点事件。
+     *
+     * 是否已连接、上传到哪一层、哪个目录，本视图一概不知道；只把已经过滤为本地文件的
+     * 路径列表通过 filesDropped 交给 TerminalWorkspace，理由与右键菜单的上传入口相同。
+     */
+    void dropEvent(QDropEvent *event) override;
 
 private:
     /** @brief 根据当前输入前缀显示或隐藏历史补全弹层。 */

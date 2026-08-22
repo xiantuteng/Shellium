@@ -4,6 +4,7 @@
 #include "terminal/TerminalEchoFilter.h"
 
 #include <QColor>
+#include <QHash>
 #include <QSet>
 #include <QVector>
 #include <QStringList>
@@ -66,6 +67,16 @@ public:
 
     /** @brief 返回连接链最内层目标；尚未连接时返回无效目标。 */
     [[nodiscard]] ConnectionTarget activeTarget() const;
+
+    /**
+     * @brief 返回当前活动层最近一次由 Shell 集成上报的工作目录。
+     * @return 该层尚未上报过 cwd（shim 未就绪、推测层没有 shim 或提示符还未刷新过一次）
+     *         时返回空字符串，调用方必须视为"未知"而不是根目录。
+     *
+     * 与 remoteWorkingDirectoryChanged 信号只广播"变化"不同，本方法提供拖拽上传等需要在
+     * 任意时刻同步查询"此刻在哪"的场景，不必先订阅信号再等待下一次提示符刷新。
+     */
+    [[nodiscard]] QString activeWorkingDirectory() const;
 
     /**
      * @brief 返回当前会话赖以建立的受管连接计划；本地 Shell 或尚未连接时为空。
@@ -383,6 +394,16 @@ private:
      */
     QVector<ConnectionTarget> m_inferredTargets;
     bool m_shellReady = false;
+
+    /**
+     * @brief 按服务器稳定键缓存的最近已知远端工作目录。
+     *
+     * remoteWorkingDirectoryChanged 只在变化时广播；这里额外缓存一份是为了让
+     * activeWorkingDirectory() 能同步应答"此刻在哪"，供拖拽上传这类不订阅信号、只在
+     * 事件发生瞬间查询一次的场景使用。层切换不会清空旧条目，同一层再次成为活动层时
+     * 仍可复用上一次上报的位置，直到下一次提示符刷新覆盖它。
+     */
+    QHash<QString, QString> m_lastKnownCwd;
 
     /**
      * @brief 当前 SSH 工作线程是否至少成功建立过一次交互式 Shell。

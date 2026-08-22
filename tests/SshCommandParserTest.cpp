@@ -12,10 +12,14 @@
 #include <QAbstractButton>
 #include <QClipboard>
 #include <QApplication>
+#include <QDir>
+#include <QDragEnterEvent>
+#include <QDropEvent>
 #include <QFile>
 #include <QLabel>
 #include <QLineEdit>
 #include <QGuiApplication>
+#include <QMimeData>
 #include <QSignalSpy>
 #include <QInputMethodEvent>
 #include <QMenu>
@@ -31,6 +35,7 @@
 #include <QSet>
 #include <QTest>
 #include <QTimer>
+#include <QUrl>
 
 #include <libssh/libssh.h>
 
@@ -81,6 +86,12 @@ private slots:
 
     /** @brief 终端右键菜单必须发出当前目录上传请求。 */
     void terminalViewContextMenuRequestsCurrentDirectoryUpload();
+
+    /** @brief 拖入本地文件必须过滤出本地路径并发出 filesDropped。 */
+    void terminalViewDropEventEmitsLocalFilePaths();
+
+    /** @brief 拖拽内容里没有任何本地文件时不得发出 filesDropped。 */
+    void terminalViewDropEventIgnoresNonLocalUrls();
 
     /** @brief 分块到达的标准 SSH password 提示必须被识别且不泄露任何输入。 */
     void terminalViewDetectsSplitAuthenticationPrompt();
@@ -447,6 +458,46 @@ void SshCommandParserTest::terminalViewContextMenuRequestsCurrentDirectoryUpload
 
     QVERIFY2(foundUploadAction, "终端右键菜单没有提供当前远程目录上传动作");
     QCOMPARE(uploadSpy.count(), 1);
+}
+
+void SshCommandParserTest::terminalViewDropEventEmitsLocalFilePaths()
+{
+    TerminalView view;
+    view.resize(400, 300);
+    QSignalSpy dropSpy(&view, &TerminalView::filesDropped);
+
+    const QString localPath = QDir::tempPath() + QStringLiteral("/shellium-drop-test.txt");
+    QMimeData mimeData;
+    mimeData.setUrls({QUrl::fromLocalFile(localPath)});
+
+    QDragEnterEvent dragEnter(QPoint(5, 5), Qt::CopyAction, &mimeData,
+                              Qt::LeftButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(view.viewport(), &dragEnter);
+    QVERIFY2(dragEnter.isAccepted(), "拖入本地文件时终端必须接受拖拽，否则系统不会投递落点事件");
+
+    QDropEvent dropEvent(QPoint(5, 5), Qt::CopyAction, &mimeData,
+                         Qt::LeftButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(view.viewport(), &dropEvent);
+
+    QCOMPARE(dropSpy.count(), 1);
+    QCOMPARE(dropSpy.at(0).at(0).toStringList(), QStringList{localPath});
+}
+
+void SshCommandParserTest::terminalViewDropEventIgnoresNonLocalUrls()
+{
+    TerminalView view;
+    view.resize(400, 300);
+    QSignalSpy dropSpy(&view, &TerminalView::filesDropped);
+
+    // 远程/网络 URL 没有对应的本地磁盘路径，不能被当作待上传文件处理。
+    QMimeData mimeData;
+    mimeData.setUrls({QUrl(QStringLiteral("https://example.com/file.txt"))});
+
+    QDropEvent dropEvent(QPoint(5, 5), Qt::CopyAction, &mimeData,
+                         Qt::LeftButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(view.viewport(), &dropEvent);
+
+    QCOMPARE(dropSpy.count(), 0);
 }
 
 void SshCommandParserTest::terminalViewDetectsSplitAuthenticationPrompt()

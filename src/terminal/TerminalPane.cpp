@@ -651,6 +651,11 @@ ConnectionTarget TerminalPane::activeTarget() const
     return m_ownedTargets.isEmpty() ? ConnectionTarget{} : m_ownedTargets.constLast();
 }
 
+QString TerminalPane::activeWorkingDirectory() const
+{
+    return m_lastKnownCwd.value(activeTarget().stableKey());
+}
+
 void TerminalPane::connectNestedHost(const ConnectionTarget &target,
                                      const bool outerShimSuspended)
 {
@@ -1130,7 +1135,9 @@ void TerminalPane::handleShellIntegrationEvent(const QByteArray &payload)
 {
     const ShellShim::Event event = ShellShim::parseEvent(payload);
     if (event.kind == ShellShim::Event::Kind::Cwd) {
-        emit remoteWorkingDirectoryChanged(activeTarget().stableKey(), event.workingDirectory);
+        const QString stableKey = activeTarget().stableKey();
+        m_lastKnownCwd.insert(stableKey, event.workingDirectory);
+        emit remoteWorkingDirectoryChanged(stableKey, event.workingDirectory);
         return;
     }
     if (event.kind != ShellShim::Event::Kind::Connect) {

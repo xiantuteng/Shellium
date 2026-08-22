@@ -1054,7 +1054,7 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
                         UiIcons::symbol(this, UiIcons::Symbol::Send, this->palette().color(QPalette::WindowText)),
                         tr("上传到当前远程目录"));
                     connect(uploadAction, &QAction::triggered, this, [this, localPath]() {
-                        uploadLocalPaths({localPath}, m_pathEdit->text().trimmed());
+                        uploadLocalPaths(selectedTarget(), {localPath}, m_pathEdit->text().trimmed());
                     });
                     menu.addSeparator();
                 }
@@ -1204,7 +1204,7 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     auto *remoteDropTree = static_cast<RemoteDropTree *>(m_fileTree);
     remoteDropTree->setLocalDropHandler([this](const QStringList &localPaths) {
         // 一律上传到当前远程目录，不按鼠标落点猜测目标子目录——见 RemoteDropTree::dropEvent。
-        uploadLocalPaths(localPaths, m_pathEdit->text().trimmed());
+        uploadLocalPaths(selectedTarget(), localPaths, m_pathEdit->text().trimmed());
     });
     auto *localDropTree = static_cast<LocalDropTree *>(m_localTree);
     localDropTree->setRemoteDropHandler(
@@ -1892,10 +1892,10 @@ void RemoteFileManagerWidget::rebuildTransferQueueView()
     m_transferPanel->setVisible(hasAnyTransfer || m_progressBar->isVisible());
 }
 
-void RemoteFileManagerWidget::uploadLocalPaths(const QStringList &localPaths,
+void RemoteFileManagerWidget::uploadLocalPaths(const ConnectionTarget &target,
+                                               const QStringList &localPaths,
                                                const QString &remoteDirectory)
 {
-    const ConnectionTarget target = selectedTarget();
     if (!target.isValid()) {
         QMessageBox::information(this, tr("尚未连接"), tr("请先连接并选择一台远程服务器。"));
         return;
@@ -2082,7 +2082,7 @@ void RemoteFileManagerWidget::uploadSelectedFile()
     if (localPaths.isEmpty()) {
         return;
     }
-    uploadLocalPaths(localPaths, m_pathEdit->text().trimmed());
+    uploadLocalPaths(selectedTarget(), localPaths, m_pathEdit->text().trimmed());
 }
 
 void RemoteFileManagerWidget::requestUploadToCurrentDirectory()
@@ -2103,6 +2103,16 @@ void RemoteFileManagerWidget::requestUploadToCurrentDirectory()
 
     // 校验通过后仍走和页面操作按钮完全相同的选择与队列方法，不创建第二套隐式传输状态。
     uploadSelectedFile();
+}
+
+void RemoteFileManagerWidget::uploadFilesToDirectory(const ConnectionTarget &target,
+                                                      const QString &remoteDirectory,
+                                                      const QStringList &localPaths)
+{
+    // 直接复用 uploadLocalPaths 的路径校验、符号链接过滤和队列逻辑；target 完全来自调用方
+    // （拖拽发生时的终端活动层），不读取面板自身的 selectedTarget()/m_pathEdit，因此面板
+    // 隐藏、未展开或选中了另一台服务器都不影响这次上传落到正确的层。
+    uploadLocalPaths(target, localPaths, remoteDirectory);
 }
 
 void RemoteFileManagerWidget::uploadSelectedDirectory()
@@ -2135,7 +2145,7 @@ void RemoteFileManagerWidget::uploadSelectedDirectory()
     if (choice != QMessageBox::Yes) {
         return;
     }
-    uploadLocalPaths({localDirectory}, remoteParent);
+    uploadLocalPaths(selectedTarget(), {localDirectory}, remoteParent);
 }
 
 void RemoteFileManagerWidget::downloadSelectedFile()

@@ -5,6 +5,7 @@
 #include "terminal/TerminalView.h"
 
 #include <QBoxLayout>
+#include <QMessageBox>
 #include <QSplitter>
 
 TerminalWorkspace::TerminalWorkspace(QWidget *parent)
@@ -87,6 +88,12 @@ TerminalWorkspace::TerminalWorkspace(QWidget *parent)
                 &TerminalView::uploadToCurrentDirectoryRequested,
                 m_fileManager,
                 &RemoteFileManagerWidget::requestUploadToCurrentDirectory);
+        // 同样的“不查全局当前标签”理由：拖拽落点必然就在本工作区的终端视图上，直接处理
+        // 而不经 MainWindow 转发，标签切换期间也不会有歧义。
+        connect(terminalView,
+                &TerminalView::filesDropped,
+                this,
+                &TerminalWorkspace::handleFilesDropped);
     }
 
     // 默认收起远程文件管理，终端独占整个标签页宽度；用户按需展开后该标签会记住选择。
@@ -149,4 +156,49 @@ void TerminalWorkspace::emitTerminalStatus()
                                QStringLiteral("UTF-8"),
                                m_terminalColumns,
                                m_terminalRows);
+}
+
+void TerminalWorkspace::handleFilesDropped(const QStringList &localPaths)
+{
+    if (localPaths.isEmpty()) {
+        return;
+    }
+    if (!m_pane->isConnected()) {
+        emit statusMessage(tr("尚未连接，无法上传拖入的文件。"));
+        return;
+    }
+    const ConnectionTarget target = m_pane->activeTarget();
+    if (!target.isValid()) {
+        // 本地 zsh 没有远程目标；虽然本地终端也在“已连接”状态，拖拽上传对它没有意义。
+        emit statusMessage(tr("当前是本地终端，无法上传拖入的文件。"));
+        return;
+    }
+    const QString remoteDirectory = m_pane->activeWorkingDirectory();
+    if (remoteDirectory.isEmpty()) {
+        // cwd 缓存来自 Shell 集成上报，连接刚建立、提示符还没刷新过一次时可能仍是空的；
+        // 此时没有可信目标目录，宁可让用户重试也不要猜一个根目录。
+        QMessageBox::warning(this,
+                             tr("远程路径未知"),
+                             tr("尚未获取到当前目录，请在终端里按一次回车后再拖入文件。"));
+        return;
+    }
+
+    QString serverDescription = target.connectionSpecifier(true);
+    if (target.confidence == ConnectionTarget::Confidence::Inferred) {
+        // 与 emitTerminalStatus 相同的显式标注：推测层的身份不是本程序亲自确认的，必须让
+        // 用户在确认上传前就看到这一点。
+        serverDescription.prepend(tr("推测 · "));
+    }
+    const QMessageBox::StandardButton choice = QMessageBox::question(
+        this,
+        tr("上传到当前目录？"),
+        tr("是否把拖入的 %1 个本地文件上传到 %2 的当前目录：\n%3")
+            .arg(localPaths.size())
+            .arg(serverDescription, remoteDirectory),
+        QMessageBox::Yes | QMessageBox::No,
+        QMessageBox::No);
+    if (choice != QMessageBox::Yes) {
+        return;
+    }
+    m_fileManager->uploadFilesToDirectory(target, remoteDirectory, localPaths);
 }

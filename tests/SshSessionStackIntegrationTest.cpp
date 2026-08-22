@@ -122,6 +122,15 @@ private slots:
      */
     void normalExitOffersManualRecoveryInsteadOfLocalShell();
 
+    /**
+     * @brief 拖拽上传须落到"此刻真实所在"的层与目录，而不是根连接或建连时的主目录。
+     *
+     * 压入真实第二层后在其中 cd 到一个已知目录，验证 TerminalPane::activeWorkingDirectory()
+     * 跟随内层；弹回外层后必须换回外层自己此前记录的目录，而不是继续停留在已不再活动的
+     * 内层路径上——后者正是拖拽上传功能会把文件传错服务器的根因。
+     */
+    void activeWorkingDirectoryTracksInnermostLayerAfterNestedPush();
+
 private:
     /** @brief 从环境变量装配第一层目标。 */
     [[nodiscard]] static ConnectionTarget firstLayerTarget();
@@ -1162,6 +1171,40 @@ void SshSessionStackIntegrationTest::routesNestedSftpThroughOuterLayer()
              qPrintable(QStringLiteral("内层 SFTP 失败：%1")
                             .arg(failed.value(0).value(3).toString())));
     qInfo("第 2 层主目录解析为：%s", qPrintable(listed.at(0).at(2).toString()));
+}
+
+void SshSessionStackIntegrationTest::activeWorkingDirectoryTracksInnermostLayerAfterNestedPush()
+{
+    if (m_secondLayerHost.isEmpty() || qgetenv("SHELLIUM_IT_PASSWORD2").isEmpty()) {
+        QSKIP("未设置第二层服务器信息，跳过嵌套层工作目录跟踪测试");
+    }
+
+    TerminalPane pane;
+    pane.resize(900, 500);
+    pane.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&pane));
+
+    pane.connectToHost(firstLayerTarget());
+    QVERIFY2(waitFor([&]() { return pane.isConnected(); }, 40000), "第一层连接失败");
+    QVERIFY(waitFor([&]() { return pane.targets().size() == 1; }, 20000));
+
+    // 用 cd 制造一个与登录主目录不同的已知位置，避免"恰好没变"掩盖了跟踪逻辑没生效。
+    pane.executeCommand(QStringLiteral("cd /tmp"));
+    QVERIFY2(waitFor([&]() { return pane.activeWorkingDirectory() == QStringLiteral("/tmp"); }, 15000),
+             "第一层 cd 后 activeWorkingDirectory 未跟上新的工作目录");
+
+    pane.connectNestedHost(secondLayerTarget());
+    QVERIFY2(waitFor([&]() { return pane.targets().size() == 2; }, 40000), "第二层未建成");
+
+    pane.executeCommand(QStringLiteral("cd /var"));
+    QVERIFY2(waitFor([&]() { return pane.activeWorkingDirectory() == QStringLiteral("/var"); }, 15000),
+             "压入第二层后 activeWorkingDirectory 未跟随内层 cd，拖拽上传会落到错误的层");
+
+    // 内层退出后必须换回外层自己此前记录的位置，而不是继续停留在已不再活动的内层路径上。
+    pane.executeCommand(QStringLiteral("exit"));
+    QVERIFY2(waitFor([&]() { return pane.targets().size() == 1; }, 20000), "内层 exit 后未弹回外层");
+    QVERIFY2(waitFor([&]() { return pane.activeWorkingDirectory() == QStringLiteral("/tmp"); }, 15000),
+             "弹回外层后 activeWorkingDirectory 未恢复外层自己的目录");
 }
 
 QTEST_MAIN(SshSessionStackIntegrationTest)

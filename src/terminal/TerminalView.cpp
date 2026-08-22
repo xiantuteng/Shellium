@@ -19,6 +19,10 @@
 #include <QClipboard>
 #include <QCompleter>
 #include <QContextMenuEvent>
+#include <QDragEnterEvent>
+#include <QDragMoveEvent>
+#include <QDropEvent>
+#include <QFileInfo>
 #include <QFontMetrics>
 #include <QKeySequence>
 #include <QListView>
@@ -38,6 +42,7 @@
 #include <QStringListModel>
 #include <QTextBlock>
 #include <QTextFragment>
+#include <QUrl>
 #include <QTextCursor>
 #include <QTextDocument>
 #include <QTextLayout>
@@ -276,6 +281,14 @@ TerminalView::TerminalView(QWidget *parent)
     setTabChangesFocus(false);
     setFocusPolicy(Qt::StrongFocus);
     setContextMenuPolicy(Qt::DefaultContextMenu);
+    // 允许从系统文件管理器把本地文件拖进终端，触发"上传到当前目录"确认——见
+    // dragEnterEvent/dropEvent。QPlainTextEdit 是 QAbstractScrollArea：真正接收操作系统
+    // 拖拽事件、也是屏幕上可见区域的是 viewport() 这个子控件，不是本控件自身。只设置
+    // 本控件的 acceptDrops 时，macOS 的原生视图从未注册接受拖拽类型，文件拖进来会直接
+    // 显示"禁止"光标、Qt 完全收不到事件——RemoteFileManagerWidget 里的文件树能正常接收
+    // 拖拽，是因为 QAbstractItemView::setDragDropMode 内部已经调用了这一行。
+    setAcceptDrops(true);
+    viewport()->setAcceptDrops(true);
     setStyleSheet(QStringLiteral(
         "QPlainTextEdit { background: #111318; color: #e6e6e6; border: 0; padding: 6px; }"));
 
@@ -407,6 +420,46 @@ QMenu *TerminalView::createTerminalContextMenu()
     connect(uploadAction, &QAction::triggered,
             this, &TerminalView::uploadToCurrentDirectoryRequested);
     return menu;
+}
+
+void TerminalView::dragEnterEvent(QDragEnterEvent *event)
+{
+    if (event->mimeData()->hasUrls()) {
+        event->acceptProposedAction();
+        return;
+    }
+    QPlainTextEdit::dragEnterEvent(event);
+}
+
+void TerminalView::dragMoveEvent(QDragMoveEvent *event)
+{
+    if (event->mimeData()->hasUrls()) {
+        event->acceptProposedAction();
+        return;
+    }
+    QPlainTextEdit::dragMoveEvent(event);
+}
+
+void TerminalView::dropEvent(QDropEvent *event)
+{
+    if (!event->mimeData()->hasUrls()) {
+        QPlainTextEdit::dropEvent(event);
+        return;
+    }
+    QStringList localPaths;
+    for (const QUrl &url : event->mimeData()->urls()) {
+        if (url.isLocalFile()) {
+            localPaths.append(url.toLocalFile());
+        }
+    }
+    // 即使拖拽整体被接受，也可能全是远程/网络 URL；此时没有本地文件可传，交回默认处理
+    // 而不是吞掉事件。
+    if (localPaths.isEmpty()) {
+        QPlainTextEdit::dropEvent(event);
+        return;
+    }
+    event->acceptProposedAction();
+    emit filesDropped(localPaths);
 }
 
 void TerminalView::applySettings(const TerminalSettings &settings)
