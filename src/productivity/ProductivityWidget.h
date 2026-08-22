@@ -8,13 +8,14 @@
 class ProductivityModel;
 class QCheckBox;
 class QComboBox;
+class QDialog;
 class QLineEdit;
 class QListWidget;
+class QListWidgetItem;
 class QPushButton;
+class QShortcut;
 class QTabWidget;
 class QTextEdit;
-class QTreeWidget;
-class QTreeWidgetItem;
 
 /**
  * @brief Snippets、命令历史、自动补全入口和广播输入的独立效率工具侧栏。
@@ -22,6 +23,9 @@ class QTreeWidgetItem;
  * 控件不持有 TerminalPane，也不直接向网络写数据。所有执行行为都通过携带稳定主机 id 的
  * 信号交给上层路由，因此同一控件既能嵌入 MainWindow，也能在测试或未来浮动窗口中复用。
  * 数据读写统一经过 ProductivityModel，界面不会直接拼 SQL。
+ *
+ * Snippet 分组功能已移除：所有片段都是根层级的扁平列表，新增/编辑改用弹出对话框，
+ * 列表本身支持拖拽排序；片段始终在当前活动终端执行，不再提供多目标勾选框。
  */
 class ProductivityWidget final : public QWidget {
     Q_OBJECT
@@ -42,8 +46,8 @@ public:
      * @brief 更新当前可执行目标。
      * @param targets 通常对应已打开且可交互的终端；id 应使用持久化主机主键。
      *
-     * 选中多个目标后执行 Snippet 即形成多主机执行入口；广播模式同样只会向选中的 id
-     * 发信号。空选择由上层解释为“当前终端”，不会在本控件内猜测当前标签页。
+     * Snippet 始终在当前活动终端执行，不再使用该列表；广播模式仍然依赖它选择接收方，
+     * 历史筛选的主机下拉框同样从这里填充。
      */
     void setExecutionTargets(const QList<ConnectionTarget> &targets);
 
@@ -79,28 +83,32 @@ private:
     /** @brief 创建三个标签页及其表单，构造函数只调用一次。 */
     void buildUi();
 
-    /** @brief 重新构造 Snippet 树和父分组选择框。 */
+    /** @brief 创建新增/编辑片段弹窗，仅调用一次；随后每次复用并重置内容。 */
+    void buildEditorDialog();
+
+    /** @brief 重新从模型加载扁平片段列表。 */
     void reloadSnippets();
 
-    /** @brief 递归加载某个分组；visited 防止旧损坏数据造成无限递归。 */
-    bool appendSnippetChildren(QTreeWidgetItem *parentItem,
-                               const QString &parentId,
-                               QSet<QString> *visited);
+    /** @brief 为单个片段构造带"执行/复制"按钮的列表行控件。 */
+    QWidget *createSnippetRowWidget(const SnippetRecord &record, int shortcutIndex);
 
-    /** @brief 把当前树节点内容填入编辑表单。 */
-    void editTreeItem(QTreeWidgetItem *item);
+    /** @brief 打开编辑弹窗并预填指定片段；id 为空表示新建。 */
+    void openSnippetEditor(const QString &id);
 
-    /** @brief 开始创建一条未保存的新节点。 */
-    void beginNewRecord(SnippetNodeKind kind);
-
-    /** @brief 校验表单并保存当前新建或编辑记录。 */
+    /** @brief 校验弹窗内容并保存，成功后关闭弹窗。 */
     void saveEditorRecord();
 
-    /** @brief 明确确认后删除当前树节点；分组会连同后代删除。 */
+    /** @brief 明确确认后删除当前选中片段。 */
     void removeSelectedRecord();
 
-    /** @brief 执行当前选中的可执行 Snippet；分组不会发出执行信号。 */
-    void executeSelectedSnippet();
+    /** @brief 执行列表中指定行的 Snippet；供数字快捷键使用，内部转发到 executeSnippetForId。 */
+    void executeSnippetAtRow(int row);
+
+    /** @brief 按稳定 id 执行 Snippet；供行内按钮和快捷键共用，不受列表重排影响。 */
+    void executeSnippetForId(const QString &id);
+
+    /** @brief 把指定 id 片段的命令复制到剪贴板。 */
+    void copySnippetForId(const QString &id);
 
     /** @brief 根据当前主机和过滤前缀刷新历史列表。 */
     void reloadHistory();
@@ -108,28 +116,41 @@ private:
     /** @brief 从带复选框的目标列表提取稳定 id，保持界面顺序并去重。 */
     [[nodiscard]] static QStringList checkedTargetIds(const QListWidget *list);
 
-    /** @brief 将目标同时填充到执行列表、历史筛选和广播列表。 */
+    /** @brief 将目标同时填充到历史筛选和广播列表。 */
     void populateTargetSelectors();
 
+private slots:
+    /**
+     * @brief 拖拽排序结束后，把当前显示顺序回写为 sortOrder 并刷新列表。
+     *
+     * 声明为 slot（而非普通私有方法）是为了让测试可以通过 QMetaObject::invokeMethod
+     * 直接触发，不必真的驱动一次原生拖拽手势。
+     */
+    void persistSnippetOrder();
+
+private:
     ProductivityModel *m_model = nullptr; ///< 非拥有指针；业务模型通常由 MainWindow 持有。
     QList<ConnectionTarget> m_targets;     ///< 最近一次由上层提供的可执行目标快照。
 
     QTabWidget *m_tabs = nullptr;
-    QTreeWidget *m_snippetTree = nullptr;
-    QLineEdit *m_nameEdit = nullptr;
-    QComboBox *m_parentGroupCombo = nullptr;
+    QListWidget *m_snippetList = nullptr;
+
+    QDialog *m_editorDialog = nullptr;
+    QLineEdit *m_editorNameEdit = nullptr;
     /**
      * @brief 命令正文编辑器。
      *
-     * 命令可能包含较长的管道和参数，使用多行编辑器可以在窄侧栏内自然换行，避免用户
-     * 只能依靠水平滚动检查内容。
+     * 命令可能包含较长的管道和参数，使用多行编辑器可以自然换行，避免用户只能依靠水平
+     * 滚动检查内容。
      */
-    QTextEdit *m_commandEdit = nullptr;
+    QTextEdit *m_editorCommandEdit = nullptr;
 
     /** @brief 片段的一行简短说明；列表预览会优先展示该字段。 */
-    QLineEdit *m_descriptionEdit = nullptr;
-    QPushButton *m_saveButton = nullptr;
-    QListWidget *m_executionTargets = nullptr;
+    QLineEdit *m_editorDescriptionEdit = nullptr;
+    QPushButton *m_editorSaveButton = nullptr;
+
+    /** @brief Ctrl+1..Ctrl+9,Ctrl+0 对应列表前 10 个片段的执行快捷键，构造时一次性创建。 */
+    QList<QShortcut *> m_snippetShortcuts;
 
     QComboBox *m_historyHostCombo = nullptr;
     QLineEdit *m_historyPrefixEdit = nullptr;
@@ -139,6 +160,5 @@ private:
     QCheckBox *m_broadcastEnabled = nullptr;
     QLineEdit *m_broadcastInput = nullptr;
 
-    QString m_editingId; ///< 当前编辑记录 id；新记录在 beginNewRecord 时立即生成稳定 UUID。
-    SnippetNodeKind m_editingKind = SnippetNodeKind::Snippet;
+    QString m_editingId; ///< 当前弹窗正在编辑的片段 id；空表示新建。
 };

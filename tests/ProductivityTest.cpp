@@ -6,8 +6,11 @@
 #include "terminal/TerminalPane.h"
 #include "terminal/TerminalView.h"
 
+#include <QApplication>
 #include <QCheckBox>
+#include <QClipboard>
 #include <QComboBox>
+#include <QDialog>
 #include <QFormLayout>
 #include <QLabel>
 #include <QLineEdit>
@@ -17,7 +20,6 @@
 #include <QTest>
 #include <QTextEdit>
 #include <QToolButton>
-#include <QTreeWidget>
 #include <QVBoxLayout>
 
 #include <memory>
@@ -38,7 +40,7 @@ private slots:
     /** @brief 用例结束后先销毁模型再关闭数据库，满足非拥有指针生命周期约束。 */
     void cleanup();
 
-    /** @brief Snippet 分组、更新、环检测和递归删除必须形成完整 CRUD 闭环。 */
+    /** @brief Snippet 分组、更新、环检测和递归删除在模型层仍必须形成完整 CRUD 闭环。 */
     void snippetCrudGroupingAndRecursiveDelete();
 
     /** @brief 历史应按主机隔离、最近优先去重，并尊重前导空格的隐私约定。 */
@@ -47,8 +49,11 @@ private slots:
     /** @brief TerminalPane 收到提交信号后应直接调用数据库历史接口，且不能记录控制伪命令。 */
     void terminalPanePersistsSubmittedCommands();
 
-    /** @brief Widget 应发出多主机执行、广播模式和一次性原始输入信号。 */
-    void widgetExposesMultiTargetExecutionAndBroadcastContracts();
+    /**
+     * @brief 界面层不再暴露分组功能，也不再提供多目标执行勾选框：Snippet 列表只显示扁平
+     * 记录，且执行始终发出空 targetIds（由上层解释为当前活动终端）。广播仍然保留多目标。
+     */
+    void widgetHasNoGroupingAndExecutesOnCurrentTerminalWhileBroadcastKeepsTargets();
 
     /**
      * @brief 会话状态栏的瞬时提示必须紧邻服务器名，且到期后自动清空。
@@ -71,20 +76,29 @@ private slots:
     void terminalPaneDoesNotExposeInferredTargetBadge();
 
     /**
-     * @brief 320px 侧栏放不下"名称/说明"两列，片段树必须收窄成单列，说明改到第二行角色里；
-     * 没有说明时要退化显示命令，分组节点则完全不设置这个角色。
+     * @brief 片段列表必须是扁平单列列表，没有说明时要退化显示命令；每行还要带一个
+     * "执行/复制"按钮，前 10 行的执行按钮要在 Tooltip 中提示 Ctrl+1..Ctrl+0 快捷键。
      */
-    void snippetTreeIsSingleColumnWithDescriptionFallbackToCommand();
+    void snippetListIsFlatWithDescriptionFallbackAndShortcutHints();
 
-    /** @brief 效率工具的管理按钮、编辑表单和筛选器必须在 260px 侧栏中保持单列布局。 */
-    void widgetUsesNarrowSidebarLayouts();
+    /** @brief 新增/编辑片段改为弹出对话框；保存后数据落库、对话框关闭，且不再有分组字段。 */
+    void snippetEditorDialogSavesWithoutGroupingField();
+
+    /** @brief Ctrl+1 快捷键应执行列表第一个片段，并像按钮一样只作用于当前活动终端。 */
+    void snippetShortcutExecutesFirstSnippetOnCurrentTerminal();
+
+    /** @brief 复制按钮应把命令原样写入系统剪贴板，而不改动数据库。 */
+    void snippetRowCopyButtonWritesCommandToClipboard();
+
+    /** @brief 拖拽排序完成后，新的可见顺序必须回写为持久化的 sortOrder。 */
+    void reorderingSnippetListPersistsNewSortOrder();
 
     /** @brief 嵌套路由必须保留远端密钥 SFTP 兜底所需的外层认证配置与内层端口。 */
     void tunnelBrokerReturnsRemoteSftpRelayEndpoints();
 
 private:
-    /** @brief 递归查找树中保存指定稳定 id 的节点。 */
-    static QTreeWidgetItem *findTreeItem(QTreeWidgetItem *parent, const QString &id);
+    /** @brief 在 Snippet 列表中按稳定 id 查找对应的行。 */
+    static QListWidgetItem *findSnippetItem(const QListWidget *list, const QString &id);
 
     std::unique_ptr<ApplicationDatabase> m_database;
     std::unique_ptr<ProductivityModel> m_model;
@@ -104,14 +118,11 @@ void ProductivityTest::cleanup()
     m_database.reset();
 }
 
-QTreeWidgetItem *ProductivityTest::findTreeItem(QTreeWidgetItem *parent, const QString &id)
+QListWidgetItem *ProductivityTest::findSnippetItem(const QListWidget *list, const QString &id)
 {
-    if (parent->data(0, Qt::UserRole).toString() == id) {
-        return parent;
-    }
-    for (int index = 0; index < parent->childCount(); ++index) {
-        if (QTreeWidgetItem *found = findTreeItem(parent->child(index), id); found != nullptr) {
-            return found;
+    for (int index = 0; index < list->count(); ++index) {
+        if (list->item(index)->data(Qt::UserRole).toString() == id) {
+            return list->item(index);
         }
     }
     return nullptr;
@@ -119,6 +130,8 @@ QTreeWidgetItem *ProductivityTest::findTreeItem(QTreeWidgetItem *parent, const Q
 
 void ProductivityTest::snippetCrudGroupingAndRecursiveDelete()
 {
+    // 界面已经不再提供分组入口，但模型/数据库仍然通用地支持树状结构（例如未来同步旧
+    // 数据），因此这里继续直接对模型做完整 CRUD 校验，不依赖 ProductivityWidget。
     SnippetRecord operations;
     operations.id = QStringLiteral("folder-operations");
     operations.kind = SnippetNodeKind::Folder;
@@ -231,7 +244,7 @@ void ProductivityTest::terminalPanePersistsSubmittedCommands()
     QCOMPARE(history.at(1).command, QStringLiteral("uptime"));
 }
 
-void ProductivityTest::widgetExposesMultiTargetExecutionAndBroadcastContracts()
+void ProductivityTest::widgetHasNoGroupingAndExecutesOnCurrentTerminalWhileBroadcastKeepsTargets()
 {
     SnippetRecord snippet;
     snippet.id = QStringLiteral("snippet-disk");
@@ -253,33 +266,31 @@ void ProductivityTest::widgetExposesMultiTargetExecutionAndBroadcastContracts()
     ProductivityWidget widget(m_model.get());
     widget.setExecutionTargets({first, second});
 
-    QTreeWidget *tree = widget.findChild<QTreeWidget *>(
-        QStringLiteral("productivitySnippetTree"));
-    QListWidget *executionTargets = widget.findChild<QListWidget *>(
-        QStringLiteral("productivityExecutionTargets"));
-    QPushButton *executeButton = widget.findChild<QPushButton *>(
-        QStringLiteral("productivityExecuteSnippet"));
-    QVERIFY(tree != nullptr);
-    QVERIFY(executionTargets != nullptr);
-    QVERIFY(executeButton != nullptr);
-    QCOMPARE(executionTargets->count(), 2);
-    executionTargets->item(0)->setCheckState(Qt::Checked);
-    executionTargets->item(1)->setCheckState(Qt::Checked);
+    // 分组和多目标执行勾选框都必须彻底消失，而不只是隐藏。
+    QVERIFY2(widget.findChild<QToolButton *>(QStringLiteral("productivityNewGroup")) == nullptr,
+             "不应再存在“新建分组”按钮");
+    QVERIFY2(widget.findChild<QListWidget *>(QStringLiteral("productivityExecutionTargets"))
+                 == nullptr,
+             "Snippet 页不应再有可勾选的多目标执行列表");
 
-    QTreeWidgetItem *snippetItem = nullptr;
-    for (int index = 0; index < tree->topLevelItemCount() && snippetItem == nullptr; ++index) {
-        snippetItem = findTreeItem(tree->topLevelItem(index), snippet.id);
-    }
+    QListWidget *snippetList = widget.findChild<QListWidget *>(
+        QStringLiteral("productivitySnippetList"));
+    QVERIFY(snippetList != nullptr);
+    QListWidgetItem *snippetItem = findSnippetItem(snippetList, snippet.id);
     QVERIFY(snippetItem != nullptr);
-    tree->setCurrentItem(snippetItem);
+    auto *executeButton = qobject_cast<QPushButton *>(
+        snippetList->itemWidget(snippetItem)->findChild<QPushButton *>(
+            QStringLiteral("productivitySnippetExecute")));
+    QVERIFY(executeButton != nullptr);
 
     QSignalSpy executionSpy(&widget, &ProductivityWidget::commandExecutionRequested);
     executeButton->click();
     QCOMPARE(executionSpy.count(), 1);
     QCOMPARE(executionSpy.constFirst().at(0).toString(), QStringLiteral("df -h"));
-    QCOMPARE(executionSpy.constFirst().at(1).toStringList(),
-             QStringList({QStringLiteral("host-a"), QStringLiteral("host-b")}));
+    // 空 targetIds：执行始终落在当前活动终端，不再由界面选择多个目标。
+    QVERIFY(executionSpy.constFirst().at(1).toStringList().isEmpty());
 
+    // 广播仍然是多目标功能，保留其独立的勾选列表。
     QListWidget *broadcastTargets = widget.findChild<QListWidget *>(
         QStringLiteral("productivityBroadcastTargets"));
     QCheckBox *broadcastEnabled = widget.findChild<QCheckBox *>(
@@ -292,6 +303,7 @@ void ProductivityTest::widgetExposesMultiTargetExecutionAndBroadcastContracts()
     QVERIFY(broadcastEnabled != nullptr);
     QVERIFY(broadcastInput != nullptr);
     QVERIFY(broadcastSend != nullptr);
+    QCOMPARE(broadcastTargets->count(), 2);
     broadcastTargets->item(1)->setCheckState(Qt::Checked);
 
     QSignalSpy modeSpy(&widget, &ProductivityWidget::broadcastModeChanged);
@@ -369,101 +381,222 @@ void ProductivityTest::terminalPaneDoesNotExposeInferredTargetBadge()
              "终端状态栏不应创建“推测嵌套目标”徽章");
 }
 
-void ProductivityTest::snippetTreeIsSingleColumnWithDescriptionFallbackToCommand()
+void ProductivityTest::snippetListIsFlatWithDescriptionFallbackAndShortcutHints()
 {
-    SnippetRecord folder;
-    folder.id = QStringLiteral("folder-1");
-    folder.kind = SnippetNodeKind::Folder;
-    folder.name = QStringLiteral("常用运维");
-    QVERIFY(m_model->saveSnippet(folder));
+    // 分组功能已移除：即使数据库里还残留旧的 Folder 节点（例如从旧版本升级而来），界面
+    // 也只应该展示根层级的可执行片段，不能尝试渲染分组本身。
+    SnippetRecord legacyFolder;
+    legacyFolder.id = QStringLiteral("legacy-folder");
+    legacyFolder.kind = SnippetNodeKind::Folder;
+    legacyFolder.name = QStringLiteral("旧版分组");
+    QVERIFY(m_model->saveSnippet(legacyFolder));
 
     SnippetRecord withDescription;
     withDescription.id = QStringLiteral("snippet-with-desc");
-    withDescription.parentId = folder.id;
     withDescription.kind = SnippetNodeKind::Snippet;
     withDescription.name = QStringLiteral("查看磁盘占用");
     withDescription.command = QStringLiteral("df -h | sort -k5 -h -r");
     withDescription.description = QStringLiteral("按占用从高到低查看各分区使用率");
+    withDescription.sortOrder = 0;
     QVERIFY(m_model->saveSnippet(withDescription));
 
     // 没有说明时必须退化显示命令本身，否则第二行会是空的，用户看不出这条片段做什么。
     SnippetRecord withoutDescription;
     withoutDescription.id = QStringLiteral("snippet-without-desc");
-    withoutDescription.parentId = folder.id;
     withoutDescription.kind = SnippetNodeKind::Snippet;
     withoutDescription.name = QStringLiteral("重启 nginx");
     withoutDescription.command = QStringLiteral("systemctl restart nginx");
+    withoutDescription.sortOrder = 1;
     QVERIFY(m_model->saveSnippet(withoutDescription));
 
     ProductivityWidget widget(m_model.get());
-    QTreeWidget *tree = widget.findChild<QTreeWidget *>(
-        QStringLiteral("productivitySnippetTree"));
-    QVERIFY(tree != nullptr);
+    QListWidget *list = widget.findChild<QListWidget *>(
+        QStringLiteral("productivitySnippetList"));
+    QVERIFY(list != nullptr);
 
-    // 320px 侧栏放不下两列表头，树必须是单列且不显示表头。
-    QCOMPARE(tree->columnCount(), 1);
-    QVERIFY(tree->isHeaderHidden());
+    // 只有两个可执行片段会出现；分组节点被过滤掉。
+    QCOMPARE(list->count(), 2);
 
-    constexpr int kPreviewRole = Qt::UserRole + 2;
-
-    QTreeWidgetItem *folderItem = nullptr;
-    for (int index = 0; index < tree->topLevelItemCount(); ++index) {
-        if (tree->topLevelItem(index)->data(0, Qt::UserRole).toString() == folder.id) {
-            folderItem = tree->topLevelItem(index);
-            break;
+    QListWidgetItem *withDescItem = findSnippetItem(list, withDescription.id);
+    QVERIFY(withDescItem != nullptr);
+    QWidget *withDescRow = list->itemWidget(withDescItem);
+    QVERIFY(withDescRow != nullptr);
+    bool foundDescriptionText = false;
+    for (QLabel *label : withDescRow->findChildren<QLabel *>()) {
+        if (label->text() == withDescription.description) {
+            foundDescriptionText = true;
         }
     }
-    QVERIFY(folderItem != nullptr);
-    // 分组行不是"没有说明的片段"，不能拿命令去填第二行——分组本来就没有 command。
-    QVERIFY(!folderItem->data(0, kPreviewRole).isValid());
+    QVERIFY2(foundDescriptionText, "有说明时第二行必须展示说明文字");
 
-    QTreeWidgetItem *withDescItem = findTreeItem(folderItem, withDescription.id);
-    QVERIFY(withDescItem != nullptr);
-    QCOMPARE(withDescItem->data(0, kPreviewRole).toString(), withDescription.description);
-
-    QTreeWidgetItem *withoutDescItem = findTreeItem(folderItem, withoutDescription.id);
+    QListWidgetItem *withoutDescItem = findSnippetItem(list, withoutDescription.id);
     QVERIFY(withoutDescItem != nullptr);
-    QCOMPARE(withoutDescItem->data(0, kPreviewRole).toString(), withoutDescription.command);
+    QWidget *withoutDescRow = list->itemWidget(withoutDescItem);
+    QVERIFY(withoutDescRow != nullptr);
+    bool foundCommandFallback = false;
+    for (QLabel *label : withoutDescRow->findChildren<QLabel *>()) {
+        if (label->text() == withoutDescription.command) {
+            foundCommandFallback = true;
+        }
+    }
+    QVERIFY2(foundCommandFallback, "没有说明时第二行必须退化显示命令本身");
+
+    // 每行都要有执行/复制按钮；前两行（第 1、2 个片段）的执行按钮要提示 Ctrl+1、Ctrl+2。
+    for (QWidget *row : {withDescRow, withoutDescRow}) {
+        QVERIFY(row->findChild<QPushButton *>(QStringLiteral("productivitySnippetExecute"))
+                    != nullptr);
+        QVERIFY(row->findChild<QPushButton *>(QStringLiteral("productivitySnippetCopy"))
+                    != nullptr);
+    }
+    auto *firstExecute = withDescRow->findChild<QPushButton *>(
+        QStringLiteral("productivitySnippetExecute"));
+    auto *secondExecute = withoutDescRow->findChild<QPushButton *>(
+        QStringLiteral("productivitySnippetExecute"));
+    QVERIFY2(firstExecute->toolTip().contains(QStringLiteral("Ctrl+1")),
+             "第一个片段的执行按钮必须提示 Ctrl+1");
+    QVERIFY2(secondExecute->toolTip().contains(QStringLiteral("Ctrl+2")),
+             "第二个片段的执行按钮必须提示 Ctrl+2");
 }
 
-void ProductivityTest::widgetUsesNarrowSidebarLayouts()
+void ProductivityTest::snippetEditorDialogSavesWithoutGroupingField()
 {
     ProductivityWidget widget(m_model.get());
-    widget.resize(260, 720);
 
-    // 三个树管理动作必须都是图标按钮；完整名称保留在 accessibleName 中，既节省宽度，
-    // 又不会让键盘或辅助技术用户失去动作语义。
-    const QStringList toolButtonNames = {
-        QStringLiteral("productivityNewGroup"),
-        QStringLiteral("productivityNewSnippet"),
-        QStringLiteral("productivityRemoveSnippet")};
-    for (const QString &objectName : toolButtonNames) {
-        auto *button = widget.findChild<QToolButton *>(objectName);
-        QVERIFY2(button != nullptr, qPrintable(QStringLiteral("缺少工具按钮：%1").arg(objectName)));
-        QCOMPARE(button->toolButtonStyle(), Qt::ToolButtonIconOnly);
-        QVERIFY2(!button->accessibleName().isEmpty(), "图标按钮必须提供完整无障碍名称");
-    }
+    auto *newSnippetButton = widget.findChild<QToolButton *>(
+        QStringLiteral("productivityNewSnippet"));
+    QVERIFY(newSnippetButton != nullptr);
+    newSnippetButton->click();
 
-    auto *editorLayout = widget.findChild<QFormLayout *>(
-        QStringLiteral("productivitySnippetEditorLayout"));
-    auto *commandEdit = widget.findChild<QTextEdit *>(
+    auto *dialog = widget.findChild<QDialog *>(QStringLiteral("productivitySnippetDialog"));
+    QVERIFY2(dialog != nullptr, "新建片段必须弹出对话框，而不是就地展开表单");
+    QVERIFY2(dialog->isVisible(), "点击新建后对话框必须立即可见");
+
+    // 分组字段必须彻底消失：对话框里不应再有任何用于选择父分组的下拉框。
+    QVERIFY(dialog->findChild<QComboBox *>() == nullptr);
+
+    auto *nameEdit = dialog->findChild<QLineEdit *>(
+        QStringLiteral("productivitySnippetNameEdit"));
+    auto *commandEdit = dialog->findChild<QTextEdit *>(
         QStringLiteral("productivityCommandEdit"));
-    QVERIFY(editorLayout != nullptr);
+    auto *descriptionEdit = dialog->findChild<QLineEdit *>(
+        QStringLiteral("productivitySnippetDescriptionEdit"));
+    auto *saveButton = dialog->findChild<QPushButton *>(
+        QStringLiteral("productivitySnippetSave"));
+    QVERIFY(nameEdit != nullptr);
     QVERIFY(commandEdit != nullptr);
-    QCOMPARE(editorLayout->rowWrapPolicy(), QFormLayout::WrapAllRows);
+    QVERIFY(descriptionEdit != nullptr);
+    QVERIFY(saveButton != nullptr);
 
-    // 历史页必须由纵向布局直接承载两个筛选器。检查布局拓扑而非窗口几何，可以在没有
-    // 图形屏幕的 CI 环境中稳定运行，也不绑定平台字体产生的像素差异。
-    auto *historyPage = widget.findChild<QWidget *>(QStringLiteral("productivityHistoryPage"));
-    auto *historyHost = widget.findChild<QComboBox *>(QStringLiteral("productivityHistoryHost"));
-    auto *historyPrefix = widget.findChild<QLineEdit *>(QStringLiteral("productivityHistoryPrefix"));
-    QVERIFY(historyPage != nullptr);
-    QVERIFY(historyHost != nullptr);
-    QVERIFY(historyPrefix != nullptr);
-    auto *historyLayout = qobject_cast<QVBoxLayout *>(historyPage->layout());
-    QVERIFY(historyLayout != nullptr);
-    QVERIFY2(historyLayout->indexOf(historyHost) < historyLayout->indexOf(historyPrefix),
-             "主机筛选与命令前缀筛选必须上下堆叠，不能在窄侧栏中并排互相挤压");
+    nameEdit->setText(QStringLiteral("查看磁盘"));
+    commandEdit->setPlainText(QStringLiteral("df -hl"));
+    descriptionEdit->setText(QStringLiteral("查看磁盘占用"));
+    saveButton->click();
+
+    QVERIFY2(!dialog->isVisible(), "保存成功后对话框必须关闭");
+
+    bool ok = false;
+    const QList<SnippetRecord> rootSnippets = m_model->snippetsInGroup(QString(), &ok);
+    QVERIFY(ok);
+    QCOMPARE(rootSnippets.size(), 1);
+    QCOMPARE(rootSnippets.constFirst().name, QStringLiteral("查看磁盘"));
+    QCOMPARE(rootSnippets.constFirst().command, QStringLiteral("df -hl"));
+    QVERIFY(rootSnippets.constFirst().parentId.isEmpty());
+}
+
+void ProductivityTest::snippetShortcutExecutesFirstSnippetOnCurrentTerminal()
+{
+    SnippetRecord snippet;
+    snippet.id = QStringLiteral("snippet-shortcut");
+    snippet.kind = SnippetNodeKind::Snippet;
+    snippet.name = QStringLiteral("查看内存");
+    snippet.command = QStringLiteral("free -h");
+    QVERIFY(m_model->saveSnippet(snippet));
+
+    ProductivityWidget widget(m_model.get());
+    widget.resize(360, 480);
+    widget.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&widget));
+
+    auto *list = widget.findChild<QListWidget *>(QStringLiteral("productivitySnippetList"));
+    QVERIFY(list != nullptr);
+    list->setFocus();
+    QVERIFY(QTest::qWaitForWindowActive(&widget));
+
+    QSignalSpy executionSpy(&widget, &ProductivityWidget::commandExecutionRequested);
+    QTest::keyClick(&widget, Qt::Key_1, Qt::ControlModifier);
+    QCOMPARE(executionSpy.count(), 1);
+    QCOMPARE(executionSpy.constFirst().at(0).toString(), QStringLiteral("free -h"));
+    QVERIFY(executionSpy.constFirst().at(1).toStringList().isEmpty());
+}
+
+void ProductivityTest::snippetRowCopyButtonWritesCommandToClipboard()
+{
+    SnippetRecord snippet;
+    snippet.id = QStringLiteral("snippet-copy");
+    snippet.kind = SnippetNodeKind::Snippet;
+    snippet.name = QStringLiteral("查看进程");
+    snippet.command = QStringLiteral("ps aux | grep sshd");
+    QVERIFY(m_model->saveSnippet(snippet));
+
+    ProductivityWidget widget(m_model.get());
+    auto *list = widget.findChild<QListWidget *>(QStringLiteral("productivitySnippetList"));
+    QVERIFY(list != nullptr);
+    QListWidgetItem *item = findSnippetItem(list, snippet.id);
+    QVERIFY(item != nullptr);
+    auto *copyButton = list->itemWidget(item)->findChild<QPushButton *>(
+        QStringLiteral("productivitySnippetCopy"));
+    QVERIFY(copyButton != nullptr);
+
+    QSignalSpy executionSpy(&widget, &ProductivityWidget::commandExecutionRequested);
+    copyButton->click();
+    QCOMPARE(executionSpy.count(), 0);
+    QCOMPARE(QApplication::clipboard()->text(), snippet.command);
+}
+
+void ProductivityTest::reorderingSnippetListPersistsNewSortOrder()
+{
+    SnippetRecord first;
+    first.id = QStringLiteral("snippet-first");
+    first.kind = SnippetNodeKind::Snippet;
+    first.name = QStringLiteral("第一条");
+    first.command = QStringLiteral("echo first");
+    first.sortOrder = 0;
+    QVERIFY(m_model->saveSnippet(first));
+
+    SnippetRecord second;
+    second.id = QStringLiteral("snippet-second");
+    second.kind = SnippetNodeKind::Snippet;
+    second.name = QStringLiteral("第二条");
+    second.command = QStringLiteral("echo second");
+    second.sortOrder = 1;
+    QVERIFY(m_model->saveSnippet(second));
+
+    ProductivityWidget widget(m_model.get());
+    auto *list = widget.findChild<QListWidget *>(QStringLiteral("productivitySnippetList"));
+    QVERIFY(list != nullptr);
+    QCOMPARE(list->dragDropMode(), QAbstractItemView::InternalMove);
+    QCOMPARE(list->count(), 2);
+    QCOMPARE(list->item(0)->data(Qt::UserRole).toString(), first.id);
+    QCOMPARE(list->item(1)->data(Qt::UserRole).toString(), second.id);
+
+    // 模拟一次拖拽把第二条挪到最前面：QListWidget 内部拖拽最终也是先取出再插入。
+    QListWidgetItem *movedItem = list->takeItem(1);
+    QVERIFY(movedItem != nullptr);
+    list->insertItem(0, movedItem);
+
+    QVERIFY(QMetaObject::invokeMethod(&widget, "persistSnippetOrder", Qt::DirectConnection));
+
+    const std::optional<SnippetRecord> updatedFirst = m_model->snippet(first.id);
+    const std::optional<SnippetRecord> updatedSecond = m_model->snippet(second.id);
+    QVERIFY(updatedFirst.has_value());
+    QVERIFY(updatedSecond.has_value());
+    QCOMPARE(updatedSecond->sortOrder, 0);
+    QCOMPARE(updatedFirst->sortOrder, 1);
+
+    // 保存触发了 reloadSnippets，列表应该按新的 sortOrder 重新排列。
+    QCOMPARE(list->count(), 2);
+    QCOMPARE(list->item(0)->data(Qt::UserRole).toString(), second.id);
+    QCOMPARE(list->item(1)->data(Qt::UserRole).toString(), first.id);
 }
 
 void ProductivityTest::tunnelBrokerReturnsRemoteSftpRelayEndpoints()

@@ -3,31 +3,27 @@
 #include "productivity/ProductivityModel.h"
 #include "ui/UiIcons.h"
 
+#include <QAbstractItemModel>
 #include <QAction>
 #include <QApplication>
 #include <QCheckBox>
 #include <QClipboard>
 #include <QComboBox>
+#include <QDialog>
 #include <QFormLayout>
-#include <QGroupBox>
 #include <QHBoxLayout>
+#include <QKeySequence>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QLocale>
 #include <QMessageBox>
 #include <QMenu>
-#include <QPainter>
 #include <QPushButton>
-#include <QSet>
-#include <QSplitter>
-#include <QStyle>
-#include <QStyledItemDelegate>
+#include <QShortcut>
 #include <QTabWidget>
 #include <QTextEdit>
 #include <QToolButton>
-#include <QTreeWidget>
-#include <QTreeWidgetItem>
 #include <QUuid>
 #include <QVBoxLayout>
 
@@ -35,126 +31,22 @@
 
 namespace {
 
-/** @brief QTreeWidgetItem::UserRole 中保存的稳定节点 id。 */
+/** @brief QListWidgetItem::UserRole 中保存的稳定 Snippet id。 */
 constexpr int kIdRole = Qt::UserRole;
-
-/** @brief QTreeWidgetItem::UserRole+1 中保存的 SnippetNodeKind 整数值。 */
-constexpr int kKindRole = Qt::UserRole + 1;
-
-/**
- * @brief QTreeWidgetItem::UserRole+2 中保存的第二行预览文案。
- *
- * 只有 Snippet 节点会设置：有 description 就显示 description，为空则退化显示 command，
- * 不引入新数据源。分组节点不设置该角色，委托据此判断要不要多画一行。
- */
-constexpr int kPreviewRole = Qt::UserRole + 2;
 
 /** @brief 目标列表项 UserRole 中保存的持久化主机 id。 */
 constexpr int kTargetIdRole = Qt::UserRole;
 
-/** @brief 按点/像素两种字号语义缩放字体，避免 pointSizeF 为 -1 时算出 0 号字。 */
-QFont scaledFont(QFont font, const double deltaPoints)
-{
-    if (font.pointSizeF() > 0.0) {
-        font.setPointSizeF(std::max(7.0, font.pointSizeF() + deltaPoints));
-    } else if (font.pixelSize() > 0) {
-        font.setPixelSize(std::max(9, font.pixelSize() + qRound(deltaPoints * 4.0 / 3.0)));
-    }
-    return font;
-}
-
-/**
- * @brief 把片段行画成"名称 + 命令/说明预览"两行，分组行仍是单行。
- *
- * 320px 侧栏放不下"名称/说明"两列表头，两列本身也会把说明挤到几乎看不清的宽度。改成
- * 单列后第二行复用 kPreviewRole 里已经算好的文案，委托只负责排版，不重新读数据库。
- */
-class SnippetItemDelegate final : public QStyledItemDelegate {
-public:
-    using QStyledItemDelegate::QStyledItemDelegate;
-
-protected:
-    void paint(QPainter *painter,
-              const QStyleOptionViewItem &option,
-              const QModelIndex &index) const override
-    {
-        const QString preview = index.data(kPreviewRole).toString();
-        if (preview.isEmpty()) {
-            QStyledItemDelegate::paint(painter, option, index);
-            return;
-        }
-
-        // 背景与选中态仍交给样式（generic QTreeView 已有的浅色选中底纹），本委托只接管
-        // 文字排版，不重新实现一套选中视觉。
-        QStyleOptionViewItem background = option;
-        initStyleOption(&background, index);
-        background.text.clear();
-        const QWidget *widget = option.widget;
-        QStyle *style = widget != nullptr ? widget->style() : QApplication::style();
-        style->drawControl(QStyle::CE_ItemViewItem, &background, painter, widget);
-
-        const QRect contentRect =
-            style->subElementRect(QStyle::SE_ItemViewItemText, &background, widget);
-        const QRect iconRect =
-            style->subElementRect(QStyle::SE_ItemViewItemDecoration, &background, widget);
-        if (!iconRect.isEmpty()) {
-            qvariant_cast<QIcon>(index.data(Qt::DecorationRole))
-                .paint(painter, iconRect, Qt::AlignCenter);
-        }
-
-        const QFont nameFont = option.font;
-        const QFont previewFont = scaledFont(option.font, -1.5);
-        const QFontMetrics nameMetrics(nameFont);
-        const QFontMetrics previewMetrics(previewFont);
-        // 选中态下 generic QTreeView 的 QSS 只换背景、不换字色（@TEXT@ 保持不变），这里跟着
-        // 用同一条 Text 角色，选中前后文字颜色才不会“跳色”。
-        const QColor baseColor = background.palette.color(QPalette::Text);
-
-        painter->save();
-        const QRect nameRect(contentRect.left(), contentRect.top(), contentRect.width(),
-                             nameMetrics.height());
-        painter->setFont(nameFont);
-        painter->setPen(baseColor);
-        painter->drawText(nameRect,
-                          Qt::AlignLeft | Qt::AlignVCenter,
-                          nameMetrics.elidedText(index.data(Qt::DisplayRole).toString(),
-                                                 Qt::ElideRight,
-                                                 nameRect.width()));
-
-        QColor previewColor = baseColor;
-        previewColor.setAlphaF(0.62F);
-        const QRect previewRect(contentRect.left(),
-                                nameRect.bottom() + 1,
-                                contentRect.width(),
-                                previewMetrics.height());
-        painter->setFont(previewFont);
-        painter->setPen(previewColor);
-        painter->drawText(previewRect,
-                          Qt::AlignLeft | Qt::AlignVCenter,
-                          previewMetrics.elidedText(preview, Qt::ElideMiddle, previewRect.width()));
-        painter->restore();
-    }
-
-    QSize sizeHint(const QStyleOptionViewItem &option, const QModelIndex &index) const override
-    {
-        QSize hint = QStyledItemDelegate::sizeHint(option, index);
-        if (index.data(kPreviewRole).toString().isEmpty()) {
-            return hint;
-        }
-        const int textHeight = QFontMetrics(option.font).height()
-            + QFontMetrics(scaledFont(option.font, -1.5)).height() + 1;
-        hint.setHeight(std::max(hint.height(), textHeight + 8));
-        return hint;
-    }
-};
+/** @brief 最多提供数字快捷键的片段数量：Ctrl+1..Ctrl+9、Ctrl+0。 */
+constexpr int kMaxShortcutSnippets = 10;
 
 /**
  * @brief 将效率侧栏的次要命令配置为紧凑图标按钮。
  * @param button 待配置按钮；不得为空。
  * @param accessibleName 动作完整中文名称，同时用于 Tooltip 和无障碍树。
  *
- * Snippet 页面需要把主要空间留给树与编辑器。树管理工具栏中的三个动作都使用图标，
- * 完整语义通过 Tooltip 与无障碍名称保留；保存、执行等内容级主流程继续使用文字按钮。
+ * 树管理工具栏动作使用图标，完整语义通过 Tooltip 与无障碍名称保留；保存、执行等
+ * 内容级主流程继续使用文字按钮。
  */
 void configureProductivityIconButton(QToolButton *button, const QString &accessibleName)
 {
@@ -169,7 +61,7 @@ void configureProductivityIconButton(QToolButton *button, const QString &accessi
 }
 
 /**
- * @brief 创建一条可复选的执行目标列表项。
+ * @brief 创建一条可复选的目标列表项，供历史筛选和广播使用。
  *
  * 列表项不保存 ConnectionTarget 全量对象，尤其不能复制 password；稳定 id 足以让上层在
  * 真正发送前重新定位会话，也避免侧栏快照意外延长凭据驻留时间。
@@ -184,6 +76,18 @@ QListWidgetItem *createTargetItem(const ConnectionTarget &target, QListWidget *l
     item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
     item->setCheckState(Qt::Unchecked);
     return item;
+}
+
+/**
+ * @brief 把标签文字调淡，用于列表行的次要说明和快捷键提示。
+ */
+void applyMutedPalette(QWidget *widget, const qreal alpha)
+{
+    QColor color = widget->palette().color(QPalette::WindowText);
+    color.setAlphaF(alpha);
+    QPalette palette = widget->palette();
+    palette.setColor(QPalette::WindowText, color);
+    widget->setPalette(palette);
 }
 
 } // namespace
@@ -213,9 +117,6 @@ void ProductivityWidget::buildUi()
 
     auto *snippetToolbar = new QHBoxLayout;
     snippetToolbar->setSpacing(5);
-    auto *newGroupButton = new QToolButton(snippetPage);
-    newGroupButton->setObjectName(QStringLiteral("productivityNewGroup"));
-    newGroupButton->setText(tr("新建分组"));
     auto *newSnippetButton = new QToolButton(snippetPage);
     newSnippetButton->setObjectName(QStringLiteral("productivityNewSnippet"));
     newSnippetButton->setText(tr("新建片段"));
@@ -223,178 +124,102 @@ void ProductivityWidget::buildUi()
     removeButton->setObjectName(QStringLiteral("productivityRemoveSnippet"));
     removeButton->setText(tr("删除"));
     UiIcons::decorateButton(
-        newGroupButton,
-        UiIcons::symbol(this, UiIcons::Symbol::FolderAdd, this->palette().color(QPalette::WindowText)),
-        tr("新建 Snippet 分组"));
-    UiIcons::decorateButton(
         newSnippetButton,
         UiIcons::symbol(this, UiIcons::Symbol::Plus, this->palette().color(QPalette::WindowText)),
         tr("新建可执行命令片段"));
     UiIcons::decorateButton(
         removeButton,
         UiIcons::symbol(this, UiIcons::Symbol::Trash, this->palette().color(QPalette::WindowText)),
-        tr("删除当前选中的分组或片段"));
-    configureProductivityIconButton(newGroupButton, tr("新建 Snippet 分组"));
+        tr("删除当前选中的片段"));
     configureProductivityIconButton(newSnippetButton, tr("新建可执行命令片段"));
-    configureProductivityIconButton(removeButton, tr("删除当前选中的分组或片段"));
-    snippetToolbar->addWidget(newGroupButton);
+    configureProductivityIconButton(removeButton, tr("删除当前选中的片段"));
     snippetToolbar->addWidget(newSnippetButton);
     snippetToolbar->addStretch();
     snippetToolbar->addWidget(removeButton);
     snippetPageLayout->addLayout(snippetToolbar);
 
-    auto *snippetSplitter = new QSplitter(Qt::Vertical, snippetPage);
-    m_snippetTree = new QTreeWidget(snippetSplitter);
-    m_snippetTree->setObjectName(QStringLiteral("productivitySnippetTree"));
-    // 320px 侧栏放不下"名称/说明"两列表头；说明改由 SnippetItemDelegate 画成名称下方的
-    // 第二行小字，单列就够，也不需要再显示表头。
-    m_snippetTree->setHeaderHidden(true);
-    m_snippetTree->setColumnCount(1);
-    m_snippetTree->setItemDelegate(new SnippetItemDelegate(m_snippetTree));
-    m_snippetTree->setSelectionMode(QAbstractItemView::SingleSelection);
-    m_snippetTree->setContextMenuPolicy(Qt::CustomContextMenu);
-
-    auto *editorBox = new QGroupBox(tr("片段编辑"), snippetSplitter);
-    editorBox->setObjectName(QStringLiteral("productivitySnippetEditor"));
-    auto *editorLayout = new QFormLayout(editorBox);
-    editorLayout->setObjectName(QStringLiteral("productivitySnippetEditorLayout"));
-    // 侧栏实际内容宽度只有约 284px。强制所有标签位于字段上方，可以给输入框保留完整
-    // 宽度，也保证侧栏拖到最小宽度时不会出现标签挤压命令内容的情况。
-    editorLayout->setRowWrapPolicy(QFormLayout::WrapAllRows);
-    editorLayout->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
-    editorLayout->setLabelAlignment(Qt::AlignLeft);
-    editorLayout->setHorizontalSpacing(0);
-    editorLayout->setVerticalSpacing(6);
-    m_nameEdit = new QLineEdit(editorBox);
-    m_parentGroupCombo = new QComboBox(editorBox);
-    UiIcons::modernizePopup(m_parentGroupCombo);
-    m_commandEdit = new QTextEdit(editorBox);
-    m_commandEdit->setObjectName(QStringLiteral("productivityCommandEdit"));
-    m_commandEdit->setAcceptRichText(false);
-    m_commandEdit->setMaximumHeight(72);
-    m_descriptionEdit = new QLineEdit(editorBox);
-    m_saveButton = new QPushButton(tr("保存"), editorBox);
-    m_saveButton->setProperty("primaryAction", true);
-    auto *cancelEditorButton = new QPushButton(tr("取消"), editorBox);
-    cancelEditorButton->setObjectName(QStringLiteral("productivityCancelEditor"));
-    UiIcons::decorateButton(
-        m_saveButton,
-        UiIcons::symbol(this, UiIcons::Symbol::Download, this->palette().color(QPalette::WindowText)),
-        tr("保存当前片段或分组修改"));
-    editorLayout->addRow(tr("名称"), m_nameEdit);
-    editorLayout->addRow(tr("所属分组"), m_parentGroupCombo);
-    editorLayout->addRow(tr("命令"), m_commandEdit);
-    editorLayout->addRow(tr("说明"), m_descriptionEdit);
-    auto *editorActions = new QHBoxLayout;
-    editorActions->setContentsMargins(0, 0, 0, 0);
-    editorActions->setSpacing(8);
-    editorActions->addStretch(1);
-    editorActions->addWidget(cancelEditorButton);
-    editorActions->addWidget(m_saveButton);
-    editorLayout->addRow(editorActions);
-    snippetSplitter->addWidget(m_snippetTree);
-    snippetSplitter->addWidget(editorBox);
-    snippetSplitter->setStretchFactor(0, 2);
-    snippetSplitter->setStretchFactor(1, 1);
-    snippetPageLayout->addWidget(snippetSplitter, 1);
-
-    auto *executionBox = new QGroupBox(tr("执行目标（可多选；不选表示当前终端）"), snippetPage);
-    auto *executionLayout = new QVBoxLayout(executionBox);
-    m_executionTargets = new QListWidget(executionBox);
-    m_executionTargets->setObjectName(QStringLiteral("productivityExecutionTargets"));
-    m_executionTargets->setMaximumHeight(105);
-    auto *executeButton = new QPushButton(tr("执行选中片段"), executionBox);
-    executeButton->setProperty("primaryAction", true);
-    UiIcons::decorateButton(
-        executeButton,
-        UiIcons::symbol(this, UiIcons::Symbol::Play, this->palette().color(QPalette::WindowText)),
-        tr("在明确选择的目标终端执行片段"));
-    executeButton->setObjectName(QStringLiteral("productivityExecuteSnippet"));
-    executionLayout->addWidget(m_executionTargets);
-    executionLayout->addWidget(executeButton);
-    snippetPageLayout->addWidget(executionBox);
+    m_snippetList = new QListWidget(snippetPage);
+    m_snippetList->setObjectName(QStringLiteral("productivitySnippetList"));
+    m_snippetList->setSelectionMode(QAbstractItemView::SingleSelection);
+    // 分组功能已移除，列表始终是根层级的扁平序列；InternalMove 让用户可以直接拖拽调整
+    // sortOrder，不再需要单独的"上移/下移"按钮。
+    m_snippetList->setDragDropMode(QAbstractItemView::InternalMove);
+    m_snippetList->setDefaultDropAction(Qt::MoveAction);
+    m_snippetList->setContextMenuPolicy(Qt::CustomContextMenu);
+    snippetPageLayout->addWidget(m_snippetList, 1);
     m_tabs->addTab(snippetPage, tr("命令片段"));
 
-    connect(newGroupButton, &QToolButton::clicked, this,
-            [this]() { beginNewRecord(SnippetNodeKind::Folder); });
-    connect(newSnippetButton, &QToolButton::clicked, this,
-            [this]() { beginNewRecord(SnippetNodeKind::Snippet); });
+    connect(newSnippetButton, &QToolButton::clicked,
+            this, [this]() { openSnippetEditor(QString()); });
     connect(removeButton, &QToolButton::clicked,
             this, &ProductivityWidget::removeSelectedRecord);
-    connect(m_saveButton, &QPushButton::clicked,
-            this, &ProductivityWidget::saveEditorRecord);
-    connect(cancelEditorButton, &QPushButton::clicked, this, [this]() {
-        // “取消”不改变数据库，只丢弃当前表单中的临时输入。若树中已有选择，则恢复该记录
-        // 的持久化快照；空树场景下清理字段，避免看起来像已经保存了一条空记录。
-        if (QTreeWidgetItem *selected = m_snippetTree->currentItem(); selected != nullptr) {
-            editTreeItem(selected);
-            return;
-        }
-        m_editingId.clear();
-        m_nameEdit->clear();
-        m_parentGroupCombo->setCurrentIndex(0);
-        m_commandEdit->clear();
-        m_descriptionEdit->clear();
-        m_saveButton->setText(tr("保存"));
-    });
-    connect(executeButton, &QPushButton::clicked,
-            this, &ProductivityWidget::executeSelectedSnippet);
-    connect(m_snippetTree, &QTreeWidget::itemSelectionChanged, this, [this]() {
-        editTreeItem(m_snippetTree->currentItem());
-    });
-    connect(m_snippetTree, &QTreeWidget::itemDoubleClicked, this,
-            [this](QTreeWidgetItem *, int) { executeSelectedSnippet(); });
-    connect(m_snippetTree,
+    connect(m_snippetList, &QListWidget::itemDoubleClicked, this,
+            [this](QListWidgetItem *item) {
+                if (item != nullptr) {
+                    openSnippetEditor(item->data(kIdRole).toString());
+                }
+            });
+    // 拖拽结束后 QListWidget 的内部模型会发出 rowsMoved；据此把新的可见顺序回写为
+    // sortOrder，而不是尝试在拖拽过程中追踪每一次中间态。
+    connect(m_snippetList->model(), &QAbstractItemModel::rowsMoved,
+            this, &ProductivityWidget::persistSnippetOrder);
+    connect(m_snippetList,
             &QWidget::customContextMenuRequested,
             this,
             [this](const QPoint &position) {
-                QTreeWidgetItem *item = m_snippetTree->itemAt(position);
+                QListWidgetItem *item = m_snippetList->itemAt(position);
                 if (item != nullptr) {
-                    m_snippetTree->setCurrentItem(item);
+                    m_snippetList->setCurrentItem(item);
                 }
                 QMenu menu(this);
                 UiIcons::modernizePopup(&menu);
-                QAction *newGroupAction = menu.addAction(
-                    UiIcons::symbol(this, UiIcons::Symbol::FolderAdd, this->palette().color(QPalette::WindowText)),
-                    tr("新建分组"));
                 QAction *newSnippetAction = menu.addAction(
                     UiIcons::symbol(this, UiIcons::Symbol::Plus, this->palette().color(QPalette::WindowText)),
                     tr("新建片段"));
-                connect(newGroupAction, &QAction::triggered,
-                        this, [this]() { beginNewRecord(SnippetNodeKind::Folder); });
                 connect(newSnippetAction, &QAction::triggered,
-                        this, [this]() { beginNewRecord(SnippetNodeKind::Snippet); });
+                        this, [this]() { openSnippetEditor(QString()); });
                 if (item != nullptr) {
                     menu.addSeparator();
-                    const bool isSnippet = static_cast<SnippetNodeKind>(
-                                               item->data(0, kKindRole).toInt())
-                        == SnippetNodeKind::Snippet;
-                    if (isSnippet) {
-                        QAction *executeAction = menu.addAction(
-                            UiIcons::symbol(this, UiIcons::Symbol::Play, this->palette().color(QPalette::WindowText)),
-                            tr("执行"));
-                        connect(executeAction,
-                                &QAction::triggered,
-                                this,
-                                &ProductivityWidget::executeSelectedSnippet);
-                    }
+                    const QString id = item->data(kIdRole).toString();
+                    QAction *executeAction = menu.addAction(
+                        UiIcons::symbol(this, UiIcons::Symbol::Play, this->palette().color(QPalette::WindowText)),
+                        tr("执行"));
+                    QAction *copyAction = menu.addAction(
+                        UiIcons::symbol(this, UiIcons::Symbol::Copy, this->palette().color(QPalette::WindowText)),
+                        tr("复制"));
                     QAction *editAction = menu.addAction(
                         UiIcons::symbol(this, UiIcons::Symbol::Edit, this->palette().color(QPalette::WindowText)),
                         tr("编辑"));
                     QAction *deleteAction = menu.addAction(
                         UiIcons::symbol(this, UiIcons::Symbol::Trash, this->palette().color(QPalette::WindowText)),
                         tr("删除"));
-                    connect(editAction, &QAction::triggered, this, [this, item]() {
-                        editTreeItem(item);
-                        m_nameEdit->setFocus();
-                    });
+                    connect(executeAction, &QAction::triggered,
+                            this, [this, id]() { executeSnippetForId(id); });
+                    connect(copyAction, &QAction::triggered,
+                            this, [this, id]() { copySnippetForId(id); });
+                    connect(editAction, &QAction::triggered,
+                            this, [this, id]() { openSnippetEditor(id); });
                     connect(deleteAction,
                             &QAction::triggered,
                             this,
                             &ProductivityWidget::removeSelectedRecord);
                 }
-                menu.exec(m_snippetTree->viewport()->mapToGlobal(position));
+                menu.exec(m_snippetList->viewport()->mapToGlobal(position));
             });
+
+    // Ctrl+1..Ctrl+9、Ctrl+0 分别执行列表中第 1..10 个片段；超出范围的按键在触发时安全
+    // 忽略。快捷键只创建一次，绑定的是行索引而非片段 id，与行内按钮提示的数字保持一致。
+    m_snippetShortcuts.reserve(kMaxShortcutSnippets);
+    for (int index = 0; index < kMaxShortcutSnippets; ++index) {
+        const int digit = (index == kMaxShortcutSnippets - 1) ? 0 : index + 1;
+        auto *shortcut = new QShortcut(QKeySequence(QStringLiteral("Ctrl+%1").arg(digit)), this);
+        shortcut->setContext(Qt::WidgetWithChildrenShortcut);
+        connect(shortcut, &QShortcut::activated,
+                this, [this, index]() { executeSnippetAtRow(index); });
+        m_snippetShortcuts.append(shortcut);
+    }
+
+    buildEditorDialog();
 
     // --------------------------------------------------------------- 历史标签
     auto *historyPage = new QWidget(m_tabs);
@@ -540,6 +365,56 @@ void ProductivityWidget::buildUi()
             broadcastSendButton, &QPushButton::click);
 }
 
+void ProductivityWidget::buildEditorDialog()
+{
+    m_editorDialog = new QDialog(this);
+    m_editorDialog->setObjectName(QStringLiteral("productivitySnippetDialog"));
+    m_editorDialog->setModal(true);
+    m_editorDialog->setMinimumWidth(340);
+
+    auto *layout = new QFormLayout(m_editorDialog);
+    layout->setObjectName(QStringLiteral("productivitySnippetEditorLayout"));
+    layout->setRowWrapPolicy(QFormLayout::WrapAllRows);
+    layout->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+    layout->setLabelAlignment(Qt::AlignLeft);
+    layout->setVerticalSpacing(8);
+
+    m_editorNameEdit = new QLineEdit(m_editorDialog);
+    m_editorNameEdit->setObjectName(QStringLiteral("productivitySnippetNameEdit"));
+    m_editorCommandEdit = new QTextEdit(m_editorDialog);
+    m_editorCommandEdit->setObjectName(QStringLiteral("productivityCommandEdit"));
+    m_editorCommandEdit->setAcceptRichText(false);
+    // 弹窗不再受侧栏宽度约束，给命令输入更充裕的高度，方便查看较长的管道命令。
+    m_editorCommandEdit->setMinimumHeight(140);
+    m_editorDescriptionEdit = new QLineEdit(m_editorDialog);
+    m_editorDescriptionEdit->setObjectName(QStringLiteral("productivitySnippetDescriptionEdit"));
+
+    layout->addRow(tr("名称"), m_editorNameEdit);
+    layout->addRow(tr("命令"), m_editorCommandEdit);
+    layout->addRow(tr("说明"), m_editorDescriptionEdit);
+
+    auto *cancelButton = new QPushButton(tr("取消"), m_editorDialog);
+    cancelButton->setObjectName(QStringLiteral("productivityCancelEditor"));
+    m_editorSaveButton = new QPushButton(tr("保存"), m_editorDialog);
+    m_editorSaveButton->setObjectName(QStringLiteral("productivitySnippetSave"));
+    m_editorSaveButton->setProperty("primaryAction", true);
+    UiIcons::decorateButton(
+        m_editorSaveButton,
+        UiIcons::symbol(this, UiIcons::Symbol::Download, this->palette().color(QPalette::WindowText)),
+        tr("保存当前片段修改"));
+    auto *editorActions = new QHBoxLayout;
+    editorActions->setContentsMargins(0, 0, 0, 0);
+    editorActions->setSpacing(8);
+    editorActions->addStretch(1);
+    editorActions->addWidget(cancelButton);
+    editorActions->addWidget(m_editorSaveButton);
+    layout->addRow(editorActions);
+
+    connect(cancelButton, &QPushButton::clicked, m_editorDialog, &QDialog::reject);
+    connect(m_editorSaveButton, &QPushButton::clicked,
+            this, &ProductivityWidget::saveEditorRecord);
+}
+
 void ProductivityWidget::setModel(ProductivityModel *model)
 {
     if (m_model != nullptr) {
@@ -575,112 +450,128 @@ void ProductivityWidget::refresh()
 
 void ProductivityWidget::reloadSnippets()
 {
-    m_snippetTree->clear();
-    m_parentGroupCombo->clear();
-    m_parentGroupCombo->addItem(tr("根分组"), QString());
+    m_snippetList->clear();
     if (m_model == nullptr) {
         return;
     }
 
-    QSet<QString> visited;
-    if (!appendSnippetChildren(nullptr, QString(), &visited)) {
+    // 分组功能已移除：始终只读取根层级，历史数据中残留的分组或嵌套片段不会在界面上
+    // 出现。这是刻意的简化，而不是缺陷——用户已经明确要求去掉分组。
+    bool ok = false;
+    const QList<SnippetRecord> records = m_model->snippetsInGroup(QString(), &ok);
+    if (!ok) {
         return;
     }
-    m_snippetTree->expandAll();
-}
-
-bool ProductivityWidget::appendSnippetChildren(QTreeWidgetItem *parentItem,
-                                               const QString &parentId,
-                                               QSet<QString> *visited)
-{
-    bool ok = false;
-    const QList<SnippetRecord> records = m_model->snippetsInGroup(parentId, &ok);
-    if (!ok) {
-        return false;
-    }
+    int shortcutIndex = 0;
     for (const SnippetRecord &record : records) {
-        if (visited->contains(record.id)) {
-            emit statusMessage(tr("检测到 Snippet 树循环引用，已停止展开节点：%1").arg(record.name));
+        if (record.kind != SnippetNodeKind::Snippet) {
             continue;
         }
-        visited->insert(record.id);
-        auto *item = new QTreeWidgetItem;
-        item->setText(0, record.name);
-        item->setIcon(
-            0,
-            record.kind == SnippetNodeKind::Folder
-                ? UiIcons::symbol(m_snippetTree, UiIcons::Symbol::Folder, m_snippetTree->palette().color(QPalette::WindowText))
-                : UiIcons::symbol(m_snippetTree, UiIcons::Symbol::File, m_snippetTree->palette().color(QPalette::WindowText)));
-        if (record.kind == SnippetNodeKind::Snippet) {
-            item->setData(0,
-                         kPreviewRole,
-                         record.description.isEmpty() ? record.command : record.description);
-        }
-        item->setData(0, kIdRole, record.id);
-        item->setData(0, kKindRole, static_cast<int>(record.kind));
-        if (parentItem == nullptr) {
-            m_snippetTree->addTopLevelItem(item);
-        } else {
-            parentItem->addChild(item);
-        }
-        if (record.kind == SnippetNodeKind::Folder) {
-            m_parentGroupCombo->addItem(record.name, record.id);
-            if (!appendSnippetChildren(item, record.id, visited)) {
-                return false;
-            }
-        }
-        visited->remove(record.id);
+        auto *item = new QListWidgetItem;
+        item->setData(kIdRole, record.id);
+        item->setFlags(item->flags() & ~Qt::ItemIsDropEnabled);
+        m_snippetList->addItem(item);
+        QWidget *row = createSnippetRowWidget(record, shortcutIndex);
+        item->setSizeHint(row->sizeHint());
+        m_snippetList->setItemWidget(item, row);
+        ++shortcutIndex;
     }
-    return true;
 }
 
-void ProductivityWidget::editTreeItem(QTreeWidgetItem *item)
+QWidget *ProductivityWidget::createSnippetRowWidget(const SnippetRecord &record,
+                                                     const int shortcutIndex)
 {
-    if (item == nullptr || m_model == nullptr) {
-        return;
+    auto *row = new QWidget(m_snippetList);
+    auto *rowLayout = new QHBoxLayout(row);
+    rowLayout->setContentsMargins(8, 6, 8, 6);
+    rowLayout->setSpacing(6);
+
+    // 文字区域设为鼠标事件透明，点击会穿透到下方的列表视口，这样用户仍可以直接在名称/
+    // 说明区域按住拖拽排序，而不必找一个额外的拖拽手柄；右侧按钮区域保持正常可点击。
+    auto *textArea = new QWidget(row);
+    textArea->setAttribute(Qt::WA_TransparentForMouseEvents);
+    auto *textLayout = new QVBoxLayout(textArea);
+    textLayout->setContentsMargins(0, 0, 0, 0);
+    textLayout->setSpacing(1);
+
+    auto *nameLabel = new QLabel(record.name, textArea);
+    nameLabel->setAttribute(Qt::WA_TransparentForMouseEvents);
+    QFont nameFont = nameLabel->font();
+    nameFont.setBold(true);
+    nameLabel->setFont(nameFont);
+
+    const QString preview = record.description.isEmpty() ? record.command : record.description;
+    auto *previewLabel = new QLabel(preview, textArea);
+    previewLabel->setAttribute(Qt::WA_TransparentForMouseEvents);
+    QFont previewFont = previewLabel->font();
+    previewFont.setPointSizeF(std::max(7.0, previewFont.pointSizeF() - 1.5));
+    previewLabel->setFont(previewFont);
+    applyMutedPalette(previewLabel, 0.62);
+
+    textLayout->addWidget(nameLabel);
+    textLayout->addWidget(previewLabel);
+    rowLayout->addWidget(textArea, 1);
+
+    // 执行按钮采用与 AI 助手命令卡片一致的绿色主按钮样式（primaryAction），快捷键提示直接
+    // 拼进按钮文字，不再用单独的灰色标签摆在旁边。
+    auto *executeButton = new QPushButton(tr("执行"), row);
+    executeButton->setObjectName(QStringLiteral("productivitySnippetExecute"));
+    executeButton->setProperty("compactAction", true);
+    executeButton->setProperty("primaryAction", true);
+    if (shortcutIndex >= 0 && shortcutIndex < kMaxShortcutSnippets) {
+        const int digit = (shortcutIndex == kMaxShortcutSnippets - 1) ? 0 : shortcutIndex + 1;
+        const QString hint = QStringLiteral("Ctrl+%1").arg(digit);
+        executeButton->setText(tr("执行  %1").arg(hint));
+        executeButton->setToolTip(tr("快捷键 %1").arg(hint));
     }
-    const QString id = item->data(0, kIdRole).toString();
-    const std::optional<SnippetRecord> record = m_model->snippet(id);
-    if (!record.has_value()) {
-        emit statusMessage(tr("选中的 Snippet 已不存在，请刷新列表"));
-        return;
-    }
-    m_editingId = record->id;
-    m_editingKind = record->kind;
-    m_nameEdit->setText(record->name);
-    const int parentIndex = m_parentGroupCombo->findData(record->parentId);
-    m_parentGroupCombo->setCurrentIndex(parentIndex >= 0 ? parentIndex : 0);
-    m_commandEdit->setPlainText(record->command);
-    m_commandEdit->setEnabled(record->kind == SnippetNodeKind::Snippet);
-    m_descriptionEdit->setText(record->description);
-    m_saveButton->setText(tr("保存修改"));
+    rowLayout->addWidget(executeButton);
+
+    auto *copyButton = new QPushButton(tr("复制"), row);
+    copyButton->setObjectName(QStringLiteral("productivitySnippetCopy"));
+    copyButton->setProperty("compactAction", true);
+    rowLayout->addWidget(copyButton);
+
+    const QString id = record.id;
+    connect(executeButton, &QPushButton::clicked,
+            this, [this, id]() { executeSnippetForId(id); });
+    connect(copyButton, &QPushButton::clicked,
+            this, [this, id]() { copySnippetForId(id); });
+
+    return row;
 }
 
-void ProductivityWidget::beginNewRecord(const SnippetNodeKind kind)
+void ProductivityWidget::openSnippetEditor(const QString &id)
 {
-    m_editingId = QUuid::createUuid().toString(QUuid::WithoutBraces);
-    m_editingKind = kind;
-    m_nameEdit->clear();
-    m_commandEdit->clear();
-    m_commandEdit->setEnabled(kind == SnippetNodeKind::Snippet);
-    m_descriptionEdit->clear();
-
-    // 新节点默认放在当前分组；若选中的是片段，则放到该片段的父分组。这样连续录入同组
-    // 命令无需反复选择父级，同时不会把新节点错误挂到叶子下面。
-    QString parentId;
-    if (QTreeWidgetItem *selected = m_snippetTree->currentItem(); selected != nullptr) {
-        const SnippetNodeKind selectedKind = static_cast<SnippetNodeKind>(
-            selected->data(0, kKindRole).toInt());
-        if (selectedKind == SnippetNodeKind::Folder) {
-            parentId = selected->data(0, kIdRole).toString();
-        } else if (selected->parent() != nullptr) {
-            parentId = selected->parent()->data(0, kIdRole).toString();
-        }
+    if (m_editorDialog == nullptr) {
+        return;
     }
-    const int parentIndex = m_parentGroupCombo->findData(parentId);
-    m_parentGroupCombo->setCurrentIndex(parentIndex >= 0 ? parentIndex : 0);
-    m_saveButton->setText(kind == SnippetNodeKind::Folder ? tr("创建分组") : tr("创建片段"));
-    m_nameEdit->setFocus();
+    const bool isNew = id.isEmpty();
+    if (isNew) {
+        m_editingId = QUuid::createUuid().toString(QUuid::WithoutBraces);
+        m_editorNameEdit->clear();
+        m_editorCommandEdit->clear();
+        m_editorDescriptionEdit->clear();
+        m_editorDialog->setWindowTitle(tr("新建片段"));
+    } else {
+        if (m_model == nullptr) {
+            emit statusMessage(tr("效率工具模型尚未就绪"));
+            return;
+        }
+        const std::optional<SnippetRecord> record = m_model->snippet(id);
+        if (!record.has_value()) {
+            emit statusMessage(tr("选中的 Snippet 已不存在，请刷新列表"));
+            return;
+        }
+        m_editingId = record->id;
+        m_editorNameEdit->setText(record->name);
+        m_editorCommandEdit->setPlainText(record->command);
+        m_editorDescriptionEdit->setText(record->description);
+        m_editorDialog->setWindowTitle(tr("编辑片段"));
+    }
+    m_editorNameEdit->setFocus();
+    // open() 是非阻塞的模态弹窗：既保证用户在关闭前无法操作侧栏其余部分，又不会像
+    // exec() 那样阻塞事件循环，测试可以在弹窗仍打开时继续与其中的控件交互。
+    m_editorDialog->open();
 }
 
 void ProductivityWidget::saveEditorRecord()
@@ -689,70 +580,119 @@ void ProductivityWidget::saveEditorRecord()
         emit statusMessage(tr("效率工具模型尚未就绪"));
         return;
     }
-    if (m_editingId.isEmpty()) {
-        beginNewRecord(SnippetNodeKind::Snippet);
+    const QString name = m_editorNameEdit->text().trimmed();
+    const QString command = m_editorCommandEdit->toPlainText();
+    if (name.isEmpty() || command.trimmed().isEmpty()) {
+        emit statusMessage(tr("名称和命令不能为空"));
+        return;
     }
 
+    const std::optional<SnippetRecord> existing = m_model->snippet(m_editingId);
     SnippetRecord record;
     record.id = m_editingId;
-    record.parentId = m_parentGroupCombo->currentData().toString();
-    record.kind = m_editingKind;
-    record.name = m_nameEdit->text();
-    record.command = m_editingKind == SnippetNodeKind::Snippet
-        ? m_commandEdit->toPlainText()
-        : QString();
-    record.description = m_descriptionEdit->text();
+    record.parentId = QString(); // 分组功能已移除，片段始终挂在根层级。
+    record.kind = SnippetNodeKind::Snippet;
+    record.name = name;
+    record.command = command;
+    record.description = m_editorDescriptionEdit->text();
+    record.sortOrder = existing.has_value() ? existing->sortOrder : m_snippetList->count();
+
     if (m_model->saveSnippet(record)) {
-        emit statusMessage(record.kind == SnippetNodeKind::Folder
-                               ? tr("Snippet 分组已保存")
-                               : tr("Snippet 已保存"));
+        emit statusMessage(tr("Snippet 已保存"));
+        m_editorDialog->accept();
     }
 }
 
 void ProductivityWidget::removeSelectedRecord()
 {
-    QTreeWidgetItem *item = m_snippetTree->currentItem();
+    QListWidgetItem *item = m_snippetList->currentItem();
     if (item == nullptr || m_model == nullptr) {
-        emit statusMessage(tr("请先选择要删除的 Snippet 或分组"));
+        emit statusMessage(tr("请先选择要删除的 Snippet"));
         return;
     }
-    const SnippetNodeKind kind = static_cast<SnippetNodeKind>(item->data(0, kKindRole).toInt());
-    const QString warning = kind == SnippetNodeKind::Folder
-        ? tr("删除分组会同时删除其中全部子分组和片段，确定继续吗？")
-        : tr("确定删除选中的 Snippet 吗？");
     if (QMessageBox::warning(this,
                              tr("确认删除"),
-                             warning,
+                             tr("确定删除选中的 Snippet 吗？"),
                              QMessageBox::Yes | QMessageBox::Cancel,
                              QMessageBox::Cancel) != QMessageBox::Yes) {
         return;
     }
     int removed = 0;
-    if (m_model->removeSnippet(item->data(0, kIdRole).toString(), &removed)) {
+    if (m_model->removeSnippet(item->data(kIdRole).toString(), &removed)) {
         m_editingId.clear();
-        emit statusMessage(tr("已删除 %1 个 Snippet 树节点").arg(removed));
+        emit statusMessage(tr("已删除 Snippet"));
     }
 }
 
-void ProductivityWidget::executeSelectedSnippet()
+void ProductivityWidget::executeSnippetAtRow(const int row)
 {
-    QTreeWidgetItem *item = m_snippetTree->currentItem();
-    if (item == nullptr || m_model == nullptr) {
+    if (row < 0 || row >= m_snippetList->count()) {
         emit statusMessage(tr("请先选择要执行的 Snippet"));
         return;
     }
-    if (static_cast<SnippetNodeKind>(item->data(0, kKindRole).toInt())
-        != SnippetNodeKind::Snippet) {
-        emit statusMessage(tr("分组不可执行，请选择其中的具体 Snippet"));
+    executeSnippetForId(m_snippetList->item(row)->data(kIdRole).toString());
+}
+
+void ProductivityWidget::executeSnippetForId(const QString &id)
+{
+    if (m_model == nullptr) {
+        emit statusMessage(tr("效率工具模型尚未就绪"));
         return;
     }
-    const std::optional<SnippetRecord> record = m_model->snippet(
-        item->data(0, kIdRole).toString());
+    const std::optional<SnippetRecord> record = m_model->snippet(id);
     if (!record.has_value() || record->command.trimmed().isEmpty()) {
         emit statusMessage(tr("Snippet 已不存在或命令为空"));
         return;
     }
-    emit commandExecutionRequested(record->command, checkedTargetIds(m_executionTargets));
+    // 执行目标不再由界面勾选：空 targetIds 由上层解释为当前活动终端会话。
+    emit commandExecutionRequested(record->command, QStringList{});
+}
+
+void ProductivityWidget::copySnippetForId(const QString &id)
+{
+    if (m_model == nullptr) {
+        return;
+    }
+    const std::optional<SnippetRecord> record = m_model->snippet(id);
+    if (!record.has_value()) {
+        emit statusMessage(tr("Snippet 已不存在"));
+        return;
+    }
+    if (QApplication::clipboard() != nullptr) {
+        QApplication::clipboard()->setText(record->command);
+    }
+    emit statusMessage(tr("命令已复制到剪贴板"));
+}
+
+void ProductivityWidget::persistSnippetOrder()
+{
+    if (m_model == nullptr) {
+        return;
+    }
+    // 先把当前可见顺序整体读出来，再逐条保存：saveSnippet 成功后会同步发出
+    // snippetsChanged 并触发 reloadSnippets，边遍历边重建列表会让循环踩在已经失效的
+    // QListWidgetItem 指针上。
+    QStringList orderedIds;
+    orderedIds.reserve(m_snippetList->count());
+    for (int row = 0; row < m_snippetList->count(); ++row) {
+        orderedIds.append(m_snippetList->item(row)->data(kIdRole).toString());
+    }
+
+    bool changed = false;
+    for (int row = 0; row < orderedIds.size(); ++row) {
+        std::optional<SnippetRecord> record = m_model->snippet(orderedIds.at(row));
+        if (!record.has_value() || record->sortOrder == row) {
+            continue;
+        }
+        record->sortOrder = row;
+        changed = true;
+        if (!m_model->saveSnippet(*record)) {
+            break;
+        }
+    }
+    if (changed) {
+        reloadSnippets();
+    }
 }
 
 void ProductivityWidget::reloadHistory()
@@ -800,10 +740,8 @@ QStringList ProductivityWidget::checkedTargetIds(const QListWidget *list)
 void ProductivityWidget::populateTargetSelectors()
 {
     const QString previousHistoryId = m_historyHostCombo->currentData().toString();
-    const QStringList previousExecutionIds = checkedTargetIds(m_executionTargets);
     const QStringList previousBroadcastIds = checkedTargetIds(m_broadcastTargets);
 
-    m_executionTargets->clear();
     m_broadcastTargets->clear();
     m_historyHostCombo->clear();
     m_historyHostCombo->addItem(tr("本地 / 当前终端"), QString());
@@ -814,10 +752,7 @@ void ProductivityWidget::populateTargetSelectors()
             continue;
         }
         seen.insert(target.id);
-        QListWidgetItem *executionItem = createTargetItem(target, m_executionTargets);
         QListWidgetItem *broadcastItem = createTargetItem(target, m_broadcastTargets);
-        executionItem->setCheckState(previousExecutionIds.contains(target.id)
-                                         ? Qt::Checked : Qt::Unchecked);
         broadcastItem->setCheckState(previousBroadcastIds.contains(target.id)
                                          ? Qt::Checked : Qt::Unchecked);
         m_historyHostCombo->addItem(

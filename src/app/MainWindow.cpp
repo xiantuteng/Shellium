@@ -1308,6 +1308,7 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
             border: 0;
         }
         QTabWidget#TerminalPages::pane,
+        QTabWidget#productivityTabs::pane,
         QStackedWidget#SidebarStack,
         QStackedWidget#WorkspaceStack,
         QWidget#WorkspacePlaceholder {
@@ -1815,6 +1816,15 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
             border-radius: 8px;
             padding: 3px 10px;
             font-size: 13px;
+        }
+        QPushButton[compactAction="true"] {
+            /* Snippet 列表行内的"执行/复制"按钮：行高有限，需要比通用按钮更矮更窄，
+               同时保留一致的圆角和边框视觉。 */
+            min-height: 22px;
+            max-height: 22px;
+            padding: 2px 9px;
+            font-size: 12px;
+            border-radius: 6px;
         }
         QLabel[sectionCaption="true"] {
             color: @MUTED@;
