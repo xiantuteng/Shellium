@@ -2423,7 +2423,9 @@ void RemoteFileManagerWidget::handleRecursiveTransferFinished(
     if (summary.hasWarnings()) {
         QMessageBox::warning(this, tr("目录传输已结束（存在未完成项）"), summaryText);
     }
-    emit statusMessage(summaryText.section(QLatin1Char('\n'), 0, 0));
+    const QString headline = summaryText.section(QLatin1Char('\n'), 0, 0);
+    emit statusMessage(headline);
+    emit transferResultAvailable(!summary.hasWarnings(), headline);
     refreshDirectory();
     finishQueuedTransfer(requestId);
 }
@@ -2431,9 +2433,16 @@ void RemoteFileManagerWidget::handleRecursiveTransferFinished(
 void RemoteFileManagerWidget::handleOperationSuccess(const quint64 requestId,
                                                      const QString &description)
 {
+    // 必须在 finishQueuedTransfer 清空 m_activeTransferRequest 之前判断：这决定了刚刚成功的
+    // 是一次排队的上传/下载，还是重命名、删除、预览这类没有"传输成功"语义的一次性操作。
+    const bool wasActiveTransfer = requestId == m_activeTransferRequest;
     setBusy(false, description);
     refreshDirectory();
     finishQueuedTransfer(requestId);
+
+    if (wasActiveTransfer) {
+        emit transferResultAvailable(true, description);
+    }
 }
 
 void RemoteFileManagerWidget::handleOperationFailure(const quint64 requestId,
@@ -2452,6 +2461,7 @@ void RemoteFileManagerWidget::handleOperationFailure(const quint64 requestId,
     // 事件循环启动下一项；后续认证或错误对话框仍可完整展示，不会卡死整个队列。
     if (wasActiveTransfer) {
         finishQueuedTransfer(requestId);
+        emit transferResultAvailable(false, message);
     }
 
     if (wasActiveTransfer && message.contains(tr("已取消"))) {

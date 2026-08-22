@@ -58,6 +58,15 @@ private slots:
      */
     void terminalPaneShowsAndExpiresTransientStatus();
 
+    /**
+     * @brief 传输结果必须带上成功/失败图标，且与普通瞬时提示共用同一条自动消失定时器。
+     *
+     * 拖拽上传等入口最终都通过 showTransientTransferResult 展示结果；图标本身、以及
+     * "普通提示不该残留一个过期图标"这两点都必须验证，否则下一条不带图标的提示会被
+     * 上一次传输结果的图标污染。
+     */
+    void terminalPaneShowsIconForTransferResultAndClearsOnPlainStatus();
+
     /** @brief 终端状态栏不应再创建“推测嵌套目标”徽章，以免重复展示内部判定。 */
     void terminalPaneDoesNotExposeInferredTargetBadge();
 
@@ -314,6 +323,41 @@ void ProductivityTest::terminalPaneShowsAndExpiresTransientStatus()
 
     // 到期后必须自动清空，不能永久占用状态栏空间——这条提示本质上是转瞬即逝的操作反馈。
     QTRY_VERIFY_WITH_TIMEOUT(statusLabel->text().isEmpty(), 9000);
+}
+
+void ProductivityTest::terminalPaneShowsIconForTransferResultAndClearsOnPlainStatus()
+{
+    TerminalPane pane;
+    auto *statusLabel = pane.findChild<QLabel *>(
+        QStringLiteral("terminalSessionTransientStatus"));
+    auto *statusIcon = pane.findChild<QLabel *>(
+        QStringLiteral("terminalSessionTransientStatusIcon"));
+    QVERIFY(statusLabel != nullptr);
+    QVERIFY2(statusIcon != nullptr,
+             "会话状态栏必须存在一个紧贴瞬时提示前面的传输结果图标 QLabel");
+    // pane 没有 show()，isVisible() 会因为顶层还没显示而恒为 false；必须用 isHidden()
+    // 判断"是否被显式隐藏"，这与 setVisible(false/true) 的调用状态直接对应。
+    QVERIFY2(statusIcon->isHidden() || statusIcon->pixmap().isNull(),
+             "尚未展示任何传输结果之前不应该已经有图标");
+
+    pane.showTransientTransferResult(true, QStringLiteral("上传 a.txt → /root"));
+    QVERIFY2(statusLabel->text().contains(QStringLiteral("上传 a.txt → /root")),
+             "传输结果文字必须原样展示");
+    QVERIFY2(!statusIcon->isHidden() && !statusIcon->pixmap().isNull(),
+             "传输成功后必须在文字前渲染一个非空图标");
+    const QPixmap successPixmap = statusIcon->pixmap();
+
+    pane.showTransientTransferResult(false, QStringLiteral("上传 b.txt 失败：连接被拒绝"));
+    QVERIFY2(!statusIcon->isHidden() && !statusIcon->pixmap().isNull(),
+             "传输失败同样必须展示图标，不能悄悄退化成纯文字");
+    // 颜色不同，位图数据不应完全相同——否则用户无法用肉眼区分这次是成功还是失败。
+    QVERIFY2(statusIcon->pixmap().toImage() != successPixmap.toImage(),
+             "成功和失败必须使用不同的图标，而不是同一张图换个位置贴上去");
+
+    // 普通提示（如目录读取进度）没有成功/失败语义，绝不能沿用上一次传输结果遗留的图标。
+    pane.showTransientStatus(QStringLiteral("正在读取主目录…"));
+    QVERIFY2(statusIcon->pixmap().isNull() && statusIcon->isHidden(),
+             "切换回普通提示后必须清空上一次传输结果的图标");
 }
 
 void ProductivityTest::terminalPaneDoesNotExposeInferredTargetBadge()

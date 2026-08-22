@@ -88,6 +88,16 @@ signals:
     void statusMessage(const QString &message);
 
     /**
+     * @brief 一次文件/目录上传或下载刚刚结束，供终端会话状态栏叠加成功/失败图标。
+     * @param success true 表示传输成功完成，false 表示失败或以警告收尾。
+     * @param message 与本次结果对应的可读文字，和同一时刻的 statusMessage 内容一致。
+     *
+     * 只在"排队的传输任务"结束时发出，重命名、删除、预览等一次性操作成功/失败不会触发
+     * 本信号——那些没有明确的"传输成功"语义，硬套图标反而会让人误以为发生了文件搬运。
+     */
+    void transferResultAvailable(bool success, const QString &message);
+
+    /**
      * @brief 用户切换了全屏。
      * @param fullScreen true 表示文件管理应覆盖整个标签页，终端暂时让出空间。
      */

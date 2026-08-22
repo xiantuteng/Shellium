@@ -37,6 +37,12 @@ TerminalWorkspace::TerminalWorkspace(QWidget *parent)
             &RemoteFileManagerWidget::statusMessage,
             m_pane,
             &TerminalPane::showTransientStatus);
+    // 传输结果单独走带图标的展示入口，覆盖拖拽上传、右键菜单上传和面板自身按钮触发的
+    // 全部上传/下载——三者共用同一条完成通知路径，图标和消失时机天然保持一致。
+    connect(m_fileManager,
+            &RemoteFileManagerWidget::transferResultAvailable,
+            m_pane,
+            &TerminalPane::showTransientTransferResult);
     // 全屏时让终端整体让出空间，由分隔器把宽度全部交给文件管理；终端进程和滚动缓冲
     // 都不受影响，退出全屏即原样恢复。
     connect(m_fileManager,

@@ -32,6 +32,7 @@ TerminalPane::TerminalPane(QWidget *parent)
     , m_headerBar(new QWidget(this))
     , m_headerLabel(new QLabel(tr("未连接"), this))
     , m_statusMessageLabel(new QLabel(this))
+    , m_statusMessageIcon(new QLabel(this))
     , m_statusMessageTimer(new QTimer(this))
     , m_terminalMetaLabel(new QLabel(tr("UTF-8 · 80×24"), this))
     , m_fileManagerButton(new QToolButton(this))
@@ -53,9 +54,15 @@ TerminalPane::TerminalPane(QWidget *parent)
     // 有关，放在这里比塞进窗口标题栏的全局提示区更贴近用户正在看的上下文。
     m_statusMessageLabel->setObjectName(QStringLiteral("terminalSessionTransientStatus"));
     m_statusMessageLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    m_statusMessageIcon->setObjectName(QStringLiteral("terminalSessionTransientStatusIcon"));
+    m_statusMessageIcon->setFixedSize(14, 14);
+    m_statusMessageIcon->setVisible(false);
     m_statusMessageTimer->setSingleShot(true);
-    connect(m_statusMessageTimer, &QTimer::timeout,
-            this, [this]() { m_statusMessageLabel->clear(); });
+    connect(m_statusMessageTimer, &QTimer::timeout, this, [this]() {
+        m_statusMessageLabel->clear();
+        m_statusMessageIcon->clear();
+        m_statusMessageIcon->setVisible(false);
+    });
     m_terminalMetaLabel->setObjectName(QStringLiteral("terminalSessionMeta"));
     m_terminalMetaLabel->setToolTip(tr("当前终端编码和列×行尺寸"));
     m_fileManagerButton->setObjectName(QStringLiteral("terminalFileManagerToggle"));
@@ -69,6 +76,7 @@ TerminalPane::TerminalPane(QWidget *parent)
     m_fileManagerButton->setAccessibleName(tr("远程文件管理"));
     updateFileManagerButtonIcon();
     headerLayout->addWidget(m_headerLabel, 1);
+    headerLayout->addWidget(m_statusMessageIcon);
     headerLayout->addWidget(m_statusMessageLabel);
     headerLayout->addWidget(m_terminalMetaLabel);
     headerLayout->addWidget(m_fileManagerButton);
@@ -774,6 +782,8 @@ void TerminalPane::setFileManagerVisible(const bool visible)
 
 void TerminalPane::showTransientStatus(const QString &message)
 {
+    m_statusMessageIcon->clear();
+    m_statusMessageIcon->setVisible(false);
     m_statusMessageLabel->setText(message.isEmpty() ? message : QStringLiteral("· %1").arg(message));
     m_statusMessageLabel->setToolTip(message);
     m_statusMessageTimer->stop();
@@ -781,6 +791,28 @@ void TerminalPane::showTransientStatus(const QString &message)
         // 8 秒与窗口标题栏原有的全局提示区一致，不给用户带来新的等待时长预期。
         m_statusMessageTimer->start(8000);
     }
+}
+
+void TerminalPane::showTransientTransferResult(const bool success, const QString &message)
+{
+    if (message.isEmpty()) {
+        showTransientStatus(message);
+        return;
+    }
+    // Check/Warning 用固定的语义色而不是当前主题的强调色：传输结果的对错必须一眼分辨，
+    // 不能被某个终端主题恰好把强调色调成和背景太接近的颜色而看不出来。
+    const QColor color = success ? QColor(QStringLiteral("#3fb950"))
+                                 : QColor(QStringLiteral("#f85149"));
+    m_statusMessageIcon->setPixmap(UiIcons::renderSymbolPixmap(
+        success ? UiIcons::Symbol::Check : UiIcons::Symbol::Warning,
+        color,
+        QSize(14, 14),
+        devicePixelRatioF()));
+    m_statusMessageIcon->setVisible(true);
+    m_statusMessageLabel->setText(QStringLiteral("· %1").arg(message));
+    m_statusMessageLabel->setToolTip(message);
+    m_statusMessageTimer->stop();
+    m_statusMessageTimer->start(8000);
 }
 
 void TerminalPane::updateFileManagerButtonIcon()

@@ -152,6 +152,18 @@ private slots:
     /** @brief 顶栏全屏按钮右侧必须有关闭按钮，点击只上报请求、不自行隐藏。 */
     void closeButtonSitsNextToFullScreenAndOnlyRequestsClose();
 
+    /**
+     * @brief 一次真实上传成功结束后必须发出 transferResultAvailable(true, ...)。
+     *
+     * uploadFilesToDirectory 是给终端拖拽等面板外部入口用的公开入口，直接传入 target
+     * 而不依赖面板自身选中状态；连接失败场景不适合在这里用不存在的服务器模拟——本沙箱
+     * 环境里"连接被拒绝"并不会像真实机器那样快速返回 RST，用不可达目标会让用例挂起
+     * 数分钟。真正连到 AGENT.md 记录的集成测试服务器上传一个真实文件，既避开了这个环境
+     * 差异，也顺带验证了 uploadFilesToDirectory 这条独立路径本身可用。缺少
+     * SHELLIUM_IT_* 环境变量时自动跳过。
+     */
+    void queuedUploadEmitsSuccessfulTransferResult();
+
 private:
     /**
      * @brief 断言指定工具栏的直接布局顺序与设计稿一致。
@@ -511,6 +523,43 @@ void RemoteFileManagerWidgetTest::droppingOntoFileTreeAlwaysTargetsCurrentDirect
     auto *nameLabel = queueList->findChild<QLabel *>(QStringLiteral("SftpQueueItemName"));
     QVERIFY(nameLabel != nullptr);
     QCOMPARE(nameLabel->text(), QStringLiteral("上传 payload.txt → /current"));
+}
+
+void RemoteFileManagerWidgetTest::queuedUploadEmitsSuccessfulTransferResult()
+{
+    const QByteArray host = qgetenv("SHELLIUM_IT_HOST");
+    const QByteArray user = qgetenv("SHELLIUM_IT_USER");
+    const QByteArray password = qgetenv("SHELLIUM_IT_PASSWORD");
+    if (host.isEmpty() || user.isEmpty() || password.isEmpty()) {
+        QSKIP("未设置 SHELLIUM_IT_HOST / SHELLIUM_IT_USER / SHELLIUM_IT_PASSWORD，跳过真实上传结果回归");
+    }
+
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    QFile payload(tempDir.filePath(QStringLiteral("shellium-transfer-result-test.txt")));
+    QVERIFY(payload.open(QIODevice::WriteOnly));
+    payload.write(QByteArrayLiteral("shellium drop-upload regression"));
+    payload.close();
+
+    ConnectionTarget target;
+    target.id = QStringLiteral("integration-layer-1");
+    target.host = QString::fromUtf8(host);
+    target.username = QString::fromUtf8(user);
+    target.password = QString::fromUtf8(password);
+    const uint port = qgetenv("SHELLIUM_IT_PORT").toUInt();
+    target.port = port == 0 ? 22 : static_cast<quint16>(port);
+
+    RemoteFileManagerWidget widget;
+    // 刻意不调用 setAvailableTargets：uploadFilesToDirectory 本就不依赖面板选中状态，
+    // 这里直接验证这条独立路径——正是终端拖拽入口实际调用它的方式。
+    QSignalSpy resultSpy(&widget, &RemoteFileManagerWidget::transferResultAvailable);
+    widget.uploadFilesToDirectory(target, QStringLiteral("/tmp"), {payload.fileName()});
+
+    QVERIFY2(resultSpy.wait(30000), "真实上传结束时未发出 transferResultAvailable");
+    QCOMPARE(resultSpy.count(), 1);
+    QCOMPARE(resultSpy.constFirst().at(0).toBool(), true);
+    QVERIFY2(!resultSpy.constFirst().at(1).toString().isEmpty(),
+             "成功结果也必须带上可读文字，而不是空字符串");
 }
 
 void RemoteFileManagerWidgetTest::pathEditsSelectAllExistingTextWhenFocused()

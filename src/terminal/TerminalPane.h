@@ -153,6 +153,17 @@ public:
      */
     void showTransientStatus(const QString &message);
 
+    /**
+     * @brief 在与 showTransientStatus 相同的位置展示一次文件传输结果，并带上成功/失败图标。
+     * @param success true 显示绿色对勾，false 显示红色警示。
+     * @param message 传输结果文字，例如"上传 a.txt → /root"；空字符串立即清空当前显示。
+     *
+     * 沿用 showTransientStatus 的 8 秒自动消失定时器，只是额外在文字前渲染一个图标——
+     * 拖拽上传、右键菜单上传、面板自身的上传按钮触发的传输，最终都会经这里展示结果，
+     * 因此三者的自动消失时机天然保持一致，不需要分别维护。
+     */
+    void showTransientTransferResult(bool success, const QString &message);
+
 public slots:
     /**
      * @brief 向当前 SSH 或本地 PTY 写入原始字节，不产生新的广播源信号。
@@ -354,7 +365,15 @@ private:
      */
     QLabel *m_statusMessageLabel = nullptr;
 
-    /** @brief 清空 m_statusMessageLabel 的定时器；每次新消息到达都会重新启动。 */
+    /**
+     * @brief 紧贴在 m_statusMessageLabel 前面的传输结果图标，平时不占空间。
+     *
+     * 只有 showTransientTransferResult 会点亮它；showTransientStatus 展示的普通提示
+     * （如"正在读取主目录…"）没有明确的成功/失败语义，继续保持纯文字。
+     */
+    QLabel *m_statusMessageIcon = nullptr;
+
+    /** @brief 清空 m_statusMessageLabel/m_statusMessageIcon 的定时器；每次新消息到达都会重新启动。 */
     QTimer *m_statusMessageTimer = nullptr;
 
     /** @brief 当前终端编码和列×行尺寸，随 PTY 尺寸信号实时更新。 */
