@@ -7,6 +7,8 @@
 
 #include <QCoreApplication>
 #include <QElapsedTimer>
+#include <QFile>
+#include <QTemporaryDir>
 #include <QSignalSpy>
 #include <QTest>
 
@@ -43,6 +45,9 @@ private slots:
     /** @brief 经第一层会话的 direct-tcpip 隧道抵达第二层，验证嵌套路径的传输基础。 */
     void opensForwardSocketThroughRootLayer();
 
+    /** @brief 受管主机链应自动逐跳认证，只在最终目标就绪后对界面宣布连接成功。 */
+    void establishesManagedHostChainDirectly();
+
     /** @brief 压入真实的第二层，在其中执行命令，再通过远端 exit 确定性地弹回第一层。 */
     void pushesAndPopsNestedLayer();
 
@@ -54,6 +59,15 @@ private slots:
 
     /** @brief 注入远端的 shim 必须能在真实 Shell 中定义成功并上报可解析的事件。 */
     void shellShimReportsSshInvocationFromRealShell();
+
+    /**
+     * @brief 接管之后 shim 必须继续挂起，直到被显式放行。
+     *
+     * shim 若在收到 take 后立刻返回，外层 Shell 会当场重画提示符，Shellium 紧接着写出的
+     * password 提示前面就凭空多出一段旧提示符；行为上外层也不该在内层会话期间继续执行
+     * 命令。这两点只有在真实 Shell 里才谈得上验证。
+     */
+    void shellShimSuspendsOuterShellUntilResumed();
 
     /**
      * @brief 服务器禁用 TCP 转发时，必须自动改用 exec 中继并照常建立内层会话。
@@ -72,8 +86,19 @@ private slots:
     /** @brief SFTP 连接池必须让后续操作免去重复握手，而不只是"看起来能用"。 */
     void reusesPooledSftpConnectionAcrossRequests();
 
+    /** @brief 传输占用连接期间，目录浏览必须照常返回，否则用户在上传期间无法切换目录。 */
+    void listsDirectoryWhileTransferHoldsConnection();
+
     /** @brief 无密码的嵌套目标必须索要凭据而非直接失败，且凭据要能传给 SFTP。 */
     void requestsCredentialForNestedLayerWithoutPassword();
+
+    /**
+     * @brief 首次登录必须在后台读出真实服务器的发行版，且与远端自报的 ID 完全一致。
+     *
+     * 探测走的是独立 exec 通道并与 Shell 集成安装串行，只有真实服务器才能验证它既不会
+     * 抢占交互 Shell，也确实拿得到 /etc/os-release 的内容。
+     */
+    void detectsRemoteDistributionOnFirstLogin();
 
     /** @brief 取消一次认证后，下一次建层必须重新索要凭据而不是沿用遗留的空串。 */
     void doesNotReuseStaleCredentialAfterCancel();
@@ -96,6 +121,23 @@ private slots:
 
     /** @brief Shellium 自己写给远端的字节不得出现在用户屏幕上。 */
     void suppressesOwnEchoInTerminal();
+
+    /**
+     * @brief 用户在远端敲 exit 主动结束 SSH 后，面板必须停在手动恢复提示。
+     *
+     * 正常退出曾被直接接回本地 zsh：刚断开的服务器与本机毫无关系，顶上来的本地 Shell
+     * 会静默吞掉现场，用户下一条命令很可能打在自己电脑上。
+     */
+    void normalExitOffersManualRecoveryInsteadOfLocalShell();
+
+    /**
+     * @brief 拖拽上传须落到"此刻真实所在"的层与目录，而不是根连接或建连时的主目录。
+     *
+     * 压入真实第二层后在其中 cd 到一个已知目录，验证 TerminalPane::activeWorkingDirectory()
+     * 跟随内层；弹回外层后必须换回外层自己此前记录的目录，而不是继续停留在已不再活动的
+     * 内层路径上——后者正是拖拽上传功能会把文件传错服务器的根因。
+     */
+    void activeWorkingDirectoryTracksInnermostLayerAfterNestedPush();
 
 private:
     /** @brief 从环境变量装配第一层目标。 */
@@ -306,6 +348,38 @@ void SshSessionStackIntegrationTest::opensForwardSocketThroughRootLayer()
     QVERIFY(stack.wait(10000));
 }
 
+void SshSessionStackIntegrationTest::establishesManagedHostChainDirectly()
+{
+    if (m_secondLayerHost.isEmpty()) {
+        QSKIP("未设置 SHELLIUM_IT_HOST2，无法验证受管主机链");
+    }
+
+    const QList<ConnectionTarget> plan{firstLayerTarget(), secondLayerTarget()};
+    SshSessionStack stack(plan, false, nullptr);
+    QSignalSpy connectedSpy(&stack, &SshSessionStack::shellConnected);
+    QSignalSpy layersSpy(&stack, &SshSessionStack::layersChanged);
+    QSignalSpy errorSpy(&stack, &SshSessionStack::connectionError);
+    stack.start();
+
+    QVERIFY2(waitFor([&connectedSpy, &errorSpy]() {
+                 return !connectedSpy.isEmpty() || !errorSpy.isEmpty();
+             }),
+             "受管主机链在时限内既未成功也未返回错误");
+    QVERIFY2(errorSpy.isEmpty(),
+             errorSpy.isEmpty() ? "" : qPrintable(errorSpy.constFirst().constFirst().toString()));
+    QCOMPARE(connectedSpy.size(), 1);
+    QVERIFY(!layersSpy.isEmpty());
+    const QList<ConnectionTarget> layers =
+        qvariant_cast<QList<ConnectionTarget>>(layersSpy.constLast().constFirst());
+    QCOMPARE(layers.size(), 2);
+    QVERIFY(layers.at(0).transit);
+    QVERIFY(!layers.at(1).transit);
+    QCOMPARE(layers.at(1).id, secondLayerTarget().id);
+
+    stack.requestStop();
+    QVERIFY(stack.wait(5000));
+}
+
 void SshSessionStackIntegrationTest::pushesAndPopsNestedLayer()
 {
     if (m_secondLayerHost.isEmpty() || qgetenv("SHELLIUM_IT_PASSWORD2").isEmpty()) {
@@ -470,9 +544,16 @@ void SshSessionStackIntegrationTest::shellShimReportsSshInvocationFromRealShell(
     QVERIFY2(failed.isEmpty(), "第一层连接失败");
     QVERIFY(waitFor([&]() { return !output.isEmpty(); }, 15000));
 
-    // 注入 shim。这一步在真实 Shell 里跑：语法错误、base64 缺失、引号转义问题都只有
-    // 在这里才会暴露，桩替身完全测不出来。
+    // 注入前设置一条用户策略，再在真实 Shell 里执行 shim。除语法、base64 和引号问题外，
+    // 还要确认注入不会像旧实现那样把 HISTCONTROL 无条件覆盖为 ignorespace。
+    stack.enqueueInput("HISTCONTROL=erasedups\n");
     stack.enqueueInput(ShellShim::scriptBody() + "\n");
+    output.clear();
+    stack.enqueueInput("printf '<SHELLIUM_HC>%s</SHELLIUM_HC>\\n' \"$HISTCONTROL\"\n");
+    QVERIFY2(waitFor([&]() {
+                 return output.contains("<SHELLIUM_HC>erasedups:ignorespace</SHELLIUM_HC>");
+             }, 15000),
+             "shim 覆盖或丢失了用户已有的 HISTCONTROL 策略");
     output.clear();
     stack.enqueueInput("type ssh | head -1\n");
     QVERIFY2(waitFor([&]() { return output.contains("function"); }, 15000),
@@ -509,6 +590,60 @@ void SshSessionStackIntegrationTest::shellShimReportsSshInvocationFromRealShell(
     stack.enqueueInput("echo SHIM_RELEASED\n");
     QVERIFY2(waitFor([&]() { return output.contains("SHIM_RELEASED"); }, 30000),
              "回执后终端未恢复，shim 可能仍阻塞在 read 上");
+
+    stack.requestStop();
+    QVERIFY(stack.wait(10000));
+}
+
+void SshSessionStackIntegrationTest::shellShimSuspendsOuterShellUntilResumed()
+{
+    SshSessionStack stack(firstLayerTarget());
+    QSignalSpy connected(&stack, &SshSessionStack::shellConnected);
+    QSignalSpy failed(&stack, &SshSessionStack::connectionError);
+
+    QByteArray output;
+    connect(&stack, &SshSessionStack::outputReady, this,
+            [&output](const QByteArray &bytes) { output.append(bytes); });
+
+    stack.start();
+    QVERIFY(waitFor([&]() { return connected.count() > 0 || failed.count() > 0; }));
+    QVERIFY2(failed.isEmpty(), "第一层连接失败");
+    QVERIFY(waitFor([&]() { return !output.isEmpty(); }, 15000));
+
+    stack.enqueueInput(ShellShim::scriptBody() + "\n");
+    output.clear();
+    stack.enqueueInput("type ssh | head -1\n");
+    QVERIFY2(waitFor([&]() { return output.contains("function"); }, 15000),
+             "shim 未能在远端 Shell 中定义成 ssh 函数");
+
+    // 第一轮：接管之后不放行，外层必须一直挂起。
+    output.clear();
+    stack.enqueueInput("ssh deploy@10.0.0.222\n");
+    QVERIFY2(waitFor([&]() { return output.contains("\033]6773;connect;"); }, 15000),
+             "shim 未上报 OSC 事件");
+    output.clear();
+    stack.enqueueInput(ShellShim::acceptResponse());
+
+    // 这一行会被仍然阻塞的 read 当成普通输入吃掉，Shell 绝不会执行它。shim 若在 take 之后
+    // 立刻返回，Shell 就会执行并打印出 SHIM_ASLEEP —— 那正是提示符被提前重画的病根。
+    // 断言的是展开后的结果，命令自身的回显里不含该字符串。
+    stack.enqueueInput("printf 'SHIM_%s\\n' ASLEEP\n");
+    QTest::qWait(4000);
+    QVERIFY2(!output.contains("SHIM_ASLEEP"),
+             "take 之后外层 Shell 仍在执行命令：shim 没有挂起，提示符会被提前重画");
+
+    // 第二轮：验证放行确实能让 shim 返回，外层重新取得提示符。
+    output.clear();
+    stack.enqueueInput("ssh deploy@10.0.0.222\n");
+    QVERIFY2(waitFor([&]() { return output.contains("\033]6773;connect;"); }, 15000),
+             "第二次 ssh 未上报 OSC 事件（上一轮的 shim 可能没能返回）");
+    stack.enqueueInput(ShellShim::acceptResponse());
+    QTest::qWait(500);
+    stack.enqueueInput(ShellShim::resumeResponse());
+    output.clear();
+    stack.enqueueInput("printf 'SHIM_%s\\n' RESUMED\n");
+    QVERIFY2(waitFor([&]() { return output.contains("SHIM_RESUMED"); }, 15000),
+             "放行后外层 Shell 未恢复：shim 仍阻塞在 read 上");
 
     stack.requestStop();
     QVERIFY(stack.wait(10000));
@@ -554,6 +689,73 @@ void SshSessionStackIntegrationTest::reusesPooledSftpConnectionAcrossRequests()
              qPrintable(QStringLiteral("热请求未显著快于冷请求（冷 %1ms，热最快 %2ms），"
                                        "连接池可能没有生效")
                             .arg(coldMs).arg(warmBestMs)));
+}
+
+void SshSessionStackIntegrationTest::listsDirectoryWhileTransferHoldsConnection()
+{
+    SftpService service;
+    const ConnectionTarget target = firstLayerTarget();
+
+    QSignalSpy listed(&service, &SftpService::directoryListed);
+    QSignalSpy failed(&service, &SftpService::operationFailed);
+    QSignalSpy succeeded(&service, &SftpService::operationSucceeded);
+    QSignalSpy progressed(&service, &SftpService::transferProgress);
+
+    service.listDirectory(target, QString());
+    QVERIFY2(waitFor([&]() { return listed.count() > 0 || failed.count() > 0; }, 30000),
+             "主目录读取未返回");
+    QVERIFY2(failed.isEmpty(),
+             qPrintable(QStringLiteral("主目录读取失败：%1")
+                            .arg(failed.value(0).value(3).toString())));
+    const QString home = listed.at(0).at(2).toString();
+
+    // 文件必须大到能在传输途中被暂停：单块写完就结束的小文件根本走不到暂停边界。
+    QTemporaryDir localDir;
+    QVERIFY(localDir.isValid());
+    const QString localPath = localDir.filePath(QStringLiteral("shellium-concurrency-probe.bin"));
+    {
+        QFile payload(localPath);
+        QVERIFY(payload.open(QIODevice::WriteOnly));
+        const QByteArray block(1 << 20, '\0');
+        for (int index = 0; index < 64; ++index) {
+            QCOMPARE(payload.write(block), static_cast<qint64>(block.size()));
+        }
+    }
+    const QString remotePath = home.endsWith(QLatin1Char('/'))
+        ? home + QStringLiteral("shellium-concurrency-probe.bin")
+        : home + QStringLiteral("/shellium-concurrency-probe.bin");
+
+    const quint64 uploadId =
+        service.uploadFile(target, localPath, remotePath, SftpTransfer::ExistingFilePolicy::Overwrite);
+    QVERIFY2(waitFor([&]() { return progressed.count() > 0 || failed.count() > 0; }, 60000),
+             "上传未开始");
+    QVERIFY2(failed.isEmpty(),
+             qPrintable(QStringLiteral("上传失败：%1").arg(failed.value(0).value(3).toString())));
+
+    // 暂停会让传输线程停在分块边界上，并持续占用它那条池化连接。用户在上传期间切换目录
+    // 时遇到的正是这种"连接被占住"的状态，只不过那时占用它的是仍在写字节的循环。
+    service.pauseRequest(uploadId);
+    QVERIFY2(!waitFor([&]() { return succeeded.count() > 0; }, 3000),
+             "上传在暂停前就已完成，用例无法覆盖传输占用连接的场景");
+
+    const int listedBefore = listed.count();
+    QElapsedTimer browseTimer;
+    browseTimer.start();
+    service.listDirectory(target, home);
+    const bool browsed = waitFor(
+        [&]() { return listed.count() > listedBefore || failed.count() > 0; }, 30000);
+
+    // 先恢复并取消，避免断言失败时把暂停中的传输线程留在后台。
+    service.resumeRequest(uploadId);
+    service.cancelRequest(uploadId);
+    waitFor([&]() { return succeeded.count() > 0 || failed.count() > 0; }, 30000);
+    const int succeededBeforeCleanup = succeeded.count();
+    service.removePath(target, remotePath, false);
+    waitFor([&]() { return succeeded.count() > succeededBeforeCleanup; }, 30000);
+
+    QVERIFY2(browsed,
+             "传输占用连接期间目录浏览没有返回：浏览与传输必须走各自独立的连接");
+    qInfo("传输占用连接期间的目录浏览耗时：%lldms", browseTimer.elapsed());
 }
 
 void SshSessionStackIntegrationTest::requestsCredentialForNestedLayerWithoutPassword()
@@ -743,6 +945,39 @@ void SshSessionStackIntegrationTest::terminalPaneHandlesTypedSshEndToEnd()
     QCOMPARE(chain.at(1).confidence, ConnectionTarget::Confidence::Confirmed);
 }
 
+void SshSessionStackIntegrationTest::normalExitOffersManualRecoveryInsteadOfLocalShell()
+{
+    TerminalPane pane;
+    pane.resize(900, 500);
+    pane.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&pane));
+
+    auto *view = pane.findChild<TerminalView *>();
+    QVERIFY(view != nullptr);
+    view->setFocus(Qt::OtherFocusReason);
+
+    pane.connectToHost(firstLayerTarget());
+    QVERIFY2(waitFor([&]() { return pane.isConnected(); }, 40000), "第一层连接失败");
+    QVERIFY(waitFor([&]() { return pane.targets().size() == 1; }, 20000));
+    QTest::qWait(2500);
+
+    // 完全按用户的操作来：在远端 Shell 里敲 exit 主动结束这条 SSH。
+    QTest::keyClicks(view, QStringLiteral("exit"));
+    QTest::keyClick(view, Qt::Key_Return);
+
+    QVERIFY2(waitFor([&]() { return pane.isAwaitingManualRecovery(); }, 40000),
+             "远端 exit 后未进入手动恢复提示");
+    QVERIFY2(!pane.isConnected(), "提示状态下不应存在可交互会话");
+
+    const QString screen = pane.terminalPlainText();
+    QVERIFY2(screen.contains(QStringLiteral("按 r 重新连接")),
+             "结束后必须给出手动重连按键");
+    QVERIFY2(screen.contains(QStringLiteral("按 x 关闭")),
+             "结束后必须给出关闭标签页按键");
+    QVERIFY2(!screen.contains(QStringLiteral("正在启动本地 zsh")),
+             "主动结束 SSH 后不得擅自接回本地 zsh");
+}
+
 void SshSessionStackIntegrationTest::suppressesOwnEchoInTerminal()
 {
     if (m_secondLayerHost.isEmpty() || qgetenv("SHELLIUM_IT_PASSWORD2").isEmpty()) {
@@ -786,9 +1021,34 @@ void SshSessionStackIntegrationTest::suppressesOwnEchoInTerminal()
                  qPrintable(QStringLiteral("终端里出现了注入行片段：%1").arg(fragment)));
     }
 
+    // source 命令是本程序注入的，同样一个字都不该出现。它在 readline 接管 PTY 之前抵达
+    // 时会被远端回显两次，只扣一次就会在屏幕上留下一条 `. /tmp/.shm-xxxxxxxx`。
+    QVERIFY2(!screen.contains(QStringLiteral("/tmp/.shm-")),
+             qPrintable(QStringLiteral("终端里出现了 Shell 集成的 source 命令：[%1]")
+                            .arg(screen)));
+
     // 真正的远端输出必须完好——过滤不能把用户内容一起吞掉。
     QVERIFY2(screen.contains(QStringLiteral("ssh root@") + m_secondLayerHost),
              "用户自己敲的命令被过滤掉了");
+
+    // 密码提示必须紧贴用户敲的那一行。中间若冒出空行，说明 take 回执的换行没被扣掉；
+    // 若冒出一段外层提示符，说明 shim 在接管后立刻返回、Shell 重画了提示符。
+    const QStringList lines = screen.split(QLatin1Char('\n'));
+    const QString command = QStringLiteral("ssh root@") + m_secondLayerHost;
+    const qsizetype commandLine = [&]() {
+        for (qsizetype index = 0; index < lines.size(); ++index) {
+            if (lines.at(index).contains(command)) {
+                return index;
+            }
+        }
+        return qsizetype(-1);
+    }();
+    QVERIFY(commandLine >= 0 && commandLine + 1 < lines.size());
+    const QString promptLine = lines.at(commandLine + 1);
+    QVERIFY2(promptLine.startsWith(QStringLiteral("root@") + m_secondLayerHost
+                                   + QStringLiteral("'s password:")),
+             qPrintable(QStringLiteral("ssh 命令下一行不是密码提示，而是：[%1]")
+                            .arg(promptLine)));
 }
 
 void SshSessionStackIntegrationTest::resolvesHomeDirectoryForEmptyPath()
@@ -919,6 +1179,86 @@ void SshSessionStackIntegrationTest::routesNestedSftpThroughOuterLayer()
              qPrintable(QStringLiteral("内层 SFTP 失败：%1")
                             .arg(failed.value(0).value(3).toString())));
     qInfo("第 2 层主目录解析为：%s", qPrintable(listed.at(0).at(2).toString()));
+}
+
+void SshSessionStackIntegrationTest::activeWorkingDirectoryTracksInnermostLayerAfterNestedPush()
+{
+    if (m_secondLayerHost.isEmpty() || qgetenv("SHELLIUM_IT_PASSWORD2").isEmpty()) {
+        QSKIP("未设置第二层服务器信息，跳过嵌套层工作目录跟踪测试");
+    }
+
+    TerminalPane pane;
+    pane.resize(900, 500);
+    pane.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&pane));
+
+    pane.connectToHost(firstLayerTarget());
+    QVERIFY2(waitFor([&]() { return pane.isConnected(); }, 40000), "第一层连接失败");
+    QVERIFY(waitFor([&]() { return pane.targets().size() == 1; }, 20000));
+
+    // 用 cd 制造一个与登录主目录不同的已知位置，避免"恰好没变"掩盖了跟踪逻辑没生效。
+    pane.executeCommand(QStringLiteral("cd /tmp"));
+    QVERIFY2(waitFor([&]() { return pane.activeWorkingDirectory() == QStringLiteral("/tmp"); }, 15000),
+             "第一层 cd 后 activeWorkingDirectory 未跟上新的工作目录");
+
+    pane.connectNestedHost(secondLayerTarget());
+    QVERIFY2(waitFor([&]() { return pane.targets().size() == 2; }, 40000), "第二层未建成");
+
+    pane.executeCommand(QStringLiteral("cd /var"));
+    QVERIFY2(waitFor([&]() { return pane.activeWorkingDirectory() == QStringLiteral("/var"); }, 15000),
+             "压入第二层后 activeWorkingDirectory 未跟随内层 cd，拖拽上传会落到错误的层");
+
+    // 内层退出后必须换回外层自己此前记录的位置，而不是继续停留在已不再活动的内层路径上。
+    pane.executeCommand(QStringLiteral("exit"));
+    QVERIFY2(waitFor([&]() { return pane.targets().size() == 1; }, 20000), "内层 exit 后未弹回外层");
+    QVERIFY2(waitFor([&]() { return pane.activeWorkingDirectory() == QStringLiteral("/tmp"); }, 15000),
+             "弹回外层后 activeWorkingDirectory 未恢复外层自己的目录");
+}
+
+void SshSessionStackIntegrationTest::detectsRemoteDistributionOnFirstLogin()
+{
+    SshSessionStack stack(firstLayerTarget());
+    QSignalSpy connected(&stack, &SshSessionStack::shellConnected);
+    QSignalSpy failed(&stack, &SshSessionStack::connectionError);
+    QSignalSpy detected(&stack, &SshSessionStack::remoteDistributionDetected);
+
+    QByteArray output;
+    connect(&stack, &SshSessionStack::outputReady, this, [&output](const QByteArray &bytes) {
+        output.append(bytes);
+    });
+
+    // 与 MainWindow 的顺序一致：先登记一次性请求，再启动线程。
+    stack.requestRemoteDistributionDetection();
+    stack.updateTerminalSize(120, 40);
+    stack.start();
+
+    QVERIFY2(waitFor([&]() { return connected.count() > 0 || failed.count() > 0; }),
+             "连接既未成功也未报错");
+    QVERIFY2(failed.isEmpty(),
+             qPrintable(QStringLiteral("连接报错：%1")
+                            .arg(failed.value(0).value(0).toString())));
+
+    QVERIFY2(waitFor([&]() { return detected.count() > 0; }, 30000),
+             "首次登录后未在后台读出远端发行版");
+    const QString distributionId = detected.at(0).at(0).toString();
+    QVERIFY2(!distributionId.isEmpty(), "识别结果为空");
+
+    // 与远端自报的 ID 逐字比对，确保拿到的是这台服务器的真实系统，而不是任何本地推断。
+    QVERIFY(waitFor([&]() { return !output.isEmpty(); }, 15000));
+    output.clear();
+    stack.enqueueInput("echo SHELLIUM_OS_$(. /etc/os-release; echo $ID)_END\n");
+    const QByteArray expected =
+        QByteArrayLiteral("SHELLIUM_OS_") + distributionId.toUtf8() + QByteArrayLiteral("_END");
+    QVERIFY2(waitFor([&]() { return output.contains(expected); }, 15000),
+             qPrintable(QStringLiteral("后台识别到 %1，但远端 Shell 报告的 ID 不同")
+                            .arg(distributionId)));
+
+    // 探测只应发生一次：请求被工作线程接手后不得在每个泵送周期重复执行远端命令。
+    QVERIFY(waitFor([&]() { return detected.count() > 1; }, 3000) == false);
+    QCOMPARE(detected.count(), 1);
+
+    stack.requestStop();
+    QVERIFY(stack.wait(10000));
 }
 
 QTEST_MAIN(SshSessionStackIntegrationTest)

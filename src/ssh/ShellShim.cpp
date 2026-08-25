@@ -18,6 +18,31 @@ bool isSshExecutable(const QString &token)
     return QFileInfo(token).fileName() == QStringLiteral("ssh");
 }
 
+/**
+ * @brief 判断参数是否为 OpenSSH 的详细日志开关（`-v`、`-vv` 或 `-vvv`）。
+ * @param token 远端 Shell 已完成引号展开后的单个命令行参数。
+ * @return 参数仅由一个前导短横线和一个或多个 `v` 组成时返回 true。
+ *
+ * Shellium 接管嵌套连接后实际使用 libssh 建连，不会启动用户输入的 OpenSSH 进程，也就
+ * 无法忠实产生 OpenSSH 写入 stderr 的 `debug1/debug2/debug3` 诊断。这里不能像普通的
+ * 无参数开关一样忽略 `-v`，而应当识别所有合法重复级别并让调用方回退到原生 ssh。
+ */
+bool isOpenSshVerboseFlag(const QString &token)
+{
+    if (token.size() < 2 || token.front() != QLatin1Char('-')) {
+        return false;
+    }
+
+    // OpenSSH 用重复的 v 提高日志等级；逐字符判断可同时覆盖 -v、-vv、-vvv，并拒绝把
+    // 其他未知组合选项误判成详细日志请求。
+    for (qsizetype index = 1; index < token.size(); ++index) {
+        if (token.at(index) != QLatin1Char('v')) {
+            return false;
+        }
+    }
+    return true;
+}
+
 } // namespace
 
 QByteArray ShellShim::scriptBody()
@@ -25,22 +50,39 @@ QByteArray ShellShim::scriptBody()
     // 设计约束逐条说明：
     //   * 脚本经独立 exec 通道写入远端文件，正文不经过终端；交互式 Shell 里只执行一条
     //     极短的 source 命令，其回显可以被本地过滤器精确扣掉。
-    //   * 外层用 [ -n "$BASH_VERSION$ZSH_VERSION" ] 限定，其他 Shell 下什么都不定义；
+    //   * 外层用 Bash/Zsh 版本变量限定，其他 Bourne Shell 下什么都不定义；安装命令还会
+    //     在独立 exec 通道核对登录 Shell，fish/csh 等环境不会收到 source 命令；
     //     case "$-" in *i*) 再限定只在交互式 Shell 生效，脚本里的 ssh 不受影响。
+    //   * Bash 的 HISTCONTROL 只在缺少忽略空格策略时追加 ignorespace，保留用户原有的
+    //     ignoredups/erasedups；Zsh 不使用该变量，因此不做无意义的环境改动。
     //   * argv 用 0x1E 连接后再 base64——**不能直接把 0x1E 放进 OSC**：它是 C0 控制字符，
     //     libvterm 会在此处中止字符串解析，导致只收到第一个参数。base64 的字符集
     //     [A-Za-z0-9+/=] 在 OSC 中完全安全。
     //   * base64 不可用时直接执行原生 ssh，绝不发出无人应答的 OSC——那会让 shim 永远
     //     阻塞在 read 上，把用户的终端挂死。
     //   * read 从 /dev/tty 读取回执，因此即使 stdout 被重定向也能收到 Shellium 的答复。
-    //     回执文本 take/pass 会被 PTY 回显到屏幕上，这是已知的外观瑕疵。两种消除办法都
-    //     被否决了：`read -s` 并非 POSIX，不支持时返回非零，再用 `||` 回退就会吃掉用户
-    //     的下一行输入；`stty -echo` 多数实现走 TCSAFLUSH，会丢弃已在缓冲区里的输入，
-    //     回执若先于 stty 抵达就被吞掉，shim 将永久阻塞。宁可留下一行噪音，也不能冒
-    //     丢输入或死锁的风险。
+    //     回执文本 take/pass 连同其换行都会被 PTY 回显，由本地的 TerminalEchoFilter 精确
+    //     扣掉。不在远端消除回显：`read -s` 并非 POSIX，不支持时返回非零，再用 `||` 回退
+    //     就会吃掉用户的下一行输入；`stty -echo` 多数实现走 TCSAFLUSH，会丢弃已在缓冲区
+    //     里的输入，回执若先于 stty 抵达就被吞掉，shim 将永久阻塞。
+    //   * take 之后再阻塞读一行，直到 Shellium 在内层会话结束时放行。这一步是外观正确的
+    //     关键：函数若立刻返回，外层 Shell 会当场重画一遍提示符，于是 Shellium 紧接着写出
+    //     的 password 提示前面凭空多出一段"[root@outer ~]# "。行为上这也与真正的 ssh 一致
+    //     ——外层 Shell 本就应当在内层会话期间挂起。即使 Shellium 意外退出也不会卡死：
+    //     用户敲一次回车就能让 read 返回。
+    //   * cwd 上报钩子（_shellium_report_cwd）挂在 PROMPT_COMMAND/precmd_functions 上，
+    //     每次提示符刷新前都会重新上报，且注册前先查重，重复 source 不会挂两次。追加而不
+    //     是覆盖：用户自己的 PROMPT_COMMAND/precmd 钩子必须继续生效。刻意不对 $PWD 做
+    //     shell 转义/编码——多数路径不含会打断 OSC 帧的控制字符，换取实现和调用方解析都
+    //     保持简单；真出现异常路径，后果只是这一次 cwd 上报被丢弃，不影响其余功能。
     return QByteArrayLiteral(
-        "if [ -n \"$BASH_VERSION$ZSH_VERSION\" ]; then"
-        " export HISTCONTROL=ignorespace;"
+        "if [ -n \"${BASH_VERSION-}${ZSH_VERSION-}\" ]; then"
+        " if [ -n \"${BASH_VERSION-}\" ]; then"
+        " case \":${HISTCONTROL-}:\" in"
+        " *:ignorespace:*|*:ignoreboth:*) ;;"
+        " *) HISTCONTROL=\"${HISTCONTROL:+$HISTCONTROL:}ignorespace\"; export HISTCONTROL;;"
+        " esac;"
+        " fi;"
         " ssh() {"
         " case \"$-\" in *i*) ;; *) command ssh \"$@\"; return $?;; esac;"
         " _shellium_a='';"
@@ -54,23 +96,49 @@ QByteArray ShellShim::scriptBody()
         ";connect;%s\\007' \"$_shellium_b\" > /dev/tty;"
         " unset _shellium_b;"
         " IFS= read -r _shellium_r < /dev/tty;"
-        " if [ \"$_shellium_r\" = \"take\" ]; then unset _shellium_r; return 0; fi;"
+        " if [ \"$_shellium_r\" = \"take\" ]; then"
+        " IFS= read -r _shellium_r < /dev/tty;"
+        " unset _shellium_r; return 0; fi;"
         " unset _shellium_r; command ssh \"$@\";"
         " };"
+        " _shellium_report_cwd() { printf '\\033]") + kOscNumber + QByteArrayLiteral(
+        ";cwd;%s\\007' \"$PWD\" > /dev/tty 2>/dev/null; };"
+        " if [ -n \"${BASH_VERSION-}\" ]; then"
+        " case \";${PROMPT_COMMAND-};\" in"
+        " *\";_shellium_report_cwd;\"*) ;;"
+        " *) PROMPT_COMMAND=\"${PROMPT_COMMAND:+$PROMPT_COMMAND;}_shellium_report_cwd\";;"
+        " esac;"
+        " elif [ -n \"${ZSH_VERSION-}\" ]; then"
+        " case \" ${precmd_functions[*]-} \" in"
+        " *\" _shellium_report_cwd \"*) ;;"
+        " *) precmd_functions+=(_shellium_report_cwd);;"
+        " esac;"
+        " fi;"
+        " _shellium_report_cwd;"
         " fi");
 }
 
 QByteArray ShellShim::installCommand(const QByteArray &path)
 {
+    // 登录 Shell 检查发生在独立 exec 通道：即使用户使用 fish/csh，其语法错误与非零退出码
+    // 也不会污染交互终端；SshSessionStack 看到失败后不会再发送 `. path`。
+    // umask 077 防止同机其他用户在“写入完成—交互 source”之间读取或篡改临时脚本。
     // here-doc 定界符不会出现在脚本正文中；引号形式禁止变量展开，正文原样落盘。
-    // 脚本末尾自删：这样交互式终端里那条 source 命令可以保持最短，无需再跟一条 rm。
-    return "cat > " + path + " <<'SHELLIUM_SHIM_EOF'\n"
+    return "case \"${SHELL##*/}\" in bash|zsh) ;; *) "
+           "printf 'shellium: unsupported login shell: %s\\n' \"${SHELL:-unknown}\" >&2; "
+           "exit 64;; esac\n"
+           "umask 077\ncat > " + path + " <<'SHELLIUM_SHIM_EOF'\n"
         + scriptBody() + "\nrm -f " + path + "\nSHELLIUM_SHIM_EOF\n";
 }
 
 QByteArray ShellShim::sourceCommand(const QByteArray &path)
 {
     return " . " + path;
+}
+
+QByteArray ShellShim::sourceCommandEchoReplacement()
+{
+    return QByteArrayLiteral("\r\x1b[2K");
 }
 
 QByteArray ShellShim::acceptResponse()
@@ -83,6 +151,12 @@ QByteArray ShellShim::declineResponse()
     return QByteArrayLiteral("pass\n");
 }
 
+QByteArray ShellShim::resumeResponse()
+{
+    // 挂起的 shim 只等一个行结束符，内容无关紧要；空行让远端不必回显任何可见字符。
+    return QByteArrayLiteral("\n");
+}
+
 ShellShim::Event ShellShim::parseEvent(const QByteArray &payload)
 {
     Event event;
@@ -90,7 +164,21 @@ ShellShim::Event ShellShim::parseEvent(const QByteArray &payload)
     if (separator < 0) {
         return event;
     }
-    if (payload.left(separator) != QByteArrayLiteral("connect")) {
+    const QByteArray kind = payload.left(separator);
+
+    if (kind == QByteArrayLiteral("cwd")) {
+        // 载荷是远端 Shell 未经转义的 $PWD 原文；不做 base64，只要求不含破坏 OSC 帧的
+        // 控制字符。此处不再按 ';' 二次拆分——路径本身允许包含分号。
+        const QByteArray path = payload.mid(separator + 1);
+        if (path.isEmpty()) {
+            return event;
+        }
+        event.workingDirectory = QString::fromUtf8(path);
+        event.kind = Event::Kind::Cwd;
+        return event;
+    }
+
+    if (kind != QByteArrayLiteral("connect")) {
         return event;
     }
 
@@ -158,6 +246,11 @@ ConnectionTarget ShellShim::resolveTarget(const QStringList &arguments,
         }
         if (nonInteractiveFlags.contains(token)) {
             return decline(tr("该 ssh 调用不会进入交互式 Shell"));
+        }
+        if (isOpenSshVerboseFlag(token)) {
+            // -v 的核心用途就是观察 OpenSSH 自身的协商过程。若继续由 libssh 接管，连接虽
+            // 可能成功，但用户明确要求的 stderr 调试输出会消失，因此必须交还原生 ssh。
+            return decline(tr("该 ssh 调用要求显示 OpenSSH 详细过程"));
         }
         if (token == QStringLiteral("-F") || token == QStringLiteral("-J")) {
             // 自定义配置文件与显式跳板链无法用一条 direct-tcpip 忠实复现，

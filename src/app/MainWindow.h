@@ -1,9 +1,37 @@
 #pragma once
 
 #include <QMainWindow>
+#include <QHash>
+#include <QList>
+#include <QStringList>
 
+class ApplicationDatabase;
+class AiAssistantWidget;
+class AiSettingsService;
+class ConnectionTarget;
+class CredentialVault;
+class HostManagerWidget;
+class PortForwardManagerWidget;
+class ProductivityModel;
+class ProductivityWidget;
+struct TerminalSettings;
+class QAction;
+class QEvent;
+class QLabel;
+class QMenu;
+class QObject;
+class QPoint;
+class QResizeEvent;
+class QShowEvent;
+class QSplitter;
+class QStackedWidget;
 class QTabWidget;
+class QTimer;
+class QToolButton;
+class QWidget;
+class SessionTabBar;
 class TerminalPane;
+class TerminalSettingsService;
 class TerminalWorkspace;
 
 /**
@@ -16,7 +44,60 @@ class MainWindow final : public QMainWindow {
     Q_OBJECT
 
 public:
-    explicit MainWindow(QWidget *parent = nullptr);
+    /**
+     * @brief 创建主窗口并接入已初始化的持久化数据库。
+     * @param database 应用级数据库，生命周期由 main() 管理并覆盖整个窗口。
+     * @param parent Qt 父对象。
+     */
+    explicit MainWindow(ApplicationDatabase *database,
+                        CredentialVault *credentialVault,
+                        QWidget *parent = nullptr);
+    ~MainWindow() override;
+
+    /**
+     * @brief 构建标题栏标签的右键菜单。
+     * @param index 被右键的标签索引；小于 0 表示点在空白处，只保留"新建终端标签"。
+     * @param parent 菜单的父控件，由调用方决定生命周期。
+     * @return 已装配好全部动作的菜单，调用方负责弹出或直接触发其中的动作。
+     *
+     * 菜单构建与弹出分离，用例才能在不进入 exec() 阻塞事件循环的前提下触发同一批动作。
+     */
+    [[nodiscard]] QMenu *createSessionTabMenu(int index, QWidget *parent);
+
+protected:
+    /**
+     * @brief 观察全应用的人机输入并刷新保险库闲置计时器。
+     *
+     * 只处理键盘、鼠标、滚轮和触摸等真实活动；绘制、网络与定时器事件不能延长解锁时间，
+     * 否则一个持续输出日志的无人值守终端会让保险库永不自动锁定。
+     */
+    bool eventFilter(QObject *watched, QEvent *event) override;
+
+    /**
+     * @brief 窗口首次显示后配置 macOS 原生透明标题栏。
+     *
+     * Cocoa 的 NSWindow 在 QWidget 构造阶段还不一定存在，因此必须延迟到 showEvent；配置
+     * 失败时不会改变功能，并会在后续显示事件安全重试。
+     */
+    void showEvent(QShowEvent *event) override;
+
+    /**
+     * @brief 在窗口最大化、恢复或全屏状态变化后重新对齐 macOS 原生标题按钮。
+     * @param event Qt 窗口状态变化事件；其他 changeEvent 类型只交给基类处理。
+     *
+     * AppKit 可能在状态转换期间重新布局红黄绿按钮，因此需要等待当前事件完成后再次校正，
+     * 否则按钮会短暂或永久回到系统默认短标题栏的纵向位置。
+     */
+    void changeEvent(QEvent *event) override;
+
+    /**
+     * @brief 在原生窗口尺寸变化后维持交通灯相对自定义标题栏的垂直位置。
+     * @param event Qt 窗口尺寸变化事件。
+     *
+     * macOS 的标准缩放动画会产生连续尺寸事件，却不保证对应 Qt::WindowStateChange；在这里
+     * 做幂等对齐可覆盖双击放大、绿色按钮缩放以及普通边缘调整三条路径。
+     */
+    void resizeEvent(QResizeEvent *event) override;
 
 private:
     /** @brief 打开连接对话框，并在当前标签页的终端中启动 SSH。 */
@@ -30,12 +111,291 @@ private:
      */
     void connectNestedFromCurrentPane();
 
+    /**
+     * @brief 从主机树或最近连接列表连接一条持久化主机记录。
+     * @param hostId 数据库稳定主键，用于连接历史与凭据引用。
+     * @param connectionPlan 已解析的受管连接计划；为空时由主窗口按 hostId 重新解析。新建
+     *        主机后首次连接时，最终层还可能带进程内临时密码。
+     * @param openInNewTab true 时先新建标签页再连接（双击主机），而不是复用当前标签页。
+     */
+    void connectSavedHost(const QString &hostId,
+                          const QList<ConnectionTarget> &connectionPlan,
+                          bool openInNewTab = false);
+
+    /** @brief 根连接认证成功后写入进行中的成功历史。 */
+    void recordConnectionSucceeded(TerminalPane *pane, const ConnectionTarget &target);
+
+    /** @brief 根连接认证前失败后写入带错误原因的完整历史。 */
+    void recordConnectionFailed(TerminalPane *pane,
+                                const ConnectionTarget &target,
+                                const QString &message);
+
+    /** @brief 已成功根连接断开后补齐结束时间和持续时长。 */
+    void recordConnectionDisconnected(TerminalPane *pane,
+                                      const ConnectionTarget &target,
+                                      int exitStatus);
+
+    /** @brief 确保保险库已解锁，供连接已保存凭据和安全设置操作复用。 */
+    bool ensureVaultUnlocked();
+
     /** @brief 创建一个拥有独立终端与文件管理器的新标签页，并统一连接状态信号。 */
     TerminalWorkspace *createWorkspaceTab(const QString &title);
+
+    /**
+     * @brief 构建"没有任何标签页"时占据整个工作区的品牌空态页面。
+     * @return 由调用方加入工作区栈的空态控件。
+     *
+     * 启动时不再预先创建一个空终端：真正的默认状态是"还没有会话"。用一个独立页面表达
+     * 它，比留下一个连 Shell 都没启动的空标签更诚实，也避免用户误以为那是可用终端。
+     */
+    QWidget *createWorkspacePlaceholder();
+
+    /**
+     * @brief 按当前标签数量在品牌空态页与终端标签页之间切换工作区栈。
+     *
+     * 所有增删标签的路径都必须调用它；否则关闭最后一个标签后，QTabWidget 会留下一块
+     * 没有页面的空白区域，看起来像界面渲染失败。
+     */
+    void updateWorkspacePlaceholder();
+
+    /**
+     * @brief 为一个终端标签配置其专属 AI 助手及命令路由。
+     * @param assistant 归属于该标签的 AI 助手实例，不可为空。
+     * @param pane 同一标签内的终端面板，不可为空；助手终端上下文始终从它读取。
+     *
+     * 每个标签使用独立助手实例，才能保证模型异步回复、输出捕获和最近十次会话在切换标签
+     * 后仍留在原标签。命令也直接路由到绑定 pane，避免用户点击后恰逢标签切换而发错终端。
+     */
+    void configureAiAssistant(AiAssistantWidget *assistant, TerminalPane *pane);
+
+    /**
+     * @brief 关闭指定会话标签并同步标题栏标签模型。
+     * @param index 待关闭标签索引。
+     * @param allowLast 保留参数：关闭最后一个标签现在会回到品牌空态页，两种取值行为相同。
+     *
+     * 标题栏 QTabBar 只是中央 QTabWidget 的视觉镜像，所有删除都必须经过这里，避免两个
+     * 控件的索引错位后把连接、文件管理器或保存工作区操作路由到错误会话。
+     */
+    void closeWorkspaceTab(int index, bool allowLast = false);
+
+    /**
+     * @brief 同时更新中央工作区与标题栏镜像中的标签文字。
+     * @param index 标签索引。
+     * @param title 经过调用方校验的非空显示名称。
+     */
+    void setWorkspaceTabText(int index, const QString &title);
+
+    /**
+     * @brief 在新标签中再打开一份与指定标签相同的会话。
+     * @param index 被复制的标签索引。
+     *
+     * 直接复用源面板已解析好的整条受管计划（含逐跳凭据），因此复制远程标签不会再次触发
+     * 主机链解析和保险库解锁；源标签跑的是本地 Shell 时，副本同样只是本地 Shell。
+     */
+    void duplicateWorkspaceTab(int index);
+
+    /**
+     * @brief 显示或隐藏左侧单一内容侧栏。
+     * @param visible true 表示显示当前侧栏页面，false 表示仅保留窄图标导航轨。
+     */
+    void setSidebarVisible(bool visible);
+
+    /**
+     * @brief 切换左侧侧栏中的功能页面并确保侧栏可见。
+     * @param pageIndex 0 为主机、1 为效率工具、2 为端口转发；越界值会被忽略。
+     *
+     * 页面采用一个 QStackedWidget 而不是多个 Dock。这样导航轨、标题和正文始终共享同一
+     * 对齐体系，窗口缩放时不会出现 Dock 标题条、拖动把手和页签反复挤压终端的问题。
+     */
+    void showSidebarPage(int pageIndex);
+
+    /**
+     * @brief 读取上次持久化的侧栏宽度并应用到分隔器。
+     *
+     * 读取失败或数值越界都退回默认宽度，而不是把损坏值原样交给 QSplitter：一个过小或
+     * 过大的宽度会让侧栏或终端在启动后完全无法使用，用户也没有入口修正它。
+     */
+    void restoreSidebarWidth();
+
+    /**
+     * @brief 把分隔器当前的侧栏宽度写入数据库设置。
+     *
+     * 只在侧栏可见且宽度不小于最小值时写入。侧栏被收起时 QSplitter 会把它的尺寸压成 0，
+     * 若照单保存，下次启动恢复出来的就是一条看不见的侧栏。
+     */
+    void persistSidebarWidth();
+
+    /**
+     * @brief 根据当前设置应用窗口级现代化视觉系统。
+     * @param settings 已规范化的终端设置快照。
+     *
+     * 该方法只负责窗口框架、通用表单和列表的颜色/间距；终端正文仍由 TerminalPane 使用
+     * 自己的终端调色板，避免 QSS 覆盖 ANSI 渲染颜色。
+     */
+    void applyModernAppearance(const TerminalSettings &settings);
+
+    /**
+     * @brief 在标题栏标签的右键位置打开会话菜单。
+     * @param position 相对于标题栏 QTabBar 的局部坐标。
+     */
+    void showSessionTabContextMenu(const QPoint &position);
+
+    /**
+     * @brief 记录一条运行信息。
+     *
+     * 界面上不再有任何对应的提示区：消息只写入 ActivityLog 的日志文件，供事后排查。
+     * @param message 面向用户的简短说明；空文本无操作。
+     * @param timeoutMilliseconds 历史参数，界面提示条移除后已被忽略，仅保留调用点兼容。
+     */
+    void showTransientMessage(const QString &message, int timeoutMilliseconds = 5000);
 
     /** @brief 返回当前标签页的终端工作区。 */
     [[nodiscard]] TerminalWorkspace *activeWorkspace() const;
 
+    /** @brief 收集所有已打开标签的终端面板；返回值不转移所有权。 */
+    [[nodiscard]] QList<TerminalPane *> allTerminalPanes() const;
+
+    /**
+     * @brief 根据当前可交互标签刷新效率工具的主机选择器，并把当前标签同步给 AI 助手。
+     *
+     * 两者共用同一个"当前标签变化"信号源：效率工具需要全部已连接标签的列表，AI 助手只
+     * 需要当前激活的单个标签，因此在同一个方法里一并处理，不新增第二条几乎相同的信号
+     * 连接链。
+     */
+    void refreshProductivityTargets();
+
+    /** @brief 把设置服务中的快捷键映射到实际 QAction。 */
+    void applyConfiguredShortcuts();
+
+    /** @brief 弹出查找文本输入框并在当前终端中循环查找。 */
+    void searchCurrentTerminal();
+
+    /**
+     * @brief 打开可搜索命令面板并触发选中的当前可用 QAction。
+     *
+     * 面板在每次打开时从窗口实际动作树采集条目，因此插件式新增菜单动作后无需维护第二份
+     * 命令注册表；菜单容器、分隔符、不可见和禁用动作不会出现在结果中。
+     */
+    void openCommandPalette();
+
+    /** @brief 将当前终端纯文本通过 QSaveFile 原子写入用户选择的文件。 */
+    void exportCurrentTerminal();
+
+    /**
+     * @brief 把当前全部标签的名称、保存主机 id 和文件管理显隐状态保存为工作区。
+     *
+     * 临时连接没有可重建的凭据引用，因此会拒绝保存并提示用户先把主机加入主机树；本地
+     * Shell 标签可以保存为空 hostId，恢复时重新打开本地登录 Shell。
+     */
+    void saveCurrentWorkspace();
+
+    /** @brief 选择并严格校验一个工作区，然后用其中的标签组合替换当前全部标签。 */
+    void openSavedWorkspace();
+
+    /** @brief 选择并删除一个持久化工作区，不影响当前已经打开的终端会话。 */
+    void removeSavedWorkspace();
+
+    /** @brief 将命令路由到指定主机 id 对应的全部已打开终端；空列表表示当前终端。 */
+    void executeOnTargets(const QString &command, const QStringList &targetIds);
+
+    /** @brief 将原始终端字节发送到指定主机 id 的已打开终端，可排除广播源。 */
+    void sendBytesToTargets(const QByteArray &bytes,
+                            const QStringList &targetIds,
+                            TerminalPane *excludedSource = nullptr);
+
     TerminalWorkspace *m_workspace = nullptr;
     QTabWidget *m_tabs = nullptr;
+    /**
+     * @brief 工作区区域的二选一容器：品牌空态页或终端标签页。
+     *
+     * 空态不是"隐藏 QTabWidget"，而是一个真实页面。这样分隔器的尺寸、最小宽度和拖动
+     * 行为在有无标签时完全一致，用户新建第一个标签时终端区不会突然跳一次宽度。
+     */
+    QStackedWidget *m_workspaceStack = nullptr;
+    /** @brief 没有任何会话标签时显示的产品图标与名称页面。 */
+    QWidget *m_workspacePlaceholder = nullptr;
+    /** @brief 融入窗口标题栏的可交互会话标签，内容与 m_tabs 严格镜像。 */
+    SessionTabBar *m_titleTabBar = nullptr;
+    /**
+     * @brief 标签栏两侧的外部滚动箭头。
+     *
+     * 溢出时它们使用 retainSizeWhenHidden 占位，防止显隐反过来改变溢出判定而抖动；一个
+     * 标签都没有时这份占位没有意义，必须连同标签栏一起彻底让出宽度。
+     */
+    QToolButton *m_tabScrollLeftButton = nullptr;
+    QToolButton *m_tabScrollRightButton = nullptr;
+    /** @brief 覆盖 macOS 原生标题区的 52 像素会话导航容器。 */
+    QWidget *m_titleChrome = nullptr;
+    /** @brief 始终保留的窄图标导航轨，负责选择侧栏功能。 */
+    QWidget *m_navigationRail = nullptr;
+    /** @brief 可整体收起的单一侧栏容器。 */
+    QWidget *m_sidebarPanel = nullptr;
+    /**
+     * @brief 连接侧栏与终端工作区的水平分隔器。
+     *
+     * 分隔器把侧栏最右边框变成可拖拽命中区域，同时保留终端区的最小可用宽度；隐藏侧栏
+     * 时 Qt 会自动隐藏对应把手，再次展开时恢复用户上一次拖动后的宽度。
+     */
+    QSplitter *m_sidebarSplitter = nullptr;
+    /**
+     * @brief 侧栏宽度落库的防抖定时器。
+     *
+     * 分隔器为实时拖动，splitterMoved 会在一次拖动中发出上百次；逐次写库既拖慢拖动手感，
+     * 也在磁盘上留下大量无意义事务。定时器只在拖动停下后写一次最终宽度。
+     */
+    QTimer *m_sidebarWidthPersistTimer = nullptr;
+    /** @brief 承载主机、效率工具和端口转发三个互斥页面。 */
+    QStackedWidget *m_sidebarStack = nullptr;
+    /** @brief 当前侧栏页面标题。 */
+    QLabel *m_sidebarTitle = nullptr;
+    /** @brief 主机页标题后的数量摘要；切换到其他侧栏页面时隐藏。 */
+    QLabel *m_hostCountLabel = nullptr;
+    /** @brief 主机页提供、挂在侧栏标题行右侧的动作条；仅在主机页可见。 */
+    QWidget *m_hostHeaderActions = nullptr;
+    /** @brief 导航轨上与三个侧栏页面一一对应的互斥按钮。 */
+    QList<QToolButton *> m_navigationButtons;
+    /** @brief 标题区及导航轨中需要随主题重新着色的图标按钮。 */
+    QList<QToolButton *> m_chromeButtons;
+    ApplicationDatabase *m_database = nullptr;
+    CredentialVault *m_credentialVault = nullptr;
+    HostManagerWidget *m_hostManager = nullptr;
+    PortForwardManagerWidget *m_portForwardManager = nullptr;
+    ProductivityModel *m_productivityModel = nullptr;
+    ProductivityWidget *m_productivityWidget = nullptr;
+    AiSettingsService *m_aiSettingsService = nullptr;
+    /**
+     * @brief 与终端 QTabWidget 索引严格同步的 AI 助手页面栈。
+     *
+     * 栈中每个页面都是一个独立 AiAssistantWidget；新建、移动、关闭终端标签时必须执行
+     * 相同的插入、移动、删除操作，currentIndex 也必须同步，防止显示其他标签的聊天记录。
+     */
+    QStackedWidget *m_aiAssistantStack = nullptr;
+    TerminalSettingsService *m_settingsService = nullptr;
+    QTimer *m_vaultIdleTimer = nullptr;
+
+    /** @brief 标题栏最左侧的侧栏显隐动作。 */
+    QAction *m_sidebarToggleAction = nullptr;
+    /** @brief 当前侧栏页索引，用于收起后恢复到用户最后使用的功能。 */
+    int m_activeSidebarPage = 0;
+    /** @brief 防止重复桥接 macOS NSWindow；false 时 showEvent 会继续安全重试。 */
+    bool m_macWindowChromeConfigured = false;
+
+    /** @brief 正在连接但尚未认证成功的面板与持久化主机 id。 */
+    QHash<TerminalPane *, QString> m_pendingHistoryHosts;
+
+    /** @brief 连接按钮触发时的 UTC 时间，成功和失败历史都以此为起点。 */
+    QHash<TerminalPane *, QDateTime> m_pendingHistoryStartedAt;
+
+    /** @brief 已成功连接且尚未写入断开时间的面板与连接历史行 id。 */
+    QHash<TerminalPane *, qint64> m_openHistoryRows;
+
+    /** @brief 稳定设置动作 id 到主窗口 QAction 的映射，设置变化时统一更新快捷键。 */
+    QHash<QString, QAction *> m_configurableActions;
+
+    /** @brief 实时广播开关和当前明确选择的目标主机 id。 */
+    bool m_broadcastEnabled = false;
+    QStringList m_broadcastTargetIds;
+
+    /** @brief 最近一次终端搜索文本，重复打开查找框时作为默认值。 */
+    QString m_lastTerminalSearch;
 };
