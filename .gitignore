@@ -7,4 +7,5 @@
 # macOS 发布脚本生成的 Release 中间目录和 DMG 属于本机可再生产物。忽略它们可以避免把
 # 大体积二进制、签名信息或公证票据误提交到源码仓库；正式文件应通过发布渠道单独交付。
 /build-release-arm64/**
+/build-windows-msvc/**
 /dist/**
