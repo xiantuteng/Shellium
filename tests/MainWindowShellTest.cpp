@@ -12,6 +12,7 @@
 #include <QAction>
 #include <QLabel>
 #include <QMenu>
+#include <QMenuBar>
 #include <QStackedWidget>
 #include <QSplitter>
 #include <QSplitterHandle>
@@ -42,7 +43,9 @@ private slots:
     void newTabButtonFollowsTheLastTab();
     void manualRecoveryCloseKeyClosesTheTab();
     void destroyingWindowWithOpenTabsIsSafe();
-    void emptyStateKeepsNewTabButtonNextToTheSidebarToggle();
+    void emptyStateKeepsNewTabButtonNextToTheTitleIdentity();
+    /** @brief Windows/Linux 产品名、标签与自绘窗口按钮必须共用唯一的无边框标题行。 */
+    void desktopPlatformsUseProductTitleAndCustomWindowControls();
     void sidebarWidthIsRestoredOnNextLaunch();
     void duplicateMenuItemOpensASecondCopyOfTheTab();
 
@@ -144,8 +147,56 @@ void MainWindowShellTest::newTabButtonFollowsTheLastTab()
     const int buttonRight = newTabButton->mapTo(chrome, QPoint(newTabButton->width(), 0)).x();
     QVERIFY2(buttonRight <= chrome->width(),
              "标签溢出时新建按钮不能被挤出标题行");
+#ifdef Q_OS_MACOS
     QVERIFY2(chrome->width() - buttonRight < 80,
-             "标签溢出时新建按钮必须固定在标题行最右端");
+             "macOS 标签溢出时新建按钮必须固定在标题行最右端");
+#else
+    auto *minimizeButton = window.findChild<QToolButton *>(
+        QStringLiteral("WindowMinimizeButton"));
+    QVERIFY(minimizeButton != nullptr);
+    const int controlsLeft = minimizeButton->mapTo(chrome, QPoint(0, 0)).x();
+    QVERIFY2(controlsLeft - buttonRight < 80,
+             "Windows/Linux 标签溢出时新建按钮必须紧靠右侧窗口按钮");
+#endif
+}
+
+void MainWindowShellTest::desktopPlatformsUseProductTitleAndCustomWindowControls()
+{
+#ifdef Q_OS_MACOS
+    // macOS 菜单由系统屏幕菜单栏承载，窗口控制继续使用原生交通灯；本用例只约束需要自绘
+    // 标题栏的桌面平台，避免把 Cocoa 的正确原生行为误判为缺少窗口内控件。
+    QVERIFY(true);
+#else
+    MainWindow window(m_database, m_vault);
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+    QWidget *chrome = window.findChild<QWidget *>(QStringLiteral("WindowChrome"));
+    auto *menuModel = window.findChild<QMenuBar *>(QStringLiteral("ApplicationMenuModel"));
+    auto *productName = window.findChild<QLabel *>(QStringLiteral("WindowProductName"));
+    auto *tabs = window.findChild<QTabBar *>(QStringLiteral("SessionTitleTabs"));
+    auto *minimizeButton = window.findChild<QToolButton *>(
+        QStringLiteral("WindowMinimizeButton"));
+    auto *maximizeButton = window.findChild<QToolButton *>(
+        QStringLiteral("WindowMaximizeButton"));
+    auto *closeButton = window.findChild<QToolButton *>(QStringLiteral("WindowCloseButton"));
+
+    QVERIFY(chrome != nullptr && menuModel != nullptr && productName != nullptr && tabs != nullptr);
+    QVERIFY(minimizeButton != nullptr && maximizeButton != nullptr && closeButton != nullptr);
+    QVERIFY2(window.windowFlags().testFlag(Qt::FramelessWindowHint),
+             "Windows/Linux 必须移除独立系统标题栏，避免标签栏下方再出现第二层标题");
+    QVERIFY2(window.findChild<QMenuBar *>(QStringLiteral("WindowMenuBar")) == nullptr,
+             "Windows/Linux 标题栏不能继续显示传统平铺菜单");
+    QCOMPARE(productName->parentWidget(), chrome);
+    QCOMPARE(productName->text(), QStringLiteral("Shellium"));
+    QVERIFY(productName->isVisible());
+    QCOMPARE(tabs->parentWidget(), chrome);
+    QCOMPARE(minimizeButton->parentWidget(), chrome);
+    QCOMPARE(maximizeButton->parentWidget(), chrome);
+    QCOMPARE(closeButton->parentWidget(), chrome);
+    QVERIFY2(!menuModel->isVisible(), "菜单模型只保留动作关系，不能占据标题栏空间");
+    QCOMPARE(menuModel->actions().size(), 5);
+#endif
 }
 
 void MainWindowShellTest::manualRecoveryCloseKeyClosesTheTab()
@@ -198,7 +249,7 @@ void MainWindowShellTest::destroyingWindowWithOpenTabsIsSafe()
     QVERIFY(true);
 }
 
-void MainWindowShellTest::emptyStateKeepsNewTabButtonNextToTheSidebarToggle()
+void MainWindowShellTest::emptyStateKeepsNewTabButtonNextToTheTitleIdentity()
 {
     MainWindow window(m_database, m_vault);
     window.resize(1200, 800);
@@ -216,13 +267,25 @@ void MainWindowShellTest::emptyStateKeepsNewTabButtonNextToTheSidebarToggle()
     }
     QVERIFY(sidebarButton != nullptr);
 
-    // 一个标签都没有时，标签栏不占宽度，"+"必须紧跟在侧栏开关右边；否则标题行左侧会空出
-    // 一大块无法解释的留白，用户找不到新建入口。
     const int sidebarRight = sidebarButton->geometry().right();
     const int buttonLeft = newTabButton->geometry().left();
+#ifdef Q_OS_MACOS
+    // macOS 没有窗口内产品名，空态标签入口仍应紧跟交通灯留白后的侧栏按钮。
     QVERIFY2(buttonLeft - sidebarRight < 24,
              qPrintable(QStringLiteral("空态下新建按钮与侧栏开关之间空出 %1 像素")
                             .arg(buttonLeft - sidebarRight)));
+#else
+    // Windows/Linux 按参考样式依次显示“侧栏按钮 → Shellium → 新建标签”。分别约束两段
+    // 间距，既允许产品名占据合理宽度，也防止任一布局项被伸缩项推离形成大片空白。
+    auto *productName = window.findChild<QLabel *>(QStringLiteral("WindowProductName"));
+    QVERIFY(productName != nullptr);
+    const int productLeft = productName->geometry().left();
+    const int productRight = productName->geometry().right();
+    QVERIFY2(productLeft - sidebarRight < 24,
+             "产品名称必须紧跟在侧栏按钮右侧");
+    QVERIFY2(buttonLeft - productRight < 24,
+             "空态下新建按钮必须紧跟在 Shellium 产品名称右侧");
+#endif
 }
 
 void MainWindowShellTest::sidebarWidthIsRestoredOnNextLaunch()

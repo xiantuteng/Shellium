@@ -44,6 +44,8 @@
 #include <QMessageBox>
 #include <QMenuBar>
 #include <QMouseEvent>
+#include <QPaintEvent>
+#include <QPainter>
 #include <QPointer>
 #include <QResizeEvent>
 #include <QSaveFile>
@@ -70,6 +72,69 @@ namespace {
 
 /** @brief 一体化标题栏的固定逻辑高度，同时作为 macOS 交通灯垂直对齐的唯一基准。 */
 constexpr int kWindowChromeHeight = 52;
+
+/** @brief Windows/Linux 无边框窗口边缘的逻辑像素命中宽度。 */
+constexpr int kWindowResizeBorderWidth = 7;
+
+/**
+ * @brief 计算全局指针位置命中的无边框窗口缩放边缘。
+ * @param window 待检测的顶层窗口。
+ * @param globalPosition 指针的全局逻辑坐标。
+ * @return 可交给 QWindow::startSystemResize() 的边缘组合；不在边缘或窗口不可缩放时返回空。
+ *
+ * 使用 Qt 的系统缩放入口而不是手工修改 geometry，桌面环境才能继续提供 Windows Snap、
+ * Wayland 合成器约束、多屏 DPI 与最小尺寸限制。最大化/全屏窗口没有可拖动边缘，必须直接
+ * 返回空，避免顶边操作意外把窗口恢复。
+ */
+[[nodiscard]] Qt::Edges resizeEdgesAt(const QWidget *window, const QPointF &globalPosition)
+{
+    if (window == nullptr || window->isMaximized() || window->isFullScreen()) {
+        return {};
+    }
+
+    const QRect globalRect(window->mapToGlobal(QPoint(0, 0)), window->size());
+    const QPoint position = globalPosition.toPoint();
+    Qt::Edges edges;
+    if (position.x() >= globalRect.left()
+        && position.x() < globalRect.left() + kWindowResizeBorderWidth) {
+        edges |= Qt::LeftEdge;
+    } else if (position.x() <= globalRect.right()
+               && position.x() > globalRect.right() - kWindowResizeBorderWidth) {
+        edges |= Qt::RightEdge;
+    }
+    if (position.y() >= globalRect.top()
+        && position.y() < globalRect.top() + kWindowResizeBorderWidth) {
+        edges |= Qt::TopEdge;
+    } else if (position.y() <= globalRect.bottom()
+               && position.y() > globalRect.bottom() - kWindowResizeBorderWidth) {
+        edges |= Qt::BottomEdge;
+    }
+    return edges;
+}
+
+/**
+ * @brief 把窗口缩放边缘组合转换为用户熟悉的指针形状。
+ * @param edges 当前命中的一个边或一组对角边。
+ * @return 对应横向、纵向或对角缩放的 Qt 光标；空边缘返回普通箭头。
+ */
+[[nodiscard]] Qt::CursorShape resizeCursorForEdges(const Qt::Edges edges)
+{
+    if (edges == (Qt::LeftEdge | Qt::TopEdge)
+        || edges == (Qt::RightEdge | Qt::BottomEdge)) {
+        return Qt::SizeFDiagCursor;
+    }
+    if (edges == (Qt::RightEdge | Qt::TopEdge)
+        || edges == (Qt::LeftEdge | Qt::BottomEdge)) {
+        return Qt::SizeBDiagCursor;
+    }
+    if (edges.testFlag(Qt::LeftEdge) || edges.testFlag(Qt::RightEdge)) {
+        return Qt::SizeHorCursor;
+    }
+    if (edges.testFlag(Qt::TopEdge) || edges.testFlag(Qt::BottomEdge)) {
+        return Qt::SizeVerCursor;
+    }
+    return Qt::ArrowCursor;
+}
 
 /**
  * @brief 共享侧栏允许缩小到的宽度。
@@ -176,6 +241,109 @@ protected:
     }
 };
 
+/**
+ * @brief 绘制参考设计中克制的细线型窗口控制按钮。
+ *
+ * QStyle::SP_TitleBar* 会随 Windows 主题、Linux 图标主题和 Qt 样式产生明显不同的尺寸、
+ * 填充与立体边框，无法形成稳定的产品标题栏。本控件仍复用 QToolButton 的悬停、按下、
+ * 焦点和辅助功能行为，只接管中央符号绘制，从而让三个平台版本的视觉密度保持一致。
+ */
+class WindowControlButton final : public QToolButton {
+public:
+    /** @brief 按钮中央需要绘制的窗口操作符号。 */
+    enum class Glyph {
+        Minimize,
+        Maximize,
+        Close
+    };
+
+    /**
+     * @brief 创建指定符号的窗口控制按钮。
+     * @param glyph 最小化、最大化或关闭符号。
+     * @param parent 按钮所属的标题栏容器。
+     */
+    explicit WindowControlButton(const Glyph glyph, QWidget *parent = nullptr)
+        : QToolButton(parent)
+        , m_glyph(glyph)
+    {
+        setCursor(Qt::ArrowCursor);
+        setFocusPolicy(Qt::NoFocus);
+    }
+
+    /**
+     * @brief 切换最大化按钮显示“最大化”还是“还原”双框符号。
+     * @param restoreMode true 表示窗口已最大化，应绘制还原符号。
+     *
+     * 该状态只对 Maximize 类型生效；比较后再更新可避免 resize/状态事件连续到达时重复重绘。
+     */
+    void setRestoreMode(const bool restoreMode)
+    {
+        if (m_restoreMode == restoreMode) {
+            return;
+        }
+        m_restoreMode = restoreMode;
+        update();
+    }
+
+protected:
+    /** @brief 先让 QToolButton/QSS 绘制交互背景，再在中心叠加高 DPI 细线符号。 */
+    void paintEvent(QPaintEvent *event) override
+    {
+        QToolButton::paintEvent(event);
+
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        const QColor stroke = isEnabled()
+            ? (underMouse() ? QColor(QStringLiteral("#f1f3f8"))
+                            : QColor(QStringLiteral("#9ca4b8")))
+            : QColor(QStringLiteral("#686f82"));
+        painter.setPen(QPen(stroke, 1.6, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        painter.setBrush(Qt::NoBrush);
+
+        const QPointF center = rect().center();
+        switch (m_glyph) {
+        case Glyph::Minimize:
+            // 参考图中的最小化符号位于视觉中心略下方，避免一条短线看起来向上漂浮。
+            painter.drawLine(center + QPointF(-5.0, 3.0), center + QPointF(5.0, 3.0));
+            break;
+        case Glyph::Maximize:
+            if (m_restoreMode) {
+                // 两个错位方框表达“还原”，后框只绘制未被前框覆盖的轮廓，保持图标清爽。
+                painter.drawRoundedRect(QRectF(center.x() - 3.0,
+                                               center.y() - 5.0,
+                                               8.0,
+                                               8.0),
+                                        0.8,
+                                        0.8);
+                painter.drawRoundedRect(QRectF(center.x() - 5.0,
+                                               center.y() - 3.0,
+                                               8.0,
+                                               8.0),
+                                        0.8,
+                                        0.8);
+            } else {
+                painter.drawRoundedRect(QRectF(center.x() - 5.0,
+                                               center.y() - 5.0,
+                                               10.0,
+                                               10.0),
+                                        1.0,
+                                        1.0);
+            }
+            break;
+        case Glyph::Close:
+            painter.drawLine(center + QPointF(-4.5, -4.5), center + QPointF(4.5, 4.5));
+            painter.drawLine(center + QPointF(4.5, -4.5), center + QPointF(-4.5, 4.5));
+            break;
+        }
+    }
+
+private:
+    /** @brief 构造时固定的基础符号类型。 */
+    Glyph m_glyph;
+    /** @brief 最大化按钮是否应显示双框还原符号。 */
+    bool m_restoreMode = false;
+};
+
 /** @brief 侧栏页面的稳定索引，必须与 QStackedWidget 添加顺序保持一致。 */
 enum SidebarPageIndex {
     HostsPage = 0,
@@ -213,6 +381,13 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     m_credentialVault->setPasswordProtectionEnabled(
         m_settingsService->currentSettings().vaultPasswordEnabled);
     m_productivityModel = new ProductivityModel(m_database, this);
+
+// Qt 6.8 尚不能在 Windows/Linux 上把普通 QWidget 扩展进系统标题栏。使用无边框窗口后，
+// 下方的 WindowChromeWidget 才能成为唯一标题行；移动和缩放仍交给 QWindow 系统接口，
+// 不会牺牲贴边、多屏或桌面合成器行为。macOS 继续走原生全尺寸内容标题栏。
+#ifndef Q_OS_MACOS
+    setWindowFlag(Qt::FramelessWindowHint, true);
+#endif
 
     // Qt 6.9 起 ExpandedClientAreaHint 会在平台窗口创建前通知 Cocoa：客户区需要覆盖标题栏，
     // NoTitleBarBackgroundHint 同时移除系统白色背景。只调用 AppKit 的 FullSizeContentView 太晚，
@@ -498,6 +673,22 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     m_sidebarToggleAction->setChecked(true);
     m_sidebarToggleAction->setToolTip(tr("展开或收起左侧主机、效率工具和端口转发区域"));
 
+    QMenuBar *applicationMenuBar = nullptr;
+#ifdef Q_OS_MACOS
+    // macOS 菜单属于屏幕顶部的系统菜单栏，不应塞进窗口标题行；保持原生菜单还能保留系统
+    // 统一的键盘导航、应用菜单与 VoiceOver 语义。
+    applicationMenuBar = menuBar();
+    applicationMenuBar->setNativeMenuBar(true);
+#else
+    // Windows/Linux 的标题栏按产品视觉只显示 Shellium 名称，不再平铺传统菜单项。仍保留
+    // 一个不可见的菜单模型承载菜单对象和 QAction 关系，使已有快捷键、命令面板与动作更新
+    // 逻辑不需要复制；它不进入布局，也不会占用标题栏或中央区域的任何高度。
+    applicationMenuBar = new QMenuBar(this);
+    applicationMenuBar->setObjectName(QStringLiteral("ApplicationMenuModel"));
+    applicationMenuBar->setNativeMenuBar(false);
+    applicationMenuBar->hide();
+#endif
+
     auto *sidebarChromeButton = new QToolButton(m_titleChrome);
     sidebarChromeButton->setProperty("chromeButton", true);
     sidebarChromeButton->setProperty("chromeRole", QStringLiteral("sidebar"));
@@ -506,6 +697,16 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     sidebarChromeButton->setFixedSize(38, 38);
     titleLayout->addWidget(sidebarChromeButton);
     m_chromeButtons.append(sidebarChromeButton);
+
+#ifndef Q_OS_MACOS
+    // 产品名称紧跟侧栏按钮，位置与参考图中的主产品入口一致。使用 QLabel 而不是可点击按钮，
+    // 明确表达这里是品牌标识而非被移到另一种外观下的传统菜单。
+    auto *productNameLabel = new QLabel(QStringLiteral("Shellium"), m_titleChrome);
+    productNameLabel->setObjectName(QStringLiteral("WindowProductName"));
+    productNameLabel->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
+    productNameLabel->setAccessibleName(tr("Shellium 产品名称"));
+    titleLayout->addWidget(productNameLabel, 0, Qt::AlignVCenter);
+#endif
 
     // 标签滚动箭头分置标签栏两侧，与标签栏、"新建标签"按钮同为标题行的布局项。用布局
     // 分配空间而不是把按钮浮动叠在标签栏之上，标签再多也不会与"+"互相遮挡。
@@ -566,6 +767,44 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     // 零，"+"随之固定在标题行最右端。
     titleLayout->addStretch(1);
 
+#ifndef Q_OS_MACOS
+    // 无边框窗口不会再获得系统标题按钮，因此在同一标题行最右侧提供等价操作。按钮触发的
+    // 仍是 QWidget 标准窗口状态 API，任务栏、桌面快捷键和窗口管理器可以继续感知状态。
+    auto *minimizeButton = new WindowControlButton(
+        WindowControlButton::Glyph::Minimize, m_titleChrome);
+    minimizeButton->setObjectName(QStringLiteral("WindowMinimizeButton"));
+    minimizeButton->setProperty("windowControl", true);
+    minimizeButton->setProperty("windowControlRole", QStringLiteral("minimize"));
+    minimizeButton->setToolTip(tr("最小化"));
+    minimizeButton->setAccessibleName(tr("最小化窗口"));
+    minimizeButton->setFixedSize(48, 42);
+    titleLayout->addWidget(minimizeButton);
+    connect(minimizeButton, &QToolButton::clicked, this, &QWidget::showMinimized);
+
+    m_windowMaximizeButton = new WindowControlButton(
+        WindowControlButton::Glyph::Maximize, m_titleChrome);
+    m_windowMaximizeButton->setObjectName(QStringLiteral("WindowMaximizeButton"));
+    m_windowMaximizeButton->setProperty("windowControl", true);
+    m_windowMaximizeButton->setProperty("windowControlRole", QStringLiteral("maximize"));
+    m_windowMaximizeButton->setFixedSize(48, 42);
+    titleLayout->addWidget(m_windowMaximizeButton);
+    connect(m_windowMaximizeButton, &QToolButton::clicked, this, [this]() {
+        isMaximized() ? showNormal() : showMaximized();
+    });
+    refreshWindowMaximizeIcon();
+
+    auto *closeButton = new WindowControlButton(
+        WindowControlButton::Glyph::Close, m_titleChrome);
+    closeButton->setObjectName(QStringLiteral("WindowCloseButton"));
+    closeButton->setProperty("windowControl", true);
+    closeButton->setProperty("windowControlRole", QStringLiteral("close"));
+    closeButton->setToolTip(tr("关闭"));
+    closeButton->setAccessibleName(tr("关闭窗口"));
+    closeButton->setFixedSize(48, 42);
+    titleLayout->addWidget(closeButton);
+    connect(closeButton, &QToolButton::clicked, this, &QWidget::close);
+#endif
+
     connect(scrollLeftButton, &QToolButton::clicked,
             m_titleTabBar, &SessionTabBar::scrollTabsLeft);
     connect(scrollRightButton, &QToolButton::clicked,
@@ -609,7 +848,7 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     railLayout->addWidget(settingsButton, 0, Qt::AlignHCenter);
     m_chromeButtons.append(settingsButton);
 
-    QMenu *connectionMenu = menuBar()->addMenu(tr("连接"));
+    QMenu *connectionMenu = applicationMenuBar->addMenu(tr("连接"));
     connectionMenu->addAction(connectAction);
     connectionMenu->addAction(nestedConnectAction);
     connectionMenu->addAction(localShellAction);
@@ -617,13 +856,13 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     connectionMenu->addAction(closeTabAction);
     connectionMenu->addAction(renameTabAction);
 
-    QMenu *workspaceMenu = menuBar()->addMenu(tr("工作区"));
+    QMenu *workspaceMenu = applicationMenuBar->addMenu(tr("工作区"));
     workspaceMenu->addAction(saveWorkspaceAction);
     workspaceMenu->addAction(openWorkspaceAction);
     workspaceMenu->addSeparator();
     workspaceMenu->addAction(removeWorkspaceAction);
 
-    QMenu *viewMenu = menuBar()->addMenu(tr("视图"));
+    QMenu *viewMenu = applicationMenuBar->addMenu(tr("视图"));
     viewMenu->addAction(m_sidebarToggleAction);
     viewMenu->addSeparator();
     QAction *showHostsAction = viewMenu->addAction(
@@ -657,7 +896,7 @@ MainWindow::MainWindow(ApplicationDatabase *database,
             this,
             [this]() { showSidebarPage(AiPage); });
 
-    QMenu *terminalMenu = menuBar()->addMenu(tr("终端"));
+    QMenu *terminalMenu = applicationMenuBar->addMenu(tr("终端"));
     terminalMenu->addAction(searchTerminalAction);
     terminalMenu->addAction(exportTerminalAction);
     terminalMenu->addSeparator();
@@ -678,7 +917,7 @@ MainWindow::MainWindow(ApplicationDatabase *database,
         m_settingsService->currentSettings().vaultPasswordEnabled);
     lockVaultAction->setEnabled(
         m_settingsService->currentSettings().vaultPasswordEnabled);
-    QMenu *securityMenu = menuBar()->addMenu(tr("安全"));
+    QMenu *securityMenu = applicationMenuBar->addMenu(tr("安全"));
     securityMenu->addAction(unlockVaultAction);
     securityMenu->addAction(lockVaultAction);
     securityMenu->addSeparator();
@@ -960,7 +1199,36 @@ MainWindow::~MainWindow()
 
 bool MainWindow::eventFilter(QObject *watched, QEvent *event)
 {
+#ifndef Q_OS_MACOS
+    // 应用级过滤器能在事件送达菜单、标签、分隔器或终端等任意子控件前检查窗口边缘，
+    // 因而无需在每个控件里重复实现无边框缩放。只处理当前主窗口的控件，弹窗和菜单窗口
+    // 拥有自己的顶层 window()，不会被这里错误接管。
+    auto *eventWidget = qobject_cast<QWidget *>(watched);
+    const bool belongsToThisWindow = eventWidget != nullptr && eventWidget->window() == this;
+    if (belongsToThisWindow && event->type() == QEvent::MouseMove) {
+        const auto *mouseEvent = static_cast<QMouseEvent *>(event);
+        const Qt::Edges edges = resizeEdgesAt(this, mouseEvent->globalPosition());
+        if (mouseEvent->buttons() == Qt::NoButton) {
+            edges == Qt::Edges{} ? unsetCursor() : setCursor(resizeCursorForEdges(edges));
+        }
+    } else if (belongsToThisWindow && event->type() == QEvent::MouseButtonPress) {
+        auto *mouseEvent = static_cast<QMouseEvent *>(event);
+        if (mouseEvent->button() == Qt::LeftButton) {
+            const Qt::Edges edges = resizeEdgesAt(this, mouseEvent->globalPosition());
+            if (edges != Qt::Edges{} && windowHandle() != nullptr
+                && windowHandle()->startSystemResize(edges)) {
+                // 系统已接管后必须消费原始按下事件，否则边缘下方的按钮、标签或分隔器还会
+                // 同时开始自己的操作，造成一次拖动触发两套状态机。
+                mouseEvent->accept();
+                m_credentialVault->recordActivity();
+                return true;
+            }
+        }
+    }
+#else
     Q_UNUSED(watched)
+#endif
+
     switch (event->type()) {
     case QEvent::KeyPress:
     case QEvent::MouseButtonPress:
@@ -998,7 +1266,13 @@ void MainWindow::showEvent(QShowEvent *event)
 void MainWindow::changeEvent(QEvent *event)
 {
     QMainWindow::changeEvent(event);
-    if (event->type() != QEvent::WindowStateChange || !m_macWindowChromeConfigured) {
+    if (event->type() != QEvent::WindowStateChange) {
+        return;
+    }
+
+    // Windows/Linux 的最大化按钮必须随所有窗口状态入口更新，而不是只响应按钮自己的点击。
+    refreshWindowMaximizeIcon();
+    if (!m_macWindowChromeConfigured) {
         return;
     }
 
@@ -1006,6 +1280,23 @@ void MainWindow::changeEvent(QEvent *event)
         // 最大化、恢复和全屏转换结束后，AppKit 才能给出最终标题按钮容器坐标。
         alignMacWindowButtons(this, kWindowChromeHeight);
     });
+}
+
+void MainWindow::refreshWindowMaximizeIcon()
+{
+    if (m_windowMaximizeButton == nullptr) {
+        return;
+    }
+
+    const bool restoreMode = isMaximized() || isFullScreen();
+    // Windows/Linux 的按钮使用本文件内自绘控件；dynamic_cast 同时保护未来可能替换为普通
+    // QToolButton 的平台实现，此时文字提示仍会正确更新，不会因类型假设导致崩溃。
+    if (auto *controlButton = dynamic_cast<WindowControlButton *>(m_windowMaximizeButton)) {
+        controlButton->setRestoreMode(restoreMode);
+    }
+    m_windowMaximizeButton->setToolTip(restoreMode ? tr("还原") : tr("最大化"));
+    m_windowMaximizeButton->setAccessibleName(
+        restoreMode ? tr("还原窗口") : tr("最大化窗口"));
 }
 
 void MainWindow::resizeEvent(QResizeEvent *event)
@@ -1214,8 +1505,34 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
             color: @TEXT@;
         }
         QWidget#WindowChrome {
-            background: #30364f;
+            background: #292d42;
             border: 0;
+        }
+        QLabel#WindowProductName {
+            color: #f8f9fd;
+            background: transparent;
+            border: 0;
+            padding: 0 10px 0 4px;
+            font-size: 15px;
+            font-weight: 700;
+        }
+        QToolButton[windowControl="true"] {
+            background: transparent;
+            border: 0;
+            border-radius: 7px;
+            padding: 0;
+        }
+        QToolButton[windowControl="true"]:hover {
+            background: #383d55;
+        }
+        QToolButton[windowControl="true"]:pressed {
+            background: #454b65;
+        }
+        QToolButton[windowControlRole="close"]:hover {
+            background: #c42b1c;
+        }
+        QToolButton[windowControlRole="close"]:pressed {
+            background: #a52216;
         }
         QWidget#NavigationRail {
             background: @NAVIGATION@;

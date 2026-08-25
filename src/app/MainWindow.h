@@ -103,6 +103,14 @@ protected:
     void resizeEvent(QResizeEvent *event) override;
 
 private:
+    /**
+     * @brief 按当前最大化状态刷新 Windows/Linux 标题栏的最大化或还原图标。
+     *
+     * 无边框窗口不再由系统绘制标题按钮；窗口状态可能来自按钮、双击标题栏、快捷键或桌面
+     * 环境，因此统一在状态变化后读取真实状态，避免按钮图标与窗口实际状态不一致。
+     */
+    void refreshWindowMaximizeIcon();
+
     /** @brief 打开连接对话框，并在当前标签页的终端中启动 SSH。 */
     void connectCurrentPane();
 
@@ -327,8 +335,14 @@ private:
      */
     QToolButton *m_tabScrollLeftButton = nullptr;
     QToolButton *m_tabScrollRightButton = nullptr;
-    /** @brief 覆盖 macOS 原生标题区的 52 像素会话导航容器。 */
+    /** @brief 与原生或无边框窗口标题区合并的 52 像素会话导航容器。 */
     QWidget *m_titleChrome = nullptr;
+    /**
+     * @brief Windows/Linux 无边框标题栏中的最大化/还原按钮。
+     *
+     * macOS 继续使用原生交通灯按钮，因此该指针在 macOS 上保持为空。
+     */
+    QToolButton *m_windowMaximizeButton = nullptr;
     /** @brief 始终保留的窄图标导航轨，负责选择侧栏功能。 */
     QWidget *m_navigationRail = nullptr;
     /** @brief 可整体收起的单一侧栏容器。 */
