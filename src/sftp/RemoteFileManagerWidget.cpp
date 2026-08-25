@@ -1088,6 +1088,24 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
             m_targetCombo->setCurrentIndex(innermostIndex);
         }
     });
+    connect(m_followTerminalCwdCheck, &QCheckBox::toggled, this, [this](const bool enabled) {
+        if (!enabled) {
+            return;
+        }
+
+        const ConnectionTarget target = selectedTarget();
+        if (!target.isValid()) {
+            // 终端尚未连接或当前是本地 Shell 时没有可跟随的远端目录；保持用户勾选状态，
+            // 待后续收到有效服务器的 cwd 上报后，既有实时跟随路径会自然完成同步。
+            return;
+        }
+
+        const QString stableKey = target.stableKey();
+        // 复用统一入口可继续执行服务器匹配、空路径过滤与“相同路径不重复刷新”等保护，
+        // 避免勾选即时同步和后续实时上报形成两套逐渐不一致的判断逻辑。
+        followTerminalWorkingDirectory(
+            stableKey, m_terminalWorkingDirectoryByTarget.value(stableKey));
+    });
     connect(m_fileTree,
             &QTreeWidget::itemDoubleClicked,
             this,
@@ -2046,6 +2064,12 @@ void RemoteFileManagerWidget::downloadRemoteEntryToDirectory(
 void RemoteFileManagerWidget::followTerminalWorkingDirectory(const QString &stableKey,
                                                               const QString &workingDirectory)
 {
+    if (!stableKey.isEmpty() && !workingDirectory.isEmpty()) {
+        // 缓存必须先于开关判断更新：关闭状态下收到的 cwd 正是用户稍后勾选时需要立即应用
+        // 的“当前目录”。按服务器隔离可以防止嵌套会话不同层之间互相覆盖路径。
+        m_terminalWorkingDirectoryByTarget.insert(stableKey, workingDirectory);
+    }
+
     const ConnectionTarget target = selectedTarget();
     if (!SftpUiState::shouldFollowTerminalWorkingDirectory(
             m_followTerminalCwdCheck->isChecked(), stableKey, target.stableKey(),

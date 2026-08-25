@@ -348,8 +348,8 @@ private:
     /**
      * @brief 用户可见的"跟随终端目录"开关；默认关闭。
      *
-     * 开启后，收到当前选中服务器发来的 cwd 上报就自动跳转路径框，判定逻辑见
-     * SftpUiState::shouldFollowTerminalWorkingDirectory。
+     * 开启时会立即应用当前选中服务器最近一次上报的 cwd；之后收到该服务器的新 cwd
+     * 上报也会继续自动跳转。判定逻辑见 SftpUiState::shouldFollowTerminalWorkingDirectory。
      */
     QCheckBox *m_followTerminalCwdCheck = nullptr;
 
@@ -491,6 +491,15 @@ private:
      * 传空路径，由服务端解析出该账号的主目录。
      */
     QHash<QString, QString> m_pathByTarget;
+
+    /**
+     * @brief 各终端服务器最近一次上报的工作目录，键为 ConnectionTarget::stableKey()。
+     *
+     * 即使用户尚未开启“跟随终端目录”也要持续更新该缓存。复选框可能在终端提示符已经
+     * 上报 cwd 很久之后才被勾选；若只处理开关开启后的新信号，用户就必须再执行一次 cd
+     * 或按回车才能触发跟随，与“勾选后立即跟随”的交互预期不符。
+     */
+    QHash<QString, QString> m_terminalWorkingDirectoryByTarget;
 
     /**
      * @brief 当前应用会话内的 SFTP 凭据缓存，键包含完整跳板链。

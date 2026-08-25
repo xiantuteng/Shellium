@@ -143,7 +143,7 @@ private slots:
     /** @brief 远端 SFTP 中继命令必须保留端口和用户名，并阻断 Shell 参数注入。 */
     void remoteSftpRelayCommandQuotesEveryUntrustedArgument();
 
-    /** @brief 只有开关开启且上报服务器就是当前选中服务器时，路径框才会跳转。 */
+    /** @brief 勾选时立即应用已知 cwd，之后也只跟随当前选中服务器的新上报。 */
     void followsTerminalWorkingDirectoryOnlyWhenEnabledAndMatchingTarget();
 
     /** @brief 面板变窄时"名称"列不能被压缩到低于最小宽度，多余内容改用横向滚动条。 */
@@ -300,20 +300,22 @@ void RemoteFileManagerWidgetTest::followsTerminalWorkingDirectoryOnlyWhenEnabled
     const QString stableKey = target.stableKey();
     pathEdit->setText(QStringLiteral("/initial"));
 
-    // 开关关闭时，即使上报服务器与当前选中一致也不能跳转。
+    // 开关关闭时，即使上报服务器与当前选中一致也不能立即跳转，但必须记住这次 cwd，
+    // 因为它就是用户稍后勾选时所期望的“当前终端目录”。
     widget.followTerminalWorkingDirectory(stableKey, QStringLiteral("/srv/app"));
     QCOMPARE(pathEdit->text(), QStringLiteral("/initial"));
 
     followCheck->setChecked(true);
+    QCOMPARE(pathEdit->text(), QStringLiteral("/srv/app"));
 
     // 上报服务器不是当前选中的服务器时不能跳转，否则用户正在看的目录会被意外顶掉。
     widget.followTerminalWorkingDirectory(QStringLiteral("other-layer"),
                                           QStringLiteral("/srv/other"));
-    QCOMPARE(pathEdit->text(), QStringLiteral("/initial"));
-
-    // 开关开启且服务器匹配：路径框必须立即跳转。
-    widget.followTerminalWorkingDirectory(stableKey, QStringLiteral("/srv/app"));
     QCOMPARE(pathEdit->text(), QStringLiteral("/srv/app"));
+
+    // 开关开启且服务器匹配：后续目录变化仍须实时跳转，不能只在勾选瞬间同步一次。
+    widget.followTerminalWorkingDirectory(stableKey, QStringLiteral("/srv/next"));
+    QCOMPARE(pathEdit->text(), QStringLiteral("/srv/next"));
 }
 
 void RemoteFileManagerWidgetTest::remoteFileTableUsesReferenceColumns()
