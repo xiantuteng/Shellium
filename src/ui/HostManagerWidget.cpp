@@ -376,11 +376,19 @@ constexpr int kFolderTextLeft = 52;
 /** @brief 主机图标圆角容器相对主机行左缘的位置。 */
 constexpr int kHostIconBoxLeft = 10;
 
-/** @brief 主机名称与连接副标题相对行左缘的位置。 */
-constexpr int kHostTextLeft = 46;
+/** @brief 主机名称与连接副标题相对行左缘的位置，为放大的图标保留稳定间隔。 */
+constexpr int kHostTextLeft = 50;
 
-/** @brief 主机图标容器尺寸；26px 在 50px 行高中既清晰又保留足够呼吸感。 */
-constexpr int kHostIconBoxSize = 26;
+/** @brief 主机图标容器尺寸；30px 在 50px 行高中更醒目，仍保留上下各 10px 呼吸空间。 */
+constexpr int kHostIconBoxSize = 30;
+
+/**
+ * @brief 图标内容相对圆角容器的内边距。
+ *
+ * 从原来的 6px 收紧为 5px，让通用服务器和发行版 Logo 的有效图形从约 14px 增至 20px；
+ * 仅放大容器而不收紧内边距会让用户几乎看不出图标本身发生变化。
+ */
+constexpr int kHostIconContentInset = 5;
 
 /** @brief 分组、主机与“未分组”分区各自的固定行高。 */
 constexpr int kFolderRowHeight = 34;
@@ -525,7 +533,10 @@ protected:
         painter->setBrush(iconBoxFill);
         painter->drawRoundedRect(iconBox.adjusted(0, 0, -1, -1), 8, 8);
 
-        const QRect hostSymbolRect = iconBox.adjusted(6, 6, -6, -6);
+        const QRect hostSymbolRect = iconBox.adjusted(kHostIconContentInset,
+                                                      kHostIconContentInset,
+                                                      -kHostIconContentInset,
+                                                      -kHostIconContentInset);
         // 选中态也必须保留发行版图标。此前高亮时会统一替换成服务器轮廓，导致用户刚想
         // 确认“这台是什么系统”时最关键的视觉线索反而消失；图标自身带有不透明圆底，能
         // 在绿色选中底纹上保持辨识度，无需再强制换色。
