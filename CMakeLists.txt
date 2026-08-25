@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(Shellium VERSION 0.1.12 LANGUAGES CXX)
+project(Shellium VERSION 0.1.13 LANGUAGES CXX)
 
 # 正式 macOS 安装包必须使用稳定且可配置的 Bundle Identifier。这里提供一个可直接构建的
 # 默认值，同时允许发布脚本通过 -DSHELLIUM_BUNDLE_IDENTIFIER=... 覆盖；这样企业或个人发布者
