@@ -1,5 +1,7 @@
 #pragma once
 
+#include "platform/NativeSocket.h"
+
 #include "core/ConnectionTarget.h"
 
 #include <QByteArray>
@@ -161,7 +163,7 @@ public:
      * 复用隧道时不会设置 SSH_OPTIONS_PROXYJUMP：外层路径已经由隧道本身表达，重复配置会让
      * libssh 试图从内层服务器再跳一次。
      */
-    StepResult beginEstablish(int transportFd, int columns, int rows);
+    StepResult beginEstablish(NativeSocketHandle transportFd, int columns, int rows);
 
     /**
      * @brief 向前推进一步握手、认证或通道创建，绝不阻塞等待网络。
@@ -294,7 +296,7 @@ public:
     struct ForwardOutcome {
         quint64 id = 0;
         bool ok = false;
-        int callerFd = -1;
+        NativeSocketHandle callerFd = InvalidNativeSocket;
         QString error;
     };
 
@@ -310,7 +312,7 @@ public:
     /** @brief SSH 服务器向某条 -R 监听送来的一条新连接。 */
     struct RemoteAcceptedConnection {
         QString ruleId;
-        int callerFd = -1; ///< 与 SSH channel 相连的 socket；调用方取得所有权。
+        NativeSocketHandle callerFd = InvalidNativeSocket; ///< 与 SSH channel 相连的 socket；调用方取得所有权。
     };
 
     /**
@@ -415,7 +417,7 @@ private:
 
     /** @brief 一条本地 socket ↔ SSH direct-tcpip 通道的双向桥及其缓冲。 */
     struct ActiveForward {
-        int socketFd = -1;
+        NativeSocketHandle socketFd = InvalidNativeSocket;
         ssh_channel channel = nullptr;
         QByteArray socketToChannel;
         QByteArray channelToSocket;
@@ -443,8 +445,8 @@ private:
     struct PendingForward {
         quint64 id = 0;
         ssh_channel channel = nullptr;
-        int workerFd = -1;
-        int callerFd = -1;
+        NativeSocketHandle workerFd = InvalidNativeSocket;
+        NativeSocketHandle callerFd = InvalidNativeSocket;
         QByteArray host;
         quint16 port = 22;
         int timeoutMs = 20000;

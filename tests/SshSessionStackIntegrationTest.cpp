@@ -4,6 +4,7 @@
 #include "terminal/TerminalView.h"
 #include "ssh/ShellShim.h"
 #include "ssh/SshSessionStack.h"
+#include "platform/NativeSocket.h"
 
 #include <QCoreApplication>
 #include <QElapsedTimer>
@@ -15,7 +16,6 @@
 #include <algorithm>
 #include <limits>
 
-#include <unistd.h>
 
 /**
  * @brief 针对真实服务器的 SshSessionStack 连接路径回归测试。
@@ -125,7 +125,7 @@ private slots:
     /**
      * @brief 用户在远端敲 exit 主动结束 SSH 后，面板必须停在手动恢复提示。
      *
-     * 正常退出曾被直接接回本地 zsh：刚断开的服务器与本机毫无关系，顶上来的本地 Shell
+     * 正常退出曾被直接接回本地 Shell：刚断开的服务器与本机毫无关系，顶上来的本地进程
      * 会静默吞掉现场，用户下一条命令很可能打在自己电脑上。
      */
     void normalExitOffersManualRecoveryInsteadOfLocalShell();
@@ -315,7 +315,7 @@ void SshSessionStackIntegrationTest::opensForwardSocketThroughRootLayer()
 
     // openForwardSocket 会阻塞调用线程直到工作线程完成通道创建，因此必须在后台线程发起，
     // 同时让本线程继续泵送事件循环——这正是 SFTP 服务的真实调用形态。
-    int tunnelFd = -1;
+    NativeSocketHandle tunnelFd = InvalidNativeSocket;
     QString tunnelError;
     bool done = false;
     auto *probe = QThread::create([&]() {
@@ -335,7 +335,7 @@ void SshSessionStackIntegrationTest::opensForwardSocketThroughRootLayer()
     QByteArray banner;
     QVERIFY2(waitFor([&]() {
                  char buffer[256];
-                 const ssize_t count = ::read(tunnelFd, buffer, sizeof(buffer));
+                 const qint64 count = readNativeSocket(tunnelFd, buffer, sizeof(buffer));
                  if (count > 0) {
                      banner.append(buffer, count);
                  }
@@ -343,7 +343,7 @@ void SshSessionStackIntegrationTest::opensForwardSocketThroughRootLayer()
              }, 20000),
              "未从隧道另一端读到 SSH 版本横幅，隧道可能未真正连通");
 
-    ::close(tunnelFd);
+    closeNativeSocket(tunnelFd);
     stack.requestStop();
     QVERIFY(stack.wait(10000));
 }
@@ -974,8 +974,8 @@ void SshSessionStackIntegrationTest::normalExitOffersManualRecoveryInsteadOfLoca
              "结束后必须给出手动重连按键");
     QVERIFY2(screen.contains(QStringLiteral("按 x 关闭")),
              "结束后必须给出关闭标签页按键");
-    QVERIFY2(!screen.contains(QStringLiteral("正在启动本地 zsh")),
-             "主动结束 SSH 后不得擅自接回本地 zsh");
+    QVERIFY2(!screen.contains(QStringLiteral("正在启动本地终端")),
+             "主动结束 SSH 后不得擅自接回本地 Shell");
 }
 
 void SshSessionStackIntegrationTest::suppressesOwnEchoInTerminal()
@@ -1105,7 +1105,7 @@ void SshSessionStackIntegrationTest::fallsBackToExecRelayWhenForwardingProhibite
 
     // 该服务器的 direct-tcpip 会被按策略拒绝；实现应当自动改用 exec 中继，调用方无感。
     const uint innerPort = qgetenv("SHELLIUM_IT_NOFWD_INNER_PORT").toUInt();
-    int tunnelFd = -1;
+    NativeSocketHandle tunnelFd = InvalidNativeSocket;
     QString tunnelError;
     bool done = false;
     auto *probe = QThread::create([&]() {
@@ -1129,7 +1129,7 @@ void SshSessionStackIntegrationTest::fallsBackToExecRelayWhenForwardingProhibite
     QByteArray banner;
     QVERIFY2(waitFor([&]() {
                  char buffer[256];
-                 const ssize_t count = ::read(tunnelFd, buffer, sizeof(buffer));
+                 const qint64 count = readNativeSocket(tunnelFd, buffer, sizeof(buffer));
                  if (count > 0) {
                      banner.append(buffer, count);
                  }
@@ -1139,7 +1139,7 @@ void SshSessionStackIntegrationTest::fallsBackToExecRelayWhenForwardingProhibite
                             .arg(QString::fromUtf8(banner.left(200)))));
     qInfo("经 exec 中继读到内层横幅：%s", banner.trimmed().left(60).constData());
 
-    ::close(tunnelFd);
+    closeNativeSocket(tunnelFd);
     stack.requestStop();
     QVERIFY(stack.wait(10000));
 }

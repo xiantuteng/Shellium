@@ -9,7 +9,7 @@
  * @brief 覆盖 SSH 异常断线后的"手动恢复提示"这一终端本地状态。
  *
  * 用例只驱动 TerminalPane 的本地分支，不发起任何网络连接：断线恢复的关键行为——不再擅自
- * 启动本地 zsh、终端只接受 r 与 x——完全发生在没有任何 PTY 存活的时刻，正是最容易在重构
+ * 启动本地 Shell、终端只接受 r 与 x——完全发生在没有任何 PTY/ConPTY 存活的时刻，正是最容易在重构
  * 中被误接回 openLocalShell() 的一段。
  */
 class SessionRecoveryTest final : public QObject {
@@ -50,9 +50,9 @@ void SessionRecoveryTest::promptOffersManualChoiceInsteadOfLocalShell()
              "提示必须明确给出手动重连按键");
     QVERIFY2(screen.contains(QStringLiteral("按 x 关闭")),
              "提示必须明确给出关闭标签页按键");
-    // 这是本用例真正防守的回归：断线后擅自启动的本地 zsh 与刚断开的服务器毫无关系，
+    // 这是本用例真正防守的回归：断线后擅自启动的本地 Shell 与刚断开的服务器毫无关系，
     // 却会顶掉现场，用户下一条命令很可能打在本机上。
-    QVERIFY2(!screen.contains(QStringLiteral("正在启动本地 zsh")),
+    QVERIFY2(!screen.contains(QStringLiteral("正在启动本地终端")),
              "断线恢复提示期间不得启动本地终端");
     QVERIFY2(!pane.isConnected(), "提示状态下没有任何可交互的会话");
 }

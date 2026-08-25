@@ -111,9 +111,8 @@ bool hasTerminalControlModifier(const QKeyEvent *event)
  * @brief 判断按键是否是“把终端选区复制到剪贴板”的快捷键。
  *
  * 终端不能沿用普通文本框的单一约定：Ctrl+C 在终端里必须作为 SIGINT 发给远端，因此
- * Windows/Linux 的复制键是 Ctrl+Insert，macOS 才是 Command+C（Qt 把 Command 映射为
- * ControlModifier，QKeySequence::Copy 已经覆盖）。Insert 组合在这里显式判断而不是依赖
- * QKeySequence 的平台表，是因为它必须早于“Insert 当作导航键交给 libvterm 编码”生效。
+ * Windows 同时支持 Ctrl+Shift+C 和 Ctrl+Insert，Linux 保留 Ctrl+Insert，macOS 使用
+ * Command+C。任何平台都不能把裸 Ctrl+C 截获为复制，因为它必须继续向终端发送 SIGINT。
  */
 bool isClipboardCopyShortcut(const QKeyEvent *event)
 {
@@ -121,6 +120,15 @@ bool isClipboardCopyShortcut(const QKeyEvent *event)
         return event->modifiers().testFlag(Qt::ControlModifier)
             && !event->modifiers().testFlag(Qt::ShiftModifier);
     }
+#if defined(Q_OS_WIN)
+    if (event->key() == Qt::Key_C) {
+        const Qt::KeyboardModifiers modifiers = event->modifiers();
+        return modifiers.testFlag(Qt::ControlModifier)
+            && modifiers.testFlag(Qt::ShiftModifier)
+            && !modifiers.testFlag(Qt::AltModifier)
+            && !modifiers.testFlag(Qt::MetaModifier);
+    }
+#endif
 #if defined(Q_OS_MACOS)
     return event->matches(QKeySequence::Copy);
 #else
@@ -133,7 +141,7 @@ bool isClipboardCopyShortcut(const QKeyEvent *event)
 /**
  * @brief 判断按键是否是“把剪贴板文本粘贴进终端”的快捷键。
  *
- * 与 isClipboardCopyShortcut 对称：Windows/Linux 用 Shift+Insert，macOS 用 Command+V。
+ * 与复制规则对称：Windows 增加 Ctrl+Shift+V，Linux 用 Shift+Insert，macOS 用 Command+V。
  */
 bool isClipboardPasteShortcut(const QKeyEvent *event)
 {
@@ -141,6 +149,15 @@ bool isClipboardPasteShortcut(const QKeyEvent *event)
         return event->modifiers().testFlag(Qt::ShiftModifier)
             && !event->modifiers().testFlag(Qt::ControlModifier);
     }
+#if defined(Q_OS_WIN)
+    if (event->key() == Qt::Key_V) {
+        const Qt::KeyboardModifiers modifiers = event->modifiers();
+        return modifiers.testFlag(Qt::ControlModifier)
+            && modifiers.testFlag(Qt::ShiftModifier)
+            && !modifiers.testFlag(Qt::AltModifier)
+            && !modifiers.testFlag(Qt::MetaModifier);
+    }
+#endif
 #if defined(Q_OS_MACOS)
     return event->matches(QKeySequence::Paste);
 #else

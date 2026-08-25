@@ -68,8 +68,11 @@ public:
     /** @brief 是否已有可用于承载嵌套连接的已就绪远程会话。 */
     [[nodiscard]] bool canPushNestedLayer() const;
 
-    /** @brief 在当前面板中启动本地登录式 zsh，用于本地运维和终端功能测试。 */
-    void openLocalShell(const QString &shellPath = QStringLiteral("/bin/zsh"));
+    /**
+     * @brief 在当前面板中启动平台默认本地 Shell，用于本地运维和终端功能测试。
+     * @param shellPath 可选显式程序路径；为空时 Windows 选择 PowerShell/cmd，POSIX 选择 zsh。
+     */
+    void openLocalShell(const QString &shellPath = {});
 
     /** @brief 返回该面板中已识别的外层到内层服务器链。 */
     [[nodiscard]] QList<ConnectionTarget> targets() const;
@@ -103,7 +106,7 @@ public:
      * @param target 断线前的根连接目标；按 r 时按原受管计划整链重连。
      * @param reason 已经展示给用户的断线原因，作为提示的第一行再复述一次。
      *
-     * 自动重连耗尽后不再擅自启动本地 zsh。本地 Shell 与刚刚断开的服务器毫无关系，却会
+     * 自动重连耗尽后不再擅自启动本地 Shell。本地进程与刚刚断开的服务器毫无关系，却会
      * 顶掉屏幕上的远端输出，用户下一条命令很可能就打在了本机上；把决定权交回用户，既
      * 保留了现场，也保留了"再试一次"这个最可能的意图。
      */
@@ -452,7 +455,7 @@ private:
     /**
      * @brief 当前 SSH 工作线程是否至少成功建立过一次交互式 Shell。
      *
-     * 只有该状态为 true 后发生的断开才自动退回本地 zsh；连接阶段失败、主动切换会话和
+     * 只有该状态为 true 后发生的断开才进入恢复流程；连接阶段失败、主动切换会话和
      * 析构清理都保持 false，避免错误启动新的本地终端。
      */
     bool m_remoteSessionEstablished = false;
@@ -460,7 +463,7 @@ private:
     /**
      * @brief 当前终端的会话代次，用于丢弃旧工作线程延迟到达的断开回调。
      *
-     * 每次主动连接 SSH 或打开本地 zsh 都递增。自动回退任务执行前必须核对代次，防止
+     * 每次主动连接 SSH 或打开本地 Shell 都递增。恢复任务执行前必须核对代次，防止
      * 用户已经开始新连接后，旧 SSH 的排队信号又把界面切回本地终端。
      */
     quint64 m_sessionGeneration = 0;

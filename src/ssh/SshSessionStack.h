@@ -144,10 +144,10 @@ public:
      *
      * 此方法由 SFTP 后台线程调用，通过请求队列让所有 libssh API 仍只在本工作线程执行。
      */
-    int openForwardSocket(const QString &layerId,
-                          const QString &host,
-                          quint16 port,
-                          QString *errorMessage);
+    NativeSocketHandle openForwardSocket(const QString &layerId,
+                                         const QString &host,
+                                         quint16 port,
+                                         QString *errorMessage);
 
     /**
      * @brief 通过逻辑目标 SSH 会话打开到其视角目标的 direct-tcpip 通道。
@@ -159,9 +159,9 @@ public:
      * 本地与动态端口转发绑定的是持久化业务主机。受管链存在时它是计划最后一层而非物理
      * 栈底；用户后来进入临时嵌套层时仍保持这个起点，不能悄悄改从临时层出网。
      */
-    int openRootForwardSocket(const QString &host,
-                              quint16 port,
-                              QString *errorMessage);
+    NativeSocketHandle openRootForwardSocket(const QString &host,
+                                             quint16 port,
+                                             QString *errorMessage);
 
     /**
      * @brief 在逻辑目标 SSH 会话上申请服务端远程监听（OpenSSH -R 语义）。
@@ -273,7 +273,7 @@ signals:
      * @param ruleId 持久化规则 id。
      * @param tunnelFd 与入站 SSH channel 相连的本地 socket，接收方取得所有权。
      */
-    void remoteForwardConnection(const QString &ruleId, int tunnelFd);
+    void remoteForwardConnection(const QString &ruleId, NativeSocketHandle tunnelFd);
 
 protected:
     /** @brief 建立栈底层并执行统一的输入、输出与转发泵送循环。 */
@@ -299,7 +299,7 @@ private:
         bool rootOrigin = false;
         QMutex mutex;
         QWaitCondition condition;
-        int clientFd = -1;
+        NativeSocketHandle clientFd = InvalidNativeSocket;
         QString error;
         bool completed = false;
         bool cancelled = false;
@@ -376,11 +376,11 @@ private:
     void serviceForwardRequests();
 
     /** @brief 构造并同步等待一条跨线程 direct-tcpip 请求，供两种公开入口复用。 */
-    int openForwardSocketImpl(bool rootOrigin,
-                              const QString &layerId,
-                              const QString &host,
-                              quint16 port,
-                              QString *errorMessage);
+    NativeSocketHandle openForwardSocketImpl(bool rootOrigin,
+                                             const QString &layerId,
+                                             const QString &host,
+                                             quint16 port,
+                                             QString *errorMessage);
 
     /** @brief 把跨线程的远程监听启动/停止请求转交根节点的非阻塞状态机。 */
     void serviceRemoteForwardRequests();

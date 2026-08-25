@@ -29,7 +29,7 @@ void SshTunnelBroker::unregisterRoute(const QString &routeId)
     m_routes.remove(routeId);
 }
 
-int SshTunnelBroker::openSocket(const QString &routeId, QString *errorMessage)
+NativeSocketHandle SshTunnelBroker::openSocket(const QString &routeId, QString *errorMessage)
 {
     Route route;
     {
@@ -39,7 +39,7 @@ int SshTunnelBroker::openSocket(const QString &routeId, QString *errorMessage)
             if (errorMessage != nullptr) {
                 *errorMessage = QStringLiteral("嵌套 SSH 的外层会话已经关闭");
             }
-            return -1;
+            return InvalidNativeSocket;
         }
         route = *iterator;
     }

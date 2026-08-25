@@ -1,12 +1,21 @@
 #include "terminal/LocalShellWorker.h"
 
 #include <QFile>
+#include <QFileInfo>
+#include <QDir>
 #include <QMutexLocker>
+#include <QStandardPaths>
 
 #include <algorithm>
+#if defined(Q_OS_WIN)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <Windows.h>
+#include <consoleapi.h>
+#else
 #include <cerrno>
 #include <cstring>
-
 #include <fcntl.h>
 #include <poll.h>
 #include <signal.h>
@@ -20,18 +29,87 @@
 #else
 #include <pty.h>
 #endif
+#endif
+
+namespace {
+
+/**
+ * @brief 解析当前平台的默认交互式 Shell。
+ * @param requestedPath 用户或测试显式指定的路径；非空时原样保留。
+ * @return 可供当前平台启动的程序路径。
+ *
+ * Windows 优先 PowerShell 7，其次系统 Windows PowerShell，最后退回 ComSpec/cmd；POSIX
+ * 保持项目原有 zsh 默认值。这里只探测可执行文件，不伪造 Windows Terminal 环境变量。
+ */
+QString resolveShellPath(const QString &requestedPath)
+{
+    if (!requestedPath.trimmed().isEmpty()) {
+        return requestedPath;
+    }
+#if defined(Q_OS_WIN)
+    const QString powerShell7 = QStandardPaths::findExecutable(QStringLiteral("pwsh.exe"));
+    if (!powerShell7.isEmpty()) {
+        return powerShell7;
+    }
+    const QString windowsPowerShell =
+        QStandardPaths::findExecutable(QStringLiteral("powershell.exe"));
+    if (!windowsPowerShell.isEmpty()) {
+        return windowsPowerShell;
+    }
+    const QString comSpec = qEnvironmentVariable("ComSpec");
+    return comSpec.isEmpty() ? QStringLiteral("cmd.exe") : comSpec;
+#else
+    return QStringLiteral("/bin/zsh");
+#endif
+}
+
+#if defined(Q_OS_WIN)
+/** @brief 把 Win32 错误码转换为不会泄漏临时缓冲的可读中文诊断。 */
+QString windowsErrorText(const DWORD errorCode)
+{
+    wchar_t *message = nullptr;
+    const DWORD length = FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER
+                                            | FORMAT_MESSAGE_FROM_SYSTEM
+                                            | FORMAT_MESSAGE_IGNORE_INSERTS,
+                                        nullptr,
+                                        errorCode,
+                                        0,
+                                        reinterpret_cast<wchar_t *>(&message),
+                                        0,
+                                        nullptr);
+    const QString result = length > 0 && message != nullptr
+        ? QString::fromWCharArray(message, static_cast<qsizetype>(length)).trimmed()
+        : QStringLiteral("Windows 错误 %1").arg(errorCode);
+    if (message != nullptr) {
+        LocalFree(message);
+    }
+    return result;
+}
+
+/** @brief 关闭有效 Win32 HANDLE 并把变量清空，保证所有失败路径可重复清理。 */
+void closeHandle(HANDLE &handle) noexcept
+{
+    if (handle != nullptr && handle != INVALID_HANDLE_VALUE) {
+        CloseHandle(handle);
+    }
+    handle = nullptr;
+}
+#endif
+
+} // namespace
 
 LocalShellWorker::LocalShellWorker(QString shellPath, QObject *parent)
     : QThread(parent)
-    , m_shellPath(std::move(shellPath))
+    , m_shellPath(resolveShellPath(shellPath))
 {
 }
 
 LocalShellWorker::~LocalShellWorker()
 {
     requestStop();
-    // PTY 循环每 20ms 检查停止状态，正常情况下很快退出；保留 3 秒给 zsh 执行退出钩子。
-    wait(3000);
+    // POSIX 与 ConPTY 循环都会快速观察停止状态；保留 5 秒覆盖正常退出宽限期和进程树
+    // 强制清理，绝不能在 QThread 仍运行时析构对象。
+    wait(5000);
 }
 
 void LocalShellWorker::enqueueInput(const QByteArray &bytes)
@@ -63,6 +141,238 @@ void LocalShellWorker::requestStop()
 
 void LocalShellWorker::run()
 {
+#if defined(Q_OS_WIN)
+    if (QStandardPaths::findExecutable(m_shellPath).isEmpty() && !QFile::exists(m_shellPath)) {
+        emit shellError(tr("本地 Shell 不存在：%1").arg(m_shellPath));
+        return;
+    }
+
+    HANDLE pseudoConsoleInputRead = nullptr;
+    HANDLE applicationInputWrite = nullptr;
+    HANDLE applicationOutputRead = nullptr;
+    HANDLE pseudoConsoleOutputWrite = nullptr;
+    HPCON pseudoConsole = nullptr;
+    PROCESS_INFORMATION processInfo {};
+    HANDLE job = nullptr;
+    LPPROC_THREAD_ATTRIBUTE_LIST attributes = nullptr;
+
+    const auto fail = [this](const QString &action) {
+        emit shellError(tr("%1：%2").arg(action, windowsErrorText(GetLastError())));
+    };
+    const auto cleanup = [&]() {
+        if (attributes != nullptr) {
+            DeleteProcThreadAttributeList(attributes);
+            HeapFree(GetProcessHeap(), 0, attributes);
+            attributes = nullptr;
+        }
+        closeHandle(processInfo.hThread);
+        closeHandle(processInfo.hProcess);
+        closeHandle(applicationInputWrite);
+        closeHandle(applicationOutputRead);
+        closeHandle(pseudoConsoleInputRead);
+        closeHandle(pseudoConsoleOutputWrite);
+        if (pseudoConsole != nullptr) {
+            ClosePseudoConsole(pseudoConsole);
+            pseudoConsole = nullptr;
+        }
+        closeHandle(job);
+    };
+
+    SECURITY_ATTRIBUTES pipeSecurity {sizeof(SECURITY_ATTRIBUTES), nullptr, TRUE};
+    if (!CreatePipe(&pseudoConsoleInputRead, &applicationInputWrite, &pipeSecurity, 0)
+        || !CreatePipe(&applicationOutputRead, &pseudoConsoleOutputWrite, &pipeSecurity, 0)
+        || !SetHandleInformation(applicationInputWrite, HANDLE_FLAG_INHERIT, 0)
+        || !SetHandleInformation(applicationOutputRead, HANDLE_FLAG_INHERIT, 0)) {
+        fail(tr("无法创建 ConPTY 管道"));
+        cleanup();
+        return;
+    }
+
+    COORD initialSize {};
+    {
+        QMutexLocker locker(&m_mutex);
+        initialSize.X = static_cast<SHORT>(std::clamp(m_columns, 1, 32767));
+        initialSize.Y = static_cast<SHORT>(std::clamp(m_rows, 1, 32767));
+        m_sizeDirty = false;
+    }
+    const HRESULT createResult = CreatePseudoConsole(initialSize,
+                                                     pseudoConsoleInputRead,
+                                                     pseudoConsoleOutputWrite,
+                                                     0,
+                                                     &pseudoConsole);
+    if (FAILED(createResult)) {
+        SetLastError(HRESULT_CODE(createResult));
+        fail(tr("无法创建 Windows ConPTY"));
+        cleanup();
+        return;
+    }
+    // ConPTY 已复制管道句柄；父进程立即关闭自己的伪终端侧副本，避免 EOF 永远无法传播。
+    closeHandle(pseudoConsoleInputRead);
+    closeHandle(pseudoConsoleOutputWrite);
+
+    SIZE_T attributeBytes = 0;
+    InitializeProcThreadAttributeList(nullptr, 1, 0, &attributeBytes);
+    attributes = static_cast<LPPROC_THREAD_ATTRIBUTE_LIST>(
+        HeapAlloc(GetProcessHeap(), 0, attributeBytes));
+    if (attributes == nullptr
+        || !InitializeProcThreadAttributeList(attributes, 1, 0, &attributeBytes)
+        || !UpdateProcThreadAttribute(attributes,
+                                      0,
+                                      PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE,
+                                      pseudoConsole,
+                                      sizeof(pseudoConsole),
+                                      nullptr,
+                                      nullptr)) {
+        fail(tr("无法配置 ConPTY 子进程属性"));
+        cleanup();
+        return;
+    }
+
+    STARTUPINFOEXW startupInfo {};
+    startupInfo.StartupInfo.cb = sizeof(startupInfo);
+    startupInfo.lpAttributeList = attributes;
+    QString commandLine = QStringLiteral("\"") + QDir::toNativeSeparators(m_shellPath)
+        + QStringLiteral("\"");
+    const QString executableName = QFileInfo(m_shellPath).fileName().toLower();
+    if (executableName == QStringLiteral("pwsh.exe")
+        || executableName == QStringLiteral("powershell.exe")) {
+        commandLine.append(QStringLiteral(" -NoLogo"));
+    }
+    std::wstring mutableCommand = commandLine.toStdWString();
+    mutableCommand.push_back(L'\0');
+    if (!CreateProcessW(nullptr,
+                        mutableCommand.data(),
+                        nullptr,
+                        nullptr,
+                        FALSE,
+                        EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT,
+                        nullptr,
+                        nullptr,
+                        &startupInfo.StartupInfo,
+                        &processInfo)) {
+        fail(tr("无法启动 Windows 本地 Shell"));
+        cleanup();
+        return;
+    }
+
+    job = CreateJobObjectW(nullptr, nullptr);
+    if (job != nullptr) {
+        JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits {};
+        limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        // Job 绑定失败不阻止终端使用；退出时仍会直接终止主进程，但记录错误便于排查残留树。
+        if (!SetInformationJobObject(job, JobObjectExtendedLimitInformation,
+                                     &limits, sizeof(limits))
+            || !AssignProcessToJobObject(job, processInfo.hProcess)) {
+            emit shellError(tr("无法为本地 Shell 配置进程树清理：%1")
+                                .arg(windowsErrorText(GetLastError())));
+            closeHandle(job);
+        }
+    }
+    closeHandle(processInfo.hThread);
+    emit shellStarted();
+
+    QByteArray readBuffer(64 * 1024, Qt::Uninitialized);
+    bool ioFailed = false;
+    while (!shouldStop()) {
+        QByteArray pendingInput;
+        bool resizeRequired = false;
+        int columns = 80;
+        int rows = 24;
+        {
+            QMutexLocker locker(&m_mutex);
+            pendingInput.swap(m_pendingInput);
+            resizeRequired = m_sizeDirty;
+            columns = m_columns;
+            rows = m_rows;
+            m_sizeDirty = false;
+        }
+        if (resizeRequired && pseudoConsole != nullptr) {
+            const COORD size {static_cast<SHORT>(std::clamp(columns, 1, 32767)),
+                              static_cast<SHORT>(std::clamp(rows, 1, 32767))};
+            const HRESULT resizeResult = ResizePseudoConsole(pseudoConsole, size);
+            if (FAILED(resizeResult)) {
+                emit shellError(tr("调整 ConPTY 尺寸失败：HRESULT 0x%1")
+                                    .arg(static_cast<quint32>(resizeResult), 8, 16, QLatin1Char('0')));
+            }
+        }
+        if (!pendingInput.isEmpty()) {
+            DWORD written = 0;
+            if (!WriteFile(applicationInputWrite,
+                           pendingInput.constData(),
+                           static_cast<DWORD>(pendingInput.size()),
+                           &written,
+                           nullptr)) {
+                fail(tr("向 ConPTY 写入失败"));
+                ioFailed = true;
+                break;
+            }
+            // 匿名管道的单次 WriteFile 理论上可部分完成；未写部分重新排到队首，避免丢键。
+            if (written < static_cast<DWORD>(pendingInput.size())) {
+                QMutexLocker locker(&m_mutex);
+                m_pendingInput.prepend(pendingInput.mid(static_cast<qsizetype>(written)));
+            }
+        }
+
+        DWORD available = 0;
+        if (PeekNamedPipe(applicationOutputRead, nullptr, 0, nullptr, &available, nullptr)
+            && available > 0) {
+            DWORD bytesRead = 0;
+            const DWORD requested = std::min<DWORD>(available,
+                                                    static_cast<DWORD>(readBuffer.size()));
+            if (ReadFile(applicationOutputRead, readBuffer.data(), requested, &bytesRead, nullptr)
+                && bytesRead > 0) {
+                emit outputReady(QByteArray(readBuffer.constData(),
+                                            static_cast<qsizetype>(bytesRead)));
+            }
+        }
+        const DWORD waitResult = WaitForSingleObject(processInfo.hProcess, 10);
+        if (waitResult == WAIT_OBJECT_0) {
+            // 子进程退出与匿名管道数据到达并非同一个事件。退出后再排空一次 ConPTY 输出，
+            // 否则紧接 exit 的最后一行可能仍在管道中，却被 cleanup 直接关闭而丢失。
+            while (PeekNamedPipe(applicationOutputRead,
+                                 nullptr,
+                                 0,
+                                 nullptr,
+                                 &available,
+                                 nullptr)
+                   && available > 0) {
+                DWORD bytesRead = 0;
+                const DWORD requested = std::min<DWORD>(
+                    available, static_cast<DWORD>(readBuffer.size()));
+                if (!ReadFile(applicationOutputRead,
+                              readBuffer.data(),
+                              requested,
+                              &bytesRead,
+                              nullptr)
+                    || bytesRead == 0) {
+                    break;
+                }
+                emit outputReady(QByteArray(readBuffer.constData(),
+                                            static_cast<qsizetype>(bytesRead)));
+            }
+            DWORD exitCode = 0;
+            GetExitCodeProcess(processInfo.hProcess, &exitCode);
+            cleanup();
+            emit shellFinished(static_cast<int>(exitCode));
+            return;
+        }
+    }
+
+    // 先关闭输入表达 EOF，给 PowerShell/cmd 一个正常收尾窗口；超时再借助 Job 清理整棵树。
+    closeHandle(applicationInputWrite);
+    if (WaitForSingleObject(processInfo.hProcess, 2500) == WAIT_TIMEOUT) {
+        if (job != nullptr) {
+            TerminateJobObject(job, 137);
+        } else {
+            TerminateProcess(processInfo.hProcess, 137);
+        }
+        WaitForSingleObject(processInfo.hProcess, 1000);
+    }
+    DWORD exitCode = ioFailed ? 1 : 0;
+    GetExitCodeProcess(processInfo.hProcess, &exitCode);
+    cleanup();
+    emit shellFinished(static_cast<int>(exitCode));
+#else
     if (!QFile::exists(m_shellPath)) {
         emit shellError(tr("本地 Shell 不存在：%1").arg(m_shellPath));
         return;
@@ -198,6 +508,7 @@ void LocalShellWorker::run()
     waitpid(childPid, &status, 0);
     close(masterFd);
     emit shellFinished(ioFailed ? 1 : 137);
+#endif
 }
 
 bool LocalShellWorker::shouldStop() const

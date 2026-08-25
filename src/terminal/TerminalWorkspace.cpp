@@ -137,7 +137,7 @@ bool TerminalWorkspace::isFileManagerVisible() const
 void TerminalWorkspace::synchronizeFileManager(const bool followInnermost)
 {
     // SFTP 会立即建立独立连接，因此必须等终端完成主机密钥确认和认证。连接中、已断开或
-    // 本地 zsh 都传入空列表，避免本标签页继续显示上一条会话的远程文件内容。
+    // 本地 Shell 都传入空列表，避免本标签页继续显示上一条会话的远程文件内容。
     m_fileManager->setAvailableTargets(m_pane->isConnected() ? m_pane->targets()
                                                              : QList<ConnectionTarget>{},
                                        followInnermost);
@@ -175,7 +175,7 @@ void TerminalWorkspace::handleFilesDropped(const QStringList &localPaths)
     }
     const ConnectionTarget target = m_pane->activeTarget();
     if (!target.isValid()) {
-        // 本地 zsh 没有远程目标；虽然本地终端也在“已连接”状态，拖拽上传对它没有意义。
+        // 本地 Shell 没有远程目标；虽然本地终端也在“已连接”状态，拖拽上传对它没有意义。
         emit statusMessage(tr("当前是本地终端，无法上传拖入的文件。"));
         return;
     }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/ConnectionTarget.h"
+#include "platform/NativeSocket.h"
 
 #include <QHash>
 #include <QMutex>
@@ -44,7 +45,7 @@ public:
      * @brief 打开一端连接内层 SSH、另一端交给 libssh 的 socket。
      * @return 成功返回 fd，调用方取得所有权；失败返回 -1。
      */
-    int openSocket(const QString &routeId, QString *errorMessage);
+    NativeSocketHandle openSocket(const QString &routeId, QString *errorMessage);
 
     /**
      * @brief 查询使用远端 OpenSSH 启动 SFTP 子系统所需的两端配置。

@@ -160,7 +160,9 @@ public:
     {
         QMutexLocker locker(&m_mutex);
         ensureLoadedLocked();
-        if (m_records.remove(key) > 0) {
+        // Qt 6.8 的 QHash::remove() 已直接返回 bool；不再与整数比较，既准确表达“确实删除”
+        // 的业务条件，也避免 MSVC 对 bool 参与大小比较给出 C4804 警告。
+        if (m_records.remove(key)) {
             markDirtyLocked();
         }
     }

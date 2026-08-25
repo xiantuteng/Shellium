@@ -434,7 +434,8 @@ MainWindow::MainWindow(ApplicationDatabase *database,
         tr("经当前服务器建立到内网主机的连接。层级由本程序自己维护，"
            "文件管理器可以准确地在各层之间切换。"));
 
-    auto *localShellAction = new QAction(tr("本地 zsh"), this);
+    // 菜单使用平台中立名称：Windows 会启动 PowerShell/cmd，macOS 与 Linux 默认启动 zsh。
+    auto *localShellAction = new QAction(tr("本地终端"), this);
     localShellAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+L")));
     localShellAction->setToolTip(tr("在当前终端面板中启动本地登录式 zsh"));
 
@@ -1447,6 +1448,12 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
             background: @SURFACE@;
             border-bottom: 1px solid @BORDER@;
         }
+    )QSS");
+
+    // MSVC 对单个字符串字面量的长度有额外限制。完整应用样式表超过该上限，因此必须在
+    // 完整 QSS 规则边界处拆段并在运行时追加；这样既不会截断字符串，也不会改变选择器顺序、
+    // 空白语义或后续颜色占位符替换结果。各片段均控制在 8 KiB 左右，为后续扩展保留余量。
+    styleSheet += QStringLiteral(R"QSS(
         QLabel#SftpPaneLabel {
             color: @MUTED@;
             font-size: 12px;
@@ -1677,6 +1684,11 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
             border: 1px solid @MUTED@;
             padding-right: 30px;
         }
+    )QSS");
+
+    // 继续按完整规则追加第二个中间片段，避免相邻 C++ 字面量在编译阶段被重新合并成一个
+    // 超长常量；显式 QString 追加会让分段发生在运行时，因而能够可靠绕过 C2026。
+    styleSheet += QStringLiteral(R"QSS(
         QComboBox#PortForwardHostCombo:focus {
             border: 1px solid @ACCENT@;
         }
@@ -1900,6 +1912,11 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
             background: transparent;
             color: @TEXT@;
         }
+    )QSS");
+
+    // 最后一段仍使用同一个原始字符串定界符，保证 QSS 内的引号和反斜杠无需额外转义，
+    // 同时让后面的统一主题占位符替换继续作用于拼接完成后的整份样式表。
+    styleSheet += QStringLiteral(R"QSS(
         QHeaderView::section {
             color: @MUTED@;
             background: @SIDEBAR@;

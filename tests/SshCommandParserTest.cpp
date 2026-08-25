@@ -195,10 +195,10 @@ private slots:
     /** @brief 连续拖动宽度时只提交最终 PTY 尺寸，并保持 Shell 提示符文本不变。 */
     void terminalResizeDebouncesPtyUpdates();
 
-    /** @brief 本地 zsh 必须在真实 PTY 中接收命令、返回输出并正常退出。 */
+    /** @brief 平台默认 Shell 必须在真实 PTY/ConPTY 中接收命令、返回输出并正常退出。 */
     void localZshExecutesInteractiveCommand();
 
-    /** @brief ETX 必须通过 PTY 的 VINTR 终止本地 zsh 前台命令。 */
+    /** @brief ETX 必须通过 PTY/ConPTY 终止本地 Shell 前台命令。 */
     void localZshInterruptsForegroundCommand();
 
     /** @brief SQLite 初始化必须创建全部核心功能表并开启外键约束。 */
@@ -1422,12 +1422,18 @@ void SshCommandParserTest::localZshExecutesInteractiveCommand()
     QSignalSpy errorSpy(&worker, &LocalShellWorker::shellError);
 
     worker.start();
-    QVERIFY2(startedSpy.wait(3000), "本地 zsh 未能在 3 秒内启动");
+    QVERIFY2(startedSpy.wait(3000), "本地 Shell 未能在 3 秒内启动");
+#if defined(Q_OS_WIN)
+    // PowerShell 与 cmd 都支持 echo/exit；Windows 用例关注 ConPTY 交互链路，不把测试绑定
+    // 到某一种可选 Shell 的专有补全语法。
+    worker.enqueueInput(QByteArrayLiteral("echo __SHELLIUM_ZSH_OK__\rexit\r"));
+#else
     worker.enqueueInput(QByteArrayLiteral(
         "printf '__SHELLIUM_ZSH_OK__\\n'\r"
         "print -r -- /bin/zs\t\r"
         "exit\r"));
-    QVERIFY2(finishedSpy.wait(5000), "本地 zsh 未能执行命令并正常退出");
+#endif
+    QVERIFY2(finishedSpy.wait(5000), "本地 Shell 未能执行命令并正常退出");
 
     QByteArray completeOutput;
     for (const QList<QVariant> &arguments : outputSpy) {
@@ -1437,8 +1443,10 @@ void SshCommandParserTest::localZshExecutesInteractiveCommand()
              errorSpy.isEmpty() ? "" : qPrintable(errorSpy.at(0).at(0).toString()));
     QVERIFY2(completeOutput.contains(QByteArrayLiteral("__SHELLIUM_ZSH_OK__")),
              completeOutput.constData());
+#if !defined(Q_OS_WIN)
     QVERIFY2(completeOutput.contains(QByteArrayLiteral("/bin/zsh")),
              "本地 zsh 未对 /bin/zs<Tab> 执行路径补全");
+#endif
     QCOMPARE(finishedSpy.at(0).at(0).toInt(), 0);
 }
 
@@ -1450,12 +1458,21 @@ void SshCommandParserTest::localZshInterruptsForegroundCommand()
     QSignalSpy finishedSpy(&worker, &LocalShellWorker::shellFinished);
 
     worker.start();
-    QVERIFY2(startedSpy.wait(3000), "本地 zsh 未能启动");
+    QVERIFY2(startedSpy.wait(3000), "本地 Shell 未能启动");
+#if defined(Q_OS_WIN)
+    // ping 在 PowerShell 与 cmd 均可用，可作为可被 Ctrl+C 中断的前台长任务。
+    worker.enqueueInput(QByteArrayLiteral("ping -n 11 127.0.0.1\r"));
+#else
     worker.enqueueInput(QByteArrayLiteral("sleep 10\r"));
+#endif
     QTest::qWait(150);
     worker.enqueueInput(QByteArray(1, '\x03'));
+#if defined(Q_OS_WIN)
+    worker.enqueueInput(QByteArrayLiteral("echo __SHELLIUM_INTERRUPT_OK__\rexit\r"));
+#else
     worker.enqueueInput(QByteArrayLiteral("printf '__SHELLIUM_INTERRUPT_OK__\\n'\rexit\r"));
-    QVERIFY2(finishedSpy.wait(4000), "Ctrl+C 未能及时终止 sleep 10");
+#endif
+    QVERIFY2(finishedSpy.wait(4000), "Ctrl+C 未能及时终止本地前台长任务");
 
     QByteArray completeOutput;
     for (const QList<QVariant> &arguments : outputSpy) {

@@ -1,5 +1,7 @@
 #include "forwarding/PortForwardRuntime.h"
 
+#include "platform/NativeSocket.h"
+
 #include "forwarding/Socks5Protocol.h"
 #include "ssh/SshSessionStack.h"
 
@@ -15,7 +17,6 @@
 #include <algorithm>
 #include <functional>
 
-#include <unistd.h>
 
 namespace {
 
@@ -232,21 +233,21 @@ public slots:
     }
 
     /** @brief 接收 SshSessionStack 交出的 -R 入站 socket fd；调用后本 Worker 取得所有权。 */
-    void acceptRemoteConnection(const int tunnelFd)
+    void acceptRemoteConnection(const NativeSocketHandle tunnelFd)
     {
-        if (tunnelFd < 0) {
+        if (!isNativeSocketValid(tunnelFd)) {
             return;
         }
         if (m_stopping || m_rule.type != PortForwardType::Remote
             || m_statistics.state != PortForwardState::Running) {
-            ::close(tunnelFd);
+            closeNativeSocket(tunnelFd);
             return;
         }
         auto *tunnelSocket = new QTcpSocket(this);
         if (!tunnelSocket->setSocketDescriptor(tunnelFd,
                                                QAbstractSocket::ConnectedState,
                                                QIODevice::ReadWrite)) {
-            ::close(tunnelFd);
+            closeNativeSocket(tunnelFd);
             tunnelSocket->deleteLater();
             reportConnectionError(tr("接管远程转发 SSH 通道失败"));
             return;
@@ -359,9 +360,9 @@ private:
         // 该同步调用只阻塞本规则自己的网络线程，GUI、SSH 泵送以及其他规则不受影响。
         // 规则绑定根主机，因此必须使用根层入口，不能随用户进入嵌套服务器而改变出口。
         QString error;
-        const int tunnelFd = m_sessionStack->openRootForwardSocket(
+        const NativeSocketHandle tunnelFd = m_sessionStack->openRootForwardSocket(
             targetHost, targetPort, &error);
-        if (tunnelFd < 0) {
+        if (!isNativeSocketValid(tunnelFd)) {
             if (socksClient) {
                 client->write(Socks5Protocol::reply(0x05));
             }
@@ -375,7 +376,7 @@ private:
         if (!tunnelSocket->setSocketDescriptor(tunnelFd,
                                                QAbstractSocket::ConnectedState,
                                                QIODevice::ReadWrite)) {
-            ::close(tunnelFd);
+            closeNativeSocket(tunnelFd);
             tunnelSocket->deleteLater();
             if (socksClient) {
                 client->write(Socks5Protocol::reply(0x01));
@@ -523,15 +524,15 @@ void PortForwardRuntime::stop()
     }
 }
 
-void PortForwardRuntime::acceptRemoteConnection(const int tunnelFd)
+void PortForwardRuntime::acceptRemoteConnection(const NativeSocketHandle tunnelFd)
 {
-    if (tunnelFd < 0) {
+    if (!isNativeSocketValid(tunnelFd)) {
         return;
     }
     if (m_worker == nullptr || m_workerThread == nullptr || !m_workerThread->isRunning()) {
         // fd 所有权已经由管理器转移到本对象；即使工作线程恰好结束，也必须在此兜底关闭，
         // 不能把释放责任推回已经返回的信号发送方。
-        ::close(tunnelFd);
+        closeNativeSocket(tunnelFd);
         return;
     }
     // 使用 Worker 作为队列接收者，保证 QTcpSocket 只在其所属网络线程创建和操作。

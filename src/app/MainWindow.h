@@ -8,7 +8,10 @@
 class ApplicationDatabase;
 class AiAssistantWidget;
 class AiSettingsService;
-class ConnectionTarget;
+// ConnectionTarget 的真实定义是结构体。MSVC 会把 class/struct 关键字编码进模板参数的
+// 修饰名，前置声明若写成 class 会使 QList<ConnectionTarget> 的调用方与实现方符号不一致；
+// 统一为 struct 可同时保持 Windows、macOS 和 Linux 三个平台的 ABI 声明一致。
+struct ConnectionTarget;
 class CredentialVault;
 class HostManagerWidget;
 class PortForwardManagerWidget;

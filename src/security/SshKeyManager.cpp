@@ -1,4 +1,5 @@
 #include "security/SshKeyManager.h"
+#include "platform/SecureFileWriter.h"
 
 #include <QFile>
 #include <QFileInfo>
@@ -134,47 +135,13 @@ QString publicKeyLine(const ssh_key privateKey, const QString &comment, QString 
     return line;
 }
 
-/** @brief 使用 QSaveFile 写入一个此前不存在的文件，并固定 POSIX 权限。 */
+/** @brief 使用平台安全写入器创建一个此前不存在的文件并固定实际访问权限。 */
 bool writeNewFileAtomically(const QString &path,
                             const QByteArray &content,
                             const QFileDevice::Permissions permissions,
                             QString *errorMessage)
 {
-    if (QFileInfo::exists(path)) {
-        if (errorMessage != nullptr) {
-            *errorMessage = QStringLiteral("目标文件已存在，拒绝覆盖：%1").arg(path);
-        }
-        return false;
-    }
-    QSaveFile file(path);
-    file.setDirectWriteFallback(false);
-    if (!file.open(QIODevice::WriteOnly)) {
-        if (errorMessage != nullptr) {
-            *errorMessage = QStringLiteral("无法创建文件 %1：%2").arg(path, file.errorString());
-        }
-        return false;
-    }
-    if (!file.setPermissions(permissions)) {
-        file.cancelWriting();
-        if (errorMessage != nullptr) {
-            *errorMessage = QStringLiteral("无法设置安全文件权限：%1").arg(path);
-        }
-        return false;
-    }
-    if (file.write(content) != content.size()) {
-        file.cancelWriting();
-        if (errorMessage != nullptr) {
-            *errorMessage = QStringLiteral("写入文件失败 %1：%2").arg(path, file.errorString());
-        }
-        return false;
-    }
-    if (!file.commit()) {
-        if (errorMessage != nullptr) {
-            *errorMessage = QStringLiteral("原子提交文件失败 %1：%2").arg(path, file.errorString());
-        }
-        return false;
-    }
-    return true;
+    return writeNewFileSecurely(path, content, permissions, errorMessage);
 }
 
 } // namespace

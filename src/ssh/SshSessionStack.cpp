@@ -1,5 +1,7 @@
 #include "ssh/SshSessionStack.h"
 
+#include "platform/NativeSocket.h"
+
 #include "ssh/ShellShim.h"
 #include "ssh/SshSessionNode.h"
 
@@ -11,7 +13,6 @@
 
 #include <algorithm>
 
-#include <unistd.h>
 
 namespace {
 /** @brief 与 TerminalView 共用的认证诊断通道；见该文件中的说明。 */
@@ -144,32 +145,32 @@ void SshSessionStack::requestPopLayer()
     ++m_pendingPops;
 }
 
-int SshSessionStack::openForwardSocket(const QString &layerId,
-                                       const QString &host,
-                                       const quint16 port,
-                                       QString *errorMessage)
+NativeSocketHandle SshSessionStack::openForwardSocket(const QString &layerId,
+                                                      const QString &host,
+                                                      const quint16 port,
+                                                      QString *errorMessage)
 {
     return openForwardSocketImpl(false, layerId, host, port, errorMessage);
 }
 
-int SshSessionStack::openRootForwardSocket(const QString &host,
-                                           const quint16 port,
-                                           QString *errorMessage)
+NativeSocketHandle SshSessionStack::openRootForwardSocket(const QString &host,
+                                                          const quint16 port,
+                                                          QString *errorMessage)
 {
     return openForwardSocketImpl(true, {}, host, port, errorMessage);
 }
 
-int SshSessionStack::openForwardSocketImpl(const bool rootOrigin,
-                                           const QString &layerId,
-                                           const QString &host,
-                                           const quint16 port,
-                                           QString *errorMessage)
+NativeSocketHandle SshSessionStack::openForwardSocketImpl(const bool rootOrigin,
+                                                          const QString &layerId,
+                                                          const QString &host,
+                                                          const quint16 port,
+                                                          QString *errorMessage)
 {
     if (!isRunning() || shouldStop()) {
         if (errorMessage != nullptr) {
             *errorMessage = tr("外层 SSH 会话已经结束");
         }
-        return -1;
+        return InvalidNativeSocket;
     }
 
     auto request = QSharedPointer<ForwardRequest>::create();
@@ -188,7 +189,7 @@ int SshSessionStack::openForwardSocketImpl(const bool rootOrigin,
         if (errorMessage != nullptr) {
             *errorMessage = tr("创建内层 SSH 转发通道超时");
         }
-        return -1;
+        return InvalidNativeSocket;
     }
     if (errorMessage != nullptr) {
         *errorMessage = request->error;
@@ -266,7 +267,8 @@ void SshSessionStack::run()
         rootTarget,
         rootTarget.transit ? SshSessionNode::Role::Transit
                            : SshSessionNode::Role::Interactive);
-    const SshSessionNode::StepResult start = root->beginEstablish(-1, columns, rows);
+    const SshSessionNode::StepResult start =
+        root->beginEstablish(InvalidNativeSocket, columns, rows);
     if (!start.ok) {
         emit connectionError(start.message);
         return;
@@ -692,7 +694,7 @@ void SshSessionStack::handleForwardOutcome(const SshSessionNode::ForwardOutcome 
             return;
         }
         if (m_layers.empty()) {
-            ::close(outcome.callerFd);
+            closeNativeSocket(outcome.callerFd);
             const QString error = tr("承载该内层连接的会话已经关闭");
             if (push.planned) {
                 m_plannedFailure = error;
@@ -746,7 +748,7 @@ void SshSessionStack::handleForwardOutcome(const SshSessionNode::ForwardOutcome 
     if (request.isNull()) {
         // 无人认领的成功通道必须立即关闭，否则会泄漏一个 fd。
         if (outcome.ok) {
-            ::close(outcome.callerFd);
+            closeNativeSocket(outcome.callerFd);
         }
         return;
     }
@@ -754,14 +756,14 @@ void SshSessionStack::handleForwardOutcome(const SshSessionNode::ForwardOutcome 
     QMutexLocker requestLocker(&request->mutex);
     if (outcome.ok && request->cancelled) {
         // 请求方已超时离开，通道无人认领。
-        ::close(outcome.callerFd);
+        closeNativeSocket(outcome.callerFd);
         request->error = tr("SFTP 隧道请求已取消");
-        request->clientFd = -1;
+        request->clientFd = InvalidNativeSocket;
     } else if (outcome.ok) {
         request->clientFd = outcome.callerFd;
     } else {
         request->error = outcome.error;
-        request->clientFd = -1;
+        request->clientFd = InvalidNativeSocket;
     }
     request->completed = true;
     request->condition.wakeAll();
@@ -942,7 +944,7 @@ void SshSessionStack::serviceForwardRequests()
 
         QMutexLocker requestLocker(&request->mutex);
         request->error = error;
-        request->clientFd = -1;
+        request->clientFd = InvalidNativeSocket;
         request->completed = true;
         request->condition.wakeAll();
     }
@@ -1032,7 +1034,7 @@ void SshSessionStack::abortInFlightForwards(const QString &reason)
     for (const QSharedPointer<ForwardRequest> &request : orphans) {
         QMutexLocker requestLocker(&request->mutex);
         request->error = reason;
-        request->clientFd = -1;
+        request->clientFd = InvalidNativeSocket;
         request->completed = true;
         request->condition.wakeAll();
     }

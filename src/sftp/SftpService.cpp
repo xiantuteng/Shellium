@@ -1,5 +1,6 @@
 #include "sftp/SftpService.h"
 #include "ssh/KnownHostsManager.h"
+#include "platform/NativeSocket.h"
 
 #include "ssh/SshTunnelBroker.h"
 
@@ -28,8 +29,9 @@
 #include <cstring>
 
 #include <fcntl.h>
+#if !defined(Q_OS_WIN)
 #include <sys/time.h>
-#include <unistd.h>
+#endif
 
 namespace {
 
@@ -232,11 +234,11 @@ private:
      */
     ConnectResult openDirect(const ConnectionTarget &target, const bool allowVerifiedHostKey)
     {
-        int tunnelFd = -1;
+        NativeSocketHandle tunnelFd = InvalidNativeSocket;
         if (!target.tunnelRouteId.isEmpty()) {
             QString tunnelError;
             tunnelFd = SshTunnelBroker::instance().openSocket(target.tunnelRouteId, &tunnelError);
-            if (tunnelFd < 0) {
+            if (!isNativeSocketValid(tunnelFd)) {
                 return failure(SftpService::ErrorKind::Connection,
                                QObject::tr("无法复用外层 SSH 会话：%1").arg(tunnelError));
             }
@@ -331,14 +333,14 @@ private:
      */
     ConnectResult connectAndAuthenticate(const ConnectionTarget &target,
                                          const bool allowVerifiedHostKey,
-                                         const int transportFd,
+                                         const NativeSocketHandle transportFd,
                                          const QString &authenticationLabel)
     {
         m_session = ssh_new();
         if (m_session == nullptr) {
-            if (transportFd >= 0) {
+            if (isNativeSocketValid(transportFd)) {
                 // ssh_new 失败时 fd 尚未交给 libssh，仍由调用方负责关闭，避免隧道端点泄漏。
-                ::close(transportFd);
+                closeNativeSocket(transportFd);
             }
             return failure(SftpService::ErrorKind::Connection,
                            QObject::tr("无法创建 libssh 会话。"));
@@ -348,13 +350,13 @@ private:
         const QByteArray user = target.username.toUtf8();
         const unsigned int port = target.port;
         ssh_options_set(m_session, SSH_OPTIONS_HOST, host.constData());
-        if (transportFd >= 0) {
+        if (isNativeSocketValid(transportFd)) {
             // SSH_OPTIONS_FD 接管 fd 的生命周期；HOST 仍保留真实地址，使 known_hosts 校验
             // 绑定内层主机而不是 socketpair 的本地端。
-            int fd = transportFd;
-            if (ssh_options_set(m_session, SSH_OPTIONS_FD, &fd) != SSH_OK) {
+            const socket_t socketHandle = static_cast<socket_t>(transportFd);
+            if (ssh_options_set(m_session, SSH_OPTIONS_FD, &socketHandle) != SSH_OK) {
                 // 选项设置失败代表 libssh 没有接管 fd；此分支必须显式关闭调用方端点。
-                ::close(transportFd);
+                closeNativeSocket(transportFd);
                 return failure(SftpService::ErrorKind::Connection,
                                QObject::tr("无法绑定内层 SSH 隧道：%1")
                                    .arg(QString::fromUtf8(ssh_get_error(m_session))));
@@ -369,7 +371,7 @@ private:
             const QByteArray identity = QFile::encodeName(target.identityFile);
             ssh_options_set(m_session, SSH_OPTIONS_IDENTITY, identity.constData());
         }
-        if (transportFd < 0 && !target.proxyJumps.isEmpty()) {
+        if (!isNativeSocketValid(transportFd) && !target.proxyJumps.isEmpty()) {
             const QByteArray jumps = target.proxyJumps.join(QLatin1Char(',')).toUtf8();
             if (ssh_options_set(m_session, SSH_OPTIONS_PROXYJUMP, jumps.constData()) != SSH_OK) {
                 return failure(SftpService::ErrorKind::Connection,
@@ -2715,5 +2717,6 @@ bool SftpService::takeTemporarilyTrusted(const ConnectionTarget &target)
 {
     QMutexLocker locker(&m_trustMutex);
     // QSet::remove 同时完成“检查”和“消费”，锁内没有另一请求抢走同一授权的窗口。
-    return m_temporarilyTrustedHosts.remove(target.stableKey()) > 0;
+    // Qt 6.8 直接返回 bool，无需再与 0 比较；直接返回还能避免 MSVC 的 C4804 警告。
+    return m_temporarilyTrustedHosts.remove(target.stableKey());
 }

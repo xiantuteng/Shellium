@@ -1,5 +1,7 @@
 #pragma once
 
+#include "platform/NativeSocket.h"
+
 #include "forwarding/PortForwardRule.h"
 
 #include <QHash>
@@ -122,7 +124,7 @@ private:
      */
     void dispatchRemoteConnection(SshSessionStack *sessionStack,
                                   const QString &ruleId,
-                                  int tunnelFd);
+                                  NativeSocketHandle tunnelFd);
 
     /** @brief 把运行状态枚举翻译成稳定中文。 */
     [[nodiscard]] static QString stateText(PortForwardState state);

@@ -207,7 +207,7 @@ void TerminalPane::openLocalShell(const QString &shellPath)
     ++m_reconnectToken;
     m_awaitingManualRecovery = false;
     // 主动打开本地终端代表开始新会话；递增代次后，旧 SSH 已排队的断开回调无法再触发
-    // 自动回退，从而不会重复创建本地 zsh。
+    // 恢复流程，从而不会重复创建本地 Shell。
     const quint64 sessionGeneration = ++m_sessionGeneration;
     stopWorker();
     m_ownedTargets.clear();
@@ -218,8 +218,8 @@ void TerminalPane::openLocalShell(const QString &shellPath)
     // 切换成本地 Shell 后当前终端不再具备远程目标，立即通知所属标签页清空自己的文件
     // 管理器，不能等 zsh 启动完成后继续短暂显示上一条 SSH 会话的目录。
     emit targetsChanged(this);
-    m_headerLabel->setText(tr("正在启动本地 zsh…"));
-    m_terminalView->appendTerminalOutput(tr("正在启动本地 zsh…\r\n").toUtf8());
+    m_headerLabel->setText(tr("正在启动本地终端…"));
+    m_terminalView->appendTerminalOutput(tr("正在启动本地终端…\r\n").toUtf8());
 
     m_localWorker = new LocalShellWorker(shellPath, this);
     connect(m_localWorker,
@@ -240,9 +240,9 @@ void TerminalPane::openLocalShell(const QString &shellPath)
             return;
         }
         m_shellReady = true;
-        m_headerLabel->setText(tr("本地 zsh"));
+        m_headerLabel->setText(tr("本地终端"));
         emit targetsChanged(this);
-        emit statusMessage(tr("本地 zsh 已启动"));
+        emit statusMessage(tr("本地终端已启动"));
     });
     connect(m_localWorker,
             &LocalShellWorker::shellError,
@@ -265,7 +265,7 @@ void TerminalPane::openLocalShell(const QString &shellPath)
             return;
         }
         m_shellReady = false;
-        const QString message = tr("本地 zsh 已结束（退出码 %1）").arg(exitCode);
+        const QString message = tr("本地终端已结束（退出码 %1）").arg(exitCode);
         m_headerLabel->setText(message);
         emit targetsChanged(this);
         emit statusMessage(message);
@@ -582,7 +582,7 @@ void TerminalPane::connectToHosts(const QList<ConnectionTarget> &connectionPlan)
         m_remoteSessionEstablished = false;
         m_shellReady = false;
         // 退出状态 -1 表示链路异常断开，而不是用户在远端敲了 exit：前者可以自动重连，后者
-        // 不能。但两者都不再擅自退回本地 zsh——刚断开的服务器与本机毫无关系，顶上来的本地
+        // 不能。但两者都不再擅自退回本地 Shell——刚断开的服务器与本机毫无关系，顶上来的本地
         // Shell 会让用户下一条命令打在错误的机器上，因此一律停在手动恢复提示。
         const bool abnormal = exitStatus == -1;
         const bool shouldReconnect = abnormal && m_automaticReconnectEnabled
@@ -698,7 +698,7 @@ QList<ConnectionTarget> TerminalPane::targets() const
 
 QList<ConnectionTarget> TerminalPane::connectionPlan() const
 {
-    // 面板可能已被用户切回本地 zsh，但整条计划仍留给手动重连复用。若只看计划非空，
+    // 面板可能已被用户切回本地 Shell，但整条计划仍留给手动重连复用。若只看计划非空，
     // 复制一个早已回到本机的标签会凭空再拨一条 SSH，因此以当前是否跑着本地 Shell 为准。
     return m_localWorker != nullptr ? QList<ConnectionTarget>{} : m_connectionPlan;
 }

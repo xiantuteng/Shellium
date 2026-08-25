@@ -19,13 +19,70 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(Qt6 6.8 REQUIRED COMPONENTS Core Widgets Concurrent Network Sql Svg)
 
-# Homebrew、Linux 发行版和 vcpkg 提供的 libssh 均会安装 pkg-config 元数据。
-# 通过 IMPORTED_TARGET 引入可以同时携带头文件路径、库路径和间接链接参数。
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(LIBSSH REQUIRED IMPORTED_TARGET libssh>=0.10)
-pkg_check_modules(LIBVTERM REQUIRED IMPORTED_TARGET vterm>=0.3)
-pkg_check_modules(LIBSODIUM REQUIRED IMPORTED_TARGET libsodium>=1.0.18)
-pkg_check_modules(SPDLOG REQUIRED IMPORTED_TARGET spdlog>=1.12)
+# 业务目标只链接项目内部的稳定依赖名。Windows/vcpkg 通常提供 CMake Config Package，
+# macOS Homebrew 与 Linux 发行版则普遍提供 pkg-config；先尝试前者、再统一回退到后者，
+# 可以让三平台共用其余 CMake 而不在每个测试目标中散落平台判断。
+find_package(libssh 0.10 CONFIG QUIET)
+find_package(libvterm 0.3 CONFIG QUIET)
+find_package(sodium 1.0.18 CONFIG QUIET)
+find_package(unofficial-sodium CONFIG QUIET)
+find_package(unofficial-libvterm CONFIG QUIET)
+find_package(spdlog 1.12 CONFIG QUIET)
+
+find_package(PkgConfig QUIET)
+
+function(shellium_resolve_dependency stable_name package_name minimum_version)
+    set(candidate_targets ${ARGN})
+    foreach(candidate IN LISTS candidate_targets)
+        if(TARGET "${candidate}")
+            add_library("ShelliumDependencies::${stable_name}" INTERFACE IMPORTED GLOBAL)
+            set_property(TARGET "ShelliumDependencies::${stable_name}"
+                PROPERTY INTERFACE_LINK_LIBRARIES "${candidate}")
+            return()
+        endif()
+    endforeach()
+
+    if(NOT PkgConfig_FOUND)
+        message(FATAL_ERROR
+            "找不到 ${package_name} ${minimum_version}+：请通过 vcpkg/CMake Config 安装，"
+            "或在 POSIX 平台安装 pkg-config 元数据。")
+    endif()
+    string(TOUPPER "${stable_name}" pkg_prefix)
+    pkg_check_modules("${pkg_prefix}" REQUIRED IMPORTED_TARGET
+        "${package_name}>=${minimum_version}")
+    add_library("ShelliumDependencies::${stable_name}" INTERFACE IMPORTED GLOBAL)
+    set_property(TARGET "ShelliumDependencies::${stable_name}"
+        PROPERTY INTERFACE_LINK_LIBRARIES "PkgConfig::${pkg_prefix}")
+endfunction()
+
+shellium_resolve_dependency(libssh libssh 0.10 libssh::libssh ssh)
+shellium_resolve_dependency(libvterm vterm 0.3
+    libvterm::libvterm vterm::vterm unofficial::libvterm vterm)
+shellium_resolve_dependency(libsodium libsodium 1.0.18
+    sodium::sodium unofficial-sodium::sodium sodium)
+shellium_resolve_dependency(spdlog spdlog 1.12
+    spdlog::spdlog spdlog::spdlog_header_only)
+
+# 原生 socket 平台层是 SSH/SFTP/转发共同依赖的基础设施。独立静态库让正式程序和各测试
+# 目标复用完全相同的实现，防止只给 GUI 目标补了 Windows 源码而测试目标仍然链接失败。
+add_library(ShelliumPlatform STATIC
+    src/platform/NativeSocket.cpp
+    src/platform/NativeSocket.h
+    src/platform/SecureFileWriter.cpp
+    src/platform/SecureFileWriter.h
+)
+target_include_directories(ShelliumPlatform PUBLIC src)
+target_link_libraries(ShelliumPlatform PUBLIC Qt6::Core)
+if(WIN32)
+    target_compile_definitions(ShelliumPlatform PUBLIC
+        UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN _WIN32_WINNT=0x0A00)
+    target_link_libraries(ShelliumPlatform PUBLIC Ws2_32 Advapi32)
+endif()
+
+# 所有 libssh 使用者都可能通过嵌套会话或转发间接调用平台 socket 层。把依赖挂到项目内
+# 稳定目标上，可覆盖正式程序与现有多个拆分测试目标，同时避免重复维护测试清单。
+set_property(TARGET ShelliumDependencies::libssh APPEND PROPERTY
+    INTERFACE_LINK_LIBRARIES ShelliumPlatform)
 
 # 终端等宽字体随可执行文件一起分发，不依赖用户机器上装了什么。只要走系统字体，缺字体的机器
 # 会被静默替换成别的字形，字宽与行高随之改变，终端网格就对不齐了。列表与 BundledFonts.cpp 的
@@ -215,11 +272,45 @@ target_link_libraries(Shellium PRIVATE
     Qt6::Network
     Qt6::Sql
     Qt6::Svg
-    PkgConfig::LIBSSH
-    PkgConfig::LIBVTERM
-    PkgConfig::LIBSODIUM
-    PkgConfig::SPDLOG
+    ShelliumDependencies::libssh
+    ShelliumDependencies::libvterm
+    ShelliumDependencies::libsodium
+    ShelliumDependencies::spdlog
 )
+
+if(WIN32)
+    # ConPTY、Winsock 与 Windows 安全描述符属于系统 SDK。编译定义避免 windows.h 宏污染
+    # std::min/max，并确保所有 Win32 路径与进程 API 固定走 Unicode 宽字符版本。
+    target_compile_definitions(Shellium PRIVATE
+        UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN _WIN32_WINNT=0x0A00)
+    target_link_libraries(Shellium PRIVATE Kernel32 Ws2_32 Advapi32 Userenv)
+    set_target_properties(Shellium PROPERTIES WIN32_EXECUTABLE TRUE)
+
+    if(MSVC)
+        # Shellium.rc 已显式嵌入包含 DPI、长路径与执行权限声明的自定义 manifest。MSVC 链接器
+        # 默认还会生成一份 ID 为 1 的 manifest，最终在 cvtres 阶段因资源重复报 CVT1100。
+        # 目标级 /MANIFEST:NO 只禁止链接器自动生成清单，不影响 RC 中的自定义清单与版本资源；
+        # 该选项限定在 MSVC，避免传给 MinGW 或 Linux 到 Windows 的交叉链接器。
+        target_link_options(Shellium PRIVATE "/MANIFEST:NO")
+    endif()
+
+    # 将 asInvoker、Per-Monitor-V2 DPI、长路径和版本属性直接嵌入 PE。生成到构建目录而非
+    # 修改源码文件，可让版本号始终跟随 project()，也避免多配置构建相互覆盖。
+    enable_language(RC)
+    configure_file(packaging/windows/Shellium.rc.in
+                   "${CMAKE_CURRENT_BINARY_DIR}/Shellium.rc" @ONLY)
+    target_sources(Shellium PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/Shellium.rc")
+
+    if(NOT CMAKE_CROSSCOMPILING)
+        # 原生 Windows 构建使用 Qt 官方部署脚本收集 DLL 与插件。交叉构建刻意不走此分支，
+        # 因为 Linux 主机无法运行目标平台 windeployqt，必须由发布镜像递归扫描 PE imports。
+        qt_generate_deploy_app_script(
+            TARGET Shellium
+            OUTPUT_SCRIPT shellium_qt_deploy_script
+            NO_UNSUPPORTED_PLATFORM_ERROR
+        )
+    endif()
+endif()
 
 if(UNIX AND NOT APPLE)
     # Linux 的 forkpty 位于独立 libutil；macOS 已由系统 C 库提供，无需额外链接。
@@ -262,14 +353,53 @@ if(APPLE)
     )
 endif()
 
-install(TARGETS Shellium
-    BUNDLE DESTINATION .
-    RUNTIME DESTINATION bin
-)
+if(WIN32)
+    # Windows staging 根目录直接放 EXE，Qt 插件目录与 qt.conf 可在部署阶段按标准结构加入。
+    install(TARGETS Shellium RUNTIME DESTINATION .)
+    if(DEFINED shellium_qt_deploy_script)
+        # 部署脚本必须排在 install(TARGETS) 之后执行，否则 staging 中尚无主程序可供分析。
+        install(SCRIPT "${shellium_qt_deploy_script}")
+    endif()
+else()
+    install(TARGETS Shellium
+        BUNDLE DESTINATION .
+        RUNTIME DESTINATION bin
+    )
+endif()
+
+if(WIN32)
+    # CPack ZIP 只收集程序文件，不接触 QStandardPaths 下的数据库、保险箱、日志和用户 SSH
+    # 配置；单用户 NSIS 安装器由独立脚本生成，以避开 CPack 模板固定的管理员执行级别。
+    # CMake 自带 NSIS 模板固定请求管理员权限，不符合单用户安装约束；这里只保留 ZIP 生成器，
+    # 正式安装器由 packaging/windows/Shellium.nsi 明确以 RequestExecutionLevel user 生成。
+    set(CPACK_GENERATOR "ZIP")
+    set(CPACK_PACKAGE_NAME "Shellium")
+    set(CPACK_PACKAGE_VENDOR "Shellium contributors")
+    set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
+    set(CPACK_PACKAGE_FILE_NAME "Shellium-${PROJECT_VERSION}-win64")
+    set(CPACK_PACKAGE_INSTALL_DIRECTORY "Shellium")
+    set(CPACK_NSIS_INSTALL_ROOT "$LOCALAPPDATA\\Programs")
+    set(CPACK_NSIS_MODIFY_PATH OFF)
+    set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
+    set(CPACK_NSIS_DISPLAY_NAME "Shellium")
+    set(CPACK_NSIS_PACKAGE_NAME "Shellium")
+    set(CPACK_NSIS_EXECUTABLES_DIRECTORY ".")
+    set(CPACK_NSIS_MUI_FINISHPAGE_RUN "Shellium.exe")
+    include(CPack)
+endif()
 
 include(CTest)
 if(BUILD_TESTING)
     find_package(Qt6 6.8 REQUIRED COMPONENTS Test Sql)
+
+    # 平台 socket 抽象单独测试，Windows 回环 TCP pair 与 POSIX socketpair 共用同一契约。
+    # 该目标不引入 libssh，能把所有权或错误码映射故障定位到最小范围。
+    qt_add_executable(ShelliumNativeSocketTests
+        tests/NativeSocketTest.cpp
+    )
+    target_link_libraries(ShelliumNativeSocketTests PRIVATE
+        Qt6::Core Qt6::Test ShelliumPlatform)
+    add_test(NAME ShelliumNativeSocketTests COMMAND ShelliumNativeSocketTests)
 
     qt_add_executable(ShelliumCoreTests
         tests/SshCommandParserTest.cpp
@@ -305,9 +435,9 @@ if(BUILD_TESTING)
         Qt6::Widgets
         Qt6::Sql
         Qt6::Test
-        PkgConfig::LIBSSH
-        PkgConfig::LIBVTERM
-        PkgConfig::LIBSODIUM
+        ShelliumDependencies::libssh
+        ShelliumDependencies::libvterm
+        ShelliumDependencies::libsodium
     )
     if(UNIX AND NOT APPLE)
         target_link_libraries(ShelliumCoreTests PRIVATE util)
@@ -353,7 +483,7 @@ if(BUILD_TESTING)
     )
     target_include_directories(ShelliumConnectionToolsTests PRIVATE src)
     target_link_libraries(ShelliumConnectionToolsTests PRIVATE
-        Qt6::Core Qt6::Network Qt6::Sql Qt6::Test PkgConfig::LIBSSH)
+        Qt6::Core Qt6::Network Qt6::Sql Qt6::Test ShelliumDependencies::libssh)
     add_test(NAME ShelliumConnectionToolsTests COMMAND ShelliumConnectionToolsTests)
 
     # 效率工具测试覆盖 Snippet 树、历史补全、多目标信号以及 TerminalPane 到数据库的真实
@@ -401,8 +531,8 @@ if(BUILD_TESTING)
         Qt6::Sql
         Qt6::Widgets
         Qt6::Test
-        PkgConfig::LIBSSH
-        PkgConfig::LIBVTERM
+        ShelliumDependencies::libssh
+        ShelliumDependencies::libvterm
     )
     if(UNIX AND NOT APPLE)
         target_link_libraries(ShelliumProductivityTests PRIVATE util)
@@ -437,7 +567,7 @@ if(BUILD_TESTING)
     target_include_directories(ShelliumPortForwardTests PRIVATE src)
     target_link_libraries(ShelliumPortForwardTests PRIVATE
         Qt6::Core Qt6::Gui Qt6::Network Qt6::Widgets Qt6::Sql Qt6::Test
-        PkgConfig::LIBSSH)
+        ShelliumDependencies::libssh)
     add_test(NAME ShelliumPortForwardTests COMMAND ShelliumPortForwardTests)
 
     # 标题栏标签控件测试需要真实的 QTabBar 布局与窗口曝光，因此依赖 Qt6::Widgets 和
@@ -502,10 +632,10 @@ if(BUILD_TESTING)
         Qt6::Svg
         Qt6::Widgets
         Qt6::Test
-        PkgConfig::LIBSSH
-        PkgConfig::LIBVTERM
-        PkgConfig::LIBSODIUM
-        PkgConfig::SPDLOG
+        ShelliumDependencies::libssh
+        ShelliumDependencies::libvterm
+        ShelliumDependencies::libsodium
+        ShelliumDependencies::spdlog
     )
     if(UNIX AND NOT APPLE)
         target_link_libraries(ShelliumMainWindowShellTests PRIVATE util)
@@ -563,8 +693,8 @@ if(BUILD_TESTING)
         Qt6::Sql
         Qt6::Widgets
         Qt6::Test
-        PkgConfig::LIBSSH
-        PkgConfig::LIBVTERM
+        ShelliumDependencies::libssh
+        ShelliumDependencies::libvterm
     )
     if(UNIX AND NOT APPLE)
         target_link_libraries(ShelliumSessionRecoveryTests PRIVATE util)
@@ -653,7 +783,7 @@ if(BUILD_TESTING)
     target_include_directories(ShelliumHostManagerTests PRIVATE src)
     target_link_libraries(ShelliumHostManagerTests PRIVATE
         Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Sql Qt6::Svg Qt6::Test
-        PkgConfig::LIBSSH PkgConfig::LIBSODIUM)
+        ShelliumDependencies::libssh ShelliumDependencies::libsodium)
     add_test(NAME ShelliumHostManagerTests COMMAND ShelliumHostManagerTests)
 
     # 设置界面改版后的控件接线回归：步进器、滑动开关、配色色板与分类导航都是自绘控件，
@@ -690,7 +820,7 @@ if(BUILD_TESTING)
     shellium_add_bundled_fonts(ShelliumSettingsUiTests)
     target_include_directories(ShelliumSettingsUiTests PRIVATE src)
     target_link_libraries(ShelliumSettingsUiTests PRIVATE
-        Qt6::Core Qt6::Gui Qt6::Network Qt6::Widgets Qt6::Sql Qt6::Test PkgConfig::LIBSODIUM)
+        Qt6::Core Qt6::Gui Qt6::Network Qt6::Widgets Qt6::Sql Qt6::Test ShelliumDependencies::libsodium)
     add_test(NAME ShelliumSettingsUiTests COMMAND ShelliumSettingsUiTests)
 
     # AI 助手改版成单步交互回路后，"执行完命令自动读取真实输出并续问模型"这条链路完全靠
@@ -718,7 +848,7 @@ if(BUILD_TESTING)
     )
     target_include_directories(ShelliumAiAssistantTests PRIVATE src)
     target_link_libraries(ShelliumAiAssistantTests PRIVATE
-        Qt6::Core Qt6::Gui Qt6::Network Qt6::Widgets Qt6::Sql Qt6::Test PkgConfig::LIBSODIUM)
+        Qt6::Core Qt6::Gui Qt6::Network Qt6::Widgets Qt6::Sql Qt6::Test ShelliumDependencies::libsodium)
     add_test(NAME ShelliumAiAssistantTests COMMAND ShelliumAiAssistantTests)
 
     # 运行日志是界面提示条移除后唯一的消息去路：写入一旦静默失败，用户既看不到提示也查
@@ -737,7 +867,7 @@ if(BUILD_TESTING)
     # 另一套报 "Unknown test function" 并返回非零，破坏单独复现某个用例的工作流。
     qt_add_executable(ShelliumKeepAliveTests tests/KeepAliveTest.cpp)
     target_include_directories(ShelliumKeepAliveTests PRIVATE src)
-    target_link_libraries(ShelliumKeepAliveTests PRIVATE Qt6::Core Qt6::Test PkgConfig::LIBSSH)
+    target_link_libraries(ShelliumKeepAliveTests PRIVATE Qt6::Core Qt6::Test ShelliumDependencies::libssh)
     add_test(NAME ShelliumKeepAliveTests COMMAND ShelliumKeepAliveTests)
 
     # SFTP 递归传输的纯逻辑（路径越界防护、遍历顺序、跳过判定、失败聚合、进度计算）全部以
@@ -775,7 +905,7 @@ if(BUILD_TESTING)
     )
     target_include_directories(ShelliumSftpUiTests PRIVATE src)
     target_link_libraries(ShelliumSftpUiTests PRIVATE
-        Qt6::Core Qt6::Concurrent Qt6::Gui Qt6::Widgets Qt6::Test PkgConfig::LIBSSH)
+        Qt6::Core Qt6::Concurrent Qt6::Gui Qt6::Widgets Qt6::Test ShelliumDependencies::libssh)
     add_test(NAME ShelliumSftpUiTests COMMAND ShelliumSftpUiTests)
 
     # 备用屏（vim/top/less 等全屏程序）下的渲染与按键编码回归。只需要 libvterm 与
@@ -796,7 +926,7 @@ if(BUILD_TESTING)
     )
     target_include_directories(ShelliumTerminalAltScreenTests PRIVATE src)
     target_link_libraries(ShelliumTerminalAltScreenTests PRIVATE
-        Qt6::Core Qt6::Gui Qt6::Sql Qt6::Widgets Qt6::Test PkgConfig::LIBVTERM)
+        Qt6::Core Qt6::Gui Qt6::Sql Qt6::Widgets Qt6::Test ShelliumDependencies::libvterm)
     add_test(NAME ShelliumTerminalAltScreenTests COMMAND ShelliumTerminalAltScreenTests)
 
     # 针对真实服务器的连接路径回归。非阻塞握手状态机的价值就在于与真实 libssh 和真实
@@ -843,8 +973,8 @@ if(BUILD_TESTING)
         Qt6::Sql
         Qt6::Widgets
         Qt6::Test
-        PkgConfig::LIBSSH
-        PkgConfig::LIBVTERM
+        ShelliumDependencies::libssh
+        ShelliumDependencies::libvterm
     )
     if(UNIX AND NOT APPLE)
         target_link_libraries(ShelliumSshIntegrationTests PRIVATE util)
@@ -897,8 +1027,8 @@ if(BUILD_TESTING)
         Qt6::Sql
         Qt6::Widgets
         Qt6::Test
-        PkgConfig::LIBSSH
-        PkgConfig::LIBVTERM
+        ShelliumDependencies::libssh
+        ShelliumDependencies::libvterm
     )
     if(UNIX AND NOT APPLE)
         target_link_libraries(ShelliumSftpUploadPipelineTests PRIVATE util)
@@ -950,8 +1080,8 @@ if(BUILD_TESTING)
         Qt6::Sql
         Qt6::Widgets
         Qt6::Test
-        PkgConfig::LIBSSH
-        PkgConfig::LIBVTERM
+        ShelliumDependencies::libssh
+        ShelliumDependencies::libvterm
     )
     if(UNIX AND NOT APPLE)
         target_link_libraries(ShelliumSftpResumeIntegrationTests PRIVATE util)

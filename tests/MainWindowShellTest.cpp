@@ -103,7 +103,7 @@ void MainWindowShellTest::newTabButtonOpensDefaultTerminal()
     QCOMPARE(stack->currentWidget(), tabs);
     auto *workspace = qobject_cast<TerminalWorkspace *>(tabs->widget(0));
     QVERIFY(workspace != nullptr);
-    // 默认终端就是本地 zsh：新标签必须真的启动一个可交互 Shell，而不是留下一个空面板。
+    // 新标签必须真的启动当前平台默认交互式 Shell，而不是留下一个空面板。
     QTRY_VERIFY_WITH_TIMEOUT(workspace->activePane()->isConnected(), 8000);
 }
 

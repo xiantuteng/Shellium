@@ -1,5 +1,7 @@
 #pragma once
 
+#include "platform/NativeSocket.h"
+
 #include "forwarding/PortForwardRule.h"
 
 #include <QObject>
@@ -57,7 +59,7 @@ public slots:
      * 该入口由 PortForwardManagerWidget 唯一分发，而不是让每个规则同时订阅栈信号。集中
      * 分发可以明确 fd 只有一个所有者，并在规则停止/迁移的竞态窗口及时关闭孤儿连接。
      */
-    void acceptRemoteConnection(int tunnelFd);
+    void acceptRemoteConnection(NativeSocketHandle tunnelFd);
 
 signals:
     /** @brief 生命周期或流量统计变化；始终投递到本对象所属线程。 */

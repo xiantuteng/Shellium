@@ -1,5 +1,6 @@
 #include "ssh/SshSessionNode.h"
 #include "ssh/KnownHostsManager.h"
+#include "platform/NativeSocket.h"
 
 #include <QFile>
 #include <QLoggingCategory>
@@ -8,11 +9,7 @@
 #include <algorithm>
 #include <utility>
 
-#include <cerrno>
 #include <cstring>
-#include <fcntl.h>
-#include <sys/socket.h>
-#include <unistd.h>
 
 namespace {
 
@@ -227,8 +224,8 @@ SshSessionNode::~SshSessionNode()
     for (PendingForward &pending : m_pendingForwards) {
         // 同样只 free 不 close：这些通道从未打开成功。
         ssh_channel_free(pending.channel);
-        ::close(pending.workerFd);
-        ::close(pending.callerFd);
+        closeNativeSocket(pending.workerFd);
+        closeNativeSocket(pending.callerFd);
     }
     m_pendingForwards.clear();
 
@@ -248,10 +245,13 @@ SshSessionNode::~SshSessionNode()
     m_secret.fill('\0');
 }
 
-SshSessionNode::StepResult SshSessionNode::beginEstablish(const int transportFd,
+SshSessionNode::StepResult SshSessionNode::beginEstablish(const NativeSocketHandle transportFd,
                                                           const int columns,
                                                           const int rows)
 {
+    // 调用即转移隧道句柄所有权。先放入 RAII 守卫，保证 ssh_new/ssh_options_set 的任何早退
+    // 都会正确使用 closesocket/close；只有 libssh 明确接管成功后才 release。
+    UniqueNativeSocket transportOwner(transportFd);
     m_columns = std::max(columns, 1);
     m_rows = std::max(rows, 1);
     m_terminalModes = interactiveTerminalModes();
@@ -277,11 +277,15 @@ SshSessionNode::StepResult SshSessionNode::beginEstablish(const int transportFd,
     const int noDelay = 1;
     ssh_options_set(m_session, SSH_OPTIONS_NODELAY, &noDelay);
 
-    if (transportFd >= 0) {
+    if (isNativeSocketValid(transportFd)) {
         // SSH_OPTIONS_FD 让 libssh 在已连接 socket 上直接握手，同时 HOST 仍保持真实内层
         // 地址，known_hosts 校验不会错误绑定到隧道本地端。
-        int fd = transportFd;
-        ssh_options_set(m_session, SSH_OPTIONS_FD, &fd);
+        const socket_t socketHandle = static_cast<socket_t>(transportFd);
+        if (ssh_options_set(m_session, SSH_OPTIONS_FD, &socketHandle) != SSH_OK) {
+            m_stage = Stage::Failed;
+            return failure(tr("无法绑定 SSH 隧道套接字：%1").arg(lastError()));
+        }
+        static_cast<void>(transportOwner.release());
     } else {
         // 该超时只保护 libssh 内部仍然同步执行的部分（例如 DNS 解析）。握手本身在非阻塞
         // 模式下由 advanceEstablish 的整体计时器限时。
@@ -293,7 +297,7 @@ SshSessionNode::StepResult SshSessionNode::beginEstablish(const int transportFd,
         const QByteArray identity = QFile::encodeName(m_target.identityFile);
         ssh_options_set(m_session, SSH_OPTIONS_IDENTITY, identity.constData());
     }
-    if (transportFd < 0 && !m_target.proxyJumps.isEmpty()) {
+    if (!isNativeSocketValid(transportFd) && !m_target.proxyJumps.isEmpty()) {
         // 复用隧道时外层路径已由隧道本身表达；此处再配置 ProxyJump 会让 libssh 试图从
         // 内层服务器重新跳一次，因此只在直连模式下应用跳板链。
         const QByteArray jumps = m_target.proxyJumps.join(QLatin1Char(',')).toUtf8();
@@ -919,16 +923,16 @@ quint64 SshSessionNode::beginForward(const QString &host,
         return reportError(tr("该层 SSH 会话尚未建立"));
     }
 
-    int socketPair[2] = {-1, -1};
-    if (::socketpair(AF_UNIX, SOCK_STREAM, 0, socketPair) != 0) {
-        return reportError(tr("创建 SFTP 隧道 socket 失败：%1")
-                               .arg(QString::fromLocal8Bit(std::strerror(errno))));
+    NativeSocketHandle socketPair[2] = {InvalidNativeSocket, InvalidNativeSocket};
+    QString socketError;
+    if (!createConnectedSocketPair(&socketPair[0], &socketPair[1], &socketError)) {
+        return reportError(tr("创建 SFTP 隧道 socket 失败：%1").arg(socketError));
     }
 
     ssh_channel channel = ssh_channel_new(m_session);
     if (channel == nullptr) {
-        ::close(socketPair[0]);
-        ::close(socketPair[1]);
+        closeNativeSocket(socketPair[0]);
+        closeNativeSocket(socketPair[1]);
         return reportError(tr("无法在 %1 上分配转发通道：%2")
                                .arg(m_target.connectionSpecifier(true), lastError()));
     }
@@ -940,19 +944,17 @@ quint64 SshSessionNode::beginForward(const QString &host,
     // 显式调大到 4MiB 让缓冲区能吸收多个轮询周期的数据量，轮询间隔就不再是瓶颈；
     // setsockopt 失败时保持系统默认值，不影响功能正确性。
     constexpr int kForwardSocketBufferBytes = 4 * 1024 * 1024;
-    for (const int fd : socketPair) {
-        ::setsockopt(fd, SOL_SOCKET, SO_SNDBUF,
-                    &kForwardSocketBufferBytes, sizeof(kForwardSocketBufferBytes));
-        ::setsockopt(fd, SOL_SOCKET, SO_RCVBUF,
-                    &kForwardSocketBufferBytes, sizeof(kForwardSocketBufferBytes));
+    for (const NativeSocketHandle socketHandle : socketPair) {
+        // 缓冲调优失败不影响正确性，保留系统默认值即可，因此这里有意忽略诊断。
+        setNativeSocketBufferSize(socketHandle, kForwardSocketBufferBytes);
     }
 
     // 工作线程一侧必须非阻塞，否则轮询循环会被没有数据的隧道读操作卡住。
-    fcntl(socketPair[0], F_SETFL, fcntl(socketPair[0], F_GETFL, 0) | O_NONBLOCK);
+    setNativeSocketNonBlocking(socketPair[0], true);
     if (nonBlockingCaller) {
         // 嵌套层的 libssh 会话工作在非阻塞模式，其传输 fd 必须同样非阻塞，否则握手读取会
         // 阻塞工作线程并再次饿死承载它的外层通道。SFTP 的同步会话则需要保留阻塞语义。
-        fcntl(socketPair[1], F_SETFL, fcntl(socketPair[1], F_GETFL, 0) | O_NONBLOCK);
+        setNativeSocketNonBlocking(socketPair[1], true);
     }
 
     PendingForward pending;
@@ -980,13 +982,13 @@ void SshSessionNode::discardPending(PendingForward &pending)
         ssh_channel_free(pending.channel);
         pending.channel = nullptr;
     }
-    if (pending.workerFd >= 0) {
-        ::close(pending.workerFd);
-        pending.workerFd = -1;
+    if (isNativeSocketValid(pending.workerFd)) {
+        closeNativeSocket(pending.workerFd);
+        pending.workerFd = InvalidNativeSocket;
     }
-    if (pending.callerFd >= 0) {
-        ::close(pending.callerFd);
-        pending.callerFd = -1;
+    if (isNativeSocketValid(pending.callerFd)) {
+        closeNativeSocket(pending.callerFd);
+        pending.callerFd = InvalidNativeSocket;
     }
 }
 
@@ -1040,7 +1042,7 @@ bool SshSessionNode::advanceDirectForward(PendingForward &pending,
         m_forwards.append({pending.workerFd, pending.channel, {}, {}});
         pending.channel = nullptr;
         pending.workerFd = -1;
-        pending.callerFd = -1;
+        pending.callerFd = InvalidNativeSocket;
         outcomes.append(outcome);
         return true;
     }
@@ -1146,7 +1148,7 @@ bool SshSessionNode::advanceRelayForward(PendingForward &pending,
         m_forwards.append({pending.workerFd, pending.channel, {}, {}});
         pending.channel = nullptr;
         pending.workerFd = -1;
-        pending.callerFd = -1;
+        pending.callerFd = InvalidNativeSocket;
         outcomes.append(outcome);
         return true;
     }
@@ -1180,7 +1182,9 @@ QList<SshSessionNode::ForwardOutcome> SshSessionNode::pumpForwards()
         bool forwardRemoved = false;
 
         while (true) {
-            const ssize_t count = ::read(forward.socketFd, tunnelBuffer, sizeof(tunnelBuffer));
+            const qint64 count = readNativeSocket(forward.socketFd,
+                                                  tunnelBuffer,
+                                                  sizeof(tunnelBuffer));
             if (count > 0) {
                 forward.socketToChannel.append(tunnelBuffer, count);
             } else {
@@ -1243,9 +1247,9 @@ QList<SshSessionNode::ForwardOutcome> SshSessionNode::pumpForwards()
             }
         }
         while (!forward.channelToSocket.isEmpty()) {
-            const ssize_t written = ::write(forward.socketFd,
-                                            forward.channelToSocket.constData(),
-                                            forward.channelToSocket.size());
+            const qint64 written = writeNativeSocket(forward.socketFd,
+                                                     forward.channelToSocket.constData(),
+                                                     forward.channelToSocket.size());
             if (written > 0) {
                 forward.channelToSocket.remove(0, written);
             } else {
@@ -1403,15 +1407,16 @@ void SshSessionNode::pumpRemoteForwarding(QList<RemoteListenOutcome> &outcomes,
             continue;
         }
 
-        int socketPair[2] = {-1, -1};
-        if (::socketpair(AF_UNIX, SOCK_STREAM, 0, socketPair) != 0) {
-            qCWarning(sshLog) << "为远程转发创建 socketpair 失败：" << std::strerror(errno);
+        NativeSocketHandle socketPair[2] = {InvalidNativeSocket, InvalidNativeSocket};
+        QString socketError;
+        if (!createConnectedSocketPair(&socketPair[0], &socketPair[1], &socketError)) {
+            qCWarning(sshLog) << "为远程转发创建 socketpair 失败：" << socketError;
             ssh_channel_free(channel);
             continue;
         }
         // SshSessionStack 每轮泵送所有通道，工作端必须非阻塞；调用端交给独立转发运行时，
         // 后者会按自己的 poll 循环设置模式并负责最终关闭。
-        fcntl(socketPair[0], F_SETFL, fcntl(socketPair[0], F_GETFL, 0) | O_NONBLOCK);
+        setNativeSocketNonBlocking(socketPair[0], true);
         m_forwards.append({socketPair[0], channel, {}, {}});
         accepted.append({listenerIt->ruleId, socketPair[1]});
     }
@@ -1419,9 +1424,9 @@ void SshSessionNode::pumpRemoteForwarding(QList<RemoteListenOutcome> &outcomes,
 
 void SshSessionNode::releaseForward(ActiveForward &forward)
 {
-    if (forward.socketFd >= 0) {
-        ::close(forward.socketFd);
-        forward.socketFd = -1;
+    if (isNativeSocketValid(forward.socketFd)) {
+        closeNativeSocket(forward.socketFd);
+        forward.socketFd = InvalidNativeSocket;
     }
     if (forward.channel != nullptr) {
         // 同上：ssh_channel_free 会在需要时自行关闭，并且正确处理非阻塞会话上尚未完成的

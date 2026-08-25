@@ -1,4 +1,5 @@
 #include "forwarding/PortForwardManagerWidget.h"
+#include "platform/NativeSocket.h"
 
 #include "forwarding/PortForwardRuntime.h"
 #include "ssh/SshSessionStack.h"
@@ -40,7 +41,6 @@
 #include <functional>
 #include <utility>
 
-#include <unistd.h>
 
 namespace {
 
@@ -1163,7 +1163,8 @@ void PortForwardManagerWidget::registerSession(const QString &hostId,
         connect(sessionStack,
                 &SshSessionStack::remoteForwardConnection,
                 this,
-                [this, sessionStack](const QString &ruleId, const int tunnelFd) {
+                [this, sessionStack](const QString &ruleId,
+                                     const NativeSocketHandle tunnelFd) {
                     dispatchRemoteConnection(sessionStack, ruleId, tunnelFd);
                 },
                 Qt::QueuedConnection);
@@ -1213,9 +1214,9 @@ void PortForwardManagerWidget::unregisterSession(const QString &hostId,
 
 void PortForwardManagerWidget::dispatchRemoteConnection(SshSessionStack *sessionStack,
                                                          const QString &ruleId,
-                                                         const int tunnelFd)
+                                                         const NativeSocketHandle tunnelFd)
 {
-    if (tunnelFd < 0) {
+    if (!isNativeSocketValid(tunnelFd)) {
         return;
     }
     PortForwardRuntime *runtime = m_runtimes.value(ruleId);
@@ -1223,7 +1224,7 @@ void PortForwardManagerWidget::dispatchRemoteConnection(SshSessionStack *session
         || runtime->rule().type != PortForwardType::Remote) {
         // 规则可能在服务端接受 channel 与 GUI 收到排队信号之间被停止、删除或迁移。管理器
         // 是信号的唯一接收者，因此找不到准确所有者时必须在此关闭，避免长期泄漏 fd。
-        ::close(tunnelFd);
+        closeNativeSocket(tunnelFd);
         return;
     }
     runtime->acceptRemoteConnection(tunnelFd);

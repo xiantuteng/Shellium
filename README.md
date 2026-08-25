@@ -18,7 +18,8 @@ Shellium 是基于 Qt 6、libssh 和 libvterm 的桌面 SSH 终端与远程文�
 当前还包括：
 
 - libvterm VT/xterm 状态机、256 色/TrueColor、备用屏幕、双宽字符与可配置滚动历史；
-- 真实 PTY 本地登录式 Shell，多标签页，连接异常有限自动重连和断开回退；
+- macOS/Linux 使用 PTY、Windows 使用 ConPTY 的本地交互式 Shell，多标签页，连接异常有限
+  自动重连和断开回退；
 - 主机树、嵌套分组、配置继承、标签筛选、最近连接、连接历史，以及可复用已有主机凭据的
   可视化主机链；同时保留高级手动 ProxyJump 兼容入口；
 - OpenSSH config 导入，以及不含凭据的 Shellium JSON 导入/导出；
@@ -41,7 +42,8 @@ Shellium 是基于 Qt 6、libssh 和 libvterm 的桌面 SSH 终端与远程文�
 - libvterm 0.3+；
 - libsodium 1.0.18+；
 - spdlog 1.12+；
-- pkg-config、Ninja 和支持 C++20 的编译器。
+- Ninja 和支持 C++20 的编译器；macOS/Linux 可用 pkg-config，Windows 可用 CMake Config
+  Package/vcpkg 或 pkg-config。
 
 ~~~bash
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON
@@ -63,6 +65,9 @@ build/Shellium.app/Contents/MacOS/Shellium
 
 Apple Silicon 站外发布使用 Developer ID 签名、公证与 DMG 一键脚本。证书准备、最低系统
 兼容性和完整命令见 [macOS DMG 发布指南](docs/MACOS_DMG_RELEASE.md)。
+
+Windows 10 1809+ / Windows 11 x64 的原生构建、交叉工具链、NSIS 与发布验收说明见
+[Windows 构建与发布指南](packaging/windows/README.md)。
 
 ## 首次使用
 
@@ -92,8 +97,9 @@ ShelliumSshIntegrationTests 通过 SHELLIUM_IT_* 环境变量连接受控测试�
 
 ## 当前边界
 
-- macOS arm64 已完成本机构建与测试；Linux 尚需 CI 实机验证；
-- Windows 尚未适配 POSIX PTY、socketpair 和文件描述符路径；
+- macOS arm64 已完成本机构建与测试；Linux 继续使用原有 POSIX 路径，尚需 CI 实机验证；
+- Windows x64 已具备 ConPTY、原生 socket、私钥 ACL、CMake/NSIS 构建基线；正式发布仍需
+  在干净 Windows 10 1809+/11 VM 完成 GUI、安装器、句柄泄漏和 Authenticode 验收；
 - 终端鼠标报告、终端感知块选择、URL 点击与自动会话日志尚未实现；
 - SFTP 删除支持文件和空目录，递归目录删除仍需单独的高风险交互设计；
 - 外部 SOCKS5/HTTP 代理“用于建立 SSH 连接”尚未实现；这与已完成的 -D 动态转发不同；
