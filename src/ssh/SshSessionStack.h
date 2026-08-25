@@ -86,6 +86,29 @@ public:
     void confirmUnknownHost(bool trusted);
 
     /**
+     * @brief 请求在逻辑最终主机上静默读取 /etc/os-release。
+     *
+     * 该请求只由主机列表在某台已保存主机尚未缓存发行版时发起。方法可从 GUI 线程调用，
+     * 实际 exec 仍在 SSH 工作线程中串行执行；探测失败不会影响已经可用的交互式终端。
+     */
+    void requestRemoteDistributionDetection();
+
+    /**
+     * @brief 解析发行版探测命令的两行输出。
+     * @param output 第一行为 ID，第二行（可缺失）为 VERSION_ID。
+     * @param distributionId 成功时接收小写、可安全持久化的发行版标识；不得为空指针。
+     * @param versionId 成功时接收去除首尾空白的版本标识；不得为空指针。
+     * @return 输出符合 os-release 标识约束返回 true，否则返回 false 且不修改输出参数。
+     *
+     * 远端输出属于不可信数据：ID 只接受字母、数字、下划线、连字符与点，长度受限，避免
+     * 控制字符或超长文本进入 SQLite、Tooltip 与图标映射。作为静态成员而非文件内私有函数
+     * 暴露，正是为了让这条安全边界可被单元测试直接覆盖，而不必依赖真实服务器。
+     */
+    [[nodiscard]] static bool parseRemoteDistributionOutput(const QByteArray &output,
+                                                            QString *distributionId,
+                                                            QString *versionId);
+
+    /**
      * @brief 请求在当前栈顶之上建立新一层，终端 PTY 随后切换到该层。
      * @param target 内层服务器；其 host/port 由栈顶服务器的视角解析。
      *
@@ -216,6 +239,16 @@ signals:
      * Shell 事件退化为推测式命令解析，文件操作层据此应保持更谨慎的预期。
      */
     void shellIntegrationFailed(const ConnectionTarget &target, const QString &message);
+
+    /**
+     * @brief 逻辑最终主机的 /etc/os-release 已被后台读取。
+     * @param distributionId 规范化后的 ID，例如 "ubuntu"。
+     * @param versionId 规范化后的 VERSION_ID，例如 "24.04"；远端未提供时为空。
+     *
+     * 仅在命令成功且 ID 可安全解析时发出。无法读取 os-release 并非连接错误，因此没有
+     * 对应的失败信号，调用方应保留通用服务器图标。
+     */
+    void remoteDistributionDetected(const QString &distributionId, const QString &versionId);
 
     /**
      * @brief 正在建立的层需要密码。
@@ -365,6 +398,9 @@ private:
     /** @brief 经独立 exec 通道把 Shell 集成脚本写入远端临时文件。 */
     void beginShellIntegrationInstall(SshSessionNode &node);
 
+    /** @brief 在 Shell 集成后台任务空闲后发起一次只读发行版探测。 */
+    void serviceRemoteDistributionDetection();
+
     /**
      * @brief 远端交互 Shell 静默后，才把 source 命令下发给栈顶。
      * @param top 当前栈顶，必须已就绪。
@@ -413,6 +449,11 @@ private:
      * 来源，拿它反查路径不需要任何额外状态。
      */
     QSet<QString> m_pendingShellIntegration;
+
+    /** @brief GUI 线程提交的发行版探测请求；访问时必须持有 m_mutex。 */
+    bool m_distributionDetectionRequested = false;
+    /** @brief 已承接发行版探测 exec 的最终目标 id；仅由 SSH 工作线程访问。 */
+    QString m_distributionDetectionTargetId;
 
     /** @brief 距上次收到交互 Shell 输出的时间；用于判断远端是否已回到提示符。 */
     QElapsedTimer m_shellOutputClock;

@@ -5,6 +5,7 @@
 #include "ssh/SshSessionStack.h"
 #include "storage/ApplicationDatabase.h"
 #include "ui/SettingsWidgets.h"
+#include "ui/HostDistributionIcon.h"
 #include "ui/UiIcons.h"
 #include "ui/VaultDialog.h"
 
@@ -525,15 +526,11 @@ protected:
         painter->drawRoundedRect(iconBox.adjusted(0, 0, -1, -1), 8, 8);
 
         const QRect hostSymbolRect = iconBox.adjusted(6, 6, -6, -6);
-        if (selected && widget != nullptr) {
-            UiIcons::symbol(widget,
-                            UiIcons::Symbol::HostItem,
-                            QColor(QStringLiteral("#0c2f24")))
-                .paint(painter, hostSymbolRect, Qt::AlignCenter);
-        } else {
-            qvariant_cast<QIcon>(index.data(Qt::DecorationRole))
-                .paint(painter, hostSymbolRect, Qt::AlignCenter);
-        }
+        // 选中态也必须保留发行版图标。此前高亮时会统一替换成服务器轮廓，导致用户刚想
+        // 确认“这台是什么系统”时最关键的视觉线索反而消失；图标自身带有不透明圆底，能
+        // 在绿色选中底纹上保持辨识度，无需再强制换色。
+        qvariant_cast<QIcon>(index.data(Qt::DecorationRole))
+            .paint(painter, hostSymbolRect, Qt::AlignCenter);
         painter->restore();
 
         const QFont nameFont = hostNameFont(option.font);
@@ -1896,6 +1893,14 @@ public:
             result.proxyJumps = splitList(m_proxyJumpsEdit->text());
             result.hostChain = m_hostChain;
             result.allowLegacyHmacSha1 = m_legacyHmacToggle->isChecked();
+            if (result.host != m_initial.host || result.port != m_initial.port
+                || result.username != m_initial.username) {
+                // 地址、端口或账号一改，这条记录指向的很可能已经是另一台服务器，缓存的
+                // 发行版随即失效。清空而不是保留，既让侧栏立刻回到通用图标，也让下一次
+                // 连接重新触发“首次登录探测”，避免图标长期停留在旧系统上误导用户。
+                result.distributionId.clear();
+                result.distributionVersionId.clear();
+            }
         }
         return result;
     }
@@ -4154,14 +4159,19 @@ QTreeWidgetItem *HostManagerWidget::createTreeItem(const HostRecord &record) con
     QFont itemNameFont = m_tree->font();
     itemNameFont.setWeight(record.kind == HostNodeKind::Folder ? QFont::Bold : QFont::Normal);
     item->setFont(0, itemNameFont);
+    const QIcon distributionIcon = HostDistributionIcon::iconFor(record.distributionId);
     item->setIcon(
         0,
         record.kind == HostNodeKind::Folder
             ? localFileFolderIcon(m_tree)
-            : UiIcons::symbol(
-                  m_tree,
-                  UiIcons::Symbol::HostItem,
-                  m_tree->palette().color(QPalette::WindowText)));
+            // 尚未完成首次登录、或远端不提供 os-release 时才使用原有通用服务器图标；只要
+            // 已有可识别发行版，侧栏左侧就稳定显示其对应图标，刷新与重启不会退化。
+            : (distributionIcon.isNull()
+                   ? UiIcons::symbol(
+                         m_tree,
+                         UiIcons::Symbol::HostItem,
+                         m_tree->palette().color(QPalette::WindowText))
+                   : distributionIcon));
     item->setData(0, HostIdRole, record.id);
     item->setData(0, HostKindRole, static_cast<int>(record.kind));
     if (record.kind == HostNodeKind::Host) {
@@ -4189,7 +4199,13 @@ QTreeWidgetItem *HostManagerWidget::createTreeItem(const HostRecord &record) con
                           ? QVariant{}
                           : QVariant::fromValue(resolveTagColor(
                                 m_tagColors, displayRecord.tags.constFirst())));
-        item->setToolTip(0, detail);
+        const QString distributionText = HostDistributionIcon::displayName(
+            record.distributionId, record.distributionVersionId);
+        // 版本号不会挤占两行主机卡片的有限空间，但悬停时必须可见，方便用户确认图标背后
+        // 的精确发行版本，而不是只凭颜色猜测系统家族。
+        item->setToolTip(0, distributionText.isEmpty()
+                                ? detail
+                                : tr("%1\n系统：%2").arg(detail, distributionText));
     }
     // 两种节点都能被拖动；只有分组能接收拖放（成为其他节点的父分组），主机不是容器。
     Qt::ItemFlags flags = item->flags() | Qt::ItemIsDragEnabled;

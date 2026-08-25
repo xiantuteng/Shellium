@@ -13,7 +13,7 @@
 namespace {
 
 /// 当前代码要求的 schema 版本。每次结构变更必须递增，并在 upgradeSchema 中补齐对应分支。
-constexpr int kSchemaVersion = 6;
+constexpr int kSchemaVersion = 7;
 
 /// 内存数据库的 SQLite 特殊路径。
 const QString kMemoryPath = QStringLiteral(":memory:");
@@ -118,6 +118,8 @@ HostRecord readHostRow(const QSqlQuery &query)
     record.identityFile = query.value(QStringLiteral("identity_file")).toString();
     record.tags = splitList(query.value(QStringLiteral("tags")));
     record.proxyJumps = splitList(query.value(QStringLiteral("proxy_jump")));
+    record.distributionId = query.value(QStringLiteral("distribution_id")).toString();
+    record.distributionVersionId = query.value(QStringLiteral("distribution_version_id")).toString();
     record.allowLegacyHmacSha1 = query.value(QStringLiteral("legacy_hmac")).toInt() != 0;
     record.sortOrder = query.value(QStringLiteral("sort_order")).toInt();
     record.createdAt = deserializeTime(query.value(QStringLiteral("created_at")));
@@ -503,6 +505,13 @@ bool ApplicationDatabase::upgradeSchema(QString *errorMessage)
                    << QStringLiteral("CREATE INDEX IF NOT EXISTS idx_hosts_credential "
                                      "ON hosts(credential_id)");
     }
+    if (*currentVersion < 7) {
+        // 版本 7：首次成功登录后保存 /etc/os-release 的 ID 与 VERSION_ID。字段允许为空，
+        // 以兼容非 Linux、精简容器或权限限制导致无法提供 os-release 的服务器；空值会让
+        // 界面继续使用通用主机图标，不会阻断正常连接。
+        statements << QStringLiteral("ALTER TABLE hosts ADD COLUMN distribution_id TEXT")
+                   << QStringLiteral("ALTER TABLE hosts ADD COLUMN distribution_version_id TEXT");
+    }
     statements << QStringLiteral("UPDATE schema_version SET version = %1").arg(kSchemaVersion);
 
     for (const QString &statement : statements) {
@@ -649,14 +658,18 @@ bool ApplicationDatabase::saveHost(const HostRecord &record, QString *errorMessa
         // 更新一个分组时会连带删光它下面的所有主机。
         query.prepare(QStringLiteral(
             "INSERT INTO hosts (id, parent_id, kind, name, host, port, username, credential_id, "
-            "identity_file, tags, proxy_jump, legacy_hmac, sort_order, created_at, updated_at) "
+            "identity_file, tags, proxy_jump, distribution_id, distribution_version_id, legacy_hmac, "
+            "sort_order, created_at, updated_at) "
             "VALUES (:id, :parent_id, :kind, :name, :host, :port, :username, :credential_id, "
-            ":identity_file, :tags, :proxy_jump, :legacy_hmac, :sort_order, :created_at, :updated_at) "
+            ":identity_file, :tags, :proxy_jump, :distribution_id, :distribution_version_id, "
+            ":legacy_hmac, :sort_order, :created_at, :updated_at) "
             "ON CONFLICT(id) DO UPDATE SET parent_id = excluded.parent_id, kind = excluded.kind, "
             "name = excluded.name, host = excluded.host, port = excluded.port, "
             "username = excluded.username, credential_id = excluded.credential_id, "
             "identity_file = excluded.identity_file, tags = excluded.tags, "
-            "proxy_jump = excluded.proxy_jump, legacy_hmac = excluded.legacy_hmac, "
+            "proxy_jump = excluded.proxy_jump, distribution_id = excluded.distribution_id, "
+            "distribution_version_id = excluded.distribution_version_id, "
+            "legacy_hmac = excluded.legacy_hmac, "
             "sort_order = excluded.sort_order, updated_at = excluded.updated_at"));
         query.bindValue(QStringLiteral(":id"), record.id);
         query.bindValue(QStringLiteral(":parent_id"), nullableText(record.parentId));
@@ -670,6 +683,8 @@ bool ApplicationDatabase::saveHost(const HostRecord &record, QString *errorMessa
         query.bindValue(QStringLiteral(":identity_file"), record.identityFile);
         query.bindValue(QStringLiteral(":tags"), joinList(record.tags));
         query.bindValue(QStringLiteral(":proxy_jump"), joinList(record.proxyJumps));
+        query.bindValue(QStringLiteral(":distribution_id"), record.distributionId);
+        query.bindValue(QStringLiteral(":distribution_version_id"), record.distributionVersionId);
         query.bindValue(QStringLiteral(":legacy_hmac"), record.allowLegacyHmacSha1 ? 1 : 0);
         query.bindValue(QStringLiteral(":sort_order"), record.sortOrder);
         query.bindValue(QStringLiteral(":created_at"), serializeTime(createdAt));

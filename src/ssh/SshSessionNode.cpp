@@ -632,6 +632,7 @@ bool SshSessionNode::beginDetachedExec(const QByteArray &command)
     }
     m_execCommand = command;
     m_execDiagnostic.clear();
+    m_execOutput.clear();
     m_execError.clear();
     m_execHasResult = false;
     m_execSucceeded = false;
@@ -697,6 +698,9 @@ void SshSessionNode::pumpExec()
             if (count <= 0) {
                 break;
             }
+            // 远端命令由服务器端 Shell 解释，异常登录脚本可能输出远超预期的数据；识别逻辑
+            // 虽只需两行 os-release 字段，仍要限制 stdout，防止不可信服务端耗尽客户端内存。
+            appendBoundedDiagnostic(m_execOutput, QByteArray(buffer, count));
         }
         while (true) {
             const int count = ssh_channel_read_nonblocking(
@@ -730,7 +734,9 @@ void SshSessionNode::pumpExec()
     }
 }
 
-bool SshSessionNode::takeExecResult(bool *succeeded, QString *errorMessage)
+bool SshSessionNode::takeExecResult(bool *succeeded,
+                                    QByteArray *standardOutput,
+                                    QString *errorMessage)
 {
     if (!m_execHasResult) {
         return false;
@@ -739,10 +745,14 @@ bool SshSessionNode::takeExecResult(bool *succeeded, QString *errorMessage)
     if (succeeded != nullptr) {
         *succeeded = m_execSucceeded;
     }
+    if (standardOutput != nullptr) {
+        *standardOutput = m_execOutput;
+    }
     if (errorMessage != nullptr) {
         *errorMessage = m_execError;
     }
     m_execError.clear();
+    m_execOutput.clear();
     return true;
 }
 

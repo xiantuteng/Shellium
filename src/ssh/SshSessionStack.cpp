@@ -5,6 +5,7 @@
 
 #include <QLoggingCategory>
 #include <QMutexLocker>
+#include <QRegularExpression>
 
 #include <libssh/libssh.h>
 
@@ -15,6 +16,7 @@
 namespace {
 /** @brief 与 TerminalView 共用的认证诊断通道；见该文件中的说明。 */
 Q_LOGGING_CATEGORY(authLog, "shellium.auth", QtWarningMsg)
+
 } // namespace
 
 SshSessionStack::SshSessionStack(const ConnectionTarget &rootTarget, QObject *parent)
@@ -82,6 +84,38 @@ void SshSessionStack::confirmUnknownHost(const bool trusted)
     QMutexLocker locker(&m_mutex);
     // 决定只是记录下来，由工作线程在下一轮推进时读取；GUI 线程绝不直接触碰 libssh 会话。
     m_hostKeyDecision = trusted ? HostKeyDecision::Trusted : HostKeyDecision::Rejected;
+}
+
+bool SshSessionStack::parseRemoteDistributionOutput(const QByteArray &output,
+                                                    QString *distributionId,
+                                                    QString *versionId)
+{
+    Q_ASSERT(distributionId != nullptr);
+    Q_ASSERT(versionId != nullptr);
+    const QList<QByteArray> lines = output.split('\n');
+    if (lines.isEmpty()) {
+        return false;
+    }
+    const QString identifier = QString::fromUtf8(lines.constFirst()).trimmed().toLower();
+    static const QRegularExpression validIdentifier(
+        QStringLiteral("^[a-z0-9][a-z0-9_.-]{0,63}$"));
+    if (!validIdentifier.match(identifier).hasMatch()) {
+        return false;
+    }
+    const QString version = lines.size() > 1
+        ? QString::fromUtf8(lines.at(1)).trimmed().left(64)
+        : QString{};
+    *distributionId = identifier;
+    *versionId = version;
+    return true;
+}
+
+void SshSessionStack::requestRemoteDistributionDetection()
+{
+    QMutexLocker locker(&m_mutex);
+    // 连接尚未完成时也可安全登记；工作线程只会在逻辑最终层就绪、且主机已真正可交互后
+    // 执行。布尔值而非任务队列确保重复点击、自动重连等不会创建多次相同探测。
+    m_distributionDetectionRequested = true;
 }
 
 void SshSessionStack::provideLayerCredential(const QString &secret)
@@ -284,10 +318,22 @@ bool SshSessionStack::pumpLoop()
 
         for (const std::unique_ptr<SshSessionNode> &layer : m_layers) {
             layer->pumpExec();
-            bool installed = false;
-            QString installError;
-            if (layer->takeExecResult(&installed, &installError)) {
-                if (installed) {
+            bool succeeded = false;
+            QByteArray standardOutput;
+            QString execError;
+            if (layer->takeExecResult(&succeeded, &standardOutput, &execError)) {
+                if (layer->target().id == m_distributionDetectionTargetId) {
+                    m_distributionDetectionTargetId.clear();
+                    QString distributionId;
+                    QString versionId;
+                    if (succeeded
+                        && parseRemoteDistributionOutput(
+                            standardOutput, &distributionId, &versionId)) {
+                        emit remoteDistributionDetected(distributionId, versionId);
+                    }
+                    continue;
+                }
+                if (succeeded) {
                     // 只有远端明确返回退出码 0 才加载脚本。这里只登记意图：真正下发要等
                     // 交互 Shell 静默，理由见 serviceDeferredShellIntegration()。
                     m_pendingShellIntegration.insert(layer->target().id);
@@ -295,7 +341,7 @@ bool SshSessionStack::pumpLoop()
                 } else {
                     emit shellIntegrationFailed(
                         layer->target(),
-                        installError.isEmpty() ? tr("远端未返回安装结果") : installError);
+                        execError.isEmpty() ? tr("远端未返回安装结果") : execError);
                 }
             }
         }
@@ -319,6 +365,8 @@ bool SshSessionStack::pumpLoop()
             emit shellConnected();
             emit layersChanged(layerTargets());
         }
+
+        serviceRemoteDistributionDetection();
 
         if (!m_layers.back()->isShellAlive()) {
             if (m_layers.size() > static_cast<std::size_t>(m_connectionPlan.size())) {
@@ -757,6 +805,46 @@ void SshSessionStack::beginShellIntegrationInstall(SshSessionNode &node)
         // 误以为随后识别出的推测层仍具有自持层同等的确定性。
         emit shellIntegrationFailed(node.target(), tr("无法创建远端脚本安装通道"));
         return;
+    }
+}
+
+void SshSessionStack::serviceRemoteDistributionDetection()
+{
+    bool requested = false;
+    {
+        QMutexLocker locker(&m_mutex);
+        requested = m_distributionDetectionRequested;
+        // 请求一旦被工作线程接手就不再重试。读取失败通常意味着目标不是 Linux 或禁用了
+        // exec；反复执行只会给每次登录增加额外网络往返，用户手动刷新主机配置后可再触发。
+        if (requested) {
+            m_distributionDetectionRequested = false;
+        }
+    }
+    if (!requested || !m_distributionDetectionTargetId.isEmpty()) {
+        return;
+    }
+
+    SshSessionNode *logicalRoot = logicalRootLayer();
+    if (logicalRoot == nullptr || !logicalRoot->isReady()) {
+        return;
+    }
+    if (logicalRoot->hasDetachedExecInFlight()) {
+        // Shell 集成安装和发行版探测严格串行。下一个泵送周期会在安装任务得出结果后重试，
+        // 因此不能在这里永久消费请求。
+        QMutexLocker locker(&m_mutex);
+        m_distributionDetectionRequested = true;
+        return;
+    }
+
+    // 只读并使用 BusyBox、Debian、RHEL 通常均提供的 awk。刻意不 `. /etc/os-release`：即使
+    // 远端文件遭篡改，也不能把其中的 Shell 语法作为当前已认证账号的命令执行。字段以独立
+    // 两行输出，避免 PrettyName 中的空格或本地化文字影响图标映射和数据库字段边界。
+    constexpr auto kDistributionCommand =
+        "test -r /etc/os-release && awk -F= '$1==\"ID\" { id=$2; gsub(/^\"|\"$/, \"\", id) } "
+        "$1==\"VERSION_ID\" { version=$2; gsub(/^\"|\"$/, \"\", version) } "
+        "END { if (id != \"\") printf \"%s\\n%s\\n\", id, version; else exit 1 }' /etc/os-release";
+    if (logicalRoot->beginDetachedExec(kDistributionCommand)) {
+        m_distributionDetectionTargetId = logicalRoot->target().id;
     }
 }
 

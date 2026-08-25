@@ -2352,6 +2352,11 @@ void MainWindow::duplicateWorkspaceTab(const int index)
         m_pendingHistoryHosts.insert(pane, rootHostId);
         m_pendingHistoryStartedAt.insert(pane, QDateTime::currentDateTimeUtc());
     }
+    const std::optional<HostRecord> copiedHost = m_database->findHost(rootHostId, &lookupError);
+    // 复制标签仍然属于同一条已保存主机。若用户在第一次连接尚未等到识别完成就复制标签，
+    // 允许两个会话中的任意一个完成一次探测；数据库一旦写入，后续新连接都会自动跳过。
+    pane->setRemoteDistributionDetectionEnabled(
+        copiedHost.has_value() && copiedHost->distributionId.isEmpty());
     pane->connectToHosts(connectionPlan);
 
     const int copyIndex = m_tabs->indexOf(copy);
@@ -2494,6 +2499,14 @@ void MainWindow::connectSavedHost(const QString &hostId,
     logicalTarget.id = hostId;
     logicalTarget.parentId.clear();
     logicalTarget.confidence = ConnectionTarget::Confidence::Confirmed;
+    QString distributionLookupError;
+    const std::optional<HostRecord> savedLogicalHost =
+        m_database->findHost(hostId, &distributionLookupError);
+    // “首次成功登录”由持久化字段是否为空决定，而不是进程内状态：应用重启、连接失败或
+    // 自动重连都不会把同一台主机重新标成首次。读取异常不会中断已经完成的连接配置，只是
+    // 安全地跳过本轮可选探测，避免把数据库错误伪装成 SSH 错误。
+    pane->setRemoteDistributionDetectionEnabled(
+        savedLogicalHost.has_value() && savedLogicalHost->distributionId.isEmpty());
     m_pendingHistoryHosts.insert(pane, hostId);
     m_pendingHistoryStartedAt.insert(pane, QDateTime::currentDateTimeUtc());
     pane->connectToHosts(connectionPlan);
@@ -2801,6 +2814,38 @@ TerminalWorkspace *MainWindow::createWorkspaceTab(const QString &title)
                     m_portForwardManager->registerSession(target.id,
                                                           pane->forwardingSessionStack());
                 }
+            });
+    connect(pane,
+            &TerminalPane::remoteDistributionDetected,
+            this,
+            [this](const ConnectionTarget &target,
+                   const QString &distributionId,
+                   const QString &versionId) {
+                if (target.id.isEmpty() || distributionId.isEmpty()) {
+                    return;
+                }
+                QString lookupError;
+                std::optional<HostRecord> savedHost = m_database->findHost(target.id, &lookupError);
+                // 信号可能来自用户刚删除、编辑或替换的旧标签。重新按稳定 id 读取并确认仍是
+                // 主机节点，避免把异步探测结果覆盖到分组或已修改成其他配置的记录。
+                if (!savedHost.has_value() || savedHost->kind != HostNodeKind::Host
+                    || !savedHost->distributionId.isEmpty()) {
+                    return;
+                }
+                savedHost->distributionId = distributionId;
+                savedHost->distributionVersionId = versionId;
+                // saveHost() 对携带有效 updatedAt 的记录会保留原时间；此次属于真实业务更新，
+                // 显式清空让数据库统一写入当前 UTC，便于将来排查图标识别的更新时间。
+                savedHost->updatedAt = {};
+                QString saveError;
+                if (!m_database->saveHost(*savedHost, &saveError)) {
+                    ActivityLog::instance().append(
+                        tr("保存主机发行版信息失败：%1").arg(saveError));
+                    return;
+                }
+                // 图标由 HostRecord 重建得到，刷新能同时更新嵌套目录、搜索结果与所有主题下
+                // 的委托绘制，不需要直接持有或猜测某个 QTreeWidgetItem 的生命周期。
+                m_hostManager->refresh();
             });
     connect(pane,
             &TerminalPane::automaticReconnectStarted,

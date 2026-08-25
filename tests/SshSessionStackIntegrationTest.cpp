@@ -92,6 +92,14 @@ private slots:
     /** @brief 无密码的嵌套目标必须索要凭据而非直接失败，且凭据要能传给 SFTP。 */
     void requestsCredentialForNestedLayerWithoutPassword();
 
+    /**
+     * @brief 首次登录必须在后台读出真实服务器的发行版，且与远端自报的 ID 完全一致。
+     *
+     * 探测走的是独立 exec 通道并与 Shell 集成安装串行，只有真实服务器才能验证它既不会
+     * 抢占交互 Shell，也确实拿得到 /etc/os-release 的内容。
+     */
+    void detectsRemoteDistributionOnFirstLogin();
+
     /** @brief 取消一次认证后，下一次建层必须重新索要凭据而不是沿用遗留的空串。 */
     void doesNotReuseStaleCredentialAfterCancel();
 
@@ -1205,6 +1213,52 @@ void SshSessionStackIntegrationTest::activeWorkingDirectoryTracksInnermostLayerA
     QVERIFY2(waitFor([&]() { return pane.targets().size() == 1; }, 20000), "内层 exit 后未弹回外层");
     QVERIFY2(waitFor([&]() { return pane.activeWorkingDirectory() == QStringLiteral("/tmp"); }, 15000),
              "弹回外层后 activeWorkingDirectory 未恢复外层自己的目录");
+}
+
+void SshSessionStackIntegrationTest::detectsRemoteDistributionOnFirstLogin()
+{
+    SshSessionStack stack(firstLayerTarget());
+    QSignalSpy connected(&stack, &SshSessionStack::shellConnected);
+    QSignalSpy failed(&stack, &SshSessionStack::connectionError);
+    QSignalSpy detected(&stack, &SshSessionStack::remoteDistributionDetected);
+
+    QByteArray output;
+    connect(&stack, &SshSessionStack::outputReady, this, [&output](const QByteArray &bytes) {
+        output.append(bytes);
+    });
+
+    // 与 MainWindow 的顺序一致：先登记一次性请求，再启动线程。
+    stack.requestRemoteDistributionDetection();
+    stack.updateTerminalSize(120, 40);
+    stack.start();
+
+    QVERIFY2(waitFor([&]() { return connected.count() > 0 || failed.count() > 0; }),
+             "连接既未成功也未报错");
+    QVERIFY2(failed.isEmpty(),
+             qPrintable(QStringLiteral("连接报错：%1")
+                            .arg(failed.value(0).value(0).toString())));
+
+    QVERIFY2(waitFor([&]() { return detected.count() > 0; }, 30000),
+             "首次登录后未在后台读出远端发行版");
+    const QString distributionId = detected.at(0).at(0).toString();
+    QVERIFY2(!distributionId.isEmpty(), "识别结果为空");
+
+    // 与远端自报的 ID 逐字比对，确保拿到的是这台服务器的真实系统，而不是任何本地推断。
+    QVERIFY(waitFor([&]() { return !output.isEmpty(); }, 15000));
+    output.clear();
+    stack.enqueueInput("echo SHELLIUM_OS_$(. /etc/os-release; echo $ID)_END\n");
+    const QByteArray expected =
+        QByteArrayLiteral("SHELLIUM_OS_") + distributionId.toUtf8() + QByteArrayLiteral("_END");
+    QVERIFY2(waitFor([&]() { return output.contains(expected); }, 15000),
+             qPrintable(QStringLiteral("后台识别到 %1，但远端 Shell 报告的 ID 不同")
+                            .arg(distributionId)));
+
+    // 探测只应发生一次：请求被工作线程接手后不得在每个泵送周期重复执行远端命令。
+    QVERIFY(waitFor([&]() { return detected.count() > 1; }, 3000) == false);
+    QCOMPARE(detected.count(), 1);
+
+    stack.requestStop();
+    QVERIFY(stack.wait(10000));
 }
 
 QTEST_MAIN(SshSessionStackIntegrationTest)

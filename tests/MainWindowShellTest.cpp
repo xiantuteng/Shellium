@@ -1,9 +1,13 @@
 #include "app/MainWindow.h"
+#include "core/ConnectionTarget.h"
+#include "core/HostRecord.h"
 #include "security/Vault.h"
 #include "storage/ApplicationDatabase.h"
 #include "terminal/TerminalPane.h"
 #include "terminal/TerminalView.h"
 #include "terminal/TerminalWorkspace.h"
+#include "ui/HostDistributionIcon.h"
+#include "ui/HostManagerWidget.h"
 
 #include <QAction>
 #include <QLabel>
@@ -16,6 +20,8 @@
 #include <QTabWidget>
 #include <QTest>
 #include <QToolButton>
+#include <QTreeWidget>
+#include <QTreeWidgetItem>
 
 #include <memory>
 #include <optional>
@@ -39,6 +45,9 @@ private slots:
     void emptyStateKeepsNewTabButtonNextToTheSidebarToggle();
     void sidebarWidthIsRestoredOnNextLaunch();
     void duplicateMenuItemOpensASecondCopyOfTheTab();
+
+    /** @brief 终端上报的发行版必须落库并让侧栏立刻换成对应图标，重启后依然保持。 */
+    void detectedDistributionIsPersistedAndShownInSidebar();
 
 private:
     ApplicationDatabase *m_database = nullptr;
@@ -304,6 +313,72 @@ void MainWindowShellTest::duplicateMenuItemOpensASecondCopyOfTheTab()
     // 副本必须真的起了一个可交互的会话，而不是留下空面板等用户再点一次。
     QTRY_VERIFY_WITH_TIMEOUT(copy->activePane()->isConnected(), 8000);
     QVERIFY(source->activePane()->isConnected());
+}
+
+void MainWindowShellTest::detectedDistributionIsPersistedAndShownInSidebar()
+{
+    HostRecord host;
+    host.id = QStringLiteral("main-window-distribution-host");
+    host.kind = HostNodeKind::Host;
+    host.name = QStringLiteral("待识别系统的主机");
+    host.host = QStringLiteral("192.0.2.31");
+    host.username = QStringLiteral("root");
+    host.port = 22;
+    QString error;
+    QVERIFY2(m_database->saveHost(host, &error), qPrintable(error));
+
+    MainWindow window(m_database, m_vault);
+    window.resize(1200, 800);
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+    auto *tabs = window.findChild<QTabWidget *>(QStringLiteral("TerminalPages"));
+    auto *newTabButton = window.findChild<QToolButton *>(QStringLiteral("TitleNewTabButton"));
+    auto *hostManager = window.findChild<HostManagerWidget *>();
+    QVERIFY(tabs != nullptr && newTabButton != nullptr && hostManager != nullptr);
+    QTest::mouseClick(newTabButton, Qt::LeftButton);
+    auto *workspace = qobject_cast<TerminalWorkspace *>(tabs->widget(0));
+    QVERIFY(workspace != nullptr);
+    TerminalPane *pane = workspace->activePane();
+    QVERIFY(pane != nullptr);
+
+    auto *tree = hostManager->findChild<QTreeWidget *>();
+    QVERIFY(tree != nullptr);
+    const QSize comparisonSize(20, 20);
+    QList<QTreeWidgetItem *> matches =
+        tree->findItems(host.name, Qt::MatchExactly | Qt::MatchRecursive);
+    QVERIFY2(!matches.isEmpty(), "主机未出现在侧栏");
+    const QImage beforePixels = matches.constFirst()->icon(0).pixmap(comparisonSize).toImage();
+
+    // 直接触发终端层的上报信号，把主窗口的持久化与刷新这一段单独验证出来：真实探测依赖
+    // 远端服务器，而“收到结果后是否写库并换图标”属于本地逻辑，必须能脱离网络回归。
+    ConnectionTarget target;
+    target.id = host.id;
+    target.host = host.host;
+    target.username = host.username;
+    target.port = host.port.value_or(quint16{22});
+    QVERIFY(QMetaObject::invokeMethod(pane,
+                                      "remoteDistributionDetected",
+                                      Qt::DirectConnection,
+                                      Q_ARG(ConnectionTarget, target),
+                                      Q_ARG(QString, QStringLiteral("ubuntu")),
+                                      Q_ARG(QString, QStringLiteral("24.04"))));
+
+    const std::optional<HostRecord> stored = m_database->findHost(host.id, &error);
+    QVERIFY2(stored.has_value(), qPrintable(error));
+    QCOMPARE(stored->distributionId, QStringLiteral("ubuntu"));
+    QCOMPARE(stored->distributionVersionId, QStringLiteral("24.04"));
+
+    matches = tree->findItems(host.name, Qt::MatchExactly | Qt::MatchRecursive);
+    QVERIFY2(!matches.isEmpty(), "刷新后主机从侧栏消失");
+    const QImage afterPixels = matches.constFirst()->icon(0).pixmap(comparisonSize).toImage();
+    QCOMPARE(afterPixels,
+             HostDistributionIcon::iconFor(QStringLiteral("ubuntu"))
+                 .pixmap(comparisonSize)
+                 .toImage());
+    QVERIFY2(afterPixels != beforePixels, "识别结果没有让侧栏图标发生变化");
+    QVERIFY2(matches.constFirst()->toolTip(0).contains(QStringLiteral("Ubuntu 24.04")),
+             qPrintable(matches.constFirst()->toolTip(0)));
 }
 
 QTEST_MAIN(MainWindowShellTest)

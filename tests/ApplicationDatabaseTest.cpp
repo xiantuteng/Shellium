@@ -80,8 +80,8 @@ private slots:
     /** @brief 从 schema 版本 1 升级后，旧数据必须完好且新列可用。 */
     void migrationFromVersionOnePreservesData();
 
-    /** @brief 版本 6 迁移必须把历史共享凭据拆成独立密文引用，且不改变密文内容。 */
-    void migrationToVersionSixSplitsSharedCredentialReferences();
+    /** @brief 版本 7 迁移必须先拆分历史共享凭据，再保留新增发行版字段的空值语义。 */
+    void migrationToVersionSevenSplitsSharedCredentialReferences();
 
 private:
     /** @brief 构造一台可连接主机的样例记录。 */
@@ -134,6 +134,8 @@ void ApplicationDatabaseTest::hostRoundTripPreservesEveryField()
     host.tags = QStringList{QStringLiteral("db"), QStringLiteral("prod")};
     host.proxyJumps = QStringList{QStringLiteral("bastion@edge:2200")};
     host.hostChain = QStringList{QStringLiteral("jump-managed")};
+    host.distributionId = QStringLiteral("ubuntu");
+    host.distributionVersionId = QStringLiteral("24.04");
     host.allowLegacyHmacSha1 = true;
     host.sortOrder = 7;
     host.createdAt = QDateTime::fromString(QStringLiteral("2026-01-02T03:04:05.678Z"),
@@ -149,6 +151,8 @@ void ApplicationDatabaseTest::hostRoundTripPreservesEveryField()
 
     const std::optional<HostRecord> loaded = m_database->findHost(host.id, &error);
     QVERIFY2(loaded.has_value(), qPrintable(error));
+    QCOMPARE(loaded->distributionId, QStringLiteral("ubuntu"));
+    QCOMPARE(loaded->distributionVersionId, QStringLiteral("24.04"));
     QCOMPARE(loaded->parentId, host.parentId);
     QCOMPARE(loaded->kind, HostNodeKind::Host);
     QCOMPARE(loaded->name, host.name);
@@ -949,7 +953,7 @@ void ApplicationDatabaseTest::migrationFromVersionOnePreservesData()
     QVERIFY(reopened.findHost(QStringLiteral("old-host"), &error).has_value());
 }
 
-void ApplicationDatabaseTest::migrationToVersionSixSplitsSharedCredentialReferences()
+void ApplicationDatabaseTest::migrationToVersionSevenSplitsSharedCredentialReferences()
 {
     QTemporaryDir temporaryDirectory;
     QVERIFY(temporaryDirectory.isValid());
@@ -1007,7 +1011,7 @@ void ApplicationDatabaseTest::migrationToVersionSixSplitsSharedCredentialReferen
     ApplicationDatabase upgraded(path);
     QString error;
     QVERIFY2(upgraded.initialize(&error), qPrintable(error));
-    QCOMPARE(*upgraded.schemaVersion(&error), 6);
+    QCOMPARE(*upgraded.schemaVersion(&error), 7);
 
     QSet<QString> credentialIds;
     for (const QString &hostId : {QStringLiteral("h1"), QStringLiteral("h2"),
@@ -1023,8 +1027,24 @@ void ApplicationDatabaseTest::migrationToVersionSixSplitsSharedCredentialReferen
                  QByteArray::fromHex("11223344556677889900AABBCCDDEEFF"));
         QCOMPARE(credential->nonce,
                  QByteArray::fromHex("000102030405060708090A0B0C0D0E0F1011121314151617"));
+        // 版本 7 新增的发行版列对历史记录必须是空值而不是读取失败；空值正是“尚未探测”的
+        // 语义，界面据此继续显示通用主机图标，并在下次登录时触发识别。
+        QVERIFY2(host->distributionId.isEmpty(), "迁移不应给历史主机凭空编造发行版");
+        QVERIFY2(host->distributionVersionId.isEmpty(), "迁移不应给历史主机凭空编造版本号");
     }
     QCOMPARE(credentialIds.size(), 3);
+
+    // 迁移后的旧库必须真的具备可写入的新列：只验证读到空值的话，列缺失时同样能通过上面
+    // 的断言，直到用户首次登录才在生产环境暴露 “no such column”。
+    std::optional<HostRecord> migratedHost = upgraded.findHost(QStringLiteral("h1"), &error);
+    QVERIFY2(migratedHost.has_value(), qPrintable(error));
+    migratedHost->distributionId = QStringLiteral("rocky");
+    migratedHost->distributionVersionId = QStringLiteral("9.4");
+    QVERIFY2(upgraded.saveHost(*migratedHost, &error), qPrintable(error));
+    const std::optional<HostRecord> reloaded = upgraded.findHost(QStringLiteral("h1"), &error);
+    QVERIFY2(reloaded.has_value(), qPrintable(error));
+    QCOMPARE(reloaded->distributionId, QStringLiteral("rocky"));
+    QCOMPARE(reloaded->distributionVersionId, QStringLiteral("9.4"));
 }
 
 QTEST_GUILESS_MAIN(ApplicationDatabaseTest)

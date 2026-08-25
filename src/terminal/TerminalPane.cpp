@@ -289,7 +289,16 @@ TerminalPane::~TerminalPane()
 
 void TerminalPane::connectToHost(const ConnectionTarget &target)
 {
+    // 连接对话框创建的是临时目标，不应把上一次主机树连接遗留的“首次探测”开关带过去。
+    m_remoteDistributionDetectionEnabled = false;
     connectToHosts(QList<ConnectionTarget>{target});
+}
+
+void TerminalPane::setRemoteDistributionDetectionEnabled(const bool enabled)
+{
+    // 开关只由 GUI 线程在发起连接前设置，并由紧随其后的 connectToHosts() 消费；不需要额外
+    // 锁。真正跨线程的请求交接由 SshSessionStack::requestRemoteDistributionDetection() 加锁。
+    m_remoteDistributionDetectionEnabled = enabled;
 }
 
 void TerminalPane::connectToHosts(const QList<ConnectionTarget> &connectionPlan)
@@ -298,6 +307,10 @@ void TerminalPane::connectToHosts(const QList<ConnectionTarget> &connectionPlan)
         return;
     }
     const ConnectionTarget target = connectionPlan.constLast();
+    // 把一次性配置在创建 worker 前取走。自动重连会直接复用连接计划，但不应在识别结果已
+    // 写入或一次探测失败后继续额外执行远端命令。
+    const bool shouldDetectRemoteDistribution = m_remoteDistributionDetectionEnabled;
+    m_remoteDistributionDetectionEnabled = false;
     // 无论重连由提示、菜单还是退避定时器发起，提示都已经完成使命；继续拦截键盘会让新
     // 会话第一个字符消失。
     m_awaitingManualRecovery = false;
@@ -358,6 +371,15 @@ void TerminalPane::connectToHosts(const QList<ConnectionTarget> &connectionPlan)
         // 先清空再被紧随其后的 layersChanged 重新填充，用户能看到一次闪烁。栈保证
         // layersChanged 紧跟在 shellConnected 之后到达，由它统一通知即可。
     });
+    connect(m_sessionStack,
+            &SshSessionStack::remoteDistributionDetected,
+            this,
+            [this, target, sessionGeneration](const QString &distributionId,
+                                               const QString &versionId) {
+                if (sessionGeneration == m_sessionGeneration) {
+                    emit remoteDistributionDetected(target, distributionId, versionId);
+                }
+            });
     connect(m_sessionStack,
             &SshSessionStack::layersChanged,
             this,
@@ -623,6 +645,11 @@ void TerminalPane::connectToHosts(const QList<ConnectionTarget> &connectionPlan)
     // 否则稳定窗口中打开的新会话会以默认 80×24 请求 PTY，直到下一次人为改变界面尺寸。
     m_sessionStack->updateTerminalSize(m_terminalView->terminalColumns(),
                                        m_terminalView->terminalRows());
+    if (shouldDetectRemoteDistribution) {
+        // 先登记再启动线程，确保极快的本地或跳板连接不会在 GUI 线程来得及排队请求前错过
+        // 首个可用循环；SshSessionStack 仍会等认证完成并与 Shell 集成安装串行执行。
+        m_sessionStack->requestRemoteDistributionDetection();
+    }
     m_sessionStack->start();
     emit statusMessage(tr("正在连接 %1").arg(target.connectionSpecifier()));
     focusTerminal();

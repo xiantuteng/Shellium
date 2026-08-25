@@ -45,6 +45,15 @@ public:
     void connectToHosts(const QList<ConnectionTarget> &connectionPlan);
 
     /**
+     * @brief 设置下一次受管主机连接是否需要后台识别远端发行版。
+     * @param enabled true 表示认证成功后读取一次 /etc/os-release，false 表示跳过。
+     *
+     * 这是一次性连接参数而不是持久化偏好：MainWindow 只有在数据库尚未存有该主机的发行版
+     * 时才开启它，connectToHosts() 读取后立即清除，避免之后的临时连接或自动重连重复探测。
+     */
+    void setRemoteDistributionDetectionEnabled(bool enabled);
+
+    /**
      * @brief 在当前连接之上由本程序亲自建立一层嵌套会话，终端随后切换到该层。
      * @param target 内层服务器；host/port 由当前栈顶服务器的视角解析。
      *
@@ -256,6 +265,19 @@ signals:
     void rootConnectionSucceeded(const ConnectionTarget &target);
 
     /**
+     * @brief 当前根主机的远端发行版已由后台只读命令识别。
+     * @param target 本次成功连接的最终目标快照。
+     * @param distributionId /etc/os-release 的规范化 ID。
+     * @param versionId /etc/os-release 的 VERSION_ID，可为空。
+     *
+     * TerminalPane 不直接访问数据库，保证终端层在测试与临时会话中仍可独立复用；主窗口负责
+     * 核验 target.id 是否对应保存的主机，再将结果持久化并刷新侧栏。
+     */
+    void remoteDistributionDetected(const ConnectionTarget &target,
+                                    const QString &distributionId,
+                                    const QString &versionId);
+
+    /**
      * @brief 异常断线退避结束、即将发起一次自动重连。
      * @param target 与原成功会话相同的根目标快照。
      * @param attempt 当前是本轮第几次尝试，从 1 开始。
@@ -413,6 +435,9 @@ private:
      */
     QVector<ConnectionTarget> m_inferredTargets;
     bool m_shellReady = false;
+
+    /** @brief 仅作用于下一次 connectToHosts() 的发行版探测开关。 */
+    bool m_remoteDistributionDetectionEnabled = false;
 
     /**
      * @brief 按服务器稳定键缓存的最近已知远端工作目录。

@@ -17,7 +17,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-find_package(Qt6 6.8 REQUIRED COMPONENTS Core Widgets Concurrent Network Sql)
+find_package(Qt6 6.8 REQUIRED COMPONENTS Core Widgets Concurrent Network Sql Svg)
 
 # Homebrew、Linux 发行版和 vcpkg 提供的 libssh 均会安装 pkg-config 元数据。
 # 通过 IMPORTED_TARGET 引入可以同时携带头文件路径、库路径和间接链接参数。
@@ -131,6 +131,7 @@ set(SHELLIUM_APP_SOURCES
     src/ui/ConnectionDialog.h
     src/ui/HostManagerWidget.cpp
     src/ui/HostManagerWidget.h
+    src/ui/HostDistributionIcon.h
     src/ui/SettingsDialog.cpp
     src/ui/SettingsDialog.h
     src/ui/SettingsWidgets.cpp
@@ -165,6 +166,44 @@ qt_add_resources(Shellium "shellium_brand_assets"
         resources/icons/shellium-app-icon-macos-512.png
 )
 
+# 主机侧栏图标：真实发行版官方标志的单色矢量版（源自 simple-icons 项目，CC0 授权，仅
+# 保留可识别的品牌轮廓），运行时按 HostRecord.distributionId 选取并着色，见
+# HostDistributionIcon.h。未收录的发行版继续退回该文件里手绘的通用 Linux 图标。
+qt_add_resources(Shellium "shellium_distribution_icons"
+    PREFIX "/"
+    BASE "${CMAKE_CURRENT_SOURCE_DIR}"
+    FILES
+        resources/icons/distros/almalinux.svg
+        resources/icons/distros/alpinelinux.svg
+        resources/icons/distros/archlinux.svg
+        resources/icons/distros/artixlinux.svg
+        resources/icons/distros/centos.svg
+        resources/icons/distros/debian.svg
+        resources/icons/distros/deepin.svg
+        resources/icons/distros/devuan.svg
+        resources/icons/distros/elementary.svg
+        resources/icons/distros/endeavouros.svg
+        resources/icons/distros/fedora.svg
+        resources/icons/distros/gentoo.svg
+        resources/icons/distros/kalilinux.svg
+        resources/icons/distros/linuxmint.svg
+        resources/icons/distros/manjaro.svg
+        resources/icons/distros/mxlinux.svg
+        resources/icons/distros/nixos.svg
+        resources/icons/distros/opensuse.svg
+        resources/icons/distros/photon.svg
+        resources/icons/distros/popos.svg
+        resources/icons/distros/raspberrypi.svg
+        resources/icons/distros/redhat.svg
+        resources/icons/distros/rockylinux.svg
+        resources/icons/distros/slackware.svg
+        resources/icons/distros/solus.svg
+        resources/icons/distros/suse.svg
+        resources/icons/distros/ubuntu.svg
+        resources/icons/distros/voidlinux.svg
+        resources/icons/distros/zorin.svg
+)
+
 shellium_add_bundled_fonts(Shellium)
 
 target_include_directories(Shellium PRIVATE src)
@@ -174,6 +213,7 @@ target_link_libraries(Shellium PRIVATE
     Qt6::Concurrent
     Qt6::Network
     Qt6::Sql
+    Qt6::Svg
     PkgConfig::LIBSSH
     PkgConfig::LIBVTERM
     PkgConfig::LIBSODIUM
@@ -416,6 +456,40 @@ if(BUILD_TESTING)
             resources/icons/chevron-down-light.svg
             resources/icons/shellium-app-icon-macos-512.png
     )
+    qt_add_resources(ShelliumMainWindowShellTests "shellium_distribution_icons_shell_tests"
+        PREFIX "/"
+        BASE "${CMAKE_CURRENT_SOURCE_DIR}"
+        FILES
+            resources/icons/distros/almalinux.svg
+            resources/icons/distros/alpinelinux.svg
+            resources/icons/distros/archlinux.svg
+            resources/icons/distros/artixlinux.svg
+            resources/icons/distros/centos.svg
+            resources/icons/distros/debian.svg
+            resources/icons/distros/deepin.svg
+            resources/icons/distros/devuan.svg
+            resources/icons/distros/elementary.svg
+            resources/icons/distros/endeavouros.svg
+            resources/icons/distros/fedora.svg
+            resources/icons/distros/gentoo.svg
+            resources/icons/distros/kalilinux.svg
+            resources/icons/distros/linuxmint.svg
+            resources/icons/distros/manjaro.svg
+            resources/icons/distros/mxlinux.svg
+            resources/icons/distros/nixos.svg
+            resources/icons/distros/opensuse.svg
+            resources/icons/distros/photon.svg
+            resources/icons/distros/popos.svg
+            resources/icons/distros/raspberrypi.svg
+            resources/icons/distros/redhat.svg
+            resources/icons/distros/rockylinux.svg
+            resources/icons/distros/slackware.svg
+            resources/icons/distros/solus.svg
+            resources/icons/distros/suse.svg
+            resources/icons/distros/ubuntu.svg
+            resources/icons/distros/voidlinux.svg
+            resources/icons/distros/zorin.svg
+    )
     shellium_add_bundled_fonts(ShelliumMainWindowShellTests)
     target_include_directories(ShelliumMainWindowShellTests PRIVATE src)
     target_link_libraries(ShelliumMainWindowShellTests PRIVATE
@@ -424,6 +498,7 @@ if(BUILD_TESTING)
         Qt6::Gui
         Qt6::Network
         Qt6::Sql
+        Qt6::Svg
         Qt6::Widgets
         Qt6::Test
         PkgConfig::LIBSSH
@@ -533,15 +608,50 @@ if(BUILD_TESTING)
         src/storage/ApplicationDatabase.h
         src/ui/HostManagerWidget.cpp
         src/ui/HostManagerWidget.h
+        src/ui/HostDistributionIcon.h
         src/ui/SettingsWidgets.cpp
         src/ui/SettingsWidgets.h
         src/ui/UiIcons.h
         src/ui/VaultDialog.cpp
         src/ui/VaultDialog.h
     )
+    qt_add_resources(ShelliumHostManagerTests "shellium_distribution_icons_host_manager_tests"
+        PREFIX "/"
+        BASE "${CMAKE_CURRENT_SOURCE_DIR}"
+        FILES
+            resources/icons/distros/almalinux.svg
+            resources/icons/distros/alpinelinux.svg
+            resources/icons/distros/archlinux.svg
+            resources/icons/distros/artixlinux.svg
+            resources/icons/distros/centos.svg
+            resources/icons/distros/debian.svg
+            resources/icons/distros/deepin.svg
+            resources/icons/distros/devuan.svg
+            resources/icons/distros/elementary.svg
+            resources/icons/distros/endeavouros.svg
+            resources/icons/distros/fedora.svg
+            resources/icons/distros/gentoo.svg
+            resources/icons/distros/kalilinux.svg
+            resources/icons/distros/linuxmint.svg
+            resources/icons/distros/manjaro.svg
+            resources/icons/distros/mxlinux.svg
+            resources/icons/distros/nixos.svg
+            resources/icons/distros/opensuse.svg
+            resources/icons/distros/photon.svg
+            resources/icons/distros/popos.svg
+            resources/icons/distros/raspberrypi.svg
+            resources/icons/distros/redhat.svg
+            resources/icons/distros/rockylinux.svg
+            resources/icons/distros/slackware.svg
+            resources/icons/distros/solus.svg
+            resources/icons/distros/suse.svg
+            resources/icons/distros/ubuntu.svg
+            resources/icons/distros/voidlinux.svg
+            resources/icons/distros/zorin.svg
+    )
     target_include_directories(ShelliumHostManagerTests PRIVATE src)
     target_link_libraries(ShelliumHostManagerTests PRIVATE
-        Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Sql Qt6::Test
+        Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Sql Qt6::Svg Qt6::Test
         PkgConfig::LIBSSH PkgConfig::LIBSODIUM)
     add_test(NAME ShelliumHostManagerTests COMMAND ShelliumHostManagerTests)
 

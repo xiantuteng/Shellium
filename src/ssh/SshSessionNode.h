@@ -206,13 +206,27 @@ public:
     /**
      * @brief 取走最近一次后台 exec 的完成结果。
      * @param succeeded 输出远端命令是否明确以退出码 0 结束；可传 nullptr。
+     * @param standardOutput 输出受长度限制的标准输出；可传 nullptr。
      * @param errorMessage 失败时输出通道错误、退出码和受限长度的 stderr 诊断；可传 nullptr。
      * @return 有尚未消费的完成结果返回 true；命令仍在执行或没有发起过返回 false。
      *
      * 仅看到通道 EOF 不能证明命令成功：例如临时目录不可写时 `cat` 同样会很快 EOF。
-     * 因此调用方必须通过本接口消费经过退出状态校验后的结果，不能自行把 EOF 当成功。
+     * 因此调用方必须通过本接口消费经过退出状态校验后的结果，不能自行把 EOF 当成功。Shell
+     * 集成安装不读取标准输出，但发行版探测需要读取它；复用这一条受限通道可避免两个后台
+     * exec 同时竞争同一个 libssh 会话。
      */
-    bool takeExecResult(bool *succeeded, QString *errorMessage = nullptr);
+    bool takeExecResult(bool *succeeded,
+                        QByteArray *standardOutput = nullptr,
+                        QString *errorMessage = nullptr);
+
+    /**
+     * @brief 当前层是否有正在执行的后台命令。
+     * @return true 表示 exec 通道尚未得到最终退出结果。
+     *
+     * libssh 会话允许多个通道，但 Shellium 的后台任务刻意串行：Shell 集成安装与发行版
+     * 探测若并发执行，会让任务归属和失败处理变得模糊，也会增加精简 SSH 服务端的兼容风险。
+     */
+    [[nodiscard]] bool hasDetachedExecInFlight() const { return m_execChannel != nullptr; }
 
     /**
      * @brief 写出内部排队的字节（目前只有 Shell 集成注入）。
@@ -546,6 +560,8 @@ private:
     QString m_execError;
     /** @brief 后台 exec 的 stderr 摘要，防止诊断输出无限占用内存。 */
     QByteArray m_execDiagnostic;
+    /** @brief 后台 exec 的 stdout 摘要，供只读系统识别读取，同样严格限制长度。 */
+    QByteArray m_execOutput;
 
     int m_columns = 80;
     int m_rows = 24;

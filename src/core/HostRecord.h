@@ -54,6 +54,23 @@ struct HostRecord {
     QStringList tags;             ///< 与祖先分组的标签取并集，用于按标签筛选。
 
     /**
+     * @brief 远端 /etc/os-release 中的发行版标识，例如 "ubuntu" 或 "rocky"。
+     *
+     * 该值只在主机首次成功建立 SSH 交互会话后由后台只读探测写入；分组不参与继承，因为
+     * 同一分组通常同时包含 Ubuntu、Rocky Linux 等不同系统。空字符串表示尚未探测或目标
+     * 不是遵循 os-release 规范的系统，界面此时回退为通用服务器图标。
+     */
+    QString distributionId;
+
+    /**
+     * @brief 远端 /etc/os-release 中的具体发行版本号，例如 "24.04"。
+     *
+     * 版本号与 distributionId 一起保存而非仅缓存图标选择结果，既能准确满足“识别具体
+     * 发行版本”的需求，也为后续在主机详情或诊断页展示系统版本保留可信数据来源。
+     */
+    QString distributionVersionId;
+
+    /**
      * @brief 是否显式允许旧版 hmac-sha1。
      *
      * 该字段刻意不参与继承：降低算法安全基线必须是针对某一台服务器的知情决定，

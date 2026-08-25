@@ -1,6 +1,8 @@
 #include "core/HostRecord.h"
 #include "security/Vault.h"
 #include "storage/ApplicationDatabase.h"
+#include "ssh/SshSessionStack.h"
+#include "ui/HostDistributionIcon.h"
 #include "ui/HostManagerWidget.h"
 #include "ui/UiIcons.h"
 
@@ -145,6 +147,18 @@ private slots:
 
     /** @brief 分组下拉框的顺序必须与侧边栏主机树一致（按 sortOrder），而不是按名称字母排序。 */
     void groupComboOrderMatchesSidebarTreeOrder();
+
+    /** @brief 已识别发行版的主机必须换成对应发行版图标，并在悬停提示中给出具体版本。 */
+    void detectedDistributionDrivesHostIconAndTooltip();
+
+    /** @brief 未收录的发行版仍应显示通用 Linux 图标，不得退回“尚未识别”的服务器轮廓。 */
+    void unlistedDistributionKeepsLinuxIconInsteadOfGenericHost();
+
+    /** @brief 改掉地址、端口或账号后必须清空缓存的发行版，避免图标长期停留在旧系统。 */
+    void editingConnectionTargetClearsCachedDistribution();
+
+    /** @brief 远端 os-release 输出不可信：非法 ID、控制字符与超长文本都必须被拒绝。 */
+    void remoteDistributionParserRejectsUnsafeOutput();
 
 private:
     [[nodiscard]] QTreeWidgetItem *findItem(const HostManagerWidget &widget,
@@ -2378,6 +2392,233 @@ void HostManagerWidgetTest::groupComboOrderMatchesSidebarTreeOrder()
 
     QCOMPARE(observedOrder,
              QStringList({QStringLiteral("未分组"), QStringLiteral("Zeta"), QStringLiteral("Alpha")}));
+}
+
+void HostManagerWidgetTest::detectedDistributionDrivesHostIconAndTooltip()
+{
+    HostRecord detected;
+    detected.id = QStringLiteral("distribution-detected-host");
+    detected.kind = HostNodeKind::Host;
+    detected.name = QStringLiteral("已识别系统的主机");
+    detected.host = QStringLiteral("192.0.2.21");
+    detected.username = QStringLiteral("root");
+    detected.port = 22;
+    detected.distributionId = QStringLiteral("ubuntu");
+    detected.distributionVersionId = QStringLiteral("24.04");
+    QString error;
+    QVERIFY2(m_database->saveHost(detected, &error), qPrintable(error));
+
+    HostRecord undetected;
+    undetected.id = QStringLiteral("distribution-unknown-host");
+    undetected.kind = HostNodeKind::Host;
+    undetected.name = QStringLiteral("尚未登录过的主机");
+    undetected.host = QStringLiteral("192.0.2.22");
+    undetected.username = QStringLiteral("root");
+    undetected.port = 22;
+    QVERIFY2(m_database->saveHost(undetected, &error), qPrintable(error));
+
+    HostManagerWidget widget(m_database.get(), m_vault.get());
+    QTreeWidgetItem *detectedItem = findItem(widget, detected.name);
+    QTreeWidgetItem *undetectedItem = findItem(widget, undetected.name);
+    QVERIFY(detectedItem != nullptr);
+    QVERIFY(undetectedItem != nullptr);
+
+    // 比较最终位图而不是 QIcon 实例：图标每次都会重新绘制，只有像素才能证明用户确实
+    // 看到了 Ubuntu 图形而不是通用服务器轮廓。
+    const QSize comparisonSize(20, 20);
+    const QImage detectedPixels = detectedItem->icon(0).pixmap(comparisonSize).toImage();
+    const QImage genericPixels =
+        UiIcons::symbol(&widget,
+                        UiIcons::Symbol::HostItem,
+                        widget.palette().color(QPalette::WindowText))
+            .pixmap(comparisonSize)
+            .toImage();
+    QCOMPARE(detectedPixels,
+             HostDistributionIcon::iconFor(QStringLiteral("ubuntu"))
+                 .pixmap(comparisonSize)
+                 .toImage());
+    QVERIFY2(detectedPixels != genericPixels, "已识别发行版仍在显示通用主机图标");
+    QCOMPARE(undetectedItem->icon(0).pixmap(comparisonSize).toImage(), genericPixels);
+
+    QVERIFY2(detectedItem->toolTip(0).contains(QStringLiteral("Ubuntu 24.04")),
+             qPrintable(QStringLiteral("悬停提示缺少发行版本：%1").arg(detectedItem->toolTip(0))));
+    QVERIFY2(detectedItem->toolTip(0).contains(QStringLiteral("root@192.0.2.21:22")),
+             "发行版信息不应挤掉原有的连接地址提示");
+    QVERIFY2(!undetectedItem->toolTip(0).contains(QStringLiteral("系统：")),
+             "尚未识别的主机不应出现空的系统行");
+}
+
+void HostManagerWidgetTest::unlistedDistributionKeepsLinuxIconInsteadOfGenericHost()
+{
+    HostRecord host;
+    host.id = QStringLiteral("distribution-unlisted-host");
+    host.kind = HostNodeKind::Host;
+    host.name = QStringLiteral("私有发行版主机");
+    host.host = QStringLiteral("192.0.2.23");
+    // 企业自建系统的 ID 不在映射表中，但它确实是一台已成功登录的 Linux。
+    host.distributionId = QStringLiteral("kylin");
+    host.distributionVersionId = QStringLiteral("V10");
+    QString error;
+    QVERIFY2(m_database->saveHost(host, &error), qPrintable(error));
+
+    HostManagerWidget widget(m_database.get(), m_vault.get());
+    QTreeWidgetItem *item = findItem(widget, host.name);
+    QVERIFY(item != nullptr);
+
+    const QSize comparisonSize(20, 20);
+    const QImage pixels = item->icon(0).pixmap(comparisonSize).toImage();
+    QCOMPARE(pixels,
+             HostDistributionIcon::iconFor(QStringLiteral("kylin"))
+                 .pixmap(comparisonSize)
+                 .toImage());
+    QVERIFY2(pixels
+                 != UiIcons::symbol(&widget,
+                                    UiIcons::Symbol::HostItem,
+                                    widget.palette().color(QPalette::WindowText))
+                        .pixmap(comparisonSize)
+                        .toImage(),
+             "未收录的发行版不应退回通用主机图标");
+    // 未知 ID 保留原文，诊断时仍能看出远端自报了什么系统。
+    QVERIFY2(item->toolTip(0).contains(QStringLiteral("kylin V10")),
+             qPrintable(item->toolTip(0)));
+}
+
+void HostManagerWidgetTest::editingConnectionTargetClearsCachedDistribution()
+{
+    HostRecord host;
+    host.id = QStringLiteral("distribution-retarget-host");
+    host.kind = HostNodeKind::Host;
+    host.name = QStringLiteral("换机器的主机");
+    host.host = QStringLiteral("192.0.2.24");
+    host.username = QStringLiteral("root");
+    host.port = 22;
+    host.distributionId = QStringLiteral("ubuntu");
+    host.distributionVersionId = QStringLiteral("24.04");
+    QString error;
+    QVERIFY2(m_database->saveHost(host, &error), qPrintable(error));
+
+    HostManagerWidget widget(m_database.get(), m_vault.get());
+    auto *tree = widget.findChild<QTreeWidget *>();
+    QVERIFY(tree != nullptr);
+    QTreeWidgetItem *item = findItem(widget, host.name);
+    QVERIFY(item != nullptr);
+    tree->setCurrentItem(item);
+
+    // 第一次编辑只改名称：目标服务器没变，已识别的发行版必须原样保留，否则每次改备注
+    // 都会白白丢掉一次远端探测结果。
+    QString dialogFailure;
+    QTimer::singleShot(0, [&dialogFailure]() {
+        auto *dialog = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+        auto *nameEdit = dialog == nullptr
+            ? nullptr
+            : dialog->findChild<QLineEdit *>(QStringLiteral("hostRecordNameEdit"));
+        auto *saveButton = dialog == nullptr
+            ? nullptr
+            : dialog->findChild<QPushButton *>(QStringLiteral("hostRecordSaveButton"));
+        if (nameEdit == nullptr || saveButton == nullptr) {
+            dialogFailure = QStringLiteral("主机配置窗口缺少名称输入框或保存按钮");
+            if (dialog != nullptr) {
+                dialog->reject();
+            }
+            return;
+        }
+        nameEdit->setText(QStringLiteral("只是改了备注"));
+        saveButton->click();
+    });
+    widget.editSelected();
+    QVERIFY2(dialogFailure.isEmpty(), qPrintable(dialogFailure));
+
+    std::optional<HostRecord> afterRename = m_database->findHost(host.id, &error);
+    QVERIFY2(afterRename.has_value(), qPrintable(error));
+    QCOMPARE(afterRename->distributionId, QStringLiteral("ubuntu"));
+    QCOMPARE(afterRename->distributionVersionId, QStringLiteral("24.04"));
+
+    QTreeWidgetItem *renamedItem = findItem(widget, QStringLiteral("只是改了备注"));
+    QVERIFY(renamedItem != nullptr);
+    tree->setCurrentItem(renamedItem);
+
+    // 第二次编辑改掉地址：记录已经指向另一台服务器，缓存的 Ubuntu 图标必须失效。
+    QTimer::singleShot(0, [&dialogFailure]() {
+        auto *dialog = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+        auto *hostEdit = dialog == nullptr
+            ? nullptr
+            : dialog->findChild<QLineEdit *>(QStringLiteral("hostAddressEdit"));
+        auto *saveButton = dialog == nullptr
+            ? nullptr
+            : dialog->findChild<QPushButton *>(QStringLiteral("hostRecordSaveButton"));
+        if (hostEdit == nullptr || saveButton == nullptr) {
+            dialogFailure = QStringLiteral("主机配置窗口缺少地址输入框或保存按钮");
+            if (dialog != nullptr) {
+                dialog->reject();
+            }
+            return;
+        }
+        hostEdit->setText(QStringLiteral("192.0.2.25"));
+        saveButton->click();
+    });
+    widget.editSelected();
+    QVERIFY2(dialogFailure.isEmpty(), qPrintable(dialogFailure));
+
+    const std::optional<HostRecord> afterRetarget = m_database->findHost(host.id, &error);
+    QVERIFY2(afterRetarget.has_value(), qPrintable(error));
+    QCOMPARE(afterRetarget->host, QStringLiteral("192.0.2.25"));
+    QVERIFY2(afterRetarget->distributionId.isEmpty(), "换了服务器后仍保留旧发行版标识");
+    QVERIFY2(afterRetarget->distributionVersionId.isEmpty(), "换了服务器后仍保留旧发行版本号");
+
+    QTreeWidgetItem *retargetedItem = findItem(widget, QStringLiteral("只是改了备注"));
+    QVERIFY(retargetedItem != nullptr);
+    const QSize comparisonSize(20, 20);
+    QCOMPARE(retargetedItem->icon(0).pixmap(comparisonSize).toImage(),
+             UiIcons::symbol(&widget,
+                             UiIcons::Symbol::HostItem,
+                             widget.palette().color(QPalette::WindowText))
+                 .pixmap(comparisonSize)
+                 .toImage());
+}
+
+void HostManagerWidgetTest::remoteDistributionParserRejectsUnsafeOutput()
+{
+    QString distributionId;
+    QString versionId;
+
+    QVERIFY(SshSessionStack::parseRemoteDistributionOutput(
+        QByteArrayLiteral("ubuntu\n24.04\n"), &distributionId, &versionId));
+    QCOMPARE(distributionId, QStringLiteral("ubuntu"));
+    QCOMPARE(versionId, QStringLiteral("24.04"));
+
+    // 大小写与首尾空白由解析层归一，图标映射与数据库因此只需处理一种形态。
+    QVERIFY(SshSessionStack::parseRemoteDistributionOutput(
+        QByteArrayLiteral(" Rocky \r\n 9.4 \r\n"), &distributionId, &versionId));
+    QCOMPARE(distributionId, QStringLiteral("rocky"));
+    QCOMPARE(versionId, QStringLiteral("9.4"));
+
+    // 滚动发行版没有 VERSION_ID，缺版本行不算失败。
+    QVERIFY(SshSessionStack::parseRemoteDistributionOutput(
+        QByteArrayLiteral("arch\n"), &distributionId, &versionId));
+    QCOMPARE(distributionId, QStringLiteral("arch"));
+    QVERIFY(versionId.isEmpty());
+
+    for (const QByteArray &rejected : {QByteArrayLiteral(""),
+                                       QByteArrayLiteral("\n9.4\n"),
+                                       QByteArrayLiteral("ubuntu; rm -rf /\n24.04\n"),
+                                       QByteArrayLiteral("ubun\x1b[31mtu\n"),
+                                       QByteArrayLiteral("-ubuntu\n"),
+                                       QByteArray(200, 'a') + QByteArrayLiteral("\n")}) {
+        QString rejectedId = QStringLiteral("unchanged");
+        QString rejectedVersion = QStringLiteral("unchanged");
+        QVERIFY2(!SshSessionStack::parseRemoteDistributionOutput(
+                     rejected, &rejectedId, &rejectedVersion),
+                 qPrintable(QStringLiteral("非法输出被当成合法发行版：%1")
+                                .arg(QString::fromUtf8(rejected.toPercentEncoding()))));
+        QCOMPARE(rejectedId, QStringLiteral("unchanged"));
+        QCOMPARE(rejectedVersion, QStringLiteral("unchanged"));
+    }
+
+    // 超长版本号必须被截断而不是原样落库，避免副标题与 Tooltip 被远端任意拉长。
+    QVERIFY(SshSessionStack::parseRemoteDistributionOutput(
+        QByteArrayLiteral("debian\n") + QByteArray(200, '9'), &distributionId, &versionId));
+    QCOMPARE(distributionId, QStringLiteral("debian"));
+    QCOMPARE(versionId.size(), 64);
 }
 
 QTEST_MAIN(HostManagerWidgetTest)
