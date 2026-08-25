@@ -2366,6 +2366,28 @@ private:
                         session->confirmUnknownHost(answer == QMessageBox::Yes);
                     }
                 });
+        connect(session,
+                &SshSessionStack::hostKeyChangeVerificationRequired,
+                this,
+                [this, session](const ConnectionTarget &verificationTarget,
+                                const QString &fingerprint) {
+                    // 测试连接也必须使用与正式终端完全相同的变更核验流程；否则测试按钮会
+                    // 永久报错，或者更危险地在用户不知情时绕过旧指纹保护。
+                    const QMessageBox::StandardButton answer = QMessageBox::warning(
+                        this,
+                        tr("服务器主机密钥已变更"),
+                        tr("%1 返回的主机密钥与本机记录不一致。\n\n"
+                           "新 SHA-256 指纹：\n%2\n\n"
+                           "这可能是服务器重装或密钥轮换，也可能是中间人攻击。请先通过可信"
+                           "渠道核对新指纹。\n\n"
+                           "确认密钥确已变更，并替换 known_hosts 中的旧记录后继续测试吗？")
+                            .arg(verificationTarget.connectionSpecifier(true), fingerprint),
+                        QMessageBox::Yes | QMessageBox::No,
+                        QMessageBox::No);
+                    if (m_testSession == session) {
+                        session->confirmUnknownHost(answer == QMessageBox::Yes);
+                    }
+                });
         connect(session, &QThread::finished, this, [this, session]() {
             if (m_testSession == session) {
                 m_testSession = nullptr;

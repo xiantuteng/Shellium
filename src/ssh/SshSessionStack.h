@@ -213,6 +213,14 @@ signals:
                                      const QString &fingerprint);
 
     /**
+     * @brief 已有主机密钥发生冲突时，要求 GUI 以高风险提示展示并确认新 SHA-256 指纹。
+     *
+     * 该信号与首次信任分开，防止界面用“首次连接”的低风险文案掩盖潜在的中间人攻击。
+     */
+    void hostKeyChangeVerificationRequired(const ConnectionTarget &target,
+                                           const QString &fingerprint);
+
+    /**
      * @brief 层栈发生变化，携带从外层到内层的完整快照。
      *
      * 快照中的每一层都是本程序亲自建立并完成认证的会话，因此 confidence 均为 Confirmed；

@@ -517,6 +517,10 @@ bool SshSessionStack::advanceEstablishingLayers()
         emit hostKeyVerificationRequired(node.target(), step.fingerprint);
         return true;
     }
+    if (step.hostKeyChanged) {
+        emit hostKeyChangeVerificationRequired(node.target(), step.fingerprint);
+        return true;
+    }
     if (step.pending) {
         return true;
     }

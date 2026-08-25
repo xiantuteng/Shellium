@@ -1,4 +1,5 @@
 #include "ssh/SshSessionNode.h"
+#include "ssh/KnownHostsManager.h"
 
 #include <QFile>
 #include <QLoggingCategory>
@@ -342,9 +343,18 @@ SshSessionNode::StepResult SshSessionNode::advanceEstablish()
         }
         if (!m_hostKeyTrusted) {
             m_stage = Stage::Failed;
-            return failure(tr("用户拒绝了未知服务器主机密钥。"));
+            return failure(m_hostKeyReplacementRequired
+                               ? tr("用户未确认服务器主机密钥变更，连接已终止。")
+                               : tr("用户拒绝了未知服务器主机密钥。"));
         }
-        if (ssh_session_update_known_hosts(m_session) != SSH_OK) {
+        if (m_hostKeyReplacementRequired) {
+            QString replacementError;
+            if (!KnownHostsManager::replaceChangedHostKey(m_session, &replacementError)) {
+                m_stage = Stage::Failed;
+                return failure(tr("替换 known_hosts 中的旧主机密钥失败：%1")
+                                   .arg(replacementError));
+            }
+        } else if (ssh_session_update_known_hosts(m_session) != SSH_OK) {
             m_stage = Stage::Failed;
             return failure(tr("写入 known_hosts 失败：%1").arg(lastError()));
         }
@@ -465,8 +475,20 @@ SshSessionNode::StepResult SshSessionNode::evaluateHostKey()
 {
     const ssh_known_hosts_e knownState = ssh_session_is_known_server(m_session);
     if (knownState == SSH_KNOWN_HOSTS_CHANGED || knownState == SSH_KNOWN_HOSTS_OTHER) {
-        m_stage = Stage::Failed;
-        return failure(tr("服务器主机密钥与 known_hosts 不一致，连接已终止。"));
+        // 密钥冲突不能自动信任，但也不应把正常的服务器重装变成只能手改文件的死路。暂停
+        // 状态机并展示新指纹；只有用户通过可信渠道核验后才允许精确替换旧记录。
+        m_stage = Stage::AwaitingHostKeyDecision;
+        m_hostKeyDecided = false;
+        m_hostKeyTrusted = false;
+        m_hostKeyReplacementRequired = true;
+        m_establishTimer.invalidate();
+
+        StepResult result;
+        result.ok = true;
+        result.pending = true;
+        result.hostKeyChanged = true;
+        result.fingerprint = serverFingerprint(m_session);
+        return result;
     }
     if (knownState == SSH_KNOWN_HOSTS_ERROR) {
         m_stage = Stage::Failed;
@@ -476,6 +498,7 @@ SshSessionNode::StepResult SshSessionNode::evaluateHostKey()
         m_stage = Stage::AwaitingHostKeyDecision;
         m_hostKeyDecided = false;
         m_hostKeyTrusted = false;
+        m_hostKeyReplacementRequired = false;
         // 等待用户核验期间不能让整体超时把连接掐断，人核对指纹远比握手慢。
         m_establishTimer.invalidate();
 

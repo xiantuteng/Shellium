@@ -1,4 +1,5 @@
 #include "sftp/SftpService.h"
+#include "ssh/KnownHostsManager.h"
 
 #include "ssh/SshTunnelBroker.h"
 
@@ -119,12 +120,12 @@ public:
     /**
      * @brief 建立 SSH、校验主机密钥、完成认证并初始化 SFTP 子系统。
      * @param target 目标服务器及完整跳板链。
-     * @param allowUnknownHost 用户是否已确认本次遇到的未知指纹。
-     * @return 结构化连接结果；未知主机会附带 SHA-256 指纹。
+     * @param allowVerifiedHostKey 用户是否已确认本次遇到的未知或已变更指纹。
+     * @return 结构化连接结果；需要人工核验时会附带 SHA-256 指纹。
      */
-    ConnectResult open(const ConnectionTarget &target, const bool allowUnknownHost)
+    ConnectResult open(const ConnectionTarget &target, const bool allowVerifiedHostKey)
     {
-        ConnectResult directResult = openDirect(target, allowUnknownHost);
+        ConnectResult directResult = openDirect(target, allowVerifiedHostKey);
         if (directResult.success) {
             return directResult;
         }
@@ -226,10 +227,10 @@ private:
     /**
      * @brief 使用本机 libssh 直连或经已注册隧道连接内层服务器。
      * @param target 内层目标。
-     * @param allowUnknownHost 是否已由用户确认内层服务器指纹。
+     * @param allowVerifiedHostKey 是否已由用户确认内层服务器本次返回的指纹。
      * @return 完整连接与 SFTP 初始化结果。
      */
-    ConnectResult openDirect(const ConnectionTarget &target, const bool allowUnknownHost)
+    ConnectResult openDirect(const ConnectionTarget &target, const bool allowVerifiedHostKey)
     {
         int tunnelFd = -1;
         if (!target.tunnelRouteId.isEmpty()) {
@@ -242,7 +243,7 @@ private:
         }
 
         const ConnectResult connected = connectAndAuthenticate(
-            target, allowUnknownHost, tunnelFd, QObject::tr("SFTP"));
+            target, allowVerifiedHostKey, tunnelFd, QObject::tr("SFTP"));
         if (!connected.success) {
             return connected;
         }
@@ -323,13 +324,13 @@ private:
     /**
      * @brief 配置、连接、校验并认证一个 SSH 会话。
      * @param target 实际要由本机 libssh 认证的服务器。
-     * @param allowUnknownHost 是否允许写入此前已由界面确认的未知主机指纹。
+     * @param allowVerifiedHostKey 是否允许写入或替换此前已由界面确认的主机指纹。
      * @param transportFd 已连通的隧道 fd；负数表示按 host/proxyJumps 自行连接。
      * @param authenticationLabel 认证失败消息中的连接角色名称。
      * @return 成功时 m_session 已认证；失败时返回可分类诊断。
      */
     ConnectResult connectAndAuthenticate(const ConnectionTarget &target,
-                                         const bool allowUnknownHost,
+                                         const bool allowVerifiedHostKey,
                                          const int transportFd,
                                          const QString &authenticationLabel)
     {
@@ -396,7 +397,7 @@ private:
                            QObject::tr("SSH 连接失败：%1").arg(error));
         }
 
-        const ConnectResult verification = verifyServerKey(allowUnknownHost);
+        const ConnectResult verification = verifyServerKey(allowVerifiedHostKey);
         if (!verification.success) {
             return verification;
         }
@@ -459,7 +460,7 @@ private:
         }
     }
 
-    ConnectResult verifyServerKey(const bool allowUnknownHost)
+    ConnectResult verifyServerKey(const bool allowVerifiedHostKey)
     {
         ssh_key serverKey = nullptr;
         unsigned char *hash = nullptr;
@@ -490,11 +491,26 @@ private:
             return {.success = true};
         }
         if (state == SSH_KNOWN_HOSTS_CHANGED || state == SSH_KNOWN_HOSTS_OTHER) {
-            return failure(SftpService::ErrorKind::HostKeyChanged,
-                           QObject::tr("服务器主机密钥与 known_hosts 记录不一致。为防止中间人攻击，连接已终止。"));
+            if (!allowVerifiedHostKey) {
+                ConnectResult result = failure(
+                    SftpService::ErrorKind::HostKeyChanged,
+                    QObject::tr("服务器主机密钥与 known_hosts 记录不一致，必须先核验新指纹。"));
+                result.fingerprint = fingerprint;
+                return result;
+            }
+
+            // 只有界面展示新指纹且用户明确确认后才会进入此分支。与首次信任不同，冲突旧行
+            // 必须先被精确替换；简单追加会留下旧行，下一次连接仍会继续报 CHANGED。
+            QString replacementError;
+            if (!KnownHostsManager::replaceChangedHostKey(m_session, &replacementError)) {
+                return failure(SftpService::ErrorKind::Connection,
+                               QObject::tr("替换 known_hosts 中的旧主机密钥失败：%1")
+                                   .arg(replacementError));
+            }
+            return {.success = true};
         }
         if ((state == SSH_KNOWN_HOSTS_UNKNOWN || state == SSH_KNOWN_HOSTS_NOT_FOUND)
-            && !allowUnknownHost) {
+            && !allowVerifiedHostKey) {
             ConnectResult result = failure(SftpService::ErrorKind::HostKeyUnknown,
                                            QObject::tr("该服务器尚未被信任。"));
             result.fingerprint = fingerprint;
@@ -506,7 +522,7 @@ private:
                                .arg(QString::fromUtf8(ssh_get_error(m_session))));
         }
 
-        // 只有界面已展示指纹且用户明确确认时 allowUnknownHost 才会为 true。
+        // 只有界面已展示指纹且用户明确确认时 allowVerifiedHostKey 才会为 true。
         if (ssh_session_update_known_hosts(m_session) != SSH_OK) {
             return failure(SftpService::ErrorKind::Connection,
                            QObject::tr("写入 known_hosts 失败：%1")
@@ -618,6 +634,8 @@ void deliverConnectionFailure(const QPointer<SftpService> &service,
         }
         if (result.kind == SftpService::ErrorKind::HostKeyUnknown) {
             emit service->hostKeyVerificationRequired(target, result.fingerprint);
+        } else if (result.kind == SftpService::ErrorKind::HostKeyChanged) {
+            emit service->hostKeyChangeVerificationRequired(target, result.fingerprint);
         }
         emit service->operationFailed(requestId, target, result.kind, result.message);
     }, Qt::QueuedConnection);
@@ -1925,7 +1943,7 @@ SftpService::~SftpService()
 quint64 SftpService::listDirectory(const ConnectionTarget &target, const QString &path)
 {
     const quint64 requestId = nextRequestId();
-    const bool allowUnknown = isTemporarilyTrusted(target);
+    const bool allowUnknown = takeTemporarilyTrusted(target);
     const QPointer<SftpService> service(this);
 
     (void)QtConcurrent::run([service, pool = m_pool, requestId, target, path, allowUnknown]() {
@@ -2032,7 +2050,7 @@ quint64 SftpService::uploadFile(const ConnectionTarget &target,
                                 const SftpTransfer::ExistingFilePolicy policy)
 {
     const quint64 requestId = nextRequestId();
-    const bool allowUnknown = isTemporarilyTrusted(target);
+    const bool allowUnknown = takeTemporarilyTrusted(target);
     const QPointer<SftpService> service(this);
 
     (void)QtConcurrent::run([service, pool = m_pool, ledger = m_ledger, requestId, target,
@@ -2098,7 +2116,7 @@ quint64 SftpService::downloadFile(const ConnectionTarget &target,
                                   const SftpTransfer::ExistingFilePolicy policy)
 {
     const quint64 requestId = nextRequestId();
-    const bool allowUnknown = isTemporarilyTrusted(target);
+    const bool allowUnknown = takeTemporarilyTrusted(target);
     const QPointer<SftpService> service(this);
 
     (void)QtConcurrent::run([service, pool = m_pool, ledger = m_ledger, requestId, target,
@@ -2161,7 +2179,7 @@ quint64 SftpService::uploadDirectory(const ConnectionTarget &target,
                                      const SftpTransfer::DirectoryConflictPolicy conflictPolicy)
 {
     const quint64 requestId = nextRequestId();
-    const bool allowUnknown = isTemporarilyTrusted(target);
+    const bool allowUnknown = takeTemporarilyTrusted(target);
     const QPointer<SftpService> service(this);
 
     (void)QtConcurrent::run([service, pool = m_pool, ledger = m_ledger, requestId, target,
@@ -2301,7 +2319,7 @@ quint64 SftpService::downloadDirectory(const ConnectionTarget &target,
                                        const SftpTransfer::ExistingFilePolicy policy)
 {
     const quint64 requestId = nextRequestId();
-    const bool allowUnknown = isTemporarilyTrusted(target);
+    const bool allowUnknown = takeTemporarilyTrusted(target);
     const QPointer<SftpService> service(this);
 
     (void)QtConcurrent::run([service, pool = m_pool, ledger = m_ledger, requestId, target,
@@ -2437,7 +2455,7 @@ quint64 SftpService::previewFile(const ConnectionTarget &target,
 {
     const quint64 requestId = nextRequestId();
     const quint64 safeLimit = SftpTransfer::boundedPreviewLimit(maximumBytes);
-    const bool allowUnknown = isTemporarilyTrusted(target);
+    const bool allowUnknown = takeTemporarilyTrusted(target);
     const QPointer<SftpService> service(this);
     (void)QtConcurrent::run([service, pool = m_pool, requestId, target, remotePath,
                              safeLimit, allowUnknown]() {
@@ -2533,7 +2551,7 @@ quint64 SftpService::chmodPath(const ConnectionTarget &target,
                                const quint32 permissions)
 {
     const quint64 requestId = nextRequestId();
-    const bool allowUnknown = isTemporarilyTrusted(target);
+    const bool allowUnknown = takeTemporarilyTrusted(target);
     const QPointer<SftpService> service(this);
     (void)QtConcurrent::run([service, pool = m_pool, requestId, target, remotePath,
                              permissions, allowUnknown]() {
@@ -2581,7 +2599,7 @@ quint64 SftpService::renamePath(const ConnectionTarget &target,
                                 const QString &newPath)
 {
     const quint64 requestId = nextRequestId();
-    const bool allowUnknown = isTemporarilyTrusted(target);
+    const bool allowUnknown = takeTemporarilyTrusted(target);
     const QPointer<SftpService> service(this);
     (void)QtConcurrent::run([service, pool = m_pool, requestId, target, oldPath, newPath, allowUnknown]() {
         const QString poolKey = transferPoolKey(target);
@@ -2617,7 +2635,7 @@ quint64 SftpService::removePath(const ConnectionTarget &target,
                                 const bool directory)
 {
     const quint64 requestId = nextRequestId();
-    const bool allowUnknown = isTemporarilyTrusted(target);
+    const bool allowUnknown = takeTemporarilyTrusted(target);
     const QPointer<SftpService> service(this);
     (void)QtConcurrent::run([service, pool = m_pool, requestId, target, path, directory, allowUnknown]() {
         const QString poolKey = transferPoolKey(target);
@@ -2654,7 +2672,7 @@ quint64 SftpService::removePath(const ConnectionTarget &target,
 quint64 SftpService::statPath(const ConnectionTarget &target, const QString &remotePath)
 {
     const quint64 requestId = nextRequestId();
-    const bool allowUnknown = isTemporarilyTrusted(target);
+    const bool allowUnknown = takeTemporarilyTrusted(target);
     const QPointer<SftpService> service(this);
 
     (void)QtConcurrent::run([service, pool = m_pool, requestId, target, remotePath,
@@ -2682,7 +2700,7 @@ quint64 SftpService::statPath(const ConnectionTarget &target, const QString &rem
     return requestId;
 }
 
-void SftpService::trustUnknownHost(const ConnectionTarget &target)
+void SftpService::trustHostKey(const ConnectionTarget &target)
 {
     QMutexLocker locker(&m_trustMutex);
     m_temporarilyTrustedHosts.insert(target.stableKey());
@@ -2693,8 +2711,9 @@ quint64 SftpService::nextRequestId()
     return m_nextRequestId.fetch_add(1, std::memory_order_relaxed);
 }
 
-bool SftpService::isTemporarilyTrusted(const ConnectionTarget &target) const
+bool SftpService::takeTemporarilyTrusted(const ConnectionTarget &target)
 {
     QMutexLocker locker(&m_trustMutex);
-    return m_temporarilyTrustedHosts.contains(target.stableKey());
+    // QSet::remove 同时完成“检查”和“消费”，锁内没有另一请求抢走同一授权的窗口。
+    return m_temporarilyTrustedHosts.remove(target.stableKey()) > 0;
 }

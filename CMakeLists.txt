@@ -105,6 +105,7 @@ set(SHELLIUM_APP_SOURCES
     src/sftp/SftpResumeLedger.h
     src/sftp/SftpService.cpp
     src/sftp/SftpService.h
+    src/ssh/KnownHostsManager.h
     src/ssh/ShellShim.cpp
     src/ssh/ShellShim.h
     src/ssh/SshCommandParser.cpp

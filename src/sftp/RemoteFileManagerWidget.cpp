@@ -1286,7 +1286,34 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
                     QMessageBox::No);
                 m_hostKeyDialogOpen = false;
                 if (answer == QMessageBox::Yes) {
-                    m_service->trustUnknownHost(target);
+                    m_service->trustHostKey(target);
+                    refreshDirectory();
+                }
+            });
+    connect(m_service,
+            &SftpService::hostKeyChangeVerificationRequired,
+            this,
+            [this](const ConnectionTarget &target, const QString &fingerprint) {
+                if (m_hostKeyDialogOpen) {
+                    return;
+                }
+                m_hostKeyDialogOpen = true;
+                // SFTP 使用独立 SSH 会话，仍必须与终端执行同等级别的变更核验，不能因为用户
+                // 已登录终端就假定后台连接拿到的一定是同一台服务器。
+                const QMessageBox::StandardButton answer = QMessageBox::warning(
+                    this,
+                    tr("服务器主机密钥已变更"),
+                    tr("%1 返回的主机密钥与本机记录不一致。\n\n"
+                       "新 SHA-256 指纹：\n%2\n\n"
+                       "这可能是服务器重装或密钥轮换，也可能是中间人攻击。请先通过可信渠道"
+                       "核对新指纹。\n\n"
+                       "确认密钥确已变更，并替换 known_hosts 中的旧记录吗？")
+                        .arg(target.connectionSpecifier(true), fingerprint),
+                    QMessageBox::Yes | QMessageBox::No,
+                    QMessageBox::No);
+                m_hostKeyDialogOpen = false;
+                if (answer == QMessageBox::Yes) {
+                    m_service->trustHostKey(target);
                     refreshDirectory();
                 }
             });
@@ -2568,7 +2595,8 @@ void RemoteFileManagerWidget::handleOperationFailure(const quint64 requestId,
     }
 
     // 未知主机错误紧随指纹确认信号到达，由确认对话框负责提示，避免重复弹窗。
-    if (kind != SftpService::ErrorKind::HostKeyUnknown) {
+    if (kind != SftpService::ErrorKind::HostKeyUnknown
+        && kind != SftpService::ErrorKind::HostKeyChanged) {
         QMessageBox::critical(this, tr("SFTP 操作失败"), message);
     }
 }

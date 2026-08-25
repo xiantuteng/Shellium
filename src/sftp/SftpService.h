@@ -831,12 +831,13 @@ public:
                        bool directory);
 
     /**
-     * @brief 允许目标在本次应用运行期间写入 known_hosts。
-     * @param target 用户已确认指纹的目标。
+     * @brief 允许目标的下一次连接写入未知密钥或替换已变更密钥。
+     * @param target 用户已通过可信渠道确认当前指纹的目标。
      *
-     * 此方法必须由明确的用户确认触发；不会提供静默全局信任开关。
+     * 此方法必须由明确的用户确认触发；授权在下一次连接调度时即被消费，不会提供静默全局
+     * 信任开关，也不会让一次确认覆盖同一进程内的后续密钥变化。
      */
-    void trustUnknownHost(const ConnectionTarget &target);
+    void trustHostKey(const ConnectionTarget &target);
 
     /**
      * @brief 改用独立路径存放续传账本。
@@ -877,6 +878,12 @@ signals:
     void hostKeyVerificationRequired(const ConnectionTarget &target,
                                      const QString &fingerprint);
 
+    /**
+     * @brief 已有主机密钥发生冲突时，要求界面以高风险提示展示并确认新 SHA-256 指纹。
+     */
+    void hostKeyChangeVerificationRequired(const ConnectionTarget &target,
+                                           const QString &fingerprint);
+
     /** @brief 文件传输进度；total 为 0 表示服务器未提供大小。 */
     void transferProgress(quint64 requestId, quint64 completed, quint64 total);
 
@@ -912,8 +919,15 @@ private:
     /** @brief 生成线程安全且进程内单调递增的请求编号。 */
     quint64 nextRequestId();
 
-    /** @brief 判断用户是否已在本次运行中确认过未知主机。 */
-    bool isTemporarilyTrusted(const ConnectionTarget &target) const;
+    /**
+     * @brief 原子消费一次用户刚刚作出的主机指纹确认。
+     * @param target 即将重试连接的目标。
+     * @return 存在尚未消费的确认时返回 true，并立即移除该确认。
+     *
+     * 确认必须是一次性的：如果服务器在同一次应用运行期间再次换钥，沿用早先授权会静默
+     * 接受第二次变更，破坏每次密钥变化都需人工核验的安全保证。
+     */
+    bool takeTemporarilyTrusted(const ConnectionTarget &target);
 
     /**
      * @brief 按目标缓存的 SFTP 连接池。

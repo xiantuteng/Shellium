@@ -114,13 +114,17 @@ public:
     /**
      * @brief 一次状态推进的结构化结果。
      *
-     * pending 为 true 表示本轮没有产生结论，调用方稍后应再次推进。hostKeyUnknown 与
-     * legacyHmacRequired 都不是错误，而是必须由人确认后才能继续的分支。
+     * pending 为 true 表示本轮没有产生结论，调用方稍后应再次推进。hostKeyUnknown、
+     * hostKeyChanged 与 legacyHmacRequired 都不是普通连接错误，而是必须由人确认后才能
+     * 继续的安全分支。
      */
     struct StepResult {
         bool ok = false;
         bool pending = false;
+        /** @brief 服务器没有任何本地信任记录，需要首次核验指纹。 */
         bool hostKeyUnknown = false;
+        /** @brief 服务器密钥与已有记录冲突，需要按高风险变更流程核验指纹。 */
+        bool hostKeyChanged = false;
         bool legacyHmacRequired = false;
         /**
          * @brief 服务器要求密码，但本层还没有可用凭据。
@@ -162,13 +166,13 @@ public:
     /**
      * @brief 向前推进一步握手、认证或通道创建，绝不阻塞等待网络。
      * @return ok 且非 pending 表示 Shell 已就绪；pending 表示需要再次调用；
-     *         hostKeyUnknown 表示必须先调用 provideHostKeyDecision。
+     *         hostKeyUnknown 或 hostKeyChanged 表示必须先调用 provideHostKeyDecision。
      */
     StepResult advanceEstablish();
 
     /**
-     * @brief 提交用户对未知主机指纹的核验结论。
-     * @param trusted true 表示允许写入 known_hosts 并继续，false 表示中止本层。
+     * @brief 提交用户对未知或已变更主机指纹的核验结论。
+     * @param trusted true 表示允许写入或替换 known_hosts 并继续，false 表示中止本层。
      */
     void provideHostKeyDecision(bool trusted);
 
@@ -569,6 +573,8 @@ private:
 
     bool m_hostKeyDecided = false;
     bool m_hostKeyTrusted = false;
+    /** @brief 当前确认是否针对冲突旧记录；为 true 时确认后必须替换而非简单追加。 */
+    bool m_hostKeyReplacementRequired = false;
 
     /** @brief 用户已提交凭据、等待下一轮推进消费。 */
     bool m_credentialProvided = false;

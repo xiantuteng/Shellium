@@ -1,5 +1,6 @@
 #include "core/ConnectionTarget.h"
 #include "ssh/ShellShim.h"
+#include "ssh/KnownHostsManager.h"
 #include "terminal/TerminalEchoFilter.h"
 #include "ssh/SshCommandParser.h"
 #include "terminal/TerminalView.h"
@@ -68,6 +69,12 @@ private slots:
 
     /** @brief 当前 libssh 构建必须实际包含并接受 hmac-sha1 兼容配置。 */
     void libsshSupportsOptInLegacyHmac();
+
+    /** @brief 替换冲突密钥时只能删除精确旧行，其他主机、注释与空行必须保留。 */
+    void knownHostsReplacementPreservesUnrelatedContent();
+
+    /** @brief 哈希过的主机字段必须继续保持哈希，不能因密钥轮换泄露服务器地址。 */
+    void knownHostsReplacementPreservesHashedHostname();
 
     /** @brief 自动重连策略必须限制危险数值并完整持久化。 */
     void terminalSettingsPersistReconnectPolicy();
@@ -351,6 +358,64 @@ void SshCommandParserTest::libsshSupportsOptInLegacyHmac()
     QCOMPARE(ssh_options_set(session, SSH_OPTIONS_HMAC_C_S, legacyHmac), SSH_OK);
     QCOMPARE(ssh_options_set(session, SSH_OPTIONS_HMAC_S_C, legacyHmac), SSH_OK);
     ssh_free(session);
+}
+
+void SshCommandParserTest::knownHostsReplacementPreservesUnrelatedContent()
+{
+    // 公钥正文是两个结构合法、内容不同的 Ed25519 公钥 blob。使用真实格式可确保测试经过
+    // libssh 逐行解析器，而不是只验证普通字符串替换。
+    const QByteArray oldPublicKey = QByteArrayLiteral(
+        "AAAAC3NzaC1lZDI1NTE5AAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+    const QByteArray newPublicKey = QByteArrayLiteral(
+        "AAAAC3NzaC1lZDI1NTE5AAAAIAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEB");
+    const QByteArray lookupHost = QByteArrayLiteral("[8.148.83.73]:2222");
+    const QByteArray oldEntry = QByteArrayLiteral(
+        "[8.148.83.73]:2222 ssh-ed25519 ") + oldPublicKey;
+    const QByteArray newEntry = QByteArrayLiteral(
+        "[8.148.83.73]:2222 ssh-ed25519 ") + newPublicKey;
+    const QByteArray unrelatedEntry = QByteArrayLiteral(
+        "other.example ssh-ed25519 ") + oldPublicKey;
+    const QByteArray original = QByteArrayLiteral("# production hosts\r\n")
+        + oldEntry + QByteArrayLiteral("\r\n\r\n")
+        + unrelatedEntry + QByteArrayLiteral("\n") + oldEntry + QByteArrayLiteral("\n");
+
+    bool replaced = false;
+    const QByteArray rewritten = KnownHostsManager::Detail::replaceHostEntries(
+        original, lookupHost, newEntry, &replaced);
+
+    QVERIFY(replaced);
+    QVERIFY(!rewritten.contains(oldEntry));
+    QCOMPARE(rewritten.count(newEntry), 1);
+    QVERIFY(rewritten.contains(QByteArrayLiteral("# production hosts\r\n")));
+    QVERIFY(rewritten.contains(unrelatedEntry));
+}
+
+void SshCommandParserTest::knownHostsReplacementPreservesHashedHostname()
+{
+    const QByteArray lookupHost = QByteArrayLiteral("8.148.83.73");
+    // 盐为 ASCII `salt-for-test`；HMAC-SHA1 按 OpenSSH |1| 格式对 lookupHost 计算。固定
+    // 向量让用例无需调用外部 ssh-keygen，也能验证 libssh 确实识别哈希主机字段。
+    const QByteArray hashedHost = QByteArrayLiteral(
+        "|1|c2FsdC1mb3ItdGVzdA==|tUiOdWbBvCbi3YslYi7Asu2/V6Q=");
+    const QByteArray oldEntry = hashedHost
+        + QByteArrayLiteral(
+            " ssh-ed25519 "
+            "AAAAC3NzaC1lZDI1NTE5AAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+    const QByteArray exportedEntry = QByteArrayLiteral(
+        "8.148.83.73 ssh-ed25519 "
+        "AAAAC3NzaC1lZDI1NTE5AAAAIAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEB");
+
+    bool replaced = false;
+    const QByteArray rewritten = KnownHostsManager::Detail::replaceHostEntries(
+        oldEntry + QByteArrayLiteral("\n"), lookupHost, exportedEntry, &replaced);
+
+    QVERIFY(replaced);
+    QCOMPARE(rewritten,
+             hashedHost
+                 + QByteArrayLiteral(
+                     " ssh-ed25519 "
+                     "AAAAC3NzaC1lZDI1NTE5AAAAIAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEB\n"));
+    QVERIFY(!rewritten.contains(QByteArrayLiteral("8.148.83.73")));
 }
 
 void SshCommandParserTest::terminalViewForwardsKeyboardInput()

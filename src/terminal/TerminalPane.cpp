@@ -637,6 +637,31 @@ void TerminalPane::connectToHosts(const QList<ConnectionTarget> &connectionPlan)
                     m_sessionStack->confirmUnknownHost(answer == QMessageBox::Yes);
                 }
             });
+    connect(m_sessionStack,
+            &SshSessionStack::hostKeyChangeVerificationRequired,
+            this,
+            [this, sessionGeneration](const ConnectionTarget &verificationTarget,
+                                      const QString &fingerprint) {
+                if (sessionGeneration != m_sessionGeneration) {
+                    return;
+                }
+                // 变更提示必须明显区别于首次连接：用户只有在确认服务器重装或管理员主动
+                // 轮换密钥后才能继续，不能把潜在的中间人攻击包装成普通确认框。
+                const QMessageBox::StandardButton answer = QMessageBox::warning(
+                    this,
+                    tr("服务器主机密钥已变更"),
+                    tr("%1 返回的主机密钥与本机记录不一致。\n\n"
+                       "新 SHA-256 指纹：\n%2\n\n"
+                       "这可能是服务器重装或密钥轮换，也可能是中间人攻击。请先通过可信渠道"
+                       "向服务器管理员核对新指纹。\n\n"
+                       "确认密钥确已变更，并替换 known_hosts 中的旧记录吗？")
+                        .arg(verificationTarget.connectionSpecifier(true), fingerprint),
+                    QMessageBox::Yes | QMessageBox::No,
+                    QMessageBox::No);
+                if (m_sessionStack != nullptr) {
+                    m_sessionStack->confirmUnknownHost(answer == QMessageBox::Yes);
+                }
+            });
     connect(m_terminalView,
             &TerminalView::terminalSizeChanged,
             m_sessionStack,
