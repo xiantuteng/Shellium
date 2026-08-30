@@ -150,10 +150,10 @@ void TerminalWorkspace::emitTerminalStatus()
     if (target.isValid()) {
         server = target.connectionSpecifier(true);
         if (target.confidence == ConnectionTarget::Confidence::Inferred) {
-            server.prepend(tr("推测 · "));
+            server.prepend(tr("Inferred · "));
         }
     } else {
-        server = m_pane->isConnected() ? tr("本地终端") : tr("未连接");
+        server = m_pane->isConnected() ? tr("Local terminal") : tr("Not connected");
     }
 
     // libvterm 与所有 SSH/PTY 输入输出均以 UTF-8 工作；在真正支持可切换编码前，明确发出
@@ -170,13 +170,13 @@ void TerminalWorkspace::handleFilesDropped(const QStringList &localPaths)
         return;
     }
     if (!m_pane->isConnected()) {
-        emit statusMessage(tr("尚未连接，无法上传拖入的文件。"));
+        emit statusMessage(tr("Not connected yet; cannot upload the dropped files."));
         return;
     }
     const ConnectionTarget target = m_pane->activeTarget();
     if (!target.isValid()) {
         // 本地 Shell 没有远程目标；虽然本地终端也在“已连接”状态，拖拽上传对它没有意义。
-        emit statusMessage(tr("当前是本地终端，无法上传拖入的文件。"));
+        emit statusMessage(tr("This is a local terminal; dropped files cannot be uploaded."));
         return;
     }
     const QString remoteDirectory = m_pane->activeWorkingDirectory();
@@ -184,8 +184,8 @@ void TerminalWorkspace::handleFilesDropped(const QStringList &localPaths)
         // cwd 缓存来自 Shell 集成上报，连接刚建立、提示符还没刷新过一次时可能仍是空的；
         // 此时没有可信目标目录，宁可让用户重试也不要猜一个根目录。
         QMessageBox::warning(this,
-                             tr("远程路径未知"),
-                             tr("尚未获取到当前目录，请在终端里按一次回车后再拖入文件。"));
+                             tr("Remote path unknown"),
+                             tr("The current directory is not known yet; press Enter once in the terminal, then drop the files."));
         return;
     }
 
@@ -193,12 +193,12 @@ void TerminalWorkspace::handleFilesDropped(const QStringList &localPaths)
     if (target.confidence == ConnectionTarget::Confidence::Inferred) {
         // 与 emitTerminalStatus 相同的显式标注：推测层的身份不是本程序亲自确认的，必须让
         // 用户在确认上传前就看到这一点。
-        serverDescription.prepend(tr("推测 · "));
+        serverDescription.prepend(tr("Inferred · "));
     }
     const QMessageBox::StandardButton choice = QMessageBox::question(
         this,
-        tr("上传到当前目录？"),
-        tr("是否把拖入的 %1 个本地文件上传到 %2 的当前目录：\n%3")
+        tr("Upload to the current directory?"),
+        tr("Upload the %1 dropped local files to the current directory of %2:\n%3")
             .arg(localPaths.size())
             .arg(serverDescription, remoteDirectory),
         QMessageBox::Yes | QMessageBox::No,

@@ -1,10 +1,13 @@
 #include "app/MainWindow.h"
+#include "i18n/LocalizationService.h"
 #include "security/Vault.h"
 #include "settings/BundledFonts.h"
 #include "storage/ApplicationDatabase.h"
 #include "ui/VaultDialog.h"
 
 #include <QApplication>
+#include <QCommandLineOption>
+#include <QCommandLineParser>
 #include <QCoreApplication>
 #include <QIcon>
 #include <QMessageBox>
@@ -193,22 +196,52 @@ int main(int argc, char *argv[])
     // 配色再由设置服务和 MainWindow 视觉系统覆盖，避免平台原生样式造成布局尺寸漂移。
     application.setStyle(QStyleFactory::create(QStringLiteral("Fusion")));
 
+    // 界面语言优先级：命令行 --lang > 数据库设置 > 跟随系统。命令行入口主要供自动化截图和
+    // 本地化自测按语言固定界面，正常启动不会带该参数。用 parse() 而非 process()，避免把
+    // macOS LaunchServices 传入的 -psn_/-NS* 参数当成错误而拒绝启动。
+    LocalizationService localization;
+    QCommandLineParser commandLineParser;
+    const QCommandLineOption languageOption(
+        QStringLiteral("lang"),
+        QObject::tr("Start with the given UI language (e.g. zh_CN, en, or system)."),
+        QStringLiteral("locale"));
+    commandLineParser.addOption(languageOption);
+    commandLineParser.parse(application.arguments());
+    const QString commandLineLanguage = commandLineParser.isSet(languageOption)
+        ? commandLineParser.value(languageOption).trimmed()
+        : QString{};
+
+    // 数据库尚未打开，此时先按命令行或系统语言装载翻译，让下面的数据库初始化失败提示也能
+    // 本地化；数据库就绪后若没有命令行覆盖，再按用户存储的偏好重新装载一次。
+    localization.apply(localization.resolve(
+        commandLineLanguage.isEmpty() ? QStringLiteral("system") : commandLineLanguage));
+
     ApplicationDatabase database(uiPreviewMode ? ApplicationDatabase::inMemoryPath()
                                                : QString{});
     QString databaseError;
     if (!database.initialize(&databaseError)) {
         QMessageBox::critical(nullptr,
-                              QObject::tr("数据库初始化失败"),
-                              QObject::tr("无法初始化 Shellium 本地数据：%1").arg(databaseError));
+                              QObject::tr("Database initialization failed"),
+                              QObject::tr("Could not initialize Shellium local data: %1").arg(databaseError));
         return 1;
+    }
+
+    if (commandLineLanguage.isEmpty()) {
+        QString languageSettingError;
+        const std::optional<QString> storedLanguage =
+            database.setting(QStringLiteral("appearance/language"), &languageSettingError);
+        // 读取失败不阻断启动：语言不是安全关键项，退回系统语言即可，真正的设置错误会在
+        // 后续 TerminalSettingsService::load() 统一上报。
+        localization.apply(localization.resolve(
+            storedLanguage.value_or(QStringLiteral("system"))));
     }
 
     if (uiPreviewMode) {
         QString previewSeedError;
         if (!seedHostUiPreview(&database, &previewSeedError)) {
             QMessageBox::critical(nullptr,
-                                  QObject::tr("UI 预览初始化失败"),
-                                  QObject::tr("无法创建隔离的主机页预览数据：%1")
+                                  QObject::tr("UI preview initialization failed"),
+                                  QObject::tr("Could not create the isolated host page preview data: %1")
                                       .arg(previewSeedError));
             return 1;
         }
@@ -224,8 +257,8 @@ int main(int argc, char *argv[])
                                      requestedPreviewTheme,
                                      &previewThemeError)) {
                 QMessageBox::critical(nullptr,
-                                      QObject::tr("UI 预览初始化失败"),
-                                      QObject::tr("无法写入隔离的预览主题：%1")
+                                      QObject::tr("UI preview initialization failed"),
+                                      QObject::tr("Could not write the isolated preview theme: %1")
                                           .arg(previewThemeError));
                 return 1;
             }
@@ -240,8 +273,8 @@ int main(int argc, char *argv[])
         const QString transientPassword = QUuid::createUuid().toString(QUuid::WithoutBraces);
         if (!credentialVault.initialize(transientPassword, &previewVaultError)) {
             QMessageBox::critical(nullptr,
-                                  QObject::tr("UI 预览初始化失败"),
-                                  QObject::tr("无法初始化隔离的内存保险库：%1")
+                                  QObject::tr("UI preview initialization failed"),
+                                  QObject::tr("Could not initialize the isolated in-memory vault: %1")
                                       .arg(previewVaultError));
             return 1;
         }
@@ -252,7 +285,7 @@ int main(int argc, char *argv[])
                              &vaultSettingError);
         if (!vaultSettingError.isEmpty()) {
             QMessageBox::critical(nullptr,
-                                  QObject::tr("读取设置失败"),
+                                  QObject::tr("Failed to read settings"),
                                   vaultSettingError);
             return 1;
         }
@@ -265,7 +298,7 @@ int main(int argc, char *argv[])
                 database.vaultConfiguration(&configurationError).has_value();
             if (!configurationError.isEmpty()) {
                 QMessageBox::critical(nullptr,
-                                      QObject::tr("保险箱配置损坏"),
+                                      QObject::tr("The vault configuration is corrupt"),
                                       configurationError);
                 return 1;
             }
@@ -285,7 +318,7 @@ int main(int argc, char *argv[])
 
     // 数据库与保险库服务都由 main() 持有，生命周期覆盖 MainWindow。显式注入保证主机树、
     // 最近连接和凭据解密共享同一份已迁移数据与同一把会话密钥。
-    MainWindow window(&database, &credentialVault);
+    MainWindow window(&database, &credentialVault, &localization);
     if (uiPreviewMode) {
         window.setWindowTitle(QObject::tr("Shellium · UI Preview"));
     }

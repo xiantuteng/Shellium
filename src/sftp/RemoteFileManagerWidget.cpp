@@ -91,16 +91,16 @@ int compareValues(const T &left, const T &right)
 QString formatDuration(const double seconds)
 {
     if (!std::isfinite(seconds) || seconds < 0.0) {
-        return QObject::tr("未知");
+        return QObject::tr("Unknown");
     }
     const qint64 total = qint64(seconds + 0.5);
     if (total < 60) {
-        return QObject::tr("%1 秒").arg(total);
+        return QObject::tr("%1 s").arg(total);
     }
     if (total < 3600) {
-        return QObject::tr("%1 分 %2 秒").arg(total / 60).arg(total % 60);
+        return QObject::tr("%1 min %2 s").arg(total / 60).arg(total % 60);
     }
-    return QObject::tr("%1 小时 %2 分").arg(total / 3600).arg((total % 3600) / 60);
+    return QObject::tr("%1 h %2 min").arg(total / 3600).arg((total % 3600) / 60);
 }
 
 /** @brief 把字节数格式化为适合文件列表展示的 IEC 单位。 */
@@ -617,19 +617,19 @@ void sortFileTreeItems(QTreeWidget *tree, const int column, const Qt::SortOrder 
 RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     : QWidget(parent)
     , m_targetCombo(new QComboBox(this))
-    , m_followInnermostCheck(new QCheckBox(tr("自动跟随最内层"), this))
-    , m_followTerminalCwdCheck(new QCheckBox(tr("跟随终端目录"), this))
+    , m_followInnermostCheck(new QCheckBox(tr("Follow the innermost layer automatically"), this))
+    , m_followTerminalCwdCheck(new QCheckBox(tr("Follow terminal directory"), this))
     , m_fullScreenButton(new QToolButton(this))
     , m_closeButton(new QToolButton(this))
     , m_localPathEdit(new SelectAllOnFocusLineEdit(QDir::homePath(), this))
     , m_localTree(new LocalDropTree(this))
     , m_pathEdit(new SelectAllOnFocusLineEdit(QStringLiteral("/"), this))
     , m_fileTree(new RemoteDropTree(this))
-    , m_statusLabel(new QLabel(tr("请选择终端服务器"), this))
+    , m_statusLabel(new QLabel(tr("Select a terminal server"), this))
     , m_progressBar(new QProgressBar(this))
     , m_cancelButton(new QToolButton(this))
     , m_pauseButton(new QToolButton(this))
-    , m_resumeTransfersCheck(new QCheckBox(tr("优先断点续传"), this))
+    , m_resumeTransfersCheck(new QCheckBox(tr("Prefer resumable transfer"), this))
     , m_transferQueueList(new QListWidget(this))
     , m_service(new SftpService(this))
 {
@@ -645,7 +645,7 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     auto *targetRowLayout = new QHBoxLayout(m_targetRow);
     targetRowLayout->setContentsMargins(14, 12, 14, 12);
     targetRowLayout->setSpacing(10);
-    auto *serverLabel = new QLabel(tr("服务器"), m_targetRow);
+    auto *serverLabel = new QLabel(tr("Server"), m_targetRow);
     serverLabel->setObjectName(QStringLiteral("SftpServerLabel"));
     UiIcons::modernizePopup(m_targetCombo);
     m_targetCombo->setObjectName(QStringLiteral("SftpTargetCombo"));
@@ -667,15 +667,15 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     m_fullScreenButton->setFixedSize(32, 32);
     m_fullScreenButton->setProperty("sftpFullScreenAction", true);
     m_fullScreenButton->setObjectName(QStringLiteral("SftpFullScreenButton"));
-    m_fullScreenButton->setToolTip(tr("全屏显示文件管理，并展开本地文件用于双栏对拷"));
-    m_fullScreenButton->setAccessibleName(tr("全屏"));
+    m_fullScreenButton->setToolTip(tr("Show the file manager full screen and expand local files for side-by-side copying"));
+    m_fullScreenButton->setAccessibleName(tr("Full screen"));
     m_closeButton->setAutoRaise(true);
     m_closeButton->setIconSize(QSize(18, 18));
     m_closeButton->setFixedSize(32, 32);
     m_closeButton->setProperty("sftpFullScreenAction", true);
     m_closeButton->setObjectName(QStringLiteral("SftpCloseButton"));
-    m_closeButton->setToolTip(tr("关闭远程文件管理，宽度全部还给终端"));
-    m_closeButton->setAccessibleName(tr("关闭"));
+    m_closeButton->setToolTip(tr("Close the remote file manager and give all the width back to the terminal"));
+    m_closeButton->setAccessibleName(tr("Close"));
     m_closeButton->setIcon(
         UiIcons::symbol(this, UiIcons::Symbol::Close, this->palette().color(QPalette::WindowText)));
     connect(m_closeButton, &QToolButton::clicked, this, &RemoteFileManagerWidget::closeRequested);
@@ -698,7 +698,7 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     auto *localPathRow = new QHBoxLayout(localToolbar);
     localPathRow->setContentsMargins(10, 8, 10, 8);
     localPathRow->setSpacing(6);
-    auto *localCaption = new QLabel(tr("本地文件"), localToolbar);
+    auto *localCaption = new QLabel(tr("Local files"), localToolbar);
     localCaption->setObjectName(QStringLiteral("SftpPaneLabel"));
     localCaption->setProperty("sectionCaption", true);
     auto *localUpButton = new QToolButton(localToolbar);
@@ -708,11 +708,11 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     configurePaneNavigationButton(
         localUpButton,
         UiIcons::symbol(this, UiIcons::Symbol::ArrowUp, this->palette().color(QPalette::WindowText)),
-        tr("返回本地父目录"));
+        tr("Go to the local parent directory"));
     configurePaneNavigationButton(
         localRefreshButton,
         UiIcons::symbol(this, UiIcons::Symbol::Refresh, this->palette().color(QPalette::WindowText)),
-        tr("刷新本地目录"));
+        tr("Refresh local directory"));
     m_localPathEdit->setObjectName(QStringLiteral("SftpLocalPathEdit"));
     localPathRow->addWidget(localCaption);
     localPathRow->addWidget(localUpButton);
@@ -728,7 +728,7 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     // 远程栏保持一致（名称/大小/修改时间/权限/所有者），排序比较逻辑因此可以共用
     // sortFileTreeItems，两栏也能逐列直接对照。
     m_localTree->setHeaderLabels(
-        {tr("名称"), tr("大小"), tr("修改时间"), tr("权限"), tr("所有者")});
+        {tr("Name"), tr("Size"), tr("Modified"), tr("Permissions"), tr("Owner")});
     m_localTree->setRootIsDecorated(false);
     m_localTree->setAlternatingRowColors(false);
     m_localTree->setUniformRowHeights(true);
@@ -772,7 +772,7 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     auto *pathRow = new QHBoxLayout(remoteToolbar);
     pathRow->setContentsMargins(10, 8, 10, 8);
     pathRow->setSpacing(6);
-    auto *remoteCaption = new QLabel(tr("远程文件"), remoteToolbar);
+    auto *remoteCaption = new QLabel(tr("Remote files"), remoteToolbar);
     remoteCaption->setObjectName(QStringLiteral("SftpPaneLabel"));
     remoteCaption->setProperty("sectionCaption", true);
     auto *upButton = new QToolButton(remoteToolbar);
@@ -782,16 +782,16 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     configurePaneNavigationButton(
         upButton,
         UiIcons::symbol(this, UiIcons::Symbol::ArrowUp, this->palette().color(QPalette::WindowText)),
-        tr("返回远程父目录"));
+        tr("Go to the remote parent directory"));
     configurePaneNavigationButton(
         refreshButton,
         UiIcons::symbol(this, UiIcons::Symbol::Refresh, this->palette().color(QPalette::WindowText)),
-        tr("刷新当前远程目录"));
+        tr("Refresh the current remote directory"));
     m_pathEdit->setObjectName(QStringLiteral("SftpRemotePathEdit"));
     m_followTerminalCwdCheck->setObjectName(QStringLiteral("SftpFollowTerminalCwdCheck"));
     m_followTerminalCwdCheck->setChecked(false);
     m_followTerminalCwdCheck->setToolTip(
-        tr("开启后，路径框会自动跳转到左侧终端当前所在的远端目录"));
+        tr("When enabled, the path box jumps automatically to the remote directory the left terminal is currently in"));
     pathRow->addWidget(remoteCaption);
     pathRow->addWidget(upButton);
     pathRow->addWidget(refreshButton);
@@ -803,7 +803,7 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     m_fileTree->setObjectName(QStringLiteral("RemoteFileTree"));
     m_fileTree->setColumnCount(5);
     m_fileTree->setHeaderLabels(
-        {tr("名称"), tr("大小"), tr("修改时间"), tr("权限"), tr("所有者")});
+        {tr("Name"), tr("Size"), tr("Modified"), tr("Permissions"), tr("Owner")});
     m_fileTree->setRootIsDecorated(false);
     m_fileTree->setAlternatingRowColors(false);
     m_fileTree->setUniformRowHeights(true);
@@ -830,10 +830,10 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     };
     const QList<int> defaultColumnWidths = {
         kRemoteNameColumnMinWidth,
-        columnWidthFor(QStringLiteral("1023.9 MiB"), tr("大小")),
-        columnWidthFor(QStringLiteral("2026-08-09 23:56:28"), tr("修改时间")),
-        columnWidthFor(QStringLiteral("drwxrwxrwt"), tr("权限")),
-        columnWidthFor(QStringLiteral("root"), tr("所有者")),
+        columnWidthFor(QStringLiteral("1023.9 MiB"), tr("Size")),
+        columnWidthFor(QStringLiteral("2026-08-09 23:56:28"), tr("Modified")),
+        columnWidthFor(QStringLiteral("drwxrwxrwt"), tr("Permissions")),
+        columnWidthFor(QStringLiteral("root"), tr("Owner")),
     };
     for (int column = 0; column < defaultColumnWidths.size(); ++column) {
         m_fileTree->setColumnWidth(column, defaultColumnWidths.at(column));
@@ -864,7 +864,7 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     connect(m_fullScreenButton, &QToolButton::toggled, this, [this](const bool fullScreen) {
         m_localPanel->setVisible(fullScreen);
         m_fullScreenButton->setToolTip(
-            fullScreen ? tr("退出全屏并收起本地文件") : tr("全屏显示文件管理，并展开本地文件用于双栏对拷"));
+            fullScreen ? tr("Exit full screen and collapse local files") : tr("Show the file manager full screen and expand local files for side-by-side copying"));
         updateFullScreenIcon();
         emit fullScreenChanged(fullScreen);
     });
@@ -889,7 +889,7 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     configureResponsiveFileAction(
         uploadButton,
         UiIcons::symbol(this, UiIcons::Symbol::Upload, this->palette().color(QPalette::WindowText)),
-        tr("上传"),
+        tr("Upload"),
         QStringLiteral("transfer"));
     // 文件与目录合成一个按钮。系统文件选择器无法在一次会话里同时接受文件和目录，因此按钮
     // 展开一个二选一菜单，而不是让用户在两个外观相近的图标之间猜。
@@ -897,10 +897,10 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     UiIcons::modernizePopup(uploadMenu);
     QAction *uploadFilesAction = uploadMenu->addAction(
         UiIcons::symbol(this, UiIcons::Symbol::Send, this->palette().color(QPalette::WindowText)),
-        tr("上传文件…"));
+        tr("Upload Files…"));
     QAction *uploadDirectoryAction = uploadMenu->addAction(
         UiIcons::symbol(this, UiIcons::Symbol::Folder, this->palette().color(QPalette::WindowText)),
-        tr("上传目录…"));
+        tr("Upload Directory…"));
     connect(uploadFilesAction, &QAction::triggered,
             this, &RemoteFileManagerWidget::uploadSelectedFile);
     connect(uploadDirectoryAction, &QAction::triggered,
@@ -910,38 +910,38 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     configureResponsiveFileAction(
         downloadButton,
         UiIcons::symbol(this, UiIcons::Symbol::Download, this->palette().color(QPalette::WindowText)),
-        tr("下载"),
+        tr("Download"),
         QStringLiteral("transfer"));
     configureResponsiveFileAction(
         previewButton,
         UiIcons::symbol(this, UiIcons::Symbol::Eye, this->palette().color(QPalette::WindowText)),
-        tr("预览"),
+        tr("Preview"),
         QStringLiteral("file"));
     configureResponsiveFileAction(
         chmodButton,
         UiIcons::symbol(this, UiIcons::Symbol::Info, this->palette().color(QPalette::WindowText)),
-        tr("权限"),
+        tr("Permissions"),
         QStringLiteral("file"));
     configureResponsiveFileAction(
         renameButton,
         UiIcons::symbol(this, UiIcons::Symbol::Edit, this->palette().color(QPalette::WindowText)),
-        tr("重命名"),
+        tr("Rename"),
         QStringLiteral("file"));
     configureResponsiveFileAction(
         deleteButton,
         UiIcons::symbol(this,
                         UiIcons::Symbol::Trash,
                         QColor(QStringLiteral("#d84a41"))),
-        tr("删除"),
+        tr("Delete"),
         QStringLiteral("danger"));
     configureCompactFileButton(
         m_pauseButton,
         UiIcons::symbol(this, UiIcons::Symbol::Pause, this->palette().color(QPalette::WindowText)),
-        tr("暂停或恢复当前传输"));
+        tr("Pause or resume the current transfer"));
     configureCompactFileButton(
         m_cancelButton,
         UiIcons::symbol(this, UiIcons::Symbol::Cancel, this->palette().color(QPalette::WindowText)),
-        tr("取消当前传输或选中的等待任务"));
+        tr("Cancel the current transfer or the selected waiting task"));
     m_pauseButton->setObjectName(QStringLiteral("SftpPauseButton"));
     m_cancelButton->setObjectName(QStringLiteral("SftpCancelButton"));
     m_cancelButton->setEnabled(false);
@@ -950,10 +950,9 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     m_pauseButton->setVisible(false);
     m_resumeTransfersCheck->setChecked(true);
     m_resumeTransfersCheck->setObjectName(QStringLiteral("SftpResumeCheck"));
-    m_resumeTransfersCheck->setText(tr("断点续传"));
+    m_resumeTransfersCheck->setText(tr("Resumable transfer"));
     m_resumeTransfersCheck->setToolTip(
-        tr("开启时：内容确实一致的文件跳过不传，中断留下的残片经校验后继续；\n"
-           "关闭时：无论内容是否相同，一律完整重传。"));
+        tr("On: files whose content is truly identical are skipped, and partial fragments left by an interruption continue after verification;\nOff: everything is re-uploaded in full regardless of whether content matches."));
     // 操作行按"传输""文件操作""传输控制"三组用竖线隔开，从左到右符合从常用到不常用
     // 的操作频率，用户不用逐个图标猜边界。
     operationRow->addWidget(uploadButton);
@@ -1008,7 +1007,7 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     m_transferQueueList->setSelectionMode(QAbstractItemView::SingleSelection);
     m_transferQueueList->setContextMenuPolicy(Qt::CustomContextMenu);
     m_transferQueueList->setToolTip(
-        tr("传输严格按顺序执行；选择等待项后点击“取消选中”可直接移除。"));
+        tr("Transfers run strictly in order; select a waiting item and click 'Deselect' to remove it directly."));
     transferLayout->addWidget(m_transferQueueList);
     m_transferPanel->setVisible(false);
     mainLayout->addWidget(m_transferPanel);
@@ -1046,13 +1045,13 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
                     if (item->data(0, Qt::UserRole + 1).toBool()) {
                         QAction *openAction = menu.addAction(
                             UiIcons::symbol(this, UiIcons::Symbol::Folder, this->palette().color(QPalette::WindowText)),
-                            tr("打开目录"));
+                            tr("Open directory"));
                         connect(openAction, &QAction::triggered,
                                 this, [this, localPath]() { setLocalDirectory(localPath); });
                     }
                     QAction *uploadAction = menu.addAction(
                         UiIcons::symbol(this, UiIcons::Symbol::Send, this->palette().color(QPalette::WindowText)),
-                        tr("上传到当前远程目录"));
+                        tr("Upload to the current remote directory"));
                     connect(uploadAction, &QAction::triggered, this, [this, localPath]() {
                         uploadLocalPaths(selectedTarget(), {localPath}, m_pathEdit->text().trimmed());
                     });
@@ -1060,7 +1059,7 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
                 }
                 QAction *refreshAction = menu.addAction(
                     UiIcons::symbol(this, UiIcons::Symbol::Refresh, this->palette().color(QPalette::WindowText)),
-                    tr("刷新本地目录"));
+                    tr("Refresh local directory"));
                 connect(refreshAction, &QAction::triggered, this, [this]() {
                     setLocalDirectory(m_localPathEdit->text().trimmed());
                 });
@@ -1126,10 +1125,10 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
                 UiIcons::modernizePopup(&menu);
                 QAction *uploadFileAction = menu.addAction(
                     UiIcons::symbol(this, UiIcons::Symbol::Send, this->palette().color(QPalette::WindowText)),
-                    tr("上传文件到当前目录"));
+                    tr("Upload files to the current directory"));
                 QAction *uploadDirectoryAction = menu.addAction(
                     UiIcons::symbol(this, UiIcons::Symbol::Upload, this->palette().color(QPalette::WindowText)),
-                    tr("上传目录到当前目录"));
+                    tr("Upload a directory to the current directory"));
                 connect(uploadFileAction,
                         &QAction::triggered,
                         this,
@@ -1142,19 +1141,19 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
                     menu.addSeparator();
                     QAction *downloadAction = menu.addAction(
                         UiIcons::symbol(this, UiIcons::Symbol::Download, this->palette().color(QPalette::WindowText)),
-                        tr("下载"));
+                        tr("Download"));
                     QAction *previewAction = menu.addAction(
                         UiIcons::symbol(this, UiIcons::Symbol::Eye, this->palette().color(QPalette::WindowText)),
-                        tr("预览"));
+                        tr("Preview"));
                     QAction *chmodAction = menu.addAction(
                         UiIcons::symbol(this, UiIcons::Symbol::Info, this->palette().color(QPalette::WindowText)),
-                        tr("修改权限"));
+                        tr("Change permissions"));
                     QAction *renameAction = menu.addAction(
                         UiIcons::symbol(this, UiIcons::Symbol::Edit, this->palette().color(QPalette::WindowText)),
-                        tr("重命名"));
+                        tr("Rename"));
                     QAction *deleteAction = menu.addAction(
                         UiIcons::symbol(this, UiIcons::Symbol::Trash, this->palette().color(QPalette::WindowText)),
-                        tr("删除"));
+                        tr("Delete"));
                     connect(downloadAction, &QAction::triggered,
                             this, &RemoteFileManagerWidget::downloadSelectedFile);
                     connect(previewAction, &QAction::triggered,
@@ -1169,7 +1168,7 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
                 menu.addSeparator();
                 QAction *refreshAction = menu.addAction(
                     UiIcons::symbol(this, UiIcons::Symbol::Refresh, this->palette().color(QPalette::WindowText)),
-                    tr("刷新远程目录"));
+                    tr("Refresh remote directory"));
                 connect(refreshAction, &QAction::triggered,
                         this, &RemoteFileManagerWidget::refreshDirectory);
                 menu.exec(m_fileTree->viewport()->mapToGlobal(position));
@@ -1203,7 +1202,7 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
                 if (m_activeQueuedTransfer.has_value()) {
                     QAction *pauseAction = menu.addAction(
                         UiIcons::symbol(this, UiIcons::Symbol::Pause, this->palette().color(QPalette::WindowText)),
-                        m_activeTransferPaused ? tr("继续当前传输") : tr("暂停当前传输"));
+                        m_activeTransferPaused ? tr("Continue the current transfer") : tr("Pause the current transfer"));
                     connect(pauseAction,
                             &QAction::triggered,
                             this,
@@ -1211,7 +1210,7 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
                 }
                 QAction *cancelAction = menu.addAction(
                     UiIcons::symbol(this, UiIcons::Symbol::Cancel, this->palette().color(QPalette::WindowText)),
-                    tr("取消选中任务"));
+                    tr("Deselect task"));
                 connect(cancelAction,
                         &QAction::triggered,
                         this,
@@ -1276,7 +1275,7 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
                 // 记住这台服务器的当前位置：下次切回来时应当回到这里，而不是沿用别处的路径。
                 m_pathByTarget.insert(target.stableKey(), path);
                 m_directoryDisconnectRetries.remove(target.stableKey());
-                setBusy(false, tr("%1 个条目").arg(entries.size()));
+                setBusy(false, tr("%1 items").arg(entries.size()));
             });
     connect(m_service,
             &SftpService::operationSucceeded,
@@ -1296,9 +1295,8 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
                 m_hostKeyDialogOpen = true;
                 const QMessageBox::StandardButton answer = QMessageBox::question(
                     this,
-                    tr("确认服务器主机密钥"),
-                    tr("首次连接 %1。\n\nSHA-256 指纹：\n%2\n\n"
-                       "请通过可信渠道核对指纹。确认信任并写入 known_hosts 吗？")
+                    tr("Confirm the server host key"),
+                    tr("Connecting to %1 for the first time.\n\nSHA-256 fingerprint:\n%2\n\nVerify the fingerprint through a trusted channel. Trust it and write it to known_hosts?")
                         .arg(target.connectionSpecifier(true), fingerprint),
                     QMessageBox::Yes | QMessageBox::No,
                     QMessageBox::No);
@@ -1320,12 +1318,8 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
                 // 已登录终端就假定后台连接拿到的一定是同一台服务器。
                 const QMessageBox::StandardButton answer = QMessageBox::warning(
                     this,
-                    tr("服务器主机密钥已变更"),
-                    tr("%1 返回的主机密钥与本机记录不一致。\n\n"
-                       "新 SHA-256 指纹：\n%2\n\n"
-                       "这可能是服务器重装或密钥轮换，也可能是中间人攻击。请先通过可信渠道"
-                       "核对新指纹。\n\n"
-                       "确认密钥确已变更，并替换 known_hosts 中的旧记录吗？")
+                    tr("The server host key has changed"),
+                    tr("The host key returned by %1 does not match the local record.\n\nNew SHA-256 fingerprint:\n%2\n\nThis may be a server reinstall or key rotation, or a man-in-the-middle attack. Verify the new fingerprint through a trusted channel first.\n\nConfirm the key has changed and replace the old record in known_hosts?")
                         .arg(target.connectionSpecifier(true), fingerprint),
                     QMessageBox::Yes | QMessageBox::No,
                     QMessageBox::No);
@@ -1365,7 +1359,7 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
                     return;
                 }
                 // 字节进度条无法区分"一个大文件"和"几千个小文件"，条目计数补上这层信息。
-                const QString message = tr("正在传输 %1/%2：%3")
+                const QString message = tr("Transferring %1/%2: %3")
                                             .arg(filesCompleted + 1)
                                             .arg(filesTotal)
                                             .arg(currentItem);
@@ -1399,15 +1393,15 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
 
                 QMessageBox box(this);
                 box.setIcon(QMessageBox::Question);
-                box.setWindowTitle(tr("远端已存在同名条目"));
+                box.setWindowTitle(tr("An item with the same name already exists on the remote"));
                 if (!isDirectory) {
                     // 同名的普通文件挡住了目录位置，"合并"无从谈起，只能替换或放弃。
-                    box.setText(tr("远端已存在同名文件：\n%1").arg(upload.remoteRoot));
+                    box.setText(tr("A file with the same name already exists on the remote:\n%1").arg(upload.remoteRoot));
                     box.setInformativeText(
-                        tr("要上传目录就必须先删除这个文件。是否替换？"));
+                        tr("To upload a directory, this file must be deleted first. Replace it?"));
                     QPushButton *replaceButton =
-                        box.addButton(tr("替换"), QMessageBox::DestructiveRole);
-                    box.addButton(tr("取消"), QMessageBox::RejectRole);
+                        box.addButton(tr("Replace"), QMessageBox::DestructiveRole);
+                    box.addButton(tr("Cancel"), QMessageBox::RejectRole);
                     box.setDefaultButton(replaceButton);
                     box.exec();
                     if (box.clickedButton() == replaceButton) {
@@ -1417,18 +1411,15 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
                     return;
                 }
 
-                box.setText(tr("远端已存在同名目录：\n%1").arg(upload.remoteRoot));
+                box.setText(tr("A directory with the same name already exists on the remote:\n%1").arg(upload.remoteRoot));
                 // 两种语义的差别事后无法补救，必须在这里说清楚，而不是让用户凭按钮名去猜。
                 box.setInformativeText(
-                    tr("合并更新：逐个文件比对内容，只重传确实有变化的文件；远端多出来的"
-                       "文件会保留。\n\n"
-                       "替换：先删除远端整个目录再完整上传，结果与本地严格一致；远端多出来"
-                       "的文件会被永久删除。"));
+                    tr("Merge update: compares content file by file and re-uploads only the files that actually changed; extra files on the remote are kept.\n\nReplace: deletes the entire remote directory and uploads everything again so the result exactly matches local; extra files on the remote are permanently deleted."));
                 QPushButton *mergeButton =
-                    box.addButton(tr("合并更新"), QMessageBox::AcceptRole);
+                    box.addButton(tr("Merge update"), QMessageBox::AcceptRole);
                 QPushButton *replaceButton =
-                    box.addButton(tr("替换"), QMessageBox::DestructiveRole);
-                box.addButton(tr("取消"), QMessageBox::RejectRole);
+                    box.addButton(tr("Replace"), QMessageBox::DestructiveRole);
+                box.addButton(tr("Cancel"), QMessageBox::RejectRole);
                 box.setDefaultButton(
                     m_lastDirectoryConflictChoice == SftpTransfer::DirectoryConflictPolicy::Replace
                         ? replaceButton
@@ -1457,16 +1448,16 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
                     // 用户已经切换服务器时不弹出旧请求内容，避免把 A 服务器文件误认为 B。
                     return;
                 }
-                setBusy(false, tr("已读取 %1 的安全预览").arg(remotePath));
+                setBusy(false, tr("Loaded the safe preview of %1").arg(remotePath));
 
                 auto *dialog = new QDialog(this);
                 dialog->setAttribute(Qt::WA_DeleteOnClose);
-                dialog->setWindowTitle(tr("安全预览 · %1").arg(remotePath));
+                dialog->setWindowTitle(tr("Safe preview · %1").arg(remotePath));
                 dialog->resize(760, 560);
                 auto *layout = new QVBoxLayout(dialog);
                 if (truncated) {
                     auto *notice = new QLabel(
-                        tr("仅显示前 %1，文件内容已截断。")
+                        tr("Showing only the first %1; the file content is truncated.")
                             .arg(formatSize(static_cast<quint64>(data.size()))),
                         dialog);
                     notice->setWordWrap(true);
@@ -1497,7 +1488,7 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
                     layout->addWidget(textView, 1);
                 } else {
                     auto *unsupported = new QLabel(
-                        tr("该文件不是受支持的文本或安全栅格图片，未展示二进制内容。\nMIME：%1")
+                        tr("This file is not a supported text file or safe raster image; binary content is not shown.\nMIME: %1")
                             .arg(mimeType),
                         dialog);
                     unsupported->setWordWrap(true);
@@ -1649,14 +1640,14 @@ void RemoteFileManagerWidget::updateTransferProgressText(const quint64 completed
         m_lastSpeedSampleBytes = completed;
     }
 
-    QString text = tr("已传输 %1").arg(formatSize(completed));
+    QString text = tr("Transferred %1").arg(formatSize(completed));
     if (m_smoothedBytesPerSecond > 0.0) {
         text += tr(" · %1/s").arg(formatSize(quint64(m_smoothedBytesPerSecond)));
         if (total > completed) {
             const double remainingSeconds =
                 double(total - completed) / m_smoothedBytesPerSecond;
             // 剩余时间只在能算得出时给出，避免总量未知时显示一个凭空的数字。
-            text += tr(" · 剩余 %1").arg(formatDuration(remainingSeconds));
+            text += tr(" · %1 left").arg(formatDuration(remainingSeconds));
         }
     }
     m_transferDetailLabel->setText(text);
@@ -1707,8 +1698,8 @@ void RemoteFileManagerWidget::setAvailableTargets(const QList<ConnectionTarget> 
         // 是不可撤销的。
         m_targetCombo->addItem(
             target.confidence == ConnectionTarget::Confidence::Inferred
-                ? tr("第 %1 层 · ⚠ 推测 · %2").arg(index + 1).arg(label)
-                : tr("第 %1 层 · %2").arg(index + 1).arg(label));
+                ? tr("Layer %1 · ⚠ inferred · %2").arg(index + 1).arg(label)
+                : tr("Layer %1 · %2").arg(index + 1).arg(label));
     }
 
     QStringList stableKeys;
@@ -1735,7 +1726,7 @@ void RemoteFileManagerWidget::setAvailableTargets(const QList<ConnectionTarget> 
         refreshDirectory();
     } else {
         m_fileTree->clear();
-        m_statusLabel->setText(tr("当前终端尚未连接服务器"));
+        m_statusLabel->setText(tr("The current terminal is not connected to a server yet"));
     }
 }
 
@@ -1744,15 +1735,15 @@ void RemoteFileManagerWidget::setLocalDirectory(const QString &directory)
     const QFileInfo directoryInfo(QDir::cleanPath(directory));
     if (!directoryInfo.exists() || !directoryInfo.isDir()) {
         QMessageBox::warning(this,
-                             tr("本地路径无效"),
-                             tr("本地目录不存在或不可访问：\n%1").arg(directory));
+                             tr("Invalid local path"),
+                             tr("The local directory does not exist or is not accessible:\n%1").arg(directory));
         return;
     }
     const QDir directoryToList(directoryInfo.absoluteFilePath());
     if (!directoryToList.isReadable()) {
         QMessageBox::warning(this,
-                             tr("无法浏览本地目录"),
-                             tr("没有权限读取该目录：\n%1").arg(directoryToList.absolutePath()));
+                             tr("Could not browse the local directory"),
+                             tr("No permission to read this directory:\n%1").arg(directoryToList.absolutePath()));
         return;
     }
 
@@ -1814,12 +1805,12 @@ void RemoteFileManagerWidget::startNextQueuedTransfer()
     m_activeQueuedTransfer = m_pendingTransfers.takeFirst();
     const QueuedTransfer &transfer = *m_activeQueuedTransfer;
     m_activeTransferPaused = false;
-    m_pauseButton->setText(tr("暂停"));
-    m_pauseButton->setToolTip(tr("暂停当前传输"));
-    m_pauseButton->setAccessibleName(tr("暂停当前传输"));
+    m_pauseButton->setText(tr("Pause"));
+    m_pauseButton->setToolTip(tr("Pause the current transfer"));
+    m_pauseButton->setAccessibleName(tr("Pause the current transfer"));
     m_pauseButton->setIcon(
         UiIcons::symbol(this, UiIcons::Symbol::Pause, this->palette().color(QPalette::WindowText)));
-    setBusy(true, tr("正在执行：%1").arg(transfer.description));
+    setBusy(true, tr("Running: %1").arg(transfer.description));
     // 每个传输独立计速：沿用上一次的样本会让新任务开头显示出前一个任务的速度。
     resetTransferSpeed();
 
@@ -1861,9 +1852,9 @@ void RemoteFileManagerWidget::finishQueuedTransfer(const quint64 requestId)
     m_activeTransferRequest = 0;
     m_activeQueuedTransfer.reset();
     m_activeTransferPaused = false;
-    m_pauseButton->setText(tr("暂停"));
-    m_pauseButton->setToolTip(tr("暂停当前传输"));
-    m_pauseButton->setAccessibleName(tr("暂停当前传输"));
+    m_pauseButton->setText(tr("Pause"));
+    m_pauseButton->setToolTip(tr("Pause the current transfer"));
+    m_pauseButton->setAccessibleName(tr("Pause the current transfer"));
     m_pauseButton->setIcon(
         UiIcons::symbol(this, UiIcons::Symbol::Pause, this->palette().color(QPalette::WindowText)));
     rebuildTransferQueueView();
@@ -1914,13 +1905,13 @@ void RemoteFileManagerWidget::rebuildTransferQueueView()
     };
     if (m_activeQueuedTransfer.has_value()) {
         appendItem(*m_activeQueuedTransfer,
-                   m_activeTransferPaused ? tr("已暂停") : tr("进行中"),
+                   m_activeTransferPaused ? tr("Paused") : tr("In progress"),
                    m_activeTransferPaused ? QStringLiteral("paused")
                                           : QStringLiteral("active"));
     }
     for (const QueuedTransfer &transfer : std::as_const(m_pendingTransfers)) {
         appendItem(transfer,
-                   tr("等待"),
+                   tr("Waiting"),
                    QStringLiteral("queued"));
     }
 
@@ -1942,13 +1933,13 @@ void RemoteFileManagerWidget::uploadLocalPaths(const ConnectionTarget &target,
                                                const QString &remoteDirectory)
 {
     if (!target.isValid()) {
-        QMessageBox::information(this, tr("尚未连接"), tr("请先连接并选择一台远程服务器。"));
+        QMessageBox::information(this, tr("Not connected yet"), tr("Connect to and select a remote server first."));
         return;
     }
     if (remoteDirectory.isEmpty() || !remoteDirectory.startsWith(QLatin1Char('/'))) {
         QMessageBox::warning(this,
-                             tr("远程路径未知"),
-                             tr("请先进入一个远程目录，再拖入本地文件。"));
+                             tr("Remote path unknown"),
+                             tr("Enter a remote directory first, then drop local files."));
         return;
     }
 
@@ -1966,8 +1957,8 @@ void RemoteFileManagerWidget::uploadLocalPaths(const ConnectionTarget &target,
     }
     if (acceptedEntries.isEmpty()) {
         QMessageBox::information(this,
-                                 tr("没有可上传条目"),
-                                 tr("拖入的条目不存在、不可读取或是不会跟随的符号链接。"));
+                                 tr("Nothing to upload"),
+                                 tr("The dropped item does not exist, cannot be read, or is a symlink that is not followed."));
         return;
     }
 
@@ -1985,13 +1976,13 @@ void RemoteFileManagerWidget::uploadLocalPaths(const ConnectionTarget &target,
         transfer.sourcePath = info.absoluteFilePath();
         transfer.destinationPath = joinRemotePath(remoteDirectory, info.fileName());
         transfer.policy = policy;
-        transfer.description = tr("上传 %1 → %2")
+        transfer.description = tr("Upload %1 → %2")
                                    .arg(info.fileName(), remoteDirectory);
         enqueueTransfer(std::move(transfer));
         ++queuedNow;
     }
     if (queuedNow > 0) {
-        emit statusMessage(tr("已将 %1 个本地文件加入传输队列").arg(queuedNow));
+        emit statusMessage(tr("Added %1 local files to the transfer queue").arg(queuedNow));
     }
 }
 
@@ -2023,12 +2014,12 @@ void RemoteFileManagerWidget::enqueueDirectoryUpload(
     transfer.policy = pending.policy;
     transfer.conflictPolicy = conflictPolicy;
     transfer.description = conflictPolicy == SftpTransfer::DirectoryConflictPolicy::Replace
-        ? tr("替换上传 %1 → %2").arg(QDir(pending.localDirectory).dirName(),
+        ? tr("Replace upload %1 → %2").arg(QDir(pending.localDirectory).dirName(),
                                      pending.remoteParentDirectory)
-        : tr("上传 %1 → %2").arg(QDir(pending.localDirectory).dirName(),
+        : tr("Upload %1 → %2").arg(QDir(pending.localDirectory).dirName(),
                                  pending.remoteParentDirectory);
     enqueueTransfer(std::move(transfer));
-    emit statusMessage(tr("已将目录 %1 加入传输队列").arg(pending.remoteRoot));
+    emit statusMessage(tr("Added directory %1 to the transfer queue").arg(pending.remoteRoot));
 }
 
 void RemoteFileManagerWidget::downloadRemoteEntryToDirectory(
@@ -2038,8 +2029,8 @@ void RemoteFileManagerWidget::downloadRemoteEntryToDirectory(
     const QFileInfo destinationInfo(localDirectory);
     if (!destinationInfo.exists() || !destinationInfo.isDir()) {
         QMessageBox::warning(this,
-                             tr("本地路径无效"),
-                             tr("下载目标不是可访问目录：\n%1").arg(localDirectory));
+                             tr("Invalid local path"),
+                             tr("The download target is not an accessible directory:\n%1").arg(localDirectory));
         return;
     }
     if (entry.path.isEmpty() || entry.name.isEmpty()) {
@@ -2056,7 +2047,7 @@ void RemoteFileManagerWidget::downloadRemoteEntryToDirectory(
         ? destinationInfo.absoluteFilePath()
         : QDir(destinationInfo.absoluteFilePath()).filePath(entry.name);
     transfer.policy = selectedTransferPolicy();
-    transfer.description = tr("下载 %1 → %2")
+    transfer.description = tr("Download %1 → %2")
                                .arg(entry.name, destinationInfo.absoluteFilePath());
     enqueueTransfer(std::move(transfer));
 }
@@ -2102,12 +2093,12 @@ void RemoteFileManagerWidget::refreshDirectory()
     }
     const QString path = m_pathEdit->text().trimmed();
     if (!path.isEmpty() && !path.startsWith(QLatin1Char('/'))) {
-        QMessageBox::warning(this, tr("路径无效"), tr("请输入以 / 开头的远程绝对路径。"));
+        QMessageBox::warning(this, tr("Invalid path"), tr("Enter a remote absolute path starting with /."));
         return;
     }
 
     // 空路径交给服务端解析成该账号的主目录；解析结果会由 directoryListed 带回来。
-    setBusy(true, path.isEmpty() ? tr("正在读取主目录…") : tr("正在读取 %1…").arg(path));
+    setBusy(true, path.isEmpty() ? tr("Reading home directory…") : tr("Reading %1…").arg(path));
     m_latestListRequest = m_service->listDirectory(target, path);
 }
 
@@ -2129,7 +2120,7 @@ void RemoteFileManagerWidget::activateItem(QTreeWidgetItem *item, const int colu
 void RemoteFileManagerWidget::uploadSelectedFile()
 {
     const QStringList localPaths = QFileDialog::getOpenFileNames(
-        this, tr("选择要上传的一个或多个文件"), m_localPathEdit->text().trimmed());
+        this, tr("Select one or more files to upload"), m_localPathEdit->text().trimmed());
     if (localPaths.isEmpty()) {
         return;
     }
@@ -2141,14 +2132,14 @@ void RemoteFileManagerWidget::requestUploadToCurrentDirectory()
     // 从终端右键进入时文件管理面板可能处于隐藏或尚未加载路径的状态。必须在弹出本地文件
     // 选择器之前验证目标，避免用户选完文件后才得知没有可上传的服务器或目录。
     if (!selectedTarget().isValid()) {
-        QMessageBox::information(this, tr("尚未连接"), tr("请先连接并选择一台远程服务器。"));
+        QMessageBox::information(this, tr("Not connected yet"), tr("Connect to and select a remote server first."));
         return;
     }
     const QString remoteDirectory = m_pathEdit->text().trimmed();
     if (remoteDirectory.isEmpty() || !remoteDirectory.startsWith(QLatin1Char('/'))) {
         QMessageBox::warning(this,
-                             tr("远程路径未知"),
-                             tr("请先在远程文件管理器中进入一个目录，再从终端发起上传。"));
+                             tr("Remote path unknown"),
+                             tr("Enter a directory in the remote file manager first, then start the upload from the terminal."));
         return;
     }
 
@@ -2169,14 +2160,14 @@ void RemoteFileManagerWidget::uploadFilesToDirectory(const ConnectionTarget &tar
 void RemoteFileManagerWidget::uploadSelectedDirectory()
 {
     const QString localDirectory = QFileDialog::getExistingDirectory(
-        this, tr("选择要上传的目录"), m_localPathEdit->text().trimmed());
+        this, tr("Select a directory to upload"), m_localPathEdit->text().trimmed());
     if (localDirectory.isEmpty()) {
         return;
     }
     const QString remoteParent = m_pathEdit->text().trimmed();
     if (remoteParent.isEmpty()) {
-        QMessageBox::warning(this, tr("路径未知"),
-                             tr("请先进入一个远程目录，再上传本地目录。"));
+        QMessageBox::warning(this, tr("Path unknown"),
+                             tr("Enter a remote directory first, then upload the local directory."));
         return;
     }
 
@@ -2187,9 +2178,8 @@ void RemoteFileManagerWidget::uploadSelectedDirectory()
         : remoteParent + QLatin1Char('/') + QDir(localDirectory).dirName();
     const QMessageBox::StandardButton choice = QMessageBox::question(
         this,
-        tr("确认上传目录"),
-        tr("将递归上传本地目录：\n%1\n\n到远程位置：\n%2\n\n"
-           "远端若已存在同名目录，下一步会让你选择合并更新还是替换。是否继续？")
+        tr("Confirm directory upload"),
+        tr("The local directory will be uploaded recursively:\n%1\n\nto the remote location:\n%2\n\nIf a directory with the same name already exists on the remote, the next step lets you choose merge update or replace. Continue?")
             .arg(QDir::toNativeSeparators(localDirectory), remoteRoot),
         QMessageBox::Yes | QMessageBox::No,
         QMessageBox::No);
@@ -2203,11 +2193,11 @@ void RemoteFileManagerWidget::downloadSelectedFile()
 {
     const QList<RemoteFileInfo> entries = selectedFiles();
     if (entries.isEmpty()) {
-        QMessageBox::information(this, tr("请选择条目"), tr("请选择一个要下载的远程文件或目录。"));
+        QMessageBox::information(this, tr("Select an item"), tr("Select a remote file or directory to download."));
         return;
     }
     const QString localParent = QFileDialog::getExistingDirectory(
-        this, tr("选择批量下载的本地目录"), m_localPathEdit->text().trimmed());
+        this, tr("Choose the local directory for bulk download"), m_localPathEdit->text().trimmed());
     if (localParent.isEmpty()) {
         return;
     }
@@ -2231,7 +2221,7 @@ void RemoteFileManagerWidget::cancelActiveTransfer()
                 const QString description = iterator->description;
                 m_pendingTransfers.erase(iterator);
                 rebuildTransferQueueView();
-                const QString message = tr("已取消等待项：%1").arg(description);
+                const QString message = tr("Waiting item cancelled: %1").arg(description);
                 m_statusLabel->setText(message);
                 emit statusMessage(message);
                 return;
@@ -2245,7 +2235,7 @@ void RemoteFileManagerWidget::cancelActiveTransfer()
     m_service->cancelRequest(m_activeTransferRequest);
     // 后台任务要跑到下一个分块边界才会停，先把按钮禁掉避免用户反复点击并以为没生效。
     m_cancelButton->setEnabled(false);
-    const QString message = tr("已请求取消传输，正在收尾…");
+    const QString message = tr("Transfer cancellation requested; finishing up…");
     m_statusLabel->setText(message);
     emit statusMessage(message);
 }
@@ -2258,20 +2248,20 @@ void RemoteFileManagerWidget::toggleActiveTransferPause()
     m_activeTransferPaused = !m_activeTransferPaused;
     if (m_activeTransferPaused) {
         m_service->pauseRequest(m_activeTransferRequest);
-        m_pauseButton->setText(tr("恢复"));
-        m_pauseButton->setToolTip(tr("恢复当前传输"));
-        m_pauseButton->setAccessibleName(tr("恢复当前传输"));
+        m_pauseButton->setText(tr("Resume"));
+        m_pauseButton->setToolTip(tr("Resume the current transfer"));
+        m_pauseButton->setAccessibleName(tr("Resume the current transfer"));
         m_pauseButton->setIcon(
             UiIcons::symbol(this, UiIcons::Symbol::Play, this->palette().color(QPalette::WindowText)));
-        emit statusMessage(tr("传输将在下一个 64 KiB 分块边界暂停"));
+        emit statusMessage(tr("The transfer will pause at the next 64 KiB chunk boundary"));
     } else {
         m_service->resumeRequest(m_activeTransferRequest);
-        m_pauseButton->setText(tr("暂停"));
-        m_pauseButton->setToolTip(tr("暂停当前传输"));
-        m_pauseButton->setAccessibleName(tr("暂停当前传输"));
+        m_pauseButton->setText(tr("Pause"));
+        m_pauseButton->setToolTip(tr("Pause the current transfer"));
+        m_pauseButton->setAccessibleName(tr("Pause the current transfer"));
         m_pauseButton->setIcon(
             UiIcons::symbol(this, UiIcons::Symbol::Pause, this->palette().color(QPalette::WindowText)));
-        emit statusMessage(tr("传输已恢复"));
+        emit statusMessage(tr("Transfer resumed"));
     }
     rebuildTransferQueueView();
 }
@@ -2281,11 +2271,11 @@ void RemoteFileManagerWidget::previewSelectedFile()
     const std::optional<RemoteFileInfo> entry = selectedFile();
     if (!entry.has_value() || entry->isDirectory || entry->isSymbolicLink) {
         QMessageBox::information(this,
-                                 tr("无法预览"),
-                                 tr("请选择一个普通远程文件；目录和符号链接不进入安全预览。"));
+                                 tr("Cannot preview"),
+                                 tr("Select a regular remote file; directories and symlinks are not opened in the safe preview."));
         return;
     }
-    setBusy(true, tr("正在安全读取 %1 的预览…").arg(entry->name));
+    setBusy(true, tr("Safely reading the preview of %1…").arg(entry->name));
     m_service->previewFile(selectedTarget(),
                            entry->path,
                            SftpTransfer::MaximumPreviewBytes);
@@ -2295,15 +2285,15 @@ void RemoteFileManagerWidget::chmodSelectedPath()
 {
     const std::optional<RemoteFileInfo> entry = selectedFile();
     if (!entry.has_value()) {
-        QMessageBox::information(this, tr("请选择条目"), tr("请选择要修改权限的文件或目录。"));
+        QMessageBox::information(this, tr("Select an item"), tr("Select a file or directory to change permissions for."));
         return;
     }
     bool accepted = false;
     const QString initial = formatPermissions(entry->permissions);
     const QString input = QInputDialog::getText(
         this,
-        tr("修改远程权限"),
-        tr("请输入三位或四位八进制权限（例如 0644、0755）："),
+        tr("Change remote permissions"),
+        tr("Enter three or four octal permission digits (e.g. 0644, 0755):"),
         QLineEdit::Normal,
         initial,
         &accepted).trimmed();
@@ -2313,17 +2303,17 @@ void RemoteFileManagerWidget::chmodSelectedPath()
     static const QRegularExpression octalPattern(QStringLiteral("^[0-7]{3,4}$"));
     if (!octalPattern.match(input).hasMatch()) {
         QMessageBox::warning(this,
-                             tr("权限格式无效"),
-                             tr("权限只能包含 0 到 7，长度必须为三位或四位。"));
+                             tr("Invalid permission format"),
+                             tr("Permissions may contain only 0 to 7 and must be three or four digits long."));
         return;
     }
     bool converted = false;
     const quint32 permissions = input.toUInt(&converted, 8);
     if (!converted || permissions > 07777U) {
-        QMessageBox::warning(this, tr("权限格式无效"), tr("权限值超出 POSIX 允许范围。"));
+        QMessageBox::warning(this, tr("Invalid permission format"), tr("The permission value is outside the range allowed by POSIX."));
         return;
     }
-    setBusy(true, tr("正在修改 %1 的权限…").arg(entry->name));
+    setBusy(true, tr("Changing permissions of %1…").arg(entry->name));
     m_service->chmodPath(selectedTarget(), entry->path, permissions);
 }
 
@@ -2331,13 +2321,13 @@ void RemoteFileManagerWidget::renameSelectedPath()
 {
     const std::optional<RemoteFileInfo> entry = selectedFile();
     if (!entry.has_value()) {
-        QMessageBox::information(this, tr("请选择条目"), tr("请选择要重命名的文件或目录。"));
+        QMessageBox::information(this, tr("Select an item"), tr("Select a file or directory to rename."));
         return;
     }
     bool accepted = false;
     const QString newName = QInputDialog::getText(this,
-                                                   tr("重命名"),
-                                                   tr("新名称："),
+                                                   tr("Rename"),
+                                                   tr("New name:"),
                                                    QLineEdit::Normal,
                                                    entry->name,
                                                    &accepted).trimmed();
@@ -2345,11 +2335,11 @@ void RemoteFileManagerWidget::renameSelectedPath()
         return;
     }
     if (newName.contains(QLatin1Char('/'))) {
-        QMessageBox::warning(this, tr("名称无效"), tr("名称中不能包含路径分隔符 /。"));
+        QMessageBox::warning(this, tr("Invalid name"), tr("The name cannot contain the path separator /."));
         return;
     }
     const QString newPath = joinRemotePath(m_pathEdit->text(), newName);
-    setBusy(true, tr("正在重命名…"));
+    setBusy(true, tr("Renaming…"));
     m_service->renamePath(selectedTarget(), entry->path, newPath);
 }
 
@@ -2357,30 +2347,29 @@ void RemoteFileManagerWidget::deleteSelectedPath()
 {
     const std::optional<RemoteFileInfo> entry = selectedFile();
     if (!entry.has_value()) {
-        QMessageBox::information(this, tr("请选择条目"), tr("请选择要删除的文件或空目录。"));
+        QMessageBox::information(this, tr("Select an item"), tr("Select a file or empty directory to delete."));
         return;
     }
     const ConnectionTarget target = selectedTarget();
     // 确认框必须写明服务器：删除是不可撤销的，而用户很可能同时开着多层、多标签页，
     // 只显示路径不足以让人确认自己在哪台机器上操作。
-    QString message = tr("即将在服务器 %1 上永久删除%2：\n\n%3\n\n此操作无法撤销。")
+    QString message = tr("You are about to permanently delete %2 on server %1:\n\n%3\n\nThis action cannot be undone.")
                           .arg(target.connectionSpecifier(true),
-                               entry->isDirectory ? tr("目录") : tr("文件"),
+                               entry->isDirectory ? tr("Directory") : tr("File"),
                                entry->path);
     if (target.confidence == ConnectionTarget::Confidence::Inferred) {
-        message += tr("\n\n⚠ 该服务器是由解析终端命令推测得出的，可能并非你以为的那一台。"
-                      "请先在终端执行 hostname 核对后再继续。");
+        message += tr("\n\n⚠ This server was inferred by parsing terminal commands and may not be the one you expect. Run 'hostname' in the terminal to verify before continuing.");
     }
     const QMessageBox::StandardButton answer = QMessageBox::warning(
         this,
-        tr("确认删除"),
+        tr("Confirm delete"),
         message,
         QMessageBox::Yes | QMessageBox::No,
         QMessageBox::No);
     if (answer != QMessageBox::Yes) {
         return;
     }
-    setBusy(true, tr("正在删除 %1…").arg(entry->name));
+    setBusy(true, tr("Deleting %1…").arg(entry->name));
     m_service->removePath(target, entry->path, entry->isDirectory);
 }
 
@@ -2472,7 +2461,7 @@ void RemoteFileManagerWidget::handleRecursiveTransferFinished(
     // 跳过和失败必须主动弹给用户：把"有 37 个文件没传成功"埋进一行状态栏文字里，等同于
     // 让用户以为整个目录都传完了。
     if (summary.hasWarnings()) {
-        QMessageBox::warning(this, tr("目录传输已结束（存在未完成项）"), summaryText);
+        QMessageBox::warning(this, tr("The directory transfer has ended (some items are incomplete)"), summaryText);
     }
     const QString headline = summaryText.section(QLatin1Char('\n'), 0, 0);
     emit statusMessage(headline);
@@ -2515,7 +2504,7 @@ void RemoteFileManagerWidget::handleOperationFailure(const quint64 requestId,
         emit transferResultAvailable(false, message);
     }
 
-    if (wasActiveTransfer && message.contains(tr("已取消"))) {
+    if (wasActiveTransfer && message.contains(tr("Cancelled"))) {
         // 用户主动取消属于预期控制流，不应再弹红色错误框；保留半成品供下一次续传。
         emit statusMessage(message);
         return;
@@ -2529,7 +2518,7 @@ void RemoteFileManagerWidget::handleOperationFailure(const quint64 requestId,
         if (retryCount < 2) {
             ++retryCount;
             const int retryDelayMs = retryCount * 400;
-            const QString retryMessage = tr("跳板连接暂时断开，正在进行第 %1 次重试…")
+            const QString retryMessage = tr("The jump host connection dropped temporarily; retrying (attempt %1)…")
                                              .arg(retryCount);
             m_statusLabel->setText(retryMessage);
             emit statusMessage(retryMessage);
@@ -2551,7 +2540,7 @@ void RemoteFileManagerWidget::handleOperationFailure(const quint64 requestId,
         // 否则用户会被卡在一个打不开的位置，只能自己猜一个存在的路径。
         m_pathByTarget.remove(target.stableKey());
         m_pathEdit->clear();
-        emit statusMessage(tr("%1；已返回主目录").arg(message));
+        emit statusMessage(tr("%1; returned to home directory").arg(message));
         refreshDirectory();
         return;
     }
@@ -2562,7 +2551,7 @@ void RemoteFileManagerWidget::handleOperationFailure(const quint64 requestId,
             // 内层 OpenSSH 可能正在显示第二次 password 提示。此时弹出独立输入框会迫使用户
             // 输入两次；保持文件管理器静默，TerminalPane 捕获下一次终端输入后会更新凭据
             // 并通过 targetsChanged 自动重新发起当前目录读取。
-            const QString retryMessage = tr("内层 SSH 认证尚未完成，请直接在终端重新输入密码");
+            const QString retryMessage = tr("Inner SSH authentication is not finished; re-enter the password directly in the terminal");
             m_statusLabel->setText(retryMessage);
             emit statusMessage(retryMessage);
             return;
@@ -2577,8 +2566,8 @@ void RemoteFileManagerWidget::handleOperationFailure(const quint64 requestId,
         bool accepted = false;
         const QString password = QInputDialog::getText(
             this,
-            tr("输入内层服务器凭据"),
-            tr("服务器拒绝了当前会话凭据。请输入 %1 的新密码或私钥口令：")
+            tr("Enter inner server credentials"),
+            tr("The server rejected the current session credentials. Enter a new password or private key passphrase for %1:")
                 .arg(target.connectionSpecifier(true)),
             QLineEdit::Password,
             {},
@@ -2600,10 +2589,8 @@ void RemoteFileManagerWidget::handleOperationFailure(const quint64 requestId,
         && target.stableKey() == selectedTarget().stableKey()) {
         const QMessageBox::StandardButton answer = QMessageBox::warning(
             this,
-            tr("服务器仅支持旧版 MAC 算法"),
-            tr("服务器 %1 的 SFTP 服务仅提供 hmac-sha1。\n\n"
-               "该算法已过时，建议优先升级服务器 SSH 配置。是否仅为这个连接启用并重试？\n\n"
-               "%2")
+            tr("The server only supports legacy MAC algorithms"),
+            tr("The SFTP service of server %1 offers only hmac-sha1.\n\nThis algorithm is obsolete; upgrading the server's SSH configuration is recommended. Enable it for this connection only and retry?\n\n%2")
                 .arg(target.connectionSpecifier(true), message),
             QMessageBox::Yes | QMessageBox::No,
             QMessageBox::No);
@@ -2621,6 +2608,6 @@ void RemoteFileManagerWidget::handleOperationFailure(const quint64 requestId,
     // 未知主机错误紧随指纹确认信号到达，由确认对话框负责提示，避免重复弹窗。
     if (kind != SftpService::ErrorKind::HostKeyUnknown
         && kind != SftpService::ErrorKind::HostKeyChanged) {
-        QMessageBox::critical(this, tr("SFTP 操作失败"), message);
+        QMessageBox::critical(this, tr("SFTP operation failed"), message);
     }
 }

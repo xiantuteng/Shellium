@@ -86,6 +86,16 @@ struct TerminalThemePreset {
  * 负数滚动缓冲或异常大的内存占用。
  */
 struct TerminalSettings {
+    /**
+     * @brief 界面语言的 Qt 区域名称，默认 "system" 表示跟随操作系统。
+     *
+     * 取值为 QLocale 名称（如 "zh_CN"、"en"）或字面量 "system"。未知或不受支持的值会在
+     * normalized() 中回退为 "system"，再由 LocalizationService 解析到最接近的受支持语言，
+     * 因此渲染侧永远不会拿到一个没有对应 .qm 的语言码。该字段只决定 UI 文案与本地化格式，
+     * 不影响终端内容、主机名或历史日志。
+     */
+    QString language = QStringLiteral("system");
+
     /** @brief 主题选择，默认深色，与大多数终端模拟器的开箱体验一致。 */
     ThemeMode themeMode = ThemeMode::Dark;
 

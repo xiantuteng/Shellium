@@ -433,7 +433,7 @@ QMenu *TerminalView::createTerminalContextMenu()
     QMenu *menu = createStandardContextMenu();
     UiIcons::modernizePopup(menu);
     menu->addSeparator();
-    QAction *uploadAction = menu->addAction(tr("上传到当前远程目录…"));
+    QAction *uploadAction = menu->addAction(tr("Upload to the current remote directory…"));
     connect(uploadAction, &QAction::triggered,
             this, &TerminalView::uploadToCurrentDirectoryRequested);
     return menu;
@@ -985,18 +985,18 @@ bool TerminalView::confirmPaste(const PastePreparation &prepared)
 {
     QStringList riskDescriptions;
     if (prepared.containsLineBreak) {
-        riskDescriptions.append(tr("内容包含 %1 行，发送后可能立即执行多条命令。")
+        riskDescriptions.append(tr("The content has %1 lines and may run multiple commands immediately after being sent.")
                                     .arg(prepared.text.count(QLatin1Char('\n')) + 1));
     }
     if (prepared.removedControlCharacters > 0) {
-        riskDescriptions.append(tr("已移除 %1 个可能注入终端控制序列的不可见字符。")
+        riskDescriptions.append(tr("Removed %1 invisible characters that could inject terminal control sequences.")
                                     .arg(prepared.removedControlCharacters));
     }
-    riskDescriptions.append(tr("确认将以下内容发送到当前终端吗？"));
+    riskDescriptions.append(tr("Send the following content to the current terminal?"));
 
     QDialog dialog(this);
     dialog.setObjectName(QStringLiteral("TerminalPasteConfirmDialog"));
-    dialog.setWindowTitle(tr("确认终端粘贴"));
+    dialog.setWindowTitle(tr("Confirm terminal paste"));
     auto *layout = new QVBoxLayout(&dialog);
     auto *summary = new QLabel(riskDescriptions.join(QLatin1Char('\n')), &dialog);
     summary->setWordWrap(true);
@@ -1016,7 +1016,7 @@ bool TerminalView::confirmPaste(const PastePreparation &prepared)
     layout->addWidget(preview, 1);
 
     auto *buttons = new QDialogButtonBox(QDialogButtonBox::Cancel, &dialog);
-    QPushButton *pasteButton = buttons->addButton(tr("粘贴"), QDialogButtonBox::AcceptRole);
+    QPushButton *pasteButton = buttons->addButton(tr("Paste"), QDialogButtonBox::AcceptRole);
     pasteButton->setDefault(true);
     pasteButton->setAutoDefault(true);
     pasteButton->setFocus();

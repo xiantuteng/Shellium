@@ -1107,7 +1107,7 @@ public:
         // 否则描边会顶到控件边界，抗锯齿处理后看起来像被裁掉了一截、圆环不闭合。
         setFixedSize(32, 32);
         setToolTip(color.name());
-        setAccessibleName(tr("标签颜色 %1").arg(color.name()));
+        setAccessibleName(tr("Tag color %1").arg(color.name()));
     }
 
     /** @brief 返回该圆点代表的颜色。 */
@@ -1171,13 +1171,13 @@ public:
         // 复用主机配置窗口的对象名，是为了直接套用全局样式表里的卡片、输入框与页脚规则；
         // 内部控件仍使用各自独立的对象名，测试与样式定位不会互相干扰。
         setObjectName(QStringLiteral("ConnectionDialog"));
-        setWindowTitle(tr("标签"));
+        setWindowTitle(tr("Tag"));
         setMinimumWidth(420);
         resize(440, 480);
 
         m_nameEdit = new QLineEdit(this);
         m_nameEdit->setObjectName(QStringLiteral("hostTagNameEdit"));
-        m_nameEdit->setPlaceholderText(tr("输入标签名称，例如 生产"));
+        m_nameEdit->setPlaceholderText(tr("Enter a tag name, e.g. production"));
         m_nameEdit->setMinimumWidth(200);
 
         auto *colorRow = new QWidget(this);
@@ -1209,19 +1209,19 @@ public:
         // 卡片不设标题：窗口标题已经是"标签"，名称、颜色和历史标签又是同一件事——挑一个
         // 名称和颜色——没有必要在正文里再重复一次这个词。
         auto *editorCard = new SettingsCard(QString(), this);
-        editorCard->addWideRow(tr("名称"), m_nameEdit);
-        editorCard->addWideRow(tr("颜色"), colorRow);
+        editorCard->addWideRow(tr("Name"), m_nameEdit);
+        editorCard->addWideRow(tr("Color"), colorRow);
         editorCard->addFullWidthWidget(m_historyFlowWidget);
-        editorCard->addNote(tr("点击标签可将其名称与颜色载入上方，供编辑或直接确认。"));
+        editorCard->addNote(tr("Click a tag to load its name and color above for editing or direct confirmation."));
 
         auto *footer = new QWidget(this);
         footer->setObjectName(QStringLiteral("SettingsFooter"));
         auto *footerLayout = new QHBoxLayout(footer);
         footerLayout->setContentsMargins(20, 12, 20, 12);
         footerLayout->setSpacing(10);
-        auto *cancelButton = new QPushButton(tr("取消"), footer);
+        auto *cancelButton = new QPushButton(tr("Cancel"), footer);
         cancelButton->setObjectName(QStringLiteral("hostTagCancelButton"));
-        auto *acceptButton = new QPushButton(tr("确定"), footer);
+        auto *acceptButton = new QPushButton(tr("OK"), footer);
         acceptButton->setObjectName(QStringLiteral("hostTagAcceptButton"));
         acceptButton->setProperty("primaryAction", true);
         acceptButton->setDefault(true);
@@ -1229,19 +1229,19 @@ public:
             cancelButton,
             UiIcons::symbol(
                 this, UiIcons::Symbol::Cancel, this->palette().color(QPalette::WindowText)),
-            tr("放弃本次标签修改"));
+            tr("Discard this tab change"));
         UiIcons::decorateButton(
             acceptButton,
             UiIcons::symbol(this, UiIcons::Symbol::Check, QColor(QStringLiteral("#0c2f24"))),
-            tr("确认标签与配色"));
-        auto *deleteButton = new QPushButton(tr("删除标签"), footer);
+            tr("Confirm tag and color"));
+        auto *deleteButton = new QPushButton(tr("Delete tag"), footer);
         deleteButton->setObjectName(QStringLiteral("hostTagDeleteButton"));
         // 只有本机已经挂着标签时，"删除"才有意义；新增场景下留白反而更清楚。
         deleteButton->setEnabled(!m_tags.isEmpty());
         UiIcons::decorateButton(
             deleteButton,
             UiIcons::symbol(this, UiIcons::Symbol::Trash, this->palette().color(QPalette::WindowText)),
-            tr("删除本机的标签"));
+            tr("Delete this tag"));
         footerLayout->addWidget(deleteButton);
         footerLayout->addStretch(1);
         footerLayout->addWidget(cancelButton);
@@ -1295,7 +1295,7 @@ protected:
         const QString name = m_nameEdit->text().trimmed();
         if (name.contains(QLatin1Char(','))) {
             // 标签在数据库里以逗号连接存入同一列，含逗号的名称会被拆成两个假标签。
-            QMessageBox::warning(this, tr("标签不合法"), tr("标签名称不能包含逗号。"));
+            QMessageBox::warning(this, tr("Invalid tag"), tr("A tag name cannot contain a comma."));
             m_nameEdit->setFocus();
             return;
         }
@@ -1357,7 +1357,7 @@ private:
         chip->setText(QStringLiteral("#%1").arg(tag));
         chip->setStyleSheet(tagPillStyleSheet(resolveTagColor(m_colors, tag), highlighted));
         chip->setCursor(Qt::PointingHandCursor);
-        chip->setToolTip(tr("载入名称与颜色"));
+        chip->setToolTip(tr("Load name and color"));
         connect(chip, &QToolButton::clicked, this, [this, tag]() {
             loadTagIntoEditor(tag);
             refreshLists();
@@ -1506,20 +1506,20 @@ public:
         // 从对象树层面保证分组窗口除名称外不再残留可聚焦或可被辅助技术发现的字段。
         const bool isHost = initial.kind == HostNodeKind::Host;
         setObjectName(QStringLiteral("ConnectionDialog"));
-        setWindowTitle(isHost ? tr("主机配置") : tr("分组配置"));
+        setWindowTitle(isHost ? tr("Host configuration") : tr("Group configuration"));
         // 主机窗口的名称行多出分组下拉框，而名称输入框本身必须保持原有宽度，因此窗口下限
         // 相应加宽；分组窗口字段未变，沿用原值。
         setMinimumWidth(isHost ? 728 : 580);
         m_nameEdit->setObjectName(QStringLiteral("hostRecordNameEdit"));
         m_nameEdit->setMinimumWidth(260);
 
-        auto *basicsCard = new SettingsCard(isHost ? tr("主机") : tr("分组"), this);
+        auto *basicsCard = new SettingsCard(isHost ? tr("Hosts") : tr("Group"), this);
         // SettingsCard 的固定对象名由全局样式表用于绘制白色圆角区域，不能为了测试定位而
         // 覆盖；一旦改名，QFrame#SettingsCard 选择器就会失效，卡片会退化成透明矩形。
         if (!isHost) {
             // 分组窗口保持"只有名称"的极简形态：分组既不需要标签入口，也不能在这里改父级，
             // 否则移动分组会连带整棵子树，与侧栏里的拖放形成两套语义不同的入口。
-            basicsCard->addRow(tr("名称"), m_nameEdit);
+            basicsCard->addRow(tr("Name"), m_nameEdit);
         }
         if (isHost) {
             // 主机专属字段只在主机窗口中实例化。端口始终以明确值保存，因此不再提供容易让
@@ -1534,19 +1534,19 @@ public:
 
             m_usernameEdit = new QLineEdit(initial.username, this);
             m_usernameEdit->setObjectName(QStringLiteral("hostUsernameEdit"));
-            m_usernameEdit->setPlaceholderText(tr("留空则继承父分组"));
+            m_usernameEdit->setPlaceholderText(tr("Leave empty to inherit from the parent group"));
             m_passwordEdit = new QLineEdit(this);
             m_passwordEdit->setObjectName(QStringLiteral("hostPasswordEdit"));
             m_passwordEdit->setEchoMode(QLineEdit::Password);
-            m_passwordEdit->setPlaceholderText(tr("输入后随主机自动保存"));
+            m_passwordEdit->setPlaceholderText(tr("Saved automatically with the host after you type it"));
             m_identityEdit = new QLineEdit(initial.identityFile, this);
             m_identityEdit->setObjectName(QStringLiteral("hostIdentityEdit"));
             m_identityEdit->setPlaceholderText(
-                tr("留空则继承父分组或使用 Agent/默认密钥"));
+                tr("Leave empty to inherit from the parent group or use the agent / default key"));
             m_proxyJumpsEdit = new QLineEdit(
                 initial.proxyJumps.join(QLatin1Char(',')), this);
             m_proxyJumpsEdit->setObjectName(QStringLiteral("hostProxyJumpsEdit"));
-            m_proxyJumpsEdit->setPlaceholderText(tr("逗号分隔；留空则继承父分组"));
+            m_proxyJumpsEdit->setPlaceholderText(tr("Comma-separated; leave empty to inherit from the parent group"));
             m_hostChain = initial.hostChain;
             m_hostChainButton = new QPushButton(this);
             m_hostChainButton->setObjectName(QStringLiteral("hostChainButton"));
@@ -1557,7 +1557,7 @@ public:
                     this,
                     UiIcons::Symbol::ArrowUp,
                     this->palette().color(QPalette::WindowText)),
-                tr("编辑当前主机在最终连接前依次经过的跳板机"));
+                tr("Edit the jump hosts the current host passes through before the final connection"));
             refreshHostChainSummary();
             m_legacyHmacToggle = new ToggleSwitch(this);
             m_legacyHmacToggle->setObjectName(QStringLiteral("hostLegacyHmacToggle"));
@@ -1568,18 +1568,18 @@ public:
                 edit->setMinimumWidth(260);
             }
 
-            basicsCard->addRow(tr("主机地址"), m_hostEdit);
+            basicsCard->addRow(tr("Host address"), m_hostEdit);
             basicsCard->addRow(
-                tr("端口"), new SettingsStepper(m_portSpin, basicsCard));
+                tr("Port"), new SettingsStepper(m_portSpin, basicsCard));
             // 名称排在地址与端口之后，是因为它默认由这两项自动生成：先填连接参数、再确认
             // 或改写生成出的名称，符合用户真实的填写顺序，也让自动名称不再"凭空先出现"。
-            basicsCard->addRow(tr("名称"), buildNameRow());
+            basicsCard->addRow(tr("Name"), buildNameRow());
 
             auto *identityContainer = new QWidget(this);
             auto *identityLayout = new QHBoxLayout(identityContainer);
             identityLayout->setContentsMargins(0, 0, 0, 0);
             identityLayout->setSpacing(8);
-            auto *browseButton = new QPushButton(tr("浏览…"), identityContainer);
+            auto *browseButton = new QPushButton(tr("Browse…"), identityContainer);
             browseButton->setObjectName(QStringLiteral("hostIdentityBrowseButton"));
             UiIcons::decorateButton(
                 browseButton,
@@ -1587,7 +1587,7 @@ public:
                     this,
                     UiIcons::Symbol::Upload,
                     this->palette().color(QPalette::WindowText)),
-                tr("选择 SSH 私钥文件"));
+                tr("Select SSH private key file"));
             m_identityEdit->setMinimumWidth(200);
             identityLayout->addWidget(m_identityEdit, 1);
             identityLayout->addWidget(browseButton);
@@ -1595,8 +1595,8 @@ public:
             // 认证区严格按用户填写路径排列：用户名、密码、私钥和受管主机链保持在主路径中；
             // 自由文本 ProxyJump 收进末尾的高级入口，避免与主机链形成两个并列的首选方案。
             // 保存凭据和旧版算法开关仍保持直接可见，因为它们会明显改变安全行为。
-            auto *authCard = new SettingsCard(tr("认证与跳板"), this);
-            authCard->addRow(tr("用户名"), m_usernameEdit);
+            auto *authCard = new SettingsCard(tr("Authentication and jump hosts"), this);
+            authCard->addRow(tr("Username"), m_usernameEdit);
             // 查看入口使用 QLineEdit 的 TrailingPosition 内嵌动作，而不是额外占据一列的文字
             // 按钮。Qt 会自动为文本保留右侧图标空间，长密码不会画到眼睛图标下面；动作仍是
             // 独立 QAction，便于禁用、提供无障碍名称和在主题切换时替换图标。
@@ -1609,25 +1609,25 @@ public:
             m_passwordVisibilityAction->setObjectName(
                 QStringLiteral("hostPasswordVisibilityAction"));
             m_passwordVisibilityAction->setCheckable(true);
-            m_passwordVisibilityAction->setText(tr("查看密码"));
+            m_passwordVisibilityAction->setText(tr("View password"));
             // 未启用主密码时仍保持眼睛图标可点击。直接禁用虽然阻止了明文显示，却也切断了
             // 用户理解原因和找到设置入口的路径；实际授权仍在 toggled 回调第一层严格拦截。
             m_passwordVisibilityAction->setEnabled(true);
             m_passwordVisibilityAction->setToolTip(
                 m_credentialVault->passwordProtectionEnabled()
-                    ? tr("查看已保存密码；保险箱锁定时会先要求输入主密码")
-                    : tr("点击查看如何启用主密码保护"));
+                    ? tr("View the saved password; when the vault is locked you will be asked for the master password first")
+                    : tr("Click to see how to enable master password protection"));
             authCard->addRow(
-                tr("密码"),
+                tr("Password"),
                 m_passwordEdit,
-                tr("密码会自动保存；启用主密码保护后可解锁查看明文。"));
-            authCard->addRow(tr("私钥文件"), identityContainer);
-            authCard->addRow(tr("主机链"),
+                tr("The password is saved automatically; enable master password protection to unlock and view the plaintext."));
+            authCard->addRow(tr("Private key file"), identityContainer);
+            authCard->addRow(tr("Host chain"),
                              m_hostChainButton,
-                             tr("选择主机管理中的已有主机作为跳板，也可以在链编辑器中新增主机。"));
-            authCard->addRow(tr("旧版兼容"),
+                             tr("Choose an existing host in Host Manager as a jump host, or add a host in the chain editor."));
+            authCard->addRow(tr("Legacy compatibility"),
                              m_legacyHmacToggle,
-                             tr("仅为该主机允许 hmac-sha1（不继承）。"));
+                             tr("Allow hmac-sha1 for this host only (not inherited)."));
 
             m_advancedSettingsButton = new QToolButton(authCard);
             m_advancedSettingsButton->setObjectName(
@@ -1636,7 +1636,7 @@ public:
             m_advancedSettingsButton->setCheckable(true);
             m_advancedSettingsButton->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
             m_advancedSettingsButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-            m_advancedSettingsButton->setAccessibleName(tr("展开 ProxyJump 高级设置"));
+            m_advancedSettingsButton->setAccessibleName(tr("Expand ProxyJump advanced settings"));
             // 已有主机若保存过手工 ProxyJump，打开编辑器时必须直接展示真实生效值，不能因
             // “弱化入口”而把旧路由悄悄藏起来；全新配置和单纯继承父分组时则默认折叠。
             m_advancedSettingsButton->setChecked(!initial.proxyJumps.isEmpty());
@@ -1644,14 +1644,14 @@ public:
             authCard->addRow(
                 tr("ProxyJump"),
                 m_proxyJumpsEdit,
-                tr("兼容 OpenSSH 的高级手工跳板配置；通常请优先使用上方主机链。"));
+                tr("OpenSSH-compatible advanced manual jump host configuration; normally prefer the host chain above."));
             m_proxyJumpRow = m_proxyJumpsEdit->parentWidget();
             m_proxyJumpRow->setObjectName(QStringLiteral("hostProxyJumpRow"));
             refreshProxyJumpDisclosure();
 
             connect(browseButton, &QPushButton::clicked, this, [this]() {
                 const QString path = QFileDialog::getOpenFileName(
-                    this, tr("选择 SSH 私钥文件"));
+                    this, tr("Select SSH private key file"));
                 if (!path.isEmpty()) {
                     m_identityEdit->setText(path);
                 }
@@ -1692,9 +1692,8 @@ public:
                             if (visible) {
                                 QMessageBox::information(
                                     this,
-                                    tr("需要主密码保护"),
-                                    tr("查看主机密码需要先启用主密码保护。请前往“设置 → "
-                                       "连接与安全 → 凭据保险箱”，开启“使用主密码保护凭据”。"));
+                                    tr("Master password protection required"),
+                                    tr("Viewing host passwords requires master password protection. Go to 'Settings → Connections & Security → Credential Vault' and turn on 'Protect credentials with a master password'."));
                             }
                             return;
                         }
@@ -1713,10 +1712,10 @@ public:
                         m_passwordEdit->setEchoMode(
                             visible ? QLineEdit::Normal : QLineEdit::Password);
                         m_passwordVisibilityAction->setText(
-                            visible ? tr("隐藏密码") : tr("查看密码"));
+                            visible ? tr("Hide password") : tr("View password"));
                         m_passwordVisibilityAction->setToolTip(
-                            visible ? tr("隐藏密码")
-                                    : tr("查看已保存密码；保险箱锁定时会先要求输入主密码"));
+                            visible ? tr("Hide password")
+                                    : tr("View the saved password; when the vault is locked you will be asked for the master password first"));
                         m_passwordVisibilityAction->setIcon(
                             UiIcons::symbol(
                                 this,
@@ -1751,7 +1750,7 @@ public:
                     m_passwordLoadedFromStorage = false;
                 }
                 m_passwordEdit->setEchoMode(QLineEdit::Password);
-                m_passwordEdit->setPlaceholderText(tr("保险箱已重置，请重新输入凭据"));
+                m_passwordEdit->setPlaceholderText(tr("The vault has been reset; please re-enter your credentials"));
                 if (m_passwordVisibilityAction != nullptr) {
                     const QSignalBlocker blocker(m_passwordVisibilityAction);
                     m_passwordVisibilityAction->setChecked(false);
@@ -1796,9 +1795,9 @@ public:
         auto *footerLayout = new QHBoxLayout(footer);
         footerLayout->setContentsMargins(20, 12, 20, 12);
         footerLayout->setSpacing(10);
-        auto *cancelButton = new QPushButton(tr("取消"), footer);
+        auto *cancelButton = new QPushButton(tr("Cancel"), footer);
         cancelButton->setObjectName(QStringLiteral("hostRecordCancelButton"));
-        auto *saveButton = new QPushButton(tr("保存"), footer);
+        auto *saveButton = new QPushButton(tr("Save"), footer);
         saveButton->setObjectName(QStringLiteral("hostRecordSaveButton"));
         saveButton->setProperty("primaryAction", true);
         saveButton->setDefault(true);
@@ -1806,15 +1805,15 @@ public:
             cancelButton,
             UiIcons::symbol(
                 this, UiIcons::Symbol::Cancel, this->palette().color(QPalette::WindowText)),
-            tr("取消本次配置修改"));
+            tr("Discard this configuration change"));
         UiIcons::decorateButton(
             saveButton,
             // 保存是绿色主操作，固定深色图标才能同时兼顾浅色与深色主题下的对比度。
             UiIcons::symbol(
                 this, UiIcons::Symbol::Check, QColor(QStringLiteral("#0c2f24"))),
-            tr("保存当前配置"));
+            tr("Save the current configuration"));
         if (isHost) {
-            m_testConnectionButton = new QPushButton(tr("测试连接"), footer);
+            m_testConnectionButton = new QPushButton(tr("Test connection"), footer);
             m_testConnectionButton->setObjectName(
                 QStringLiteral("hostTestConnectionButton"));
             UiIcons::decorateButton(
@@ -1823,7 +1822,7 @@ public:
                     this,
                     UiIcons::Symbol::Connect,
                     this->palette().color(QPalette::WindowText)),
-                tr("使用当前未保存的配置测试 SSH 连接"));
+                tr("Test the SSH connection using the current unsaved configuration"));
             // 测试属于独立的辅助动作，固定在页脚左下角；右侧仍保留取消和保存的标准顺序。
             footerLayout->addWidget(m_testConnectionButton);
         }
@@ -1855,12 +1854,12 @@ public:
         connect(cancelButton, &QPushButton::clicked, this, &QDialog::reject);
         connect(saveButton, &QPushButton::clicked, this, [this, isHost]() {
             if (m_nameEdit->text().trimmed().isEmpty()) {
-                QMessageBox::warning(this, tr("配置不完整"), tr("请输入名称。"));
+                QMessageBox::warning(this, tr("The configuration is incomplete"), tr("Enter a name."));
                 m_nameEdit->setFocus();
                 return;
             }
             if (isHost && m_hostEdit->text().trimmed().isEmpty()) {
-                QMessageBox::warning(this, tr("配置不完整"), tr("请输入主机名或 IP 地址。"));
+                QMessageBox::warning(this, tr("The configuration is incomplete"), tr("Enter a host name or IP address."));
                 m_hostEdit->setFocus();
                 return;
             }
@@ -1954,7 +1953,7 @@ private:
             && !m_credentialVault->isUnlocked()) {
             if (!allowUnlock
                 || !VaultDialog::ensureUnlocked(m_credentialVault, this)) {
-                m_passwordEdit->setPlaceholderText(tr("已保存；解锁保险箱后可查看"));
+                m_passwordEdit->setPlaceholderText(tr("Saved; view it after unlocking the vault"));
                 return false;
             }
         }
@@ -1964,8 +1963,8 @@ private:
             if (allowUnlock) {
                 QMessageBox::warning(
                     this,
-                    tr("无法读取已保存密码"),
-                    credentialError.isEmpty() ? tr("凭据不存在或已经损坏。")
+                    tr("Could not read the saved password"),
+                    credentialError.isEmpty() ? tr("The credential does not exist or is corrupt.")
                                               : credentialError);
             }
             return false;
@@ -1993,14 +1992,14 @@ private:
         m_groupCombo->setObjectName(QStringLiteral("hostRecordGroupCombo"));
         m_groupCombo->setMinimumWidth(150);
         m_groupCombo->setMaximumWidth(200);
-        m_groupCombo->setToolTip(tr("选择该主机在主机管理中的所属分组"));
-        m_groupCombo->setAccessibleName(tr("所属分组"));
+        m_groupCombo->setToolTip(tr("Choose which group this host belongs to in Host Manager"));
+        m_groupCombo->setAccessibleName(tr("Group"));
         populateGroupChoices();
 
-        m_tagButton = new InlineFieldButton(tr("#标签"), m_nameEdit);
+        m_tagButton = new InlineFieldButton(tr("#tag"), m_nameEdit);
         m_tagButton->setObjectName(QStringLiteral("hostRecordTagButton"));
-        m_tagButton->setToolTip(tr("为该主机添加标签并选择标签颜色"));
-        m_tagButton->setAccessibleName(tr("编辑标签"));
+        m_tagButton->setToolTip(tr("Add tags to this host and choose a tag color"));
+        m_tagButton->setAccessibleName(tr("Edit tag"));
         refreshTagButton();
 
         auto *nameRow = new QWidget(this);
@@ -2031,7 +2030,7 @@ private:
     {
         const QSignalBlocker blocker(m_groupCombo);
         m_groupCombo->clear();
-        m_groupCombo->addItem(tr("未分组"), QString{});
+        m_groupCombo->addItem(tr("Ungrouped"), QString{});
 
         QList<QPair<QString, QString>> entries;
         QSet<QString> visited;
@@ -2113,7 +2112,7 @@ private:
             return;
         }
         if (m_tags.isEmpty()) {
-            m_tagButton->updateText(tr("#标签"));
+            m_tagButton->updateText(tr("#tag"));
             m_tagButton->clearTagColor();
         } else {
             m_tagButton->updateText(QStringLiteral("#%1").arg(m_tags.constFirst()));
@@ -2143,19 +2142,19 @@ private:
         // 不能错误宣称“正在继承”；只有直连草稿才提示潜在生效的继承路径。
         const bool inheritsProxyJump = !hasExplicitProxyJump && m_hostChain.isEmpty()
             && !m_inheritedParent.proxyJumps.isEmpty();
-        QString summary = tr("高级设置");
+        QString summary = tr("Advanced settings");
         if (hasExplicitProxyJump) {
-            summary = tr("高级设置 · ProxyJump 已配置");
+            summary = tr("Advanced settings · ProxyJump configured");
         } else if (inheritsProxyJump) {
-            summary = tr("高级设置 · 继承 ProxyJump");
+            summary = tr("Advanced settings · inherits ProxyJump");
         }
 
         m_advancedSettingsButton->setText(summary);
         m_advancedSettingsButton->setArrowType(expanded ? Qt::DownArrow : Qt::RightArrow);
         m_advancedSettingsButton->setAccessibleName(
-            expanded ? tr("收起 ProxyJump 高级设置") : tr("展开 ProxyJump 高级设置"));
+            expanded ? tr("Collapse ProxyJump advanced settings") : tr("Expand ProxyJump advanced settings"));
         m_advancedSettingsButton->setToolTip(
-            tr("仅在兼容 OpenSSH 配置或需要手工指定跳板地址时使用"));
+            tr("Use only for OpenSSH-compatible configuration or when a jump host address must be specified manually"));
         m_proxyJumpRow->setVisible(expanded);
     }
 
@@ -2166,14 +2165,14 @@ private:
             return;
         }
         if (m_hostChain.isEmpty()) {
-            m_hostChainButton->setText(tr("主机链  ·  直连  ›"));
+            m_hostChainButton->setText(tr("Host chain  ·  direct  ›"));
         } else if (m_hostChain.size() == 1) {
             const std::optional<HostRecord> jump = m_database->findHost(m_hostChain.constFirst());
             m_hostChainButton->setText(
-                tr("主机链  ·  经 %1  ›")
-                    .arg(jump.has_value() ? jump->name : tr("失效主机")));
+                tr("Host chain  ·  via %1  ›")
+                    .arg(jump.has_value() ? jump->name : tr("Invalid host")));
         } else {
-            m_hostChainButton->setText(tr("主机链  ·  %1 个跳板  ›").arg(m_hostChain.size()));
+            m_hostChainButton->setText(tr("Host chain  ·  %1 jump hosts  ›").arg(m_hostChain.size()));
         }
         // 主机链会覆盖父分组 ProxyJump；链路增删后同步摘要，避免继续显示已经不生效的继承。
         refreshProxyJumpDisclosure();
@@ -2223,7 +2222,7 @@ private:
             || m_hostEdit->text().trimmed().isEmpty()) {
             if (m_hostEdit != nullptr && m_hostEdit->text().trimmed().isEmpty()) {
                 QMessageBox::warning(
-                    this, tr("连接信息不完整"), tr("请输入主机名或 IP 地址。"));
+                    this, tr("The connection details are incomplete"), tr("Enter a host name or IP address."));
                 m_hostEdit->setFocus();
             }
             return;
@@ -2254,15 +2253,15 @@ private:
             if (expanded.isEmpty()) {
                 QMessageBox::warning(
                     this,
-                    tr("无法测试主机链"),
-                    routeError.isEmpty() ? tr("跳板机不存在或链路无效：%1").arg(jumpId)
+                    tr("Could not test the host chain"),
+                    routeError.isEmpty() ? tr("The jump host does not exist or the chain is invalid: %1").arg(jumpId)
                                          : routeError);
                 return;
             }
             for (const HostRecord &hop : expanded) {
                 if (routeIds.contains(hop.id) || hop.id == effective.id) {
                     QMessageBox::warning(
-                        this, tr("无法测试主机链"), tr("主机链包含重复节点或环路：%1").arg(hop.name));
+                        this, tr("Could not test the host chain"), tr("The host chain contains duplicate nodes or a loop: %1").arg(hop.name));
                     return;
                 }
                 routeIds.insert(hop.id);
@@ -2289,7 +2288,7 @@ private:
                 const bool requiresUnlock = m_credentialVault->credentialRequiresUnlock(
                     hop.credentialId, &credentialError);
                 if (!credentialError.isEmpty()) {
-                    QMessageBox::warning(this, tr("无法测试连接"), credentialError);
+                    QMessageBox::warning(this, tr("Could not test the connection"), credentialError);
                     return;
                 }
                 if (requiresUnlock && !vaultReady) {
@@ -2301,9 +2300,9 @@ private:
                 if (!m_credentialVault->applyHostCredential(hop, hopTarget, &credentialError)) {
                     QMessageBox::warning(
                         this,
-                        tr("无法测试连接"),
+                        tr("Could not test the connection"),
                         credentialError.isEmpty()
-                            ? tr("无法读取“%1”的已保存凭据。").arg(hop.name)
+                            ? tr("Could not read the saved credentials for '%1'.").arg(hop.name)
                             : credentialError);
                     return;
                 }
@@ -2313,7 +2312,7 @@ private:
 
         m_testInProgress = true;
         m_testConnectionButton->setEnabled(false);
-        m_testConnectionButton->setText(tr("测试中…"));
+        m_testConnectionButton->setText(tr("Testing…"));
 
         // 测试连接复用生产 SSH 状态机，才能覆盖 ProxyJump、私钥、密码和旧版 HMAC 等完整
         // 配置。第二个参数关闭 Shell 集成安装，避免一次只读测试在远端写入临时脚本。
@@ -2332,7 +2331,7 @@ private:
                 [this, testSpecifier]() {
                     finishConnectionTest(
                         true,
-                        tr("已成功连接 %1。").arg(testSpecifier));
+                        tr("Successfully connected to %1.").arg(testSpecifier));
                 });
         connect(session,
                 &SshSessionStack::connectionError,
@@ -2346,7 +2345,7 @@ private:
                 [this](const QString &message) {
                     finishConnectionTest(
                         false,
-                        tr("服务器只支持旧版 hmac-sha1。若已确认风险，请开启“旧版兼容”后重试。\n\n%1")
+                        tr("The server only supports legacy hmac-sha1. If you have accepted the risk, turn on 'Legacy compatibility' and retry.\n\n%1")
                             .arg(message));
                 });
         connect(session,
@@ -2355,8 +2354,8 @@ private:
                 [this](const ConnectionTarget &, const bool retry) {
                     finishConnectionTest(
                         false,
-                        retry ? tr("SSH 认证失败，请检查密码或私钥口令后重试。")
-                              : tr("服务器需要密码或私钥口令，请填写“密码”后重试。"));
+                        retry ? tr("SSH authentication failed. Check the password or private key passphrase and retry.")
+                              : tr("The server requires a password or private key passphrase. Fill in 'Password' and retry."));
                 });
         connect(session,
                 &SshSessionStack::hostKeyVerificationRequired,
@@ -2367,9 +2366,8 @@ private:
                     // 人工核验，不能为了“测试方便”自动信任并写入本机配置。
                     const QMessageBox::StandardButton answer = QMessageBox::question(
                         this,
-                        tr("确认服务器主机密钥"),
-                        tr("首次连接 %1。\n\nSHA-256 指纹：\n%2\n\n"
-                           "请通过可信渠道核对指纹。确认信任并继续测试吗？")
+                        tr("Confirm the server host key"),
+                        tr("Connecting to %1 for the first time.\n\nSHA-256 fingerprint:\n%2\n\nVerify the fingerprint through a trusted channel. Trust it and continue testing?")
                             .arg(verificationTarget.connectionSpecifier(true), fingerprint),
                         QMessageBox::Yes | QMessageBox::No,
                         QMessageBox::No);
@@ -2386,12 +2384,8 @@ private:
                     // 永久报错，或者更危险地在用户不知情时绕过旧指纹保护。
                     const QMessageBox::StandardButton answer = QMessageBox::warning(
                         this,
-                        tr("服务器主机密钥已变更"),
-                        tr("%1 返回的主机密钥与本机记录不一致。\n\n"
-                           "新 SHA-256 指纹：\n%2\n\n"
-                           "这可能是服务器重装或密钥轮换，也可能是中间人攻击。请先通过可信"
-                           "渠道核对新指纹。\n\n"
-                           "确认密钥确已变更，并替换 known_hosts 中的旧记录后继续测试吗？")
+                        tr("The server host key has changed"),
+                        tr("The host key returned by %1 does not match the local record.\n\nNew SHA-256 fingerprint:\n%2\n\nThis may be a server reinstall or key rotation, or a man-in-the-middle attack. Verify the new fingerprint through a trusted channel first.\n\nConfirm the key has changed, replace the old record in known_hosts, and continue testing?")
                             .arg(verificationTarget.connectionSpecifier(true), fingerprint),
                         QMessageBox::Yes | QMessageBox::No,
                         QMessageBox::No);
@@ -2423,18 +2417,18 @@ private:
         }
         m_testInProgress = false;
         m_testConnectionButton->setEnabled(true);
-        m_testConnectionButton->setText(tr("测试连接"));
+        m_testConnectionButton->setText(tr("Test connection"));
         if (m_testSession != nullptr) {
             m_testSession->requestStop();
         }
 
         if (succeeded) {
-            QMessageBox::information(this, tr("测试连接成功"), message);
+            QMessageBox::information(this, tr("Connection test succeeded"), message);
         } else {
             QMessageBox::warning(
                 this,
-                tr("测试连接失败"),
-                message.isEmpty() ? tr("SSH 连接未能建立，请检查当前配置。") : message);
+                tr("Connection test failed"),
+                message.isEmpty() ? tr("The SSH connection could not be established. Check the current configuration.") : message);
         }
     }
 
@@ -2645,17 +2639,17 @@ public:
         , m_list(new QListWidget(this))
     {
         setObjectName(QStringLiteral("HostPickerDialog"));
-        setWindowTitle(tr("选择跳板机"));
+        setWindowTitle(tr("Select jump host"));
         setMinimumSize(460, 470);
         ShelliumUi::applyStandaloneDialogStyle(this);
 
         auto *body = new QWidget(this);
         body->setObjectName(QStringLiteral("HostPickerBody"));
-        auto *subtitle = new QLabel(tr("选择已有主机"), body);
+        auto *subtitle = new QLabel(tr("Select an existing host"), body);
         subtitle->setObjectName(QStringLiteral("HostPickerSubtitle"));
 
         m_searchEdit->setObjectName(QStringLiteral("hostChainSearchEdit"));
-        m_searchEdit->setPlaceholderText(tr("搜索名称、地址或账号"));
+        m_searchEdit->setPlaceholderText(tr("Search name, address, or account"));
         // 搜索图标作为 QLineEdit 的 leading action 存在，不占用独立布局，也不会遮挡输入文本；
         // 使用语义图标而不是 Unicode 放大镜，保证高分屏和不同字体环境下轮廓一致。
         m_searchEdit->addAction(
@@ -2685,9 +2679,9 @@ public:
             item->setSizeHint(QSize(0, 62));
         }
 
-        auto *newButton = new QPushButton(tr("新建主机"), this);
+        auto *newButton = new QPushButton(tr("New host"), this);
         newButton->setObjectName(QStringLiteral("hostChainCreateHostButton"));
-        auto *selectButton = new QPushButton(tr("选择"), this);
+        auto *selectButton = new QPushButton(tr("Select"), this);
         selectButton->setObjectName(QStringLiteral("hostChainSelectHostButton"));
         selectButton->setProperty("primaryAction", true);
         selectButton->setEnabled(false);
@@ -2698,14 +2692,14 @@ public:
                 this,
                 UiIcons::Symbol::Plus,
                 this->palette().color(QPalette::WindowText)),
-            tr("新建一台可复用的跳板主机"));
+            tr("Create a reusable jump host"));
         UiIcons::decorateButton(
             selectButton,
             UiIcons::symbol(
                 this,
                 UiIcons::Symbol::Check,
                 QColor(QStringLiteral("#0c2f24"))),
-            tr("把当前选中的主机加入链路"));
+            tr("Add the selected host to the chain"));
 
         auto *bodyLayout = new QVBoxLayout(body);
         bodyLayout->setContentsMargins(24, 18, 24, 20);
@@ -2797,7 +2791,7 @@ public:
         Q_ASSERT(m_database != nullptr);
         Q_ASSERT(m_credentialVault != nullptr);
         setObjectName(QStringLiteral("HostChainDialog"));
-        setWindowTitle(tr("编辑主机链"));
+        setWindowTitle(tr("Edit host chain"));
         setMinimumSize(560, 560);
         ShelliumUi::applyStandaloneDialogStyle(this);
 
@@ -2805,15 +2799,14 @@ public:
         body->setObjectName(QStringLiteral("HostChainBody"));
         const QString targetDetail = target.toConnectionTarget().connectionSpecifier(true);
         auto *explanation = new QLabel(
-            tr("添加的主机将按下列顺序建立连接，最后进入 "
-               "<span style=\"font-family: monospace; font-weight: 600;\">%1</span>。")
+            tr("The hosts you add connect in the following order, finally reaching <span style=\"font-family: monospace; font-weight: 600;\">%1</span>.")
                 .arg(targetDetail.toHtmlEscaped()),
             body);
         explanation->setObjectName(QStringLiteral("HostChainIntroduction"));
         explanation->setTextFormat(Qt::RichText);
         explanation->setWordWrap(true);
 
-        auto *addButton = new QPushButton(tr("添加主机"), body);
+        auto *addButton = new QPushButton(tr("Add host"), body);
         addButton->setObjectName(QStringLiteral("hostChainAddButton"));
         addButton->setProperty("primaryAction", true);
         addButton->setMinimumHeight(42);
@@ -2823,7 +2816,7 @@ public:
                 this,
                 UiIcons::Symbol::Plus,
                 QColor(QStringLiteral("#0c2f24"))),
-            tr("从主机管理中选择或新建一台跳板主机"));
+            tr("Choose or create a jump host in Host Manager"));
 
         m_list->setObjectName(QStringLiteral("hostChainList"));
         m_list->setDragDropMode(QAbstractItemView::InternalMove);
@@ -2851,7 +2844,7 @@ public:
         targetCard->setObjectName(QStringLiteral("hostChainTargetCard"));
         targetCard->setMinimumHeight(82);
         targetCard->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-        auto *targetLabel = new QLabel(tr("目标主机"), targetCard);
+        auto *targetLabel = new QLabel(tr("Target host"), targetCard);
         targetLabel->setObjectName(QStringLiteral("hostChainTargetLabel"));
         targetLabel->setAlignment(Qt::AlignCenter);
         auto *targetDetailLabel = new QLabel(targetDetail, targetCard);
@@ -2866,13 +2859,13 @@ public:
         targetLayout->addWidget(targetDetailLabel);
         targetLayout->addStretch(1);
 
-        auto *removeButton = new QPushButton(tr("从链路移除"), this);
+        auto *removeButton = new QPushButton(tr("Remove from chain"), this);
         removeButton->setObjectName(QStringLiteral("hostChainRemoveButton"));
         removeButton->setProperty("hostChainDanger", true);
         removeButton->setEnabled(false);
-        auto *cancelButton = new QPushButton(tr("取消"), this);
+        auto *cancelButton = new QPushButton(tr("Cancel"), this);
         cancelButton->setObjectName(QStringLiteral("hostChainCancelButton"));
-        auto *saveButton = new QPushButton(tr("保存"), this);
+        auto *saveButton = new QPushButton(tr("Save"), this);
         saveButton->setObjectName(QStringLiteral("hostChainSaveButton"));
         saveButton->setProperty("primaryAction", true);
         saveButton->setDefault(true);
@@ -2882,14 +2875,14 @@ public:
                 this,
                 UiIcons::Symbol::Cancel,
                 this->palette().color(QPalette::WindowText)),
-            tr("放弃当前主机链修改"));
+            tr("Discard changes to the current host chain"));
         UiIcons::decorateButton(
             saveButton,
             UiIcons::symbol(
                 this,
                 UiIcons::Symbol::Check,
                 QColor(QStringLiteral("#0c2f24"))),
-            tr("保存当前主机链顺序"));
+            tr("Save the current host chain order"));
 
         auto *bodyLayout = new QVBoxLayout(body);
         bodyLayout->setContentsMargins(28, 22, 28, 22);
@@ -2963,7 +2956,7 @@ private:
     void appendHost(const QString &hostId)
     {
         const std::optional<HostRecord> record = m_database->resolveHost(hostId);
-        const QString title = record.has_value() ? record->name : tr("失效主机引用");
+        const QString title = record.has_value() ? record->name : tr("Invalid host reference");
         const QString detail = record.has_value()
             ? record->toConnectionTarget().connectionSpecifier(true) : hostId;
         auto *item = new QListWidgetItem(
@@ -2981,7 +2974,7 @@ private:
         QString error;
         const QList<HostRecord> rawCandidates = m_database->searchHosts({}, &ok, &error);
         if (!ok) {
-            QMessageBox::critical(this, tr("读取主机失败"), error);
+            QMessageBox::critical(this, tr("Failed to read host"), error);
             return;
         }
 
@@ -3037,12 +3030,12 @@ private:
                 return;
             }
             saved = m_credentialVault->saveConnectionPassword(
-                created, target, tr("%1 的登录凭据").arg(created.name), &error);
+                created, target, tr("Login credentials for %1").arg(created.name), &error);
         } else {
             saved = m_database->saveHost(created, &error);
         }
         if (!saved) {
-            QMessageBox::critical(this, tr("新建跳板机失败"), error);
+            QMessageBox::critical(this, tr("Failed to create jump host"), error);
             return;
         }
         m_databaseChanged = true;
@@ -3088,7 +3081,7 @@ HostManagerWidget::HostManagerWidget(ApplicationDatabase *database,
     Q_ASSERT(m_credentialVault != nullptr);
 
     m_searchEdit->setObjectName(QStringLiteral("HostSearchEdit"));
-    m_searchEdit->setPlaceholderText(tr("搜索名称 / 地址…"));
+    m_searchEdit->setPlaceholderText(tr("Search name / address…"));
     m_searchEdit->setClearButtonEnabled(true);
     m_searchEdit->addAction(
         UiIcons::symbol(this, UiIcons::Symbol::Search, this->palette().color(QPalette::WindowText)),
@@ -3105,9 +3098,9 @@ HostManagerWidget::HostManagerWidget(ApplicationDatabase *database,
     searchBarLayout->addWidget(m_searchEdit, 1);
     auto *tagFilterButton = new QToolButton(searchBar);
     tagFilterButton->setObjectName(QStringLiteral("HostTagFilterButton"));
-    tagFilterButton->setText(tr("#标签"));
-    tagFilterButton->setToolTip(tr("按标签精确筛选主机"));
-    tagFilterButton->setAccessibleName(tr("按标签精确筛选主机"));
+    tagFilterButton->setText(tr("#tag"));
+    tagFilterButton->setToolTip(tr("Filter hosts by exact tag"));
+    tagFilterButton->setAccessibleName(tr("Filter hosts by exact tag"));
     tagFilterButton->setCursor(Qt::PointingHandCursor);
     searchBarLayout->addWidget(tagFilterButton, 0, Qt::AlignVCenter);
     m_searchBar = searchBar;
@@ -3199,8 +3192,8 @@ HostManagerWidget::HostManagerWidget(ApplicationDatabase *database,
     // 侧栏标题行只保留三个最高频动作；编辑/删除/导入/导出都能在树的右键菜单里找到，
     // 而它们都需要先选中一个节点，本来就更适合右键这条“先选中再操作”的路径。
     auto *addGroupButton = new QToolButton(m_headerActions);
-    addGroupButton->setText(tr("新建分组"));
-    auto *addHostButton = new QPushButton(tr("新建主机"), m_headerActions);
+    addGroupButton->setText(tr("New group"));
+    auto *addHostButton = new QPushButton(tr("New host"), m_headerActions);
     addHostButton->setObjectName(QStringLiteral("HostAddButton"));
     addHostButton->setProperty("primaryAction", true);
     addHostButton->setProperty("hostPrimaryAction", true);
@@ -3209,11 +3202,11 @@ HostManagerWidget::HostManagerWidget(ApplicationDatabase *database,
     addHostButton->setMinimumWidth(90);
     addHostButton->setFixedHeight(30);
     auto *refreshButton = new QToolButton(m_headerActions);
-    refreshButton->setText(tr("刷新"));
+    refreshButton->setText(tr("Refresh"));
     UiIcons::decorateButton(
         addGroupButton,
         UiIcons::symbol(this, UiIcons::Symbol::FolderAdd, this->palette().color(QPalette::WindowText)),
-        tr("在当前层级新建主机分组"));
+        tr("Create a new host group at the current level"));
     UiIcons::decorateButton(
         addHostButton,
         // 主操作背景在浅色和深色主题下都固定为高亮绿色，图标也必须固定使用深色；若让它
@@ -3221,13 +3214,13 @@ HostManagerWidget::HostManagerWidget(ApplicationDatabase *database,
         UiIcons::symbol(this,
                         UiIcons::Symbol::Plus,
                         QColor(QStringLiteral("#0c2f24"))),
-        tr("在当前分组中新建 SSH 主机"));
+        tr("Create a new SSH host in the current group"));
     UiIcons::decorateButton(
         refreshButton,
         UiIcons::symbol(this, UiIcons::Symbol::Refresh, this->palette().color(QPalette::WindowText)),
-        tr("重新读取主机与分组"));
-    configureSidebarIconButton(addGroupButton, tr("在当前层级新建主机分组"));
-    configureSidebarIconButton(refreshButton, tr("重新读取主机与分组"));
+        tr("Reload hosts and groups"));
+    configureSidebarIconButton(addGroupButton, tr("Create a new host group at the current level"));
+    configureSidebarIconButton(refreshButton, tr("Reload hosts and groups"));
 
     auto *headerLayout = new QHBoxLayout(m_headerActions);
     headerLayout->setContentsMargins(0, 0, 0, 0);
@@ -3309,7 +3302,7 @@ void HostManagerWidget::populateContextMenu(QMenu *menu, QTreeWidgetItem *item)
             UiIcons::symbol(this,
                             UiIcons::Symbol::Connect,
                             this->palette().color(QPalette::WindowText)),
-            tr("连接"));
+            tr("Connect"));
         connect(connectAction, &QAction::triggered,
                 this, [this, item]() { activateTreeItem(item); });
         menu->addSeparator();
@@ -3319,12 +3312,12 @@ void HostManagerWidget::populateContextMenu(QMenu *menu, QTreeWidgetItem *item)
     // 标题动作区保持一致，避免同一页面的两个入口形成相反的操作习惯。
     QAction *addHostAction = menu->addAction(
         UiIcons::symbol(this, UiIcons::Symbol::Plus, this->palette().color(QPalette::WindowText)),
-        tr("新建主机"));
+        tr("New host"));
     QAction *addGroupAction = menu->addAction(
         UiIcons::symbol(this,
                         UiIcons::Symbol::FolderAdd,
                         this->palette().color(QPalette::WindowText)),
-        tr("新建分组"));
+        tr("New group"));
     connect(addHostAction, &QAction::triggered, this, &HostManagerWidget::addHost);
     connect(addGroupAction, &QAction::triggered, this, &HostManagerWidget::addGroup);
 
@@ -3340,7 +3333,7 @@ void HostManagerWidget::populateContextMenu(QMenu *menu, QTreeWidgetItem *item)
                 UiIcons::symbol(this,
                                 UiIcons::Symbol::Copy,
                                 this->palette().color(QPalette::WindowText)),
-                tr("复制"));
+                tr("Copy"));
             connect(copyAction,
                     &QAction::triggered,
                     this,
@@ -3350,12 +3343,12 @@ void HostManagerWidget::populateContextMenu(QMenu *menu, QTreeWidgetItem *item)
             UiIcons::symbol(this,
                             UiIcons::Symbol::Edit,
                             this->palette().color(QPalette::WindowText)),
-            tr("编辑"));
+            tr("Edit"));
         QAction *deleteAction = menu->addAction(
             UiIcons::symbol(this,
                             UiIcons::Symbol::Trash,
                             this->palette().color(QPalette::WindowText)),
-            tr("删除"));
+            tr("Delete"));
         connect(editAction, &QAction::triggered, this, &HostManagerWidget::editSelected);
         connect(deleteAction, &QAction::triggered, this, &HostManagerWidget::removeSelected);
     }
@@ -3365,12 +3358,12 @@ void HostManagerWidget::populateContextMenu(QMenu *menu, QTreeWidgetItem *item)
         UiIcons::symbol(this,
                         UiIcons::Symbol::Upload,
                         this->palette().color(QPalette::WindowText)),
-        tr("导入主机…"));
+        tr("Import Hosts…"));
     QAction *exportAction = menu->addAction(
         UiIcons::symbol(this,
                         UiIcons::Symbol::Download,
                         this->palette().color(QPalette::WindowText)),
-        tr("导出主机…"));
+        tr("Export Hosts…"));
     connect(importAction, &QAction::triggered, this, &HostManagerWidget::importHosts);
     connect(exportAction, &QAction::triggered, this, &HostManagerWidget::exportHosts);
     menu->addSeparator();
@@ -3378,7 +3371,7 @@ void HostManagerWidget::populateContextMenu(QMenu *menu, QTreeWidgetItem *item)
         UiIcons::symbol(this,
                         UiIcons::Symbol::Refresh,
                         this->palette().color(QPalette::WindowText)),
-        tr("刷新"));
+        tr("Refresh"));
     connect(refreshAction, &QAction::triggered, this, &HostManagerWidget::refresh);
 }
 
@@ -3480,7 +3473,7 @@ bool HostManagerWidget::appendRootLevel(QString *errorMessage)
     }
 
     if (!ungroupedHosts.isEmpty()) {
-        m_tree->addTopLevelItem(createSectionHeaderItem(tr("未分组")));
+        m_tree->addTopLevelItem(createSectionHeaderItem(tr("Ungrouped")));
         for (const HostRecord &record : ungroupedHosts) {
             m_tree->addTopLevelItem(createTreeItem(record));
         }
@@ -3498,7 +3491,7 @@ void HostManagerWidget::loadFolderExpansionState()
     if (!error.isEmpty()) {
         // 展开状态只是界面偏好，读取失败不能阻断主机管理器启动。数据库层已给出可诊断文本，
         // 这里记录日志并回退到全部默认展开；后续用户操作仍会尝试重新写入以实现自动修复。
-        qWarning().noquote() << tr("读取主机目录展开状态失败：%1").arg(error);
+        qWarning().noquote() << tr("Failed to read the host folder expansion state: %1").arg(error);
         return;
     }
     if (!storedValue.has_value()) {
@@ -3513,7 +3506,7 @@ void HostManagerWidget::loadFolderExpansionState()
         // 损坏的纯界面设置不值得阻塞启动；忽略整个值比部分猜测更可预测，下次真实操作会用
         // 当前支持的结构覆盖它。日志保留偏移和原因，方便排查手工改库或异常写入。
         qWarning().noquote()
-            << tr("主机目录展开状态格式损坏，已采用默认展开：%1（偏移 %2）")
+            << tr("The host folder expansion state is corrupt; using the default expansion: %1 (offset %2)")
                    .arg(parseError.errorString())
                    .arg(parseError.offset);
         return;
@@ -3528,7 +3521,7 @@ void HostManagerWidget::loadFolderExpansionState()
         // 版本或结构不受支持时保留默认展开。显式校验可避免未来格式升级后把任意 JSON 字段
         // 错当成目录 id，进而产生难以解释的随机折叠状态。
         qWarning().noquote()
-            << tr("主机目录展开状态版本或结构不受支持，已采用默认展开");
+            << tr("The host folder expansion state version or structure is unsupported; using the default expansion");
         return;
     }
 
@@ -3609,7 +3602,7 @@ void HostManagerWidget::persistFolderExpansionState(QTreeWidgetItem *item, const
     if (!m_database->setSetting(kHostTreeExpansionSettingKey, serializedState, &error)) {
         // 状态已留在内存中，因此当前会话交互仍正确；明确提示落库失败，让用户知道下次启动
         // 可能无法恢复，而不是把持久化故障伪装成保存成功。
-        showDatabaseError(tr("保存主机目录展开状态"), error);
+        showDatabaseError(tr("Save host folder expansion state"), error);
     }
 }
 
@@ -3632,7 +3625,7 @@ void HostManagerWidget::applyFilter()
 
     if (query.isEmpty()) {
         if (!appendRootLevel(&error)) {
-            showDatabaseError(tr("加载主机树"), error);
+            showDatabaseError(tr("Load host tree"), error);
             return;
         }
         restoreFolderExpansionState();
@@ -3647,7 +3640,7 @@ void HostManagerWidget::applyFilter()
         results = m_database->searchHosts(query, &ok, &error);
     }
     if (!ok) {
-        showDatabaseError(tr("搜索主机"), error);
+        showDatabaseError(tr("Search hosts"), error);
         return;
     }
 
@@ -3665,7 +3658,7 @@ QToolButton *HostManagerWidget::buildTagSuggestionChip(const QString &tag)
     chip->setText(QStringLiteral("#%1").arg(tag));
     chip->setStyleSheet(tagPillStyleSheet(resolveTagColor(m_tagColors, tag)));
     chip->setCursor(Qt::PointingHandCursor);
-    chip->setToolTip(tr("按此标签精确筛选主机"));
+    chip->setToolTip(tr("Filter hosts by this exact tag"));
     // 点击直接把完整"#标签名"写回搜索框：既复用 applyFilter() 已有的精确匹配路径，也让
     // 面板本身不必重复一份筛选逻辑。写入会经 textChanged 关闭面板（前缀不再是待选状态）。
     connect(chip, &QToolButton::clicked, this, [this, tag]() {
@@ -3764,7 +3757,7 @@ void HostManagerWidget::addGroup()
 
     QString error;
     if (!m_database->saveHost(record, &error)) {
-        showDatabaseError(tr("新建分组"), error);
+        showDatabaseError(tr("New group"), error);
         return;
     }
     refresh();
@@ -3785,8 +3778,8 @@ void HostManagerWidget::addHost()
             m_database->resolveHost(record.parentId, &parentError);
         if (!resolvedParent.has_value()) {
             showDatabaseError(
-                tr("读取父分组配置"),
-                parentError.isEmpty() ? tr("父分组不存在") : parentError);
+                tr("Read parent group configuration"),
+                parentError.isEmpty() ? tr("The parent group does not exist") : parentError);
             return;
         }
         inheritedParent = *resolvedParent;
@@ -3813,14 +3806,14 @@ void HostManagerWidget::addHost()
         // 凭据密文与 host.credentialId 必须处在同一事务中；先 saveSecret 再 saveHost 会在
         // 第二步失败时留下永远无人引用的密文。服务层的组合接口专门维护该原子性边界。
         hostSaved = m_credentialVault->saveConnectionPassword(
-            record, target, tr("%1 的登录凭据").arg(record.name), &error);
+            record, target, tr("Login credentials for %1").arg(record.name), &error);
         if (!hostSaved) {
-            showDatabaseError(tr("保存加密凭据"), error);
+            showDatabaseError(tr("Save encrypted credentials"), error);
             return;
         }
     }
     if (!hostSaved && !m_database->saveHost(record, &error)) {
-        showDatabaseError(tr("保存主机"), error);
+        showDatabaseError(tr("Save host"), error);
         return;
     }
     refresh();
@@ -3843,7 +3836,7 @@ void HostManagerWidget::copySelectedHost()
     const std::optional<HostRecord> source = selectedRecord(&error);
     if (!source.has_value()) {
         if (!error.isEmpty()) {
-            showDatabaseError(tr("读取主机"), error);
+            showDatabaseError(tr("Read host"), error);
         }
         return;
     }
@@ -3857,7 +3850,7 @@ void HostManagerWidget::copySelectedHost()
     const QList<HostRecord> siblings =
         m_database->listHostsInGroup(source->parentId, &siblingsLoaded, &error);
     if (!siblingsLoaded) {
-        showDatabaseError(tr("读取当前分组"), error);
+        showDatabaseError(tr("Read current group"), error);
         return;
     }
 
@@ -3892,7 +3885,7 @@ void HostManagerWidget::copySelectedHost()
         : m_credentialVault->cloneCredentialForHost(
               copied, source->credentialId, &error);
     if (!copiedSaved) {
-        showDatabaseError(tr("复制主机"), error);
+        showDatabaseError(tr("Duplicate host"), error);
         return;
     }
     refresh();
@@ -3904,7 +3897,7 @@ void HostManagerWidget::editSelected()
     const std::optional<HostRecord> existing = selectedRecord(&error);
     if (!existing.has_value()) {
         if (!error.isEmpty()) {
-            showDatabaseError(tr("读取节点"), error);
+            showDatabaseError(tr("Read node"), error);
         }
         return;
     }
@@ -3915,8 +3908,8 @@ void HostManagerWidget::editSelected()
             m_database->resolveHost(existing->parentId, &error);
         if (!resolvedParent.has_value()) {
             showDatabaseError(
-                tr("读取父分组配置"),
-                error.isEmpty() ? tr("父分组不存在") : error);
+                tr("Read parent group configuration"),
+                error.isEmpty() ? tr("The parent group does not exist") : error);
             return;
         }
         inheritedParent = *resolvedParent;
@@ -3939,15 +3932,15 @@ void HostManagerWidget::editSelected()
             return;
         }
         hostSaved = m_credentialVault->saveConnectionPassword(
-            updated, editedTarget, tr("%1 的登录凭据").arg(updated.name), &error);
+            updated, editedTarget, tr("Login credentials for %1").arg(updated.name), &error);
         if (!hostSaved) {
-            showDatabaseError(tr("更新加密凭据"), error);
+            showDatabaseError(tr("Update encrypted credentials"), error);
             return;
         }
     }
 
     if (!hostSaved && !m_database->saveHost(updated, &error)) {
-        showDatabaseError(tr("更新节点"), error);
+        showDatabaseError(tr("Update node"), error);
         return;
     }
     refresh();
@@ -3959,17 +3952,17 @@ void HostManagerWidget::removeSelected()
     const std::optional<HostRecord> record = selectedRecord(&error);
     if (!record.has_value()) {
         if (!error.isEmpty()) {
-            showDatabaseError(tr("读取节点"), error);
+            showDatabaseError(tr("Read node"), error);
         }
         return;
     }
 
     const QString warning = record->kind == HostNodeKind::Folder
-        ? tr("删除分组“%1”会同时删除其全部子分组和主机，且无法撤销。确定继续吗？")
+        ? tr("Deleting group '%1' also deletes all of its subgroups and hosts, and cannot be undone. Continue?")
               .arg(record->name)
-        : tr("确定删除主机“%1”吗？此操作无法撤销。").arg(record->name);
+        : tr("Delete host '%1'? This action cannot be undone.").arg(record->name);
     if (QMessageBox::warning(this,
-                             tr("确认删除"),
+                             tr("Confirm delete"),
                              warning,
                              QMessageBox::Yes | QMessageBox::Cancel,
                              QMessageBox::Cancel) != QMessageBox::Yes) {
@@ -3978,7 +3971,7 @@ void HostManagerWidget::removeSelected()
 
     int removedCount = 0;
     if (!m_database->removeHost(record->id, &removedCount, &error)) {
-        showDatabaseError(tr("删除节点"), error);
+        showDatabaseError(tr("Delete node"), error);
         return;
     }
     refresh();
@@ -3989,9 +3982,9 @@ void HostManagerWidget::importHosts()
     const QString defaultConfig = QDir::home().filePath(QStringLiteral(".ssh/config"));
     const QString path = QFileDialog::getOpenFileName(
         this,
-        tr("导入主机配置"),
+        tr("Import host configuration"),
         QFileInfo::exists(defaultConfig) ? defaultConfig : QDir::homePath(),
-        tr("支持的配置 (*.json *.conf *.config);;所有文件 (*)"));
+        tr("Supported configuration (*.json *.conf *.config);;All files (*)"));
     if (path.isEmpty()) {
         return;
     }
@@ -3999,8 +3992,8 @@ void HostManagerWidget::importHosts()
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly)) {
         QMessageBox::critical(this,
-                              tr("无法读取导入文件"),
-                              tr("无法打开 %1：%2").arg(path, file.errorString()));
+                              tr("Could not read the import file"),
+                              tr("Could not open %1: %2").arg(path, file.errorString()));
         return;
     }
     const QByteArray content = file.readAll();
@@ -4010,19 +4003,19 @@ void HostManagerWidget::importHosts()
         ? ConnectionConfigCodec::importJson(content, &importedRecords, &error)
         : ConnectionConfigCodec::importOpenSsh(content, &importedRecords, &error);
     if (!parsed) {
-        QMessageBox::critical(this, tr("导入失败"), error);
+        QMessageBox::critical(this, tr("Import failed"), error);
         return;
     }
     if (importedRecords.isEmpty()) {
-        QMessageBox::information(this, tr("没有可导入主机"), tr("文件中没有可用记录。"));
+        QMessageBox::information(this, tr("No hosts to import"), tr("The file has no usable records."));
         return;
     }
 
     const QString confirmation =
-        tr("将导入 %1 条主机/分组记录。所有记录会分配新的本地主键，凭据不会从配置文件导入。")
+        tr("%1 host/group records will be imported. Every record is assigned a new local primary key, and credentials are not imported from the configuration file.")
             .arg(importedRecords.size());
     if (QMessageBox::question(this,
-                              tr("确认导入"),
+                              tr("Confirm import"),
                               confirmation,
                               QMessageBox::Yes | QMessageBox::Cancel,
                               QMessageBox::Cancel) != QMessageBox::Yes) {
@@ -4035,13 +4028,13 @@ void HostManagerWidget::importHosts()
                                                 importedRecords,
                                                 selectedParentGroupId(),
                                                 &error)) {
-        showDatabaseError(tr("导入主机"), error);
+        showDatabaseError(tr("Import hosts"), error);
         return;
     }
     refresh();
     QMessageBox::information(this,
-                             tr("导入完成"),
-                             tr("已成功导入 %1 条记录。").arg(importedRecords.size()));
+                             tr("Import complete"),
+                             tr("Successfully imported %1 records.").arg(importedRecords.size()));
 }
 
 void HostManagerWidget::exportHosts()
@@ -4049,17 +4042,17 @@ void HostManagerWidget::exportHosts()
     QList<HostRecord> records;
     QString error;
     if (!collectRecords({}, &records, &error)) {
-        showDatabaseError(tr("读取导出数据"), error);
+        showDatabaseError(tr("Read export data"), error);
         return;
     }
     if (records.isEmpty()) {
-        QMessageBox::information(this, tr("没有可导出主机"), tr("主机树当前为空。"));
+        QMessageBox::information(this, tr("No hosts to export"), tr("The host tree is currently empty."));
         return;
     }
 
     const QString path = QFileDialog::getSaveFileName(
         this,
-        tr("导出 Shellium 主机"),
+        tr("Export Shellium hosts"),
         QDir::home().filePath(QStringLiteral("shellium-hosts.json")),
         tr("Shellium JSON (*.json)"));
     if (path.isEmpty()) {
@@ -4069,27 +4062,27 @@ void HostManagerWidget::exportHosts()
     QSaveFile output(path);
     if (!output.open(QIODevice::WriteOnly)) {
         QMessageBox::critical(this,
-                              tr("无法写入导出文件"),
-                              tr("无法打开 %1：%2").arg(path, output.errorString()));
+                              tr("Could not write the export file"),
+                              tr("Could not open %1: %2").arg(path, output.errorString()));
         return;
     }
     const QByteArray json = ConnectionConfigCodec::exportJson(records, &error);
     if (json.isEmpty()) {
         QMessageBox::critical(this,
-                              tr("导出失败"),
-                              error.isEmpty() ? tr("无法编码主机配置") : error);
+                              tr("Export failed"),
+                              error.isEmpty() ? tr("Could not encode the host configuration") : error);
         output.cancelWriting();
         return;
     }
     if (output.write(json) != json.size() || !output.commit()) {
         QMessageBox::critical(this,
-                              tr("导出失败"),
-                              tr("写入 %1 失败：%2").arg(path, output.errorString()));
+                              tr("Export failed"),
+                              tr("Failed to write %1: %2").arg(path, output.errorString()));
         return;
     }
     QMessageBox::information(this,
-                             tr("导出完成"),
-                             tr("已导出 %1 条主机/分组记录。文件不包含任何凭据。")
+                             tr("Export complete"),
+                             tr("%1 host/group records exported. The file contains no credentials.")
                                  .arg(records.size()));
 }
 
@@ -4099,7 +4092,7 @@ bool HostManagerWidget::collectRecords(const QString &parentId,
 {
     if (records == nullptr) {
         if (errorMessage != nullptr) {
-            *errorMessage = tr("导出记录容器为空");
+            *errorMessage = tr("The export record container is empty");
         }
         return false;
     }
@@ -4137,8 +4130,8 @@ void HostManagerWidget::requestConnection(const QString &hostId,
     QString error;
     const QList<HostRecord> records = m_database->resolveConnectionChain(hostId, &error);
     if (records.isEmpty()) {
-        showDatabaseError(tr("解析主机链"),
-                          error.isEmpty() ? tr("主机记录或链路不存在") : error);
+        showDatabaseError(tr("Resolve host chain"),
+                          error.isEmpty() ? tr("The host record or chain does not exist") : error);
         return;
     }
 
@@ -4217,9 +4210,9 @@ QTreeWidgetItem *HostManagerWidget::createTreeItem(const HostRecord &record) con
             const std::optional<HostRecord> firstJump =
                 m_database->findHost(record.hostChain.constFirst());
             detail += record.hostChain.size() == 1
-                ? tr(" · 经 %1").arg(firstJump.has_value() ? firstJump->name : tr("失效跳板"))
-                : tr(" · 经 %1 等 %2 个跳板")
-                      .arg(firstJump.has_value() ? firstJump->name : tr("失效跳板"))
+                ? tr(" · via %1").arg(firstJump.has_value() ? firstJump->name : tr("Invalid jump host"))
+                : tr(" · via %1 and %2 jump hosts")
+                      .arg(firstJump.has_value() ? firstJump->name : tr("Invalid jump host"))
                       .arg(record.hostChain.size());
         }
         item->setData(0, HostDetailRole, detail);
@@ -4238,7 +4231,7 @@ QTreeWidgetItem *HostManagerWidget::createTreeItem(const HostRecord &record) con
         // 的精确发行版本，而不是只凭颜色猜测系统家族。
         item->setToolTip(0, distributionText.isEmpty()
                                 ? detail
-                                : tr("%1\n系统：%2").arg(detail, distributionText));
+                                : tr("%1\nSystem: %2").arg(detail, distributionText));
     }
     // 两种节点都能被拖动；只有分组能接收拖放（成为其他节点的父分组），主机不是容器。
     Qt::ItemFlags flags = item->flags() | Qt::ItemIsDragEnabled;
@@ -4265,7 +4258,7 @@ void HostManagerWidget::persistTreeReorder(QTreeWidgetItem *movedItem, QTreeWidg
         ok = reindexChildren(oldParentItem, &error);
     }
     if (!ok) {
-        showDatabaseError(tr("保存拖放顺序"), error);
+        showDatabaseError(tr("Save drag-and-drop order"), error);
     }
     // 无论成功与否都刷新：成功时让内存树与刚写入的数据库状态严格对齐；失败时把树还原成
     // 数据库里真实的样子，避免用户以为拖放生效了，重启后才发现顺序没变。
@@ -4299,7 +4292,7 @@ bool HostManagerWidget::reindexChildren(QTreeWidgetItem *parentItem, QString *er
         std::optional<HostRecord> record = m_database->findHost(childId, errorMessage);
         if (!record.has_value()) {
             if (errorMessage != nullptr && errorMessage->isEmpty()) {
-                *errorMessage = tr("找不到节点 %1").arg(childId);
+                *errorMessage = tr("Node %1 not found").arg(childId);
             }
             return false;
         }
@@ -4316,6 +4309,6 @@ bool HostManagerWidget::reindexChildren(QTreeWidgetItem *parentItem, QString *er
 void HostManagerWidget::showDatabaseError(const QString &operation, const QString &details) const
 {
     QMessageBox::critical(const_cast<HostManagerWidget *>(this),
-                          tr("主机数据操作失败"),
-                          tr("%1失败：%2").arg(operation, details));
+                          tr("Host data operation failed"),
+                          tr("%1 failed: %2").arg(operation, details));
 }

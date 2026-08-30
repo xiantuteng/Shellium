@@ -154,7 +154,7 @@ public slots:
         m_stopping = false;
         setState(PortForwardState::Starting);
         if (m_sessionStack == nullptr || !m_sessionStack->isRunning()) {
-            fail(tr("SSH 会话尚未就绪，无法启动转发“%1”").arg(m_rule.name));
+            fail(tr("The SSH session is not ready; cannot start forwarding '%1'").arg(m_rule.name));
             return;
         }
 
@@ -164,7 +164,7 @@ public slots:
                                                     m_rule.bindHost,
                                                     m_rule.bindPort,
                                                     &error)) {
-                fail(tr("启动远程转发“%1”失败：%2").arg(m_rule.name, error));
+                fail(tr("Failed to start remote forwarding '%1': %2").arg(m_rule.name, error));
                 return;
             }
             setState(PortForwardState::Running);
@@ -187,12 +187,12 @@ public slots:
                                            Qt::CaseInsensitive) == 0) {
                 address = QHostAddress::LocalHost;
             } else {
-                fail(tr("监听地址“%1”不是可绑定的本机 IP 地址").arg(normalizedBindHost));
+                fail(tr("The listen address '%1' is not a bindable local IP address").arg(normalizedBindHost));
                 return;
             }
         }
         if (!m_server->listen(address, m_rule.bindPort)) {
-            fail(tr("监听 %1:%2 失败：%3")
+            fail(tr("Failed to listen on %1:%2: %3")
                      .arg(m_rule.bindHost)
                      .arg(m_rule.bindPort)
                      .arg(m_server->errorString()));
@@ -249,7 +249,7 @@ public slots:
                                                QIODevice::ReadWrite)) {
             closeNativeSocket(tunnelFd);
             tunnelSocket->deleteLater();
-            reportConnectionError(tr("接管远程转发 SSH 通道失败"));
+            reportConnectionError(tr("Failed to take over the remote forwarding SSH channel"));
             return;
         }
 
@@ -261,7 +261,7 @@ public slots:
         connect(targetSocket, &QTcpSocket::errorOccurred, this,
                 [this, tunnelSocket, targetSocket](QAbstractSocket::SocketError) {
                     reportConnectionError(
-                        tr("远程转发无法连接本机目标 %1:%2：%3")
+                        tr("Remote forwarding could not connect to the local target %1:%2: %3")
                             .arg(m_rule.targetHost)
                             .arg(m_rule.targetPort)
                             .arg(targetSocket->errorString()));
@@ -310,7 +310,7 @@ private:
         }
         iterator->buffer.append(client->readAll());
         if (iterator->buffer.size() > 64 * 1024) {
-            reportConnectionError(tr("SOCKS5 握手超过 64 KiB 安全上限"));
+            reportConnectionError(tr("SOCKS5 handshake exceeded the 64 KiB safety limit"));
             client->disconnectFromHost();
             return;
         }
@@ -367,7 +367,7 @@ private:
                 client->write(Socks5Protocol::reply(0x05));
             }
             reportConnectionError(
-                tr("无法经 SSH 连接目标 %1:%2：%3").arg(targetHost).arg(targetPort).arg(error));
+                tr("Could not connect to target %1:%2 over SSH: %3").arg(targetHost).arg(targetPort).arg(error));
             client->disconnectFromHost();
             return;
         }
@@ -381,7 +381,7 @@ private:
             if (socksClient) {
                 client->write(Socks5Protocol::reply(0x01));
             }
-            reportConnectionError(tr("接管本地 SSH 转发通道失败"));
+            reportConnectionError(tr("Failed to take over the local SSH forwarding channel"));
             client->disconnectFromHost();
             return;
         }

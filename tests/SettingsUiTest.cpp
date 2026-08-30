@@ -106,6 +106,8 @@ private slots:
     /** @brief 关闭保护时执行忘记密码重置，必须同步自动保存设置并保留主机。 */
     void forgottenVaultPasswordResetSynchronizesSettings();
     void reconnectToggleGatesDependentRows();
+    /** @brief 语言下拉必须列出候选语言，并把选择即时写入设置服务、重开时回显。 */
+    void languageSelectorPersistsAndRoundTrips();
     void colorSchemeSwatchesAreExclusiveAndPersist();
     void navigationSelectsMatchingPage();
     /** @brief 设置页不再显示保存/取消，修改必须即时入库且关闭窗口不得回滚。 */
@@ -409,7 +411,7 @@ void SettingsUiTest::forgottenVaultPasswordResetSynchronizesSettings()
                 }
                 return;
             }
-            confirmationEdit->setText(QStringLiteral("重置保险箱"));
+            confirmationEdit->setText(QStringLiteral("Reset vault"));
             resetButton->click();
         });
         forgotButton->click();
@@ -452,6 +454,37 @@ void SettingsUiTest::reconnectToggleGatesDependentRows()
     reconnectToggle->click();
     QVERIFY(attemptsSpin->isEnabled());
     QVERIFY(stepperButton(attemptsSpin, QStringLiteral("increase"))->isEnabled());
+}
+
+void SettingsUiTest::languageSelectorPersistsAndRoundTrips()
+{
+    auto service = makeService();
+    QCOMPARE(service->currentSettings().language, QStringLiteral("system"));
+
+    {
+        SettingsDialog dialog(service.get());
+        auto *selector = dialog.findChild<QComboBox *>(QStringLiteral("languageSelector"));
+        QVERIFY(selector != nullptr);
+        QVERIFY(selector->count() >= 2);
+        // 首项固定是“跟随系统”。
+        QCOMPARE(selector->itemData(0).toString(), QStringLiteral("system"));
+
+        const int englishIndex = selector->findData(QStringLiteral("en"));
+        QVERIFY(englishIndex >= 0);
+        selector->setCurrentIndex(englishIndex);
+        QCOMPARE(dialog.editedSettings().language, QStringLiteral("en"));
+    }
+
+    QCOMPARE(service->currentSettings().language, QStringLiteral("en"));
+
+    SettingsDialog reopened(service.get());
+    auto *reopenedSelector =
+        reopened.findChild<QComboBox *>(QStringLiteral("languageSelector"));
+    QVERIFY(reopenedSelector != nullptr);
+    QCOMPARE(reopenedSelector->currentData().toString(), QStringLiteral("en"));
+
+    QString error;
+    QVERIFY2(service->save(TerminalSettings{}.normalized(), &error), qPrintable(error));
 }
 
 void SettingsUiTest::colorSchemeSwatchesAreExclusiveAndPersist()

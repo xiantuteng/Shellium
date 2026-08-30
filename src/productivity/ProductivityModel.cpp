@@ -26,7 +26,7 @@ bool ProductivityModel::ensureDatabase() const
     if (m_database != nullptr) {
         return true;
     }
-    emit errorOccurred(tr("效率工具尚未连接应用数据库"));
+    emit errorOccurred(tr("Productivity is not connected to the app database yet"));
     return false;
 }
 
@@ -37,7 +37,7 @@ bool ProductivityModel::saveSnippet(const SnippetRecord &record)
     }
     QString error;
     if (!m_database->saveSnippet(record, &error)) {
-        emit errorOccurred(tr("保存 Snippet 失败：%1").arg(error));
+        emit errorOccurred(tr("Failed to save snippet: %1").arg(error));
         return false;
     }
     emit snippetsChanged();
@@ -51,7 +51,7 @@ bool ProductivityModel::removeSnippet(const QString &id, int *removedCount)
     }
     QString error;
     if (!m_database->removeSnippet(id, removedCount, &error)) {
-        emit errorOccurred(tr("删除 Snippet 失败：%1").arg(error));
+        emit errorOccurred(tr("Failed to delete snippet: %1").arg(error));
         return false;
     }
     emit snippetsChanged();
@@ -69,7 +69,7 @@ QList<SnippetRecord> ProductivityModel::snippetsInGroup(const QString &parentId,
     QString error;
     const QList<SnippetRecord> records = m_database->listSnippetsInGroup(parentId, ok, &error);
     if (!error.isEmpty()) {
-        emit errorOccurred(tr("读取 Snippet 分组失败：%1").arg(error));
+        emit errorOccurred(tr("Failed to read snippet groups: %1").arg(error));
     }
     return records;
 }
@@ -82,7 +82,7 @@ std::optional<SnippetRecord> ProductivityModel::snippet(const QString &id) const
     QString error;
     const std::optional<SnippetRecord> record = m_database->findSnippet(id, &error);
     if (!error.isEmpty()) {
-        emit errorOccurred(tr("读取 Snippet 失败：%1").arg(error));
+        emit errorOccurred(tr("Failed to read snippets: %1").arg(error));
     }
     return record;
 }
@@ -101,7 +101,7 @@ bool ProductivityModel::recordCommand(const QString &hostId, const QString &comm
     entry.command = command.trimmed();
     QString error;
     if (!m_database->appendCommandHistory(entry, &error).has_value()) {
-        emit errorOccurred(tr("写入命令历史失败：%1").arg(error));
+        emit errorOccurred(tr("Failed to write command history: %1").arg(error));
         return false;
     }
     emit commandHistoryChanged(hostId);
@@ -121,7 +121,7 @@ QList<CommandHistoryEntry> ProductivityModel::recentHistory(const QString &hostI
     QString error;
     const QList<CommandHistoryEntry> history = m_database->recentCommands(hostId, limit, ok, &error);
     if (!error.isEmpty()) {
-        emit errorOccurred(tr("读取命令历史失败：%1").arg(error));
+        emit errorOccurred(tr("Failed to read command history: %1").arg(error));
     }
     return history;
 }

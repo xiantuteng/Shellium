@@ -329,8 +329,8 @@ void ProductivityTest::terminalPaneShowsAndExpiresTransientStatus()
              "会话状态栏必须存在一个专门承载瞬时提示的 QLabel，紧邻服务器名之后");
     QVERIFY(statusLabel->text().isEmpty());
 
-    pane.showTransientStatus(QStringLiteral("正在读取主目录…"));
-    QVERIFY2(statusLabel->text().contains(QStringLiteral("正在读取主目录…")),
+    pane.showTransientStatus(QStringLiteral("Reading home directory…"));
+    QVERIFY2(statusLabel->text().contains(QStringLiteral("Reading home directory…")),
              "调用后必须立即显示传入的消息文字");
 
     // 到期后必须自动清空，不能永久占用状态栏空间——这条提示本质上是转瞬即逝的操作反馈。
@@ -352,8 +352,8 @@ void ProductivityTest::terminalPaneShowsIconForTransferResultAndClearsOnPlainSta
     QVERIFY2(statusIcon->isHidden() || statusIcon->pixmap().isNull(),
              "尚未展示任何传输结果之前不应该已经有图标");
 
-    pane.showTransientTransferResult(true, QStringLiteral("上传 a.txt → /root"));
-    QVERIFY2(statusLabel->text().contains(QStringLiteral("上传 a.txt → /root")),
+    pane.showTransientTransferResult(true, QStringLiteral("Upload a.txt → /root"));
+    QVERIFY2(statusLabel->text().contains(QStringLiteral("Upload a.txt → /root")),
              "传输结果文字必须原样展示");
     QVERIFY2(!statusIcon->isHidden() && !statusIcon->pixmap().isNull(),
              "传输成功后必须在文字前渲染一个非空图标");
@@ -367,7 +367,7 @@ void ProductivityTest::terminalPaneShowsIconForTransferResultAndClearsOnPlainSta
              "成功和失败必须使用不同的图标，而不是同一张图换个位置贴上去");
 
     // 普通提示（如目录读取进度）没有成功/失败语义，绝不能沿用上一次传输结果遗留的图标。
-    pane.showTransientStatus(QStringLiteral("正在读取主目录…"));
+    pane.showTransientStatus(QStringLiteral("Reading home directory…"));
     QVERIFY2(statusIcon->pixmap().isNull() && statusIcon->isHidden(),
              "切换回普通提示后必须清空上一次传输结果的图标");
 }

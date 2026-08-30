@@ -52,9 +52,9 @@ SshKeyManagerDialog::SshKeyManagerDialog(QWidget *parent)
     , m_importPassphraseEdit(new QLineEdit(this))
     , m_importStatusLabel(new QLabel(this))
     , m_publicKeyEdit(new QPlainTextEdit(this))
-    , m_copyPublicKeyButton(new QPushButton(tr("复制公钥"), this))
+    , m_copyPublicKeyButton(new QPushButton(tr("Copy public key"), this))
 {
-    setWindowTitle(tr("SSH 密钥管理"));
+    setWindowTitle(tr("SSH Key Management"));
     resize(720, 520);
     UiIcons::modernizePopup(m_algorithmCombo);
     auto *rootLayout = new QVBoxLayout(this);
@@ -70,57 +70,56 @@ SshKeyManagerDialog::SshKeyManagerDialog(QWidget *parent)
     }
     auto *generationPathRow = new QHBoxLayout;
     generationPathRow->addWidget(m_generationPathEdit, 1);
-    auto *generationBrowseButton = new QPushButton(tr("选择…"), generationPage);
+    auto *generationBrowseButton = new QPushButton(tr("Select…"), generationPage);
     generationPathRow->addWidget(generationBrowseButton);
     m_generationPassphraseEdit->setEchoMode(QLineEdit::Password);
     m_generationPassphraseConfirmationEdit->setEchoMode(QLineEdit::Password);
-    m_generationPassphraseEdit->setPlaceholderText(tr("可留空；建议为长期密钥设置口令"));
-    m_generationPassphraseConfirmationEdit->setPlaceholderText(tr("再次输入相同口令"));
+    m_generationPassphraseEdit->setPlaceholderText(tr("May be left empty; a passphrase is recommended for long-lived keys"));
+    m_generationPassphraseConfirmationEdit->setPlaceholderText(tr("Enter the same passphrase again"));
     m_rsaBitsSpin->setRange(2048, 4096);
     m_rsaBitsSpin->setSingleStep(1024);
     m_rsaBitsSpin->setValue(3072);
-    generationForm->addRow(tr("算法："), m_algorithmCombo);
-    generationForm->addRow(tr("私钥路径："), generationPathRow);
-    generationForm->addRow(tr("保护口令："), m_generationPassphraseEdit);
-    generationForm->addRow(tr("确认口令："), m_generationPassphraseConfirmationEdit);
-    generationForm->addRow(tr("公钥注释："), m_commentEdit);
-    generationForm->addRow(tr("RSA 位数："), m_rsaBitsSpin);
+    generationForm->addRow(tr("Algorithm:"), m_algorithmCombo);
+    generationForm->addRow(tr("Private key path:"), generationPathRow);
+    generationForm->addRow(tr("Protection passphrase:"), m_generationPassphraseEdit);
+    generationForm->addRow(tr("Confirm passphrase:"), m_generationPassphraseConfirmationEdit);
+    generationForm->addRow(tr("Public key comment:"), m_commentEdit);
+    generationForm->addRow(tr("RSA bits:"), m_rsaBitsSpin);
     generationLayout->addLayout(generationForm);
     auto *generationNotice = new QLabel(
-        tr("安全说明：Shellium 不会覆盖已有密钥；私钥以仅当前用户可读写的权限原子保存，"
-           "口令不会写入数据库。请自行备份私钥。"),
+        tr("Security note: Shellium never overwrites an existing key; the private key is saved atomically with permissions readable and writable only by the current user, and the passphrase is not written to the database. Back up your private key yourself."),
         generationPage);
     generationNotice->setWordWrap(true);
     generationLayout->addWidget(generationNotice);
-    auto *generateButton = new QPushButton(tr("生成密钥对"), generationPage);
+    auto *generateButton = new QPushButton(tr("Generate key pair"), generationPage);
     generationLayout->addWidget(generateButton, 0, Qt::AlignRight);
     m_generationStatusLabel->setWordWrap(true);
     generationLayout->addWidget(m_generationStatusLabel);
     generationLayout->addStretch(1);
-    tabs->addTab(generationPage, tr("生成"));
+    tabs->addTab(generationPage, tr("Generate"));
 
     auto *importPage = new QWidget(tabs);
     auto *importLayout = new QVBoxLayout(importPage);
     auto *importForm = new QFormLayout;
     auto *importPathRow = new QHBoxLayout;
     importPathRow->addWidget(m_importPathEdit, 1);
-    auto *importBrowseButton = new QPushButton(tr("选择…"), importPage);
+    auto *importBrowseButton = new QPushButton(tr("Select…"), importPage);
     importPathRow->addWidget(importBrowseButton);
     m_importPassphraseEdit->setEchoMode(QLineEdit::Password);
-    m_importPassphraseEdit->setPlaceholderText(tr("加密私钥需要；只在本次检查期间使用"));
-    importForm->addRow(tr("已有私钥："), importPathRow);
-    importForm->addRow(tr("保护口令："), m_importPassphraseEdit);
+    m_importPassphraseEdit->setPlaceholderText(tr("Required for an encrypted private key; used only during this check"));
+    importForm->addRow(tr("Existing private key:"), importPathRow);
+    importForm->addRow(tr("Protection passphrase:"), m_importPassphraseEdit);
     importLayout->addLayout(importForm);
-    auto *inspectButton = new QPushButton(tr("检查并提取公钥"), importPage);
+    auto *inspectButton = new QPushButton(tr("Check and extract the public key"), importPage);
     importLayout->addWidget(inspectButton, 0, Qt::AlignRight);
     m_importStatusLabel->setWordWrap(true);
     importLayout->addWidget(m_importStatusLabel);
     m_publicKeyEdit->setReadOnly(true);
-    m_publicKeyEdit->setPlaceholderText(tr("校验成功后在此显示 authorized_keys 格式公钥"));
+    m_publicKeyEdit->setPlaceholderText(tr("After verification succeeds, the authorized_keys-format public key is shown here"));
     importLayout->addWidget(m_publicKeyEdit, 1);
     m_copyPublicKeyButton->setEnabled(false);
     importLayout->addWidget(m_copyPublicKeyButton, 0, Qt::AlignRight);
-    tabs->addTab(importPage, tr("检查 / 导入"));
+    tabs->addTab(importPage, tr("Check / import"));
 
     auto *closeButtons = new QDialogButtonBox(QDialogButtonBox::Close, this);
     rootLayout->addWidget(closeButtons);
@@ -143,7 +142,7 @@ SshKeyManagerDialog::SshKeyManagerDialog(QWidget *parent)
 void SshKeyManagerDialog::browseGenerationPath()
 {
     const QString path = QFileDialog::getSaveFileName(
-        this, tr("选择新私钥保存位置"), m_generationPathEdit->text().trimmed());
+        this, tr("Choose where to save the new private key"), m_generationPathEdit->text().trimmed());
     if (!path.isEmpty()) {
         m_generationPathEdit->setText(path);
     }
@@ -153,18 +152,18 @@ void SshKeyManagerDialog::generateKeyPair()
 {
     const QString privatePath = m_generationPathEdit->text().trimmed();
     if (privatePath.isEmpty()) {
-        QMessageBox::warning(this, tr("缺少保存路径"), tr("请选择新私钥的保存位置。"));
+        QMessageBox::warning(this, tr("Missing save path"), tr("Choose where to save the new private key."));
         return;
     }
     if (m_generationPassphraseEdit->text()
         != m_generationPassphraseConfirmationEdit->text()) {
-        QMessageBox::warning(this, tr("口令不一致"), tr("两次输入的保护口令不一致。"));
+        QMessageBox::warning(this, tr("Passphrases do not match"), tr("The two protection passphrases do not match."));
         return;
     }
     if (m_algorithmCombo->currentIndex() < 0) {
         QMessageBox::critical(this,
-                              tr("没有可用算法"),
-                              tr("当前 libssh 构建不支持生成规划中的 SSH 密钥算法。"));
+                              tr("No algorithms available"),
+                              tr("The current libssh build does not support generating the planned SSH key algorithm."));
         return;
     }
 
@@ -179,7 +178,7 @@ void SshKeyManagerDialog::generateKeyPair()
                                  m_rsaBitsSpin->value(),
                                  &info,
                                  &error)) {
-        QMessageBox::critical(this, tr("生成密钥失败"), error);
+        QMessageBox::critical(this, tr("Failed to generate key"), error);
         return;
     }
 
@@ -187,7 +186,7 @@ void SshKeyManagerDialog::generateKeyPair()
     m_generationPassphraseEdit->clear();
     m_generationPassphraseConfirmationEdit->clear();
     m_generationStatusLabel->setText(
-        tr("已生成 %1 密钥。\n私钥：%2\n公钥：%3")
+        tr("Generated a %1 key.\nPrivate key: %2\nPublic key: %3")
             .arg(SshKeyManager::algorithmName(info.algorithm),
                  info.privateKeyPath,
                  info.publicKeyPath));
@@ -202,7 +201,7 @@ void SshKeyManagerDialog::browseImportPath()
               + QStringLiteral("/.ssh")
         : m_importPathEdit->text().trimmed();
     const QString path = QFileDialog::getOpenFileName(
-        this, tr("选择已有 SSH 私钥"), suggested, tr("私钥文件 (*)"));
+        this, tr("Select an existing SSH private key"), suggested, tr("Private key files (*)"));
     if (!path.isEmpty()) {
         m_importPathEdit->setText(path);
         m_publicKeyEdit->clear();
@@ -214,7 +213,7 @@ void SshKeyManagerDialog::inspectPrivateKey()
 {
     const QString privatePath = m_importPathEdit->text().trimmed();
     if (privatePath.isEmpty() || !QFileInfo::exists(privatePath)) {
-        QMessageBox::warning(this, tr("文件不存在"), tr("请选择一个存在的 SSH 私钥文件。"));
+        QMessageBox::warning(this, tr("The file does not exist"), tr("Select an existing SSH private key file."));
         return;
     }
 
@@ -227,21 +226,21 @@ void SshKeyManagerDialog::inspectPrivateKey()
     m_publicKeyEdit->clear();
     m_copyPublicKeyButton->setEnabled(false);
     if (status == SshKeyManager::ImportStatus::PassphraseRequired) {
-        m_importStatusLabel->setText(tr("该私钥已加密，请输入保护口令后重新检查。"));
+        m_importStatusLabel->setText(tr("This private key is encrypted; enter the passphrase and check again."));
         m_importPassphraseEdit->setFocus();
         return;
     }
     if (status != SshKeyManager::ImportStatus::Valid) {
         QMessageBox::critical(this,
-                              tr("私钥不可用"),
-                              error.isEmpty() ? tr("私钥格式不支持、文件损坏或口令错误。") : error);
+                              tr("The private key is unavailable"),
+                              error.isEmpty() ? tr("The private key format is unsupported, the file is corrupt, or the passphrase is wrong.") : error);
         return;
     }
 
     m_importStatusLabel->setText(
-        tr("校验通过：%1%2。可在主机编辑器的“私钥”字段选择此文件。")
+        tr("Verification passed: %1%2. You can select this file in the 'Private key' field of the host editor.")
             .arg(SshKeyManager::algorithmName(info.algorithm),
-                 info.encrypted ? tr("，已使用口令保护") : QString()));
+                 info.encrypted ? tr(", passphrase-protected") : QString()));
     m_publicKeyEdit->setPlainText(info.publicKeyLine);
     m_copyPublicKeyButton->setEnabled(!info.publicKeyLine.isEmpty());
 }

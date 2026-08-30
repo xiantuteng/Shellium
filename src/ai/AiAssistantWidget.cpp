@@ -543,7 +543,7 @@ void AiAssistantWidget::buildUi()
     serverIcon->setPixmap(UiIcons::renderSymbolPixmap(
         UiIcons::Symbol::HostItem, QColor(m_colors.text), QSize(14, 14), devicePixelRatioF()));
     contextLayout->addWidget(serverIcon);
-    m_contextTargetLabel = new QLabel(tr("未连接终端"), contextBar);
+    m_contextTargetLabel = new QLabel(tr("No connected terminal"), contextBar);
     QFont targetFont = m_contextTargetLabel->font();
     targetFont.setBold(true);
     m_contextTargetLabel->setFont(targetFont);
@@ -555,8 +555,8 @@ void AiAssistantWidget::buildUi()
     // 和选中状态立即反映出来。
     m_historyButton = new QToolButton(contextBar);
     m_historyButton->setObjectName(QStringLiteral("aiHistoryButton"));
-    m_historyButton->setAccessibleName(tr("聊天历史"));
-    m_historyButton->setToolTip(tr("查看当前标签页的聊天历史"));
+    m_historyButton->setAccessibleName(tr("Chat history"));
+    m_historyButton->setToolTip(tr("View the chat history for the current tab"));
     m_historyButton->setCursor(Qt::PointingHandCursor);
     m_historyButton->setAutoRaise(false);
     m_historyButton->setFixedSize(32, 32);
@@ -573,7 +573,7 @@ void AiAssistantWidget::buildUi()
         "QToolButton::menu-indicator { image: none; width: 0; }").arg(m_colors.hover));
     contextLayout->addWidget(m_historyButton);
 
-    m_newSessionButton = new QPushButton(tr("新会话"), contextBar);
+    m_newSessionButton = new QPushButton(tr("New session"), contextBar);
     m_newSessionButton->setObjectName(QStringLiteral("aiNewSessionButton"));
     m_newSessionButton->setCursor(Qt::PointingHandCursor);
     m_newSessionButton->setStyleSheet(QStringLiteral(
@@ -635,7 +635,7 @@ void AiAssistantWidget::buildUi()
 
     m_inputEdit = new QTextEdit(composer);
     m_inputEdit->setObjectName(QStringLiteral("aiInputEdit"));
-    m_inputEdit->setPlaceholderText(tr("描述你希望在当前服务器完成的任务…"));
+    m_inputEdit->setPlaceholderText(tr("Describe what you want to accomplish on the current server…"));
     m_inputEdit->setAcceptRichText(false);
     m_inputEdit->setMinimumHeight(kInputMinimumHeight);
     m_inputEdit->setMaximumHeight(kInputMinimumHeight);
@@ -647,14 +647,14 @@ void AiAssistantWidget::buildUi()
     auto *attachLayout = new QHBoxLayout(attachRow);
     attachLayout->setContentsMargins(3, 0, 0, 0);
     attachLayout->setSpacing(6);
-    m_attachContextCheck = new QCheckBox(tr("附带终端新增输出"), attachRow);
+    m_attachContextCheck = new QCheckBox(tr("Include new terminal output"), attachRow);
     attachLayout->addWidget(m_attachContextCheck);
     attachLayout->addStretch(1);
     m_sendButton = new QPushButton(attachRow);
     m_sendButton->setObjectName(QStringLiteral("aiSendButton"));
     m_sendButton->setIcon(UiIcons::symbol(this, UiIcons::Symbol::ArrowUp, QColor(Qt::white)));
     m_sendButton->setFixedSize(34, 34);
-    m_sendButton->setToolTip(tr("发送（Enter）"));
+    m_sendButton->setToolTip(tr("Send (Enter)"));
     m_sendButton->setStyleSheet(QStringLiteral(
         "QPushButton { background: #159a60; border: none; border-radius: 9px; }"
         "QPushButton:disabled { background: palette(mid); }"));
@@ -663,7 +663,7 @@ void AiAssistantWidget::buildUi()
     root->addWidget(composer);
 
     auto *disclaimer = new QLabel(
-        tr("AI 可能出错。所有修改系统的命令都需要你明确确认。"), this);
+        tr("The AI can make mistakes. Every command that changes the system requires your explicit confirmation."), this);
     disclaimer->setAlignment(Qt::AlignCenter);
     disclaimer->setWordWrap(true);
     disclaimer->setStyleSheet(QStringLiteral("color: palette(mid); font-size: 10.5px;"));
@@ -753,7 +753,7 @@ void AiAssistantWidget::executeLatestPendingCommand()
             return;
         }
     }
-    emit statusMessage(tr("当前没有等待执行的命令"));
+    emit statusMessage(tr("There is no command waiting to run"));
 }
 
 void AiAssistantWidget::updateInputEditorHeight()
@@ -783,7 +783,7 @@ void AiAssistantWidget::setActiveTarget(const ConnectionTarget &target)
         return;
     }
     if (!target.isValid()) {
-        m_contextTargetLabel->setText(tr("未连接终端"));
+        m_contextTargetLabel->setText(tr("No connected terminal"));
         return;
     }
     m_contextTargetLabel->setText(target.displayName.isEmpty() ? target.host : target.displayName);
@@ -797,7 +797,7 @@ void AiAssistantWidget::setTerminalContextProvider(std::function<QString()> prov
 void AiAssistantWidget::startNewSession()
 {
     if (m_requestInFlight || m_captureInFlight) {
-        emit statusMessage(tr("有请求正在进行，请稍候再开启新会话"));
+        emit statusMessage(tr("A request is in progress; wait before starting a new session"));
         return;
     }
 
@@ -855,7 +855,7 @@ QString AiAssistantWidget::conversationTitle(const QList<AiChatMessage> &history
             ? normalized.left(kMaximumTitleCharacters - 1) + QChar(0x2026)
             : normalized;
     }
-    return tr("未命名会话");
+    return tr("Untitled session");
 }
 
 void AiAssistantWidget::synchronizeActiveConversation()
@@ -894,7 +894,7 @@ void AiAssistantWidget::populateConversationHistoryMenu()
     m_historyMenu->clear();
 
     if (m_recentConversations.isEmpty()) {
-        QAction *emptyAction = m_historyMenu->addAction(tr("暂无聊天记录"));
+        QAction *emptyAction = m_historyMenu->addAction(tr("No chat history yet"));
         emptyAction->setEnabled(false);
         return;
     }
@@ -917,7 +917,7 @@ void AiAssistantWidget::populateConversationHistoryMenu()
 void AiAssistantWidget::loadConversation(const QString &conversationId)
 {
     if (m_requestInFlight || m_captureInFlight) {
-        emit statusMessage(tr("当前会话仍在处理中，请稍候再切换聊天记录"));
+        emit statusMessage(tr("The current session is still processing; wait before switching chat history"));
         return;
     }
     synchronizeActiveConversation();
@@ -972,7 +972,7 @@ void AiAssistantWidget::renderActiveConversation()
             const bool alreadyExecuted = index + 1 < m_history.size()
                 && m_history.at(index + 1).role == AiChatRole::User
                 && m_history.at(index + 1).content.startsWith(
-                    tr("[命令 `%1` 的执行结果]").arg(reply.command));
+                    tr("[Result of command `%1`]").arg(reply.command));
             appendCommandCard(reply.command, QString(), QString(), alreadyExecuted);
         } else {
             appendAssistantBubble(reply.message);
@@ -998,7 +998,7 @@ void AiAssistantWidget::sendCurrentInput()
     if (m_attachContextCheck != nullptr && m_attachContextCheck->isChecked()) {
         const QString newOutput = consumeNewTerminalOutput();
         if (!newOutput.isEmpty()) {
-            ephemeralContext = tr("[终端新增输出]\n%1").arg(newOutput);
+            ephemeralContext = tr("[New terminal output]\n%1").arg(newOutput);
         }
     }
     sendMessageInternal(text, ephemeralContext);
@@ -1024,7 +1024,7 @@ void AiAssistantWidget::sendMessageInternal(const QString &historyText,
     const AiSettings settings = m_settingsService->currentSettings();
     if (!settings.isConfigured()) {
         appendNoticeBubble(
-            tr("请先在设置 → AI 助手中配置大模型地址和模型名称"), true);
+            tr("Configure the LLM URL and model name in Settings → AI Assistant first"), true);
         scrollToBottom();
         return;
     }
@@ -1089,12 +1089,12 @@ void AiAssistantWidget::requestAgentProtocolRepair(const QString &invalidContent
 {
     if (m_agentProtocolRepairCount >= kMaxAgentProtocolRepairs) {
         appendNoticeBubble(
-            tr("AI 未能按单步交互协议返回结果，已停止本轮操作。请重试或更换支持 JSON 指令的模型。"),
+            tr("The AI did not return a result following the single-step interaction protocol; this round has been stopped. Retry or switch to a model that supports JSON instructions."),
             true);
         m_agentProtocolRepairCount = 0;
         setBusy(false);
         scrollToBottom();
-        emit statusMessage(tr("AI 响应不符合单步智能体协议：%1").arg(validationError));
+        emit statusMessage(tr("The AI response does not conform to the single-step agent protocol: %1").arg(validationError));
         return;
     }
 
@@ -1103,8 +1103,7 @@ void AiAssistantWidget::requestAgentProtocolRepair(const QString &invalidContent
     repairMessages.append(AiChatMessage{AiChatRole::Assistant, invalidContent});
     repairMessages.append(AiChatMessage{
         AiChatRole::User,
-        tr("你刚才的响应违反了单步协议：%1。请重新决策，只返回一个符合系统消息定义的 JSON "
-           "对象；不要输出完整计划，不要输出多个命令，也不要解释协议本身。")
+        tr("Your last response violated the single-step protocol: %1. Decide again and return only one JSON object as defined by the system message; do not output a full plan, multiple commands, or an explanation of the protocol itself.")
             .arg(validationError)});
 
     const AiSettings settings = m_settingsService->currentSettings();
@@ -1163,7 +1162,7 @@ QWidget *AiAssistantWidget::buildThinkingIndicator()
     icon->setStyleSheet(
         QStringLiteral("background: %1; border-radius: 8px;").arg(m_colors.avatarTint));
     rowLayout->addWidget(icon);
-    auto *text = new QLabel(tr("正在分析…"), row);
+    auto *text = new QLabel(tr("Analyzing…"), row);
     text->setStyleSheet(QStringLiteral("color: palette(mid); font-style: italic;"));
     rowLayout->addWidget(text);
     rowLayout->addStretch(1);
@@ -1258,7 +1257,7 @@ void AiAssistantWidget::appendCommandCard(const QString &command,
         .arg(QColor(accent.red(), accent.green(), accent.blue(), 36).name(QColor::HexArgb)));
     auto *headerLayout = new QHBoxLayout(header);
     headerLayout->setContentsMargins(11, 7, 11, 7);
-    auto *statusLabel = new QLabel(tr("等待确认"), header);
+    auto *statusLabel = new QLabel(tr("Awaiting confirmation"), header);
     QFont statusFont = statusLabel->font();
     statusFont.setBold(true);
     statusLabel->setFont(statusFont);
@@ -1316,15 +1315,15 @@ void AiAssistantWidget::appendCommandCard(const QString &command,
     auto *actionsLayout = new QHBoxLayout(actions);
     actionsLayout->setContentsMargins(8, 5, 8, 7);
     actionsLayout->setSpacing(5);
-    auto *insertButton = new QPushButton(tr("插入"), actions);
-    auto *copyButton = new QPushButton(tr("复制"), actions);
-    auto *modifyButton = new QPushButton(tr("修改"), actions);
-    auto *executeButton = new QPushButton(tr("执行  ⌘↵"), actions);
+    auto *insertButton = new QPushButton(tr("Insert"), actions);
+    auto *copyButton = new QPushButton(tr("Copy"), actions);
+    auto *modifyButton = new QPushButton(tr("Edit"), actions);
+    auto *executeButton = new QPushButton(tr("Run  ⌘↵"), actions);
     insertButton->setObjectName(QStringLiteral("aiInsertButton"));
     copyButton->setObjectName(QStringLiteral("aiCopyButton"));
     modifyButton->setObjectName(QStringLiteral("aiModifyButton"));
     executeButton->setObjectName(QStringLiteral("aiExecuteButton"));
-    executeButton->setToolTip(tr("执行最后一条待确认命令（Command+Enter）"));
+    executeButton->setToolTip(tr("Run the last command awaiting confirmation (Command+Enter)"));
     for (QPushButton *button : {insertButton, copyButton, modifyButton, executeButton}) {
         button->setProperty("aiCompactAction", true);
         button->setCursor(Qt::PointingHandCursor);
@@ -1333,8 +1332,8 @@ void AiAssistantWidget::appendCommandCard(const QString &command,
     if (alreadyExecuted) {
         // 从历史记录恢复的已执行命令只能保留查看、复制和再次插入能力，不能重新出现为待确认
         // 状态；否则用户可能把一次旧操作误认为当前智能体刚提出的新步骤并重复执行。
-        statusLabel->setText(tr("已执行"));
-        executeButton->setText(tr("已执行"));
+        statusLabel->setText(tr("Executed"));
+        executeButton->setText(tr("Executed"));
         executeButton->setEnabled(false);
     }
     actionsLayout->addWidget(insertButton);
@@ -1350,14 +1349,14 @@ void AiAssistantWidget::appendCommandCard(const QString &command,
     connect(copyButton, &QPushButton::clicked, this, [this, command]() {
         QGuiApplication::clipboard()->setText(command);
         // 使用主窗口现有的非阻塞提示区反馈复制结果，不弹模态 QMessageBox 打断连续操作。
-        emit statusMessage(tr("命令已复制到剪贴板"));
+        emit statusMessage(tr("Command copied to clipboard"));
     });
     connect(modifyButton, &QPushButton::clicked, this, [this, command]() {
         bool accepted = false;
         const QString editedCommand = QInputDialog::getText(
             this,
-            tr("修改命令"),
-            tr("确认后将插入当前终端，不会自动执行："),
+            tr("Edit command"),
+            tr("After confirmation it is inserted into the current terminal and not run automatically:"),
             QLineEdit::Normal,
             command,
             &accepted).trimmed();
@@ -1365,7 +1364,7 @@ void AiAssistantWidget::appendCommandCard(const QString &command,
             return;
         }
         if (editedCommand.contains(QLatin1Char('\n')) || editedCommand.contains(QLatin1Char('\r'))) {
-            appendNoticeBubble(tr("只能向终端插入单行命令"), true);
+            appendNoticeBubble(tr("Only a single-line command can be inserted into the terminal"), true);
             return;
         }
         emit commandInsertionRequested(editedCommand, QStringList{});
@@ -1373,14 +1372,14 @@ void AiAssistantWidget::appendCommandCard(const QString &command,
     connect(executeButton, &QPushButton::clicked, this,
             [this, command, level, executeButton, statusLabel, card, actions]() {
         if (m_captureInFlight) {
-            emit statusMessage(tr("上一条命令还在等待输出，请稍候再执行"));
+            emit statusMessage(tr("The previous command is still waiting for output; please wait before running another"));
             return;
         }
         if (level == CommandRiskLevel::HighRisk) {
             const auto choice = QMessageBox::warning(
                 this,
-                tr("确认执行高风险命令"),
-                tr("这条命令可能造成不可逆或大范围影响：\n\n%1\n\n确定要在当前终端执行吗？")
+                tr("Confirm running a high-risk command"),
+                tr("This command may have irreversible or wide-ranging effects:\n\n%1\n\nRun it in the current terminal?")
                     .arg(command),
                 QMessageBox::Yes | QMessageBox::Cancel,
                 QMessageBox::Cancel);
@@ -1389,13 +1388,13 @@ void AiAssistantWidget::appendCommandCard(const QString &command,
             }
         }
         executeButton->setEnabled(false);
-        executeButton->setText(tr("已执行"));
-        statusLabel->setText(tr("已执行"));
+        executeButton->setText(tr("Executed"));
+        statusLabel->setText(tr("Executed"));
         // 必须先拍下终端基线再下发命令。executeOnTargets 是同步信号槽，极快命令可能在 emit
         // 返回前就已经产生回显；若下发后才记录位置，这部分真实输出会被误当成旧内容丢弃。
         beginOutputCapture(command, card, actions);
         emit commandExecutionRequested(command, QStringList{});
-        emit statusMessage(tr("已发送到当前终端执行，AI 将自动等待完成"));
+        emit statusMessage(tr("Sent to the current terminal to run; the AI will wait for it to finish automatically"));
     });
 
     cardRowLayout->addWidget(card, 1);
@@ -1421,7 +1420,7 @@ void AiAssistantWidget::updateSendButtonMode()
                                           stoppable ? UiIcons::Symbol::Stop
                                                     : UiIcons::Symbol::ArrowUp,
                                           QColor(Qt::white)));
-    m_sendButton->setToolTip(stoppable ? tr("停止") : tr("发送（Enter）"));
+    m_sendButton->setToolTip(stoppable ? tr("Stop") : tr("Send (Enter)"));
     m_sendButton->setStyleSheet(
         stoppable
             ? QStringLiteral(
@@ -1443,8 +1442,8 @@ void AiAssistantWidget::stopActiveWork()
         }
         m_agentProtocolRepairCount = 0;
         setBusy(false);
-        appendNoticeBubble(tr("已停止本次分析。可以补充说明后重新发送。"), false);
-        emit statusMessage(tr("已停止 AI 分析"));
+        appendNoticeBubble(tr("This analysis has been stopped. Add more detail and send again."), false);
+        emit statusMessage(tr("AI analysis stopped"));
         scrollToBottom();
         return;
     }
@@ -1472,8 +1471,8 @@ void AiAssistantWidget::cancelOutputCapture()
     // 若把它重新灌给模型，等于把用户刚刚放弃的那一轮又拉回上下文。
     updateSendButtonMode();
     appendNoticeBubble(
-        tr("已停止等待命令执行结果，命令仍在终端继续运行。"), false);
-    emit statusMessage(tr("已停止等待命令执行结果"));
+        tr("Stopped waiting for the command result; the command is still running in the terminal."), false);
+    emit statusMessage(tr("Stopped waiting for the command result"));
     scrollToBottom();
 }
 
@@ -1485,7 +1484,7 @@ void AiAssistantWidget::beginOutputCapture(const QString &command, QFrame *card,
     if (!m_terminalContextProvider) {
         // 没有可读的终端快照时无法安全判断完成，也不能要求用户手工复制。显示明确状态，
         // 保持命令已下发的事实，同时停止自动链路，避免伪造执行结果。
-        appendNoticeBubble(tr("无法读取当前终端状态，不能自动等待命令完成。"), true);
+        appendNoticeBubble(tr("Could not read the current terminal state; cannot wait for the command to finish automatically."), true);
         return;
     }
 
@@ -1509,7 +1508,7 @@ void AiAssistantWidget::beginOutputCapture(const QString &command, QFrame *card,
     if (card != nullptr && actionsRow != nullptr) {
         auto *cardLayout = qobject_cast<QVBoxLayout *>(card->layout());
         if (cardLayout != nullptr) {
-            auto *waitingLabel = new QLabel(tr("正在等待命令执行完成…"), card);
+            auto *waitingLabel = new QLabel(tr("Waiting for the command to finish…"), card);
             waitingLabel->setObjectName(QStringLiteral("aiCommandWaitingLabel"));
             waitingLabel->setStyleSheet(
                 QStringLiteral("color: %1; font-style: italic; padding: 5px 11px;")
@@ -1551,7 +1550,7 @@ void AiAssistantWidget::pollCaptureTick()
         // 等待状态只报"还在等、等了多久"这一件事。附带的操作说明每秒重绘一次，却在整个
         // 等待期间一字不变，读一遍之后就只是把命令卡片撑高、把上一轮回答挤出视野。
         m_captureWaitingLabel->setText(
-            tr("正在等待命令执行完成… 已等待 %1 秒").arg(elapsedSeconds));
+            tr("Waiting for the command to finish… waited %1 s").arg(elapsedSeconds));
     }
 
     // 必须先观察到终端变化，再接受提示符回归；否则命令下发与第一次轮询之间的短暂窗口里，
@@ -1573,7 +1572,7 @@ void AiAssistantWidget::finishOutputCapture()
     // 在终端和聊天区重复出现，也避免密码、令牌、数据库结果等内容被长期留在对话界面。
     QString output = consumeNewTerminalOutput();
     if (output.isEmpty()) {
-        output = tr("(无输出)");
+        output = tr("(no output)");
     }
 
     if (!m_captureWaitingLabel.isNull()) {
@@ -1583,7 +1582,7 @@ void AiAssistantWidget::finishOutputCapture()
     m_captureCardActionsRow.clear();
     m_captureWaitingLabel.clear();
 
-    const QString marker = tr("[命令 `%1` 的执行结果]\n%2").arg(m_captureCommand, output);
+    const QString marker = tr("[Result of command `%1`]\n%2").arg(m_captureCommand, output);
     sendMessageInternal(marker);
 }
 

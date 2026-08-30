@@ -970,11 +970,11 @@ void SshSessionStackIntegrationTest::normalExitOffersManualRecoveryInsteadOfLoca
     QVERIFY2(!pane.isConnected(), "提示状态下不应存在可交互会话");
 
     const QString screen = pane.terminalPlainText();
-    QVERIFY2(screen.contains(QStringLiteral("按 r 重新连接")),
+    QVERIFY2(screen.contains(QStringLiteral("Press r to reconnect")),
              "结束后必须给出手动重连按键");
-    QVERIFY2(screen.contains(QStringLiteral("按 x 关闭")),
+    QVERIFY2(screen.contains(QStringLiteral("press x to close this tab")),
              "结束后必须给出关闭标签页按键");
-    QVERIFY2(!screen.contains(QStringLiteral("正在启动本地终端")),
+    QVERIFY2(!screen.contains(QStringLiteral("Starting local terminal")),
              "主动结束 SSH 后不得擅自接回本地 Shell");
 }
 

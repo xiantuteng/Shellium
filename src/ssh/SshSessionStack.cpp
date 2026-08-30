@@ -168,7 +168,7 @@ NativeSocketHandle SshSessionStack::openForwardSocketImpl(const bool rootOrigin,
 {
     if (!isRunning() || shouldStop()) {
         if (errorMessage != nullptr) {
-            *errorMessage = tr("外层 SSH 会话已经结束");
+            *errorMessage = tr("The outer SSH session has ended");
         }
         return InvalidNativeSocket;
     }
@@ -187,7 +187,7 @@ NativeSocketHandle SshSessionStack::openForwardSocketImpl(const bool rootOrigin,
     if (!request->condition.wait(&request->mutex, 15000) || !request->completed) {
         request->cancelled = true;
         if (errorMessage != nullptr) {
-            *errorMessage = tr("创建内层 SSH 转发通道超时");
+            *errorMessage = tr("Timed out creating the inner SSH forwarding channel");
         }
         return InvalidNativeSocket;
     }
@@ -204,7 +204,7 @@ bool SshSessionStack::startRemoteForward(const QString &ruleId,
 {
     if (!isRunning() || shouldStop()) {
         if (errorMessage != nullptr) {
-            *errorMessage = tr("根 SSH 会话已经结束");
+            *errorMessage = tr("The root SSH session has ended");
         }
         return false;
     }
@@ -221,7 +221,7 @@ bool SshSessionStack::startRemoteForward(const QString &ruleId,
     if (!request->condition.wait(&request->mutex, 20000) || !request->completed) {
         request->cancelled = true;
         if (errorMessage != nullptr) {
-            *errorMessage = tr("等待服务器建立远程监听超时");
+            *errorMessage = tr("Timed out waiting for the server to set up remote listening");
         }
         // 排队停止保证晚到的成功结果不会留下无人管理的远程监听。
         requestLocker.unlock();
@@ -257,7 +257,7 @@ void SshSessionStack::run()
     }
 
     if (m_connectionPlan.isEmpty() || !m_connectionPlan.constFirst().isValid()) {
-        emit connectionError(tr("连接计划为空或第一跳无效"));
+        emit connectionError(tr("The connection plan is empty or the first hop is invalid"));
         return;
     }
     ConnectionTarget rootTarget = m_connectionPlan.constFirst();
@@ -277,7 +277,7 @@ void SshSessionStack::run()
 
     const bool remoteShellEnded = pumpLoop();
 
-    abortInFlightForwards(tr("SSH 会话已经结束"));
+    abortInFlightForwards(tr("The SSH session has ended"));
     const int exitStatus = m_layers.empty() ? -1 : m_layers.back()->shellExitStatus();
     // 逐层析构会关闭各自的 Shell、转发通道和 socket；栈顶先释放，保证内层通道在其承载的
     // 外层会话之前关闭。
@@ -343,7 +343,7 @@ bool SshSessionStack::pumpLoop()
                 } else {
                     emit shellIntegrationFailed(
                         layer->target(),
-                        execError.isEmpty() ? tr("远端未返回安装结果") : execError);
+                        execError.isEmpty() ? tr("The remote returned no installation result") : execError);
                 }
             }
         }
@@ -377,7 +377,7 @@ bool SshSessionStack::pumpLoop()
                 // 观察式识别的根本优势：出栈与入栈同样可靠。
                 popTopLayer();
                 discardPendingCredential();
-                abortInFlightForwards(tr("承载该请求的 SSH 会话层已经关闭"));
+                abortInFlightForwards(tr("The SSH session layer carrying this request is already closed"));
                 emit layersChanged(layerTargets());
                 continue;
             }
@@ -436,7 +436,7 @@ bool SshSessionStack::pumpLoop()
                 continue;
             }
             if (written < 0) {
-                emit connectionError(tr("向远端终端写入数据失败：%1").arg(top.lastError()));
+                emit connectionError(tr("Failed to write data to the remote terminal: %1").arg(top.lastError()));
                 return false;
             }
             writeOffset += written;
@@ -567,7 +567,7 @@ bool SshSessionStack::advanceEstablishingLayers()
                 emit legacyHmacRequired(step.message);
             } else {
                 emit connectionError(
-                    tr("主机链在 %1 失败：%2")
+                    tr("The host chain failed at %1: %2")
                         .arg(failedTarget.connectionSpecifier(true), step.message));
             }
             return false;
@@ -637,7 +637,7 @@ void SshSessionStack::servicePendingLayerRequests()
     }
     if (changed) {
         // 被弹掉的那一层上可能还挂着在途请求，它们的结果永远不会再产生。
-        abortInFlightForwards(tr("承载该请求的 SSH 会话层已经关闭"));
+        abortInFlightForwards(tr("The SSH session layer carrying this request is already closed"));
         emit layersChanged(layerTargets());
     }
 
@@ -645,7 +645,7 @@ void SshSessionStack::servicePendingLayerRequests()
         return;
     }
     if (m_layers.empty() || !m_layers.back()->isReady()) {
-        const QString error = tr("当前没有可用于建立内层连接的已就绪会话");
+        const QString error = tr("There is no ready session available to establish an inner connection");
         if (push.planned) {
             m_plannedFailure = error;
         } else {
@@ -663,7 +663,7 @@ void SshSessionStack::servicePendingLayerRequests()
     if (forwardId == 0) {
         releaseSuspendedOuterShim(push);
         if (push.planned) {
-            m_plannedFailure = tr("主机链在 %1 失败：%2")
+            m_plannedFailure = tr("The host chain failed at %1: %2")
                                    .arg(push.target.connectionSpecifier(true), error);
         } else {
             emit layerFailed(push.target, error);
@@ -686,7 +686,7 @@ void SshSessionStack::handleForwardOutcome(const SshSessionNode::ForwardOutcome 
         if (!outcome.ok) {
             releaseSuspendedOuterShim(push);
             if (push.planned) {
-                m_plannedFailure = tr("主机链在 %1 失败：%2")
+                m_plannedFailure = tr("The host chain failed at %1: %2")
                                        .arg(target.connectionSpecifier(true), outcome.error);
             } else {
                 emit layerFailed(target, outcome.error);
@@ -695,7 +695,7 @@ void SshSessionStack::handleForwardOutcome(const SshSessionNode::ForwardOutcome 
         }
         if (m_layers.empty()) {
             closeNativeSocket(outcome.callerFd);
-            const QString error = tr("承载该内层连接的会话已经关闭");
+            const QString error = tr("The session carrying this inner connection is already closed");
             if (push.planned) {
                 m_plannedFailure = error;
             } else {
@@ -730,7 +730,7 @@ void SshSessionStack::handleForwardOutcome(const SshSessionNode::ForwardOutcome 
             // 释放，重复关闭会误伤后续复用同一编号的 fd。
             releaseSuspendedOuterShim(push);
             if (push.planned) {
-                m_plannedFailure = tr("主机链在 %1 失败：%2")
+                m_plannedFailure = tr("The host chain failed at %1: %2")
                                        .arg(target.connectionSpecifier(true), start.message);
             } else {
                 emit layerFailed(target, start.message);
@@ -757,7 +757,7 @@ void SshSessionStack::handleForwardOutcome(const SshSessionNode::ForwardOutcome 
     if (outcome.ok && request->cancelled) {
         // 请求方已超时离开，通道无人认领。
         closeNativeSocket(outcome.callerFd);
-        request->error = tr("SFTP 隧道请求已取消");
+        request->error = tr("SFTP tunnel request cancelled");
         request->clientFd = InvalidNativeSocket;
     } else if (outcome.ok) {
         request->clientFd = outcome.callerFd;
@@ -809,7 +809,7 @@ void SshSessionStack::beginShellIntegrationInstall(SshSessionNode &node)
     if (!node.beginDetachedExec(ShellShim::installCommand(path))) {
         // 发起失败不影响会话本身，只是这一层退回命令解析的降级路径；显式上报可避免用户
         // 误以为随后识别出的推测层仍具有自持层同等的确定性。
-        emit shellIntegrationFailed(node.target(), tr("无法创建远端脚本安装通道"));
+        emit shellIntegrationFailed(node.target(), tr("Could not create the remote script installation channel"));
         return;
     }
 }
@@ -883,7 +883,7 @@ void SshSessionStack::pumpAllForwards()
         request->succeeded = outcome.ok && !request->cancelled;
         request->error = request->succeeded
             ? QString()
-            : (request->cancelled ? tr("远程监听申请已取消") : outcome.error);
+            : (request->cancelled ? tr("The remote listening request was cancelled") : outcome.error);
         request->condition.wakeAll();
         if (outcome.ok && request->cancelled && !m_layers.empty()) {
             m_layers.front()->cancelRemoteListen(outcome.ruleId);
@@ -934,7 +934,7 @@ void SshSessionStack::serviceForwardRequests()
             forwardId = origin->beginForward(
                 request->host, request->port, false, kSftpForwardTimeoutMs, &error);
         } else {
-            error = tr("承载该目标的外层 SSH 会话不可用");
+            error = tr("The outer SSH session carrying this target is unavailable");
         }
 
         if (forwardId != 0) {
@@ -979,7 +979,7 @@ void SshSessionStack::serviceRemoteForwardRequests()
             QMutexLocker requestLocker(&request->mutex);
             request->cancelled = true;
             request->completed = true;
-            request->error = tr("远程监听申请已停止");
+            request->error = tr("The remote listening request has stopped");
             request->condition.wakeAll();
         }
     }
@@ -988,13 +988,13 @@ void SshSessionStack::serviceRemoteForwardRequests()
         QMutexLocker requestLocker(&request->mutex);
         if (request->cancelled) {
             request->completed = true;
-            request->error = tr("远程监听申请已取消");
+            request->error = tr("The remote listening request was cancelled");
             request->condition.wakeAll();
             continue;
         }
         if (root == nullptr || !root->isReady()) {
             request->completed = true;
-            request->error = tr("根 SSH 会话尚未就绪");
+            request->error = tr("The root SSH session is not ready yet");
             request->condition.wakeAll();
             continue;
         }

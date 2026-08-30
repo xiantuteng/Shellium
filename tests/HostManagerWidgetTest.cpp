@@ -267,9 +267,9 @@ void HostManagerWidgetTest::headerExposesOnlyThreePrimaryActions()
     }
     std::sort(labels.begin(), labels.end());
     QCOMPARE(labels,
-             (QStringList{QStringLiteral("刷新"),
-                          QStringLiteral("新建主机"),
-                          QStringLiteral("新建分组")}));
+             (QStringList{QStringLiteral("New group"),
+                          QStringLiteral("New host"),
+                          QStringLiteral("Refresh")}));
 
     // 导入/导出已移入树的右键菜单，不应再占用侧栏顶部的常驻位置。
     QVERIFY(!labels.contains(QStringLiteral("导入")));
@@ -310,12 +310,12 @@ void HostManagerWidgetTest::hostContextMenuProvidesCopyAndRequestedCreationOrder
         }
     }
 
-    const qsizetype addHostIndex = actionTexts.indexOf(QStringLiteral("新建主机"));
-    const qsizetype addGroupIndex = actionTexts.indexOf(QStringLiteral("新建分组"));
+    const qsizetype addHostIndex = actionTexts.indexOf(QStringLiteral("New host"));
+    const qsizetype addGroupIndex = actionTexts.indexOf(QStringLiteral("New group"));
     QVERIFY2(addHostIndex >= 0, "主机右键菜单缺少新建主机动作");
     QVERIFY2(addGroupIndex >= 0, "主机右键菜单缺少新建分组动作");
     QVERIFY2(addHostIndex < addGroupIndex, "新建主机没有排在新建分组之前");
-    QVERIFY2(actionTexts.contains(QStringLiteral("复制")), "主机右键菜单缺少复制动作");
+    QVERIFY2(actionTexts.contains(QStringLiteral("Copy")), "主机右键菜单缺少复制动作");
 }
 
 void HostManagerWidgetTest::copyHostKeepsConfigurationInSameGroup()
@@ -447,7 +447,7 @@ void HostManagerWidgetTest::groupDialogHasNoStrayWidgets()
     // 所以在事件循环里取当前模态窗口来检查，再关掉它让 addGroup() 返回。
     QAbstractButton *addGroupButton = nullptr;
     for (QAbstractButton *button : widget.headerActionsWidget()->findChildren<QAbstractButton *>()) {
-        if (button->text() == QStringLiteral("新建分组")) {
+        if (button->text() == QStringLiteral("New group")) {
             addGroupButton = button;
         }
     }
@@ -519,7 +519,7 @@ void HostManagerWidgetTest::hostDialogUsesRequestedFieldOrderAndIcons()
 
     QAbstractButton *addHostButton = nullptr;
     for (QAbstractButton *button : widget.headerActionsWidget()->findChildren<QAbstractButton *>()) {
-        if (button->text() == QStringLiteral("新建主机")) {
+        if (button->text() == QStringLiteral("New host")) {
             addHostButton = button;
             break;
         }
@@ -590,7 +590,7 @@ void HostManagerWidgetTest::hostDialogUsesRequestedFieldOrderAndIcons()
                 auto *messageBox = qobject_cast<QMessageBox *>(
                     QApplication::activeModalWidget());
                 if (messageBox != nullptr
-                    && messageBox->text().contains(QStringLiteral("启用主密码保护"))) {
+                    && messageBox->text().contains(QStringLiteral("master password protection"))) {
                     guidanceShown = true;
                     messageBox->accept();
                 }
@@ -891,7 +891,7 @@ void HostManagerWidgetTest::newlySavedHostRequestsConnectionInNewTab()
 
     QAbstractButton *addHostButton = nullptr;
     for (QAbstractButton *button : widget.headerActionsWidget()->findChildren<QAbstractButton *>()) {
-        if (button->text() == QStringLiteral("新建主机")) {
+        if (button->text() == QStringLiteral("New host")) {
             addHostButton = button;
             break;
         }
@@ -980,7 +980,7 @@ void HostManagerWidgetTest::configuredProxyJumpRemainsVisibleWhenEditing()
         if (dialog == nullptr || advancedSettings == nullptr || proxyJumps == nullptr) {
             failure = QStringLiteral("已有主机的 ProxyJump 高级控件不完整");
         } else if (!advancedSettings->isChecked() || !proxyJumps->isVisible()
-                   || !advancedSettings->text().contains(QStringLiteral("已配置"))) {
+                   || !advancedSettings->text().contains(QStringLiteral("configured"))) {
             // 既有路由必须在打开窗口时主动显露；否则用户可能误以为当前目标是直连并保存
             // 其他改动，给连接排障和安全审计带来歧义。
             failure = QStringLiteral("已有 ProxyJump 未自动展开或缺少已配置提示");
@@ -1000,7 +1000,7 @@ void HostManagerWidgetTest::emptyHostNameFollowsConnectionFieldsUntilManuallyEdi
 
     QAbstractButton *addHostButton = nullptr;
     for (QAbstractButton *button : widget.headerActionsWidget()->findChildren<QAbstractButton *>()) {
-        if (button->text() == QStringLiteral("新建主机")) {
+        if (button->text() == QStringLiteral("New host")) {
             addHostButton = button;
             break;
         }
@@ -1774,7 +1774,7 @@ void HostManagerWidgetTest::tagShortcutEntersTagSearchMode()
     auto *tagButton = widget.findChild<QToolButton *>(QStringLiteral("HostTagFilterButton"));
     QVERIFY2(searchEdit != nullptr, "主机页没有设计稿要求的组合搜索输入框");
     QVERIFY2(tagButton != nullptr, "搜索框右侧缺少 #标签 快捷入口");
-    QCOMPARE(tagButton->text(), QStringLiteral("#标签"));
+    QCOMPARE(tagButton->text(), QStringLiteral("#tag"));
 
     tagButton->click();
     QCOMPARE(searchEdit->text(), QStringLiteral("#"));
@@ -1895,7 +1895,7 @@ void HostManagerWidgetTest::ungroupedHostsFollowFoldersBehindSectionHeader()
              HostNodeKind::Folder);
 
     QTreeWidgetItem *headerItem = tree->topLevelItem(1);
-    QCOMPARE(headerItem->text(0), QStringLiteral("未分组"));
+    QCOMPARE(headerItem->text(0), QStringLiteral("Ungrouped"));
     // 标题的 kind 既不是 Folder 也不是 Host：它不对应任何数据库记录，不能被误当成两者
     // 之一参与拖拽、编辑或删除。
     const int headerKind = headerItem->data(0, Qt::UserRole + 1).toInt();
@@ -2122,7 +2122,7 @@ void HostManagerWidgetTest::hostDialogPlacesNameBelowPortWithGroupAndTagEntry()
             failure = QStringLiteral("名称输入框宽度被新增控件改变");
         }
         if (failure.isEmpty()
-            && (tagButton->parentWidget() != name || tagButton->text() != QStringLiteral("#标签"))) {
+            && (tagButton->parentWidget() != name || tagButton->text() != QStringLiteral("#tag"))) {
             failure = QStringLiteral("标签入口没有嵌在名称输入框内部");
         }
         // 入口必须贴在输入框右端，并为文本让出等宽的右边距，长名称才不会画到按钮下面。
@@ -2391,7 +2391,7 @@ void HostManagerWidgetTest::groupComboOrderMatchesSidebarTreeOrder()
     QVERIFY2(failure.isEmpty(), qPrintable(failure));
 
     QCOMPARE(observedOrder,
-             QStringList({QStringLiteral("未分组"), QStringLiteral("Zeta"), QStringLiteral("Alpha")}));
+             QStringList({QStringLiteral("Ungrouped"), QStringLiteral("Zeta"), QStringLiteral("Alpha")}));
 }
 
 void HostManagerWidgetTest::detectedDistributionDrivesHostIconAndTooltip()

@@ -4,6 +4,7 @@
 #include <QHash>
 #include <QList>
 #include <QStringList>
+#include <QVector>
 
 class ApplicationDatabase;
 class AiAssistantWidget;
@@ -14,6 +15,7 @@ class AiSettingsService;
 struct ConnectionTarget;
 class CredentialVault;
 class HostManagerWidget;
+class LocalizationService;
 class PortForwardManagerWidget;
 class ProductivityModel;
 class ProductivityWidget;
@@ -54,6 +56,7 @@ public:
      */
     explicit MainWindow(ApplicationDatabase *database,
                         CredentialVault *credentialVault,
+                        LocalizationService *localization = nullptr,
                         QWidget *parent = nullptr);
     ~MainWindow() override;
 
@@ -408,6 +411,47 @@ private:
 
     /** @brief 稳定设置动作 id 到主窗口 QAction 的映射，设置变化时统一更新快捷键。 */
     QHash<QString, QAction *> m_configurableActions;
+
+    /**
+     * @brief 语言切换后需要重设文案的菜单项与菜单标题及其源字符串。
+     *
+     * 菜单栏是常驻控件，切换语言时 Qt 会向本窗口投递 QEvent::LanguageChange，此处据此逐条
+     * 用当前翻译器重译。按需弹出的对话框不登记：它们下次打开时会以新语言重新构造。
+     */
+    struct TranslatableUiEntry {
+        QAction *action = nullptr;
+        QMenu *menu = nullptr;
+        const char *text = nullptr;
+        const char *toolTip = nullptr;
+    };
+    QVector<TranslatableUiEntry> m_translatableUi;
+
+    /** @brief 界面语言服务；可为空（如单元测试），此时仅保留被动重译能力。 */
+    LocalizationService *m_localization = nullptr;
+
+    /** @brief 本次运行是否已就“重启后完全生效”提示过用户，避免每次微调都弹框。 */
+    bool m_languageChangeNoticeShown = false;
+
+    /** @brief 记录一个菜单动作及其源文案，供语言切换时重译；同时设置初始文案。 */
+    void registerTranslatable(QAction *action,
+                              const char *sourceText,
+                              const char *sourceToolTip = nullptr);
+
+    /** @brief 记录一个菜单及其源标题，供语言切换时重译；同时设置初始标题。 */
+    void registerTranslatable(QMenu *menu, const char *sourceTitle);
+
+    /** @brief 用当前翻译器重设所有已登记的常驻菜单文案。 */
+    void retranslateUi();
+
+    /**
+     * @brief 把设置里的语言偏好应用到运行中的翻译器。
+     * @param storedLanguage TerminalSettings::language 的原始值（"system" 或具体码）。
+     *
+     * 仅当解析后的具体语言与当前语言不同才切换：切换会触发 QEvent::LanguageChange 让菜单
+     * 就地重译，并首次弹出一次“部分界面需重开或重启后完全生效”的提示。m_localization
+     * 为空时静默跳过。
+     */
+    void applyLanguageSetting(const QString &storedLanguage);
 
     /** @brief 实时广播开关和当前明确选择的目标主机 id。 */
     bool m_broadcastEnabled = false;

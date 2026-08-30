@@ -119,20 +119,20 @@ void ProductivityWidget::buildUi()
     snippetToolbar->setSpacing(5);
     auto *newSnippetButton = new QToolButton(snippetPage);
     newSnippetButton->setObjectName(QStringLiteral("productivityNewSnippet"));
-    newSnippetButton->setText(tr("新建片段"));
+    newSnippetButton->setText(tr("New snippet"));
     auto *removeButton = new QToolButton(snippetPage);
     removeButton->setObjectName(QStringLiteral("productivityRemoveSnippet"));
-    removeButton->setText(tr("删除"));
+    removeButton->setText(tr("Delete"));
     UiIcons::decorateButton(
         newSnippetButton,
         UiIcons::symbol(this, UiIcons::Symbol::Plus, this->palette().color(QPalette::WindowText)),
-        tr("新建可执行命令片段"));
+        tr("Create an executable command snippet"));
     UiIcons::decorateButton(
         removeButton,
         UiIcons::symbol(this, UiIcons::Symbol::Trash, this->palette().color(QPalette::WindowText)),
-        tr("删除当前选中的片段"));
-    configureProductivityIconButton(newSnippetButton, tr("新建可执行命令片段"));
-    configureProductivityIconButton(removeButton, tr("删除当前选中的片段"));
+        tr("Delete the selected snippet"));
+    configureProductivityIconButton(newSnippetButton, tr("Create an executable command snippet"));
+    configureProductivityIconButton(removeButton, tr("Delete the selected snippet"));
     snippetToolbar->addWidget(newSnippetButton);
     snippetToolbar->addStretch();
     snippetToolbar->addWidget(removeButton);
@@ -147,7 +147,7 @@ void ProductivityWidget::buildUi()
     m_snippetList->setDefaultDropAction(Qt::MoveAction);
     m_snippetList->setContextMenuPolicy(Qt::CustomContextMenu);
     snippetPageLayout->addWidget(m_snippetList, 1);
-    m_tabs->addTab(snippetPage, tr("命令片段"));
+    m_tabs->addTab(snippetPage, tr("Command snippets"));
 
     connect(newSnippetButton, &QToolButton::clicked,
             this, [this]() { openSnippetEditor(QString()); });
@@ -175,7 +175,7 @@ void ProductivityWidget::buildUi()
                 UiIcons::modernizePopup(&menu);
                 QAction *newSnippetAction = menu.addAction(
                     UiIcons::symbol(this, UiIcons::Symbol::Plus, this->palette().color(QPalette::WindowText)),
-                    tr("新建片段"));
+                    tr("New snippet"));
                 connect(newSnippetAction, &QAction::triggered,
                         this, [this]() { openSnippetEditor(QString()); });
                 if (item != nullptr) {
@@ -183,16 +183,16 @@ void ProductivityWidget::buildUi()
                     const QString id = item->data(kIdRole).toString();
                     QAction *executeAction = menu.addAction(
                         UiIcons::symbol(this, UiIcons::Symbol::Play, this->palette().color(QPalette::WindowText)),
-                        tr("执行"));
+                        tr("Run"));
                     QAction *copyAction = menu.addAction(
                         UiIcons::symbol(this, UiIcons::Symbol::Copy, this->palette().color(QPalette::WindowText)),
-                        tr("复制"));
+                        tr("Copy"));
                     QAction *editAction = menu.addAction(
                         UiIcons::symbol(this, UiIcons::Symbol::Edit, this->palette().color(QPalette::WindowText)),
-                        tr("编辑"));
+                        tr("Edit"));
                     QAction *deleteAction = menu.addAction(
                         UiIcons::symbol(this, UiIcons::Symbol::Trash, this->palette().color(QPalette::WindowText)),
-                        tr("删除"));
+                        tr("Delete"));
                     connect(executeAction, &QAction::triggered,
                             this, [this, id]() { executeSnippetForId(id); });
                     connect(copyAction, &QAction::triggered,
@@ -232,7 +232,7 @@ void ProductivityWidget::buildUi()
     m_historyHostCombo->setObjectName(QStringLiteral("productivityHistoryHost"));
     m_historyPrefixEdit = new QLineEdit(historyPage);
     m_historyPrefixEdit->setObjectName(QStringLiteral("productivityHistoryPrefix"));
-    m_historyPrefixEdit->setPlaceholderText(tr("按命令前缀筛选"));
+    m_historyPrefixEdit->setPlaceholderText(tr("Filter by command prefix"));
     // 主机与前缀筛选在窄侧栏内上下堆叠；并排布局会让两个输入框都只剩百余像素，主机名
     // 和长前缀同时被截断。
     historyLayout->addWidget(m_historyHostCombo);
@@ -240,15 +240,15 @@ void ProductivityWidget::buildUi()
     m_historyList = new QListWidget(historyPage);
     m_historyList->setContextMenuPolicy(Qt::CustomContextMenu);
     historyLayout->addWidget(m_historyList, 1);
-    auto *historyExecuteButton = new QPushButton(tr("在所选主机执行"), historyPage);
+    auto *historyExecuteButton = new QPushButton(tr("Run on the selected host"), historyPage);
     historyExecuteButton->setObjectName(QStringLiteral("productivityHistoryExecute"));
     historyExecuteButton->setProperty("primaryAction", true);
     UiIcons::decorateButton(
         historyExecuteButton,
         UiIcons::symbol(this, UiIcons::Symbol::Play, this->palette().color(QPalette::WindowText)),
-        tr("在历史筛选器选中的主机上重新执行命令"));
+        tr("Re-run the command on the host selected in the history filter"));
     historyLayout->addWidget(historyExecuteButton);
-    m_tabs->addTab(historyPage, tr("命令历史"));
+    m_tabs->addTab(historyPage, tr("Command history"));
 
     connect(m_historyHostCombo, &QComboBox::currentIndexChanged,
             this, &ProductivityWidget::reloadHistory);
@@ -257,7 +257,7 @@ void ProductivityWidget::buildUi()
     connect(historyExecuteButton, &QPushButton::clicked, this, [this]() {
         const QListWidgetItem *item = m_historyList->currentItem();
         if (item == nullptr) {
-            emit statusMessage(tr("请先选择一条命令历史"));
+            emit statusMessage(tr("Select a command history entry first"));
             return;
         }
         const QString hostId = m_historyHostCombo->currentData().toString();
@@ -289,10 +289,10 @@ void ProductivityWidget::buildUi()
                 UiIcons::modernizePopup(&menu);
                 QAction *executeAction = menu.addAction(
                     UiIcons::symbol(this, UiIcons::Symbol::Play, this->palette().color(QPalette::WindowText)),
-                    tr("执行"));
+                    tr("Run"));
                 QAction *copyAction = menu.addAction(
                     UiIcons::symbol(this, UiIcons::Symbol::Copy, this->palette().color(QPalette::WindowText)),
-                    tr("复制命令"));
+                    tr("Copy command"));
                 connect(executeAction, &QAction::triggered, this, [this, command]() {
                     const QString hostId = m_historyHostCombo->currentData().toString();
                     emit commandExecutionRequested(
@@ -313,34 +313,34 @@ void ProductivityWidget::buildUi()
     broadcastLayout->setContentsMargins(0, 8, 0, 0);
     broadcastLayout->setSpacing(8);
     broadcastLayout->addWidget(new QLabel(
-        tr("选择目标后可开启实时键盘广播；源终端由主窗口绑定为当前标签页。"), broadcastPage));
+        tr("After choosing targets you can turn on live keyboard broadcast; the source terminal is bound by the main window to the current tab."), broadcastPage));
     m_broadcastTargets = new QListWidget(broadcastPage);
     m_broadcastTargets->setObjectName(QStringLiteral("productivityBroadcastTargets"));
     broadcastLayout->addWidget(m_broadcastTargets, 1);
-    m_broadcastEnabled = new QCheckBox(tr("开启实时原始输入广播"), broadcastPage);
+    m_broadcastEnabled = new QCheckBox(tr("Turn on live raw input broadcast"), broadcastPage);
     m_broadcastEnabled->setObjectName(QStringLiteral("productivityBroadcastEnabled"));
     broadcastLayout->addWidget(m_broadcastEnabled);
     m_broadcastInput = new QLineEdit(broadcastPage);
     m_broadcastInput->setObjectName(QStringLiteral("productivityBroadcastInput"));
-    m_broadcastInput->setPlaceholderText(tr("一次性向选中目标发送命令"));
-    auto *broadcastSendButton = new QPushButton(tr("广播发送"), broadcastPage);
+    m_broadcastInput->setPlaceholderText(tr("Send a command once to the selected targets"));
+    auto *broadcastSendButton = new QPushButton(tr("Broadcast send"), broadcastPage);
     broadcastSendButton->setProperty("primaryAction", true);
     UiIcons::decorateButton(
         broadcastSendButton,
         UiIcons::symbol(this, UiIcons::Symbol::Send, this->palette().color(QPalette::WindowText)),
-        tr("向明确勾选的多个终端发送一次命令"));
+        tr("Send a command once to the terminals you explicitly checked"));
     broadcastSendButton->setObjectName(QStringLiteral("productivityBroadcastSend"));
     // 一次性命令输入与发送按钮同样采用单列通栏布局，防止按钮文字挤占命令输入空间。
     broadcastLayout->addWidget(m_broadcastInput);
     broadcastLayout->addWidget(broadcastSendButton);
-    m_tabs->addTab(broadcastPage, tr("广播输入"));
+    m_tabs->addTab(broadcastPage, tr("Broadcast input"));
 
     connect(m_broadcastEnabled, &QCheckBox::toggled, this, [this](const bool enabled) {
         const QStringList ids = checkedTargetIds(m_broadcastTargets);
         if (enabled && ids.isEmpty()) {
             // 不自动选择全部目标：广播命令具有破坏性，必须由用户明确勾选接收方。
             m_broadcastEnabled->setChecked(false);
-            emit statusMessage(tr("开启广播前请明确勾选至少一个目标终端"));
+            emit statusMessage(tr("Explicitly check at least one target terminal before turning on broadcast"));
             return;
         }
         emit broadcastModeChanged(enabled, ids);
@@ -355,7 +355,7 @@ void ProductivityWidget::buildUi()
         const QString command = m_broadcastInput->text();
         const QStringList ids = checkedTargetIds(m_broadcastTargets);
         if (command.trimmed().isEmpty() || ids.isEmpty()) {
-            emit statusMessage(tr("广播发送需要非空命令和至少一个明确目标"));
+            emit statusMessage(tr("Broadcast send requires a non-empty command and at least one explicit target"));
             return;
         }
         emit broadcastInputRequested(command.toUtf8() + QByteArrayLiteral("\r"), ids);
@@ -389,19 +389,19 @@ void ProductivityWidget::buildEditorDialog()
     m_editorDescriptionEdit = new QLineEdit(m_editorDialog);
     m_editorDescriptionEdit->setObjectName(QStringLiteral("productivitySnippetDescriptionEdit"));
 
-    layout->addRow(tr("名称"), m_editorNameEdit);
-    layout->addRow(tr("命令"), m_editorCommandEdit);
-    layout->addRow(tr("说明"), m_editorDescriptionEdit);
+    layout->addRow(tr("Name"), m_editorNameEdit);
+    layout->addRow(tr("Command"), m_editorCommandEdit);
+    layout->addRow(tr("Description"), m_editorDescriptionEdit);
 
-    auto *cancelButton = new QPushButton(tr("取消"), m_editorDialog);
+    auto *cancelButton = new QPushButton(tr("Cancel"), m_editorDialog);
     cancelButton->setObjectName(QStringLiteral("productivityCancelEditor"));
-    m_editorSaveButton = new QPushButton(tr("保存"), m_editorDialog);
+    m_editorSaveButton = new QPushButton(tr("Save"), m_editorDialog);
     m_editorSaveButton->setObjectName(QStringLiteral("productivitySnippetSave"));
     m_editorSaveButton->setProperty("primaryAction", true);
     UiIcons::decorateButton(
         m_editorSaveButton,
         UiIcons::symbol(this, UiIcons::Symbol::Download, this->palette().color(QPalette::WindowText)),
-        tr("保存当前片段修改"));
+        tr("Save changes to the current snippet"));
     auto *editorActions = new QHBoxLayout;
     editorActions->setContentsMargins(0, 0, 0, 0);
     editorActions->setSpacing(8);
@@ -514,19 +514,19 @@ QWidget *ProductivityWidget::createSnippetRowWidget(const SnippetRecord &record,
 
     // 执行按钮采用与 AI 助手命令卡片一致的绿色主按钮样式（primaryAction），快捷键提示直接
     // 拼进按钮文字，不再用单独的灰色标签摆在旁边。
-    auto *executeButton = new QPushButton(tr("执行"), row);
+    auto *executeButton = new QPushButton(tr("Run"), row);
     executeButton->setObjectName(QStringLiteral("productivitySnippetExecute"));
     executeButton->setProperty("compactAction", true);
     executeButton->setProperty("primaryAction", true);
     if (shortcutIndex >= 0 && shortcutIndex < kMaxShortcutSnippets) {
         const int digit = (shortcutIndex == kMaxShortcutSnippets - 1) ? 0 : shortcutIndex + 1;
         const QString hint = QStringLiteral("Ctrl+%1").arg(digit);
-        executeButton->setText(tr("执行  %1").arg(hint));
-        executeButton->setToolTip(tr("快捷键 %1").arg(hint));
+        executeButton->setText(tr("Run  %1").arg(hint));
+        executeButton->setToolTip(tr("Shortcut %1").arg(hint));
     }
     rowLayout->addWidget(executeButton);
 
-    auto *copyButton = new QPushButton(tr("复制"), row);
+    auto *copyButton = new QPushButton(tr("Copy"), row);
     copyButton->setObjectName(QStringLiteral("productivitySnippetCopy"));
     copyButton->setProperty("compactAction", true);
     rowLayout->addWidget(copyButton);
@@ -551,22 +551,22 @@ void ProductivityWidget::openSnippetEditor(const QString &id)
         m_editorNameEdit->clear();
         m_editorCommandEdit->clear();
         m_editorDescriptionEdit->clear();
-        m_editorDialog->setWindowTitle(tr("新建片段"));
+        m_editorDialog->setWindowTitle(tr("New snippet"));
     } else {
         if (m_model == nullptr) {
-            emit statusMessage(tr("效率工具模型尚未就绪"));
+            emit statusMessage(tr("The productivity model is not ready yet"));
             return;
         }
         const std::optional<SnippetRecord> record = m_model->snippet(id);
         if (!record.has_value()) {
-            emit statusMessage(tr("选中的 Snippet 已不存在，请刷新列表"));
+            emit statusMessage(tr("The selected snippet no longer exists; refresh the list"));
             return;
         }
         m_editingId = record->id;
         m_editorNameEdit->setText(record->name);
         m_editorCommandEdit->setPlainText(record->command);
         m_editorDescriptionEdit->setText(record->description);
-        m_editorDialog->setWindowTitle(tr("编辑片段"));
+        m_editorDialog->setWindowTitle(tr("Edit snippet"));
     }
     m_editorNameEdit->setFocus();
     // open() 是非阻塞的模态弹窗：既保证用户在关闭前无法操作侧栏其余部分，又不会像
@@ -577,13 +577,13 @@ void ProductivityWidget::openSnippetEditor(const QString &id)
 void ProductivityWidget::saveEditorRecord()
 {
     if (m_model == nullptr) {
-        emit statusMessage(tr("效率工具模型尚未就绪"));
+        emit statusMessage(tr("The productivity model is not ready yet"));
         return;
     }
     const QString name = m_editorNameEdit->text().trimmed();
     const QString command = m_editorCommandEdit->toPlainText();
     if (name.isEmpty() || command.trimmed().isEmpty()) {
-        emit statusMessage(tr("名称和命令不能为空"));
+        emit statusMessage(tr("The name and command cannot be empty"));
         return;
     }
 
@@ -598,7 +598,7 @@ void ProductivityWidget::saveEditorRecord()
     record.sortOrder = existing.has_value() ? existing->sortOrder : m_snippetList->count();
 
     if (m_model->saveSnippet(record)) {
-        emit statusMessage(tr("Snippet 已保存"));
+        emit statusMessage(tr("Snippet saved"));
         m_editorDialog->accept();
     }
 }
@@ -607,12 +607,12 @@ void ProductivityWidget::removeSelectedRecord()
 {
     QListWidgetItem *item = m_snippetList->currentItem();
     if (item == nullptr || m_model == nullptr) {
-        emit statusMessage(tr("请先选择要删除的 Snippet"));
+        emit statusMessage(tr("Select a snippet to delete first"));
         return;
     }
     if (QMessageBox::warning(this,
-                             tr("确认删除"),
-                             tr("确定删除选中的 Snippet 吗？"),
+                             tr("Confirm delete"),
+                             tr("Delete the selected snippet?"),
                              QMessageBox::Yes | QMessageBox::Cancel,
                              QMessageBox::Cancel) != QMessageBox::Yes) {
         return;
@@ -620,14 +620,14 @@ void ProductivityWidget::removeSelectedRecord()
     int removed = 0;
     if (m_model->removeSnippet(item->data(kIdRole).toString(), &removed)) {
         m_editingId.clear();
-        emit statusMessage(tr("已删除 Snippet"));
+        emit statusMessage(tr("Snippet deleted"));
     }
 }
 
 void ProductivityWidget::executeSnippetAtRow(const int row)
 {
     if (row < 0 || row >= m_snippetList->count()) {
-        emit statusMessage(tr("请先选择要执行的 Snippet"));
+        emit statusMessage(tr("Select a snippet to run first"));
         return;
     }
     executeSnippetForId(m_snippetList->item(row)->data(kIdRole).toString());
@@ -636,12 +636,12 @@ void ProductivityWidget::executeSnippetAtRow(const int row)
 void ProductivityWidget::executeSnippetForId(const QString &id)
 {
     if (m_model == nullptr) {
-        emit statusMessage(tr("效率工具模型尚未就绪"));
+        emit statusMessage(tr("The productivity model is not ready yet"));
         return;
     }
     const std::optional<SnippetRecord> record = m_model->snippet(id);
     if (!record.has_value() || record->command.trimmed().isEmpty()) {
-        emit statusMessage(tr("Snippet 已不存在或命令为空"));
+        emit statusMessage(tr("The snippet no longer exists or its command is empty"));
         return;
     }
     // 执行目标不再由界面勾选：空 targetIds 由上层解释为当前活动终端会话。
@@ -655,13 +655,13 @@ void ProductivityWidget::copySnippetForId(const QString &id)
     }
     const std::optional<SnippetRecord> record = m_model->snippet(id);
     if (!record.has_value()) {
-        emit statusMessage(tr("Snippet 已不存在"));
+        emit statusMessage(tr("The snippet no longer exists"));
         return;
     }
     if (QApplication::clipboard() != nullptr) {
         QApplication::clipboard()->setText(record->command);
     }
-    emit statusMessage(tr("命令已复制到剪贴板"));
+    emit statusMessage(tr("Command copied to clipboard"));
 }
 
 void ProductivityWidget::persistSnippetOrder()
@@ -744,7 +744,7 @@ void ProductivityWidget::populateTargetSelectors()
 
     m_broadcastTargets->clear();
     m_historyHostCombo->clear();
-    m_historyHostCombo->addItem(tr("本地 / 当前终端"), QString());
+    m_historyHostCombo->addItem(tr("Local / current terminal"), QString());
 
     QSet<QString> seen;
     for (const ConnectionTarget &target : std::as_const(m_targets)) {

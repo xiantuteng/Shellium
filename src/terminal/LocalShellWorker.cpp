@@ -143,7 +143,7 @@ void LocalShellWorker::run()
 {
 #if defined(Q_OS_WIN)
     if (QStandardPaths::findExecutable(m_shellPath).isEmpty() && !QFile::exists(m_shellPath)) {
-        emit shellError(tr("本地 Shell 不存在：%1").arg(m_shellPath));
+        emit shellError(tr("The local shell does not exist: %1").arg(m_shellPath));
         return;
     }
 
@@ -157,7 +157,7 @@ void LocalShellWorker::run()
     LPPROC_THREAD_ATTRIBUTE_LIST attributes = nullptr;
 
     const auto fail = [this](const QString &action) {
-        emit shellError(tr("%1：%2").arg(action, windowsErrorText(GetLastError())));
+        emit shellError(tr("%1: %2").arg(action, windowsErrorText(GetLastError())));
     };
     const auto cleanup = [&]() {
         if (attributes != nullptr) {
@@ -183,7 +183,7 @@ void LocalShellWorker::run()
         || !CreatePipe(&applicationOutputRead, &pseudoConsoleOutputWrite, &pipeSecurity, 0)
         || !SetHandleInformation(applicationInputWrite, HANDLE_FLAG_INHERIT, 0)
         || !SetHandleInformation(applicationOutputRead, HANDLE_FLAG_INHERIT, 0)) {
-        fail(tr("无法创建 ConPTY 管道"));
+        fail(tr("Could not create the ConPTY pipe"));
         cleanup();
         return;
     }
@@ -202,7 +202,7 @@ void LocalShellWorker::run()
                                                      &pseudoConsole);
     if (FAILED(createResult)) {
         SetLastError(HRESULT_CODE(createResult));
-        fail(tr("无法创建 Windows ConPTY"));
+        fail(tr("Could not create the Windows ConPTY"));
         cleanup();
         return;
     }
@@ -223,7 +223,7 @@ void LocalShellWorker::run()
                                       sizeof(pseudoConsole),
                                       nullptr,
                                       nullptr)) {
-        fail(tr("无法配置 ConPTY 子进程属性"));
+        fail(tr("Could not configure the ConPTY child process attributes"));
         cleanup();
         return;
     }
@@ -250,7 +250,7 @@ void LocalShellWorker::run()
                         nullptr,
                         &startupInfo.StartupInfo,
                         &processInfo)) {
-        fail(tr("无法启动 Windows 本地 Shell"));
+        fail(tr("Could not start the Windows local shell"));
         cleanup();
         return;
     }
@@ -263,7 +263,7 @@ void LocalShellWorker::run()
         if (!SetInformationJobObject(job, JobObjectExtendedLimitInformation,
                                      &limits, sizeof(limits))
             || !AssignProcessToJobObject(job, processInfo.hProcess)) {
-            emit shellError(tr("无法为本地 Shell 配置进程树清理：%1")
+            emit shellError(tr("Could not configure process tree cleanup for the local shell: %1")
                                 .arg(windowsErrorText(GetLastError())));
             closeHandle(job);
         }
@@ -291,7 +291,7 @@ void LocalShellWorker::run()
                               static_cast<SHORT>(std::clamp(rows, 1, 32767))};
             const HRESULT resizeResult = ResizePseudoConsole(pseudoConsole, size);
             if (FAILED(resizeResult)) {
-                emit shellError(tr("调整 ConPTY 尺寸失败：HRESULT 0x%1")
+                emit shellError(tr("Failed to resize ConPTY: HRESULT 0x%1")
                                     .arg(static_cast<quint32>(resizeResult), 8, 16, QLatin1Char('0')));
             }
         }
@@ -302,7 +302,7 @@ void LocalShellWorker::run()
                            static_cast<DWORD>(pendingInput.size()),
                            &written,
                            nullptr)) {
-                fail(tr("向 ConPTY 写入失败"));
+                fail(tr("Failed to write to ConPTY"));
                 ioFailed = true;
                 break;
             }
@@ -374,7 +374,7 @@ void LocalShellWorker::run()
     emit shellFinished(static_cast<int>(exitCode));
 #else
     if (!QFile::exists(m_shellPath)) {
-        emit shellError(tr("本地 Shell 不存在：%1").arg(m_shellPath));
+        emit shellError(tr("The local shell does not exist: %1").arg(m_shellPath));
         return;
     }
 
@@ -389,7 +389,7 @@ void LocalShellWorker::run()
     int masterFd = -1;
     const pid_t childPid = forkpty(&masterFd, nullptr, nullptr, &initialSize);
     if (childPid < 0) {
-        emit shellError(tr("无法创建本地 PTY：%1").arg(QString::fromLocal8Bit(std::strerror(errno))));
+        emit shellError(tr("Could not create the local PTY: %1").arg(QString::fromLocal8Bit(std::strerror(errno))));
         return;
     }
 
@@ -448,7 +448,7 @@ void LocalShellWorker::run()
                 QThread::msleep(2);
             } else {
                 ioFailed = true;
-                emit shellError(tr("向本地 PTY 写入失败：%1")
+                emit shellError(tr("Failed to write to the local PTY: %1")
                                     .arg(QString::fromLocal8Bit(std::strerror(errno))));
                 break;
             }
@@ -460,7 +460,7 @@ void LocalShellWorker::run()
         struct pollfd descriptor {masterFd, POLLIN | POLLHUP | POLLERR, 0};
         const int pollResult = poll(&descriptor, 1, 20);
         if (pollResult < 0 && errno != EINTR) {
-            emit shellError(tr("轮询本地 PTY 失败：%1")
+            emit shellError(tr("Failed to poll the local PTY: %1")
                                 .arg(QString::fromLocal8Bit(std::strerror(errno))));
             ioFailed = true;
             break;

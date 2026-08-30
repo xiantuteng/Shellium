@@ -101,7 +101,7 @@ QString serverFingerprint(ssh_session session)
     ssh_key serverKey = nullptr;
     unsigned char *hash = nullptr;
     size_t hashLength = 0;
-    QString result = QObject::tr("无法读取指纹");
+    QString result = QObject::tr("Could not read the fingerprint");
 
     if (ssh_get_server_publickey(session, &serverKey) == SSH_OK
         && ssh_get_publickey_hash(serverKey,
@@ -260,7 +260,7 @@ SshSessionNode::StepResult SshSessionNode::beginEstablish(const NativeSocketHand
     m_session = ssh_new();
     if (m_session == nullptr) {
         m_stage = Stage::Failed;
-        return failure(tr("无法创建 libssh 会话。"));
+        return failure(tr("Could not create a libssh session."));
     }
 
     const QByteArray host = m_target.host.toUtf8();
@@ -283,7 +283,7 @@ SshSessionNode::StepResult SshSessionNode::beginEstablish(const NativeSocketHand
         const socket_t socketHandle = static_cast<socket_t>(transportFd);
         if (ssh_options_set(m_session, SSH_OPTIONS_FD, &socketHandle) != SSH_OK) {
             m_stage = Stage::Failed;
-            return failure(tr("无法绑定 SSH 隧道套接字：%1").arg(lastError()));
+            return failure(tr("Could not bind the SSH tunnel socket: %1").arg(lastError()));
         }
         static_cast<void>(transportOwner.release());
     } else {
@@ -303,7 +303,7 @@ SshSessionNode::StepResult SshSessionNode::beginEstablish(const NativeSocketHand
         const QByteArray jumps = m_target.proxyJumps.join(QLatin1Char(',')).toUtf8();
         if (ssh_options_set(m_session, SSH_OPTIONS_PROXYJUMP, jumps.constData()) != SSH_OK) {
             m_stage = Stage::Failed;
-            return failure(tr("无法配置 SSH 跳板链：%1").arg(lastError()));
+            return failure(tr("Could not configure the SSH jump chain: %1").arg(lastError()));
         }
     }
 
@@ -330,11 +330,11 @@ SshSessionNode::StepResult SshSessionNode::advanceEstablish()
         return success();
     }
     if (m_stage == Stage::Failed || m_stage == Stage::Idle) {
-        return failure(tr("该层尚未开始建立或已经失败。"));
+        return failure(tr("This layer has not started connecting yet or has already failed."));
     }
     if (m_establishTimer.isValid() && m_establishTimer.elapsed() > kEstablishTimeoutMs) {
         m_stage = Stage::Failed;
-        return failure(tr("连接 %1 超时。").arg(m_target.connectionSpecifier(true)));
+        return failure(tr("Connection to %1 timed out.").arg(m_target.connectionSpecifier(true)));
     }
 
     switch (m_stage) {
@@ -348,19 +348,19 @@ SshSessionNode::StepResult SshSessionNode::advanceEstablish()
         if (!m_hostKeyTrusted) {
             m_stage = Stage::Failed;
             return failure(m_hostKeyReplacementRequired
-                               ? tr("用户未确认服务器主机密钥变更，连接已终止。")
-                               : tr("用户拒绝了未知服务器主机密钥。"));
+                               ? tr("The user did not confirm the server host key change; the connection was terminated.")
+                               : tr("The user rejected the unknown server host key."));
         }
         if (m_hostKeyReplacementRequired) {
             QString replacementError;
             if (!KnownHostsManager::replaceChangedHostKey(m_session, &replacementError)) {
                 m_stage = Stage::Failed;
-                return failure(tr("替换 known_hosts 中的旧主机密钥失败：%1")
+                return failure(tr("Failed to replace the old host key in known_hosts: %1")
                                    .arg(replacementError));
             }
         } else if (ssh_session_update_known_hosts(m_session) != SSH_OK) {
             m_stage = Stage::Failed;
-            return failure(tr("写入 known_hosts 失败：%1").arg(lastError()));
+            return failure(tr("Failed to write known_hosts: %1").arg(lastError()));
         }
         m_stage = Stage::Authenticating;
         m_authPhase = AuthPhase::None;
@@ -377,7 +377,7 @@ SshSessionNode::StepResult SshSessionNode::advanceEstablish()
         m_credentialProvided = false;
         if (m_secret.isEmpty()) {
             m_stage = Stage::Failed;
-            return failure(tr("用户取消了 %1 的认证。")
+            return failure(tr("The user cancelled authentication for %1.")
                                .arg(m_target.connectionSpecifier(true)));
         }
         m_stage = Stage::Authenticating;
@@ -392,7 +392,7 @@ SshSessionNode::StepResult SshSessionNode::advanceEstablish()
             m_shell = ssh_channel_new(m_session);
             if (m_shell == nullptr) {
                 m_stage = Stage::Failed;
-                return failure(tr("无法创建 SSH Shell 通道：%1").arg(lastError()));
+                return failure(tr("Could not create the SSH shell channel: %1").arg(lastError()));
             }
         }
         const int result = ssh_channel_open_session(m_shell);
@@ -401,7 +401,7 @@ SshSessionNode::StepResult SshSessionNode::advanceEstablish()
         }
         if (result != SSH_OK) {
             m_stage = Stage::Failed;
-            return failure(tr("无法创建 SSH Shell 通道：%1").arg(lastError()));
+            return failure(tr("Could not create the SSH shell channel: %1").arg(lastError()));
         }
         m_stage = Stage::RequestingPty;
         return pending();
@@ -420,7 +420,7 @@ SshSessionNode::StepResult SshSessionNode::advanceEstablish()
         }
         if (result != SSH_OK) {
             m_stage = Stage::Failed;
-            return failure(tr("服务器拒绝分配交互式 PTY：%1").arg(lastError()));
+            return failure(tr("The server refused to allocate an interactive PTY: %1").arg(lastError()));
         }
         m_ptyApplied = true;
         m_stage = Stage::RequestingShell;
@@ -434,7 +434,7 @@ SshSessionNode::StepResult SshSessionNode::advanceEstablish()
         }
         if (result != SSH_OK) {
             m_stage = Stage::Failed;
-            return failure(tr("服务器拒绝启动交互式 Shell：%1").arg(lastError()));
+            return failure(tr("The server refused to start an interactive shell: %1").arg(lastError()));
         }
         m_stage = Stage::Ready;
         m_establishTimer.invalidate();
@@ -449,7 +449,7 @@ SshSessionNode::StepResult SshSessionNode::advanceEstablish()
         break;
     }
     m_stage = Stage::Failed;
-    return failure(tr("连接状态机进入了未定义状态。"));
+    return failure(tr("The connection state machine entered an undefined state."));
 }
 
 SshSessionNode::StepResult SshSessionNode::advanceConnecting()
@@ -470,7 +470,7 @@ SshSessionNode::StepResult SshSessionNode::advanceConnecting()
             legacy.legacyHmacRequired = true;
             return legacy;
         }
-        return failure(tr("SSH 连接失败：%1").arg(error));
+        return failure(tr("SSH connection failed: %1").arg(error));
     }
     return evaluateHostKey();
 }
@@ -496,7 +496,7 @@ SshSessionNode::StepResult SshSessionNode::evaluateHostKey()
     }
     if (knownState == SSH_KNOWN_HOSTS_ERROR) {
         m_stage = Stage::Failed;
-        return failure(tr("读取 known_hosts 失败：%1").arg(lastError()));
+        return failure(tr("Failed to read known_hosts: %1").arg(lastError()));
     }
     if (knownState == SSH_KNOWN_HOSTS_UNKNOWN || knownState == SSH_KNOWN_HOSTS_NOT_FOUND) {
         m_stage = Stage::AwaitingHostKeyDecision;
@@ -578,11 +578,11 @@ SshSessionNode::StepResult SshSessionNode::advanceAuthenticating()
             return credentialRequired(true);
         }
         m_stage = Stage::Failed;
-        return failure(tr("SSH 认证失败：%1。请检查密码、私钥或 SSH Agent。").arg(lastError()));
+        return failure(tr("SSH authentication failed: %1. Check the password, private key, or SSH agent.").arg(lastError()));
     }
 
     m_stage = Stage::Failed;
-    return failure(tr("认证状态机进入了未定义状态。"));
+    return failure(tr("The authentication state machine entered an undefined state."));
 }
 
 SshSessionNode::StepResult SshSessionNode::authenticationSucceeded()
@@ -688,7 +688,7 @@ void SshSessionNode::pumpExec()
     // 安装脚本只是写个小文件；超时说明远端异常，此时放弃即可，交互式会话不受影响。
     constexpr qint64 kExecTimeoutMs = 15000;
     if (m_execTimer.isValid() && m_execTimer.elapsed() > kExecTimeoutMs) {
-        finish(false, tr("后台命令执行超时"));
+        finish(false, tr("The background command timed out"));
         return;
     }
 
@@ -699,7 +699,7 @@ void SshSessionNode::pumpExec()
             return;
         }
         if (result != SSH_OK) {
-            finish(false, tr("无法打开后台命令通道：%1").arg(lastError()));
+            finish(false, tr("Could not open the background command channel: %1").arg(lastError()));
             return;
         }
         m_execStage = ExecStage::Requesting;
@@ -711,7 +711,7 @@ void SshSessionNode::pumpExec()
             return;
         }
         if (result != SSH_OK) {
-            finish(false, tr("远端拒绝执行后台命令：%1").arg(lastError()));
+            finish(false, tr("The remote refused to run the background command: %1").arg(lastError()));
             return;
         }
         m_execStage = ExecStage::Draining;
@@ -745,12 +745,12 @@ void SshSessionNode::pumpExec()
             } else {
                 const QString diagnostic = QString::fromUtf8(m_execDiagnostic).trimmed();
                 const QString exitDescription = exitCode == static_cast<uint32_t>(-1)
-                    ? tr("远端未返回退出码")
-                    : tr("退出码 %1").arg(exitCode);
+                    ? tr("The remote returned no exit code")
+                    : tr("Exit code %1").arg(exitCode);
                 finish(false,
                        diagnostic.isEmpty()
                            ? exitDescription
-                           : tr("%1：%2").arg(exitDescription, diagnostic));
+                           : tr("%1: %2").arg(exitDescription, diagnostic));
             }
         }
         return;
@@ -920,20 +920,20 @@ quint64 SshSessionNode::beginForward(const QString &host,
     };
 
     if (m_session == nullptr) {
-        return reportError(tr("该层 SSH 会话尚未建立"));
+        return reportError(tr("The SSH session for this layer is not established yet"));
     }
 
     NativeSocketHandle socketPair[2] = {InvalidNativeSocket, InvalidNativeSocket};
     QString socketError;
     if (!createConnectedSocketPair(&socketPair[0], &socketPair[1], &socketError)) {
-        return reportError(tr("创建 SFTP 隧道 socket 失败：%1").arg(socketError));
+        return reportError(tr("Failed to create the SFTP tunnel socket: %1").arg(socketError));
     }
 
     ssh_channel channel = ssh_channel_new(m_session);
     if (channel == nullptr) {
         closeNativeSocket(socketPair[0]);
         closeNativeSocket(socketPair[1]);
-        return reportError(tr("无法在 %1 上分配转发通道：%2")
+        return reportError(tr("Could not allocate a forwarding channel on %1: %2")
                                .arg(m_target.connectionSpecifier(true), lastError()));
     }
 
@@ -1024,7 +1024,7 @@ bool SshSessionNode::advanceDirectForward(PendingForward &pending,
         outcome.id = pending.id;
         // 远端向不可路由地址转发时会一直没有响应。没有时限，这条请求就会永远悬挂，
         // 发起方（建层或 SFTP）也就永远等不到结论。
-        outcome.error = tr("服务器 %1 转发到 %2:%3 超时（%4 秒）")
+        outcome.error = tr("Server %1 timed out forwarding to %2:%3 (%4 s)")
                             .arg(m_target.connectionSpecifier(true),
                                  QString::fromUtf8(pending.host))
                             .arg(pending.port)
@@ -1060,7 +1060,7 @@ bool SshSessionNode::advanceDirectForward(PendingForward &pending,
 
     ForwardOutcome outcome;
     outcome.id = pending.id;
-    outcome.error = tr("服务器 %1 无法转发到 %2:%3：%4")
+    outcome.error = tr("Server %1 could not forward to %2:%3: %4")
                         .arg(m_target.connectionSpecifier(true),
                              QString::fromUtf8(pending.host))
                         .arg(pending.port)
@@ -1076,7 +1076,7 @@ bool SshSessionNode::advanceRelayForward(PendingForward &pending,
     const auto fail = [&](const QString &reason) {
         ForwardOutcome outcome;
         outcome.id = pending.id;
-        outcome.error = tr("服务器 %1 无法中继到 %2:%3：%4")
+        outcome.error = tr("Server %1 could not relay to %2:%3: %4")
                             .arg(m_target.connectionSpecifier(true),
                                  QString::fromUtf8(pending.host))
                             .arg(pending.port)
@@ -1087,7 +1087,7 @@ bool SshSessionNode::advanceRelayForward(PendingForward &pending,
     };
 
     if (pending.timer.elapsed() > pending.timeoutMs) {
-        return fail(tr("等待 %1 秒后仍未建立").arg(pending.timeoutMs / 1000));
+        return fail(tr("Still not established after waiting %1 s").arg(pending.timeoutMs / 1000));
     }
 
     switch (pending.relayStage) {
@@ -1132,7 +1132,7 @@ bool SshSessionNode::advanceRelayForward(PendingForward &pending,
         if (ssh_channel_is_eof(pending.channel) != 0) {
             const QString diagnostic = QString::fromUtf8(pending.relayDiagnostic).trimmed();
             return fail(diagnostic.isEmpty()
-                            ? tr("远端中继命令启动后立即退出")
+                            ? tr("The remote relay command exited immediately after starting")
                             : diagnostic);
         }
         if (pending.timer.elapsed() - pending.relayExecStartedAtMs < kRelayConfirmationMs) {
@@ -1153,7 +1153,7 @@ bool SshSessionNode::advanceRelayForward(PendingForward &pending,
         return true;
     }
     }
-    return fail(tr("中继状态机进入了未定义状态"));
+    return fail(tr("The relay state machine entered an undefined state"));
 }
 
 QList<SshSessionNode::ForwardOutcome> SshSessionNode::advancePendingForwards()
@@ -1232,7 +1232,7 @@ QList<SshSessionNode::ForwardOutcome> SshSessionNode::pumpForwards()
         }
         if (!runtimeDiagnostic.isEmpty()) {
             qCWarning(sshLog).noquote()
-                << tr("服务器 %1 的 exec 中继诊断：%2")
+                << tr("exec relay diagnostics for server %1: %2")
                        .arg(m_target.connectionSpecifier(true),
                             QString::fromUtf8(runtimeDiagnostic).trimmed());
         }
@@ -1276,10 +1276,10 @@ quint64 SshSessionNode::beginRemoteListen(const QString &ruleId,
         return 0;
     };
     if (!isReady() || m_session == nullptr) {
-        return fail(tr("SSH 会话尚未完成认证"));
+        return fail(tr("The SSH session has not finished authenticating"));
     }
     if (ruleId.trimmed().isEmpty() || bindHost.trimmed().isEmpty() || bindPort == 0) {
-        return fail(tr("远程监听规则、地址和端口必须有效"));
+        return fail(tr("The remote listening rule, address, and port must be valid"));
     }
     const auto sameRule = [&ruleId](const auto &listener) {
         return listener.ruleId == ruleId;
@@ -1287,7 +1287,7 @@ quint64 SshSessionNode::beginRemoteListen(const QString &ruleId,
     if (std::any_of(m_pendingRemoteListeners.cbegin(),
                     m_pendingRemoteListeners.cend(), sameRule)
         || std::any_of(m_remoteListeners.cbegin(), m_remoteListeners.cend(), sameRule)) {
-        return fail(tr("该远程转发规则已经启动或正在启动"));
+        return fail(tr("This remote forwarding rule is already started or starting"));
     }
 
     PendingRemoteListen pendingListener;
@@ -1345,11 +1345,11 @@ void SshSessionNode::pumpRemoteForwarding(QList<RemoteListenOutcome> &outcomes,
                                       outcome.boundPort,
                                       false});
         } else if (result == SSH_AGAIN) {
-            outcome.error = tr("申请远程监听 %1:%2 超时")
+            outcome.error = tr("Timed out requesting remote listening on %1:%2")
                                 .arg(QString::fromUtf8(pendingListener.bindHost))
                                 .arg(pendingListener.bindPort);
         } else {
-            outcome.error = tr("服务器拒绝远程监听 %1:%2：%3")
+            outcome.error = tr("The server refused remote listening on %1:%2: %3")
                                 .arg(QString::fromUtf8(pendingListener.bindHost))
                                 .arg(pendingListener.bindPort)
                                 .arg(lastError());
@@ -1373,7 +1373,7 @@ void SshSessionNode::pumpRemoteForwarding(QList<RemoteListenOutcome> &outcomes,
         }
         if (result != SSH_OK) {
             qCWarning(sshLog).noquote()
-                << tr("取消远程监听 %1:%2 失败：%3")
+                << tr("Failed to cancel remote listener %1:%2: %3")
                        .arg(QString::fromUtf8(listener.bindHost))
                        .arg(listener.boundPort)
                        .arg(lastError());

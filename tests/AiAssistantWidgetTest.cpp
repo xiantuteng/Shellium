@@ -220,7 +220,7 @@ void AiAssistantWidgetTest::executingCommandAutoCapturesOutputAndContinuesConver
     // 单步流程里同一条命令不能被重复执行，点击后必须立刻自锁，按钮文案也要能让用户一眼
     // 看出这条已经处理过，不是还没点。
     QVERIFY(!executeButton->isEnabled());
-    QCOMPARE(executeButton->text(), QStringLiteral("已执行"));
+    QCOMPARE(executeButton->text(), QStringLiteral("Executed"));
 
     // 先模拟一个仍在运行但暂时没有新输出的长命令。旧实现只等待 900ms 的“输出稳定”，会在
     // 此处错误地认为命令已经完成；新实现必须继续等待提示符回归并给出明确等待状态。
@@ -232,7 +232,7 @@ void AiAssistantWidgetTest::executingCommandAutoCapturesOutputAndContinuesConver
     QVERIFY(sendButton->isEnabled());
     auto *waitingLabel = widget.findChild<QLabel *>(QStringLiteral("aiCommandWaitingLabel"));
     QVERIFY(waitingLabel != nullptr);
-    QVERIFY(waitingLabel->text().contains(QStringLiteral("正在等待命令执行完成")));
+    QVERIFY(waitingLabel->text().contains(QStringLiteral("Waiting for the command to finish")));
     // 等待状态只保留一行：秒数在变，附带的固定操作说明已移除，卡片高度不再随等待增长。
     QVERIFY(!waitingLabel->text().contains(QChar::fromLatin1('\n')));
     QVERIFY(!waitingLabel->text().contains(QStringLiteral("无需复制")));
@@ -250,7 +250,7 @@ void AiAssistantWidgetTest::executingCommandAutoCapturesOutputAndContinuesConver
              QStringLiteral("system"));
     const QString lastMessage =
         secondMessages.last().toObject().value(QStringLiteral("content")).toString();
-    QVERIFY2(lastMessage.contains(QStringLiteral("[命令 `which nginx` 的执行结果]")),
+    QVERIFY2(lastMessage.contains(QStringLiteral("[Result of command `which nginx`]")),
              qPrintable(lastMessage));
     QVERIFY2(lastMessage.contains(QStringLiteral("nginx not found")), qPrintable(lastMessage));
     // 续问只应携带命令下发之后新增的那部分文本，不应该把命令发出前就存在的旧提示符也带回去
@@ -434,7 +434,7 @@ void AiAssistantWidgetTest::multiStepResponseIsRejectedAndRepairedBeforeDisplay(
     QCOMPARE(repairMessages.first().toObject().value(QStringLiteral("role")).toString(),
              QStringLiteral("system"));
     QVERIFY(repairMessages.last().toObject().value(QStringLiteral("content")).toString().contains(
-        QStringLiteral("违反了单步协议")));
+        QStringLiteral("violated the single-step protocol")));
 }
 
 /**
@@ -725,7 +725,7 @@ void AiAssistantWidgetTest::commandCardInsertModifyAndCopyUseCorrectRoutes()
     widget.findChild<QPushButton *>(QStringLiteral("aiCopyButton"))->click();
     QCOMPARE(QGuiApplication::clipboard()->text(), QStringLiteral("systemctl status nginx"));
     QVERIFY(!statusSpy.isEmpty());
-    QCOMPARE(statusSpy.last().at(0).toString(), QStringLiteral("命令已复制到剪贴板"));
+    QCOMPARE(statusSpy.last().at(0).toString(), QStringLiteral("Command copied to clipboard"));
 
     // QInputDialog::getText 使用嵌套事件循环；预先排队的回调在对话框显示后填入修改值并确认，
     // 从而覆盖真实的弹窗交互，而不是直接调用内部信号绕过实现。
@@ -892,7 +892,7 @@ void AiAssistantWidgetTest::stopButtonEndsLongRunningAnalysis()
     inputEdit->setPlainText(QStringLiteral("查看一下集群状态"));
     sendButton->click();
     QTRY_COMPARE_WITH_TIMEOUT(server.capturedBodies.size(), 1, 5000);
-    QTRY_VERIFY(labelWithText(QStringLiteral("正在分析")));
+    QTRY_VERIFY(labelWithText(QStringLiteral("Analyzing")));
 
     // 等待期间按钮不能是灰的：它必须就地变成停止入口，否则用户只能干等或关掉整个标签。
     QVERIFY(sendButton->isEnabled());
@@ -900,8 +900,8 @@ void AiAssistantWidgetTest::stopButtonEndsLongRunningAnalysis()
 
     sendButton->click();
 
-    QTRY_VERIFY2(!labelWithText(QStringLiteral("正在分析")), "停止后等待指示器必须消失");
-    QVERIFY(labelWithText(QStringLiteral("已停止本次分析")));
+    QTRY_VERIFY2(!labelWithText(QStringLiteral("Analyzing")), "停止后等待指示器必须消失");
+    QVERIFY(labelWithText(QStringLiteral("This analysis has been stopped")));
     QCOMPARE(sendButton->property("aiButtonMode").toString(), QStringLiteral("send"));
     QVERIFY(sendButton->isEnabled());
 

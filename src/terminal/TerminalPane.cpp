@@ -30,7 +30,7 @@ Q_LOGGING_CATEGORY(authLog, "shellium.auth", QtWarningMsg)
 TerminalPane::TerminalPane(QWidget *parent)
     : QWidget(parent)
     , m_headerBar(new QWidget(this))
-    , m_headerLabel(new QLabel(tr("未连接"), this))
+    , m_headerLabel(new QLabel(tr("Not connected"), this))
     , m_statusMessageLabel(new QLabel(this))
     , m_statusMessageIcon(new QLabel(this))
     , m_statusMessageTimer(new QTimer(this))
@@ -64,7 +64,7 @@ TerminalPane::TerminalPane(QWidget *parent)
         m_statusMessageIcon->setVisible(false);
     });
     m_terminalMetaLabel->setObjectName(QStringLiteral("terminalSessionMeta"));
-    m_terminalMetaLabel->setToolTip(tr("当前终端编码和列×行尺寸"));
+    m_terminalMetaLabel->setToolTip(tr("Current terminal encoding and columns × rows"));
     m_fileManagerButton->setObjectName(QStringLiteral("terminalFileManagerToggle"));
     m_fileManagerButton->setCheckable(true);
     // 远程文件管理默认收起：多数会话只用终端，一进来就占掉三分之一宽度并立刻发起 SFTP
@@ -72,8 +72,8 @@ TerminalPane::TerminalPane(QWidget *parent)
     m_fileManagerButton->setChecked(false);
     m_fileManagerButton->setAutoRaise(true);
     m_fileManagerButton->setIconSize(QSize(18, 18));
-    m_fileManagerButton->setToolTip(tr("显示当前会话的远程文件管理（Ctrl+Shift+F）"));
-    m_fileManagerButton->setAccessibleName(tr("远程文件管理"));
+    m_fileManagerButton->setToolTip(tr("Show the remote file manager for the current session (Ctrl+Shift+F)"));
+    m_fileManagerButton->setAccessibleName(tr("Remote file manager"));
     updateFileManagerButtonIcon();
     headerLayout->addWidget(m_headerLabel, 1);
     headerLayout->addWidget(m_statusMessageIcon);
@@ -121,7 +121,7 @@ TerminalPane::TerminalPane(QWidget *parent)
                     // 只有刚提交过嵌套 ssh 命令时才允许捕获下一行，普通 sudo、数据库或应用
                     // 密码提示不会进入 SFTP 凭据缓存。
                     m_captureNextLineAsCredential = true;
-                    emit statusMessage(tr("等待内层 SSH 密码；本次输入将同时用于 SFTP 会话"));
+                    emit statusMessage(tr("Waiting for the inner SSH password; this entry is also used for the SFTP session"));
                 }
             });
     connect(m_terminalView,
@@ -151,7 +151,7 @@ TerminalPane::TerminalPane(QWidget *parent)
     connect(m_terminalView,
             &TerminalView::nestedSshFailed,
             this,
-            [this]() { rollBackPendingNestedTarget(tr("内层 SSH 连接失败")); });
+            [this]() { rollBackPendingNestedTarget(tr("Inner SSH connection failed")); });
     connect(m_terminalView,
             &TerminalView::nestedSshAborted,
             this,
@@ -159,7 +159,7 @@ TerminalPane::TerminalPane(QWidget *parent)
                 // 只有确实存在未确认的嵌套目标时，Ctrl+C 才被理解为"取消这次 ssh"；
                 // 否则它就是普通的命令中断，不该影响连接链。
                 if (!m_pendingNestedCredentialTargetId.isEmpty()) {
-                    rollBackPendingNestedTarget(tr("已取消内层 SSH 连接"));
+                    rollBackPendingNestedTarget(tr("Inner SSH connection cancelled"));
                 }
             });
     connect(m_terminalView,
@@ -194,7 +194,7 @@ TerminalPane::TerminalPane(QWidget *parent)
                 m_pendingNestedCredentialTargetId.clear();
                 m_captureNextLineAsCredential = false;
                 emit targetsChanged(this);
-                emit statusMessage(tr("内层 SSH 认证成功，文件管理已切换到当前服务器"));
+                emit statusMessage(tr("Inner SSH authentication succeeded; the file manager has switched to the current server"));
             });
 }
 
@@ -218,8 +218,8 @@ void TerminalPane::openLocalShell(const QString &shellPath)
     // 切换成本地 Shell 后当前终端不再具备远程目标，立即通知所属标签页清空自己的文件
     // 管理器，不能等 zsh 启动完成后继续短暂显示上一条 SSH 会话的目录。
     emit targetsChanged(this);
-    m_headerLabel->setText(tr("正在启动本地终端…"));
-    m_terminalView->appendTerminalOutput(tr("正在启动本地终端…\r\n").toUtf8());
+    m_headerLabel->setText(tr("Starting local terminal…"));
+    m_terminalView->appendTerminalOutput(tr("Starting local terminal…\r\n").toUtf8());
 
     m_localWorker = new LocalShellWorker(shellPath, this);
     connect(m_localWorker,
@@ -240,9 +240,9 @@ void TerminalPane::openLocalShell(const QString &shellPath)
             return;
         }
         m_shellReady = true;
-        m_headerLabel->setText(tr("本地终端"));
+        m_headerLabel->setText(tr("Local terminal"));
         emit targetsChanged(this);
-        emit statusMessage(tr("本地终端已启动"));
+        emit statusMessage(tr("Local terminal started"));
     });
     connect(m_localWorker,
             &LocalShellWorker::shellError,
@@ -252,7 +252,7 @@ void TerminalPane::openLocalShell(const QString &shellPath)
             return;
         }
         m_shellReady = false;
-        m_headerLabel->setText(tr("本地终端错误"));
+        m_headerLabel->setText(tr("Local terminal error"));
         m_terminalView->appendTerminalOutput(
             (QStringLiteral("\r\n") + message + QStringLiteral("\r\n")).toUtf8());
         emit statusMessage(message);
@@ -265,7 +265,7 @@ void TerminalPane::openLocalShell(const QString &shellPath)
             return;
         }
         m_shellReady = false;
-        const QString message = tr("本地终端已结束（退出码 %1）").arg(exitCode);
+        const QString message = tr("Local terminal ended (exit code %1)").arg(exitCode);
         m_headerLabel->setText(message);
         emit targetsChanged(this);
         emit statusMessage(message);
@@ -336,11 +336,11 @@ void TerminalPane::connectToHosts(const QList<ConnectionTarget> &connectionPlan)
     // 新 SSH 尚未完成主机校验和认证，此时先让所属标签页清空旧 SFTP 内容；shellConnected
     // 会在认证成功后再次发出 targetsChanged 并开放该目标。
     emit targetsChanged(this);
-    m_headerLabel->setText(tr("正在连接 %1…").arg(target.connectionSpecifier()));
+    m_headerLabel->setText(tr("Connecting to %1…").arg(target.connectionSpecifier()));
     // 终端里必须使用 CRLF。裸 LF 只把光标下移一行、不回到第 0 列，远端随后的第一行输出
     // 会从本行末尾的列继续绘制，看起来就是"Last login 前面凭空多出一大段空格"。
     m_terminalView->appendTerminalOutput(
-        tr("正在连接 %1…\r\n").arg(target.connectionSpecifier()).toUtf8());
+        tr("Connecting to %1…\r\n").arg(target.connectionSpecifier()).toUtf8());
 
     m_sessionStack = new SshSessionStack(connectionPlan, true, this);
     connect(m_sessionStack,
@@ -365,7 +365,7 @@ void TerminalPane::connectToHosts(const QList<ConnectionTarget> &connectionPlan)
         m_reconnectAttempts = 0;
         ++m_reconnectToken;
         m_headerLabel->setText(target.connectionSpecifier());
-        emit statusMessage(tr("已连接 %1").arg(target.connectionSpecifier()));
+        emit statusMessage(tr("Connected to %1").arg(target.connectionSpecifier()));
         emit rootConnectionSucceeded(target);
         // 这里刻意不发 targetsChanged：此刻 m_ownedTargets 仍为空，发出去会让文件管理器
         // 先清空再被紧随其后的 layersChanged 重新填充，用户能看到一次闪烁。栈保证
@@ -435,7 +435,7 @@ void TerminalPane::connectToHosts(const QList<ConnectionTarget> &connectionPlan)
         // Shell 集成失败不会中断 SSH；清楚告知已进入降级识别，避免用户把后续推测层当成
         // 已由程序认证的确定层。完整原因保留在状态消息中，便于定位权限或 Shell 兼容问题。
         emit statusMessage(
-            tr("%1 的 Shell 集成未启用，嵌套识别已降级：%2")
+            tr("Shell integration for %1 is not enabled; nested detection is degraded: %2")
                 .arg(failedTarget.connectionSpecifier(), message));
     });
     connect(m_sessionStack,
@@ -470,10 +470,10 @@ void TerminalPane::connectToHosts(const QList<ConnectionTarget> &connectionPlan)
         if (target.id != m_takeoverTargetId) {
             // 内层失败不影响外层：这里只报告，不改变任何连接状态。
             m_terminalView->appendTerminalOutput(
-                tr("\r\n无法建立到 %1 的嵌套连接：%2\r\n")
+                tr("\r\nCould not establish the nested connection to %1: %2\r\n")
                     .arg(target.connectionSpecifier(), message)
                     .toUtf8());
-            emit statusMessage(tr("嵌套连接失败：%1").arg(message));
+            emit statusMessage(tr("Nested connection failed: %1").arg(message));
             return;
         }
 
@@ -484,12 +484,12 @@ void TerminalPane::connectToHosts(const QList<ConnectionTarget> &connectionPlan)
         if (message.contains(QStringLiteral("error (1)"))) {
             // RFC 4254 的 SSH_OPEN_ADMINISTRATIVELY_PROHIBITED：服务端按策略拒绝，
             // 而非目标不可达。
-            reason = tr("该服务器禁用了 TCP 转发");
+            reason = tr("This server has TCP forwarding disabled");
             if (!m_takeoverOuterKey.isEmpty()) {
                 m_forwardingProhibitedHosts.insert(m_takeoverOuterKey);
             }
         }
-        emit statusMessage(tr("嵌套连接未接管：%1").arg(reason));
+        emit statusMessage(tr("The nested connection was not taken over: %1").arg(reason));
         runTakeoverFallback(reason);
     });
     connect(m_sessionStack,
@@ -502,7 +502,7 @@ void TerminalPane::connectToHosts(const QList<ConnectionTarget> &connectionPlan)
         const bool wasEstablished = m_remoteSessionEstablished;
         m_shellReady = false;
         m_remoteSessionEstablished = false;
-        m_headerLabel->setText(tr("连接失败"));
+        m_headerLabel->setText(tr("Connection failed"));
         m_terminalView->appendTerminalOutput((QStringLiteral("\r\n") + message
                                               + QStringLiteral("\r\n")).toUtf8());
         emit statusMessage(message);
@@ -542,10 +542,8 @@ void TerminalPane::connectToHosts(const QList<ConnectionTarget> &connectionPlan)
         }
         const QMessageBox::StandardButton answer = QMessageBox::warning(
             this,
-            tr("服务器仅支持旧版 MAC 算法"),
-            tr("服务器 %1 仅提供 hmac-sha1，默认安全策略无法完成连接。\n\n"
-               "hmac-sha1 已过时，建议优先升级服务器 SSH 配置。是否仅为本次连接启用该算法并重试？\n\n"
-               "详细信息：%2")
+            tr("The server only supports legacy MAC algorithms"),
+            tr("Server %1 offers only hmac-sha1, which the default security policy cannot use to complete the connection.\n\nhmac-sha1 is obsolete; upgrading the server's SSH configuration is recommended. Enable this algorithm for this connection only and retry?\n\nDetails: %2")
                 .arg(target.connectionSpecifier(true), error),
             QMessageBox::Yes | QMessageBox::No,
             QMessageBox::No);
@@ -561,8 +559,8 @@ void TerminalPane::connectToHosts(const QList<ConnectionTarget> &connectionPlan)
                 }
             });
         } else {
-            const QString message = tr("已取消连接：服务器需要已禁用的 hmac-sha1。请升级服务器配置。");
-            m_headerLabel->setText(tr("连接失败"));
+            const QString message = tr("Connection cancelled: the server requires hmac-sha1, which is disabled. Upgrade the server configuration.");
+            m_headerLabel->setText(tr("Connection failed"));
             m_terminalView->appendTerminalOutput(
                 (QStringLiteral("\r\n") + message + QStringLiteral("\r\n")).toUtf8());
             emit statusMessage(message);
@@ -588,10 +586,10 @@ void TerminalPane::connectToHosts(const QList<ConnectionTarget> &connectionPlan)
         const bool shouldReconnect = abnormal && m_automaticReconnectEnabled
             && m_reconnectMaxAttempts > 0;
         const QString message = shouldReconnect
-            ? tr("SSH 连接因网络异常中断，准备自动重连")
+            ? tr("The SSH connection was interrupted by a network error; preparing to reconnect automatically")
             : abnormal
-                ? tr("SSH 连接因网络异常中断")
-                : tr("SSH 连接已结束（退出状态 %1）").arg(exitStatus);
+                ? tr("The SSH connection was interrupted by a network error")
+                : tr("The SSH connection has ended (exit status %1)").arg(exitStatus);
         m_headerLabel->setText(message);
         m_terminalView->appendTerminalOutput((QStringLiteral("\r\n") + message
                                               + QStringLiteral("\r\n")).toUtf8());
@@ -627,9 +625,8 @@ void TerminalPane::connectToHosts(const QList<ConnectionTarget> &connectionPlan)
                 }
                 const QMessageBox::StandardButton answer = QMessageBox::question(
                     this,
-                    tr("确认服务器主机密钥"),
-                    tr("首次连接 %1。\n\nSHA-256 指纹：\n%2\n\n"
-                       "请通过可信渠道核对指纹。确认信任并写入 known_hosts 吗？")
+                    tr("Confirm the server host key"),
+                    tr("Connecting to %1 for the first time.\n\nSHA-256 fingerprint:\n%2\n\nVerify the fingerprint through a trusted channel. Trust it and write it to known_hosts?")
                         .arg(verificationTarget.connectionSpecifier(true), fingerprint),
                     QMessageBox::Yes | QMessageBox::No,
                     QMessageBox::No);
@@ -649,12 +646,8 @@ void TerminalPane::connectToHosts(const QList<ConnectionTarget> &connectionPlan)
                 // 轮换密钥后才能继续，不能把潜在的中间人攻击包装成普通确认框。
                 const QMessageBox::StandardButton answer = QMessageBox::warning(
                     this,
-                    tr("服务器主机密钥已变更"),
-                    tr("%1 返回的主机密钥与本机记录不一致。\n\n"
-                       "新 SHA-256 指纹：\n%2\n\n"
-                       "这可能是服务器重装或密钥轮换，也可能是中间人攻击。请先通过可信渠道"
-                       "向服务器管理员核对新指纹。\n\n"
-                       "确认密钥确已变更，并替换 known_hosts 中的旧记录吗？")
+                    tr("The server host key has changed"),
+                    tr("The host key returned by %1 does not match the local record.\n\nNew SHA-256 fingerprint:\n%2\n\nThis may be a server reinstall or key rotation, or a man-in-the-middle attack. Verify the new fingerprint with the server administrator through a trusted channel first.\n\nConfirm the key has changed and replace the old record in known_hosts?")
                         .arg(verificationTarget.connectionSpecifier(true), fingerprint),
                     QMessageBox::Yes | QMessageBox::No,
                     QMessageBox::No);
@@ -676,7 +669,7 @@ void TerminalPane::connectToHosts(const QList<ConnectionTarget> &connectionPlan)
         m_sessionStack->requestRemoteDistributionDetection();
     }
     m_sessionStack->start();
-    emit statusMessage(tr("正在连接 %1").arg(target.connectionSpecifier()));
+    emit statusMessage(tr("Connecting to %1").arg(target.connectionSpecifier()));
     focusTerminal();
 }
 
@@ -725,7 +718,7 @@ void TerminalPane::connectNestedHost(const ConnectionTarget &target,
     // 推测层是对"终端当前在哪台机器"的猜测；一旦由本程序亲自建层，这些猜测的依据就没了。
     m_inferredTargets.clear();
     m_sessionStack->requestPushLayer(target, outerShimSuspended);
-    emit statusMessage(tr("正在经当前服务器建立到 %1 的嵌套连接…")
+    emit statusMessage(tr("Establishing a nested connection to %1 through the current server…")
                            .arg(target.connectionSpecifier()));
 }
 
@@ -826,8 +819,8 @@ void TerminalPane::setFileManagerVisible(const bool visible)
     m_fileManagerButton->setChecked(visible);
     m_fileManagerButton->setToolTip(
         visible
-            ? tr("隐藏当前会话的远程文件管理（Ctrl+Shift+F）")
-            : tr("显示当前会话的远程文件管理（Ctrl+Shift+F）"));
+            ? tr("Hide the remote file manager for the current session (Ctrl+Shift+F)")
+            : tr("Show the remote file manager for the current session (Ctrl+Shift+F)"));
     // 阻断 toggled 的同时也阻断了图标刷新，这里必须显式补上。
     updateFileManagerButtonIcon();
 }
@@ -890,7 +883,7 @@ void TerminalPane::beginManualRecovery(const ConnectionTarget &target,
     m_awaitingManualRecovery = true;
     m_manualRecoveryTarget = target;
 
-    const QString hint = tr("按 r 重新连接 %1，按 x 关闭该标签页")
+    const QString hint = tr("Press r to reconnect to %1, press x to close this tab")
                              .arg(target.connectionSpecifier());
     m_headerLabel->setText(hint);
     // 终端里必须使用 CRLF：裸 LF 只下移一行而不回到第 0 列，提示会从上一行末尾的列开始。
@@ -921,13 +914,13 @@ void TerminalPane::handleManualRecoveryInput(const QByteArray &bytes)
             if (plan.isEmpty() || !plan.constLast().isValid()) {
                 // 没有可复用的目标时继续停留在提示上：静默什么都不做会让用户以为按键失灵。
                 m_terminalView->appendTerminalOutput(
-                    tr("\r\n没有可重连的服务器，请按 x 关闭该标签页\r\n").toUtf8());
+                    tr("\r\nNo server to reconnect to; press x to close this tab\r\n").toUtf8());
                 return;
             }
             // connectToHosts 会清除提示状态；重连必须走整条受管计划，否则断线后会绕过跳板
             // 直接从本机连同名私网地址。
             m_terminalView->appendTerminalOutput(
-                tr("\r\n正在手动重连…\r\n").toUtf8());
+                tr("\r\nReconnecting manually…\r\n").toUtf8());
             connectToHosts(plan);
             return;
         }
@@ -948,7 +941,7 @@ bool TerminalPane::scheduleAutomaticReconnect(const ConnectionTarget &target,
     }
     if (m_reconnectAttempts >= m_reconnectMaxAttempts) {
         m_reconnectCycleActive = false;
-        const QString exhausted = tr("自动重连已达到 %1 次上限")
+        const QString exhausted = tr("Automatic reconnect reached its limit of %1 attempts")
                                       .arg(m_reconnectMaxAttempts);
         QTimer::singleShot(0, this, [this, target, exhausted, sessionGeneration]() {
             if (sessionGeneration == m_sessionGeneration && !m_remoteSessionEstablished) {
@@ -964,7 +957,7 @@ bool TerminalPane::scheduleAutomaticReconnect(const ConnectionTarget &target,
     const int exponentialDelay = m_reconnectBaseDelaySeconds * (1 << (attempt - 1));
     const int delaySeconds = std::min(exponentialDelay, 60);
     const quint64 reconnectToken = m_reconnectToken;
-    const QString waiting = tr("将在 %1 秒后自动重连 %2（第 %3/%4 次）")
+    const QString waiting = tr("Reconnecting to %2 automatically in %1 s (attempt %3/%4)")
                                 .arg(delaySeconds)
                                 .arg(target.connectionSpecifier())
                                 .arg(attempt)
@@ -1016,7 +1009,7 @@ void TerminalPane::sendInputBytes(const QByteArray &bytes)
 void TerminalPane::executeCommand(const QString &command)
 {
     if (!m_shellReady || command.trimmed().isEmpty()) {
-        emit statusMessage(tr("当前终端尚未就绪，无法执行命令"));
+        emit statusMessage(tr("The current terminal is not ready; cannot run the command"));
         return;
     }
     m_terminalView->submitCommand(command);
@@ -1025,7 +1018,7 @@ void TerminalPane::executeCommand(const QString &command)
 void TerminalPane::insertCommandText(const QString &command)
 {
     if (!m_shellReady || command.isEmpty()) {
-        emit statusMessage(tr("当前终端尚未就绪，无法插入命令"));
+        emit statusMessage(tr("The current terminal is not ready; cannot insert the command"));
         return;
     }
     m_terminalView->insertCommandText(command);
@@ -1047,7 +1040,7 @@ void TerminalPane::recordSubmittedCommand(const QString &command)
     entry.command = command.trimmed();
     QString error;
     if (!m_commandHistoryDatabase->appendCommandHistory(entry, &error).has_value()) {
-        emit statusMessage(tr("写入命令历史失败：%1").arg(error));
+        emit statusMessage(tr("Failed to write command history: %1").arg(error));
         return;
     }
     emit commandHistoryChanged(entry.hostId);
@@ -1068,7 +1061,7 @@ void TerminalPane::refreshCommandCompletions()
         hostId, 500, &ok, &error);
     if (!ok) {
         m_terminalView->setCommandCompletions({});
-        emit statusMessage(tr("读取命令历史失败：%1").arg(error));
+        emit statusMessage(tr("Failed to read command history: %1").arg(error));
         return;
     }
 
@@ -1122,10 +1115,10 @@ void TerminalPane::inspectSubmittedCommand(const QString &command)
             if (m_pendingNestedCredentialTargetId == targetId
                 && !m_captureNextLineAsCredential) {
                 emit targetsChanged(this);
-                emit statusMessage(tr("已同步内层 SSH 凭据，文件管理正在连接当前服务器"));
+                emit statusMessage(tr("Inner SSH credentials synced; the file manager is connecting to the current server"));
             }
         });
-        emit statusMessage(tr("已接收内层 SSH 密码，正在等待服务器确认"));
+        emit statusMessage(tr("Inner SSH password received; waiting for the server to confirm"));
         return;
     }
 
@@ -1166,8 +1159,8 @@ void TerminalPane::inspectSubmittedCommand(const QString &command)
         m_inferredTargets.append(nestedTarget);
         refreshCommandCompletions();
         m_pendingNestedCredentialTargetId = nestedTarget.id;
-        m_headerLabel->setText(tr("%1（嵌套目标）").arg(nestedTarget.connectionSpecifier()));
-        emit statusMessage(tr("已识别嵌套 SSH 目标：%1").arg(nestedTarget.connectionSpecifier()));
+        m_headerLabel->setText(tr("%1 (nested target)").arg(nestedTarget.connectionSpecifier()));
+        emit statusMessage(tr("Detected nested SSH target: %1").arg(nestedTarget.connectionSpecifier()));
 
         // 公钥/Agent 登录不会出现 password 提示。这里为高延迟网络保留五秒认证观察窗口：
         // 窗口内一旦收到密码提示，就必须先复用用户在终端提交的那一份密码；窗口结束仍无
@@ -1207,7 +1200,7 @@ void TerminalPane::inspectSubmittedCommand(const QString &command)
         m_inferredTargets.removeLast();
         refreshHeaderLabel();
         emit targetsChanged(this);
-        emit statusMessage(tr("已返回服务器：%1")
+        emit statusMessage(tr("Returned to server: %1")
                                .arg(activeTarget().connectionSpecifier()));
     } else if (finalizedPendingAuthentication) {
         // 普通命令确认内层 Shell 已可用后，把“认证完成”状态同步给文件管理器。
@@ -1256,7 +1249,7 @@ void TerminalPane::handleShellIntegrationEvent(const QByteArray &payload)
         // 被标注为不确定——这比用一个错误的目标去建立会话安全得多。
         respond(ShellShim::declineResponse());
         if (!declineReason.isEmpty()) {
-            emit statusMessage(tr("未接管本次 ssh（%1），已交由远端自行执行").arg(declineReason));
+            emit statusMessage(tr("This ssh was not taken over (%1); it was left to the remote to run itself").arg(declineReason));
         }
         return;
     }
@@ -1315,7 +1308,7 @@ void TerminalPane::runTakeoverFallback(const QString &reason)
     m_takeoverTargetId.clear();
 
     m_terminalView->appendTerminalOutput(
-        tr("Shellium 未能接管本次连接（%1），正在交由远端 ssh 直接执行。\r\n")
+        tr("Shellium could not take over this connection (%1); handing it to the remote ssh to run directly.\r\n")
             .arg(reason)
             .toUtf8());
     // 登记回显：这条命令是本程序补发的，用户已经敲过一次，不该在屏幕上看到第二遍。
@@ -1357,7 +1350,7 @@ void TerminalPane::rollBackPendingNestedTarget(const QString &reason)
 
     refreshHeaderLabel();
     emit targetsChanged(this);
-    emit statusMessage(tr("%1，已退回 %2")
+    emit statusMessage(tr("%1, fell back to %2")
                            .arg(reason, activeTarget().connectionSpecifier()));
 }
 

@@ -156,7 +156,7 @@ public:
         }
 
         ConnectResult combined = relayResult;
-        combined.message = QObject::tr("常规 SFTP 路径失败：%1\n远端密钥 SFTP 兜底失败：%2")
+        combined.message = QObject::tr("The regular SFTP path failed: %1\nThe remote-key SFTP fallback also failed: %2")
                                .arg(directResult.message, relayResult.message);
         return combined;
     }
@@ -221,7 +221,7 @@ public:
     }
     [[nodiscard]] QString lastError() const
     {
-        return m_session == nullptr ? QObject::tr("未知 libssh 错误")
+        return m_session == nullptr ? QObject::tr("Unknown libssh error")
                                     : QString::fromUtf8(ssh_get_error(m_session));
     }
 
@@ -240,7 +240,7 @@ private:
             tunnelFd = SshTunnelBroker::instance().openSocket(target.tunnelRouteId, &tunnelError);
             if (!isNativeSocketValid(tunnelFd)) {
                 return failure(SftpService::ErrorKind::Connection,
-                               QObject::tr("无法复用外层 SSH 会话：%1").arg(tunnelError));
+                               QObject::tr("Could not reuse the outer SSH session: %1").arg(tunnelError));
             }
         }
 
@@ -253,7 +253,7 @@ private:
         m_sftp = sftp_new(m_session);
         if (m_sftp == nullptr || sftp_init(m_sftp) != SSH_OK) {
             return failure(SftpService::ErrorKind::Connection,
-                           QObject::tr("服务器未能初始化 SFTP 子系统：%1")
+                           QObject::tr("The server could not initialize the SFTP subsystem: %1")
                                .arg(QString::fromUtf8(ssh_get_error(m_session))));
         }
         return {.success = true};
@@ -271,7 +271,7 @@ private:
         // 外层已经由当前终端完成过主机密钥确认，known_hosts 应有记录；这里仍强制校验且不
         // 自动接受未知指纹，防止兜底路径成为绕过主机身份校验的后门。
         const ConnectResult connected = connectAndAuthenticate(
-            relayOrigin, false, -1, QObject::tr("外层 SSH"));
+            relayOrigin, false, -1, QObject::tr("Outer SSH"));
         if (!connected.success) {
             return connected;
         }
@@ -279,7 +279,7 @@ private:
         ssh_channel relayChannel = ssh_channel_new(m_session);
         if (relayChannel == nullptr) {
             return failure(SftpService::ErrorKind::Connection,
-                           QObject::tr("无法创建远端 SFTP 中继通道：%1")
+                           QObject::tr("Could not create the remote SFTP relay channel: %1")
                                .arg(QString::fromUtf8(ssh_get_error(m_session))));
         }
 
@@ -287,7 +287,7 @@ private:
             const QString error = QString::fromUtf8(ssh_get_error(m_session));
             ssh_channel_free(relayChannel);
             return failure(SftpService::ErrorKind::Connection,
-                           QObject::tr("外层服务器拒绝启动 SFTP 中继会话：%1").arg(error));
+                           QObject::tr("The outer server refused to start the SFTP relay session: %1").arg(error));
         }
 
         const QByteArray command = SftpRemoteRelay::buildCommand(target);
@@ -295,7 +295,7 @@ private:
             const QString error = QString::fromUtf8(ssh_get_error(m_session));
             ssh_channel_free(relayChannel);
             return failure(SftpService::ErrorKind::Connection,
-                           QObject::tr("外层服务器无法执行内层 OpenSSH：%1").arg(error));
+                           QObject::tr("The outer server could not run the inner OpenSSH: %1").arg(error));
         }
 
         // sftp_new_channel 虽然通常接收 subsystem request 创建的通道，但 SFTP 协议只依赖
@@ -305,7 +305,7 @@ private:
         if (m_sftp == nullptr) {
             ssh_channel_free(relayChannel);
             return failure(SftpService::ErrorKind::Connection,
-                           QObject::tr("无法绑定远端 OpenSSH 的 SFTP 数据通道：%1")
+                           QObject::tr("Could not bind the remote OpenSSH SFTP data channel: %1")
                                .arg(QString::fromUtf8(ssh_get_error(m_session))));
         }
         m_remoteSftpChannel = relayChannel;
@@ -318,7 +318,7 @@ private:
             // 远端 OpenSSH 使用的是外层服务器上的密钥/Agent，本机密码输入框无法修复这条
             // 路径；按连接错误上报并展示真实 stderr，避免诱导用户输入一份不会被使用的密码。
             return failure(SftpService::ErrorKind::Connection,
-                           QObject::tr("外层 OpenSSH 未能建立内层 SFTP：%1").arg(detail));
+                           QObject::tr("The outer OpenSSH could not establish the inner SFTP: %1").arg(detail));
         }
         return {.success = true};
     }
@@ -343,7 +343,7 @@ private:
                 closeNativeSocket(transportFd);
             }
             return failure(SftpService::ErrorKind::Connection,
-                           QObject::tr("无法创建 libssh 会话。"));
+                           QObject::tr("Could not create a libssh session."));
         }
 
         const QByteArray host = target.host.toUtf8();
@@ -358,7 +358,7 @@ private:
                 // 选项设置失败代表 libssh 没有接管 fd；此分支必须显式关闭调用方端点。
                 closeNativeSocket(transportFd);
                 return failure(SftpService::ErrorKind::Connection,
-                               QObject::tr("无法绑定内层 SSH 隧道：%1")
+                               QObject::tr("Could not bind the inner SSH tunnel: %1")
                                    .arg(QString::fromUtf8(ssh_get_error(m_session))));
             }
         }
@@ -375,7 +375,7 @@ private:
             const QByteArray jumps = target.proxyJumps.join(QLatin1Char(',')).toUtf8();
             if (ssh_options_set(m_session, SSH_OPTIONS_PROXYJUMP, jumps.constData()) != SSH_OK) {
                 return failure(SftpService::ErrorKind::Connection,
-                               QObject::tr("无法配置跳板链：%1")
+                               QObject::tr("Could not configure the jump chain: %1")
                                    .arg(QString::fromUtf8(ssh_get_error(m_session))));
             }
         }
@@ -393,10 +393,10 @@ private:
                 && error.contains(QStringLiteral("no match for method mac algo"), Qt::CaseInsensitive)
                 && error.contains(QStringLiteral("hmac-sha1"), Qt::CaseInsensitive)) {
                 return failure(SftpService::ErrorKind::LegacyAlgorithmRequired,
-                               QObject::tr("服务器仅支持旧版 hmac-sha1：%1").arg(error));
+                               QObject::tr("The server only supports legacy hmac-sha1: %1").arg(error));
             }
             return failure(SftpService::ErrorKind::Connection,
-                           QObject::tr("SSH 连接失败：%1").arg(error));
+                           QObject::tr("SSH connection failed: %1").arg(error));
         }
 
         const ConnectResult verification = verifyServerKey(allowVerifiedHostKey);
@@ -417,7 +417,7 @@ private:
         }
         if (authentication != SSH_AUTH_SUCCESS) {
             return failure(SftpService::ErrorKind::Authentication,
-                           QObject::tr("%1 认证失败：%2。请检查用户名、密码、私钥或 SSH Agent。")
+                           QObject::tr("Authentication failed for %1: %2. Check the username, password, private key, or SSH agent.")
                                .arg(authenticationLabel,
                                     QString::fromUtf8(ssh_get_error(m_session))));
         }
@@ -467,7 +467,7 @@ private:
         ssh_key serverKey = nullptr;
         unsigned char *hash = nullptr;
         size_t hashLength = 0;
-        QString fingerprint = QObject::tr("无法读取指纹");
+        QString fingerprint = QObject::tr("Could not read the fingerprint");
 
         if (ssh_get_server_publickey(m_session, &serverKey) == SSH_OK
             && ssh_get_publickey_hash(serverKey,
@@ -496,7 +496,7 @@ private:
             if (!allowVerifiedHostKey) {
                 ConnectResult result = failure(
                     SftpService::ErrorKind::HostKeyChanged,
-                    QObject::tr("服务器主机密钥与 known_hosts 记录不一致，必须先核验新指纹。"));
+                    QObject::tr("The server host key does not match the known_hosts record; the new fingerprint must be verified first."));
                 result.fingerprint = fingerprint;
                 return result;
             }
@@ -506,7 +506,7 @@ private:
             QString replacementError;
             if (!KnownHostsManager::replaceChangedHostKey(m_session, &replacementError)) {
                 return failure(SftpService::ErrorKind::Connection,
-                               QObject::tr("替换 known_hosts 中的旧主机密钥失败：%1")
+                               QObject::tr("Failed to replace the old host key in known_hosts: %1")
                                    .arg(replacementError));
             }
             return {.success = true};
@@ -514,20 +514,20 @@ private:
         if ((state == SSH_KNOWN_HOSTS_UNKNOWN || state == SSH_KNOWN_HOSTS_NOT_FOUND)
             && !allowVerifiedHostKey) {
             ConnectResult result = failure(SftpService::ErrorKind::HostKeyUnknown,
-                                           QObject::tr("该服务器尚未被信任。"));
+                                           QObject::tr("This server is not trusted yet."));
             result.fingerprint = fingerprint;
             return result;
         }
         if (state == SSH_KNOWN_HOSTS_ERROR) {
             return failure(SftpService::ErrorKind::Connection,
-                           QObject::tr("读取 known_hosts 失败：%1")
+                           QObject::tr("Failed to read known_hosts: %1")
                                .arg(QString::fromUtf8(ssh_get_error(m_session))));
         }
 
         // 只有界面已展示指纹且用户明确确认时 allowVerifiedHostKey 才会为 true。
         if (ssh_session_update_known_hosts(m_session) != SSH_OK) {
             return failure(SftpService::ErrorKind::Connection,
-                           QObject::tr("写入 known_hosts 失败：%1")
+                           QObject::tr("Failed to write known_hosts: %1")
                                .arg(QString::fromUtf8(ssh_get_error(m_session))));
         }
         return {.success = true};
@@ -1142,7 +1142,7 @@ bool renameRemoteOverwrite(SftpConnection *connection,
         && sftp_rename(connection->handle(), from.constData(), to.constData()) == SSH_OK) {
         return true;
     }
-    *errorMessage = QObject::tr("无法把临时文件改名为 %1：%2")
+    *errorMessage = QObject::tr("Could not rename the temporary file to %1: %2")
                         .arg(toPath, connection->lastError());
     return false;
 }
@@ -1167,7 +1167,7 @@ FileTransferResult writeRemoteFile(SftpConnection *connection,
 {
     QFile localFile(localPath);
     if (!localFile.open(QIODevice::ReadOnly)) {
-        *errorMessage = QObject::tr("无法读取本地文件：%1").arg(localFile.errorString());
+        *errorMessage = QObject::tr("Could not read the local file: %1").arg(localFile.errorString());
         return {TransferOutcome::Failed};
     }
 
@@ -1251,7 +1251,7 @@ FileTransferResult writeRemoteFile(SftpConnection *connection,
         if (!localTail.isEmpty() && localTail == remoteTail) {
             offset = decision.resumeOffset;
         } else {
-            effectiveReason = QObject::tr("残片尾部校验未通过，重新传输");
+            effectiveReason = QObject::tr("The fragment tail check failed; re-transferring");
         }
     }
 
@@ -1271,14 +1271,14 @@ FileTransferResult writeRemoteFile(SftpConnection *connection,
                                      openFlags,
                                      0644);
     if (remoteFile == nullptr) {
-        *errorMessage = QObject::tr("无法创建远程临时文件 %1：%2")
+        *errorMessage = QObject::tr("Could not create remote temporary file %1: %2")
                             .arg(partPath, connection->lastError());
         return {TransferOutcome::Failed};
     }
     if (offset > 0) {
         if (!localFile.seek(static_cast<qint64>(offset))) {
             sftp_close(remoteFile);
-            *errorMessage = QObject::tr("无法定位本地续传偏移 %1：%2")
+            *errorMessage = QObject::tr("Could not seek to local resume offset %1: %2")
                                 .arg(offset)
                                 .arg(localFile.errorString());
             return {TransferOutcome::Failed};
@@ -1326,7 +1326,7 @@ FileTransferResult writeRemoteFile(SftpConnection *connection,
         inFlight.pop_front();
         const ssize_t written = sftp_aio_wait_write(&front.aio);
         if (written < 0 || static_cast<size_t>(written) != front.requestedLen) {
-            *errorMessage = QObject::tr("上传 %1 失败：%2")
+            *errorMessage = QObject::tr("Upload of %1 failed: %2")
                                 .arg(remotePath, connection->lastError());
             return false;
         }
@@ -1364,7 +1364,7 @@ FileTransferResult writeRemoteFile(SftpConnection *connection,
                                                             static_cast<size_t>(carry.size() - carryOffset),
                                                             &aio);
             if (requested < 0) {
-                *errorMessage = QObject::tr("上传 %1 失败：%2")
+                *errorMessage = QObject::tr("Upload of %1 failed: %2")
                                     .arg(remotePath, connection->lastError());
                 outcome = TransferOutcome::Failed;
                 break;
@@ -1418,14 +1418,14 @@ FileTransferResult writeRemoteFile(SftpConnection *connection,
         const QByteArray encoded = partPath.toUtf8();
         sftp_unlink(connection->handle(), encoded.constData());
         context.ledger->discard(ledgerKey);
-        *errorMessage = QObject::tr("本地文件 %1 在传输过程中被修改，已放弃本次结果")
+        *errorMessage = QObject::tr("Local file %1 was modified during transfer; this result is discarded")
                             .arg(localPath);
         return {TransferOutcome::Failed};
     }
 
     const RemoteStat writtenStat = statRemote(connection, partPath);
     if (!writtenStat.exists || writtenStat.size != localSize) {
-        *errorMessage = QObject::tr("远端临时文件长度与本地不一致（%1 / %2 字节），已放弃改名")
+        *errorMessage = QObject::tr("The remote temporary file length does not match local (%1 / %2 bytes); rename abandoned")
                             .arg(writtenStat.size)
                             .arg(localSize);
         return {TransferOutcome::Failed};
@@ -1476,7 +1476,7 @@ FileTransferResult readRemoteFile(SftpConnection *connection,
 {
     const RemoteStat sourceStat = statRemote(connection, remotePath);
     if (!sourceStat.exists) {
-        *errorMessage = QObject::tr("无法读取远程文件 %1：%2")
+        *errorMessage = QObject::tr("Could not read remote file %1: %2")
                             .arg(remotePath, connection->lastError());
         return {TransferOutcome::Failed};
     }
@@ -1562,7 +1562,7 @@ FileTransferResult readRemoteFile(SftpConnection *connection,
         if (!localTail.isEmpty() && localTail == remoteTail) {
             offset = decision.resumeOffset;
         } else {
-            effectiveReason = QObject::tr("残片尾部校验未通过，重新传输");
+            effectiveReason = QObject::tr("The fragment tail check failed; re-transferring");
         }
     }
 
@@ -1579,7 +1579,7 @@ FileTransferResult readRemoteFile(SftpConnection *connection,
                                      O_RDONLY,
                                      0);
     if (remoteFile == nullptr) {
-        *errorMessage = QObject::tr("无法读取远程文件 %1：%2")
+        *errorMessage = QObject::tr("Could not read remote file %1: %2")
                             .arg(remotePath, connection->lastError());
         return {TransferOutcome::Failed};
     }
@@ -1590,14 +1590,14 @@ FileTransferResult readRemoteFile(SftpConnection *connection,
         : QIODevice::WriteOnly | QIODevice::Truncate;
     if (!partialFile.open(localMode)) {
         sftp_close(remoteFile);
-        *errorMessage = QObject::tr("无法写入本地临时文件 %1：%2")
+        *errorMessage = QObject::tr("Could not write local temporary file %1: %2")
                             .arg(partPath, partialFile.errorString());
         return {TransferOutcome::Failed};
     }
     if (offset > 0) {
         if (!partialFile.seek(static_cast<qint64>(offset))) {
             sftp_close(remoteFile);
-            *errorMessage = QObject::tr("无法定位本地续传偏移 %1：%2")
+            *errorMessage = QObject::tr("Could not seek to local resume offset %1: %2")
                                 .arg(offset)
                                 .arg(partialFile.errorString());
             return {TransferOutcome::Failed};
@@ -1624,13 +1624,13 @@ FileTransferResult readRemoteFile(SftpConnection *connection,
             break;
         }
         if (bytesRead < 0) {
-            *errorMessage = QObject::tr("下载 %1 失败：%2")
+            *errorMessage = QObject::tr("Download of %1 failed: %2")
                                 .arg(remotePath, connection->lastError());
             outcome = TransferOutcome::Failed;
             break;
         }
         if (partialFile.write(buffer.constData(), bytesRead) != bytesRead) {
-            *errorMessage = QObject::tr("保存 %1 失败：%2")
+            *errorMessage = QObject::tr("Failed to save %1: %2")
                                 .arg(partPath, partialFile.errorString());
             outcome = TransferOutcome::Failed;
             break;
@@ -1659,7 +1659,7 @@ FileTransferResult readRemoteFile(SftpConnection *connection,
     }
     sftp_close(remoteFile);
     if (!partialFile.flush() && outcome == TransferOutcome::Ok) {
-        *errorMessage = QObject::tr("刷新本地文件 %1 失败：%2")
+        *errorMessage = QObject::tr("Failed to refresh local file %1: %2")
                             .arg(partPath, partialFile.errorString());
         outcome = TransferOutcome::Failed;
     }
@@ -1685,14 +1685,14 @@ FileTransferResult readRemoteFile(SftpConnection *connection,
     if (!afterStat.exists || afterStat.size != source.size || afterStat.mtime != source.mtime) {
         QFile::remove(partPath);
         context.ledger->discard(ledgerKey);
-        *errorMessage = QObject::tr("远程文件 %1 在传输过程中被修改，已放弃本次结果")
+        *errorMessage = QObject::tr("Remote file %1 was modified during transfer; this result is discarded")
                             .arg(remotePath);
         return {TransferOutcome::Failed};
     }
 
     const QFileInfo writtenInfo(partPath);
     if (static_cast<quint64>(std::max<qint64>(writtenInfo.size(), 0)) != source.size) {
-        *errorMessage = QObject::tr("本地临时文件长度与远端不一致（%1 / %2 字节），已放弃改名")
+        *errorMessage = QObject::tr("The local temporary file length does not match the remote (%1 / %2 bytes); rename abandoned")
                             .arg(writtenInfo.size())
                             .arg(source.size);
         return {TransferOutcome::Failed};
@@ -1702,7 +1702,7 @@ FileTransferResult readRemoteFile(SftpConnection *connection,
     // QFile::rename 在目标存在时直接失败，无法提供这一语义。
     if (::rename(QFile::encodeName(partPath).constData(),
                  QFile::encodeName(localPath).constData()) != 0) {
-        *errorMessage = QObject::tr("无法把临时文件改名为 %1：%2")
+        *errorMessage = QObject::tr("Could not rename the temporary file to %1: %2")
                             .arg(localPath, QString::fromLocal8Bit(strerror(errno)));
         return {TransferOutcome::Failed};
     }
@@ -1763,7 +1763,7 @@ bool ensureRemoteDirectory(SftpConnection *connection,
             return true;
         }
     }
-    *errorMessage = QObject::tr("无法创建远程目录 %1：%2")
+    *errorMessage = QObject::tr("Could not create remote directory %1: %2")
                         .arg(remotePath, connection->lastError());
     return false;
 }
@@ -1795,7 +1795,7 @@ QList<SftpRecursive::SourceEntry> collectRemoteTree(SftpConnection *connection,
         if (directory == nullptr) {
             // 单个子目录不可读（常见于权限不足）不应中断整棵树的传输，记录后继续。
             failures->append({absoluteDirectory,
-                              QObject::tr("无法打开远程目录：%1").arg(connection->lastError())});
+                              QObject::tr("Could not open the remote directory: %1").arg(connection->lastError())});
             continue;
         }
 
@@ -1813,7 +1813,7 @@ QList<SftpRecursive::SourceEntry> collectRemoteTree(SftpConnection *connection,
             if (name.contains(QLatin1Char('/'))) {
                 // 合法 SFTP 服务器不会在单个条目名里返回分隔符；出现即视为恶意，直接丢弃。
                 failures->append({joinRemotePath(absoluteDirectory, name),
-                                  QObject::tr("远端返回了包含路径分隔符的条目名，已忽略")});
+                                  QObject::tr("The remote returned an item name containing a path separator; it was ignored")});
                 continue;
             }
 
@@ -1855,13 +1855,13 @@ bool removeRemoteTree(SftpConnection *connection,
     const QList<SftpRecursive::SourceEntry> entries = collectRemoteTree(
         connection, remoteRoot, isCancelled, &scanFailures, &cancelled);
     if (cancelled) {
-        *errorMessage = QObject::tr("替换前的扫描被取消");
+        *errorMessage = QObject::tr("The pre-replace scan was cancelled");
         return false;
     }
     if (!scanFailures.isEmpty()) {
         // 有读不到的子目录就意味着删不干净，此时继续删会得到一个"半替换"的目录树，比直接
         // 拒绝更糟：用户会以为目标端已经和源端一致。
-        *errorMessage = QObject::tr("无法完整扫描待替换目录：%1")
+        *errorMessage = QObject::tr("Could not fully scan the directory to be replaced: %1")
                             .arg(scanFailures.constFirst().message);
         return false;
     }
@@ -1881,7 +1881,7 @@ bool removeRemoteTree(SftpConnection *connection,
 
     for (const SftpRecursive::SourceEntry &entry : std::as_const(ordered)) {
         if (isCancelled && isCancelled()) {
-            *errorMessage = QObject::tr("替换过程被取消");
+            *errorMessage = QObject::tr("The replace process was cancelled");
             return false;
         }
         const QString absolute = joinRemotePath(remoteRoot, entry.relativePath);
@@ -1891,7 +1891,7 @@ bool removeRemoteTree(SftpConnection *connection,
             ? sftp_rmdir(connection->handle(), encoded.constData())
             : sftp_unlink(connection->handle(), encoded.constData());
         if (removed != SSH_OK) {
-            *errorMessage = QObject::tr("无法删除 %1：%2")
+            *errorMessage = QObject::tr("Could not delete %1: %2")
                                 .arg(absolute, connection->lastError());
             return false;
         }
@@ -1976,7 +1976,7 @@ quint64 SftpService::listDirectory(const ConnectionTarget &target, const QString
         if (directory == nullptr) {
             const ConnectResult error{false,
                                       ErrorKind::RemoteOperation,
-                                      QObject::tr("无法打开远程目录 %1：%2")
+                                      QObject::tr("Could not open remote directory %1: %2")
                                           .arg(resolvedPath, connection->lastError())};
             deliverConnectionFailure(service, requestId, target, error);
             return;
@@ -2014,7 +2014,7 @@ quint64 SftpService::listDirectory(const ConnectionTarget &target, const QString
 
         if (directoryReadFailed) {
             const ConnectResult error{false, ErrorKind::RemoteOperation,
-                                      QObject::tr("读取远程目录 %1 时连接中断：%2")
+                                      QObject::tr("The connection dropped while reading remote directory %1: %2")
                                           .arg(resolvedPath, connection->lastError())};
             deliverConnectionFailure(service, requestId, target, error);
             return;
@@ -2091,7 +2091,7 @@ quint64 SftpService::uploadFile(const ConnectionTarget &target,
                                           ? ErrorKind::LocalIo
                                           : ErrorKind::RemoteOperation,
                                       result.outcome == TransferOutcome::Cancelled
-                                          ? QObject::tr("上传 %1 已取消").arg(remotePath)
+                                          ? QObject::tr("Upload of %1 cancelled").arg(remotePath)
                                           : errorMessage};
             deliverConnectionFailure(service, requestId, target, error);
             return;
@@ -2100,8 +2100,8 @@ quint64 SftpService::uploadFile(const ConnectionTarget &target,
             // 跳过必须说成跳过。把"内容一致、未重传"讲成"已上传"，正是用户以为文件更新了、
             // 实际上远端一个字节都没变的根源。
             const QString message = result.action == SftpTransfer::TransferAction::SkipIdentical
-                ? QObject::tr("%1 内容一致（%2），未重传").arg(remotePath, result.reason)
-                : QObject::tr("已上传到 %1").arg(remotePath);
+                ? QObject::tr("%1 is identical (%2), not re-uploaded").arg(remotePath, result.reason)
+                : QObject::tr("Uploaded to %1").arg(remotePath);
             QMetaObject::invokeMethod(service, [service, requestId, message]() {
                 if (service != nullptr) {
                     emit service->operationSucceeded(requestId, message);
@@ -2155,15 +2155,15 @@ quint64 SftpService::downloadFile(const ConnectionTarget &target,
         if (result.outcome != TransferOutcome::Ok) {
             const ConnectResult error{false, ErrorKind::LocalIo,
                                       result.outcome == TransferOutcome::Cancelled
-                                          ? QObject::tr("下载 %1 已取消").arg(remotePath)
+                                          ? QObject::tr("Download of %1 cancelled").arg(remotePath)
                                           : errorMessage};
             deliverConnectionFailure(service, requestId, target, error);
             return;
         }
         if (service != nullptr) {
             const QString message = result.action == SftpTransfer::TransferAction::SkipIdentical
-                ? QObject::tr("%1 内容一致（%2），未重新下载").arg(localPath, result.reason)
-                : QObject::tr("已下载到 %1").arg(localPath);
+                ? QObject::tr("%1 is identical (%2), not re-downloaded").arg(localPath, result.reason)
+                : QObject::tr("Downloaded to %1").arg(localPath);
             QMetaObject::invokeMethod(service, [service, requestId, message]() {
                 if (service != nullptr) {
                     emit service->operationSucceeded(requestId, message);
@@ -2378,7 +2378,7 @@ quint64 SftpService::downloadDirectory(const ConnectionTarget &target,
             deliverConnectionFailure(
                 service, requestId, target,
                 {false, ErrorKind::LocalIo,
-                 QObject::tr("无法创建本地目录 %1").arg(localRoot)});
+                 QObject::tr("Could not create local directory %1").arg(localRoot)});
             return;
         }
 
@@ -2395,7 +2395,7 @@ quint64 SftpService::downloadDirectory(const ConnectionTarget &target,
             if (item.isDirectory) {
                 if (!QDir().mkpath(item.destinationPath)) {
                     summary.failed.append({item.destinationPath,
-                                           QObject::tr("无法创建本地目录")});
+                                           QObject::tr("Could not create the local directory")});
                 }
                 continue;
             }
@@ -2482,7 +2482,7 @@ quint64 SftpService::previewFile(const ConnectionTarget &target,
                 target,
                 {false,
                  ErrorKind::RemoteOperation,
-                 QObject::tr("无法读取预览文件 %1：%2")
+                 QObject::tr("Could not read preview file %1: %2")
                      .arg(remotePath, connection->lastError())});
             return;
         }
@@ -2505,7 +2505,7 @@ quint64 SftpService::previewFile(const ConnectionTarget &target,
                 break;
             }
             if (bytesRead < 0) {
-                const QString message = QObject::tr("读取预览文件 %1 失败：%2")
+                const QString message = QObject::tr("Failed to read preview file %1: %2")
                                             .arg(remotePath, connection->lastError());
                 sftp_close(remoteFile);
                 deliverConnectionFailure(service,
@@ -2575,7 +2575,7 @@ quint64 SftpService::chmodPath(const ConnectionTarget &target,
                 target,
                 {false,
                  ErrorKind::RemoteOperation,
-                 QObject::tr("修改 %1 权限失败：%2")
+                 QObject::tr("Failed to change permissions of %1: %2")
                      .arg(remotePath, connection->lastError())});
             return;
         }
@@ -2585,7 +2585,7 @@ quint64 SftpService::chmodPath(const ConnectionTarget &target,
                 if (service != nullptr) {
                     emit service->operationSucceeded(
                         requestId,
-                        QObject::tr("已将 %1 的权限修改为 %2")
+                        QObject::tr("Changed permissions of %1 to %2")
                             .arg(remotePath,
                                  QString::number(static_cast<quint32>(safePermissions), 8)
                                      .rightJustified(4, QLatin1Char('0'))));
@@ -2616,7 +2616,7 @@ quint64 SftpService::renamePath(const ConnectionTarget &target,
         const QByteArray newEncoded = newPath.toUtf8();
         if (sftp_rename(connection->handle(), oldEncoded.constData(), newEncoded.constData()) != SSH_OK) {
             const ConnectResult error{false, ErrorKind::RemoteOperation,
-                                      QObject::tr("重命名失败：%1").arg(connection->lastError())};
+                                      QObject::tr("Rename failed: %1").arg(connection->lastError())};
             deliverConnectionFailure(service, requestId, target, error);
             return;
         }
@@ -2624,7 +2624,7 @@ quint64 SftpService::renamePath(const ConnectionTarget &target,
             QMetaObject::invokeMethod(service, [service, requestId, newPath]() {
                 if (service != nullptr) {
                     emit service->operationSucceeded(
-                        requestId, QObject::tr("已重命名为 %1").arg(newPath));
+                        requestId, QObject::tr("Renamed to %1").arg(newPath));
                 }
             }, Qt::QueuedConnection);
         }
@@ -2654,7 +2654,7 @@ quint64 SftpService::removePath(const ConnectionTarget &target,
             : sftp_unlink(connection->handle(), encodedPath.constData());
         if (result != SSH_OK) {
             const ConnectResult error{false, ErrorKind::RemoteOperation,
-                                      QObject::tr("删除 %1 失败：%2。目录必须为空。")
+                                      QObject::tr("Failed to delete %1: %2. The directory must be empty.")
                                           .arg(path, connection->lastError())};
             deliverConnectionFailure(service, requestId, target, error);
             return;
@@ -2663,7 +2663,7 @@ quint64 SftpService::removePath(const ConnectionTarget &target,
             QMetaObject::invokeMethod(service, [service, requestId, path]() {
                 if (service != nullptr) {
                     emit service->operationSucceeded(
-                        requestId, QObject::tr("已删除 %1").arg(path));
+                        requestId, QObject::tr("Deleted %1").arg(path));
                 }
             }, Qt::QueuedConnection);
         }

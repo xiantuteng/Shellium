@@ -330,7 +330,7 @@ void PortForwardManagerWidgetTest::emptyStateShowsGuidanceWhenNoHostsSaved()
     auto *list = widget.findChild<QListWidget *>(QStringLiteral("PortForwardRuleList"));
     QVERIFY(list != nullptr);
     QCOMPARE(list->count(), 0);
-    QVERIFY2(findLabelWithText(&widget, QStringLiteral("请先在主机管理中保存一台主机"))
+    QVERIFY2(findLabelWithText(&widget, QStringLiteral("Save a host in Host Manager first"))
                  != nullptr,
              "没有保存主机时必须提示去主机管理创建，而不是留一片空白列表");
 }
@@ -361,7 +361,7 @@ void PortForwardManagerWidgetTest::failedRuleCardDisplaysConcreteReason()
     failedStatistics.state = PortForwardState::Failed;
     // 换行模拟系统/SSH 返回的多段错误；界面应合并为空格，避免把卡片布局拆成任意多行。
     failedStatistics.lastError =
-        QStringLiteral("监听 127.0.0.1:8080 失败：Address already in use\n请更换端口");
+        QStringLiteral("Failed to listen on 127.0.0.1:8080: Address already in use\nchange the port");
     QVERIFY2(QMetaObject::invokeMethod(&widget,
                                        "applyRuntimeStatistics",
                                        Qt::DirectConnection,
@@ -374,11 +374,11 @@ void PortForwardManagerWidgetTest::failedRuleCardDisplaysConcreteReason()
     auto *errorLabel = list->findChild<QLabel *>(QStringLiteral("PortForwardErrorLabel"));
     QVERIFY2(errorLabel != nullptr, "失败卡片必须创建直接可见的原因标签");
     QCOMPARE(errorLabel->text(),
-             QStringLiteral("失败原因：监听 127.0.0.1:8080 失败：Address already in use 请更换端口"));
+             QStringLiteral("Reason: Failed to listen on 127.0.0.1:8080: Address already in use change the port"));
     QVERIFY2(errorLabel->wordWrap(), "较长失败原因必须允许换行，不能在窄侧栏中被直接裁掉");
     // 设计稿只在确有活动连接时追加数量；失败态的零连接没有决策价值，显示“· 0”反而会
     // 干扰用户优先阅读失败原因。因此这里验证简化后的状态文本，同时继续要求原因可见。
-    QVERIFY2(findLabelWithText(list, QStringLiteral("失败")) != nullptr,
+    QVERIFY2(findLabelWithText(list, QStringLiteral("Failed")) != nullptr,
              "展示失败原因时不能丢失原有状态");
 }
 

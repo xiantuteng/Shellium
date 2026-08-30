@@ -231,11 +231,11 @@ QString label(const CommandRiskLevel level)
 {
     switch (level) {
     case CommandRiskLevel::ReadOnly:
-        return QObject::tr("只读 · 已允许");
+        return QObject::tr("Read-only · allowed");
     case CommandRiskLevel::Write:
-        return QObject::tr("修改系统 · 需审批");
+        return QObject::tr("Modifies the system · needs approval");
     case CommandRiskLevel::HighRisk:
-        return QObject::tr("高风险 · 需审批");
+        return QObject::tr("High risk · needs approval");
     }
     return {};
 }

@@ -4,6 +4,7 @@
 #include "ai/AiSettingsService.h"
 #include "core/ActivityLog.h"
 #include "forwarding/PortForwardManagerWidget.h"
+#include "i18n/LocalizationService.h"
 #include "productivity/ProductivityModel.h"
 #include "productivity/ProductivityWidget.h"
 #include "security/Vault.h"
@@ -356,12 +357,14 @@ enum SidebarPageIndex {
 
 MainWindow::MainWindow(ApplicationDatabase *database,
                        CredentialVault *credentialVault,
+                       LocalizationService *localization,
                        QWidget *parent)
     : QMainWindow(parent)
     , m_tabs(new QTabWidget(this))
     , m_database(database)
     , m_credentialVault(credentialVault)
     , m_vaultIdleTimer(new QTimer(this))
+    , m_localization(localization)
 {
     Q_ASSERT(m_database != nullptr);
     Q_ASSERT(m_credentialVault != nullptr);
@@ -376,7 +379,7 @@ MainWindow::MainWindow(ApplicationDatabase *database,
             [this](const QString &message) { showTransientMessage(message, 10000); });
     QString settingsLoadError;
     if (!m_settingsService->load(&settingsLoadError)) {
-        showTransientMessage(tr("读取设置失败：%1").arg(settingsLoadError), 0);
+        showTransientMessage(tr("Failed to read settings: %1").arg(settingsLoadError), 0);
     }
     m_credentialVault->setPasswordProtectionEnabled(
         m_settingsService->currentSettings().vaultPasswordEnabled);
@@ -455,7 +458,7 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     auto *navigationGroup = new QButtonGroup(this);
     navigationGroup->setExclusive(true);
     const QStringList navigationTooltips = {
-        tr("主机"), tr("效率工具"), tr("端口转发"), tr("AI 助手")};
+        tr("Hosts"), tr("Productivity"), tr("Port forwarding"), tr("AI Assistant")};
     for (int pageIndex = HostsPage; pageIndex <= AiPage; ++pageIndex) {
         auto *button = new QToolButton(m_navigationRail);
         button->setProperty("navButton", true);
@@ -509,9 +512,9 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     // 目标与会话动作行，不再重复渲染页面标题本身。
     sidebarLayout->setContentsMargins(10, 10, 10, 8);
     sidebarLayout->setSpacing(8);
-    m_sidebarTitle = new QLabel(tr("主机"), m_sidebarPanel);
+    m_sidebarTitle = new QLabel(tr("Hosts"), m_sidebarPanel);
     m_sidebarTitle->setObjectName(QStringLiteral("SidebarHeader"));
-    m_hostCountLabel = new QLabel(tr("0 台"), m_sidebarPanel);
+    m_hostCountLabel = new QLabel(tr("0 hosts"), m_sidebarPanel);
     m_hostCountLabel->setObjectName(QStringLiteral("HostCountLabel"));
     auto *sidebarHeaderLayout = new QHBoxLayout;
     sidebarHeaderLayout->setContentsMargins(0, 0, 0, 0);
@@ -531,7 +534,7 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     m_aiSettingsService = new AiSettingsService(m_database, m_credentialVault, this);
     QString aiSettingsLoadError;
     if (!m_aiSettingsService->load(&aiSettingsLoadError)) {
-        showTransientMessage(tr("读取 AI 助手配置失败：%1").arg(aiSettingsLoadError), 0);
+        showTransientMessage(tr("Failed to read the AI assistant configuration: %1").arg(aiSettingsLoadError), 0);
     }
     // AI 页本身是一个与终端标签索引同步的内部栈，每个标签稍后在 createWorkspaceTab() 中
     // 创建独立 AiAssistantWidget。不能只创建一个全局控件再替换 m_history：旧标签的异步
@@ -546,13 +549,13 @@ MainWindow::MainWindow(ApplicationDatabase *database,
 
     // HostManagerWidget 在构造末尾已完成首次刷新，该次信号早于 MainWindow 的连接，因此先
     // 读取快照初始化标签；之后的增删、导入和刷新再由信号增量同步。
-    m_hostCountLabel->setText(tr("%1 台").arg(m_hostManager->hostCount()));
+    m_hostCountLabel->setText(tr("%1 hosts").arg(m_hostManager->hostCount()));
     connect(m_hostManager,
             &HostManagerWidget::hostCountChanged,
             this,
             [this](const int count) {
                 if (m_hostCountLabel != nullptr) {
-                    m_hostCountLabel->setText(tr("%1 台").arg(count));
+                    m_hostCountLabel->setText(tr("%1 hosts").arg(count));
                 }
             });
 
@@ -600,40 +603,58 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     // 显得可有可无。
     updateWorkspacePlaceholder();
 
-    auto *connectAction = new QAction(tr("连接服务器"), this);
+    auto *connectAction = new QAction(this);
+    registerTranslatable(connectAction,
+                         QT_TRANSLATE_NOOP("MainWindow", "Connect to Server"),
+                         QT_TRANSLATE_NOOP("MainWindow", "Connect to an SSH server in the current terminal pane"));
     connectAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+N")));
-    connectAction->setToolTip(tr("在当前终端面板中连接 SSH 服务器"));
 
-    auto *nestedConnectAction = new QAction(tr("嵌套连接到…"), this);
-    nestedConnectAction->setToolTip(
-        tr("经当前服务器建立到内网主机的连接。层级由本程序自己维护，"
-           "文件管理器可以准确地在各层之间切换。"));
+    auto *nestedConnectAction = new QAction(this);
+    registerTranslatable(nestedConnectAction,
+                         QT_TRANSLATE_NOOP("MainWindow", "Nested Connect to…"),
+                         QT_TRANSLATE_NOOP("MainWindow",
+                             "Connects to an internal host through the current server. The app maintains the layers itself, so the file manager can switch accurately between them."));
 
     // 菜单使用平台中立名称：Windows 会启动 PowerShell/cmd，macOS 与 Linux 默认启动 zsh。
-    auto *localShellAction = new QAction(tr("本地终端"), this);
+    auto *localShellAction = new QAction(this);
+    registerTranslatable(localShellAction,
+                         QT_TRANSLATE_NOOP("MainWindow", "Local terminal"),
+                         QT_TRANSLATE_NOOP("MainWindow", "Start a local login zsh in the current terminal pane"));
     localShellAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+L")));
-    localShellAction->setToolTip(tr("在当前终端面板中启动本地登录式 zsh"));
 
-    auto *newTabAction = new QAction(tr("新建标签页"), this);
+    auto *newTabAction = new QAction(this);
+    registerTranslatable(newTabAction, QT_TRANSLATE_NOOP("MainWindow", "New tab"));
     newTabAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+T")));
 
-    auto *closeTabAction = new QAction(tr("关闭标签页"), this);
+    auto *closeTabAction = new QAction(this);
+    registerTranslatable(closeTabAction, QT_TRANSLATE_NOOP("MainWindow", "Close tab"));
     closeTabAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+W")));
 
-    auto *renameTabAction = new QAction(tr("重命名标签页"), this);
+    auto *renameTabAction = new QAction(this);
+    registerTranslatable(renameTabAction, QT_TRANSLATE_NOOP("MainWindow", "Rename tab"));
 
-    auto *toggleFilesAction = new QAction(tr("切换远程文件管理"), this);
+    auto *toggleFilesAction = new QAction(this);
+    registerTranslatable(toggleFilesAction,
+                         QT_TRANSLATE_NOOP("MainWindow", "Toggle remote file manager"),
+                         QT_TRANSLATE_NOOP("MainWindow",
+                             "Show or hide the remote file manager area inside the current terminal tab"));
     toggleFilesAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+F")));
-    toggleFilesAction->setToolTip(tr("显示或隐藏当前终端标签页内部的远程文件管理区域"));
 
-    auto *searchTerminalAction = new QAction(tr("搜索终端输出…"), this);
-    auto *exportTerminalAction = new QAction(tr("导出终端输出…"), this);
-    auto *settingsAction = new QAction(tr("设置…"), this);
-    auto *commandPaletteAction = new QAction(tr("命令面板…"), this);
+    auto *searchTerminalAction = new QAction(this);
+    registerTranslatable(searchTerminalAction, QT_TRANSLATE_NOOP("MainWindow", "Search Terminal Output…"));
+    auto *exportTerminalAction = new QAction(this);
+    registerTranslatable(exportTerminalAction, QT_TRANSLATE_NOOP("MainWindow", "Export Terminal Output…"));
+    auto *settingsAction = new QAction(this);
+    registerTranslatable(settingsAction, QT_TRANSLATE_NOOP("MainWindow", "Settings…"));
+    auto *commandPaletteAction = new QAction(this);
+    registerTranslatable(commandPaletteAction, QT_TRANSLATE_NOOP("MainWindow", "Command Palette…"));
     commandPaletteAction->setObjectName(QStringLiteral("CommandPaletteAction"));
-    auto *saveWorkspaceAction = new QAction(tr("保存当前工作区…"), this);
-    auto *openWorkspaceAction = new QAction(tr("打开工作区…"), this);
-    auto *removeWorkspaceAction = new QAction(tr("删除工作区…"), this);
+    auto *saveWorkspaceAction = new QAction(this);
+    registerTranslatable(saveWorkspaceAction, QT_TRANSLATE_NOOP("MainWindow", "Save Current Workspace…"));
+    auto *openWorkspaceAction = new QAction(this);
+    registerTranslatable(openWorkspaceAction, QT_TRANSLATE_NOOP("MainWindow", "Open Workspace…"));
+    auto *removeWorkspaceAction = new QAction(this);
+    registerTranslatable(removeWorkspaceAction, QT_TRANSLATE_NOOP("MainWindow", "Delete Workspace…"));
 
     // 动作图标同时服务菜单、命令面板和标题栏；优先使用桌面主题的语义图标，缺失时由
     // UiIcons 回退到 Qt 标准资源，避免在 macOS/Linux 之间出现空白动作。
@@ -668,10 +689,12 @@ MainWindow::MainWindow(ApplicationDatabase *database,
 
     // 标题区不是 QToolBar，而是中央内容树的第一行。macOS 原生标题栏透明后，这一行会
     // 真正延伸到交通灯背后；因此会话标签与窗口标题只占一次高度，不会再上下叠两层。
-    m_sidebarToggleAction = new QAction(tr("显示侧边栏"), this);
+    m_sidebarToggleAction = new QAction(this);
+    registerTranslatable(m_sidebarToggleAction,
+                         QT_TRANSLATE_NOOP("MainWindow", "Show sidebar"),
+                         QT_TRANSLATE_NOOP("MainWindow", "Expand or collapse the Hosts, Productivity, and Port Forwarding areas on the left"));
     m_sidebarToggleAction->setCheckable(true);
     m_sidebarToggleAction->setChecked(true);
-    m_sidebarToggleAction->setToolTip(tr("展开或收起左侧主机、效率工具和端口转发区域"));
 
     QMenuBar *applicationMenuBar = nullptr;
 #ifdef Q_OS_MACOS
@@ -704,7 +727,7 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     auto *productNameLabel = new QLabel(QStringLiteral("Shellium"), m_titleChrome);
     productNameLabel->setObjectName(QStringLiteral("WindowProductName"));
     productNameLabel->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
-    productNameLabel->setAccessibleName(tr("Shellium 产品名称"));
+    productNameLabel->setAccessibleName(tr("Shellium product name"));
     titleLayout->addWidget(productNameLabel, 0, Qt::AlignVCenter);
 #endif
 
@@ -715,8 +738,8 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     scrollLeftButton->setProperty("chromeRole", QStringLiteral("scrollLeft"));
     scrollLeftButton->setToolButtonStyle(Qt::ToolButtonIconOnly);
     scrollLeftButton->setFixedSize(18, 38);
-    scrollLeftButton->setToolTip(tr("向左滚动标签"));
-    scrollLeftButton->setAccessibleName(tr("向左滚动标签"));
+    scrollLeftButton->setToolTip(tr("Scroll tabs left"));
+    scrollLeftButton->setAccessibleName(tr("Scroll tabs left"));
     // 显隐若改变布局宽度，就会反过来改变标签是否溢出的判定，形成显示→不溢出→隐藏→
     // 溢出的抖动死循环。保留隐藏时的占位可彻底切断这条反馈路径。
     QSizePolicy scrollPolicy = scrollLeftButton->sizePolicy();
@@ -746,8 +769,8 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     scrollRightButton->setProperty("chromeRole", QStringLiteral("scrollRight"));
     scrollRightButton->setToolButtonStyle(Qt::ToolButtonIconOnly);
     scrollRightButton->setFixedSize(18, 38);
-    scrollRightButton->setToolTip(tr("向右滚动标签"));
-    scrollRightButton->setAccessibleName(tr("向右滚动标签"));
+    scrollRightButton->setToolTip(tr("Scroll tabs right"));
+    scrollRightButton->setAccessibleName(tr("Scroll tabs right"));
     scrollRightButton->setSizePolicy(scrollPolicy);
     scrollRightButton->hide();
     m_tabScrollRightButton = scrollRightButton;
@@ -775,8 +798,8 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     minimizeButton->setObjectName(QStringLiteral("WindowMinimizeButton"));
     minimizeButton->setProperty("windowControl", true);
     minimizeButton->setProperty("windowControlRole", QStringLiteral("minimize"));
-    minimizeButton->setToolTip(tr("最小化"));
-    minimizeButton->setAccessibleName(tr("最小化窗口"));
+    minimizeButton->setToolTip(tr("Minimize"));
+    minimizeButton->setAccessibleName(tr("Minimize window"));
     minimizeButton->setFixedSize(48, 42);
     titleLayout->addWidget(minimizeButton);
     connect(minimizeButton, &QToolButton::clicked, this, &QWidget::showMinimized);
@@ -798,8 +821,8 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     closeButton->setObjectName(QStringLiteral("WindowCloseButton"));
     closeButton->setProperty("windowControl", true);
     closeButton->setProperty("windowControlRole", QStringLiteral("close"));
-    closeButton->setToolTip(tr("关闭"));
-    closeButton->setAccessibleName(tr("关闭窗口"));
+    closeButton->setToolTip(tr("Close"));
+    closeButton->setAccessibleName(tr("Close window"));
     closeButton->setFixedSize(48, 42);
     titleLayout->addWidget(closeButton);
     connect(closeButton, &QToolButton::clicked, this, &QWidget::close);
@@ -848,7 +871,8 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     railLayout->addWidget(settingsButton, 0, Qt::AlignHCenter);
     m_chromeButtons.append(settingsButton);
 
-    QMenu *connectionMenu = applicationMenuBar->addMenu(tr("连接"));
+    QMenu *connectionMenu = applicationMenuBar->addMenu(QString());
+    registerTranslatable(connectionMenu, QT_TRANSLATE_NOOP("MainWindow", "Connection"));
     connectionMenu->addAction(connectAction);
     connectionMenu->addAction(nestedConnectAction);
     connectionMenu->addAction(localShellAction);
@@ -856,27 +880,33 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     connectionMenu->addAction(closeTabAction);
     connectionMenu->addAction(renameTabAction);
 
-    QMenu *workspaceMenu = applicationMenuBar->addMenu(tr("工作区"));
+    QMenu *workspaceMenu = applicationMenuBar->addMenu(QString());
+    registerTranslatable(workspaceMenu, QT_TRANSLATE_NOOP("MainWindow", "Workspace"));
     workspaceMenu->addAction(saveWorkspaceAction);
     workspaceMenu->addAction(openWorkspaceAction);
     workspaceMenu->addSeparator();
     workspaceMenu->addAction(removeWorkspaceAction);
 
-    QMenu *viewMenu = applicationMenuBar->addMenu(tr("视图"));
+    QMenu *viewMenu = applicationMenuBar->addMenu(QString());
+    registerTranslatable(viewMenu, QT_TRANSLATE_NOOP("MainWindow", "View"));
     viewMenu->addAction(m_sidebarToggleAction);
     viewMenu->addSeparator();
     QAction *showHostsAction = viewMenu->addAction(
         UiIcons::symbol(this, UiIcons::Symbol::Hosts, this->palette().color(QPalette::WindowText)),
-        tr("主机"));
+        QString());
+    registerTranslatable(showHostsAction, QT_TRANSLATE_NOOP("MainWindow", "Hosts"));
     QAction *showProductivityAction = viewMenu->addAction(
         UiIcons::symbol(this, UiIcons::Symbol::Command, this->palette().color(QPalette::WindowText)),
-        tr("效率工具"));
+        QString());
+    registerTranslatable(showProductivityAction, QT_TRANSLATE_NOOP("MainWindow", "Productivity"));
     QAction *showForwardingAction = viewMenu->addAction(
         UiIcons::symbol(this, UiIcons::Symbol::Forwarding, this->palette().color(QPalette::WindowText)),
-        tr("端口转发"));
+        QString());
+    registerTranslatable(showForwardingAction, QT_TRANSLATE_NOOP("MainWindow", "Port forwarding"));
     QAction *showAiAction = viewMenu->addAction(
         UiIcons::symbol(this, UiIcons::Symbol::Sparkle, this->palette().color(QPalette::WindowText)),
-        tr("AI 助手"));
+        QString());
+    registerTranslatable(showAiAction, QT_TRANSLATE_NOOP("MainWindow", "AI Assistant"));
     // 视图菜单与导航轨都只切换同一个 QStackedWidget，防止出现菜单显示某个 Dock、导航轨
     // 却高亮另一个页面的双重状态。
     connect(showHostsAction,
@@ -896,16 +926,20 @@ MainWindow::MainWindow(ApplicationDatabase *database,
             this,
             [this]() { showSidebarPage(AiPage); });
 
-    QMenu *terminalMenu = applicationMenuBar->addMenu(tr("终端"));
+    QMenu *terminalMenu = applicationMenuBar->addMenu(QString());
+    registerTranslatable(terminalMenu, QT_TRANSLATE_NOOP("MainWindow", "Terminal"));
     terminalMenu->addAction(searchTerminalAction);
     terminalMenu->addAction(exportTerminalAction);
     terminalMenu->addSeparator();
     terminalMenu->addAction(commandPaletteAction);
     terminalMenu->addAction(settingsAction);
 
-    auto *unlockVaultAction = new QAction(tr("解锁凭据保险库…"), this);
-    auto *lockVaultAction = new QAction(tr("锁定凭据保险库"), this);
-    auto *sshKeyManagerAction = new QAction(tr("SSH 密钥管理…"), this);
+    auto *unlockVaultAction = new QAction(this);
+    registerTranslatable(unlockVaultAction, QT_TRANSLATE_NOOP("MainWindow", "Unlock Credential Vault…"));
+    auto *lockVaultAction = new QAction(this);
+    registerTranslatable(lockVaultAction, QT_TRANSLATE_NOOP("MainWindow", "Lock credential vault"));
+    auto *sshKeyManagerAction = new QAction(this);
+    registerTranslatable(sshKeyManagerAction, QT_TRANSLATE_NOOP("MainWindow", "SSH Key Management…"));
     unlockVaultAction->setIcon(
         UiIcons::symbol(this, UiIcons::Symbol::Check, this->palette().color(QPalette::WindowText)));
     lockVaultAction->setIcon(
@@ -917,7 +951,8 @@ MainWindow::MainWindow(ApplicationDatabase *database,
         m_settingsService->currentSettings().vaultPasswordEnabled);
     lockVaultAction->setEnabled(
         m_settingsService->currentSettings().vaultPasswordEnabled);
-    QMenu *securityMenu = applicationMenuBar->addMenu(tr("安全"));
+    QMenu *securityMenu = applicationMenuBar->addMenu(QString());
+    registerTranslatable(securityMenu, QT_TRANSLATE_NOOP("MainWindow", "Security"));
     securityMenu->addAction(unlockVaultAction);
     securityMenu->addAction(lockVaultAction);
     securityMenu->addSeparator();
@@ -953,7 +988,7 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     });
     connect(newTabAction, &QAction::triggered, this, [this]() {
         TerminalWorkspace *workspace = createWorkspaceTab(
-            tr("终端 %1").arg(m_tabs->count() + 1));
+            tr("Terminal %1").arg(m_tabs->count() + 1));
         m_tabs->setCurrentWidget(workspace);
         workspace->activePane()->openLocalShell();
     });
@@ -967,8 +1002,8 @@ MainWindow::MainWindow(ApplicationDatabase *database,
         }
         bool accepted = false;
         const QString name = QInputDialog::getText(this,
-                                                    tr("重命名标签页"),
-                                                    tr("标签名称："),
+                                                    tr("Rename tab"),
+                                                    tr("Tag name:"),
                                                     QLineEdit::Normal,
                                                     m_tabs->tabText(index),
                                                     &accepted).trimmed();
@@ -1061,11 +1096,11 @@ MainWindow::MainWindow(ApplicationDatabase *database,
             [this](const QString &message) { showTransientMessage(message, 8000); });
     connect(lockVaultAction, &QAction::triggered, this, [this]() {
         m_credentialVault->lock();
-        showTransientMessage(tr("凭据保险库已锁定"), 5000);
+        showTransientMessage(tr("The credential vault is locked"), 5000);
     });
     connect(unlockVaultAction, &QAction::triggered, this, [this]() {
         if (ensureVaultUnlocked()) {
-            showTransientMessage(tr("凭据保险库已解锁"), 5000);
+            showTransientMessage(tr("The credential vault is unlocked"), 5000);
         }
     });
     connect(sshKeyManagerAction, &QAction::triggered, this, [this]() {
@@ -1086,6 +1121,7 @@ MainWindow::MainWindow(ApplicationDatabase *database,
             &TerminalSettingsService::settingsChanged,
             this,
             [this, unlockVaultAction, lockVaultAction](const TerminalSettings &settings) {
+                applyLanguageSetting(settings.language);
                 // 对已打开标签逐个应用，保证设置对话框的实时预览和系统主题切换不会只影响
                 // 新建终端；动作快捷键同样以这一份快照为唯一来源。
                 for (TerminalPane *pane : allTerminalPanes()) {
@@ -1117,10 +1153,10 @@ MainWindow::MainWindow(ApplicationDatabase *database,
                     // 修正运行态，避免后续普通设置保存把旧 true 写回，再用持久提示暴露异常。
                     m_settingsService->applyTransient(settings);
                     showTransientMessage(
-                        tr("保险箱已重置，但设置状态同步失败：%1").arg(settingsError), 0);
+                        tr("The vault was reset, but syncing the settings state failed: %1").arg(settingsError), 0);
                 } else {
                     showTransientMessage(
-                        tr("保险箱已重置；主机配置已保留，请重新录入所需凭据"), 10000);
+                        tr("The vault has been reset; host configurations are kept. Re-enter the credentials you need."), 10000);
                 }
                 m_hostManager->refresh();
                 refreshProductivityTargets();
@@ -1148,8 +1184,8 @@ MainWindow::MainWindow(ApplicationDatabase *database,
                 m_broadcastTargetIds = m_broadcastEnabled ? targetIds : QStringList{};
                 showTransientMessage(
                     m_broadcastEnabled
-                        ? tr("实时广播已开启：%1 个目标").arg(m_broadcastTargetIds.size())
-                        : tr("实时广播已关闭"),
+                        ? tr("Live broadcast turned on: %1 targets").arg(m_broadcastTargetIds.size())
+                        : tr("Live broadcast turned off"),
                     5000);
             });
     refreshProductivityTargets();
@@ -1160,7 +1196,7 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     connect(m_vaultIdleTimer, &QTimer::timeout, this, [this]() {
         if (m_credentialVault->passwordProtectionEnabled()
             && m_credentialVault->lockIfIdle()) {
-            showTransientMessage(tr("凭据保险库因闲置已自动锁定"), 5000);
+            showTransientMessage(tr("The credential vault was locked automatically due to inactivity"), 5000);
         }
     });
     m_vaultIdleTimer->start();
@@ -1263,9 +1299,81 @@ void MainWindow::showEvent(QShowEvent *event)
     }
 }
 
+void MainWindow::registerTranslatable(QAction *action,
+                                     const char *sourceText,
+                                     const char *sourceToolTip)
+{
+    if (action == nullptr) {
+        return;
+    }
+    m_translatableUi.append({action, nullptr, sourceText, sourceToolTip});
+    action->setText(QCoreApplication::translate("MainWindow", sourceText));
+    if (sourceToolTip != nullptr) {
+        action->setToolTip(QCoreApplication::translate("MainWindow", sourceToolTip));
+    }
+}
+
+void MainWindow::registerTranslatable(QMenu *menu, const char *sourceTitle)
+{
+    if (menu == nullptr) {
+        return;
+    }
+    m_translatableUi.append({nullptr, menu, sourceTitle, nullptr});
+    menu->setTitle(QCoreApplication::translate("MainWindow", sourceTitle));
+}
+
+void MainWindow::retranslateUi()
+{
+    for (const TranslatableUiEntry &entry : std::as_const(m_translatableUi)) {
+        if (entry.menu != nullptr) {
+            entry.menu->setTitle(QCoreApplication::translate("MainWindow", entry.text));
+            continue;
+        }
+        if (entry.action == nullptr) {
+            continue;
+        }
+        entry.action->setText(QCoreApplication::translate("MainWindow", entry.text));
+        if (entry.toolTip != nullptr) {
+            entry.action->setToolTip(
+                QCoreApplication::translate("MainWindow", entry.toolTip));
+        }
+    }
+    setWindowTitle(tr("Shellium"));
+}
+
+void MainWindow::applyLanguageSetting(const QString &storedLanguage)
+{
+    if (m_localization == nullptr) {
+        return;
+    }
+    const QString resolved = m_localization->resolve(storedLanguage);
+    if (resolved == m_localization->currentLanguage()) {
+        return;
+    }
+    if (!m_localization->apply(resolved)) {
+        showTransientMessage(tr("Could not switch to the selected language; check that the language pack is complete"), 8000);
+        return;
+    }
+    if (!m_languageChangeNoticeShown) {
+        m_languageChangeNoticeShown = true;
+        QMessageBox::information(
+            this,
+            tr("Interface language changed"),
+            tr("Menus updated immediately. Open terminal content, history, and some windows will fully use the new language after being reopened or after Shellium is restarted."));
+    }
+}
+
 void MainWindow::changeEvent(QEvent *event)
 {
     QMainWindow::changeEvent(event);
+
+    if (event->type() == QEvent::LanguageChange) {
+        // 安装/卸载翻译器后 Qt 会向本窗口投递该事件。菜单栏常驻，必须就地重译；按需对话框
+        // 不在此处理，它们下次打开会以新语言重新构造。
+        retranslateUi();
+        return;
+    }
+
     if (event->type() != QEvent::WindowStateChange) {
         return;
     }
@@ -1294,9 +1402,9 @@ void MainWindow::refreshWindowMaximizeIcon()
     if (auto *controlButton = dynamic_cast<WindowControlButton *>(m_windowMaximizeButton)) {
         controlButton->setRestoreMode(restoreMode);
     }
-    m_windowMaximizeButton->setToolTip(restoreMode ? tr("还原") : tr("最大化"));
+    m_windowMaximizeButton->setToolTip(restoreMode ? tr("Restore") : tr("Maximize"));
     m_windowMaximizeButton->setAccessibleName(
-        restoreMode ? tr("还原窗口") : tr("最大化窗口"));
+        restoreMode ? tr("Restore window") : tr("Maximize window"));
 }
 
 void MainWindow::resizeEvent(QResizeEvent *event)
@@ -1369,7 +1477,7 @@ void MainWindow::restoreSidebarWidth()
     } else if (!error.isEmpty()) {
         // 读取失败与"用户从未拖动过"必须区分：前者说明磁盘上的值不可信，提示一次比静默
         // 套用默认宽度更诚实，用户至少知道这次布局没有按上次的来。
-        showTransientMessage(tr("读取侧栏宽度失败：%1").arg(error), 10000);
+        showTransientMessage(tr("Failed to read the sidebar width: %1").arg(error), 10000);
     }
 
     // 第二项只表达"剩余空间归终端"，QSplitter 会按窗口实际宽度整体缩放这组比例。
@@ -1399,7 +1507,7 @@ void MainWindow::persistSidebarWidth()
     if (!m_database->setIntSetting(QString::fromLatin1(kSidebarWidthSettingKey),
                                    qMin(sidebarWidth, kSidebarMaximumWidth),
                                    &error)) {
-        showTransientMessage(tr("保存侧栏宽度失败：%1").arg(error), 10000);
+        showTransientMessage(tr("Failed to save sidebar width: %1").arg(error), 10000);
     }
 }
 
@@ -1425,7 +1533,7 @@ void MainWindow::showSidebarPage(const int pageIndex)
     }
 
     static const QStringList pageTitles = {
-        tr("主机"), tr("效率工具"), tr("端口转发"), tr("AI 助手")};
+        tr("Hosts"), tr("Productivity"), tr("Port forwarding"), tr("AI Assistant")};
     m_activeSidebarPage = pageIndex;
     m_sidebarStack->setCurrentIndex(pageIndex);
     if (m_sidebarTitle != nullptr) {
@@ -2597,10 +2705,10 @@ QMenu *MainWindow::createSessionTabMenu(const int index, QWidget *parent)
     UiIcons::modernizePopup(&menu);
     QAction *newAction = menu.addAction(
         UiIcons::symbol(this, UiIcons::Symbol::Plus, this->palette().color(QPalette::WindowText)),
-        tr("新建终端标签"));
+        tr("New terminal tab"));
     connect(newAction, &QAction::triggered, this, [this]() {
         TerminalWorkspace *workspace = createWorkspaceTab(
-            tr("终端 %1").arg(m_tabs->count() + 1));
+            tr("Terminal %1").arg(m_tabs->count() + 1));
         workspace->activePane()->openLocalShell();
     });
 
@@ -2611,18 +2719,18 @@ QMenu *MainWindow::createSessionTabMenu(const int index, QWidget *parent)
         menu.addSeparator();
         QAction *duplicateAction = menu.addAction(
             UiIcons::symbol(this, UiIcons::Symbol::Copy, this->palette().color(QPalette::WindowText)),
-            tr("复制标签"));
+            tr("Copy tag"));
         connect(duplicateAction,
                 &QAction::triggered,
                 this,
                 [this, index]() { duplicateWorkspaceTab(index); });
         QAction *renameAction = menu.addAction(
             UiIcons::symbol(this, UiIcons::Symbol::Edit, this->palette().color(QPalette::WindowText)),
-            tr("重命名"));
+            tr("Rename"));
         QAction *closeAction = menu.addAction(
             UiIcons::symbol(this, UiIcons::Symbol::Close, this->palette().color(QPalette::WindowText)),
-            tr("关闭标签"));
-        QAction *closeOthersAction = menu.addAction(tr("关闭其他标签"));
+            tr("Close tab"));
+        QAction *closeOthersAction = menu.addAction(tr("Close other tabs"));
         // 关闭最后一个标签会回到品牌空态页，因此不再禁用；"关闭其他"只有真的存在其他
         // 标签时才有意义。
         closeOthersAction->setEnabled(m_tabs->count() > 1);
@@ -2630,8 +2738,8 @@ QMenu *MainWindow::createSessionTabMenu(const int index, QWidget *parent)
         connect(renameAction, &QAction::triggered, this, [this, index]() {
             bool accepted = false;
             const QString name = QInputDialog::getText(this,
-                                                        tr("重命名标签页"),
-                                                        tr("标签名称："),
+                                                        tr("Rename tab"),
+                                                        tr("Tag name:"),
                                                         QLineEdit::Normal,
                                                         m_tabs->tabText(index),
                                                         &accepted).trimmed();
@@ -2736,8 +2844,8 @@ void MainWindow::connectNestedFromCurrentPane()
     if (!pane->canPushNestedLayer()) {
         QMessageBox::information(
             this,
-            tr("无法建立嵌套连接"),
-            tr("当前标签页尚未连接到远程服务器。请先连接一台服务器，再从它继续连接内网主机。"));
+            tr("Could not establish the nested connection"),
+            tr("The current tab is not connected to a remote server yet. Connect to a server first, then continue to an internal host from it."));
         return;
     }
 
@@ -2761,8 +2869,8 @@ void MainWindow::connectSavedHost(const QString &hostId,
         const QList<HostRecord> route = m_database->resolveConnectionChain(hostId, &routeError);
         if (route.isEmpty()) {
             QMessageBox::critical(this,
-                                  tr("无法连接保存的主机"),
-                                  routeError.isEmpty() ? tr("主机记录或主机链不存在") : routeError);
+                                  tr("Could not connect to the saved host"),
+                                  routeError.isEmpty() ? tr("The host record or host chain does not exist") : routeError);
             return;
         }
         for (const HostRecord &record : route) {
@@ -2800,9 +2908,9 @@ void MainWindow::connectSavedHost(const QString &hostId,
         const std::optional<HostRecord> savedHost = m_database->resolveHost(target.id, &lookupError);
         if (!savedHost.has_value()) {
             QMessageBox::critical(this,
-                                  tr("无法读取主机链"),
+                                  tr("Could not read the host chain"),
                                   lookupError.isEmpty()
-                                      ? tr("链路主机不存在：%1").arg(target.displayName)
+                                      ? tr("The chain host does not exist: %1").arg(target.displayName)
                                       : lookupError);
             return;
         }
@@ -2810,7 +2918,7 @@ void MainWindow::connectSavedHost(const QString &hostId,
             const bool requiresUnlock = m_credentialVault->credentialRequiresUnlock(
                 savedHost->credentialId, &lookupError);
             if (!lookupError.isEmpty()) {
-                QMessageBox::critical(this, tr("无法读取主机凭据"), lookupError);
+                QMessageBox::critical(this, tr("Could not read the host credentials"), lookupError);
                 return;
             }
             if (requiresUnlock && !vaultReady) {
@@ -2822,8 +2930,8 @@ void MainWindow::connectSavedHost(const QString &hostId,
             QString credentialError;
             if (!m_credentialVault->applyHostCredential(*savedHost, target, &credentialError)) {
                 QMessageBox::critical(this,
-                                      tr("无法读取主机凭据"),
-                                      credentialError.isEmpty() ? tr("凭据不存在") : credentialError);
+                                      tr("Could not read the host credentials"),
+                                      credentialError.isEmpty() ? tr("The credential does not exist") : credentialError);
                 return;
             }
         }
@@ -2882,7 +2990,7 @@ void MainWindow::recordConnectionSucceeded(TerminalPane *pane,
         m_openHistoryRows.insert(pane, *historyId);
         m_hostManager->refresh();
     } else {
-        showTransientMessage(tr("连接成功，但写入连接历史失败：%1").arg(error), 0);
+        showTransientMessage(tr("Connected, but writing the connection history failed: %1").arg(error), 0);
     }
 }
 
@@ -2904,7 +3012,7 @@ void MainWindow::recordConnectionFailed(TerminalPane *pane,
 
     QString error;
     if (!m_database->appendConnectionHistory(entry, &error).has_value()) {
-        showTransientMessage(tr("连接失败，且写入连接历史失败：%1").arg(error), 0);
+        showTransientMessage(tr("The connection failed, and writing the connection history also failed: %1").arg(error), 0);
     }
     m_hostManager->refresh();
 }
@@ -2926,7 +3034,7 @@ void MainWindow::recordConnectionDisconnected(TerminalPane *pane,
                                              QDateTime::currentDateTimeUtc(),
                                              &updated,
                                              &error)) {
-        showTransientMessage(tr("写入断开时间失败：%1").arg(error), 0);
+        showTransientMessage(tr("Failed to write disconnect time: %1").arg(error), 0);
     }
 }
 
@@ -2948,11 +3056,11 @@ void MainWindow::configureAiAssistant(AiAssistantWidget *assistant, TerminalPane
         // 瞬间的 activeWorkspace()。这样即使点击事件与标签切换落在同一事件循环，也不会
         // 把旧聊天里的命令发到新标签。
         if (!targetIds.isEmpty()) {
-            showTransientMessage(tr("AI 助手暂不支持向多个终端执行命令"), 5000);
+            showTransientMessage(tr("The AI assistant does not support running commands on multiple terminals"), 5000);
             return;
         }
         if (guardedPane.isNull()) {
-            showTransientMessage(tr("对应的终端标签已经关闭"), 5000);
+            showTransientMessage(tr("The matching terminal tab is already closed"), 5000);
             return;
         }
         guardedPane->executeCommand(command);
@@ -2963,15 +3071,15 @@ void MainWindow::configureAiAssistant(AiAssistantWidget *assistant, TerminalPane
             [this, guardedPane](const QString &command, const QStringList &targetIds) {
         // 插入与执行共享同一绑定规则，但仍保持两个独立信号，避免“修改”动作误带回车执行。
         if (!targetIds.isEmpty()) {
-            showTransientMessage(tr("暂不支持向多个终端插入未执行命令"), 5000);
+            showTransientMessage(tr("Inserting an unexecuted command into multiple terminals is not supported yet"), 5000);
             return;
         }
         if (guardedPane.isNull()) {
-            showTransientMessage(tr("对应的终端标签已经关闭"), 5000);
+            showTransientMessage(tr("The matching terminal tab is already closed"), 5000);
             return;
         }
         guardedPane->insertCommandText(command);
-        showTransientMessage(tr("命令已插入对应终端，按回车执行"), 5000);
+        showTransientMessage(tr("The command was inserted into the matching terminal; press Enter to run it"), 5000);
     });
     assistant->setTerminalContextProvider([guardedPane]() -> QString {
         // QPointer 在标签关闭后自动归零；回调即使被延迟的捕获定时器触发，也只返回空文本，
@@ -3010,7 +3118,7 @@ QWidget *MainWindow::createWorkspacePlaceholder()
     layout->addWidget(titleLabel);
 
     auto *hintLabel = new QLabel(
-        tr("按标题栏的 + 新建终端标签页，或从左侧主机列表连接服务器。"), placeholder);
+        tr("Press + in the title bar to open a new terminal tab, or connect to a server from the host list on the left."), placeholder);
     hintLabel->setObjectName(QStringLiteral("WorkspacePlaceholderHint"));
     hintLabel->setAlignment(Qt::AlignCenter);
     hintLabel->setWordWrap(true);
@@ -3174,7 +3282,7 @@ TerminalWorkspace *MainWindow::createWorkspaceTab(const QString &title)
                 QString saveError;
                 if (!m_database->saveHost(*savedHost, &saveError)) {
                     ActivityLog::instance().append(
-                        tr("保存主机发行版信息失败：%1").arg(saveError));
+                        tr("Failed to save host distribution information: %1").arg(saveError));
                     return;
                 }
                 // 图标由 HostRecord 重建得到，刷新能同时更新嵌套目录、搜索结果与所有主题下
@@ -3201,7 +3309,7 @@ TerminalWorkspace *MainWindow::createWorkspaceTab(const QString &title)
                         m_tabs->indexOf(workspace), SessionTabBar::ConnectionState::Connecting);
                 }
                 showTransientMessage(
-                    tr("正在自动重连 %1（第 %2/%3 次）")
+                    tr("Reconnecting to %1 automatically (attempt %2/%3)")
                         .arg(target.connectionSpecifier())
                         .arg(attempt)
                         .arg(maximumAttempts),
@@ -3332,16 +3440,16 @@ void MainWindow::applyConfiguredShortcuts()
 void MainWindow::openCommandPalette()
 {
     QDialog dialog(this);
-    dialog.setWindowTitle(tr("命令面板"));
+    dialog.setWindowTitle(tr("Command palette"));
     dialog.resize(560, 420);
     auto *layout = new QVBoxLayout(&dialog);
     auto *filterEdit = new QLineEdit(&dialog);
-    filterEdit->setPlaceholderText(tr("输入命令名称筛选…"));
+    filterEdit->setPlaceholderText(tr("Type a command name to filter…"));
     auto *list = new QListWidget(&dialog);
     list->setSelectionMode(QAbstractItemView::SingleSelection);
     layout->addWidget(filterEdit);
     layout->addWidget(list, 1);
-    layout->addWidget(new QLabel(tr("Enter 执行，Esc 关闭；这里只显示当前可用动作。"), &dialog));
+    layout->addWidget(new QLabel(tr("Enter to run, Esc to close; only currently available actions are shown here."), &dialog));
 
     QList<QAction *> candidates;
     QSet<QAction *> seen;
@@ -3425,8 +3533,8 @@ void MainWindow::searchCurrentTerminal()
 
     bool accepted = false;
     const QString text = QInputDialog::getText(this,
-                                               tr("搜索终端输出"),
-                                               tr("查找文本："),
+                                               tr("Search terminal output"),
+                                               tr("Find text:"),
                                                QLineEdit::Normal,
                                                m_lastTerminalSearch,
                                                &accepted);
@@ -3435,7 +3543,7 @@ void MainWindow::searchCurrentTerminal()
     }
     m_lastTerminalSearch = text;
     if (!pane->findTerminalText(text)) {
-        showTransientMessage(tr("终端输出中未找到“%1”").arg(text), 5000);
+        showTransientMessage(tr("'%1' was not found in the terminal output").arg(text), 5000);
     }
 }
 
@@ -3451,9 +3559,9 @@ void MainWindow::exportCurrentTerminal()
                                              .toString(QStringLiteral("yyyyMMdd-HHmmss")));
     const QString path = QFileDialog::getSaveFileName(
         this,
-        tr("导出终端输出"),
+        tr("Export terminal output"),
         QDir::home().filePath(defaultName),
-        tr("文本文件 (*.txt);;所有文件 (*)"));
+        tr("Text files (*.txt);;All files (*)"));
     if (path.isEmpty()) {
         return;
     }
@@ -3461,18 +3569,18 @@ void MainWindow::exportCurrentTerminal()
     QSaveFile output(path);
     if (!output.open(QIODevice::WriteOnly | QIODevice::Text)) {
         QMessageBox::critical(this,
-                              tr("导出失败"),
-                              tr("无法打开 %1：%2").arg(path, output.errorString()));
+                              tr("Export failed"),
+                              tr("Could not open %1: %2").arg(path, output.errorString()));
         return;
     }
     const QByteArray content = pane->terminalPlainText().toUtf8();
     if (output.write(content) != content.size() || !output.commit()) {
         QMessageBox::critical(this,
-                              tr("导出失败"),
-                              tr("写入 %1 失败：%2").arg(path, output.errorString()));
+                              tr("Export failed"),
+                              tr("Failed to write %1: %2").arg(path, output.errorString()));
         return;
     }
-    showTransientMessage(tr("终端输出已导出到 %1").arg(path), 5000);
+    showTransientMessage(tr("Terminal output exported to %1").arg(path), 5000);
 }
 
 void MainWindow::saveCurrentWorkspace()
@@ -3499,12 +3607,11 @@ void MainWindow::saveCurrentWorkspace()
                 // 保存成本地 Shell 会让用户误以为工作区完整，故在写库前整体拒绝。
                 QMessageBox::warning(
                     this,
-                    tr("工作区包含临时连接"),
+                    tr("The workspace contains temporary connections"),
                     lookupError.isEmpty()
-                        ? tr("标签“%1”不是从主机树打开的持久化主机。请先把该连接保存到主机树，"
-                             "再保存工作区。")
+                        ? tr("Tab '%1' is not a persistent host opened from the host tree. Save this connection to the host tree first, then save the workspace.")
                               .arg(m_tabs->tabText(index))
-                        : tr("检查标签“%1”的主机记录失败：%2")
+                        : tr("Failed to check the host record for tab '%1': %2")
                               .arg(m_tabs->tabText(index), lookupError));
                 return;
             }
@@ -3517,14 +3624,14 @@ void MainWindow::saveCurrentWorkspace()
         tabs.append(tab);
     }
     if (tabs.isEmpty()) {
-        QMessageBox::information(this, tr("没有可保存标签"), tr("当前窗口没有有效终端标签。"));
+        QMessageBox::information(this, tr("No tabs to save"), tr("The current window has no valid terminal tab."));
         return;
     }
 
     bool accepted = false;
     const QString name = QInputDialog::getText(this,
-                                               tr("保存工作区"),
-                                               tr("工作区名称："),
+                                               tr("Save workspace"),
+                                               tr("Workspace name:"),
                                                QLineEdit::Normal,
                                                QString(),
                                                &accepted).trimmed();
@@ -3537,7 +3644,7 @@ void MainWindow::saveCurrentWorkspace()
     QString error;
     const QList<WorkspaceRecord> existing = m_database->listWorkspaces(&ok, &error);
     if (!ok) {
-        QMessageBox::critical(this, tr("保存工作区失败"), error);
+        QMessageBox::critical(this, tr("Failed to save workspace"), error);
         return;
     }
     const auto sameName = std::find_if(
@@ -3546,8 +3653,8 @@ void MainWindow::saveCurrentWorkspace()
         });
     if (sameName != existing.cend()) {
         if (QMessageBox::question(this,
-                                  tr("覆盖已有工作区"),
-                                  tr("已存在名为“%1”的工作区，是否用当前标签组合覆盖？").arg(name),
+                                  tr("Overwrite existing workspace"),
+                                  tr("A workspace named '%1' already exists. Overwrite it with the current set of tabs?").arg(name),
                                   QMessageBox::Yes | QMessageBox::Cancel,
                                   QMessageBox::Cancel) != QMessageBox::Yes) {
             return;
@@ -3564,10 +3671,10 @@ void MainWindow::saveCurrentWorkspace()
     record.layoutJson = QString::fromUtf8(QJsonDocument(layout).toJson(QJsonDocument::Compact));
     record.updatedAt = QDateTime::currentDateTimeUtc();
     if (!m_database->saveWorkspace(record, &error)) {
-        QMessageBox::critical(this, tr("保存工作区失败"), error);
+        QMessageBox::critical(this, tr("Failed to save workspace"), error);
         return;
     }
-    showTransientMessage(tr("工作区“%1”已保存（%2 个标签）").arg(name).arg(tabs.size()),
+    showTransientMessage(tr("Workspace '%1' saved (%2 tabs)").arg(name).arg(tabs.size()),
                          5000);
 }
 
@@ -3577,11 +3684,11 @@ void MainWindow::openSavedWorkspace()
     QString error;
     const QList<WorkspaceRecord> records = m_database->listWorkspaces(&ok, &error);
     if (!ok) {
-        QMessageBox::critical(this, tr("读取工作区失败"), error);
+        QMessageBox::critical(this, tr("Failed to read workspace"), error);
         return;
     }
     if (records.isEmpty()) {
-        QMessageBox::information(this, tr("没有工作区"), tr("请先保存当前工作区。"));
+        QMessageBox::information(this, tr("No workspaces"), tr("Save the current workspace first."));
         return;
     }
 
@@ -3602,8 +3709,8 @@ void MainWindow::openSavedWorkspace()
     }
     bool accepted = false;
     const QString selectedLabel = QInputDialog::getItem(this,
-                                                        tr("打开工作区"),
-                                                        tr("选择工作区："),
+                                                        tr("Open workspace"),
+                                                        tr("Select workspace:"),
                                                         labels,
                                                         0,
                                                         false,
@@ -3615,8 +3722,8 @@ void MainWindow::openSavedWorkspace()
         m_database->findWorkspace(idByLabel.value(selectedLabel), &error);
     if (!selected.has_value()) {
         QMessageBox::critical(this,
-                              tr("读取工作区失败"),
-                              error.isEmpty() ? tr("所选工作区已被删除") : error);
+                              tr("Failed to read workspace"),
+                              error.isEmpty() ? tr("The selected workspace has been deleted") : error);
         return;
     }
 
@@ -3629,8 +3736,8 @@ void MainWindow::openSavedWorkspace()
         || serializedTabs.isEmpty() || serializedTabs.size() > 64) {
         QMessageBox::critical(
             this,
-            tr("工作区布局损坏"),
-            tr("工作区“%1”的版本、标签列表或数量无效，当前会话未被修改。")
+            tr("The workspace layout is corrupt"),
+            tr("The version, tab list, or count of workspace '%1' is invalid; the current session was not modified.")
                 .arg(selected->name));
         return;
     }
@@ -3645,14 +3752,14 @@ void MainWindow::openSavedWorkspace()
     restoredTabs.reserve(serializedTabs.size());
     for (const QJsonValue &value : serializedTabs) {
         if (!value.isObject()) {
-            error = tr("标签项不是对象");
+            error = tr("The tag entry is not an object");
             break;
         }
         const QJsonObject tab = value.toObject();
         if (!tab.value(QStringLiteral("title")).isString()
             || !tab.value(QStringLiteral("hostId")).isString()
             || !tab.value(QStringLiteral("filesVisible")).isBool()) {
-            error = tr("标签字段类型无效");
+            error = tr("Invalid tag field type");
             break;
         }
         RestoredTab restored;
@@ -3660,7 +3767,7 @@ void MainWindow::openSavedWorkspace()
         restored.hostId = tab.value(QStringLiteral("hostId")).toString().trimmed();
         restored.filesVisible = tab.value(QStringLiteral("filesVisible")).toBool();
         if (restored.title.isEmpty()) {
-            restored.title = tr("终端");
+            restored.title = tr("Terminal");
         }
         if (!restored.hostId.isEmpty()) {
             QString hostError;
@@ -3668,7 +3775,7 @@ void MainWindow::openSavedWorkspace()
                 m_database->resolveHost(restored.hostId, &hostError);
             if (!host.has_value() || host->kind != HostNodeKind::Host) {
                 error = hostError.isEmpty()
-                    ? tr("主机引用不存在：%1").arg(restored.hostId)
+                    ? tr("The host reference does not exist: %1").arg(restored.hostId)
                     : hostError;
                 break;
             }
@@ -3676,7 +3783,7 @@ void MainWindow::openSavedWorkspace()
                 restored.hostId, &hostError);
             if (route.isEmpty()) {
                 error = hostError.isEmpty()
-                    ? tr("主机链无法解析：%1").arg(restored.hostId)
+                    ? tr("The host chain could not be resolved: %1").arg(restored.hostId)
                     : hostError;
                 break;
             }
@@ -3693,16 +3800,16 @@ void MainWindow::openSavedWorkspace()
     if (!error.isEmpty() || restoredTabs.size() != serializedTabs.size()) {
         QMessageBox::critical(
             this,
-            tr("工作区布局损坏"),
-            tr("工作区“%1”无法完整恢复：%2。当前会话未被修改。")
+            tr("The workspace layout is corrupt"),
+            tr("Workspace '%1' could not be fully restored: %2. The current session was not modified.")
                 .arg(selected->name, error.isEmpty() ? parseError.errorString() : error));
         return;
     }
 
     if (QMessageBox::question(
             this,
-            tr("替换当前工作区"),
-            tr("打开“%1”会关闭当前 %2 个标签及其连接，然后恢复 %3 个标签。是否继续？")
+            tr("Replace the current workspace"),
+            tr("Opening '%1' closes the current %2 tabs and their connections, then restores %3 tabs. Continue?")
                 .arg(selected->name)
                 .arg(m_tabs->count())
                 .arg(restoredTabs.size()),
@@ -3731,7 +3838,7 @@ void MainWindow::openSavedWorkspace()
     }
     m_tabs->setCurrentIndex(0);
     m_workspace = activeWorkspace();
-    showTransientMessage(tr("工作区“%1”已恢复").arg(selected->name), 5000);
+    showTransientMessage(tr("Workspace '%1' restored").arg(selected->name), 5000);
 }
 
 void MainWindow::removeSavedWorkspace()
@@ -3740,11 +3847,11 @@ void MainWindow::removeSavedWorkspace()
     QString error;
     const QList<WorkspaceRecord> records = m_database->listWorkspaces(&ok, &error);
     if (!ok) {
-        QMessageBox::critical(this, tr("读取工作区失败"), error);
+        QMessageBox::critical(this, tr("Failed to read workspace"), error);
         return;
     }
     if (records.isEmpty()) {
-        QMessageBox::information(this, tr("没有工作区"), tr("当前没有可删除的工作区。"));
+        QMessageBox::information(this, tr("No workspaces"), tr("There are no workspaces to delete."));
         return;
     }
     QStringList labels;
@@ -3756,8 +3863,8 @@ void MainWindow::removeSavedWorkspace()
     }
     bool accepted = false;
     const QString selectedLabel = QInputDialog::getItem(this,
-                                                        tr("删除工作区"),
-                                                        tr("选择要删除的工作区："),
+                                                        tr("Delete workspace"),
+                                                        tr("Select a workspace to delete:"),
                                                         labels,
                                                         0,
                                                         false,
@@ -3766,18 +3873,18 @@ void MainWindow::removeSavedWorkspace()
         return;
     }
     if (QMessageBox::warning(this,
-                             tr("确认删除工作区"),
-                             tr("仅删除保存的布局，不会关闭当前终端。此操作不可撤销。"),
+                             tr("Confirm workspace deletion"),
+                             tr("Only the saved layout is deleted; the current terminals are not closed. This action cannot be undone."),
                              QMessageBox::Yes | QMessageBox::Cancel,
                              QMessageBox::Cancel) != QMessageBox::Yes) {
         return;
     }
     int removed = 0;
     if (!m_database->removeWorkspace(idByLabel.value(selectedLabel), &removed, &error)) {
-        QMessageBox::critical(this, tr("删除工作区失败"), error);
+        QMessageBox::critical(this, tr("Failed to delete workspace"), error);
         return;
     }
-    showTransientMessage(removed > 0 ? tr("工作区已删除") : tr("工作区已经不存在"),
+    showTransientMessage(removed > 0 ? tr("Workspace deleted") : tr("The workspace no longer exists"),
                          5000);
 }
 
@@ -3801,7 +3908,7 @@ void MainWindow::executeOnTargets(const QString &command, const QStringList &tar
         }
     }
     if (delivered == 0) {
-        showTransientMessage(tr("选中的执行目标已关闭或尚未连接"), 5000);
+        showTransientMessage(tr("The selected target is closed or not connected yet"), 5000);
     }
 }
 

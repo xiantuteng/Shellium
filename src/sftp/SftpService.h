@@ -179,9 +179,9 @@ struct TransferSummary {
         constexpr qsizetype kMaxListedEntries = 10;
         QStringList lines;
         if (cancelled) {
-            lines.append(QObject::tr("传输已取消：%1").arg(rootDescription));
+            lines.append(QObject::tr("Transfer cancelled: %1").arg(rootDescription));
         } else {
-            QString headline = QObject::tr("已传输 %1：%2/%3 个文件，共 %4 字节")
+            QString headline = QObject::tr("Transferred %1: %2/%3 files, %4 bytes total")
                                    .arg(rootDescription)
                                    .arg(filesTransferred)
                                    .arg(fileTotal)
@@ -189,13 +189,13 @@ struct TransferSummary {
             if (filesSkippedIdentical > 0) {
                 // 必须并进首行：界面只把第一行放进状态栏，"0/5 个文件"单独出现会让用户以为
                 // 传输失败了，而真实情况是那 5 个文件本来就一模一样。
-                headline += QObject::tr("；另有 %1 个文件内容一致，未重传")
+                headline += QObject::tr("; %1 other files are identical and were not re-uploaded")
                                 .arg(filesSkippedIdentical);
             }
             lines.append(headline);
         }
         if (removedForReplace > 0) {
-            lines.append(QObject::tr("替换模式下已删除目标端 %1 个多余条目")
+            lines.append(QObject::tr("Replace mode deleted %1 extra items on the target")
                              .arg(removedForReplace));
         }
         const auto appendList = [&lines](const QString &title, const QStringList &details) {
@@ -207,7 +207,7 @@ struct TransferSummary {
                 lines.append(QStringLiteral("  · ") + details.at(index));
             }
             if (details.size() > kMaxListedEntries) {
-                lines.append(QObject::tr("  · 其余 %1 项省略")
+                lines.append(QObject::tr("  · %1 more omitted")
                                  .arg(details.size() - kMaxListedEntries));
             }
         };
@@ -222,8 +222,8 @@ struct TransferSummary {
         for (const FailedEntry &entry : failed) {
             failedDetails.append(QStringLiteral("%1：%2").arg(entry.path, entry.message));
         }
-        appendList(QObject::tr("已跳过 %1 项："), skippedDetails);
-        appendList(QObject::tr("失败 %1 项："), failedDetails);
+        appendList(QObject::tr("%1 skipped:"), skippedDetails);
+        appendList(QObject::tr("%1 failed:"), failedDetails);
         return lines.join(QLatin1Char('\n'));
     }
 
@@ -334,14 +334,14 @@ struct TransferSummary {
 
     for (const SourceEntry &entry : entries) {
         if (entry.isSymbolicLink) {
-            plan.skipped.append({entry.relativePath, QObject::tr("符号链接（不跟随）")});
+            plan.skipped.append({entry.relativePath, QObject::tr("Symlink (not followed)")});
             continue;
         }
         if (entry.relativePath.isEmpty() || entry.relativePath == QStringLiteral(".")) {
             continue;
         }
         if (resolveWithinRoot(destinationRoot, entry.relativePath).isEmpty()) {
-            plan.skipped.append({entry.relativePath, QObject::tr("路径逃逸出目标目录")});
+            plan.skipped.append({entry.relativePath, QObject::tr("The path escapes the target directory")});
             continue;
         }
         accepted.append(entry);
@@ -589,7 +589,7 @@ struct TransferDecision {
     const bool mtimeTrusted)
 {
     if (policy == ExistingFilePolicy::Overwrite) {
-        return {TransferAction::FullTransfer, 0, QObject::tr("已选择覆盖重传")};
+        return {TransferAction::FullTransfer, 0, QObject::tr("Overwrite re-upload selected")};
     }
 
     // ---- 跳过判定：只认证据，不认巧合 ----
@@ -598,7 +598,7 @@ struct TransferDecision {
         // 时间戳类的弱证据——那等于用一个可能被撞上的巧合去否决一个确凿的事实。
         if (!source.contentHash.isEmpty() && !destination.contentHash.isEmpty()) {
             if (source.contentHash == destination.contentHash) {
-                return {TransferAction::SkipIdentical, 0, QObject::tr("内容哈希一致")};
+                return {TransferAction::SkipIdentical, 0, QObject::tr("Content hash matches")};
             }
         } else {
             // 算不出哈希时（服务器没有 sha256sum/shasum）才退到存档判据：源的毫秒级时间戳与
@@ -615,7 +615,7 @@ struct TransferDecision {
                 && ledger->destinationMtime >= 0
                 && ledger->destinationMtime == destination.mtime;
             if (archiveProvesIdentical) {
-                return {TransferAction::SkipIdentical, 0, QObject::tr("与上次同步记录一致")};
+                return {TransferAction::SkipIdentical, 0, QObject::tr("Identical to the last sync record")};
             }
         }
     }
@@ -645,16 +645,16 @@ struct TransferDecision {
         if (sourceUnchanged && partialConsistent) {
             return {TransferAction::Resume,
                     record.bytesWritten,
-                    hashProvesSource ? QObject::tr("残片已按内容哈希验证")
-                                     : QObject::tr("残片已按大小与修改时间验证")};
+                    hashProvesSource ? QObject::tr("The fragment was verified by content hash")
+                                     : QObject::tr("The fragment was verified by size and modification time")};
         }
         if (!sourceUnchanged) {
-            return {TransferAction::FullTransfer, 0, QObject::tr("源文件已变化，残片作废")};
+            return {TransferAction::FullTransfer, 0, QObject::tr("The source file changed; the fragment is void")};
         }
-        return {TransferAction::FullTransfer, 0, QObject::tr("残片与续传凭据不一致，重新传输")};
+        return {TransferAction::FullTransfer, 0, QObject::tr("The fragment does not match the resume credential; re-transferring")};
     }
 
-    return {TransferAction::FullTransfer, 0, QObject::tr("无可用续传凭据")};
+    return {TransferAction::FullTransfer, 0, QObject::tr("No resume credential available")};
 }
 
 /** @brief 残片文件名后缀；与正式文件同目录，传完后原子改名覆盖正式文件。 */

@@ -74,15 +74,15 @@ void SshTunnelBroker::unregisterRoute(const QString &routeId)
  * @brief 阻止界面测试意外建立真实网络连接。
  * @param routeId 请求的隧道路由标识。
  * @param errorMessage 非空时写入可诊断的失败原因。
- * @return 始终返回 -1，表示测试环境不提供 socket。
+ * @return 始终返回 InvalidNativeSocket，表示测试环境不提供 socket。
  */
-int SshTunnelBroker::openSocket(const QString &routeId, QString *errorMessage)
+NativeSocketHandle SshTunnelBroker::openSocket(const QString &routeId, QString *errorMessage)
 {
     Q_UNUSED(routeId)
     if (errorMessage != nullptr) {
-        *errorMessage = QStringLiteral("界面测试未启用 SSH 隧道");
+        *errorMessage = QStringLiteral("SSH tunnels are not enabled in UI tests");
     }
-    return -1;
+    return InvalidNativeSocket;
 }
 
 /**
@@ -243,11 +243,11 @@ void RemoteFileManagerWidgetTest::fullScreenSwitchesFromRemoteOnlyToSymmetricDua
         QVERIFY2(!localTree->isColumnHidden(column),
                  "本地栏列布局须与远程栏对齐，不再隐藏任何一列");
     }
-    QCOMPARE(localTree->headerItem()->text(0), QStringLiteral("名称"));
-    QCOMPARE(localTree->headerItem()->text(1), QStringLiteral("大小"));
-    QCOMPARE(localTree->headerItem()->text(2), QStringLiteral("修改时间"));
-    QCOMPARE(localTree->headerItem()->text(3), QStringLiteral("权限"));
-    QCOMPARE(localTree->headerItem()->text(4), QStringLiteral("所有者"));
+    QCOMPARE(localTree->headerItem()->text(0), QStringLiteral("Name"));
+    QCOMPARE(localTree->headerItem()->text(1), QStringLiteral("Size"));
+    QCOMPARE(localTree->headerItem()->text(2), QStringLiteral("Modified"));
+    QCOMPARE(localTree->headerItem()->text(3), QStringLiteral("Permissions"));
+    QCOMPARE(localTree->headerItem()->text(4), QStringLiteral("Owner"));
 }
 
 void RemoteFileManagerWidgetTest::remoteSftpRelayCommandQuotesEveryUntrustedArgument()
@@ -324,11 +324,11 @@ void RemoteFileManagerWidgetTest::remoteFileTableUsesReferenceColumns()
     auto *remoteTree = widget.findChild<QTreeWidget *>(QStringLiteral("RemoteFileTree"));
     QVERIFY(remoteTree != nullptr);
     QCOMPARE(remoteTree->columnCount(), 5);
-    QCOMPARE(remoteTree->headerItem()->text(0), QStringLiteral("名称"));
-    QCOMPARE(remoteTree->headerItem()->text(1), QStringLiteral("大小"));
-    QCOMPARE(remoteTree->headerItem()->text(2), QStringLiteral("修改时间"));
-    QCOMPARE(remoteTree->headerItem()->text(3), QStringLiteral("权限"));
-    QCOMPARE(remoteTree->headerItem()->text(4), QStringLiteral("所有者"));
+    QCOMPARE(remoteTree->headerItem()->text(0), QStringLiteral("Name"));
+    QCOMPARE(remoteTree->headerItem()->text(1), QStringLiteral("Size"));
+    QCOMPARE(remoteTree->headerItem()->text(2), QStringLiteral("Modified"));
+    QCOMPARE(remoteTree->headerItem()->text(3), QStringLiteral("Permissions"));
+    QCOMPARE(remoteTree->headerItem()->text(4), QStringLiteral("Owner"));
     // 名称列宽度由 updateRemoteNameColumnWidth() 手动管理（保底 + 横向滚动），不再用
     // Qt 内置的 Stretch——Stretch 会在面板变窄时把它一路压到 setMinimumSectionSize 的下限。
     QCOMPARE(remoteTree->header()->sectionResizeMode(0), QHeaderView::Interactive);
@@ -369,7 +369,7 @@ void RemoteFileManagerWidgetTest::localFileTableListsPermissionsOwnerAndSortsByC
                  .hasMatch(),
              qPrintable(QStringLiteral("权限列必须是 ls -l 风格的符号，实际为 %1")
                             .arg(localTree->topLevelItem(0)->text(3))));
-    QCOMPARE(localTree->headerItem()->text(4), QStringLiteral("所有者"));
+    QCOMPARE(localTree->headerItem()->text(4), QStringLiteral("Owner"));
 
     QHeaderView *header = localTree->header();
     QVERIFY(header->sectionsClickable());
@@ -524,7 +524,7 @@ void RemoteFileManagerWidgetTest::droppingOntoFileTreeAlwaysTargetsCurrentDirect
     QCOMPARE(queueList->count(), 1);
     auto *nameLabel = queueList->findChild<QLabel *>(QStringLiteral("SftpQueueItemName"));
     QVERIFY(nameLabel != nullptr);
-    QCOMPARE(nameLabel->text(), QStringLiteral("上传 payload.txt → /current"));
+    QCOMPARE(nameLabel->text(), QStringLiteral("Upload payload.txt → /current"));
 }
 
 void RemoteFileManagerWidgetTest::queuedUploadEmitsSuccessfulTransferResult()

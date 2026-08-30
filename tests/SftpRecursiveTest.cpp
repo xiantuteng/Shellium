@@ -262,7 +262,7 @@ void SftpRecursiveTest::skipsSymbolicLinksWithReason()
     QCOMPARE(plan.items.constFirst().destinationPath, QStringLiteral("/local/dst/real.txt"));
     QCOMPARE(plan.skipped.size(), 2);
     for (const SftpRecursive::SkippedEntry &skipped : plan.skipped) {
-        QVERIFY(skipped.reason.contains(QStringLiteral("符号链接")));
+        QVERIFY(skipped.reason.contains(QStringLiteral("Symlink")));
     }
     // 指向目录的符号链接同样不得进入计划，否则遍历会在环形链接上无限展开。
     QCOMPARE(plan.directoryCount, 0ULL);
@@ -282,7 +282,7 @@ void SftpRecursiveTest::skipsEscapingEntriesInsteadOfTransferringThem()
     QCOMPARE(plan.items.constFirst().destinationPath, QStringLiteral("/local/dst/ok.txt"));
     QCOMPARE(plan.skipped.size(), 2);
     for (const SftpRecursive::SkippedEntry &skipped : plan.skipped) {
-        QVERIFY(skipped.reason.contains(QStringLiteral("逃逸")));
+        QVERIFY(skipped.reason.contains(QStringLiteral("escapes the target directory")));
     }
     for (const SftpRecursive::TransferItem &item : plan.items) {
         QVERIFY(SftpRecursive::isWithinRoot(QStringLiteral("/local/dst"), item.destinationPath));
@@ -335,9 +335,9 @@ void SftpRecursiveTest::aggregatesSkippedAndFailedEntriesIntoMessage()
     summary.filesTransferred = 8;
     summary.fileTotal = 10;
     summary.bytesTransferred = 4096;
-    summary.skipped.append({QStringLiteral("logs/current"), QStringLiteral("符号链接（不跟随）")});
-    summary.failed.append({QStringLiteral("secret.key"), QStringLiteral("权限不足")});
-    summary.failed.append({QStringLiteral("big.bin"), QStringLiteral("连接中断")});
+    summary.skipped.append({QStringLiteral("logs/current"), QStringLiteral("Symlink (not followed)")});
+    summary.failed.append({QStringLiteral("secret.key"), QStringLiteral("No permission to read the file")});
+    summary.failed.append({QStringLiteral("big.bin"), QStringLiteral("connection dropped")});
 
     QVERIFY(summary.hasWarnings());
     const QString message = summary.toMessage();
@@ -346,9 +346,9 @@ void SftpRecursiveTest::aggregatesSkippedAndFailedEntriesIntoMessage()
     QVERIFY(message.contains(QStringLiteral("10")));
     QVERIFY(message.contains(QStringLiteral("logs/current")));
     QVERIFY(message.contains(QStringLiteral("secret.key")));
-    QVERIFY(message.contains(QStringLiteral("权限不足")));
+    QVERIFY(message.contains(QStringLiteral("No permission")));
     QVERIFY(message.contains(QStringLiteral("big.bin")));
-    QVERIFY(message.contains(QStringLiteral("连接中断")));
+    QVERIFY(message.contains(QStringLiteral("connection dropped")));
 
     SftpRecursive::TransferSummary clean;
     clean.rootDescription = QStringLiteral("/local/dst/project");
@@ -369,7 +369,7 @@ void SftpRecursiveTest::truncatesOverlongFailureList()
     QVERIFY(message.contains(QStringLiteral("file-0")));
     // 只展示前若干条并说明省略数量；整份清单原样倒出会淹没真正要看的第一条原因。
     QVERIFY(!message.contains(QStringLiteral("file-24")));
-    QVERIFY(message.contains(QStringLiteral("省略")));
+    QVERIFY(message.contains(QStringLiteral("more omitted")));
 }
 
 void SftpRecursiveTest::reportsCancellationDistinctlyFromSuccess()
@@ -382,8 +382,8 @@ void SftpRecursiveTest::reportsCancellationDistinctlyFromSuccess()
 
     QVERIFY(summary.hasWarnings());
     const QString message = summary.toMessage();
-    QVERIFY(message.contains(QStringLiteral("取消")));
-    QVERIFY(!message.contains(QStringLiteral("已传输")));
+    QVERIFY(message.contains(QStringLiteral("cancel")));
+    QVERIFY(!message.contains(QStringLiteral("Transferred")));
 }
 
 void SftpRecursiveTest::preservesManualServerSelectionAcrossRefresh()

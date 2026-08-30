@@ -20,8 +20,8 @@ bool VaultDialog::ensureUnlocked(CredentialVault *vault,
                                  const bool allowCancel)
 {
     if (vault == nullptr) {
-        QMessageBox::critical(parent, QObject::tr("保险库不可用"),
-                              QObject::tr("应用没有初始化凭据保险库服务。"));
+        QMessageBox::critical(parent, QObject::tr("The vault is unavailable"),
+                              QObject::tr("The app did not initialize the credential vault service."));
         return false;
     }
 
@@ -33,9 +33,8 @@ bool VaultDialog::ensureUnlocked(CredentialVault *vault,
     }
     if (state == CredentialVault::State::Corrupt) {
         QMessageBox::critical(parent,
-                              QObject::tr("保险库数据损坏"),
-                              QObject::tr("无法安全读取本地保险库：%1\n\n"
-                                          "为避免覆盖已有凭据，Shellium 不会自动创建新保险库。")
+                              QObject::tr("The vault data is corrupt"),
+                              QObject::tr("Could not safely read the local vault: %1\n\nTo avoid overwriting existing credentials, Shellium does not create a new vault automatically.")
                                   .arg(stateError));
         return false;
     }
@@ -52,16 +51,16 @@ bool VaultDialog::ensureUnlocked(CredentialVault *vault,
 bool VaultDialog::enablePasswordProtection(CredentialVault *vault, QWidget *parent)
 {
     if (vault == nullptr) {
-        QMessageBox::critical(parent, QObject::tr("保险箱不可用"),
-                              QObject::tr("应用没有初始化凭据保险箱服务。"));
+        QMessageBox::critical(parent, QObject::tr("The vault is unavailable"),
+                              QObject::tr("The app did not initialize the credential vault service."));
         return false;
     }
     QString stateError;
     if (vault->state(&stateError) != CredentialVault::State::Uninitialized) {
         QMessageBox::critical(
             parent,
-            QObject::tr("无法启用主密码保护"),
-            stateError.isEmpty() ? QObject::tr("保险箱当前状态不允许重复启用主密码保护。")
+            QObject::tr("Could not enable master password protection"),
+            stateError.isEmpty() ? QObject::tr("The vault's current state does not allow enabling master password protection again.")
                                  : stateError);
         return false;
     }
@@ -72,8 +71,8 @@ bool VaultDialog::enablePasswordProtection(CredentialVault *vault, QWidget *pare
 bool VaultDialog::disablePasswordProtection(CredentialVault *vault, QWidget *parent)
 {
     if (vault == nullptr) {
-        QMessageBox::critical(parent, QObject::tr("保险箱不可用"),
-                              QObject::tr("应用没有初始化凭据保险箱服务。"));
+        QMessageBox::critical(parent, QObject::tr("The vault is unavailable"),
+                              QObject::tr("The app did not initialize the credential vault service."));
         return false;
     }
     QString stateError;
@@ -82,8 +81,8 @@ bool VaultDialog::disablePasswordProtection(CredentialVault *vault, QWidget *par
         || state == CredentialVault::State::Uninitialized) {
         QMessageBox::critical(
             parent,
-            QObject::tr("无法关闭主密码保护"),
-            stateError.isEmpty() ? QObject::tr("保险箱没有可供验证的主密码配置。")
+            QObject::tr("Could not disable master password protection"),
+            stateError.isEmpty() ? QObject::tr("The vault has no master password configuration to verify against.")
                                  : stateError);
         return false;
     }
@@ -113,10 +112,10 @@ VaultDialog::VaultDialog(CredentialVault *vault,
     // 第一次阅读时即可区分这是安全操作，而不是一般连接参数表单。
     setObjectName(QStringLiteral("VaultDialog"));
     const QString windowTitle = operation == Operation::Enable
-        ? tr("启用主密码保护")
+        ? tr("Enable master password protection")
         : operation == Operation::Disable
-            ? tr("关闭主密码保护")
-            : creating ? tr("创建 Shellium 保险库") : tr("解锁 Shellium 保险库");
+            ? tr("Disable master password protection")
+            : creating ? tr("Create the Shellium vault") : tr("Unlock the Shellium vault");
     setWindowTitle(windowTitle);
     setMinimumWidth(400);
     setWindowFlag(Qt::WindowContextHelpButtonHint, false);
@@ -125,21 +124,20 @@ VaultDialog::VaultDialog(CredentialVault *vault,
     ShelliumUi::applyStandaloneDialogStyle(this);
 
     const QString introduction = operation == Operation::Enable
-        ? tr("请设置新的主密码。已有主机凭据将安全迁移为主密码保护。")
+        ? tr("Set a new master password. Existing host credentials are migrated securely to master password protection.")
         : operation == Operation::Disable
-            ? tr("请输入当前主密码确认关闭。已有凭据将迁移为本机加密，随后清除主密码配置。")
+            ? tr("Enter the current master password to confirm disabling. Existing credentials are migrated to local encryption, then the master password configuration is cleared.")
             : creating
-                ? tr("请设置主密码。Shellium 使用 Argon2id 派生密钥，并以 "
-                     "XChaCha20-Poly1305 加密保存的 SSH 凭据。")
-                : tr("保险库已锁定。请输入主密码以使用已保存的 SSH 凭据。");
+                ? tr("Set a master password. Shellium derives the key with Argon2id and encrypts saved SSH credentials with XChaCha20-Poly1305.")
+                : tr("The vault is locked. Enter the master password to use saved SSH credentials.");
     m_passwordEdit->setObjectName(QStringLiteral("vaultPasswordEdit"));
     m_passwordEdit->setEchoMode(QLineEdit::Password);
-    m_passwordEdit->setPlaceholderText(creating ? tr("至少 8 个字符") : tr("输入主密码"));
+    m_passwordEdit->setPlaceholderText(creating ? tr("At least 8 characters") : tr("Enter master password"));
     m_passwordEdit->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     if (m_confirmationEdit != nullptr) {
         m_confirmationEdit->setObjectName(QStringLiteral("vaultConfirmationEdit"));
         m_confirmationEdit->setEchoMode(QLineEdit::Password);
-        m_confirmationEdit->setPlaceholderText(tr("再次输入以确认"));
+        m_confirmationEdit->setPlaceholderText(tr("Enter again to confirm"));
         m_confirmationEdit->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     }
 
@@ -174,20 +172,20 @@ VaultDialog::VaultDialog(CredentialVault *vault,
         fieldLayout->addWidget(errorLabel);
         card->addFullWidthWidget(field);
     };
-    addPasswordField(tr("主密码"), m_passwordEdit, m_passwordErrorLabel);
+    addPasswordField(tr("Master password"), m_passwordEdit, m_passwordErrorLabel);
     if (m_confirmationEdit != nullptr) {
-        addPasswordField(tr("确认主密码"),
+        addPasswordField(tr("Confirm master password"),
                          m_confirmationEdit,
                          m_confirmationErrorLabel);
     }
 
     if (operation == Operation::Unlock || operation == Operation::Disable) {
-        auto *forgotPasswordButton = new QPushButton(tr("忘记密码？"), card);
+        auto *forgotPasswordButton = new QPushButton(tr("Forgot your password?"), card);
         forgotPasswordButton->setObjectName(QStringLiteral("vaultForgotPasswordButton"));
         forgotPasswordButton->setProperty("hostChainDanger", true);
         forgotPasswordButton->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
         forgotPasswordButton->setToolTip(
-            tr("无法找回旧密码；可清除全部已保存凭据后重新开始"));
+            tr("The old password cannot be recovered; clear all saved credentials and start over"));
         // 忘记密码入口使用危险操作的弱按钮样式：它必须容易找到，但不能与日常“解锁”主操作
         // 争夺视觉焦点。真正的数据删除仍由下一层输入确认短语后执行。
         card->addFullWidthWidget(forgotPasswordButton);
@@ -218,8 +216,7 @@ VaultDialog::VaultDialog(CredentialVault *vault,
                             QSize(15, 15))
                 .pixmap(QSize(15, 15)));
         auto *warningText = new QLabel(
-            tr("主密码无法找回，请妥善保管。丢失后只能重置保险箱，已保存的 SSH 密码和"
-               "私钥口令将被永久删除。"),
+            tr("The master password cannot be recovered; keep it safe. If lost, the vault can only be reset, and saved SSH passwords and private key passphrases will be permanently deleted."),
             warningNotice);
         warningText->setObjectName(QStringLiteral("VaultWarningText"));
         warningText->setWordWrap(true);
@@ -234,16 +231,16 @@ VaultDialog::VaultDialog(CredentialVault *vault,
     footerLayout->setContentsMargins(20, 12, 20, 12);
     footerLayout->setSpacing(10);
     const QString confirmText = operation == Operation::Enable
-        ? tr("启用保护")
+        ? tr("Enable protection")
         : operation == Operation::Disable
-            ? tr("确认关闭")
-            : creating ? tr("创建保险库") : tr("解锁");
+            ? tr("Confirm close")
+            : creating ? tr("Create vault") : tr("Unlock");
     auto *confirmButton = new QPushButton(confirmText, footer);
     confirmButton->setObjectName(QStringLiteral("vaultConfirmButton"));
     confirmButton->setProperty("primaryAction", true);
     confirmButton->setDefault(true);
     if (allowCancel) {
-        auto *cancelButton = new QPushButton(tr("取消"), footer);
+        auto *cancelButton = new QPushButton(tr("Cancel"), footer);
         cancelButton->setObjectName(QStringLiteral("vaultCancelButton"));
         footerLayout->addWidget(cancelButton);
         connect(cancelButton, &QPushButton::clicked, this, &VaultDialog::reject);
@@ -270,10 +267,10 @@ VaultDialog::VaultDialog(CredentialVault *vault,
                         QSize(22, 22))
             .pixmap(QSize(22, 22)));
     const QString headingText = operation == Operation::Enable
-        ? tr("启用主密码保护")
+        ? tr("Enable master password protection")
         : operation == Operation::Disable
-            ? tr("关闭主密码保护")
-            : creating ? tr("创建保险库") : tr("解锁保险库");
+            ? tr("Disable master password protection")
+            : creating ? tr("Create vault") : tr("Unlock vault");
     auto *heading = new QLabel(headingText, body);
     heading->setObjectName(QStringLiteral("VaultHeading"));
     heading->setAlignment(Qt::AlignCenter);
@@ -312,11 +309,11 @@ VaultDialog::VaultDialog(CredentialVault *vault,
 
 void VaultDialog::resetForgottenPassword()
 {
-    const QString confirmationPhrase = tr("重置保险箱");
+    const QString confirmationPhrase = tr("Reset vault");
 
     QDialog confirmationDialog(this);
     confirmationDialog.setObjectName(QStringLiteral("VaultResetConfirmationDialog"));
-    confirmationDialog.setWindowTitle(tr("重置保险箱"));
+    confirmationDialog.setWindowTitle(tr("Reset vault"));
     confirmationDialog.setMinimumWidth(430);
     confirmationDialog.setWindowFlag(Qt::WindowContextHelpButtonHint, false);
     ShelliumUi::applyStandaloneDialogStyle(&confirmationDialog);
@@ -325,7 +322,7 @@ void VaultDialog::resetForgottenPassword()
     rootLayout->setContentsMargins(20, 18, 20, 18);
     rootLayout->setSpacing(12);
 
-    auto *heading = new QLabel(tr("无法恢复旧凭据"), &confirmationDialog);
+    auto *heading = new QLabel(tr("Could not restore the old credentials"), &confirmationDialog);
     heading->setObjectName(QStringLiteral("VaultResetHeading"));
     QFont headingFont = heading->font();
     headingFont.setBold(true);
@@ -334,15 +331,14 @@ void VaultDialog::resetForgottenPassword()
     rootLayout->addWidget(heading);
 
     auto *explanation = new QLabel(
-        tr("重置会永久删除全部已保存的 SSH 密码和私钥口令，并解除它们与主机的关联。"
-           "主机地址、账号、端口、私钥文件路径、分组和主机链会保留。此操作无法撤销。"),
+        tr("Resetting permanently deletes all saved SSH passwords and private key passphrases and removes their association with hosts. Host addresses, accounts, ports, private key file paths, groups, and host chains are kept. This action cannot be undone."),
         &confirmationDialog);
     explanation->setObjectName(QStringLiteral("VaultResetExplanation"));
     explanation->setWordWrap(true);
     rootLayout->addWidget(explanation);
 
     auto *instruction = new QLabel(
-        tr("请输入“%1”确认：").arg(confirmationPhrase), &confirmationDialog);
+        tr("Type '%1' to confirm:").arg(confirmationPhrase), &confirmationDialog);
     instruction->setObjectName(QStringLiteral("VaultResetInstruction"));
     rootLayout->addWidget(instruction);
 
@@ -354,9 +350,9 @@ void VaultDialog::resetForgottenPassword()
     auto *footerLayout = new QHBoxLayout;
     footerLayout->setContentsMargins(0, 4, 0, 0);
     footerLayout->setSpacing(10);
-    auto *cancelButton = new QPushButton(tr("取消"), &confirmationDialog);
+    auto *cancelButton = new QPushButton(tr("Cancel"), &confirmationDialog);
     cancelButton->setObjectName(QStringLiteral("vaultResetCancelButton"));
-    auto *resetButton = new QPushButton(tr("永久删除并重置"), &confirmationDialog);
+    auto *resetButton = new QPushButton(tr("Permanently delete and reset"), &confirmationDialog);
     resetButton->setObjectName(QStringLiteral("vaultResetConfirmButton"));
     resetButton->setProperty("destructiveAction", true);
     resetButton->setEnabled(false);
@@ -386,8 +382,8 @@ void VaultDialog::resetForgottenPassword()
         // 数据库事务失败时旧保险箱仍保持完整，当前解锁窗口也继续存在，用户可以重试密码或
         // 再次发起重置。使用内联错误避免在两个嵌套对话框之上再叠第三个模态消息框。
         showInlineError(
-            tr("无法重置保险箱：%1").arg(
-                resetError.isEmpty() ? tr("本地数据库写入失败") : resetError),
+            tr("Could not reset the vault: %1").arg(
+                resetError.isEmpty() ? tr("Local database write failed") : resetError),
             m_passwordEdit);
         return;
     }
@@ -450,18 +446,18 @@ void VaultDialog::accept()
 {
     const QString password = m_passwordEdit->text();
     if (password.isEmpty()) {
-        showInlineError(tr("请输入主密码。"), m_passwordEdit);
+        showInlineError(tr("Enter the master password."), m_passwordEdit);
         return;
     }
     const bool creating = m_operation == Operation::Create
         || m_operation == Operation::Enable;
     if (creating && password.size() < 8) {
-        showInlineError(tr("主密码至少需要 8 个字符，以降低离线猜测风险。"), m_passwordEdit);
+        showInlineError(tr("The master password must be at least 8 characters to reduce the risk of offline guessing."), m_passwordEdit);
         return;
     }
     if (creating && password != m_confirmationEdit->text()) {
         m_confirmationEdit->clear();
-        showInlineError(tr("两次输入的主密码不一致，请重新确认。"), m_confirmationEdit);
+        showInlineError(tr("The two master passwords do not match. Please confirm again."), m_confirmationEdit);
         return;
     }
     clearInlineError();
@@ -490,11 +486,11 @@ void VaultDialog::accept()
     }
     if (!succeeded) {
         const QString operationError = m_operation == Operation::Enable
-            ? tr("无法启用主密码保护：%1").arg(error)
+            ? tr("Could not enable master password protection: %1").arg(error)
             : m_operation == Operation::Disable
-                ? tr("无法关闭主密码保护：%1").arg(error)
-                : creating ? tr("创建保险库失败：%1").arg(error)
-                           : tr("无法解锁保险库：%1").arg(error);
+                ? tr("Could not disable master password protection: %1").arg(error)
+                : creating ? tr("Failed to create the vault: %1").arg(error)
+                           : tr("Could not unlock the vault: %1").arg(error);
         showInlineError(operationError,
                         m_passwordEdit);
         return;

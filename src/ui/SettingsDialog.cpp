@@ -3,6 +3,7 @@
 #include "ai/AiClient.h"
 #include "ai/AiSettings.h"
 #include "ai/AiSettingsService.h"
+#include "i18n/LocalizationService.h"
 #include "settings/BundledFonts.h"
 #include "settings/TerminalSettings.h"
 #include "security/Vault.h"
@@ -93,6 +94,7 @@ SettingsDialog::SettingsDialog(TerminalSettingsService *service,
                                              : service->currentSettings())
     , m_navigationList(new QListWidget(this))
     , m_pages(new QStackedWidget(this))
+    , m_languageSelector(new QComboBox(this))
     , m_themeSelector(new SegmentedControl(this))
     , m_fontCombo(new QComboBox(this))
     , m_fontSizeSpin(new QSpinBox(this))
@@ -116,7 +118,7 @@ SettingsDialog::SettingsDialog(TerminalSettingsService *service,
     Q_ASSERT(m_service != nullptr);
     UiIcons::modernizePopup(m_fontCombo);
     setObjectName(QStringLiteral("SettingsDialog"));
-    setWindowTitle(tr("设置"));
+    setWindowTitle(tr("Settings"));
     resize(880, 660);
 
     auto *rootLayout = new QVBoxLayout(this);
@@ -135,7 +137,7 @@ SettingsDialog::SettingsDialog(TerminalSettingsService *service,
     auto *sidebarLayout = new QVBoxLayout(sidebar);
     sidebarLayout->setContentsMargins(12, 18, 12, 14);
     sidebarLayout->setSpacing(10);
-    auto *sidebarTitle = new QLabel(tr("设置"), sidebar);
+    auto *sidebarTitle = new QLabel(tr("Settings"), sidebar);
     sidebarTitle->setObjectName(QStringLiteral("SettingsSidebarTitle"));
     sidebarLayout->addWidget(sidebarTitle);
     sidebarLayout->addWidget(m_navigationList, 1);
@@ -163,9 +165,9 @@ SettingsDialog::SettingsDialog(TerminalSettingsService *service,
     auto *footerLayout = new QHBoxLayout(footer);
     footerLayout->setContentsMargins(20, 12, 20, 12);
     footerLayout->setSpacing(10);
-    auto *restoreButton = new QPushButton(tr("恢复默认"), footer);
+    auto *restoreButton = new QPushButton(tr("Restore defaults"), footer);
     restoreButton->setObjectName(QStringLiteral("settingsRestoreDefaults"));
-    auto *closeButton = new QPushButton(tr("关闭"), footer);
+    auto *closeButton = new QPushButton(tr("Close"), footer);
     closeButton->setObjectName(QStringLiteral("settingsClose"));
     footerLayout->addWidget(restoreButton);
     footerLayout->addStretch(1);
@@ -182,6 +184,8 @@ SettingsDialog::SettingsDialog(TerminalSettingsService *service,
         persistChanges();
     });
 
+    connect(m_languageSelector, &QComboBox::currentIndexChanged,
+            this, [this](int) { persistChanges(); });
     connect(m_themeSelector, &SegmentedControl::currentDataChanged,
             this, [this](int) { persistChanges(); });
     connect(m_cursorShapeSelector, &SegmentedControl::currentDataChanged,
@@ -234,11 +238,11 @@ void SettingsDialog::buildNavigation()
     m_navigationList->setFrameShape(QFrame::NoFrame);
     m_navigationList->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     m_navigationList->setUniformItemSizes(true);
-    m_navigationList->addItem(tr("外观"));
-    m_navigationList->addItem(tr("终端"));
-    m_navigationList->addItem(tr("连接与安全"));
-    m_navigationList->addItem(tr("快捷键"));
-    m_navigationList->addItem(tr("AI 助手"));
+    m_navigationList->addItem(tr("Appearance"));
+    m_navigationList->addItem(tr("Terminal"));
+    m_navigationList->addItem(tr("Connections & Security"));
+    m_navigationList->addItem(tr("Shortcut"));
+    m_navigationList->addItem(tr("AI Assistant"));
     for (int row = 0; row < m_navigationList->count(); ++row) {
         m_navigationList->item(row)->setSizeHint(QSize(0, 38));
     }
@@ -345,22 +349,34 @@ QWidget *SettingsDialog::buildAppearancePage()
     layout->setContentsMargins(24, 22, 24, 22);
     layout->setSpacing(16);
 
-    m_themeSelector->setObjectName(QStringLiteral("themeSelector"));
-    m_themeSelector->addSegment(tr("跟随系统"), static_cast<int>(ThemeMode::FollowSystem));
-    m_themeSelector->addSegment(tr("浅色"), static_cast<int>(ThemeMode::Light));
-    m_themeSelector->addSegment(tr("深色"), static_cast<int>(ThemeMode::Dark));
+    m_languageSelector->setObjectName(QStringLiteral("languageSelector"));
+    if (m_languageSelector->count() == 0) {
+        for (const LanguageOption &option : LocalizationService::availableLanguages()) {
+            m_languageSelector->addItem(option.nativeName, option.code);
+        }
+    }
+    auto *languageCard = new SettingsCard(tr("Interface language"), page);
+    languageCard->addRow(tr("Display language"),
+                         m_languageSelector,
+                         tr("Menus switch immediately; open terminal content and some windows take full effect after being reopened or after a restart."));
+    layout->addWidget(languageCard);
 
-    auto *themeCard = new SettingsCard(tr("应用主题"), page);
-    themeCard->addRow(tr("界面外观"),
+    m_themeSelector->setObjectName(QStringLiteral("themeSelector"));
+    m_themeSelector->addSegment(tr("Follow System"), static_cast<int>(ThemeMode::FollowSystem));
+    m_themeSelector->addSegment(tr("Light"), static_cast<int>(ThemeMode::Light));
+    m_themeSelector->addSegment(tr("Dark"), static_cast<int>(ThemeMode::Dark));
+
+    auto *themeCard = new SettingsCard(tr("App theme"), page);
+    themeCard->addRow(tr("Interface appearance"),
                       m_themeSelector,
-                      tr("“跟随系统”会在操作系统切换深浅外观时自动同步。"));
+                      tr("'Follow system' syncs automatically when the operating system switches between light and dark appearance."));
     layout->addWidget(themeCard);
 
-    auto *schemeCard = new SettingsCard(tr("终端配色"), page);
+    auto *schemeCard = new SettingsCard(tr("Terminal color scheme"), page);
     m_colorSchemeFilter = new QLineEdit(schemeCard);
     m_colorSchemeFilter->setObjectName(QStringLiteral("colorSchemeFilter"));
     m_colorSchemeFilter->setClearButtonEnabled(true);
-    m_colorSchemeFilter->setPlaceholderText(tr("搜索配色，例如 Nord、Dark、Gruvbox"));
+    m_colorSchemeFilter->setPlaceholderText(tr("Search color schemes, e.g. Nord, Dark, Gruvbox"));
     schemeCard->addFullWidthWidget(m_colorSchemeFilter);
 
     m_colorSchemeGrid = new QWidget(schemeCard);
@@ -375,8 +391,8 @@ QWidget *SettingsDialog::buildAppearancePage()
             ? paletteForScheme(m_persistedSettings, preset.id)
             : preset.palette;
         auto *swatch = new ThemeSwatchButton(preset.name,
-                                            isDefault ? tr("跟随应用主题")
-                                                      : (preset.dark ? tr("深色") : tr("浅色")),
+                                            isDefault ? tr("Follow app theme")
+                                                      : (preset.dark ? tr("Dark") : tr("Light")),
                                             palette.background,
                                             palette.foreground,
                                             palette.cursor,
@@ -398,13 +414,13 @@ QWidget *SettingsDialog::buildAppearancePage()
     }
     relayoutColorSchemeGrid(QString());
     schemeCard->addFullWidthWidget(m_colorSchemeGrid);
-    m_colorSchemeEmptyLabel = schemeCard->addNote(tr("没有匹配的配色。"));
+    m_colorSchemeEmptyLabel = schemeCard->addNote(tr("No matching color schemes."));
     m_colorSchemeEmptyLabel->setVisible(false);
     connect(m_colorSchemeFilter, &QLineEdit::textChanged,
             this, [this](const QString &text) { relayoutColorSchemeGrid(text); });
     layout->addWidget(schemeCard);
 
-    auto *previewCard = new SettingsCard(tr("实时预览"), page);
+    auto *previewCard = new SettingsCard(tr("Live preview"), page);
     m_previewLabel->setObjectName(QStringLiteral("terminalSettingsPreview"));
     m_previewLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
     m_previewLabel->setMinimumHeight(130);
@@ -443,29 +459,29 @@ QWidget *SettingsDialog::buildTerminalPage()
     m_letterSpacingSpin->setSingleStep(0.5);
     m_letterSpacingSpin->setSuffix(tr(" px"));
 
-    auto *fontCard = new SettingsCard(tr("字体"), page);
-    fontCard->addRow(tr("等宽字体"), m_fontCombo);
-    fontCard->addRow(tr("字号"), new SettingsStepper(m_fontSizeSpin, fontCard));
-    fontCard->addRow(tr("行高"), new SettingsStepper(m_lineHeightSpin, fontCard));
-    fontCard->addRow(tr("字符间距"), new SettingsStepper(m_letterSpacingSpin, fontCard));
+    auto *fontCard = new SettingsCard(tr("Font"), page);
+    fontCard->addRow(tr("Monospace font"), m_fontCombo);
+    fontCard->addRow(tr("Font size"), new SettingsStepper(m_fontSizeSpin, fontCard));
+    fontCard->addRow(tr("Line height"), new SettingsStepper(m_lineHeightSpin, fontCard));
+    fontCard->addRow(tr("Letter spacing"), new SettingsStepper(m_letterSpacingSpin, fontCard));
     layout->addWidget(fontCard);
 
     m_cursorShapeSelector->setObjectName(QStringLiteral("cursorShapeSelector"));
-    m_cursorShapeSelector->addSegment(tr("块状"), static_cast<int>(TerminalCursorShape::Block));
-    m_cursorShapeSelector->addSegment(tr("下划线"),
+    m_cursorShapeSelector->addSegment(tr("Block"), static_cast<int>(TerminalCursorShape::Block));
+    m_cursorShapeSelector->addSegment(tr("Underline"),
                                       static_cast<int>(TerminalCursorShape::Underline));
-    m_cursorShapeSelector->addSegment(tr("竖线"), static_cast<int>(TerminalCursorShape::IBeam));
+    m_cursorShapeSelector->addSegment(tr("Bar"), static_cast<int>(TerminalCursorShape::IBeam));
     m_cursorBlinkToggle->setObjectName(QStringLiteral("cursorBlinkToggle"));
 
-    auto *cursorCard = new SettingsCard(tr("光标"), page);
-    cursorCard->addRow(tr("形态"), m_cursorShapeSelector);
-    cursorCard->addRow(tr("闪烁光标"), m_cursorBlinkToggle);
+    auto *cursorCard = new SettingsCard(tr("Cursor"), page);
+    cursorCard->addRow(tr("Shape"), m_cursorShapeSelector);
+    cursorCard->addRow(tr("Blinking cursor"), m_cursorBlinkToggle);
     layout->addWidget(cursorCard);
 
     m_scrollbackSpin->setObjectName(QStringLiteral("scrollbackSpin"));
     m_scrollbackSpin->setRange(100, 1000000);
     m_scrollbackSpin->setSingleStep(1000);
-    m_scrollbackSpin->setSuffix(tr(" 行"));
+    m_scrollbackSpin->setSuffix(tr(" lines"));
     m_scrollbackSpin->setMinimumWidth(120);
     m_audibleBellToggle->setObjectName(QStringLiteral("audibleBellToggle"));
     m_commandAutoCompletionToggle->setObjectName(
@@ -473,22 +489,21 @@ QWidget *SettingsDialog::buildTerminalPage()
     m_multiLinePasteConfirmationToggle->setObjectName(
         QStringLiteral("multiLinePasteConfirmationToggle"));
 
-    auto *sessionCard = new SettingsCard(tr("会话"), page);
-    sessionCard->addRow(tr("滚动缓冲"),
+    auto *sessionCard = new SettingsCard(tr("Session"), page);
+    sessionCard->addRow(tr("Scrollback"),
                         new SettingsStepper(m_scrollbackSpin, sessionCard),
-                        tr("减小该值会立即丢弃超过上限的最旧历史；已经丢弃的内容无法恢复。"));
-    sessionCard->addRow(tr("提示音"),
+                        tr("Lowering this value immediately discards the oldest history beyond the limit; discarded content cannot be recovered."));
+    sessionCard->addRow(tr("Alert sound"),
                         m_audibleBellToggle,
-                        tr("收到终端 BEL 字节时播放系统提示音。"));
+                        tr("Play the system alert sound when a terminal BEL byte is received."));
     sessionCard->addRow(
-        tr("命令行自动提示"),
+        tr("Command-line autosuggestions"),
         m_commandAutoCompletionToggle,
-        tr("输入至少两个字符后，根据当前主机的命令历史自动显示候选；默认关闭。"));
+        tr("After you type at least two characters, suggestions are shown automatically from the current host's command history; off by default."));
     sessionCard->addRow(
-        tr("多行粘贴确认"),
+        tr("Multi-line paste confirmation"),
         m_multiLinePasteConfirmationToggle,
-        tr("粘贴多行内容前先展示完整内容并要求确认；默认关闭，即直接粘贴。"
-           "内容含可注入终端控制序列的不可见字符时仍会强制确认。"));
+        tr("Before pasting multi-line content, show the full content and ask for confirmation; off by default, i.e. paste directly. Confirmation is still forced when the content contains invisible characters that could inject terminal control sequences."));
     layout->addWidget(sessionCard);
 
     layout->addStretch(1);
@@ -506,35 +521,34 @@ QWidget *SettingsDialog::buildConnectionPage()
     m_automaticReconnectToggle->setObjectName(QStringLiteral("automaticReconnectToggle"));
     m_reconnectMaxAttemptsSpin->setObjectName(QStringLiteral("reconnectMaxAttemptsSpin"));
     m_reconnectMaxAttemptsSpin->setRange(0, 10);
-    m_reconnectMaxAttemptsSpin->setSuffix(tr(" 次"));
+    m_reconnectMaxAttemptsSpin->setSuffix(tr(" times"));
     m_reconnectBaseDelaySpin->setObjectName(QStringLiteral("reconnectBaseDelaySpin"));
     m_reconnectBaseDelaySpin->setRange(1, 60);
-    m_reconnectBaseDelaySpin->setSuffix(tr(" 秒"));
+    m_reconnectBaseDelaySpin->setSuffix(tr(" s"));
 
     m_vaultPasswordEnabledToggle->setObjectName(
         QStringLiteral("vaultPasswordEnabledToggle"));
-    auto *vaultCard = new SettingsCard(tr("凭据保险箱"), page);
+    auto *vaultCard = new SettingsCard(tr("Credential vault"), page);
     vaultCard->addRow(
-        tr("使用主密码保护凭据"),
+        tr("Protect credentials with a master password"),
         m_vaultPasswordEnabledToggle,
-        tr("开启和关闭都需要输入密码；开启后允许在主机编辑页解锁查看明文。"));
+        tr("Both enabling and disabling require a password; once enabled you can unlock and view plaintext on the host editor page."));
     vaultCard->addNote(
-        tr("关闭时会先验证当前主密码，再将凭据迁移为本机加密并清除主密码配置。主机密码"
-           "仍会自动用于连接，但不能在界面中查看明文，也不再具备主密码防护能力。"));
+        tr("When disabling, the current master password is verified first, then credentials are migrated to local encryption and the master password configuration is cleared. Host passwords are still used automatically for connections, but their plaintext cannot be viewed in the UI and they no longer have master password protection."));
     layout->addWidget(vaultCard);
 
-    auto *card = new SettingsCard(tr("自动重连"), page);
-    card->addRow(tr("网络异常时自动重连"),
+    auto *card = new SettingsCard(tr("Automatic reconnect"), page);
+    card->addRow(tr("Reconnect automatically on network errors"),
                  m_automaticReconnectToggle,
-                 tr("仅重试已经成功建立过、且未收到远端退出状态的异常断线。"));
+                 tr("Only retry abnormal disconnects that were previously established successfully and received no remote exit status."));
     // 步进器容器需要整行置灰，因此记录 addRow 返回的控件而不是内部 spin box。
     m_reconnectDependentRows.append(
-        card->addRow(tr("最多重试"), new SettingsStepper(m_reconnectMaxAttemptsSpin, card)));
+        card->addRow(tr("Max retries"), new SettingsStepper(m_reconnectMaxAttemptsSpin, card)));
     m_reconnectDependentRows.append(
-        card->addRow(tr("首轮等待"),
+        card->addRow(tr("Initial wait"),
                      new SettingsStepper(m_reconnectBaseDelaySpin, card),
-                     tr("后续尝试使用 2 倍指数退避，最长等待 60 秒。")));
-    card->addNote(tr("正常执行 exit、主动切换连接、首次认证失败或主机密钥拒绝均不会自动重连。"));
+                     tr("Later attempts use 2× exponential backoff, up to 60 seconds.")));
+    card->addNote(tr("A normal exit, switching connections yourself, a first-time authentication failure, or a host key rejection never trigger an automatic reconnect."));
     layout->addWidget(card);
 
     layout->addStretch(1);
@@ -549,7 +563,7 @@ QWidget *SettingsDialog::buildShortcutPage()
     layout->setContentsMargins(24, 22, 24, 22);
     layout->setSpacing(16);
 
-    auto *card = new SettingsCard(tr("全局快捷键"), page);
+    auto *card = new SettingsCard(tr("Global shortcuts"), page);
     for (const QString &id : TerminalSettings::shortcutIds()) {
         auto *editor = new QKeySequenceEdit(card);
         editor->setObjectName(QStringLiteral("shortcut_%1").arg(id));
@@ -560,7 +574,7 @@ QWidget *SettingsDialog::buildShortcutPage()
         card->addRow(TerminalSettings::shortcutDisplayName(id), editor);
         m_shortcutEditors.insert(id, editor);
     }
-    card->addNote(tr("留空表示取消该动作的快捷键；同一快捷键不能分配给两个动作。"));
+    card->addNote(tr("Leaving it empty removes the shortcut for this action; the same shortcut cannot be assigned to two actions."));
     layout->addWidget(card);
 
     layout->addStretch(1);
@@ -575,25 +589,25 @@ QWidget *SettingsDialog::buildAiPage()
     layout->setContentsMargins(24, 22, 24, 22);
     layout->setSpacing(16);
 
-    auto *card = new SettingsCard(tr("大模型连接"), page);
+    auto *card = new SettingsCard(tr("LLM connection"), page);
     m_aiEndpointEdit = new QLineEdit(card);
     m_aiEndpointEdit->setObjectName(QStringLiteral("aiEndpointEdit"));
     m_aiEndpointEdit->setPlaceholderText(QStringLiteral("https://your-gateway/v1"));
     // 服务地址、API Key 和模型名称都可能显著长于普通设置值，因此使用上下排列的宽表单行。
     // 输入框会占满卡片内容区并随窗口伸缩，用户无需把光标放进窄框后逐字符横向滚动确认配置。
     card->addWideRow(
-        tr("服务地址"),
+        tr("Service URL"),
         m_aiEndpointEdit,
-        tr("兼容 OpenAI Chat Completions 协议的网关根地址，不含 /chat/completions。"));
+        tr("Base URL of a gateway compatible with the OpenAI Chat Completions protocol, without /chat/completions."));
 
     m_aiApiKeyEdit = new QLineEdit(card);
     m_aiApiKeyEdit->setObjectName(QStringLiteral("aiApiKeyEdit"));
     m_aiApiKeyEdit->setEchoMode(QLineEdit::Password);
-    m_aiApiKeyEdit->setPlaceholderText(tr("留空表示网关不要求鉴权"));
+    m_aiApiKeyEdit->setPlaceholderText(tr("Empty means the gateway requires no authentication"));
     card->addWideRow(
         tr("API Key"),
         m_aiApiKeyEdit,
-        tr("以 Bearer Token 形式随请求发送，加密保存在凭据保险库。"));
+        tr("Sent with each request as a Bearer token, stored encrypted in the credential vault."));
 
     // 模型名称行 = 可编辑下拉框 + 刷新按钮：网关列表拉得到就下拉选，拉不到（网关不实现
     // /models、或者密钥还没填）也不能挡住用户手填一个模型名直接用。
@@ -622,22 +636,21 @@ QWidget *SettingsDialog::buildAiPage()
     m_aiModelRefreshButton->setCursor(Qt::PointingHandCursor);
     m_aiModelRefreshButton->setFocusPolicy(Qt::NoFocus);
     m_aiModelRefreshButton->setFixedSize(32, 32);
-    m_aiModelRefreshButton->setToolTip(tr("从服务端获取模型列表"));
-    m_aiModelRefreshButton->setAccessibleName(tr("刷新模型列表"));
+    m_aiModelRefreshButton->setToolTip(tr("Fetch the model list from the server"));
+    m_aiModelRefreshButton->setAccessibleName(tr("Refresh model list"));
     modelLayout->addWidget(m_aiModelCombo, 1);
     modelLayout->addWidget(m_aiModelRefreshButton, 0);
     card->addWideRow(
-        tr("模型名称"),
+        tr("Model name"),
         modelRow,
-        tr("可直接手动填写，也可以点右侧刷新按钮拉取服务端模型列表后下拉选择。"));
+        tr("You can type it manually, or click the refresh button on the right to fetch the server model list and pick from the dropdown."));
 
     m_aiThinkingToggle = new ToggleSwitch(card);
     m_aiThinkingToggle->setObjectName(QStringLiteral("aiThinkingToggle"));
     card->addRow(
-        tr("开启思考"),
+        tr("Enable thinking"),
         m_aiThinkingToggle,
-        tr("请求模型先推理再作答，回答更稳但更慢；仅支持思考模式的网关有效，"
-           "关闭时请求体不含该字段。"));
+        tr("Ask the model to reason before answering; answers are more reliable but slower. Only effective on gateways that support thinking mode; when off, the request body omits this field."));
 
     m_aiStatusLabel = new QLabel(card);
     m_aiStatusLabel->setWordWrap(true);
@@ -647,8 +660,8 @@ QWidget *SettingsDialog::buildAiPage()
     auto *buttonRow = new QWidget(card);
     auto *buttonLayout = new QHBoxLayout(buttonRow);
     buttonLayout->setContentsMargins(0, 4, 0, 0);
-    m_aiTestButton = new QPushButton(tr("测试连接"), buttonRow);
-    m_aiSaveButton = new QPushButton(tr("保存"), buttonRow);
+    m_aiTestButton = new QPushButton(tr("Test connection"), buttonRow);
+    m_aiSaveButton = new QPushButton(tr("Save"), buttonRow);
     m_aiSaveButton->setObjectName(QStringLiteral("settingsAiSave"));
     buttonLayout->addWidget(m_aiTestButton);
     buttonLayout->addWidget(m_aiSaveButton);
@@ -657,8 +670,7 @@ QWidget *SettingsDialog::buildAiPage()
     layout->addWidget(card);
 
     card->addNote(
-        tr("地址和密钥的改动不会像其他设置项那样逐字符自动保存，需要点击“保存”，避免"
-           "每敲一个字符都触发一次加密写入。"));
+        tr("Unlike other settings, changes to the address and key are not saved character by character; click 'Save', so that every keystroke does not trigger an encrypted write."));
 
     const bool available = m_aiSettingsService != nullptr;
     for (QWidget *field : {static_cast<QWidget *>(m_aiEndpointEdit),
@@ -679,7 +691,7 @@ QWidget *SettingsDialog::buildAiPage()
         m_aiModelCombo->setCurrentText(current.model);
         m_aiThinkingToggle->setChecked(current.thinkingEnabled);
     } else {
-        m_aiStatusLabel->setText(tr("AI 助手配置服务不可用"));
+        m_aiStatusLabel->setText(tr("The AI assistant configuration service is unavailable"));
     }
 
     connect(m_aiTestButton, &QPushButton::clicked, this, [this]() {
@@ -692,7 +704,7 @@ QWidget *SettingsDialog::buildAiPage()
         probe.model = m_aiModelCombo->currentText();
         m_aiTestButton->setEnabled(false);
         m_aiStatusLabel->setStyleSheet(QString());
-        m_aiStatusLabel->setText(tr("正在测试连接…"));
+        m_aiStatusLabel->setText(tr("Testing connection…"));
         m_aiTestClient->testConnection(probe);
     });
     connect(m_aiModelRefreshButton, &QToolButton::clicked, this, [this]() {
@@ -706,7 +718,7 @@ QWidget *SettingsDialog::buildAiPage()
         probe.apiKey = m_aiApiKeyEdit->text();
         m_aiModelRefreshButton->setEnabled(false);
         m_aiStatusLabel->setStyleSheet(QString());
-        m_aiStatusLabel->setText(tr("正在获取模型列表…"));
+        m_aiStatusLabel->setText(tr("Fetching model list…"));
         m_aiTestClient->fetchModels(probe);
     });
     connect(m_aiTestClient, &AiClient::modelsFetched, this,
@@ -752,16 +764,20 @@ void SettingsDialog::persistAiSettings()
     QString errorMessage;
     if (m_aiSettingsService->save(settings, &errorMessage)) {
         m_aiStatusLabel->setStyleSheet(QString());
-        m_aiStatusLabel->setText(tr("已保存"));
+        m_aiStatusLabel->setText(tr("Saved"));
     } else {
         m_aiStatusLabel->setStyleSheet(QStringLiteral("color: #d84a41;"));
-        m_aiStatusLabel->setText(tr("保存失败：%1").arg(errorMessage));
+        m_aiStatusLabel->setText(tr("Save failed: %1").arg(errorMessage));
     }
 }
 
 TerminalSettings SettingsDialog::editedSettings() const
 {
     TerminalSettings settings;
+    const QString languageCode = m_languageSelector->currentData().toString();
+    if (!languageCode.isEmpty()) {
+        settings.language = languageCode;
+    }
     settings.themeMode = static_cast<ThemeMode>(m_themeSelector->currentData());
     settings.colorSchemeId = QStringLiteral("default");
     for (const QString &id : m_colorSchemeOrder) {
@@ -808,8 +824,8 @@ void SettingsDialog::persistChanges()
             populateControls(m_persistedSettings);
             updatePreviewCard(m_persistedSettings);
             QMessageBox::warning(this,
-                                 tr("保险箱不可用"),
-                                 tr("当前窗口没有连接凭据保险箱服务，无法更改主密码保护。"));
+                                 tr("The vault is unavailable"),
+                                 tr("The current window is not connected to a credential vault service; master password protection cannot be changed."));
             return;
         }
 
@@ -830,8 +846,8 @@ void SettingsDialog::persistChanges()
                     m_service->applyTransient(resetSettings);
                     QMessageBox::warning(
                         this,
-                        tr("保险箱已重置"),
-                        tr("凭据已清除，但设置状态同步失败：%1").arg(synchronizationError));
+                        tr("The vault has been reset"),
+                        tr("Credentials were cleared, but syncing the settings state failed: %1").arg(synchronizationError));
                 }
                 m_persistedSettings = m_service->currentSettings();
                 populateControls(m_persistedSettings);
@@ -863,8 +879,8 @@ void SettingsDialog::persistChanges()
             updatePreviewCard(m_persistedSettings);
             QMessageBox::critical(
                 this,
-                tr("设置保存不完整"),
-                tr("主密码保护已经切换，但其他设置写入失败：%1\n未保存的配置已恢复。")
+                tr("Settings were not saved completely"),
+                tr("Master password protection was toggled, but writing other settings failed: %1\nUnsaved changes have been reverted.")
                     .arg(error));
             return;
         }
@@ -874,7 +890,7 @@ void SettingsDialog::persistChanges()
         populateControls(m_persistedSettings);
         refreshDefaultSwatchPreview(m_persistedSettings);
         updatePreviewCard(m_persistedSettings);
-        QMessageBox::warning(this, tr("无法保存设置"), error);
+        QMessageBox::warning(this, tr("Could not save settings"), error);
         return;
     }
 
@@ -889,6 +905,8 @@ void SettingsDialog::populateControls(const TerminalSettings &settings)
 {
     m_populating = true;
     const TerminalSettings normalized = settings.normalized();
+    const int languageIndex = m_languageSelector->findData(normalized.language);
+    m_languageSelector->setCurrentIndex(languageIndex >= 0 ? languageIndex : 0);
     m_themeSelector->setCurrentData(static_cast<int>(normalized.themeMode));
     for (auto iterator = m_colorSchemeSwatches.cbegin();
          iterator != m_colorSchemeSwatches.cend();
@@ -907,7 +925,7 @@ void SettingsDialog::populateControls(const TerminalSettings &settings)
         : QFontDatabase::systemFont(QFontDatabase::FixedFont).family();
     int fontIndex = m_fontCombo->findData(desiredFamily);
     if (fontIndex < 0 && explicitFamily) {
-        m_fontCombo->addItem(tr("%1（本机未安装）").arg(desiredFamily), desiredFamily);
+        m_fontCombo->addItem(tr("%1 (not installed)").arg(desiredFamily), desiredFamily);
         fontIndex = m_fontCombo->count() - 1;
     }
     m_fontCombo->setCurrentIndex(std::max(fontIndex, 0));

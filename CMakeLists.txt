@@ -17,7 +17,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-find_package(Qt6 6.8 REQUIRED COMPONENTS Core Widgets Concurrent Network Sql Svg)
+find_package(Qt6 6.8 REQUIRED COMPONENTS Core Widgets Concurrent Network Sql Svg LinguistTools)
 
 # 业务目标只链接项目内部的稳定依赖名。Windows/vcpkg 通常提供 CMake Config Package，
 # macOS Homebrew 与 Linux 发行版则普遍提供 pkg-config；先尝试前者、再统一回退到后者，
@@ -134,6 +134,8 @@ set(SHELLIUM_APP_SOURCES
     src/core/ActivityLog.h
     src/core/ConnectionTarget.cpp
     src/core/ConnectionTarget.h
+    src/i18n/LocalizationService.cpp
+    src/i18n/LocalizationService.h
     src/forwarding/PortForwardManagerWidget.cpp
     src/forwarding/PortForwardManagerWidget.h
     src/forwarding/PortForwardRule.h
@@ -263,6 +265,22 @@ qt_add_resources(Shellium "shellium_distribution_icons"
 )
 
 shellium_add_bundled_fonts(Shellium)
+
+# 界面翻译：源语言为源码里的简体中文 tr() 字面量，无需 .ts。每新增一门语言就在 i18n/ 下
+# 添加 shellium_<locale>.ts 并登记到此列表，同时同步 LocalizationService 的
+# supportedLanguages()/availableLanguages()。构建时 lrelease 会把 .ts 编成 .qm 并注入
+# Qt 资源前缀 /i18n，运行时由 LocalizationService 从 :/i18n/ 装载，因此打包不依赖外部文件。
+#
+# 开发者改动可见文案后运行：
+#   cmake --build <build-dir> --target update_translations
+# 即可用 lupdate 刷新 .ts；CI 可据其 git diff 是否为空判断有无未提取文案。
+qt_add_translations(Shellium
+    TS_FILES
+        i18n/shellium_zh_CN.ts
+    RESOURCE_PREFIX "/i18n"
+    NO_GENERATE_PLURALS_TS_FILE
+    LUPDATE_OPTIONS -no-obsolete -locations none
+)
 
 target_include_directories(Shellium PRIVATE src)
 target_link_libraries(Shellium PRIVATE
@@ -464,6 +482,40 @@ if(BUILD_TESTING)
 
     add_test(NAME ShelliumStorageTests COMMAND ShelliumStorageTests)
 
+    # 多语言基础设施测试：语言码解析、翻译资源装载与设置字段规范化。只依赖 Core/Gui/Sql，
+    # 不引入 libssh/libvterm。翻译目录由下方 qt_add_translations 编进本目标自己的 Qt 资源，
+    # 测试才能独立断言 :/i18n/shellium_en.qm 真的被装载并生效。
+    qt_add_executable(ShelliumLocalizationTests
+        tests/LocalizationTest.cpp
+        src/i18n/LocalizationService.cpp
+        src/i18n/LocalizationService.h
+        src/core/ConnectionTarget.cpp
+        src/core/ConnectionTarget.h
+        src/core/HostRecord.h
+        src/settings/TerminalSettings.cpp
+        src/settings/TerminalSettings.h
+        src/storage/ApplicationDatabase.cpp
+        src/storage/ApplicationDatabase.h
+    )
+    target_include_directories(ShelliumLocalizationTests PRIVATE src)
+    target_link_libraries(ShelliumLocalizationTests PRIVATE
+        Qt6::Core
+        Qt6::Gui
+        Qt6::Widgets
+        Qt6::Sql
+        Qt6::Test
+    )
+    qt_add_translations(ShelliumLocalizationTests
+        TS_FILES
+            i18n/shellium_zh_CN.ts
+        RESOURCE_PREFIX "/i18n"
+        NO_GENERATE_PLURALS_TS_FILE
+        LUPDATE_TARGET ShelliumLocalizationTests_lupdate
+        LRELEASE_TARGET ShelliumLocalizationTests_lrelease
+        LUPDATE_OPTIONS -no-obsolete -locations none
+    )
+    add_test(NAME ShelliumLocalizationTests COMMAND ShelliumLocalizationTests)
+
     # 连接管理工具单独测试：密钥生成依赖 libssh，配置持久化依赖 SQLite，但不需要 GUI。
     # 独立目标避免给核心解析测试继续叠加职责，并可单独复现文件权限或格式兼容问题。
     qt_add_executable(ShelliumConnectionToolsTests
@@ -647,6 +699,15 @@ if(BUILD_TESTING)
         )
         target_link_libraries(ShelliumMainWindowShellTests PRIVATE "-framework AppKit")
     endif()
+    qt_add_translations(ShelliumMainWindowShellTests
+        TS_FILES
+            i18n/shellium_zh_CN.ts
+        RESOURCE_PREFIX "/i18n"
+        NO_GENERATE_PLURALS_TS_FILE
+        LUPDATE_TARGET ShelliumMainWindowShellTests_lupdate
+        LRELEASE_TARGET ShelliumMainWindowShellTests_lrelease
+        LUPDATE_OPTIONS -no-obsolete -locations none
+    )
     add_test(NAME ShelliumMainWindowShellTests COMMAND ShelliumMainWindowShellTests)
 
     # SSH 异常断线后的手动恢复提示只涉及终端本地状态，因此单独成为一个轻量目标，用例
@@ -800,6 +861,8 @@ if(BUILD_TESTING)
         src/core/ConnectionTarget.cpp
         src/core/ConnectionTarget.h
         src/core/HostRecord.h
+        src/i18n/LocalizationService.cpp
+        src/i18n/LocalizationService.h
         src/security/Vault.cpp
         src/security/Vault.h
         src/settings/BundledFonts.cpp

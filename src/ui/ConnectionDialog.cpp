@@ -24,49 +24,49 @@ ConnectionDialog::ConnectionDialog(QWidget *parent)
     // 与设置窗口共用同一套卡片/行/开关控件族，连接参数与偏好设置因此拥有一致的字段版式：
     // 左侧是字段名与约束说明，右侧是等宽对齐的输入控件。
     setObjectName(QStringLiteral("ConnectionDialog"));
-    setWindowTitle(tr("连接 SSH 服务器"));
+    setWindowTitle(tr("Connect to an SSH server"));
     setMinimumWidth(560);
 
     m_portSpin->setRange(1, 65535);
     m_portSpin->setValue(22);
     m_passwordEdit->setEchoMode(QLineEdit::Password);
-    m_passwordEdit->setPlaceholderText(tr("可选；不会保存到磁盘"));
-    m_identityEdit->setPlaceholderText(tr("可选；留空则使用 SSH Agent/默认密钥"));
+    m_passwordEdit->setPlaceholderText(tr("Optional; not saved to disk"));
+    m_identityEdit->setPlaceholderText(tr("Optional; leave empty to use the SSH agent or default key"));
     for (QLineEdit *edit : {m_displayNameEdit, m_hostEdit, m_usernameEdit, m_passwordEdit}) {
         edit->setMinimumWidth(260);
     }
 
-    auto *serverCard = new SettingsCard(tr("服务器"), this);
-    serverCard->addRow(tr("显示名称"), m_displayNameEdit, tr("留空时自动使用 用户@主机:端口。"));
-    serverCard->addRow(tr("主机地址"), m_hostEdit);
-    serverCard->addRow(tr("用户名"), m_usernameEdit);
-    serverCard->addRow(tr("端口"), new SettingsStepper(m_portSpin, serverCard));
+    auto *serverCard = new SettingsCard(tr("Server"), this);
+    serverCard->addRow(tr("Display name"), m_displayNameEdit, tr("When empty, user@host:port is used automatically."));
+    serverCard->addRow(tr("Host address"), m_hostEdit);
+    serverCard->addRow(tr("Username"), m_usernameEdit);
+    serverCard->addRow(tr("Port"), new SettingsStepper(m_portSpin, serverCard));
 
     auto *identityRow = new QWidget(this);
     auto *identityLayout = new QHBoxLayout(identityRow);
     identityLayout->setContentsMargins(0, 0, 0, 0);
     identityLayout->setSpacing(8);
-    auto *browseButton = new QPushButton(tr("浏览…"), identityRow);
+    auto *browseButton = new QPushButton(tr("Browse…"), identityRow);
     m_identityEdit->setMinimumWidth(200);
     identityLayout->addWidget(m_identityEdit, 1);
     identityLayout->addWidget(browseButton);
 
-    auto *authCard = new SettingsCard(tr("认证"), this);
-    authCard->addRow(tr("密码/私钥口令"), m_passwordEdit);
-    authCard->addRow(tr("私钥文件"), identityRow);
-    authCard->addRow(tr("旧版兼容"),
+    auto *authCard = new SettingsCard(tr("Authentication"), this);
+    authCard->addRow(tr("Password / private key passphrase"), m_passwordEdit);
+    authCard->addRow(tr("Private key file"), identityRow);
+    authCard->addRow(tr("Legacy compatibility"),
                      m_legacyHmacToggle,
-                     tr("兼容仅支持 hmac-sha1 的旧服务器（不推荐）。"));
+                     tr("For legacy servers that only support hmac-sha1 (not recommended)."));
     authCard->addNote(
-        tr("终端通过 libssh 交互式 PTY 连接；文件管理使用同一配置建立独立 SFTP 通道。"));
+        tr("The terminal connects over a libssh interactive PTY; the file manager uses the same configuration to open a separate SFTP channel."));
 
     auto *footer = new QWidget(this);
     footer->setObjectName(QStringLiteral("SettingsFooter"));
     auto *footerLayout = new QHBoxLayout(footer);
     footerLayout->setContentsMargins(20, 12, 20, 12);
     footerLayout->setSpacing(10);
-    auto *cancelButton = new QPushButton(tr("取消"), footer);
-    auto *connectButton = new QPushButton(tr("连接"), footer);
+    auto *cancelButton = new QPushButton(tr("Cancel"), footer);
+    auto *connectButton = new QPushButton(tr("Connect"), footer);
     connectButton->setProperty("primaryAction", true);
     connectButton->setDefault(true);
     footerLayout->addStretch(1);
@@ -125,7 +125,7 @@ ConnectionTarget ConnectionDialog::target() const
 void ConnectionDialog::accept()
 {
     if (m_hostEdit->text().trimmed().isEmpty()) {
-        QMessageBox::warning(this, tr("连接信息不完整"), tr("请输入服务器主机名或 IP 地址。"));
+        QMessageBox::warning(this, tr("The connection details are incomplete"), tr("Enter the server host name or IP address."));
         m_hostEdit->setFocus();
         return;
     }
@@ -134,7 +134,7 @@ void ConnectionDialog::accept()
 
 void ConnectionDialog::browseIdentityFile()
 {
-    const QString path = QFileDialog::getOpenFileName(this, tr("选择 SSH 私钥文件"));
+    const QString path = QFileDialog::getOpenFileName(this, tr("Select SSH private key file"));
     if (!path.isEmpty()) {
         m_identityEdit->setText(path);
     }

@@ -16,6 +16,7 @@
 namespace {
 
 /** @brief 设置表中键名前缀，集中定义可避免保存和加载使用不同拼写。 */
+const QString kLanguageKey = QStringLiteral("appearance/language");
 const QString kThemeKey = QStringLiteral("appearance/theme");
 const QString kColorSchemeKey = QStringLiteral("appearance/color_scheme");
 const QString kFontFamilyKey = QStringLiteral("terminal/font_family");
@@ -96,6 +97,48 @@ std::optional<TerminalCursorShape> parseCursorShape(const QString &value)
         return TerminalCursorShape::IBeam;
     }
     return std::nullopt;
+}
+
+/**
+ * @brief 把界面语言标签收敛为规范形式；无法识别的输入一律回退 "system"。
+ *
+ * 只做纯格式判断：接受字面量 "system" 与 BCP-47 / Qt 常见的 `ll` 或 `ll_CC` 形式（大小写
+ * 归一为小写语言、大写地区）。是否真的存在对应 .qm 由 LocalizationService 负责，这里不联
+ * 网、不查资源，保证设置层可在无 QApplication 的测试中调用。
+ */
+QString normalizeLanguageTag(const QString &value)
+{
+    const QString trimmed = value.trimmed();
+    if (trimmed.isEmpty() || trimmed.compare(QLatin1String("system"), Qt::CaseInsensitive) == 0) {
+        return QStringLiteral("system");
+    }
+    const QString unified = QString(trimmed).replace(QLatin1Char('-'), QLatin1Char('_'));
+    const QStringList parts = unified.split(QLatin1Char('_'), Qt::SkipEmptyParts);
+    if (parts.isEmpty() || parts.size() > 2) {
+        return QStringLiteral("system");
+    }
+    const QString language = parts.at(0).toLower();
+    if (language.size() < 2 || language.size() > 3) {
+        return QStringLiteral("system");
+    }
+    for (const QChar ch : language) {
+        if (!ch.isLetter()) {
+            return QStringLiteral("system");
+        }
+    }
+    if (parts.size() == 1) {
+        return language;
+    }
+    const QString region = parts.at(1).toUpper();
+    if (region.size() != 2) {
+        return QStringLiteral("system");
+    }
+    for (const QChar ch : region) {
+        if (!ch.isLetter()) {
+            return QStringLiteral("system");
+        }
+    }
+    return language + QLatin1Char('_') + region;
 }
 
 /** @brief 解析明确的布尔文本；拒绝将任意非空文本静默当成 true。 */
@@ -216,16 +259,16 @@ QStringList TerminalSettings::shortcutIds()
 QString TerminalSettings::shortcutDisplayName(const QString &id)
 {
     static const QHash<QString, QString> names = {
-        {QStringLiteral("connection.new"), QObject::tr("连接服务器")},
-        {QStringLiteral("terminal.local"), QObject::tr("打开本地终端")},
-        {QStringLiteral("tab.new"), QObject::tr("新建标签页")},
-        {QStringLiteral("tab.close"), QObject::tr("关闭标签页")},
-        {QStringLiteral("files.toggle"), QObject::tr("显示/隐藏远程文件")},
-        {QStringLiteral("vault.lock"), QObject::tr("锁定凭据保险库")},
-        {QStringLiteral("terminal.search"), QObject::tr("搜索终端输出")},
-        {QStringLiteral("terminal.export"), QObject::tr("导出终端输出")},
-        {QStringLiteral("command.palette"), QObject::tr("打开命令面板")},
-        {QStringLiteral("settings.open"), QObject::tr("打开设置")},
+        {QStringLiteral("connection.new"), QObject::tr("Connect to Server")},
+        {QStringLiteral("terminal.local"), QObject::tr("Open a local terminal")},
+        {QStringLiteral("tab.new"), QObject::tr("New tab")},
+        {QStringLiteral("tab.close"), QObject::tr("Close tab")},
+        {QStringLiteral("files.toggle"), QObject::tr("Show/hide remote files")},
+        {QStringLiteral("vault.lock"), QObject::tr("Lock credential vault")},
+        {QStringLiteral("terminal.search"), QObject::tr("Search terminal output")},
+        {QStringLiteral("terminal.export"), QObject::tr("Export terminal output")},
+        {QStringLiteral("command.palette"), QObject::tr("Open the command palette")},
+        {QStringLiteral("settings.open"), QObject::tr("Open settings")},
     };
     return names.value(id, id);
 }
@@ -233,6 +276,9 @@ QString TerminalSettings::shortcutDisplayName(const QString &id)
 TerminalSettings TerminalSettings::normalized() const
 {
     TerminalSettings result = *this;
+    // 只做格式规范：把空白、大小写不规范或明显非法的语言码收敛为 "system"，真正“是否有对应
+    // 翻译”的判断交给 LocalizationService::resolve()，避免设置层反向依赖翻译器与 QApplication。
+    result.language = normalizeLanguageTag(result.language);
     result.fontFamily = result.fontFamily.trimmed();
     // 未知配色 id 一律回退默认，避免旧版本、手工改库或插件写入的值让终端拿到空调色板。
     result.colorSchemeId = result.colorSchemeId.trimmed();
@@ -277,7 +323,7 @@ bool TerminalSettings::validate(QString *errorMessage) const
         const QString existingAction = assignedSequences.value(portable);
         if (!existingAction.isEmpty()) {
             if (errorMessage != nullptr) {
-                *errorMessage = QObject::tr("快捷键 %1 同时分配给“%2”和“%3”")
+                *errorMessage = QObject::tr("Shortcut %1 is assigned to both '%2' and '%3'")
                                     .arg(portable,
                                          shortcutDisplayName(existingAction),
                                          shortcutDisplayName(id));
@@ -318,7 +364,7 @@ const QList<TerminalThemePreset> &TerminalSettings::themePresets()
     // 内置深色配色，保证任何直接读取该项 palette 的调用方也能拿到一套可用颜色。
     static const QList<TerminalThemePreset> presets = {
         {QStringLiteral("default"),
-         QObject::tr("默认"),
+         QObject::tr("Default"),
          true,
          {QColor(QStringLiteral("#111318")), QColor(QStringLiteral("#e6e6e6")),
           QColor(QStringLiteral("#f6c85f")), QColor(QStringLiteral("#34598a")),
@@ -865,7 +911,8 @@ TerminalPalette TerminalSettings::effectivePalette() const
 
 bool TerminalSettings::operator==(const TerminalSettings &other) const
 {
-    return themeMode == other.themeMode
+    return language == other.language
+        && themeMode == other.themeMode
         && colorSchemeId == other.colorSchemeId
         && fontFamily == other.fontFamily
         && fontPointSize == other.fontPointSize
@@ -911,7 +958,7 @@ bool TerminalSettingsService::load(QString *errorMessage)
     Q_ASSERT(QThread::currentThread() == thread());
     if (m_database == nullptr) {
         if (errorMessage != nullptr) {
-            *errorMessage = tr("设置服务没有可用的应用数据库");
+            *errorMessage = tr("The settings service has no app database available");
         }
         return false;
     }
@@ -945,7 +992,7 @@ bool TerminalSettingsService::load(QString *errorMessage)
         if (ok) {
             *destination = value;
         } else {
-            warnings.append(tr("设置项 %1 的值“%2”不是整数，已恢复默认值").arg(key, *raw));
+            warnings.append(tr("The value '%2' of setting %1 is not an integer; the default has been restored").arg(key, *raw));
         }
     };
     const auto assignBoolean = [&](const QString &key, bool *destination) {
@@ -957,9 +1004,19 @@ bool TerminalSettingsService::load(QString *errorMessage)
         if (parsed.has_value()) {
             *destination = *parsed;
         } else {
-            warnings.append(tr("设置项 %1 的值“%2”不是布尔值，已恢复默认值").arg(key, *raw));
+            warnings.append(tr("The value '%2' of setting %1 is not a boolean; the default has been restored").arg(key, *raw));
         }
     };
+
+    if (const std::optional<QString> raw = readValue(kLanguageKey, &queryFailed);
+        raw.has_value() && !queryFailed) {
+        // normalized() 会把非法值收敛为 "system"，因此这里不再单独告警：数据库里存过的语言
+        // 码要么合法，要么用户从没设过，两种情况都不该在启动时打扰用户。
+        loaded.language = *raw;
+    }
+    if (queryFailed) {
+        return false;
+    }
 
     if (const std::optional<QString> raw = readValue(kThemeKey, &queryFailed);
         raw.has_value() && !queryFailed) {
@@ -967,7 +1024,7 @@ bool TerminalSettingsService::load(QString *errorMessage)
         if (parsed.has_value()) {
             loaded.themeMode = *parsed;
         } else {
-            warnings.append(tr("未知主题“%1”，已恢复为跟随系统").arg(*raw));
+            warnings.append(tr("Unknown theme '%1'; reverted to follow system").arg(*raw));
         }
     }
     if (queryFailed) {
@@ -980,7 +1037,7 @@ bool TerminalSettingsService::load(QString *errorMessage)
         if (TerminalSettings::themePreset(candidate) != nullptr) {
             loaded.colorSchemeId = candidate;
         } else {
-            warnings.append(tr("未知终端配色“%1”，已恢复默认配色").arg(*raw));
+            warnings.append(tr("Unknown terminal color scheme '%1'; reverted to the default scheme").arg(*raw));
         }
     }
     if (queryFailed) {
@@ -1001,7 +1058,7 @@ bool TerminalSettingsService::load(QString *errorMessage)
         if (ok && std::isfinite(value)) {
             loaded.letterSpacing = value;
         } else {
-            warnings.append(tr("字符间距“%1”无效，已恢复默认值").arg(*raw));
+            warnings.append(tr("Letter spacing '%1' is invalid; the default has been restored").arg(*raw));
         }
     }
 
@@ -1011,7 +1068,7 @@ bool TerminalSettingsService::load(QString *errorMessage)
         if (parsed.has_value()) {
             loaded.cursorShape = *parsed;
         } else {
-            warnings.append(tr("未知光标形态“%1”，已恢复为块状光标").arg(*raw));
+            warnings.append(tr("Unknown cursor shape '%1'; reverted to block cursor").arg(*raw));
         }
     }
     assignBoolean(kCursorBlinkKey, &loaded.cursorBlink);
@@ -1027,7 +1084,7 @@ bool TerminalSettingsService::load(QString *errorMessage)
         if (parsed.has_value()) {
             loaded.vaultPasswordEnabled = *parsed;
         } else {
-            warnings.append(tr("设置项 %1 的值“%2”不是布尔值，已恢复默认值")
+            warnings.append(tr("The value '%2' of setting %1 is not a boolean; the default has been restored")
                                 .arg(kVaultPasswordEnabledKey, *vaultPasswordSetting));
         }
     } else if (!queryFailed) {
@@ -1057,7 +1114,7 @@ bool TerminalSettingsService::load(QString *errorMessage)
         }
         const QKeySequence parsed = QKeySequence::fromString(*raw, QKeySequence::PortableText);
         if (parsed.isEmpty()) {
-            warnings.append(tr("动作“%1”的快捷键“%2”无效，已恢复默认值")
+            warnings.append(tr("The shortcut '%2' for action '%1' is invalid; the default has been restored")
                                 .arg(TerminalSettings::shortcutDisplayName(id), *raw));
         } else {
             loaded.shortcuts.insert(id, parsed);
@@ -1072,7 +1129,7 @@ bool TerminalSettingsService::load(QString *errorMessage)
     if (!loaded.validate(&validationError)) {
         // 外部编辑数据库可能制造重复快捷键。保留外观和终端设置，只把快捷键整体恢复默认，
         // 这样用户仍能打开设置界面修正，而不会因 QAction::AmbiguousShortcut 无法操作。
-        warnings.append(validationError + tr("；快捷键已整体恢复默认值"));
+        warnings.append(validationError + tr("; all shortcuts have been restored to their defaults"));
         loaded.shortcuts = TerminalSettings::defaultShortcuts();
     }
 
@@ -1093,7 +1150,7 @@ bool TerminalSettingsService::save(const TerminalSettings &settings, QString *er
     Q_ASSERT(QThread::currentThread() == thread());
     if (m_database == nullptr) {
         if (errorMessage != nullptr) {
-            *errorMessage = tr("设置服务没有可用的应用数据库");
+            *errorMessage = tr("The settings service has no app database available");
         }
         return false;
     }
@@ -1109,7 +1166,8 @@ bool TerminalSettingsService::save(const TerminalSettings &settings, QString *er
                                                         const QString &value) {
                 return m_database->setSetting(key, value, transactionError);
             };
-            if (!write(kThemeKey, serializeTheme(normalizedSettings.themeMode))
+            if (!write(kLanguageKey, normalizedSettings.language)
+                || !write(kThemeKey, serializeTheme(normalizedSettings.themeMode))
                 || !write(kColorSchemeKey, normalizedSettings.colorSchemeId)
                 || !write(kFontFamilyKey, normalizedSettings.fontFamily)
                 || !write(kFontSizeKey, QString::number(normalizedSettings.fontPointSize))

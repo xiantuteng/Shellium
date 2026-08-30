@@ -39,20 +39,20 @@ ConnectionTarget SessionRecoveryTest::sampleTarget()
 void SessionRecoveryTest::promptOffersManualChoiceInsteadOfLocalShell()
 {
     TerminalPane pane;
-    pane.beginManualRecovery(sampleTarget(), QStringLiteral("自动重连已达到 3 次上限"));
+    pane.beginManualRecovery(sampleTarget(), QStringLiteral("Automatic reconnect reached its limit of 3 attempts"));
 
     QVERIFY2(pane.isAwaitingManualRecovery(),
              "重连耗尽后必须停在等待用户决定的状态");
     const QString screen = pane.terminalPlainText();
-    QVERIFY2(screen.contains(QStringLiteral("自动重连已达到 3 次上限")),
+    QVERIFY2(screen.contains(QStringLiteral("Automatic reconnect reached its limit of 3 attempts")),
              "提示必须复述断线原因，用户才知道自己在为什么做选择");
-    QVERIFY2(screen.contains(QStringLiteral("按 r 重新连接")),
+    QVERIFY2(screen.contains(QStringLiteral("Press r to reconnect")),
              "提示必须明确给出手动重连按键");
-    QVERIFY2(screen.contains(QStringLiteral("按 x 关闭")),
+    QVERIFY2(screen.contains(QStringLiteral("press x to close this tab")),
              "提示必须明确给出关闭标签页按键");
     // 这是本用例真正防守的回归：断线后擅自启动的本地 Shell 与刚断开的服务器毫无关系，
     // 却会顶掉现场，用户下一条命令很可能打在本机上。
-    QVERIFY2(!screen.contains(QStringLiteral("正在启动本地终端")),
+    QVERIFY2(!screen.contains(QStringLiteral("Starting local terminal")),
              "断线恢复提示期间不得启动本地终端");
     QVERIFY2(!pane.isConnected(), "提示状态下没有任何可交互的会话");
 }
@@ -62,7 +62,7 @@ void SessionRecoveryTest::closeKeyRequestsTabClose()
     TerminalPane pane;
     pane.show();
     QVERIFY(QTest::qWaitForWindowExposed(&pane));
-    pane.beginManualRecovery(sampleTarget(), QStringLiteral("SSH 连接因网络异常中断"));
+    pane.beginManualRecovery(sampleTarget(), QStringLiteral("The SSH connection was interrupted by a network error"));
 
     auto *view = pane.findChild<TerminalView *>();
     QVERIFY2(view != nullptr, "终端面板必须持有可接收按键的视图");
@@ -83,7 +83,7 @@ void SessionRecoveryTest::otherKeysKeepThePrompt()
     TerminalPane pane;
     pane.show();
     QVERIFY(QTest::qWaitForWindowExposed(&pane));
-    pane.beginManualRecovery(sampleTarget(), QStringLiteral("SSH 连接因网络异常中断"));
+    pane.beginManualRecovery(sampleTarget(), QStringLiteral("The SSH connection was interrupted by a network error"));
 
     auto *view = pane.findChild<TerminalView *>();
     QVERIFY(view != nullptr);
@@ -104,14 +104,14 @@ void SessionRecoveryTest::reconnectKeyWithoutTargetKeepsThePrompt()
     QVERIFY(QTest::qWaitForWindowExposed(&pane));
     // 目标无效意味着没有任何可复用的连接计划：这是"面板刚建好就被要求恢复"的退化情形，
     // 用例只验证按 r 不会静默失灵，因此全程不会发起任何网络连接。
-    pane.beginManualRecovery(ConnectionTarget{}, QStringLiteral("SSH 连接因网络异常中断"));
+    pane.beginManualRecovery(ConnectionTarget{}, QStringLiteral("The SSH connection was interrupted by a network error"));
 
     auto *view = pane.findChild<TerminalView *>();
     QVERIFY(view != nullptr);
     QTest::keyClick(view, Qt::Key_R);
 
     QVERIFY2(pane.isAwaitingManualRecovery(), "无法重连时必须继续停在提示上");
-    QVERIFY2(pane.terminalPlainText().contains(QStringLiteral("没有可重连的服务器")),
+    QVERIFY2(pane.terminalPlainText().contains(QStringLiteral("No server to reconnect to")),
              "按键必须有可见反馈，否则用户会以为终端已经卡死");
 }
 

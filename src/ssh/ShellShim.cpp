@@ -245,22 +245,22 @@ ConnectionTarget ShellShim::resolveTarget(const QStringList &arguments,
             break;
         }
         if (nonInteractiveFlags.contains(token)) {
-            return decline(tr("该 ssh 调用不会进入交互式 Shell"));
+            return decline(tr("This ssh call does not enter an interactive shell"));
         }
         if (isOpenSshVerboseFlag(token)) {
             // -v 的核心用途就是观察 OpenSSH 自身的协商过程。若继续由 libssh 接管，连接虽
             // 可能成功，但用户明确要求的 stderr 调试输出会消失，因此必须交还原生 ssh。
-            return decline(tr("该 ssh 调用要求显示 OpenSSH 详细过程"));
+            return decline(tr("This ssh call requests verbose OpenSSH output"));
         }
         if (token == QStringLiteral("-F") || token == QStringLiteral("-J")) {
             // 自定义配置文件与显式跳板链无法用一条 direct-tcpip 忠实复现，
             // 强行接管会连到与用户预期不同的路径上。
-            return decline(tr("该 ssh 调用使用了 Shellium 无法忠实复现的连接路径"));
+            return decline(tr("This ssh call uses a connection path that Shellium cannot reproduce faithfully"));
         }
         if (token == QStringLiteral("-i")) {
             // -i 的路径指的是**远端**文件系统，而接管后的认证由本机的 libssh 完成。
             // 照搬这个路径要么找不到文件，要么更糟——撞上本机一个同名的无关私钥。
-            return decline(tr("该 ssh 调用指定了远端私钥文件"));
+            return decline(tr("This ssh call specifies a private key file on the remote"));
         }
         if (token == QStringLiteral("-p") && index < arguments.size()) {
             bool ok = false;
@@ -288,10 +288,10 @@ ConnectionTarget ShellShim::resolveTarget(const QStringList &arguments,
                 }
             } else if (key == QStringLiteral("identityfile")) {
                 // 同 -i：路径属于远端文件系统，本机无法忠实使用。
-                return decline(tr("该 ssh 调用指定了远端私钥文件"));
+                return decline(tr("This ssh call specifies a private key file on the remote"));
             } else if (key == QStringLiteral("proxyjump")
                        || key == QStringLiteral("proxycommand")) {
-                return decline(tr("该 ssh 调用使用了 Shellium 无法忠实复现的连接路径"));
+                return decline(tr("This ssh call uses a connection path that Shellium cannot reproduce faithfully"));
             }
             continue;
         }
@@ -318,11 +318,11 @@ ConnectionTarget ShellShim::resolveTarget(const QStringList &arguments,
     }
 
     if (host.isEmpty()) {
-        return decline(tr("未能从命令中解析出目标主机"));
+        return decline(tr("Could not parse a target host from the command"));
     }
     if (hostIndex >= 0 && hostIndex + 1 < arguments.size()) {
         // `ssh web01 uptime` 执行完就返回外层 Shell，用户从未进入那台机器。
-        return decline(tr("该 ssh 调用只在远端执行一次性命令"));
+        return decline(tr("This ssh call only runs a one-off command on the remote"));
     }
 
     const qsizetype at = host.lastIndexOf(QLatin1Char('@'));

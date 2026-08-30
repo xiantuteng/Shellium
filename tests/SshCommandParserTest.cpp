@@ -512,7 +512,7 @@ void SshCommandParserTest::terminalViewContextMenuRequestsCurrentDirectoryUpload
     QMenu *menu = view.createTerminalContextMenu();
     QVERIFY(menu != nullptr);
     for (QAction *action : menu->actions()) {
-        if (action->text().contains(QStringLiteral("上传到当前远程目录"))) {
+        if (action->text().contains(QStringLiteral("Upload to the current remote directory"))) {
             foundUploadAction = true;
             action->trigger();
             break;
@@ -2117,7 +2117,7 @@ void SshCommandParserTest::vaultDialogReportsWrongPasswordInline()
             QStringLiteral("vaultPasswordEdit"));
         QAbstractButton *unlockButton = nullptr;
         for (QAbstractButton *button : dialog->findChildren<QAbstractButton *>()) {
-            if (button->text() == QStringLiteral("解锁")) {
+            if (button->text() == QStringLiteral("Unlock")) {
                 unlockButton = button;
             }
         }
@@ -2154,7 +2154,7 @@ void SshCommandParserTest::vaultDialogReportsWrongPasswordInline()
         } else {
             bool reported = false;
             for (const QLabel *label : dialog->findChildren<QLabel *>()) {
-                if (label->isVisible() && label->text().contains(QStringLiteral("无法解锁保险库"))) {
+                if (label->isVisible() && label->text().contains(QStringLiteral("Could not unlock the vault"))) {
                     reported = true;
                 }
             }
@@ -2236,7 +2236,7 @@ void SshCommandParserTest::vaultDialogResetsForgottenPasswordAfterTypedConfirmat
                 confirmationDialog->close();
                 return;
             }
-            confirmationEdit->setText(QStringLiteral("重置保险箱"));
+            confirmationEdit->setText(QStringLiteral("Reset vault"));
             if (!resetButton->isEnabled()) {
                 failure = QStringLiteral("输入完整确认短语后仍无法提交重置");
                 confirmationDialog->close();
@@ -2312,15 +2312,15 @@ void SshCommandParserTest::vaultCreationDialogShowsSecurityHierarchy()
             || badge->size() != QSize(44, 44)) {
             failure = QStringLiteral("保险库创建对话框缺少 44px 锁形安全徽标");
         } else if (heading == nullptr
-                   || heading->text() != QStringLiteral("创建保险库")
+                   || heading->text() != QStringLiteral("Create vault")
                    || !(heading->alignment() & Qt::AlignHCenter)) {
             failure = QStringLiteral("保险库创建对话框缺少居中的操作标题");
         } else if (warning == nullptr || !warning->isVisible()
                    || warningText == nullptr
-                   || !warningText->text().contains(QStringLiteral("主密码无法找回"))) {
+                   || !warningText->text().contains(QStringLiteral("The master password cannot be recovered"))) {
             failure = QStringLiteral("保险库创建对话框缺少独立的不可恢复警示");
         } else if (passwordEdit == nullptr || confirmationEdit == nullptr
-                   || passwordEdit->placeholderText() != QStringLiteral("至少 8 个字符")) {
+                   || passwordEdit->placeholderText() != QStringLiteral("At least 8 characters")) {
             failure = QStringLiteral("保险库创建对话框没有完整呈现两次密码输入");
         } else if (cancelButton != nullptr) {
             // allowCancel=false 用于首次启动强制创建流程。按钮必须根本不存在，而不是仅禁用，

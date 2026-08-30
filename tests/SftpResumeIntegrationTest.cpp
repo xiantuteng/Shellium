@@ -327,14 +327,14 @@ void SftpResumeIntegrationTest::skipsSecondUploadOfUnchangedFileAndSaysSo()
         service, service.uploadFile(target, localPath, remotePath,
                                     SftpTransfer::ExistingFilePolicy::ResumeWhenPossible));
     QVERIFY2(first.finished && first.succeeded, qPrintable(first.message));
-    QVERIFY(first.message.contains(QStringLiteral("已上传")));
+    QVERIFY(first.message.contains(QStringLiteral("Uploaded to")));
 
     const RequestOutcome second = awaitRequest(
         service, service.uploadFile(target, localPath, remotePath,
                                     SftpTransfer::ExistingFilePolicy::ResumeWhenPossible));
     QVERIFY2(second.finished && second.succeeded, qPrintable(second.message));
     // 跳过必须说成跳过：把"内容一致、未重传"讲成"已上传"正是用户误以为文件更新了的根源。
-    QVERIFY2(second.message.contains(QStringLiteral("内容一致")),
+    QVERIFY2(second.message.contains(QStringLiteral("identical")),
              qPrintable(QStringLiteral("第二次上传的消息未如实说明跳过：") + second.message));
 
     // 内容仍必须与本地一致，跳过不能建立在错误前提上。

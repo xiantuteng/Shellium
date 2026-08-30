@@ -175,7 +175,7 @@ inline bool replaceChangedHostKey(ssh_session session, QString *errorMessage = n
 {
     if (session == nullptr) {
         if (errorMessage != nullptr) {
-            *errorMessage = QObject::tr("SSH 会话无效，无法更新 known_hosts。");
+            *errorMessage = QObject::tr("The SSH session is invalid; cannot update known_hosts.");
         }
         return false;
     }
@@ -183,7 +183,7 @@ inline bool replaceChangedHostKey(ssh_session session, QString *errorMessage = n
     const ssh_known_hosts_e state = ssh_session_is_known_server(session);
     if (state != SSH_KNOWN_HOSTS_CHANGED && state != SSH_KNOWN_HOSTS_OTHER) {
         if (errorMessage != nullptr) {
-            *errorMessage = QObject::tr("当前 SSH 会话已不再处于主机密钥冲突状态。");
+            *errorMessage = QObject::tr("The current SSH session is no longer in a host key conflict state.");
         }
         return false;
     }
@@ -195,7 +195,7 @@ inline bool replaceChangedHostKey(ssh_session session, QString *errorMessage = n
             ssh_string_free_char(knownHostsPathRaw);
         }
         if (errorMessage != nullptr) {
-            *errorMessage = QObject::tr("无法确定用户 known_hosts 文件位置。");
+            *errorMessage = QObject::tr("Could not determine the location of your known_hosts file.");
         }
         return false;
     }
@@ -209,7 +209,7 @@ inline bool replaceChangedHostKey(ssh_session session, QString *errorMessage = n
             ssh_string_free_char(exportedEntryRaw);
         }
         if (errorMessage != nullptr) {
-            *errorMessage = QObject::tr("无法导出服务器的新主机密钥：%1")
+            *errorMessage = QObject::tr("Could not export the server's new host key: %1")
                                 .arg(QString::fromUtf8(ssh_get_error(session)));
         }
         return false;
@@ -221,7 +221,7 @@ inline bool replaceChangedHostKey(ssh_session session, QString *errorMessage = n
     const qsizetype exportedHostEnd = Detail::hostFieldEnd(normalizedNewLine);
     if (exportedHostEnd <= 0) {
         if (errorMessage != nullptr) {
-            *errorMessage = QObject::tr("libssh 导出的新主机密钥记录格式无效。");
+            *errorMessage = QObject::tr("The new host key record exported by libssh has an invalid format.");
         }
         return false;
     }
@@ -237,7 +237,7 @@ inline bool replaceChangedHostKey(ssh_session session, QString *errorMessage = n
     QFile input(knownHostsPath);
     if (!input.open(QIODevice::ReadOnly)) {
         if (errorMessage != nullptr) {
-            *errorMessage = QObject::tr("无法读取 %1：%2")
+            *errorMessage = QObject::tr("Could not read %1: %2")
                                 .arg(knownHostsPath, input.errorString());
         }
         return false;
@@ -246,7 +246,7 @@ inline bool replaceChangedHostKey(ssh_session session, QString *errorMessage = n
     const QByteArray original = input.readAll();
     if (input.error() != QFileDevice::NoError) {
         if (errorMessage != nullptr) {
-            *errorMessage = QObject::tr("读取 %1 失败：%2")
+            *errorMessage = QObject::tr("Failed to read %1: %2")
                                 .arg(knownHostsPath, input.errorString());
         }
         return false;
@@ -259,8 +259,7 @@ inline bool replaceChangedHostKey(ssh_session session, QString *errorMessage = n
     if (!replaced) {
         if (errorMessage != nullptr) {
             *errorMessage = QObject::tr(
-                "冲突记录不在用户 known_hosts 文件 %1 中；它可能来自系统级配置，"
-                "请联系管理员核验并更新。").arg(knownHostsPath);
+                "The conflicting record is not in your known_hosts file %1; it may come from a system-level configuration. Contact your administrator to verify and update it.").arg(knownHostsPath);
         }
         return false;
     }
@@ -288,7 +287,7 @@ inline bool replaceChangedHostKey(ssh_session session, QString *errorMessage = n
     QString saveError;
     if (!saveContent(rewritten, &saveError)) {
         if (errorMessage != nullptr) {
-            *errorMessage = QObject::tr("更新 %1 失败：%2").arg(knownHostsPath, saveError);
+            *errorMessage = QObject::tr("Failed to update %1: %2").arg(knownHostsPath, saveError);
         }
         return false;
     }
@@ -301,8 +300,8 @@ inline bool replaceChangedHostKey(ssh_session session, QString *errorMessage = n
     const bool rolledBack = saveContent(original, &rollbackError);
     if (errorMessage != nullptr) {
         *errorMessage = rolledBack
-            ? QObject::tr("写入新主机密钥后复核失败，已恢复原 known_hosts 文件。")
-            : QObject::tr("写入新主机密钥后复核失败，且恢复原文件失败：%1")
+            ? QObject::tr("Re-check after writing the new host key failed; the original known_hosts file has been restored.")
+            : QObject::tr("Re-check after writing the new host key failed, and restoring the original file also failed: %1")
                   .arg(rollbackError);
     }
     return false;

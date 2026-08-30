@@ -385,7 +385,7 @@ public:
         setObjectName(QStringLiteral("PortForwardHostCombo"));
         setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
         setMinimumContentsLength(14);
-        setAccessibleName(tr("端口转发主机"));
+        setAccessibleName(tr("Port forwarding hosts"));
 
         // 树形列表承载大量文字，不能使用 WA_TranslucentBackground：macOS 会把下方主界面
         // 一并合成进顶层窗口，重叠文字不仅降低可读性，还会让抗锯齿边缘看起来发虚。这里让
@@ -657,7 +657,7 @@ public:
                    ? existing->id
                    : QUuid::createUuid().toString(QUuid::WithoutBraces))
     {
-        setWindowTitle(existing.has_value() ? tr("编辑端口转发") : tr("新建端口转发"));
+        setWindowTitle(existing.has_value() ? tr("Edit port forwarding") : tr("New port forwarding"));
         setMinimumWidth(480);
         auto *layout = new QVBoxLayout(this);
         auto *form = new QFormLayout;
@@ -665,9 +665,9 @@ public:
         m_nameEdit = new QLineEdit(this);
         m_typeCombo = new QComboBox(this);
         UiIcons::modernizePopup(m_typeCombo);
-        m_typeCombo->addItem(tr("本地转发 (-L)"), static_cast<int>(PortForwardType::Local));
-        m_typeCombo->addItem(tr("远程转发 (-R)"), static_cast<int>(PortForwardType::Remote));
-        m_typeCombo->addItem(tr("动态 SOCKS5 (-D)"), static_cast<int>(PortForwardType::Dynamic));
+        m_typeCombo->addItem(tr("Local forwarding (-L)"), static_cast<int>(PortForwardType::Local));
+        m_typeCombo->addItem(tr("Remote forwarding (-R)"), static_cast<int>(PortForwardType::Remote));
+        m_typeCombo->addItem(tr("Dynamic SOCKS5 (-D)"), static_cast<int>(PortForwardType::Dynamic));
         m_bindHostEdit = new QLineEdit(QStringLiteral("127.0.0.1"), this);
         m_bindPortSpin = new QSpinBox(this);
         m_bindPortSpin->setRange(1, 65535);
@@ -676,7 +676,7 @@ public:
         m_targetPortSpin = new QSpinBox(this);
         m_targetPortSpin->setRange(1, 65535);
         m_targetPortSpin->setValue(80);
-        m_autoStartCheck = new QCheckBox(tr("根 SSH 连接成功后自动启动"), this);
+        m_autoStartCheck = new QCheckBox(tr("Starts automatically after the root SSH connection succeeds"), this);
         // 地址与端口在语义上是同一个端点。组合为一行不仅贴近常见 host:port 写法，也让
         // 用户能够横向对照监听端点和目标端点，避免在六行表单中串错端口。
         auto *bindEndpoint = new QWidget(this);
@@ -697,16 +697,15 @@ public:
         m_targetPortSpin->setFixedWidth(112);
         targetEndpointLayout->addWidget(m_targetPortSpin);
 
-        form->addRow(tr("名称："), m_nameEdit);
-        form->addRow(tr("类型："), m_typeCombo);
-        form->addRow(tr("监听："), bindEndpoint);
-        form->addRow(tr("目标："), targetEndpoint);
+        form->addRow(tr("Name:"), m_nameEdit);
+        form->addRow(tr("Type:"), m_typeCombo);
+        form->addRow(tr("Listen:"), bindEndpoint);
+        form->addRow(tr("Target:"), targetEndpoint);
         form->addRow(QString(), m_autoStartCheck);
         layout->addLayout(form);
 
         auto *securityNotice = new QLabel(
-            tr("安全提示：把监听地址设为 0.0.0.0 或 :: 会向局域网/公网暴露端口；"
-               "是否可达仍受系统防火墙和 SSH 服务端 GatewayPorts 限制。"),
+            tr("Security note: setting the listen address to 0.0.0.0 or :: exposes the port to the local network and the internet; reachability still depends on the system firewall and the SSH server's GatewayPorts setting."),
             this);
         securityNotice->setObjectName(QStringLiteral("PortForwardSecurityNotice"));
         securityNotice->setWordWrap(true);
@@ -718,7 +717,7 @@ public:
         connect(buttons, &QDialogButtonBox::accepted, this, [this]() {
             QString error;
             if (!rule().isValid(&error)) {
-                QMessageBox::warning(this, tr("规则不完整"), error);
+                QMessageBox::warning(this, tr("The rule is incomplete"), error);
                 return;
             }
             accept();
@@ -972,7 +971,7 @@ public:
         // 错误”而不是“失败原因”，避免把整条规则误报为不可用。
         QString visibleError = displayableForwardingError(lastError, 220);
         if (state == PortForwardState::Failed && visibleError.isEmpty()) {
-            visibleError = tr("运行时未返回具体错误信息");
+            visibleError = tr("No specific error message was returned at runtime");
         }
         if (!visibleError.isEmpty()) {
             auto *errorLabel = new QLabel(this);
@@ -984,8 +983,8 @@ public:
                 QStringLiteral("color:#e5484d; font-size:10px; padding-top:1px;"));
             errorLabel->setText(
                 state == PortForwardState::Failed
-                    ? tr("失败原因：%1").arg(visibleError)
-                    : tr("最近错误：%1").arg(visibleError));
+                    ? tr("Reason: %1").arg(visibleError)
+                    : tr("Last error: %1").arg(visibleError));
             errorLabel->setToolTip(displayableForwardingError(lastError, 1000));
             layout->addWidget(errorLabel);
         }
@@ -1000,7 +999,7 @@ PortForwardManagerWidget::PortForwardManagerWidget(ApplicationDatabase *database
     , m_database(database)
     , m_hostCombo(new HostTreeComboBox(this))
     , m_ruleList(new QListWidget(this))
-    , m_summaryLabel(new QLabel(tr("尚无运行中的端口转发"), this))
+    , m_summaryLabel(new QLabel(tr("No port forwarding is running yet"), this))
 {
     Q_ASSERT(m_database != nullptr);
     auto *layout = new QVBoxLayout(this);
@@ -1008,7 +1007,7 @@ PortForwardManagerWidget::PortForwardManagerWidget(ApplicationDatabase *database
     layout->setSpacing(0);
     auto *hostSection = new QVBoxLayout;
     hostSection->setSpacing(6);
-    auto *hostLabel = new QLabel(tr("主机"), this);
+    auto *hostLabel = new QLabel(tr("Hosts"), this);
     hostLabel->setObjectName(QStringLiteral("PortForwardHostLabel"));
     hostSection->addWidget(hostLabel);
     hostSection->addWidget(m_hostCombo);
@@ -1025,29 +1024,29 @@ PortForwardManagerWidget::PortForwardManagerWidget(ApplicationDatabase *database
     auto *managementButtons = new QHBoxLayout;
     managementButtons->setObjectName(QStringLiteral("PortForwardManagementLayout"));
     managementButtons->setSpacing(6);
-    auto *addButton = new QPushButton(tr("新建"), this);
+    auto *addButton = new QPushButton(tr("New"), this);
     addButton->setObjectName(QStringLiteral("AddPortForwardButton"));
     addButton->setProperty("primaryAction", true);
-    auto *startButton = new QPushButton(tr("启动"), this);
+    auto *startButton = new QPushButton(tr("Start"), this);
     startButton->setObjectName(QStringLiteral("StartAllPortForwardsButton"));
     startButton->setProperty("forwardingRuntimeAction", true);
     startButton->setFixedWidth(66);
-    auto *stopButton = new QPushButton(tr("停止"), this);
+    auto *stopButton = new QPushButton(tr("Stop"), this);
     stopButton->setObjectName(QStringLiteral("StopAllPortForwardsButton"));
     stopButton->setProperty("forwardingRuntimeAction", true);
     stopButton->setFixedWidth(66);
     UiIcons::decorateButton(
         addButton,
         UiIcons::symbol(this, UiIcons::Symbol::Plus, this->palette().color(QPalette::WindowText)),
-        tr("新建端口转发规则"));
+        tr("New port forwarding rule"));
     UiIcons::decorateButton(
         startButton,
         UiIcons::symbol(this, UiIcons::Symbol::Play, this->palette().color(QPalette::WindowText)),
-        tr("启动当前主机的全部转发规则"));
+        tr("Start all forwarding rules for the current host"));
     UiIcons::decorateButton(
         stopButton,
         UiIcons::symbol(this, UiIcons::Symbol::Stop, this->palette().color(QPalette::WindowText)),
-        tr("停止当前主机的全部转发规则"));
+        tr("Stop all forwarding rules for the current host"));
     managementButtons->addWidget(addButton);
     managementButtons->addStretch(1);
     managementButtons->addWidget(startButton);
@@ -1086,22 +1085,22 @@ PortForwardManagerWidget::PortForwardManagerWidget(ApplicationDatabase *database
                 UiIcons::modernizePopup(&menu);
                 QAction *addAction = menu.addAction(
                     UiIcons::symbol(this, UiIcons::Symbol::Plus, this->palette().color(QPalette::WindowText)),
-                    tr("新建规则"));
+                    tr("New rule"));
                 connect(addAction, &QAction::triggered, addButton, &QPushButton::click);
                 if (item != nullptr) {
                     menu.addSeparator();
                     QAction *startAction = menu.addAction(
                         UiIcons::symbol(this, UiIcons::Symbol::Play, this->palette().color(QPalette::WindowText)),
-                        tr("启动"));
+                        tr("Start"));
                     QAction *stopAction = menu.addAction(
                         UiIcons::symbol(this, UiIcons::Symbol::Stop, this->palette().color(QPalette::WindowText)),
-                        tr("停止"));
+                        tr("Stop"));
                     QAction *editAction = menu.addAction(
                         UiIcons::symbol(this, UiIcons::Symbol::Edit, this->palette().color(QPalette::WindowText)),
-                        tr("编辑"));
+                        tr("Edit"));
                     QAction *deleteAction = menu.addAction(
                         UiIcons::symbol(this, UiIcons::Symbol::Trash, this->palette().color(QPalette::WindowText)),
-                        tr("删除"));
+                        tr("Delete"));
                     // 常驻编辑/删除按钮已移除，右键菜单直接调用单条规则方法；启动/停止也
                     // 必须保持单条语义，不能借用顶部针对当前主机全部规则的批量按钮。
                     connect(startAction, &QAction::triggered,
@@ -1114,7 +1113,7 @@ PortForwardManagerWidget::PortForwardManagerWidget(ApplicationDatabase *database
                             m_database->findPortForward(selectedRuleId(), &error);
                         if (!rule.has_value()) {
                             emit statusMessage(error.isEmpty()
-                                                   ? tr("请选择要编辑的规则")
+                                                   ? tr("Select a rule to edit")
                                                    : error);
                             return;
                         }
@@ -1242,7 +1241,7 @@ void PortForwardManagerWidget::reloadHosts()
     QString error;
     const QList<HostRecord> records = m_database->searchHosts({}, &hostsLoaded, &error);
     if (!hostsLoaded) {
-        emit statusMessage(tr("读取端口转发主机失败：%1").arg(error));
+        emit statusMessage(tr("Failed to read port forwarding hosts: %1").arg(error));
         reloadRules();
         return;
     }
@@ -1251,7 +1250,7 @@ void PortForwardManagerWidget::reloadHosts()
     const QHash<QString, int> forwardingCounts =
         m_database->portForwardCounts(&countsLoaded, &error);
     if (!countsLoaded) {
-        emit statusMessage(tr("读取端口转发数量失败：%1").arg(error));
+        emit statusMessage(tr("Failed to read the port forwarding count: %1").arg(error));
         reloadRules();
         return;
     }
@@ -1279,14 +1278,14 @@ void PortForwardManagerWidget::reloadRules()
     m_ruleList->clear();
     const QString hostId = m_hostCombo->currentData().toString();
     if (hostId.isEmpty()) {
-        m_summaryLabel->setText(tr("请先在主机管理中保存一台主机"));
+        m_summaryLabel->setText(tr("Save a host in Host Manager first"));
         return;
     }
     bool ok = false;
     QString error;
     const QList<PortForwardRule> rules = m_database->listPortForwards(hostId, &ok, &error);
     if (!ok) {
-        emit statusMessage(tr("读取端口转发规则失败：%1").arg(error));
+        emit statusMessage(tr("Failed to read port forwarding rules: %1").arg(error));
         return;
     }
 
@@ -1325,28 +1324,28 @@ void PortForwardManagerWidget::reloadRules()
         m_ruleList->scrollToItem(restoredSelection, QAbstractItemView::EnsureVisible);
     }
     m_summaryLabel->setText(
-        tr("%1 条规则，%2 条活动连接，累计流量 %3；%4")
+        tr("%1 rules, %2 active connections, %3 total traffic; %4")
             .arg(rules.size())
             .arg(activeConnections)
             .arg(formatBytes(totalTraffic))
             .arg(availableSession(hostId) == nullptr
-                     ? tr("主机未连接 · SSH 会话不可用")
-                     : tr("主机已连接 · SSH 会话可用")));
+                     ? tr("Host not connected · SSH session unavailable")
+                     : tr("Host connected · SSH session available")));
 }
 
 void PortForwardManagerWidget::editRule(const std::optional<PortForwardRule> &existing)
 {
     const QString hostId = m_hostCombo->currentData().toString();
     if (hostId.isEmpty()) {
-        QMessageBox::information(this, tr("没有保存主机"), tr("请先在主机管理中创建主机。"));
+        QMessageBox::information(this, tr("No saved hosts"), tr("Create a host in Host Manager first."));
         return;
     }
     if (existing.has_value() && m_runtimes.contains(existing->id)
         && m_runtimes.value(existing->id) != nullptr
         && m_runtimes.value(existing->id)->statistics().state == PortForwardState::Running) {
         QMessageBox::information(this,
-                                 tr("规则正在运行"),
-                                 tr("请先停止规则，再修改监听或目标参数。"));
+                                 tr("The rule is running"),
+                                 tr("Stop the rule first, then change the listen or target parameters."));
         return;
     }
     PortForwardRuleDialog dialog(hostId, existing, this);
@@ -1358,16 +1357,15 @@ void PortForwardManagerWidget::editRule(const std::optional<PortForwardRule> &ex
         || rule.bindHost == QStringLiteral("::");
     if (publiclyExposed
         && QMessageBox::warning(this,
-                                tr("确认暴露监听端口"),
-                                tr("规则会监听所有网络接口，其他设备可能访问该端口。"
-                                   "确认已配置防火墙并继续保存吗？"),
+                                tr("Confirm exposing the listen port"),
+                                tr("The rule listens on all network interfaces, so other devices may reach this port. Confirm your firewall is configured and continue saving?"),
                                 QMessageBox::Yes | QMessageBox::Cancel,
                                 QMessageBox::Cancel) != QMessageBox::Yes) {
         return;
     }
     QString error;
     if (!m_database->savePortForward(rule, &error)) {
-        QMessageBox::critical(this, tr("保存规则失败"), error);
+        QMessageBox::critical(this, tr("Failed to save rule"), error);
         return;
     }
     // 新增规则后主机名称后的数量也必须立即变化；reloadHosts 会保留当前 hostId，并在一次
@@ -1379,12 +1377,12 @@ void PortForwardManagerWidget::removeSelectedRule()
 {
     const QString ruleId = selectedRuleId();
     if (ruleId.isEmpty()) {
-        emit statusMessage(tr("请选择要删除的端口转发规则"));
+        emit statusMessage(tr("Select a port forwarding rule to delete"));
         return;
     }
     if (QMessageBox::warning(this,
-                             tr("确认删除规则"),
-                             tr("删除后无法撤销；正在运行的监听会立即停止。"),
+                             tr("Confirm rule deletion"),
+                             tr("This cannot be undone; running listeners stop immediately."),
                              QMessageBox::Yes | QMessageBox::Cancel,
                              QMessageBox::Cancel) != QMessageBox::Yes) {
         return;
@@ -1395,7 +1393,7 @@ void PortForwardManagerWidget::removeSelectedRule()
     int removed = 0;
     QString error;
     if (!m_database->removePortForward(ruleId, &removed, &error)) {
-        QMessageBox::critical(this, tr("删除规则失败"), error);
+        QMessageBox::critical(this, tr("Failed to delete rule"), error);
         return;
     }
     m_statistics.remove(ruleId);
@@ -1409,19 +1407,19 @@ void PortForwardManagerWidget::startSelectedRule()
     QString error;
     const std::optional<PortForwardRule> rule = m_database->findPortForward(ruleId, &error);
     if (!rule.has_value()) {
-        emit statusMessage(error.isEmpty() ? tr("请选择要启动的规则") : error);
+        emit statusMessage(error.isEmpty() ? tr("Select a rule to start") : error);
         return;
     }
     SshSessionStack *sessionStack = availableSession(rule->hostId);
     if (sessionStack == nullptr) {
         QMessageBox::information(this,
-                                 tr("主机尚未连接"),
-                                 tr("请先从主机树连接“%1”，再启动这条规则。")
+                                 tr("The host is not connected yet"),
+                                 tr("Connect to '%1' from the host tree first, then start this rule.")
                                      .arg(m_hostCombo->currentText()));
         return;
     }
     if (!startRule(*rule, sessionStack, &error)) {
-        QMessageBox::critical(this, tr("启动转发失败"), error);
+        QMessageBox::critical(this, tr("Failed to start forwarding"), error);
     }
 }
 
@@ -1430,7 +1428,7 @@ void PortForwardManagerWidget::stopSelectedRule()
     const QString ruleId = selectedRuleId();
     PortForwardRuntime *runtime = m_runtimes.value(ruleId);
     if (runtime == nullptr) {
-        emit statusMessage(tr("所选规则当前未运行"));
+        emit statusMessage(tr("The selected rule is not running"));
         return;
     }
     runtime->stop();
@@ -1442,8 +1440,8 @@ void PortForwardManagerWidget::startAllRules()
     const QString hostId = m_hostCombo->currentData().toString();
     if (hostId.isEmpty()) {
         QMessageBox::information(this,
-                                 tr("没有保存主机"),
-                                 tr("请先在主机管理中创建并选择一台主机。"));
+                                 tr("No saved hosts"),
+                                 tr("Create and select a host in Host Manager first."));
         return;
     }
 
@@ -1451,29 +1449,29 @@ void PortForwardManagerWidget::startAllRules()
     QString error;
     const QList<PortForwardRule> rules = m_database->listPortForwards(hostId, &ok, &error);
     if (!ok) {
-        QMessageBox::critical(this, tr("读取转发规则失败"), error);
+        QMessageBox::critical(this, tr("Failed to read forwarding rules"), error);
         return;
     }
     if (rules.isEmpty()) {
         QMessageBox::information(this,
-                                 tr("没有转发规则"),
-                                 tr("当前主机还没有可启动的端口转发规则。"));
+                                 tr("No forwarding rules"),
+                                 tr("The current host has no port forwarding rules to start yet."));
         return;
     }
 
     SshSessionStack *sessionStack = availableSession(hostId);
     if (sessionStack == nullptr) {
         QMessageBox::information(this,
-                                 tr("主机尚未连接"),
-                                 tr("请先从主机树连接“%1”，再启动全部转发规则。")
+                                 tr("The host is not connected yet"),
+                                 tr("Connect to '%1' from the host tree first, then start all forwarding rules.")
                                      .arg(m_hostCombo->currentText()));
         return;
     }
 
     if (QMessageBox::question(
             this,
-            tr("确认启动全部转发"),
-            tr("将启动主机“%1”下的全部 %2 条转发规则；已在运行的规则会保持不变。是否继续？")
+            tr("Confirm starting all forwarding"),
+            tr("This will start all %2 forwarding rules under host '%1'; rules already running are left unchanged. Continue?")
                 .arg(m_hostCombo->currentText())
                 .arg(rules.size()),
             QMessageBox::Yes | QMessageBox::Cancel,
@@ -1487,7 +1485,7 @@ void PortForwardManagerWidget::startAllRules()
         QString startError;
         if (!startRule(rule, sessionStack, &startError)) {
             ++failedCount;
-            failedRules.append(tr("%1：%2").arg(rule.name, startError));
+            failedRules.append(tr("%1: %2").arg(rule.name, startError));
         }
     }
     reloadRules();
@@ -1497,13 +1495,13 @@ void PortForwardManagerWidget::startAllRules()
     if (failedCount > 0) {
         QMessageBox::warning(
             this,
-            tr("部分规则未能启动"),
-            tr("%1 条规则未能提交启动：\n%2")
+            tr("Some rules could not be started"),
+            tr("%1 rules could not be submitted to start:\n%2")
                 .arg(failedCount)
                 .arg(failedRules.join(QLatin1Char('\n'))));
         return;
     }
-    emit statusMessage(tr("已提交当前主机的 %1 条端口转发启动任务").arg(rules.size()));
+    emit statusMessage(tr("Submitted %1 port forwarding start tasks for the current host").arg(rules.size()));
 }
 
 void PortForwardManagerWidget::stopAllRules()
@@ -1511,8 +1509,8 @@ void PortForwardManagerWidget::stopAllRules()
     const QString hostId = m_hostCombo->currentData().toString();
     if (hostId.isEmpty()) {
         QMessageBox::information(this,
-                                 tr("没有保存主机"),
-                                 tr("请先在主机管理中创建并选择一台主机。"));
+                                 tr("No saved hosts"),
+                                 tr("Create and select a host in Host Manager first."));
         return;
     }
 
@@ -1520,7 +1518,7 @@ void PortForwardManagerWidget::stopAllRules()
     QString error;
     const QList<PortForwardRule> rules = m_database->listPortForwards(hostId, &ok, &error);
     if (!ok) {
-        QMessageBox::critical(this, tr("读取转发规则失败"), error);
+        QMessageBox::critical(this, tr("Failed to read forwarding rules"), error);
         return;
     }
 
@@ -1538,14 +1536,14 @@ void PortForwardManagerWidget::stopAllRules()
         }
     }
     if (activeRuntimes.isEmpty()) {
-        emit statusMessage(tr("当前主机没有正在运行的端口转发规则"));
+        emit statusMessage(tr("The current host has no running port forwarding rules"));
         return;
     }
 
     if (QMessageBox::question(
             this,
-            tr("确认停止全部转发"),
-            tr("将停止主机“%1”下的 %2 条活动转发规则，并关闭相关连接。是否继续？")
+            tr("Confirm stopping all forwarding"),
+            tr("This will stop %2 active forwarding rules under host '%1' and close the related connections. Continue?")
                 .arg(m_hostCombo->currentText())
                 .arg(activeRuntimes.size()),
             QMessageBox::Yes | QMessageBox::Cancel,
@@ -1559,7 +1557,7 @@ void PortForwardManagerWidget::stopAllRules()
         runtime->stop();
     }
     reloadRules();
-    emit statusMessage(tr("已提交当前主机的 %1 条端口转发停止任务")
+    emit statusMessage(tr("Submitted %1 port forwarding stop tasks for the current host")
                            .arg(activeRuntimes.size()));
 }
 
@@ -1601,7 +1599,7 @@ bool PortForwardManagerWidget::startRule(const PortForwardRule &rule,
         // Runtime 构造函数要求非空会话，且异步启动若接到已断开的会话只会稍后失败。这里
         // 同步拒绝可让批量汇总准确指出前置条件，并关闭会话断开与点击启动之间的竞态窗口。
         if (errorMessage != nullptr) {
-            *errorMessage = tr("主机 SSH 会话不可用");
+            *errorMessage = tr("The host SSH session is unavailable");
         }
         return false;
     }
@@ -1627,7 +1625,7 @@ bool PortForwardManagerWidget::startRule(const PortForwardRule &rule,
     // Runtime 的本地监听和远程请求都在专属网络线程异步执行；字段与会话前置条件已在
     // 本方法完成，后续 bind/服务端拒绝通过 statisticsChanged/statusMessage 明确上报。
     runtime->start();
-    emit statusMessage(tr("正在启动端口转发：%1").arg(rule.name));
+    emit statusMessage(tr("Starting port forwarding: %1").arg(rule.name));
     return true;
 }
 
@@ -1644,8 +1642,8 @@ void PortForwardManagerWidget::applyRuntimeStatistics(
     if (statistics.state == PortForwardState::Failed) {
         const QString reason = displayableForwardingError(statistics.lastError, 1000);
         emit statusMessage(
-            tr("端口转发失败：%1")
-                .arg(reason.isEmpty() ? tr("运行时未返回具体错误信息") : reason));
+            tr("Port forwarding failed: %1")
+                .arg(reason.isEmpty() ? tr("No specific error message was returned at runtime") : reason));
     }
 }
 
@@ -1656,14 +1654,14 @@ void PortForwardManagerWidget::startAutomaticRules(const QString &hostId,
     QString error;
     const QList<PortForwardRule> rules = m_database->listPortForwards(hostId, &ok, &error);
     if (!ok) {
-        emit statusMessage(tr("读取自动转发规则失败：%1").arg(error));
+        emit statusMessage(tr("Failed to read auto-forwarding rules: %1").arg(error));
         return;
     }
     for (const PortForwardRule &rule : rules) {
         if (rule.autoStart) {
             QString startError;
             if (!startRule(rule, sessionStack, &startError)) {
-                emit statusMessage(tr("自动启动“%1”失败：%2").arg(rule.name, startError));
+                emit statusMessage(tr("Failed to auto-start '%1': %2").arg(rule.name, startError));
             }
         }
     }
@@ -1673,16 +1671,16 @@ QString PortForwardManagerWidget::stateText(const PortForwardState state)
 {
     switch (state) {
     case PortForwardState::Starting:
-        return tr("启动中");
+        return tr("Starting");
     case PortForwardState::Running:
-        return tr("运行中");
+        return tr("Running");
     case PortForwardState::Stopping:
-        return tr("停止中");
+        return tr("Stopping");
     case PortForwardState::Failed:
-        return tr("失败");
+        return tr("Failed");
     case PortForwardState::Stopped:
     default:
-        return tr("已停止");
+        return tr("Stopped");
     }
 }
 
@@ -1693,14 +1691,14 @@ QString PortForwardManagerWidget::endpointMappingText(const PortForwardRule &rul
     case PortForwardType::Remote:
         // -R 在远程 SSH 服务器监听 bind，在本机连接 target；反向箭头用于避免把两端角色
         // 错画成本地转发，同时第二列始终保持“本机在前、远程在后”的阅读顺序。
-        return tr("本机 %1\n← 远程 %2")
+        return tr("Local %1\n← Remote %2")
             .arg(formatEndpoint(rule.targetHost, rule.targetPort), bindEndpoint);
     case PortForwardType::Dynamic:
         // SOCKS5 的远程目标由每个客户端请求动态给出，不能展示一个并不存在的固定端口。
-        return tr("本机 %1\n→ 远程（按 SOCKS 请求）").arg(bindEndpoint);
+        return tr("Local %1\n→ Remote (per SOCKS request)").arg(bindEndpoint);
     case PortForwardType::Local:
     default:
-        return tr("本机 %1\n→ 远程 %2")
+        return tr("Local %1\n→ Remote %2")
             .arg(bindEndpoint, formatEndpoint(rule.targetHost, rule.targetPort));
     }
 }

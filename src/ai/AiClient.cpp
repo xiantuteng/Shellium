@@ -43,7 +43,7 @@ void AiClient::testConnection(const AiSettings &settings)
         m_activeTestReply = nullptr;
     }
     if (settings.endpointUrl.trimmed().isEmpty()) {
-        emit testConnectionFinished(false, tr("请先填写大模型服务地址"));
+        emit testConnectionFinished(false, tr("Fill in the LLM service URL first"));
         return;
     }
 
@@ -63,7 +63,7 @@ void AiClient::testConnection(const AiSettings &settings)
         if (reply->error() != QNetworkReply::NoError) {
             emit testConnectionFinished(
                 false,
-                tr("连接失败：%1").arg(reply->errorString()));
+                tr("Connection failed: %1").arg(reply->errorString()));
             return;
         }
         const QByteArray body = reply->readAll();
@@ -77,8 +77,8 @@ void AiClient::testConnection(const AiSettings &settings)
         }
         emit testConnectionFinished(
             true,
-            modelCount >= 0 ? tr("连接成功，网关返回 %1 个可用模型").arg(modelCount)
-                            : tr("连接成功"));
+            modelCount >= 0 ? tr("Connected; the gateway returned %1 available models").arg(modelCount)
+                            : tr("Connected"));
     });
 }
 
@@ -89,7 +89,7 @@ void AiClient::fetchModels(const AiSettings &settings)
         m_activeModelsReply = nullptr;
     }
     if (settings.endpointUrl.trimmed().isEmpty()) {
-        emit modelsFetched(false, {}, tr("请先填写大模型服务地址"));
+        emit modelsFetched(false, {}, tr("Fill in the LLM service URL first"));
         return;
     }
 
@@ -107,7 +107,7 @@ void AiClient::fetchModels(const AiSettings &settings)
         }
         reply->deleteLater();
         if (reply->error() != QNetworkReply::NoError) {
-            emit modelsFetched(false, {}, tr("获取模型列表失败：%1").arg(reply->errorString()));
+            emit modelsFetched(false, {}, tr("Failed to fetch the model list: %1").arg(reply->errorString()));
             return;
         }
         const QJsonDocument document = QJsonDocument::fromJson(reply->readAll());
@@ -121,21 +121,21 @@ void AiClient::fetchModels(const AiSettings &settings)
             }
         }
         if (models.isEmpty()) {
-            emit modelsFetched(false, {}, tr("网关没有返回任何模型"));
+            emit modelsFetched(false, {}, tr("The gateway returned no models"));
             return;
         }
-        emit modelsFetched(true, models, tr("已获取 %1 个模型").arg(models.size()));
+        emit modelsFetched(true, models, tr("Fetched %1 models").arg(models.size()));
     });
 }
 
 void AiClient::sendMessage(const AiSettings &settings, const QList<AiChatMessage> &messages)
 {
     if (m_activeChatReply != nullptr) {
-        emit replyFailed(tr("上一条请求尚未结束"));
+        emit replyFailed(tr("The previous request has not finished"));
         return;
     }
     if (!settings.isConfigured()) {
-        emit replyFailed(tr("请先在设置中完成大模型地址和模型名称配置"));
+        emit replyFailed(tr("Finish configuring the LLM URL and model name in Settings first"));
         return;
     }
 
@@ -190,7 +190,7 @@ void AiClient::sendMessage(const AiSettings &settings, const QList<AiChatMessage
             return;
         }
         if (reply->error() != QNetworkReply::NoError) {
-            emit replyFailed(tr("请求失败：%1").arg(reply->errorString()));
+            emit replyFailed(tr("Request failed: %1").arg(reply->errorString()));
             return;
         }
         // 收尾前再扫一遍缓冲区：readyRead 可能还没来得及处理最后一批到达的字节。
@@ -205,7 +205,7 @@ void AiClient::sendMessage(const AiSettings &settings, const QList<AiChatMessage
         // 缓冲区里躺着的其实是一次性吐回来的完整 JSON。退回旧的非流式解析方式。
         const QJsonDocument document = QJsonDocument::fromJson(m_streamBuffer);
         if (!document.isObject()) {
-            emit replyFailed(tr("网关返回了无法解析的响应"));
+            emit replyFailed(tr("The gateway returned an unparseable response"));
             return;
         }
         const QJsonArray choices = document.object().value(QStringLiteral("choices")).toArray();
@@ -213,7 +213,7 @@ void AiClient::sendMessage(const AiSettings &settings, const QList<AiChatMessage
             const QString apiError =
                 document.object().value(QStringLiteral("error")).toObject()
                     .value(QStringLiteral("message")).toString();
-            emit replyFailed(apiError.isEmpty() ? tr("网关未返回任何回复") : apiError);
+            emit replyFailed(apiError.isEmpty() ? tr("The gateway returned no response") : apiError);
             return;
         }
         const QString content = choices.first().toObject()

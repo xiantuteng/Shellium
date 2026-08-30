@@ -137,6 +137,8 @@ private:
     QListWidget *m_navigationList = nullptr;
     QStackedWidget *m_pages = nullptr;
 
+    /** @brief 界面语言下拉；currentData 存语言码（"system" 或 QLocale 名称）。 */
+    QComboBox *m_languageSelector = nullptr;
     SegmentedControl *m_themeSelector = nullptr;
     /** @brief 终端配色色板卡，按配色预设 id 索引。 */
     QHash<QString, ThemeSwatchButton *> m_colorSchemeSwatches;

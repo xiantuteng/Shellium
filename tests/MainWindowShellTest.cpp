@@ -1,4 +1,5 @@
 #include "app/MainWindow.h"
+#include "i18n/LocalizationService.h"
 #include "core/ConnectionTarget.h"
 #include "core/HostRecord.h"
 #include "security/Vault.h"
@@ -10,6 +11,8 @@
 #include "ui/HostManagerWidget.h"
 
 #include <QAction>
+#include <QCoreApplication>
+#include <QEvent>
 #include <QLabel>
 #include <QMenu>
 #include <QMenuBar>
@@ -51,6 +54,9 @@ private slots:
 
     /** @brief 终端上报的发行版必须落库并让侧栏立刻换成对应图标，重启后依然保持。 */
     void detectedDistributionIsPersistedAndShownInSidebar();
+
+    /** @brief 切换界面语言后，常驻菜单栏必须就地重译，切回来也要恢复。 */
+    void languageChangeRetranslatesMenuBar();
 
 private:
     ApplicationDatabase *m_database = nullptr;
@@ -352,14 +358,14 @@ void MainWindowShellTest::duplicateMenuItemOpensASecondCopyOfTheTab()
     // 空白处右键只应给出"新建"，不能提供无从下手的"复制标签"。
     std::unique_ptr<QMenu> blankMenu(window.createSessionTabMenu(-1, &window));
     for (const QAction *action : blankMenu->actions()) {
-        QVERIFY2(action->text() != QStringLiteral("复制标签"),
+        QVERIFY2(action->text() != QStringLiteral("Copy tag"),
                  "标题栏空白处的菜单不应包含复制标签");
     }
 
     std::unique_ptr<QMenu> menu(window.createSessionTabMenu(0, &window));
     QAction *duplicateAction = nullptr;
     for (QAction *action : menu->actions()) {
-        if (action->text() == QStringLiteral("复制标签")) {
+        if (action->text() == QStringLiteral("Copy tag")) {
             duplicateAction = action;
         }
     }
@@ -442,6 +448,44 @@ void MainWindowShellTest::detectedDistributionIsPersistedAndShownInSidebar()
     QVERIFY2(afterPixels != beforePixels, "识别结果没有让侧栏图标发生变化");
     QVERIFY2(matches.constFirst()->toolTip(0).contains(QStringLiteral("Ubuntu 24.04")),
              qPrintable(matches.constFirst()->toolTip(0)));
+}
+
+void MainWindowShellTest::languageChangeRetranslatesMenuBar()
+{
+    LocalizationService localization;
+    MainWindow window(m_database, m_vault, &localization);
+
+    QMenuBar *menuBar = window.menuBar();
+    QVERIFY(menuBar != nullptr);
+
+    const auto findMenu = [menuBar](const QStringList &acceptedTitles) -> QMenu * {
+        const QList<QAction *> actions = menuBar->actions();
+        for (QAction *action : actions) {
+            if (action->menu() != nullptr && acceptedTitles.contains(action->menu()->title())) {
+                return action->menu();
+            }
+        }
+        return nullptr;
+    };
+
+    // 源语言是英文；zh_CN 通过 :/i18n/shellium_zh_CN.qm 提供翻译。
+    QMenu *connectionMenu = findMenu({QStringLiteral("Connection"), QString::fromUtf8("连接")});
+    QVERIFY(connectionMenu != nullptr);
+    QCOMPARE(connectionMenu->title(), QStringLiteral("Connection"));
+    QVERIFY(!connectionMenu->actions().isEmpty());
+    QCOMPARE(connectionMenu->actions().constFirst()->text(), QStringLiteral("Connect to Server"));
+
+    QVERIFY(localization.apply(QStringLiteral("zh_CN")));
+    // 安装翻译器后 Qt 会向各顶层控件投递 LanguageChange；测试无事件循环，手动冲刷。
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::LanguageChange);
+
+    QCOMPARE(connectionMenu->title(), QString::fromUtf8("连接"));
+    QCOMPARE(connectionMenu->actions().constFirst()->text(), QString::fromUtf8("连接服务器"));
+
+    QVERIFY(localization.apply(QStringLiteral("en")));
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::LanguageChange);
+    QCOMPARE(connectionMenu->title(), QStringLiteral("Connection"));
+    QCOMPARE(connectionMenu->actions().constFirst()->text(), QStringLiteral("Connect to Server"));
 }
 
 QTEST_MAIN(MainWindowShellTest)
