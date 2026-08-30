@@ -30,6 +30,18 @@ public:
     /** @brief 返回当前标签页是否配置为显示远程文件管理区域。 */
     [[nodiscard]] bool isFileManagerVisible() const;
 
+    /**
+     * @brief 设置当前布局是否允许打开远程文件管理器。
+     * @param allowed true 允许；false 会立即收起文件管理并禁用全部入口。
+     *
+     * 工作空间的水平、垂直和网格模式会同时显示多个终端，文件管理器会破坏单元格尺寸并
+     * 造成目标会话歧义，因此必须禁用；切换模式只显示一个终端，可以恢复该能力。
+     */
+    void setFileManagerAllowed(bool allowed);
+
+    /** @brief 返回远程文件管理当前是否被所属布局允许。 */
+    [[nodiscard]] bool isFileManagerAllowed() const;
+
 signals:
     /** @brief 当前面板的嵌套服务器链变化。 */
     void activeTargetsChanged(TerminalPane *pane);
@@ -82,6 +94,9 @@ private:
     QSplitter *m_pageSplitter = nullptr;
     RemoteFileManagerWidget *m_fileManager = nullptr;
     TerminalPane *m_pane = nullptr;
+
+    /** @brief 所属工作空间布局是否允许文件管理；单独终端标签默认允许。 */
+    bool m_fileManagerAllowed = true;
 
     /** @brief 本标签最近一次终端列数，窗口尚未布局时使用标准 80 列。 */
     int m_terminalColumns = 80;

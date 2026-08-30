@@ -836,6 +836,25 @@ void TerminalPane::setFileManagerVisible(const bool visible)
     updateFileManagerButtonIcon();
 }
 
+void TerminalPane::setFileManagerEnabled(const bool enabled)
+{
+    m_fileManagerButton->setEnabled(enabled);
+    if (!enabled) {
+        m_fileManagerButton->setToolTip(
+            tr("Remote file management is unavailable while multiple terminals are displayed."));
+        m_fileManagerButton->setAccessibleName(
+            tr("Remote file manager unavailable in the current workspace layout"));
+        return;
+    }
+    // 恢复可用时根据真实勾选态重建提示，不能沿用禁用说明，否则切换模式后按钮虽可点击，
+    // 辅助技术和鼠标用户看到的仍是“不可用”。
+    m_fileManagerButton->setToolTip(
+        m_fileManagerButton->isChecked()
+            ? tr("Hide the remote file manager for the current session (Ctrl+Shift+F)")
+            : tr("Show the remote file manager for the current session (Ctrl+Shift+F)"));
+    m_fileManagerButton->setAccessibleName(tr("Remote file manager"));
+}
+
 void TerminalPane::showTransientStatus(const QString &message)
 {
     m_statusMessageIcon->clear();

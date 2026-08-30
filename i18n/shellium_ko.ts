@@ -1215,6 +1215,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">AI 어시스턴트</translation>
     </message>
     <message>
+        <source>Workspaces</source>
+        <translation type="unfinished">작업 공간</translation>
+    </message>
+    <message>
         <source>0 hosts</source>
         <translation type="unfinished">호스트 0개</translation>
     </message>
@@ -1453,6 +1457,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>Close other tabs</source>
         <translation type="unfinished">다른 탭 닫기</translation>
+    </message>
+    <message>
+        <source>Workspace %1</source>
+        <translation type="unfinished">작업 공간 %1</translation>
     </message>
     <message>
         <source>Could not establish the nested connection</source>
@@ -4454,6 +4462,14 @@ Confirm the key has changed and replace the old record in known_hosts?</source>
         <translation type="unfinished">현재 세션의 원격 파일 관리자 숨기기 (Ctrl+Shift+F)</translation>
     </message>
     <message>
+        <source>Remote file management is unavailable while multiple terminals are displayed.</source>
+        <translation type="unfinished">여러 터미널을 표시하는 동안에는 원격 파일 관리를 사용할 수 없습니다.</translation>
+    </message>
+    <message>
+        <source>Remote file manager unavailable in the current workspace layout</source>
+        <translation type="unfinished">현재 작업 공간 레이아웃에서는 원격 파일 관리자를 사용할 수 없습니다</translation>
+    </message>
+    <message>
         <source>Press r to reconnect to %1, press x to close this tab</source>
         <translation type="unfinished">r을 눌러 %1에 재연결, x를 눌러 이 탭 닫기</translation>
     </message>
@@ -4635,6 +4651,13 @@ Reconnecting manually…<byte value="xd"/>
     </message>
 </context>
 <context>
+    <name>TerminalWorkspaceGroup</name>
+    <message>
+        <source>Terminal</source>
+        <translation type="unfinished">터미널</translation>
+    </message>
+</context>
+<context>
     <name>VaultDialog</name>
     <message>
         <source>Enable master password protection</source>
@@ -4779,6 +4802,29 @@ Reconnecting manually…<byte value="xd"/>
     <message>
         <source>Could not unlock the vault: %1</source>
         <translation type="unfinished">보관소 잠금을 해제할 수 없습니다: %1</translation>
+    </message>
+</context>
+<context>
+    <name>WorkspaceSidebarWidget</name>
+    <message>
+        <source>Horizontal</source>
+        <translation type="unfinished">가로</translation>
+    </message>
+    <message>
+        <source>Vertical</source>
+        <translation type="unfinished">세로</translation>
+    </message>
+    <message>
+        <source>Grid</source>
+        <translation type="unfinished">격자</translation>
+    </message>
+    <message>
+        <source>Switch</source>
+        <translation type="unfinished">전환</translation>
+    </message>
+    <message>
+        <source>Drag a terminal tab into the current terminal page or this sidebar to create or extend a workspace.</source>
+        <translation type="unfinished">터미널 탭을 현재 터미널 페이지나 이 사이드바로 끌어 작업 공간을 만들거나 확장하세요.</translation>
     </message>
 </context>
 </TS>

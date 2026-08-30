@@ -45,6 +45,8 @@ enum class Symbol {
     Snippets,
     Forwarding,
     Terminal,
+    /** @brief 四宫格工作空间，用于区分多终端容器与单终端标签。 */
+    Workspace,
     Folder,
     /** @brief 带斜杠的文件夹，表示远程文件管理当前处于隐藏状态。 */
     FolderHidden,
@@ -174,6 +176,18 @@ enum class Symbol {
         painter.drawLine(QPointF(6.5, 9.0), QPointF(9.5, 12.0));
         painter.drawLine(QPointF(9.5, 12.0), QPointF(6.5, 15.0));
         painter.drawLine(QPointF(12.5, 15.0), QPointF(17.0, 15.0));
+        break;
+    case Symbol::Workspace:
+        // 四个等尺寸圆角窗格直接表达“同一界面中的多个终端”，并与单终端的命令提示符
+        // 轮廓形成稳定区分；间距保留到 2px，缩放到导航轨 21px 时仍不会粘连。
+        for (int row = 0; row < 2; ++row) {
+            for (int column = 0; column < 2; ++column) {
+                painter.drawRoundedRect(
+                    QRectF(3.5 + column * 9.5, 3.5 + row * 9.5, 7.5, 7.5),
+                    1.8,
+                    1.8);
+            }
+        }
         break;
     case Symbol::Folder: {
         QPainterPath folder;

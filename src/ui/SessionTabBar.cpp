@@ -12,6 +12,7 @@
 #include <QPainter>
 #include <QPaintEvent>
 #include <QResizeEvent>
+#include <QSignalBlocker>
 #include <QStyle>
 #include <QVariantAnimation>
 #include <QWheelEvent>
@@ -155,6 +156,27 @@ void SessionTabBar::setTabConnectionState(const int index, const ConnectionState
         m_tabConnectionStates.insert(tabId, state);
     }
     update();
+}
+
+void SessionTabBar::setTabKind(const int index, const TabKind kind)
+{
+    const quint64 tabId = tabIdAt(index);
+    if (tabId == 0) {
+        return;
+    }
+    if (kind == TabKind::Terminal) {
+        // 单终端是默认类型，删除显式记录可减少长期打开大量标签时的辅助状态数量。
+        m_tabKinds.remove(tabId);
+    } else {
+        m_tabKinds.insert(tabId, kind);
+    }
+    update(tabRect(index));
+}
+
+SessionTabBar::TabKind SessionTabBar::tabKind(const int index) const
+{
+    const quint64 tabId = tabIdAt(index);
+    return tabId == 0 ? TabKind::Terminal : m_tabKinds.value(tabId, TabKind::Terminal);
 }
 
 bool SessionTabBar::eventFilter(QObject *watched, QEvent *event)
@@ -362,21 +384,55 @@ void SessionTabBar::drawSessionTab(QPainter &painter,
         painter.drawRoundedRect(pillRect, 10.0, 10.0);
     }
 
+    const bool workspaceDropTarget = m_dragActive
+        && m_workspaceDropArmed
+        && tabIdAt(index) == m_workspaceDropTargetTabId;
+    if (workspaceDropTarget) {
+        // 拖入目标使用虚线圆角描边，与工作空间内终端 Hover 的视觉语义一致。即使源标签
+        // 因 QTabBar 排序已经横向越过目标，稳定标识仍能让高亮留在真正的接收标签上。
+        QColor dropColor = m_selectedTextColor;
+        dropColor.setAlpha(225);
+        painter.setPen(QPen(dropColor,
+                            1.7,
+                            Qt::DashLine,
+                            Qt::RoundCap,
+                            Qt::RoundJoin));
+        painter.setBrush(Qt::NoBrush);
+        painter.drawRoundedRect(pillRect.adjusted(1.0, 1.0, -1.0, -1.0), 9.0, 9.0);
+    }
+
     const QColor foreground = selected ? m_selectedTextColor : m_textColor;
     painter.setPen(QPen(foreground, 1.65, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
     painter.setBrush(Qt::NoBrush);
 
-    // 自绘 17 像素终端图标可以与关闭图标保持同一线宽，且不依赖操作系统图标主题。
+    // 自绘 17 像素图标可以与关闭图标保持同一线宽，且不依赖操作系统图标主题。工作空间
+    // 使用四宫格，单终端继续使用命令窗口，使用户只看轮廓也能区分两类标签。
     // 竖直定位走浮点中心，避免 QRect::center() 取整后整组图标一起偏上。
     const qreal rowCenterY = QRectF(rawRect).center().y();
     const QRectF terminalRect(rawRect.left() + 15.0, rowCenterY - 8.0, 17.0, 16.0);
-    painter.drawRoundedRect(terminalRect, 3.0, 3.0);
-    painter.drawLine(QPointF(terminalRect.left() + 4.0, terminalRect.top() + 5.0),
-                     QPointF(terminalRect.left() + 7.0, terminalRect.top() + 8.0));
-    painter.drawLine(QPointF(terminalRect.left() + 7.0, terminalRect.top() + 8.0),
-                     QPointF(terminalRect.left() + 4.0, terminalRect.top() + 11.0));
-    painter.drawLine(QPointF(terminalRect.left() + 9.5, terminalRect.top() + 11.0),
-                     QPointF(terminalRect.left() + 13.0, terminalRect.top() + 11.0));
+    if (tabKind(index) == TabKind::Workspace) {
+        constexpr qreal tileSize = 6.0;
+        constexpr qreal gap = 2.5;
+        for (int row = 0; row < 2; ++row) {
+            for (int column = 0; column < 2; ++column) {
+                painter.drawRoundedRect(
+                    QRectF(terminalRect.left() + column * (tileSize + gap),
+                           terminalRect.top() + row * (tileSize + gap),
+                           tileSize,
+                           tileSize),
+                    1.4,
+                    1.4);
+            }
+        }
+    } else {
+        painter.drawRoundedRect(terminalRect, 3.0, 3.0);
+        painter.drawLine(QPointF(terminalRect.left() + 4.0, terminalRect.top() + 5.0),
+                         QPointF(terminalRect.left() + 7.0, terminalRect.top() + 8.0));
+        painter.drawLine(QPointF(terminalRect.left() + 7.0, terminalRect.top() + 8.0),
+                         QPointF(terminalRect.left() + 4.0, terminalRect.top() + 11.0));
+        painter.drawLine(QPointF(terminalRect.left() + 9.5, terminalRect.top() + 11.0),
+                         QPointF(terminalRect.left() + 13.0, terminalRect.top() + 11.0));
+    }
 
     // 连接状态点保留在图标右下角，并且不分选中/未选中都绘制：它表达的是会话连接结果，
     // 与当前标签选择状态无关。选中态已经由胶囊背景和高对比文字完整表达，不再额外绘制
@@ -450,10 +506,20 @@ void SessionTabBar::mousePressEvent(QMouseEvent *event)
         }
     }
 
+    const int selectedBeforePress = currentIndex();
     if (event->button() == Qt::LeftButton && pressedIndex >= 0) {
         // 记录稳定标识而不是索引：一旦越过相邻标签，QTabBar 会在同一个 mouseMoveEvent 内
         // 改写索引；稳定标识仍能让绘制层找到用户真正抓住的那个标签。
         m_pressedTabId = tabIdAt(pressedIndex);
+        // 基类随后会立即选中源标签，因此必须在调用基类前保存此前选中的目标稳定标识。
+        m_workspaceDropTargetTabId = selectedBeforePress >= 0
+                && selectedBeforePress != pressedIndex
+                && tabKind(pressedIndex) == TabKind::Terminal
+            ? tabIdAt(selectedBeforePress)
+            : 0;
+        m_workspaceDropTargetRect = m_workspaceDropTargetTabId == 0
+            ? QRect{}
+            : tabRect(selectedBeforePress);
         m_dragStartPosition = position;
         m_lastDragPosition = position;
         m_pressedOffsetWithinTab = position.x() - tabRect(pressedIndex).left();
@@ -461,6 +527,20 @@ void SessionTabBar::mousePressEvent(QMouseEvent *event)
     }
 
     // 标签内部必须继续进入基类状态机，否则 QTabBar 无法完成标签选中和拖动排序。
+    const bool deferSourceSelection = event->button() == Qt::LeftButton
+        && pressedIndex >= 0
+        && selectedBeforePress >= 0
+        && selectedBeforePress != pressedIndex;
+    if (deferSourceSelection) {
+        // QTabBar 默认在按下非当前标签的瞬间就切换页面，这会把用户正要拖入的
+        // 接收终端换成源终端。在阻断信号的临界区中仍让基类记录 pressedIndex，随后立即
+        // 恢复原选中项；单击所需的真正切换延迟到 mouseReleaseEvent，因而拖动和单击
+        // 仍能共用 Qt 的命中、排序和平台鼠标抓取逻辑。
+        const QSignalBlocker selectionBlocker(this);
+        QTabBar::mousePressEvent(event);
+        setCurrentIndex(selectedBeforePress);
+        return;
+    }
     QTabBar::mousePressEvent(event);
 }
 
@@ -516,6 +596,19 @@ void SessionTabBar::mouseMoveEvent(QMouseEvent *event)
         m_hoveredIndex = -1;
         m_closeHoveredIndex = -1;
         hideNativeDragPreview(childrenBeforeMove);
+
+        const int targetIndex = indexForTabId(m_workspaceDropTargetTabId);
+        const bool pointerOnTargetTab = targetIndex >= 0
+            && (m_workspaceDropTargetRect.contains(position)
+                || tabRect(targetIndex).contains(position));
+        // 向下离开标签栏代表用户把标签拖进中央终端内容，而不是继续做水平排序。这里只
+        // 设置视觉预备态；MainWindow 会在释放时用中央 QTabWidget 的真实全局矩形做最终校验。
+        const bool pointerBelowTabBar = position.y() >= height();
+        const bool dropArmed = m_workspaceDropTargetTabId != 0
+            && (pointerOnTargetTab || pointerBelowTabBar);
+        if (m_workspaceDropArmed != dropArmed) {
+            m_workspaceDropArmed = dropArmed;
+        }
 
         const int duration = tabMoveAnimationDuration(this);
         for (int index = 0; index < count(); ++index) {
@@ -586,6 +679,11 @@ void SessionTabBar::mouseReleaseEvent(QMouseEvent *event)
         && m_dragActive
         && m_pressedTabId != 0;
     const quint64 draggedTabId = m_pressedTabId;
+    const bool shouldActivateClickedTab = event->button() == Qt::LeftButton
+        && !m_dragActive
+        && draggedTabId != 0;
+    const quint64 workspaceDropTargetTabId = m_workspaceDropTargetTabId;
+    const QRect workspaceDropTargetRect = m_workspaceDropTargetRect;
     const int floatingLeft = position.x() - m_pressedOffsetWithinTab;
 
     QTabBar::mouseReleaseEvent(event);
@@ -594,6 +692,15 @@ void SessionTabBar::mouseReleaseEvent(QMouseEvent *event)
         // 非左键释放由基类按默认语义处理，不得清空仍在进行的左键拖拽；例如用户按住左键
         // 时误触辅助鼠标键，标签仍应继续跟随最初的抓取手势。
         return;
+    }
+
+    if (shouldActivateClickedTab) {
+        // 按下阶段为了区分“点击切换”和“拖入当前终端”而保留了原页面；只有确认
+        // 鼠标从未越过拖拽阈值后才在松手时切换，普通标签单击的最终语义不变。
+        const int clickedIndex = indexForTabId(draggedTabId);
+        if (clickedIndex >= 0) {
+            setCurrentIndex(clickedIndex);
+        }
     }
 
     if (shouldSettleDraggedTab) {
@@ -616,6 +723,22 @@ void SessionTabBar::mouseReleaseEvent(QMouseEvent *event)
         }
     }
 
+    // 索引必须在 QTabBar 完成重排后由稳定标识反查。释放点仍命中此前选中的目标胶囊时
+    // 才解释为“拖入工作空间”；放在相邻位置或空白处仍只是普通标签排序。
+    const int sourceIndex = indexForTabId(draggedTabId);
+    const int targetIndex = indexForTabId(workspaceDropTargetTabId);
+    const bool droppedOnTarget = shouldSettleDraggedTab
+        && targetIndex >= 0
+        && (workspaceDropTargetRect.contains(position)
+            || tabRect(targetIndex).contains(position));
+    const bool droppedBelowTabBar = shouldSettleDraggedTab
+        && position.y() >= height();
+    const bool validKinds = sourceIndex >= 0
+        && targetIndex >= 0
+        && tabKind(sourceIndex) == TabKind::Terminal
+        && (tabKind(targetIndex) == TabKind::Terminal
+            || tabKind(targetIndex) == TabKind::Workspace);
+
     resetPointerDragState();
     // 松手后恢复正常悬停反馈；若标签仍在落位，paintEvent 会暂时抑制叉号，直到几何稳定。
     m_hoveredIndex = tabAt(position);
@@ -624,6 +747,14 @@ void SessionTabBar::mouseReleaseEvent(QMouseEvent *event)
         ? m_hoveredIndex
         : -1;
     update();
+    if ((droppedOnTarget || droppedBelowTabBar)
+        && validKinds
+        && sourceIndex != targetIndex) {
+        emit workspaceMergeRequested(sourceIndex,
+                                     targetIndex,
+                                     event->globalPosition().toPoint(),
+                                     droppedOnTarget);
+    }
 }
 
 void SessionTabBar::tabInserted(const int index)
@@ -643,6 +774,7 @@ void SessionTabBar::tabRemoved(const int index)
         stopTabMoveAnimation(removedTabId);
         m_tabIds.removeAt(index);
         m_tabConnectionStates.remove(removedTabId);
+        m_tabKinds.remove(removedTabId);
         if (removedTabId == m_pressedTabId) {
             // 业务层可能在拖拽过程中关闭当前会话；立即终止本地手势可防止 paintEvent 继续
             // 查找一个已不存在的稳定标识，同时基类仍会按自身规则清理 pressedIndex。
@@ -784,6 +916,9 @@ void SessionTabBar::resetPointerDragState()
 {
     m_dragActive = false;
     m_pressedTabId = 0;
+    m_workspaceDropTargetTabId = 0;
+    m_workspaceDropTargetRect = {};
+    m_workspaceDropArmed = false;
     m_dragStartPosition = {};
     m_pressedOffsetWithinTab = 0;
     m_lastDragPosition = {};

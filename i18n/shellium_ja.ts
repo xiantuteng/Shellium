@@ -1215,6 +1215,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">AI アシスタント</translation>
     </message>
     <message>
+        <source>Workspaces</source>
+        <translation type="unfinished">ワークスペース</translation>
+    </message>
+    <message>
         <source>0 hosts</source>
         <translation type="unfinished">ホスト 0 台</translation>
     </message>
@@ -1453,6 +1457,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>Close other tabs</source>
         <translation type="unfinished">他のタブを閉じる</translation>
+    </message>
+    <message>
+        <source>Workspace %1</source>
+        <translation type="unfinished">ワークスペース %1</translation>
     </message>
     <message>
         <source>Could not establish the nested connection</source>
@@ -4454,6 +4462,14 @@ Confirm the key has changed and replace the old record in known_hosts?</source>
         <translation type="unfinished">現在のセッションのリモートファイルマネージャーを非表示 (Ctrl+Shift+F)</translation>
     </message>
     <message>
+        <source>Remote file management is unavailable while multiple terminals are displayed.</source>
+        <translation type="unfinished">複数のターミナルを表示している間は、リモートファイル管理を使用できません。</translation>
+    </message>
+    <message>
+        <source>Remote file manager unavailable in the current workspace layout</source>
+        <translation type="unfinished">現在のワークスペースレイアウトではリモートファイルマネージャーを使用できません</translation>
+    </message>
+    <message>
         <source>Press r to reconnect to %1, press x to close this tab</source>
         <translation type="unfinished">r を押して %1 に再接続、x を押してこのタブを閉じる</translation>
     </message>
@@ -4635,6 +4651,13 @@ Reconnecting manually…<byte value="xd"/>
     </message>
 </context>
 <context>
+    <name>TerminalWorkspaceGroup</name>
+    <message>
+        <source>Terminal</source>
+        <translation type="unfinished">ターミナル</translation>
+    </message>
+</context>
+<context>
     <name>VaultDialog</name>
     <message>
         <source>Enable master password protection</source>
@@ -4779,6 +4802,29 @@ Reconnecting manually…<byte value="xd"/>
     <message>
         <source>Could not unlock the vault: %1</source>
         <translation type="unfinished">保管庫のロックを解除できませんでした: %1</translation>
+    </message>
+</context>
+<context>
+    <name>WorkspaceSidebarWidget</name>
+    <message>
+        <source>Horizontal</source>
+        <translation type="unfinished">横並び</translation>
+    </message>
+    <message>
+        <source>Vertical</source>
+        <translation type="unfinished">縦並び</translation>
+    </message>
+    <message>
+        <source>Grid</source>
+        <translation type="unfinished">グリッド</translation>
+    </message>
+    <message>
+        <source>Switch</source>
+        <translation type="unfinished">切り替え</translation>
+    </message>
+    <message>
+        <source>Drag a terminal tab into the current terminal page or this sidebar to create or extend a workspace.</source>
+        <translation type="unfinished">ターミナルタブを現在のターミナルページまたはこのサイドバーにドラッグすると、ワークスペースを作成または拡張できます。</translation>
     </message>
 </context>
 </TS>

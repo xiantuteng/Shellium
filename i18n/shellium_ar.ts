@@ -1215,6 +1215,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">مساعد الذكاء الاصطناعي</translation>
     </message>
     <message>
+        <source>Workspaces</source>
+        <translation type="unfinished">مساحات العمل</translation>
+    </message>
+    <message>
         <source>0 hosts</source>
         <translation type="unfinished">0 مضيف</translation>
     </message>
@@ -1453,6 +1457,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>Close other tabs</source>
         <translation type="unfinished">إغلاق علامات التبويب الأخرى</translation>
+    </message>
+    <message>
+        <source>Workspace %1</source>
+        <translation type="unfinished">مساحة العمل %1</translation>
     </message>
     <message>
         <source>Could not establish the nested connection</source>
@@ -4454,6 +4462,14 @@ Confirm the key has changed and replace the old record in known_hosts?</source>
         <translation type="unfinished">إخفاء مدير الملفات البعيد للجلسة الحالية (Ctrl+Shift+F)</translation>
     </message>
     <message>
+        <source>Remote file management is unavailable while multiple terminals are displayed.</source>
+        <translation type="unfinished">لا تتوفر إدارة الملفات البعيدة عند عرض عدة أطرافية.</translation>
+    </message>
+    <message>
+        <source>Remote file manager unavailable in the current workspace layout</source>
+        <translation type="unfinished">مدير الملفات البعيدة غير متاح في تخطيط مساحة العمل الحالي</translation>
+    </message>
+    <message>
         <source>Press r to reconnect to %1, press x to close this tab</source>
         <translation type="unfinished">اضغط r لإعادة الاتصال بـ %1، وx لإغلاق علامة التبويب هذه</translation>
     </message>
@@ -4635,6 +4651,13 @@ Reconnecting manually…<byte value="xd"/>
     </message>
 </context>
 <context>
+    <name>TerminalWorkspaceGroup</name>
+    <message>
+        <source>Terminal</source>
+        <translation type="unfinished">الطرفية</translation>
+    </message>
+</context>
+<context>
     <name>VaultDialog</name>
     <message>
         <source>Enable master password protection</source>
@@ -4779,6 +4802,29 @@ Reconnecting manually…<byte value="xd"/>
     <message>
         <source>Could not unlock the vault: %1</source>
         <translation type="unfinished">تعذّر إلغاء قفل الخزنة: %1</translation>
+    </message>
+</context>
+<context>
+    <name>WorkspaceSidebarWidget</name>
+    <message>
+        <source>Horizontal</source>
+        <translation type="unfinished">أفقي</translation>
+    </message>
+    <message>
+        <source>Vertical</source>
+        <translation type="unfinished">عمودي</translation>
+    </message>
+    <message>
+        <source>Grid</source>
+        <translation type="unfinished">شبكة</translation>
+    </message>
+    <message>
+        <source>Switch</source>
+        <translation type="unfinished">تبديل</translation>
+    </message>
+    <message>
+        <source>Drag a terminal tab into the current terminal page or this sidebar to create or extend a workspace.</source>
+        <translation type="unfinished">اسحب علامة تبويب طرفية إلى صفحة الطرفية الحالية أو إلى هذا الشريط الجانبي لإنشاء مساحة عمل أو توسيعها.</translation>
     </message>
 </context>
 </TS>

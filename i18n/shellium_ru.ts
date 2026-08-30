@@ -1215,6 +1215,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">Ассистент ИИ</translation>
     </message>
     <message>
+        <source>Workspaces</source>
+        <translation type="unfinished">Рабочие пространства</translation>
+    </message>
+    <message>
         <source>0 hosts</source>
         <translation type="unfinished">0 хостов</translation>
     </message>
@@ -1453,6 +1457,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>Close other tabs</source>
         <translation type="unfinished">Закрыть другие вкладки</translation>
+    </message>
+    <message>
+        <source>Workspace %1</source>
+        <translation type="unfinished">Рабочее пространство %1</translation>
     </message>
     <message>
         <source>Could not establish the nested connection</source>
@@ -4454,6 +4462,14 @@ Confirm the key has changed and replace the old record in known_hosts?</source>
         <translation type="unfinished">Скрыть удалённый файловый менеджер для текущего сеанса (Ctrl+Shift+F)</translation>
     </message>
     <message>
+        <source>Remote file management is unavailable while multiple terminals are displayed.</source>
+        <translation type="unfinished">Управление удалёнными файлами недоступно, когда отображается несколько терминалов.</translation>
+    </message>
+    <message>
+        <source>Remote file manager unavailable in the current workspace layout</source>
+        <translation type="unfinished">Удалённый файловый менеджер недоступен в текущей раскладке рабочего пространства</translation>
+    </message>
+    <message>
         <source>Press r to reconnect to %1, press x to close this tab</source>
         <translation type="unfinished">Нажмите r, чтобы переподключиться к %1, x, чтобы закрыть эту вкладку</translation>
     </message>
@@ -4635,6 +4651,13 @@ Reconnecting manually…<byte value="xd"/>
     </message>
 </context>
 <context>
+    <name>TerminalWorkspaceGroup</name>
+    <message>
+        <source>Terminal</source>
+        <translation type="unfinished">Терминал</translation>
+    </message>
+</context>
+<context>
     <name>VaultDialog</name>
     <message>
         <source>Enable master password protection</source>
@@ -4779,6 +4802,29 @@ Reconnecting manually…<byte value="xd"/>
     <message>
         <source>Could not unlock the vault: %1</source>
         <translation type="unfinished">Не удалось разблокировать хранилище: %1</translation>
+    </message>
+</context>
+<context>
+    <name>WorkspaceSidebarWidget</name>
+    <message>
+        <source>Horizontal</source>
+        <translation type="unfinished">Горизонтально</translation>
+    </message>
+    <message>
+        <source>Vertical</source>
+        <translation type="unfinished">Вертикально</translation>
+    </message>
+    <message>
+        <source>Grid</source>
+        <translation type="unfinished">Сетка</translation>
+    </message>
+    <message>
+        <source>Switch</source>
+        <translation type="unfinished">Переключение</translation>
+    </message>
+    <message>
+        <source>Drag a terminal tab into the current terminal page or this sidebar to create or extend a workspace.</source>
+        <translation type="unfinished">Перетащите вкладку терминала на текущую страницу терминала или на эту боковую панель, чтобы создать или расширить рабочее пространство.</translation>
     </message>
 </context>
 </TS>

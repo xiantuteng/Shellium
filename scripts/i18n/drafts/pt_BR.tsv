@@ -1047,3 +1047,12 @@
 1046	Não foi possível desativar a proteção por senha mestra: %1
 1047	Não foi possível criar o cofre: %1
 1048	Não foi possível desbloquear o cofre: %1
+1049	Espaços de trabalho
+1050	Espaço de trabalho %1
+1051	O gerenciamento de arquivos remotos não está disponível enquanto vários terminais são exibidos.
+1052	O gerenciador de arquivos remotos não está disponível no layout atual do espaço de trabalho
+1053	Horizontal
+1054	Vertical
+1055	Grade
+1056	Alternância
+1057	Arraste uma aba de terminal para a página de terminal atual ou para esta barra lateral para criar ou ampliar um espaço de trabalho.

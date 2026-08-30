@@ -156,6 +156,15 @@ public:
     void setFileManagerVisible(bool visible);
 
     /**
+     * @brief 设置当前会话是否允许打开远程文件管理器。
+     * @param enabled true 允许使用；false 禁用顶部按钮并展示工作空间布局限制说明。
+     *
+     * 该方法只管理入口可用性，不自行隐藏文件区；所属 TerminalWorkspace 会先收起文件区，
+     * 再调用本方法，确保按钮状态、分隔器状态和快捷键行为保持一致。
+     */
+    void setFileManagerEnabled(bool enabled);
+
+    /**
      * @brief 在会话状态栏、紧邻服务器名之后，短暂展示一条状态文字。
      * @param message 待展示的文字；空字符串立即清空当前显示。
      *

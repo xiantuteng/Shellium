@@ -1215,6 +1215,10 @@ Bestätigen Sie, dass sich der Schlüssel geändert hat, ersetzen Sie den alten 
         <translation type="unfinished">KI-Assistent</translation>
     </message>
     <message>
+        <source>Workspaces</source>
+        <translation type="unfinished">Arbeitsbereiche</translation>
+    </message>
+    <message>
         <source>0 hosts</source>
         <translation type="unfinished">0 Hosts</translation>
     </message>
@@ -1453,6 +1457,10 @@ Bestätigen Sie, dass sich der Schlüssel geändert hat, ersetzen Sie den alten 
     <message>
         <source>Close other tabs</source>
         <translation type="unfinished">Andere Tabs schließen</translation>
+    </message>
+    <message>
+        <source>Workspace %1</source>
+        <translation type="unfinished">Arbeitsbereich %1</translation>
     </message>
     <message>
         <source>Could not establish the nested connection</source>
@@ -4454,6 +4462,14 @@ Bestätigen Sie, dass sich der Schlüssel geändert hat, und ersetzen Sie den al
         <translation type="unfinished">Den Remote-Dateimanager für die aktuelle Sitzung verbergen (Strg+Umschalt+F)</translation>
     </message>
     <message>
+        <source>Remote file management is unavailable while multiple terminals are displayed.</source>
+        <translation type="unfinished">Die Remote-Dateiverwaltung ist nicht verfügbar, während mehrere Terminals angezeigt werden.</translation>
+    </message>
+    <message>
+        <source>Remote file manager unavailable in the current workspace layout</source>
+        <translation type="unfinished">Der Remote-Dateimanager ist im aktuellen Arbeitsbereichslayout nicht verfügbar</translation>
+    </message>
+    <message>
         <source>Press r to reconnect to %1, press x to close this tab</source>
         <translation type="unfinished">Drücken Sie r, um sich erneut mit %1 zu verbinden, x, um diesen Tab zu schließen</translation>
     </message>
@@ -4635,6 +4651,13 @@ Reconnecting manually…<byte value="xd"/>
     </message>
 </context>
 <context>
+    <name>TerminalWorkspaceGroup</name>
+    <message>
+        <source>Terminal</source>
+        <translation type="unfinished">Terminal</translation>
+    </message>
+</context>
+<context>
     <name>VaultDialog</name>
     <message>
         <source>Enable master password protection</source>
@@ -4779,6 +4802,29 @@ Reconnecting manually…<byte value="xd"/>
     <message>
         <source>Could not unlock the vault: %1</source>
         <translation type="unfinished">Der Tresor konnte nicht entsperrt werden: %1</translation>
+    </message>
+</context>
+<context>
+    <name>WorkspaceSidebarWidget</name>
+    <message>
+        <source>Horizontal</source>
+        <translation type="unfinished">Horizontal</translation>
+    </message>
+    <message>
+        <source>Vertical</source>
+        <translation type="unfinished">Vertikal</translation>
+    </message>
+    <message>
+        <source>Grid</source>
+        <translation type="unfinished">Raster</translation>
+    </message>
+    <message>
+        <source>Switch</source>
+        <translation type="unfinished">Umschalten</translation>
+    </message>
+    <message>
+        <source>Drag a terminal tab into the current terminal page or this sidebar to create or extend a workspace.</source>
+        <translation type="unfinished">Ziehen Sie einen Terminal-Tab auf die aktuelle Terminal-Seite oder in diese Seitenleiste, um einen Arbeitsbereich zu erstellen oder zu erweitern.</translation>
     </message>
 </context>
 </TS>

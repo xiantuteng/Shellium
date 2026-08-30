@@ -7,16 +7,20 @@
 #include "terminal/TerminalPane.h"
 #include "terminal/TerminalView.h"
 #include "terminal/TerminalWorkspace.h"
+#include "terminal/TerminalWorkspaceGroup.h"
 #include "ui/HostDistributionIcon.h"
 #include "ui/HostManagerWidget.h"
+#include "ui/SessionTabBar.h"
 
 #include <QAbstractButton>
 #include <QAction>
+#include <QComboBox>
 #include <QCoreApplication>
 #include <QEvent>
 #include <QLabel>
 #include <QMenu>
 #include <QMenuBar>
+#include <QSignalSpy>
 #include <QStackedWidget>
 #include <QSplitter>
 #include <QSplitterHandle>
@@ -28,6 +32,7 @@
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
 
+#include <algorithm>
 #include <memory>
 #include <optional>
 
@@ -52,6 +57,12 @@ private slots:
     void desktopPlatformsUseProductTitleAndCustomWindowControls();
     void sidebarWidthIsRestoredOnNextLaunch();
     void duplicateMenuItemOpensASecondCopyOfTheTab();
+
+    /** @brief 把终端拖入此前选中的标签后必须原位合并为可重命名的工作空间标签。 */
+    void draggingTerminalIntoSelectedTabCreatesWorkspace();
+
+    /** @brief 铺开布局必须禁用远程文件管理，切换布局则恢复单终端完整能力。 */
+    void workspaceLayoutControlsRemoteFileAvailability();
 
     /** @brief 终端上报的发行版必须落库并让侧栏立刻换成对应图标，重启后依然保持。 */
     void detectedDistributionIsPersistedAndShownInSidebar();
@@ -165,6 +176,164 @@ void MainWindowShellTest::newTabButtonFollowsTheLastTab()
     QVERIFY2(controlsLeft - buttonRight < 80,
              "Windows/Linux 标签溢出时新建按钮必须紧靠右侧窗口按钮");
 #endif
+}
+
+void MainWindowShellTest::draggingTerminalIntoSelectedTabCreatesWorkspace()
+{
+    MainWindow window(m_database, m_vault);
+    window.resize(1200, 800);
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+    auto *tabs = window.findChild<QTabWidget *>(QStringLiteral("TerminalPages"));
+    auto *tabBar = window.findChild<SessionTabBar *>(QStringLiteral("SessionTitleTabs"));
+    auto *newTabButton = window.findChild<QToolButton *>(QStringLiteral("TitleNewTabButton"));
+    QVERIFY(tabs != nullptr && tabBar != nullptr && newTabButton != nullptr);
+    QTest::mouseClick(newTabButton, Qt::LeftButton);
+    QTest::mouseClick(newTabButton, Qt::LeftButton);
+    QCOMPARE(tabs->count(), 2);
+
+    // 先选第一个标签作为接收目标，再把第二个标签拖入该页面内真正的 TerminalPane。
+    // 测试故意不使用 QTabWidget 的泛化中心点，防止文件管理器、分隔条或其他中央空白
+    // 被误判为终端会话落点；同时覆盖 QTabBar 的鼠标抓取与稳定标识反查。
+    QTest::mouseClick(tabBar, Qt::LeftButton, Qt::NoModifier, tabBar->tabRect(0).center());
+    QCOMPARE(tabs->currentIndex(), 0);
+    auto *targetWorkspace = qobject_cast<TerminalWorkspace *>(tabs->widget(0));
+    QVERIFY(targetWorkspace != nullptr && targetWorkspace->activePane() != nullptr);
+    const QPoint sourceCenter = tabBar->tabRect(1).center();
+    const QPoint terminalDropPoint = tabBar->mapFromGlobal(
+        targetWorkspace->activePane()->mapToGlobal(targetWorkspace->activePane()->rect().center()));
+    QTest::mousePress(tabBar, Qt::LeftButton, Qt::NoModifier, sourceCenter);
+    // 按下非当前标签不得立即换页；否则接收终端会从眼前消失，用户只能看到源终端。
+    QCOMPARE(tabs->currentIndex(), 0);
+    // 先稍微向下移动以跨过系统拖拽阈值，再进入终端面板中心，近似真实连续手势。
+    QTest::mouseMove(tabBar, QPoint(sourceCenter.x(), tabBar->height() + 12), 40);
+    QCOMPARE(tabs->currentIndex(), 0);
+    QTest::mouseMove(tabBar, terminalDropPoint, 80);
+    QTest::mouseRelease(tabBar, Qt::LeftButton, Qt::NoModifier, terminalDropPoint);
+
+    QTRY_COMPARE(tabs->count(), 1);
+    auto *group = qobject_cast<TerminalWorkspaceGroup *>(tabs->widget(0));
+    QVERIFY2(group != nullptr, "合并后的顶层页面必须是多终端工作空间，而不是普通终端标签");
+    QCOMPARE(group->terminals().size(), 2);
+    QCOMPARE(tabBar->tabKind(0), SessionTabBar::TabKind::Workspace);
+    QVERIFY(window.findChild<WorkspaceSidebarWidget *>(QStringLiteral("WorkspaceSidebar")) != nullptr);
+
+    // 同一拖放语义也必须能通过“工作空间”侧栏向既有组追加终端，不能每两个
+    // 终端又创建一个新组。先打开该侧栏，后续落点使用侧栏自身的真实全局几何。
+    auto *navigationRail = window.findChild<QWidget *>(QStringLiteral("NavigationRail"));
+    QVERIFY(navigationRail != nullptr);
+    QToolButton *workspacesNavigationButton = nullptr;
+    const QList<QToolButton *> navigationButtons =
+        navigationRail->findChildren<QToolButton *>(QString(), Qt::FindDirectChildrenOnly);
+    for (QToolButton *button : navigationButtons) {
+        if (button->property("navButton").toBool()
+            && button->accessibleName() == QStringLiteral("Workspaces")) {
+            workspacesNavigationButton = button;
+            break;
+        }
+    }
+    QVERIFY(workspacesNavigationButton != nullptr);
+    QTest::mouseClick(workspacesNavigationButton, Qt::LeftButton);
+    auto *workspaceSidebar = window.findChild<WorkspaceSidebarWidget *>(
+        QStringLiteral("WorkspaceSidebar"));
+    QVERIFY(workspaceSidebar != nullptr && workspaceSidebar->isVisible());
+
+    QTest::mouseClick(newTabButton, Qt::LeftButton);
+    QCOMPARE(tabs->count(), 2);
+    QTest::mouseClick(tabBar, Qt::LeftButton, Qt::NoModifier, tabBar->tabRect(0).center());
+    QCOMPARE(tabs->currentWidget(), static_cast<QWidget *>(group));
+    const QPoint appendedSourceCenter = tabBar->tabRect(1).center();
+    const QPoint workspaceSidebarDropPoint = tabBar->mapFromGlobal(
+        workspaceSidebar->mapToGlobal(workspaceSidebar->rect().center()));
+    QTest::mousePress(tabBar, Qt::LeftButton, Qt::NoModifier, appendedSourceCenter);
+    QCOMPARE(tabs->currentWidget(), static_cast<QWidget *>(group));
+    QTest::mouseMove(tabBar,
+                     QPoint(appendedSourceCenter.x(), tabBar->height() + 12),
+                     40);
+    QTest::mouseMove(tabBar, workspaceSidebarDropPoint, 80);
+    QTest::mouseRelease(tabBar, Qt::LeftButton, Qt::NoModifier, workspaceSidebarDropPoint);
+    QTRY_COMPARE(tabs->count(), 1);
+    QCOMPARE(group->terminals().size(), 3);
+
+    // 除了侧栏，既有工作空间中任一当前可见的终端页面也是合法接收区。再追加
+    // 一个单终端并拖入活动成员的 TerminalPane，可防止未来只保留侧栏路径却破坏页面路径。
+    QTest::mouseClick(newTabButton, Qt::LeftButton);
+    QCOMPARE(tabs->count(), 2);
+    QTest::mouseClick(tabBar, Qt::LeftButton, Qt::NoModifier, tabBar->tabRect(0).center());
+    TerminalWorkspace *activeGroupMember = group->activeTerminal();
+    QVERIFY(activeGroupMember != nullptr && activeGroupMember->activePane() != nullptr);
+    const QPoint fourthSourceCenter = tabBar->tabRect(1).center();
+    const QPoint groupTerminalDropPoint = tabBar->mapFromGlobal(
+        activeGroupMember->activePane()->mapToGlobal(
+            activeGroupMember->activePane()->rect().center()));
+    QVERIFY2(activeGroupMember->activePane()->isVisible(),
+             "作为接收目标的工作空间终端必须当前可见");
+    const QPoint reconstructedPanePoint = activeGroupMember->activePane()->mapFromGlobal(
+        tabBar->mapToGlobal(groupTerminalDropPoint));
+    QVERIFY2(activeGroupMember->activePane()->rect().contains(reconstructedPanePoint),
+             "用标签栏局部坐标重建全局落点后必须仍命中目标 TerminalPane");
+    QSignalSpy workspaceMergeSpy(tabBar, &SessionTabBar::workspaceMergeRequested);
+    QTest::mousePress(tabBar, Qt::LeftButton, Qt::NoModifier, fourthSourceCenter);
+    QCOMPARE(tabs->currentWidget(), static_cast<QWidget *>(group));
+    QTest::mouseMove(tabBar,
+                     QPoint(fourthSourceCenter.x(), tabBar->height() + 12),
+                     40);
+    QTest::mouseMove(tabBar, groupTerminalDropPoint, 80);
+    QTest::mouseRelease(tabBar, Qt::LeftButton, Qt::NoModifier, groupTerminalDropPoint);
+    QCOMPARE(workspaceMergeSpy.count(), 1);
+    QTRY_COMPARE(tabs->count(), 1);
+    QCOMPARE(group->terminals().size(), 4);
+}
+
+void MainWindowShellTest::workspaceLayoutControlsRemoteFileAvailability()
+{
+    TerminalWorkspaceGroup group;
+    auto *first = new TerminalWorkspace;
+    auto *second = new TerminalWorkspace;
+    group.addTerminal(first, QStringLiteral("one"));
+    group.addTerminal(second, QStringLiteral("two"));
+
+    // 默认网格与另外两种铺开布局共享限制：所有文件管理器必须先收起并禁用入口。
+    QCOMPARE(group.layoutMode(), TerminalWorkspaceGroup::LayoutMode::Grid);
+    QVERIFY(!first->isFileManagerAllowed());
+    QVERIFY(!second->isFileManagerAllowed());
+    first->setFileManagerVisible(true);
+    QVERIFY(!first->isFileManagerVisible());
+
+    group.setLayoutMode(TerminalWorkspaceGroup::LayoutMode::Switch);
+    QVERIFY(first->isFileManagerAllowed());
+    QVERIFY(second->isFileManagerAllowed());
+    first->setFileManagerVisible(true);
+    QVERIFY(first->isFileManagerVisible());
+
+    group.setLayoutMode(TerminalWorkspaceGroup::LayoutMode::Horizontal);
+    QVERIFY(!first->isFileManagerAllowed());
+    QVERIFY(!first->isFileManagerVisible());
+
+    const QList<QWidget *> frames = group.findChildren<QWidget *>(
+        QStringLiteral("WorkspaceTerminalFrame"));
+    QCOMPARE(frames.size(), 2);
+    QCOMPARE(std::count_if(frames.cbegin(), frames.cend(), [](QWidget *frame) {
+        return frame->property("workspaceSelected").toBool();
+    }), 1);
+    group.setActiveTerminal(second);
+    QCOMPARE(std::count_if(frames.cbegin(), frames.cend(), [](QWidget *frame) {
+        return frame->property("workspaceSelected").toBool();
+    }), 1);
+    QVERIFY(std::any_of(frames.cbegin(), frames.cend(), [second](QWidget *frame) {
+        return frame->property("workspaceSelected").toBool()
+            && frame->isAncestorOf(second);
+    }));
+
+    const auto firstFrameIterator = std::find_if(
+        frames.cbegin(), frames.cend(), [first](QWidget *frame) { return frame->isAncestorOf(first); });
+    QVERIFY(firstFrameIterator != frames.cend());
+    QWidget *firstFrame = *firstFrameIterator;
+    QEvent enterEvent(QEvent::Enter);
+    QCoreApplication::sendEvent(first, &enterEvent);
+    QVERIFY2(firstFrame->property("workspaceHovered").toBool(),
+             "鼠标进入未选中终端后必须进入虚线 Hover 状态");
 }
 
 void MainWindowShellTest::desktopPlatformsUseProductTitleAndCustomWindowControls()

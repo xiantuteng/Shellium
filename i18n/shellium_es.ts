@@ -1215,6 +1215,10 @@ Puede ser una reinstalación del servidor o una rotación de clave, o un ataque 
         <translation type="unfinished">Asistente de IA</translation>
     </message>
     <message>
+        <source>Workspaces</source>
+        <translation type="unfinished">Espacios de trabajo</translation>
+    </message>
+    <message>
         <source>0 hosts</source>
         <translation type="unfinished">0 hosts</translation>
     </message>
@@ -1453,6 +1457,10 @@ Puede ser una reinstalación del servidor o una rotación de clave, o un ataque 
     <message>
         <source>Close other tabs</source>
         <translation type="unfinished">Cerrar las demás pestañas</translation>
+    </message>
+    <message>
+        <source>Workspace %1</source>
+        <translation type="unfinished">Espacio de trabajo %1</translation>
     </message>
     <message>
         <source>Could not establish the nested connection</source>
@@ -4454,6 +4462,14 @@ Puede ser una reinstalación del servidor o una rotación de clave, o un ataque 
         <translation type="unfinished">Ocultar el gestor de archivos remoto de la sesión actual (Ctrl+Mayús+F)</translation>
     </message>
     <message>
+        <source>Remote file management is unavailable while multiple terminals are displayed.</source>
+        <translation type="unfinished">La gestión de archivos remotos no está disponible mientras se muestran varios terminales.</translation>
+    </message>
+    <message>
+        <source>Remote file manager unavailable in the current workspace layout</source>
+        <translation type="unfinished">El administrador de archivos remotos no está disponible en la disposición actual del espacio de trabajo</translation>
+    </message>
+    <message>
         <source>Press r to reconnect to %1, press x to close this tab</source>
         <translation type="unfinished">Pulsa r para reconectar a %1, x para cerrar esta pestaña</translation>
     </message>
@@ -4635,6 +4651,13 @@ Reconnecting manually…<byte value="xd"/>
     </message>
 </context>
 <context>
+    <name>TerminalWorkspaceGroup</name>
+    <message>
+        <source>Terminal</source>
+        <translation type="unfinished">Terminal</translation>
+    </message>
+</context>
+<context>
     <name>VaultDialog</name>
     <message>
         <source>Enable master password protection</source>
@@ -4779,6 +4802,29 @@ Reconnecting manually…<byte value="xd"/>
     <message>
         <source>Could not unlock the vault: %1</source>
         <translation type="unfinished">No se pudo desbloquear la bóveda: %1</translation>
+    </message>
+</context>
+<context>
+    <name>WorkspaceSidebarWidget</name>
+    <message>
+        <source>Horizontal</source>
+        <translation type="unfinished">Horizontal</translation>
+    </message>
+    <message>
+        <source>Vertical</source>
+        <translation type="unfinished">Vertical</translation>
+    </message>
+    <message>
+        <source>Grid</source>
+        <translation type="unfinished">Cuadrícula</translation>
+    </message>
+    <message>
+        <source>Switch</source>
+        <translation type="unfinished">Cambio</translation>
+    </message>
+    <message>
+        <source>Drag a terminal tab into the current terminal page or this sidebar to create or extend a workspace.</source>
+        <translation type="unfinished">Arrastra una pestaña de terminal a la página de terminal actual o a esta barra lateral para crear o ampliar un espacio de trabajo.</translation>
     </message>
 </context>
 </TS>

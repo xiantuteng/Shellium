@@ -1215,6 +1215,10 @@ Confirmi că cheia s-a schimbat, înlocuiești vechea înregistrare din known_ho
         <translation type="unfinished">Asistent IA</translation>
     </message>
     <message>
+        <source>Workspaces</source>
+        <translation type="unfinished">Spații de lucru</translation>
+    </message>
+    <message>
         <source>0 hosts</source>
         <translation type="unfinished">0 gazde</translation>
     </message>
@@ -1453,6 +1457,10 @@ Confirmi că cheia s-a schimbat, înlocuiești vechea înregistrare din known_ho
     <message>
         <source>Close other tabs</source>
         <translation type="unfinished">Închide celelalte file</translation>
+    </message>
+    <message>
+        <source>Workspace %1</source>
+        <translation type="unfinished">Spațiu de lucru %1</translation>
     </message>
     <message>
         <source>Could not establish the nested connection</source>
@@ -4454,6 +4462,14 @@ Confirmi că cheia s-a schimbat și înlocuiești vechea înregistrare din known
         <translation type="unfinished">Ascunde managerul de fișiere la distanță pentru sesiunea curentă (Ctrl+Shift+F)</translation>
     </message>
     <message>
+        <source>Remote file management is unavailable while multiple terminals are displayed.</source>
+        <translation type="unfinished">Gestionarea fișierelor la distanță nu este disponibilă când sunt afișate mai multe terminale.</translation>
+    </message>
+    <message>
+        <source>Remote file manager unavailable in the current workspace layout</source>
+        <translation type="unfinished">Managerul de fișiere la distanță nu este disponibil în aspectul curent al spațiului de lucru</translation>
+    </message>
+    <message>
         <source>Press r to reconnect to %1, press x to close this tab</source>
         <translation type="unfinished">Apasă r pentru a te reconecta la %1, x pentru a închide această filă</translation>
     </message>
@@ -4635,6 +4651,13 @@ Reconnecting manually…<byte value="xd"/>
     </message>
 </context>
 <context>
+    <name>TerminalWorkspaceGroup</name>
+    <message>
+        <source>Terminal</source>
+        <translation type="unfinished">Terminal</translation>
+    </message>
+</context>
+<context>
     <name>VaultDialog</name>
     <message>
         <source>Enable master password protection</source>
@@ -4779,6 +4802,29 @@ Reconnecting manually…<byte value="xd"/>
     <message>
         <source>Could not unlock the vault: %1</source>
         <translation type="unfinished">Nu s-a putut debloca seiful: %1</translation>
+    </message>
+</context>
+<context>
+    <name>WorkspaceSidebarWidget</name>
+    <message>
+        <source>Horizontal</source>
+        <translation type="unfinished">Orizontal</translation>
+    </message>
+    <message>
+        <source>Vertical</source>
+        <translation type="unfinished">Vertical</translation>
+    </message>
+    <message>
+        <source>Grid</source>
+        <translation type="unfinished">Grilă</translation>
+    </message>
+    <message>
+        <source>Switch</source>
+        <translation type="unfinished">Comutare</translation>
+    </message>
+    <message>
+        <source>Drag a terminal tab into the current terminal page or this sidebar to create or extend a workspace.</source>
+        <translation type="unfinished">Trageți o filă de terminal în pagina terminalului curent sau în această bară laterală pentru a crea sau extinde un spațiu de lucru.</translation>
     </message>
 </context>
 </TS>

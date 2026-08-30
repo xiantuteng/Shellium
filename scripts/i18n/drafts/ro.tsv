@@ -1047,3 +1047,12 @@
 1046	Nu s-a putut dezactiva protecția cu parolă principală: %1
 1047	Nu s-a putut crea seiful: %1
 1048	Nu s-a putut debloca seiful: %1
+1049	Spații de lucru
+1050	Spațiu de lucru %1
+1051	Gestionarea fișierelor la distanță nu este disponibilă când sunt afișate mai multe terminale.
+1052	Managerul de fișiere la distanță nu este disponibil în aspectul curent al spațiului de lucru
+1053	Orizontal
+1054	Vertical
+1055	Grilă
+1056	Comutare
+1057	Trageți o filă de terminal în pagina terminalului curent sau în această bară laterală pentru a crea sau extinde un spațiu de lucru.

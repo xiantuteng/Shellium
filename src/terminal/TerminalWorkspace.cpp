@@ -114,6 +114,12 @@ TerminalPane *TerminalWorkspace::activePane() const
 
 void TerminalWorkspace::setFileManagerVisible(const bool visible)
 {
+    if (visible && !m_fileManagerAllowed) {
+        // 快捷键和按钮最终都汇入这里。布局不允许时保持显式关闭，避免仅禁用按钮却被全局
+        // Ctrl+Shift+F 绕过，从而在网格单元中意外展开远程文件管理。
+        m_pane->setFileManagerVisible(false);
+        return;
+    }
     if (!visible) {
         // 必须先退出全屏：全屏状态下终端是被显式隐藏的，若此时又把文件管理一并隐藏，
         // 标签页里两块内容会同时消失，只剩一片空白且没有任何可点的恢复入口。
@@ -132,6 +138,25 @@ bool TerminalWorkspace::isFileManagerVisible() const
     // 不能使用 isVisible()：非当前标签的所有子控件都会临时返回 false。isHidden() 只反映
     // 用户是否显式隐藏了该控件，适合在标签切换和工作区恢复时同步顶部会话按钮状态。
     return !m_fileManager->isHidden();
+}
+
+void TerminalWorkspace::setFileManagerAllowed(const bool allowed)
+{
+    if (m_fileManagerAllowed == allowed) {
+        return;
+    }
+    if (!allowed) {
+        // 先通过统一显隐入口退出文件管理全屏并恢复终端，再禁用按钮；反过来操作可能让
+        // checked 状态被冻结在 true，切回允许布局后出现按钮与页面不一致。
+        setFileManagerVisible(false);
+    }
+    m_fileManagerAllowed = allowed;
+    m_pane->setFileManagerEnabled(allowed);
+}
+
+bool TerminalWorkspace::isFileManagerAllowed() const
+{
+    return m_fileManagerAllowed;
 }
 
 void TerminalWorkspace::synchronizeFileManager(const bool followInnermost)

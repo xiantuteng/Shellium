@@ -12,6 +12,7 @@
 #include "storage/ApplicationDatabase.h"
 #include "terminal/TerminalPane.h"
 #include "terminal/TerminalWorkspace.h"
+#include "terminal/TerminalWorkspaceGroup.h"
 #include "ui/ConnectionDialog.h"
 #include "ui/HostManagerWidget.h"
 #include "ui/MacWindowChrome.h"
@@ -350,7 +351,8 @@ enum SidebarPageIndex {
     HostsPage = 0,
     ProductivityPage = 1,
     ForwardingPage = 2,
-    AiPage = 3
+    AiPage = 3,
+    WorkspacesPage = 4
 };
 
 } // namespace
@@ -458,8 +460,8 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     auto *navigationGroup = new QButtonGroup(this);
     navigationGroup->setExclusive(true);
     const QStringList navigationTooltips = {
-        tr("Hosts"), tr("Productivity"), tr("Port forwarding"), tr("AI Assistant")};
-    for (int pageIndex = HostsPage; pageIndex <= AiPage; ++pageIndex) {
+        tr("Hosts"), tr("Productivity"), tr("Port forwarding"), tr("AI Assistant"), tr("Workspaces")};
+    for (int pageIndex = HostsPage; pageIndex <= WorkspacesPage; ++pageIndex) {
         auto *button = new QToolButton(m_navigationRail);
         button->setProperty("navButton", true);
         button->setCheckable(true);
@@ -541,10 +543,12 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     // 模型回复和终端捕获仍可能落入新标签，独立 QObject/AiClient 才能彻底隔离状态。
     m_aiAssistantStack = new QStackedWidget(m_sidebarStack);
     m_aiAssistantStack->setObjectName(QStringLiteral("AiAssistantStack"));
+    m_workspaceSidebar = new WorkspaceSidebarWidget(m_sidebarStack);
     m_sidebarStack->addWidget(m_hostManager);
     m_sidebarStack->addWidget(m_productivityWidget);
     m_sidebarStack->addWidget(m_portForwardManager);
     m_sidebarStack->addWidget(m_aiAssistantStack);
+    m_sidebarStack->addWidget(m_workspaceSidebar);
     sidebarLayout->addWidget(m_sidebarStack, 1);
 
     // HostManagerWidget 在构造末尾已完成首次刷新，该次信号早于 MainWindow 的连接，因此先
@@ -907,6 +911,10 @@ MainWindow::MainWindow(ApplicationDatabase *database,
         UiIcons::symbol(this, UiIcons::Symbol::Sparkle, this->palette().color(QPalette::WindowText)),
         QString());
     registerTranslatable(showAiAction, QT_TRANSLATE_NOOP("MainWindow", "AI Assistant"));
+    QAction *showWorkspacesAction = viewMenu->addAction(
+        UiIcons::symbol(this, UiIcons::Symbol::Workspace, this->palette().color(QPalette::WindowText)),
+        QString());
+    registerTranslatable(showWorkspacesAction, QT_TRANSLATE_NOOP("MainWindow", "Workspaces"));
     // 视图菜单与导航轨都只切换同一个 QStackedWidget，防止出现菜单显示某个 Dock、导航轨
     // 却高亮另一个页面的双重状态。
     connect(showHostsAction,
@@ -925,6 +933,10 @@ MainWindow::MainWindow(ApplicationDatabase *database,
             &QAction::triggered,
             this,
             [this]() { showSidebarPage(AiPage); });
+    connect(showWorkspacesAction,
+            &QAction::triggered,
+            this,
+            [this]() { showSidebarPage(WorkspacesPage); });
 
     QMenu *terminalMenu = applicationMenuBar->addMenu(QString());
     registerTranslatable(terminalMenu, QT_TRANSLATE_NOOP("MainWindow", "Terminal"));
@@ -1022,6 +1034,10 @@ MainWindow::MainWindow(ApplicationDatabase *database,
             this,
             [this](const int index) { closeWorkspaceTab(index); });
     connect(m_titleTabBar,
+            &SessionTabBar::workspaceMergeRequested,
+            this,
+            &MainWindow::mergeTerminalTabs);
+    connect(m_titleTabBar,
             &QTabBar::currentChanged,
             this,
             [this](const int index) {
@@ -1068,6 +1084,7 @@ MainWindow::MainWindow(ApplicationDatabase *database,
         if (m_titleTabBar != nullptr && m_titleTabBar->currentIndex() != index) {
             m_titleTabBar->setCurrentIndex(index);
         }
+        refreshWorkspaceSidebar();
         refreshProductivityTargets();
     });
     connect(toggleFilesAction, &QAction::triggered, this, [this]() {
@@ -1221,14 +1238,19 @@ MainWindow::~MainWindow()
     // 为接收者的连接必须发生在成员失效之前，也就是这里。
     if (m_tabs != nullptr) {
         for (int index = 0; index < m_tabs->count(); ++index) {
-            auto *workspace = qobject_cast<TerminalWorkspace *>(m_tabs->widget(index));
-            if (workspace == nullptr) {
-                continue;
+            QList<TerminalWorkspace *> workspaces;
+            if (auto *workspace = qobject_cast<TerminalWorkspace *>(m_tabs->widget(index))) {
+                workspaces.append(workspace);
+            } else if (auto *group = qobject_cast<TerminalWorkspaceGroup *>(
+                           m_tabs->widget(index))) {
+                workspaces = group->terminals();
             }
-            if (TerminalPane *pane = workspace->activePane(); pane != nullptr) {
-                QObject::disconnect(pane, nullptr, this, nullptr);
+            for (TerminalWorkspace *workspace : std::as_const(workspaces)) {
+                if (TerminalPane *pane = workspace->activePane(); pane != nullptr) {
+                    QObject::disconnect(pane, nullptr, this, nullptr);
+                }
+                QObject::disconnect(workspace, nullptr, this, nullptr);
             }
-            QObject::disconnect(workspace, nullptr, this, nullptr);
         }
     }
 }
@@ -1539,7 +1561,7 @@ void MainWindow::setSidebarVisible(const bool visible)
 QString MainWindow::sidebarPageTitle(const int pageIndex) const
 {
     const QStringList pageTitles = {
-        tr("Hosts"), tr("Productivity"), tr("Port forwarding"), tr("AI Assistant")};
+        tr("Hosts"), tr("Productivity"), tr("Port forwarding"), tr("AI Assistant"), tr("Workspaces")};
     return pageTitles.value(pageIndex);
 }
 
@@ -2692,7 +2714,8 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
         UiIcons::Symbol::Hosts,
         UiIcons::Symbol::Snippets,
         UiIcons::Symbol::Forwarding,
-        UiIcons::Symbol::Sparkle};
+        UiIcons::Symbol::Sparkle,
+        UiIcons::Symbol::Workspace};
     for (int index = 0;
          index < m_navigationButtons.size() && index < navigationSymbols.size();
          ++index) {
@@ -2737,6 +2760,10 @@ QMenu *MainWindow::createSessionTabMenu(const int index, QWidget *parent)
         QAction *duplicateAction = menu.addAction(
             UiIcons::symbol(this, UiIcons::Symbol::Copy, this->palette().color(QPalette::WindowText)),
             tr("Copy tag"));
+        // 工作空间已经包含多条独立连接，“复制”究竟复制全部连接还是仅当前成员存在歧义；
+        // 在定义可预期语义前只允许复制单终端标签，避免菜单点击后无反馈。
+        duplicateAction->setEnabled(
+            qobject_cast<TerminalWorkspace *>(m_tabs->widget(index)) != nullptr);
         connect(duplicateAction,
                 &QAction::triggered,
                 this,
@@ -2823,6 +2850,190 @@ void MainWindow::duplicateWorkspaceTab(const int index)
         m_titleTabBar->setTabConnectionState(copyIndex,
                                              SessionTabBar::ConnectionState::Connecting);
     }
+}
+
+void MainWindow::mergeTerminalTabs(const int sourceIndex,
+                                   const int targetIndex,
+                                   const QPoint &globalDropPosition,
+                                   const bool droppedOnTargetTab)
+{
+    if (m_tabs == nullptr
+        || sourceIndex < 0
+        || targetIndex < 0
+        || sourceIndex >= m_tabs->count()
+        || targetIndex >= m_tabs->count()
+        || sourceIndex == targetIndex) {
+        return;
+    }
+
+    auto *sourceWorkspace = qobject_cast<TerminalWorkspace *>(m_tabs->widget(sourceIndex));
+    QWidget *targetPage = m_tabs->widget(targetIndex);
+    auto *targetWorkspace = qobject_cast<TerminalWorkspace *>(targetPage);
+    auto *targetGroup = qobject_cast<TerminalWorkspaceGroup *>(targetPage);
+    if (sourceWorkspace == nullptr || (targetWorkspace == nullptr && targetGroup == nullptr)) {
+        return;
+    }
+
+    if (!droppedOnTargetTab) {
+        const auto containsGlobalPoint = [&globalDropPosition](const QWidget *widget) {
+            // isVisible() 是必要的：QStackedWidget 中未显示的页面仍有有效 rect，仅做坐标
+            // 转换会让隐藏工作空间也成为接收目标。必须同时确认它当前可见且命中。
+            return widget != nullptr
+                && widget->isVisible()
+                && widget->rect().contains(widget->mapFromGlobal(globalDropPosition));
+        };
+
+        bool droppedOnCorrespondingTerminal = false;
+        if (targetWorkspace != nullptr) {
+            // 单终端页只接受 TerminalPane，不把同页的远程文件管理器或分隔条当成
+            // 成组落点，从而保持“拖到终端会话窗口”的语义精确可预期。
+            droppedOnCorrespondingTerminal = containsGlobalPoint(targetWorkspace->activePane());
+        } else {
+            // 工作空间的网格/水平/垂直模式会同时显示多个 Pane；切换模式只有
+            // 当前成员 isVisible() 为 true。逐个命中可同时覆盖四种布局，也不依赖私有框架子类。
+            for (TerminalWorkspace *member : targetGroup->terminals()) {
+                if (member != nullptr && containsGlobalPoint(member->activePane())) {
+                    droppedOnCorrespondingTerminal = true;
+                    break;
+                }
+            }
+        }
+
+        const bool droppedOnWorkspaceSidebar = containsGlobalPoint(m_workspaceSidebar);
+        // 侧栏是当前顶层页的投影，因此只有它所对应的目标页仍是可见当前页时
+        // 才能接收。这项校验防止拖动期间程序化切换标签后把会话加到不可见的旧目标。
+        const bool sidebarMatchesTarget = droppedOnWorkspaceSidebar
+            && m_tabs->currentWidget() == targetPage;
+        if (!droppedOnCorrespondingTerminal && !sidebarMatchesTarget) {
+            return;
+        }
+    }
+
+    const QString sourceTitle = m_tabs->tabText(sourceIndex);
+    QWidget *sourceAssistant = m_aiAssistantStack != nullptr
+            && sourceIndex < m_aiAssistantStack->count()
+        ? m_aiAssistantStack->widget(sourceIndex)
+        : nullptr;
+
+    // 先移除源顶层项，再通过页面指针重新定位目标；源位于目标左侧时索引会减一，若继续
+    // 使用旧 targetIndex 就会把相邻的无关标签合并进去。removeWidget/removeTab 均不销毁控件。
+    {
+        const QSignalBlocker titleBlocker(m_titleTabBar);
+        if (m_titleTabBar != nullptr) {
+            m_titleTabBar->removeTab(sourceIndex);
+        }
+        m_tabs->removeTab(sourceIndex);
+        if (sourceAssistant != nullptr) {
+            m_aiAssistantStack->removeWidget(sourceAssistant);
+        }
+    }
+
+    if (targetGroup != nullptr) {
+        const int groupIndex = m_tabs->indexOf(targetGroup);
+        auto *assistantGroup = m_aiAssistantStack != nullptr && groupIndex >= 0
+            ? qobject_cast<QStackedWidget *>(m_aiAssistantStack->widget(groupIndex))
+            : nullptr;
+        targetGroup->addTerminal(sourceWorkspace, sourceTitle);
+        targetGroup->setActiveTerminal(sourceWorkspace);
+        if (assistantGroup != nullptr && sourceAssistant != nullptr) {
+            assistantGroup->addWidget(sourceAssistant);
+            assistantGroup->setCurrentWidget(sourceAssistant);
+        } else if (sourceAssistant != nullptr) {
+            // 理论上既有工作空间一定对应嵌套 AI 栈；异常恢复状态下宁可安全销毁孤立助手，
+            // 也不能把它留成不可达页面并继续接收模型回调。
+            sourceAssistant->deleteLater();
+        }
+        m_tabs->setCurrentWidget(targetGroup);
+        if (m_titleTabBar != nullptr) {
+            m_titleTabBar->setCurrentIndex(groupIndex);
+            m_titleTabBar->setTabKind(groupIndex, SessionTabBar::TabKind::Workspace);
+        }
+        refreshWorkspaceSidebar();
+        refreshProductivityTargets();
+        return;
+    }
+
+    const int adjustedTargetIndex = m_tabs->indexOf(targetWorkspace);
+    if (adjustedTargetIndex < 0) {
+        return;
+    }
+    const QString targetTitle = m_tabs->tabText(adjustedTargetIndex);
+    QWidget *targetAssistant = m_aiAssistantStack != nullptr
+            && adjustedTargetIndex < m_aiAssistantStack->count()
+        ? m_aiAssistantStack->widget(adjustedTargetIndex)
+        : nullptr;
+
+    {
+        const QSignalBlocker titleBlocker(m_titleTabBar);
+        if (m_titleTabBar != nullptr) {
+            m_titleTabBar->removeTab(adjustedTargetIndex);
+        }
+        m_tabs->removeTab(adjustedTargetIndex);
+        if (targetAssistant != nullptr) {
+            m_aiAssistantStack->removeWidget(targetAssistant);
+        }
+    }
+
+    auto *group = new TerminalWorkspaceGroup(m_tabs);
+    group->addTerminal(targetWorkspace, targetTitle);
+    group->addTerminal(sourceWorkspace, sourceTitle);
+    group->setActiveTerminal(sourceWorkspace);
+    const QString groupTitle = tr("Workspace %1").arg(
+        findChildren<TerminalWorkspaceGroup *>().size());
+    const QIcon groupIcon = UiIcons::symbol(
+        this, UiIcons::Symbol::Workspace, palette().color(QPalette::WindowText));
+    m_tabs->insertTab(adjustedTargetIndex, group, groupIcon, groupTitle);
+    m_tabs->tabBar()->hide();
+
+    if (m_titleTabBar != nullptr) {
+        const QSignalBlocker titleBlocker(m_titleTabBar);
+        m_titleTabBar->insertTab(adjustedTargetIndex, groupIcon, groupTitle);
+        m_titleTabBar->setTabKind(adjustedTargetIndex, SessionTabBar::TabKind::Workspace);
+    }
+
+    auto *assistantGroup = new QStackedWidget(m_aiAssistantStack);
+    assistantGroup->setObjectName(QStringLiteral("WorkspaceAiAssistantStack"));
+    if (targetAssistant != nullptr) {
+        assistantGroup->addWidget(targetAssistant);
+    }
+    if (sourceAssistant != nullptr) {
+        assistantGroup->addWidget(sourceAssistant);
+        assistantGroup->setCurrentWidget(sourceAssistant);
+    }
+    if (m_aiAssistantStack != nullptr) {
+        m_aiAssistantStack->insertWidget(adjustedTargetIndex, assistantGroup);
+    }
+
+    connect(group,
+            &TerminalWorkspaceGroup::activeTerminalChanged,
+            this,
+            [this, group, assistantGroup](TerminalWorkspace *workspace) {
+                const int memberIndex = group->terminals().indexOf(workspace);
+                if (memberIndex >= 0 && memberIndex < assistantGroup->count()) {
+                    assistantGroup->setCurrentIndex(memberIndex);
+                }
+                m_workspace = workspace;
+                refreshWorkspaceSidebar();
+                refreshProductivityTargets();
+            });
+    connect(group,
+            &TerminalWorkspaceGroup::terminalsChanged,
+            this,
+            [this]() {
+                refreshWorkspaceSidebar();
+                refreshProductivityTargets();
+            });
+
+    m_tabs->setCurrentWidget(group);
+    if (m_titleTabBar != nullptr) {
+        m_titleTabBar->setCurrentIndex(adjustedTargetIndex);
+    }
+    if (m_aiAssistantStack != nullptr) {
+        m_aiAssistantStack->setCurrentIndex(adjustedTargetIndex);
+    }
+    updateWorkspacePlaceholder();
+    refreshWorkspaceSidebar();
+    refreshProductivityTargets();
 }
 
 void MainWindow::showTransientMessage(const QString &message, int)
@@ -2970,7 +3181,7 @@ void MainWindow::connectSavedHost(const QString &hostId,
     m_pendingHistoryStartedAt.insert(pane, QDateTime::currentDateTimeUtc());
     pane->connectToHosts(connectionPlan);
 
-    const int tabIndex = m_tabs->indexOf(workspace);
+    const int tabIndex = topLevelIndexForWorkspace(workspace);
     if (tabIndex >= 0) {
         setWorkspaceTabText(tabIndex,
                             logicalTarget.displayName.isEmpty() ? logicalTarget.connectionSpecifier()
@@ -3211,11 +3422,34 @@ TerminalWorkspace *MainWindow::createWorkspaceTab(const QString &title)
     connect(workspace,
             &TerminalWorkspace::closeRequested,
             this,
-            [this](TerminalWorkspace *requester) {
-                // 索引必须现查：用户可能已经拖动过标签，创建时的那个 index 早已失效。
-                const int currentIndex = m_tabs->indexOf(requester);
-                if (currentIndex >= 0) {
-                    closeWorkspaceTab(currentIndex);
+            [this, assistant](TerminalWorkspace *requester) {
+                // 索引必须现查：用户可能已经拖动或合并过标签，创建时的 index 早已失效。
+                const int topLevelIndex = topLevelIndexForWorkspace(requester);
+                if (topLevelIndex < 0) {
+                    return;
+                }
+                if (m_tabs->widget(topLevelIndex) == requester) {
+                    closeWorkspaceTab(topLevelIndex);
+                    return;
+                }
+
+                auto *group = qobject_cast<TerminalWorkspaceGroup *>(
+                    m_tabs->widget(topLevelIndex));
+                if (group == nullptr || !group->takeTerminal(requester)) {
+                    return;
+                }
+                if (assistant != nullptr) {
+                    if (auto *assistantGroup = qobject_cast<QStackedWidget *>(
+                            assistant->parentWidget())) {
+                        assistantGroup->removeWidget(assistant);
+                    }
+                    assistant->deleteLater();
+                }
+                requester->deleteLater();
+                // 最后一个成员被关闭时顶层工作空间已没有可交互内容，直接走统一关闭路径
+                // 回到品牌空态或相邻标签；保留空工作空间只会让用户误以为会话仍在运行。
+                if (group->terminals().isEmpty()) {
+                    closeWorkspaceTab(topLevelIndex);
                 }
             });
     pane->setCommandHistoryDatabase(m_database);
@@ -3264,7 +3498,7 @@ TerminalWorkspace *MainWindow::createWorkspaceTab(const QString &title)
             [this, pane, workspace](const ConnectionTarget &target) {
                 recordConnectionSucceeded(pane, target);
                 if (m_titleTabBar != nullptr) {
-                    m_titleTabBar->setTabConnectionState(m_tabs->indexOf(workspace),
+                    m_titleTabBar->setTabConnectionState(topLevelIndexForWorkspace(workspace),
                                                          SessionTabBar::ConnectionState::Connected);
                 }
                 if (!target.id.isEmpty() && pane->forwardingSessionStack() != nullptr) {
@@ -3323,7 +3557,7 @@ TerminalWorkspace *MainWindow::createWorkspaceTab(const QString &title)
                 }
                 if (m_titleTabBar != nullptr) {
                     m_titleTabBar->setTabConnectionState(
-                        m_tabs->indexOf(workspace), SessionTabBar::ConnectionState::Connecting);
+                        topLevelIndexForWorkspace(workspace), SessionTabBar::ConnectionState::Connecting);
                 }
                 showTransientMessage(
                     tr("Reconnecting to %1 automatically (attempt %2/%3)")
@@ -3338,7 +3572,7 @@ TerminalWorkspace *MainWindow::createWorkspaceTab(const QString &title)
             [this, pane, workspace](const ConnectionTarget &target, const QString &message) {
                 recordConnectionFailed(pane, target, message);
                 if (m_titleTabBar != nullptr) {
-                    m_titleTabBar->setTabConnectionState(m_tabs->indexOf(workspace),
+                    m_titleTabBar->setTabConnectionState(topLevelIndexForWorkspace(workspace),
                                                          SessionTabBar::ConnectionState::Failed);
                 }
                 m_portForwardManager->unregisterSession(target.id,
@@ -3353,7 +3587,7 @@ TerminalWorkspace *MainWindow::createWorkspaceTab(const QString &title)
                     // -1 表示网络异常中断（无正常退出码）；用户主动 exit 产生的正常退出码
                     // 只是回退到本地终端，不是故障，不该继续顶着一个红点。
                     m_titleTabBar->setTabConnectionState(
-                        m_tabs->indexOf(workspace),
+                        topLevelIndexForWorkspace(workspace),
                         exitStatus == -1 ? SessionTabBar::ConnectionState::Failed
                                          : SessionTabBar::ConnectionState::Unknown);
                 }
@@ -3384,7 +3618,45 @@ TerminalWorkspace *MainWindow::createWorkspaceTab(const QString &title)
 
 TerminalWorkspace *MainWindow::activeWorkspace() const
 {
-    return qobject_cast<TerminalWorkspace *>(m_tabs->currentWidget());
+    if (m_tabs == nullptr) {
+        return nullptr;
+    }
+    if (auto *workspace = qobject_cast<TerminalWorkspace *>(m_tabs->currentWidget())) {
+        return workspace;
+    }
+    auto *group = qobject_cast<TerminalWorkspaceGroup *>(m_tabs->currentWidget());
+    return group == nullptr ? nullptr : group->activeTerminal();
+}
+
+TerminalWorkspaceGroup *MainWindow::activeWorkspaceGroup() const
+{
+    return m_tabs == nullptr
+        ? nullptr
+        : qobject_cast<TerminalWorkspaceGroup *>(m_tabs->currentWidget());
+}
+
+int MainWindow::topLevelIndexForWorkspace(TerminalWorkspace *workspace) const
+{
+    if (m_tabs == nullptr || workspace == nullptr) {
+        return -1;
+    }
+    for (int index = 0; index < m_tabs->count(); ++index) {
+        if (m_tabs->widget(index) == workspace) {
+            return index;
+        }
+        auto *group = qobject_cast<TerminalWorkspaceGroup *>(m_tabs->widget(index));
+        if (group != nullptr && group->contains(workspace)) {
+            return index;
+        }
+    }
+    return -1;
+}
+
+void MainWindow::refreshWorkspaceSidebar()
+{
+    if (m_workspaceSidebar != nullptr) {
+        m_workspaceSidebar->setWorkspace(activeWorkspaceGroup());
+    }
 }
 
 QList<TerminalPane *> MainWindow::allTerminalPanes() const
@@ -3395,6 +3667,16 @@ QList<TerminalPane *> MainWindow::allTerminalPanes() const
         auto *workspace = qobject_cast<TerminalWorkspace *>(m_tabs->widget(index));
         if (workspace != nullptr && workspace->activePane() != nullptr) {
             panes.append(workspace->activePane());
+            continue;
+        }
+        auto *group = qobject_cast<TerminalWorkspaceGroup *>(m_tabs->widget(index));
+        if (group == nullptr) {
+            continue;
+        }
+        for (TerminalWorkspace *member : group->terminals()) {
+            if (member != nullptr && member->activePane() != nullptr) {
+                panes.append(member->activePane());
+            }
         }
     }
     return panes;
@@ -3429,8 +3711,16 @@ void MainWindow::refreshProductivityTargets()
             // AI 栈与终端标签使用相同索引；切换标签只改变当前页，不复制任何 m_history，因而
             // 每个实例的会话列表、进行中请求和终端读取位置都留在自己的标签中。
             m_aiAssistantStack->setCurrentIndex(currentIndex);
-            auto *assistant = qobject_cast<AiAssistantWidget *>(
-                m_aiAssistantStack->widget(currentIndex));
+            QWidget *assistantPage = m_aiAssistantStack->widget(currentIndex);
+            auto *assistant = qobject_cast<AiAssistantWidget *>(assistantPage);
+            if (assistant == nullptr) {
+                // 多终端工作空间在顶层索引中对应一个嵌套栈；其中每个 AiAssistantWidget
+                // 仍归属于原终端，选中成员变化时工作空间会切换嵌套栈的 currentWidget。
+                auto *workspaceAssistantStack = qobject_cast<QStackedWidget *>(assistantPage);
+                assistant = workspaceAssistantStack == nullptr
+                    ? nullptr
+                    : qobject_cast<AiAssistantWidget *>(workspaceAssistantStack->currentWidget());
+            }
             TerminalWorkspace *workspace = activeWorkspace();
             TerminalPane *pane = workspace == nullptr ? nullptr : workspace->activePane();
             if (assistant != nullptr) {
@@ -3614,11 +3904,11 @@ void MainWindow::saveCurrentWorkspace()
         return;
     }
     QJsonArray tabs;
-    for (int index = 0; index < m_tabs->count(); ++index) {
-        auto *workspace = qobject_cast<TerminalWorkspace *>(m_tabs->widget(index));
+    const auto appendTerminal = [this, &tabs](TerminalWorkspace *workspace,
+                                               const QString &displayTitle) {
         TerminalPane *pane = workspace == nullptr ? nullptr : workspace->activePane();
         if (workspace == nullptr || pane == nullptr) {
-            continue;
+            return true;
         }
         QString rootHostId;
         const QList<ConnectionTarget> targets = pane->targets();
@@ -3628,25 +3918,48 @@ void MainWindow::saveCurrentWorkspace()
             const std::optional<HostRecord> savedHost =
                 m_database->findHost(rootHostId, &lookupError);
             if (!savedHost.has_value() || savedHost->kind != HostNodeKind::Host) {
-                // 临时连接的随机 UUID 无法在下次启动时还原地址、跳板链和凭据引用。静默把它
-                // 保存成本地 Shell 会让用户误以为工作区完整，故在写库前整体拒绝。
+                // 临时连接的随机 UUID 无法在下次启动时还原地址、跳板链和凭据引用。工作空间
+                // 成员与普通标签执行完全相同的严格校验，不能因嵌套在组内就被静默漏掉。
                 QMessageBox::warning(
                     this,
                     tr("The workspace contains temporary connections"),
                     lookupError.isEmpty()
                         ? tr("Tab '%1' is not a persistent host opened from the host tree. Save this connection to the host tree first, then save the workspace.")
-                              .arg(m_tabs->tabText(index))
+                              .arg(displayTitle)
                         : tr("Failed to check the host record for tab '%1': %2")
-                              .arg(m_tabs->tabText(index), lookupError));
-                return;
+                              .arg(displayTitle, lookupError));
+                return false;
             }
         }
 
         QJsonObject tab;
-        tab.insert(QStringLiteral("title"), m_tabs->tabText(index));
+        tab.insert(QStringLiteral("title"), displayTitle);
         tab.insert(QStringLiteral("hostId"), rootHostId);
         tab.insert(QStringLiteral("filesVisible"), workspace->isFileManagerVisible());
         tabs.append(tab);
+        return true;
+    };
+
+    for (int index = 0; index < m_tabs->count(); ++index) {
+        auto *workspace = qobject_cast<TerminalWorkspace *>(m_tabs->widget(index));
+        if (workspace != nullptr) {
+            if (!appendTerminal(workspace, m_tabs->tabText(index))) {
+                return;
+            }
+            continue;
+        }
+        auto *group = qobject_cast<TerminalWorkspaceGroup *>(m_tabs->widget(index));
+        if (group == nullptr) {
+            continue;
+        }
+        // 现有持久化格式描述的是“恢复时打开的终端序列”，并没有嵌套布局字段。这里按侧栏
+        // 顺序完整保存每个成员，恢复时会成为独立终端标签；这比静默丢弃整个工作空间安全，
+        // 也保持旧版本能够读取同一份 version=1 数据。
+        for (TerminalWorkspace *member : group->terminals()) {
+            if (!appendTerminal(member, group->terminalTitle(member))) {
+                return;
+            }
+        }
     }
     if (tabs.isEmpty()) {
         QMessageBox::information(this, tr("No tabs to save"), tr("The current window has no valid terminal tab."));

@@ -38,6 +38,8 @@ class SessionTabBar;
 class TerminalPane;
 class TerminalSettingsService;
 class TerminalWorkspace;
+class TerminalWorkspaceGroup;
+class WorkspaceSidebarWidget;
 
 /**
  * @brief Shellium 主窗口，协调标签页、终端和连接对话框。
@@ -216,7 +218,8 @@ private:
 
     /**
      * @brief 切换左侧侧栏中的功能页面并确保侧栏可见。
-     * @param pageIndex 0 为主机、1 为效率工具、2 为端口转发；越界值会被忽略。
+     * @param pageIndex 0 为主机、1 为效率工具、2 为端口转发、3 为 AI、4 为工作空间；
+     *        越界值会被忽略。
      *
      * 页面采用一个 QStackedWidget 而不是多个 Dock。这样导航轨、标题和正文始终共享同一
      * 对齐体系，窗口缩放时不会出现 Dock 标题条、拖动把手和页签反复挤压终端的问题。
@@ -268,6 +271,30 @@ private:
 
     /** @brief 返回当前标签页的终端工作区。 */
     [[nodiscard]] TerminalWorkspace *activeWorkspace() const;
+
+    /** @brief 返回当前顶层标签中的多终端工作空间；当前为单终端标签时返回空。 */
+    [[nodiscard]] TerminalWorkspaceGroup *activeWorkspaceGroup() const;
+
+    /**
+     * @brief 把一个单终端顶层标签合并到目标终端或既有工作空间标签。
+     * @param sourceIndex 被拖动的单终端顶层索引。
+     * @param targetIndex 用户在拖动前选中的接收标签索引。
+     * @param globalDropPosition 鼠标释放全局坐标，用于精确命中终端页面或工作空间侧栏。
+     * @param droppedOnTargetTab true 表示直接落在目标标签；false 表示需要识别页面/侧栏落点。
+     *
+     * 合并只重挂现有 QWidget，不重启终端进程或 SSH 连接；AI 页面同时进入嵌套栈，确保
+     * 工作空间内切换选中终端后仍显示对应会话的独立聊天记录。
+     */
+    void mergeTerminalTabs(int sourceIndex,
+                           int targetIndex,
+                           const QPoint &globalDropPosition,
+                           bool droppedOnTargetTab);
+
+    /** @brief 查找某个终端所属的顶层标签索引，兼容单终端与工作空间成员。 */
+    [[nodiscard]] int topLevelIndexForWorkspace(TerminalWorkspace *workspace) const;
+
+    /** @brief 根据当前顶层页面更新工作空间侧栏观察对象。 */
+    void refreshWorkspaceSidebar();
 
     /** @brief 收集所有已打开标签的终端面板；返回值不转移所有权。 */
     [[nodiscard]] QList<TerminalPane *> allTerminalPanes() const;
@@ -367,7 +394,7 @@ private:
      * 也在磁盘上留下大量无意义事务。定时器只在拖动停下后写一次最终宽度。
      */
     QTimer *m_sidebarWidthPersistTimer = nullptr;
-    /** @brief 承载主机、效率工具和端口转发三个互斥页面。 */
+    /** @brief 承载主机、效率工具、端口转发、AI 和工作空间五个互斥页面。 */
     QStackedWidget *m_sidebarStack = nullptr;
     /** @brief 当前侧栏页面标题。 */
     QLabel *m_sidebarTitle = nullptr;
@@ -385,6 +412,8 @@ private:
     PortForwardManagerWidget *m_portForwardManager = nullptr;
     ProductivityModel *m_productivityModel = nullptr;
     ProductivityWidget *m_productivityWidget = nullptr;
+    /** @brief 导航轨“工作空间”页面，展示当前组的布局选择与终端缩略图。 */
+    WorkspaceSidebarWidget *m_workspaceSidebar = nullptr;
     AiSettingsService *m_aiSettingsService = nullptr;
     /**
      * @brief 与终端 QTabWidget 索引严格同步的 AI 助手页面栈。

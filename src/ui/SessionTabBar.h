@@ -29,6 +29,17 @@ class SessionTabBar final : public QTabBar {
 
 public:
     /**
+     * @brief 顶层标签的业务类型，用于在标题栏中区分单终端与多终端工作空间。
+     *
+     * 类型只影响图标和拖入校验，不改变 QTabBar 的索引语义；真实页面仍由 MainWindow
+     * 持有。这样标题栏不会反向依赖终端控件，也便于自动化用例单独验证拖放状态机。
+     */
+    enum class TabKind {
+        Terminal,
+        Workspace
+    };
+
+    /**
      * @brief 标签对应会话的连接状态，驱动终端图标右下角的微型状态点。
      *
      * Unknown 表示"还没有连接结果可展示"（刚打开的本地终端、正在首次建立连接前的
@@ -58,6 +69,16 @@ public:
     void setTabConnectionState(int index, ConnectionState state);
 
     /**
+     * @brief 设置指定标签的业务类型并立即刷新图标。
+     * @param index 目标标签当前索引；越界时安全忽略。
+     * @param kind 单终端或工作空间。
+     */
+    void setTabKind(int index, TabKind kind);
+
+    /** @brief 返回指定标签的业务类型；无效索引按单终端处理以保持向后兼容。 */
+    [[nodiscard]] TabKind tabKind(int index) const;
+
+    /**
      * @brief 更新标签栏颜色并立即重绘。
      * @param textColor 未选中标签的文字颜色。
      * @param selectedTextColor 当前标签的文字与图标颜色。
@@ -85,6 +106,18 @@ public:
     void scrollTabsRight();
 
 signals:
+    /**
+     * @brief 用户把一个终端标签拖放到此前选中的标签或页面/侧栏接收区。
+     * @param sourceIndex 被拖入的单终端标签在释放时的索引。
+     * @param targetIndex 接收拖入的终端或工作空间标签在释放时的索引。
+     * @param globalDropPosition 鼠标释放时的全局坐标，供 MainWindow 识别终端页或工作空间侧栏。
+     * @param droppedOnTargetTab true 表示直接落在目标胶囊；false 表示需要进一步命中接收控件。
+     */
+    void workspaceMergeRequested(int sourceIndex,
+                                 int targetIndex,
+                                 const QPoint &globalDropPosition,
+                                 bool droppedOnTargetTab);
+
     /**
      * @brief 标签是否溢出、以及两端是否还能继续滚动发生变化。
      * @param scrollable 标签总宽度超过可视宽度，需要显示外部滚动按钮。
@@ -337,9 +370,22 @@ private:
     QHash<quint64, QVariantAnimation *> m_tabMoveAnimations;
     /** @brief 各标签当前的连接状态，按稳定标识索引，随标签关闭一并清理。 */
     QHash<quint64, ConnectionState> m_tabConnectionStates;
+    /** @brief 各标签的业务类型，按稳定标识保存，拖动换位后无需按索引搬运。 */
+    QHash<quint64, TabKind> m_tabKinds;
 
     /** @brief 本次左键按下的标签稳定标识；0 表示没有可拖动标签。 */
     quint64 m_pressedTabId = 0;
+    /** @brief 本次拖动允许接收合并的、按下前已选中标签标识；0 表示只做普通排序。 */
+    quint64 m_workspaceDropTargetTabId = 0;
+    /** @brief 目标标签在按下源标签前的屏幕矩形，用于避免基类重排后命中区随目标移走。 */
+    QRect m_workspaceDropTargetRect;
+    /**
+     * @brief 当前指针是否位于可触发工作空间合并的区域。
+     *
+     * 该状态只驱动目标标签的虚线高亮；最终释放仍会由 MainWindow 使用全局坐标再次校验，
+     * 防止鼠标在窗口外释放时误合并。
+     */
+    bool m_workspaceDropArmed = false;
     /** @brief 左键按下时相对于标签栏的坐标，用于复用 Qt 的拖拽启动距离语义。 */
     QPoint m_dragStartPosition;
     /** @brief 鼠标按下点到标签左边缘的距离，使拖拽标签始终保持原抓取位置。 */

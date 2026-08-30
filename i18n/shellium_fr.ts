@@ -1215,6 +1215,10 @@ Confirmer que la clé a changé, remplacer l&apos;ancien enregistrement dans kno
         <translation type="unfinished">Assistant IA</translation>
     </message>
     <message>
+        <source>Workspaces</source>
+        <translation type="unfinished">Espaces de travail</translation>
+    </message>
+    <message>
         <source>0 hosts</source>
         <translation type="unfinished">0 hôte</translation>
     </message>
@@ -1453,6 +1457,10 @@ Confirmer que la clé a changé, remplacer l&apos;ancien enregistrement dans kno
     <message>
         <source>Close other tabs</source>
         <translation type="unfinished">Fermer les autres onglets</translation>
+    </message>
+    <message>
+        <source>Workspace %1</source>
+        <translation type="unfinished">Espace de travail %1</translation>
     </message>
     <message>
         <source>Could not establish the nested connection</source>
@@ -4454,6 +4462,14 @@ Confirmer que la clé a changé et remplacer l&apos;ancien enregistrement dans k
         <translation type="unfinished">Masquer le gestionnaire de fichiers distant pour la session actuelle (Ctrl+Maj+F)</translation>
     </message>
     <message>
+        <source>Remote file management is unavailable while multiple terminals are displayed.</source>
+        <translation type="unfinished">La gestion des fichiers distants n’est pas disponible lorsque plusieurs terminaux sont affichés.</translation>
+    </message>
+    <message>
+        <source>Remote file manager unavailable in the current workspace layout</source>
+        <translation type="unfinished">Le gestionnaire de fichiers distants n’est pas disponible dans la disposition actuelle de l’espace de travail</translation>
+    </message>
+    <message>
         <source>Press r to reconnect to %1, press x to close this tab</source>
         <translation type="unfinished">Appuyez sur r pour vous reconnecter à %1, sur x pour fermer cet onglet</translation>
     </message>
@@ -4635,6 +4651,13 @@ Reconnecting manually…<byte value="xd"/>
     </message>
 </context>
 <context>
+    <name>TerminalWorkspaceGroup</name>
+    <message>
+        <source>Terminal</source>
+        <translation type="unfinished">Terminal</translation>
+    </message>
+</context>
+<context>
     <name>VaultDialog</name>
     <message>
         <source>Enable master password protection</source>
@@ -4779,6 +4802,29 @@ Reconnecting manually…<byte value="xd"/>
     <message>
         <source>Could not unlock the vault: %1</source>
         <translation type="unfinished">Impossible de déverrouiller le coffre-fort : %1</translation>
+    </message>
+</context>
+<context>
+    <name>WorkspaceSidebarWidget</name>
+    <message>
+        <source>Horizontal</source>
+        <translation type="unfinished">Horizontal</translation>
+    </message>
+    <message>
+        <source>Vertical</source>
+        <translation type="unfinished">Vertical</translation>
+    </message>
+    <message>
+        <source>Grid</source>
+        <translation type="unfinished">Grille</translation>
+    </message>
+    <message>
+        <source>Switch</source>
+        <translation type="unfinished">Basculement</translation>
+    </message>
+    <message>
+        <source>Drag a terminal tab into the current terminal page or this sidebar to create or extend a workspace.</source>
+        <translation type="unfinished">Faites glisser un onglet de terminal dans la page de terminal actuelle ou dans cette barre latérale pour créer ou agrandir un espace de travail.</translation>
     </message>
 </context>
 </TS>

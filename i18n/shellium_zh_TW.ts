@@ -1215,6 +1215,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation>AI 助手</translation>
     </message>
     <message>
+        <source>Workspaces</source>
+        <translation type="unfinished">工作空間</translation>
+    </message>
+    <message>
         <source>0 hosts</source>
         <translation>0 臺</translation>
     </message>
@@ -1449,6 +1453,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>Close other tabs</source>
         <translation>關閉其他標籤</translation>
+    </message>
+    <message>
+        <source>Workspace %1</source>
+        <translation type="unfinished">工作空間 %1</translation>
     </message>
     <message>
         <source>Could not establish the nested connection</source>
@@ -4460,6 +4468,14 @@ Confirm the key has changed and replace the old record in known_hosts?</source>
         <translation>隱藏當前會話的遠端檔案管理（Ctrl+Shift+F）</translation>
     </message>
     <message>
+        <source>Remote file management is unavailable while multiple terminals are displayed.</source>
+        <translation type="unfinished">同時顯示多個終端時無法使用遠端檔案管理。</translation>
+    </message>
+    <message>
+        <source>Remote file manager unavailable in the current workspace layout</source>
+        <translation type="unfinished">目前工作空間版面配置不支援遠端檔案管理員</translation>
+    </message>
+    <message>
         <source>Press r to reconnect to %1, press x to close this tab</source>
         <translation>按 r 重新連線 %1，按 x 關閉該標籤頁</translation>
     </message>
@@ -4646,6 +4662,13 @@ Reconnecting manually…<byte value="xd" />
     </message>
 </context>
 <context>
+    <name>TerminalWorkspaceGroup</name>
+    <message>
+        <source>Terminal</source>
+        <translation type="unfinished">終端</translation>
+    </message>
+</context>
+<context>
     <name>VaultDialog</name>
     <message>
         <source>Enable master password protection</source>
@@ -4790,6 +4813,29 @@ Reconnecting manually…<byte value="xd" />
     <message>
         <source>Could not unlock the vault: %1</source>
         <translation>無法解鎖保險庫：%1</translation>
+    </message>
+</context>
+<context>
+    <name>WorkspaceSidebarWidget</name>
+    <message>
+        <source>Horizontal</source>
+        <translation type="unfinished">水平</translation>
+    </message>
+    <message>
+        <source>Vertical</source>
+        <translation type="unfinished">垂直</translation>
+    </message>
+    <message>
+        <source>Grid</source>
+        <translation type="unfinished">網格</translation>
+    </message>
+    <message>
+        <source>Switch</source>
+        <translation type="unfinished">切換</translation>
+    </message>
+    <message>
+        <source>Drag a terminal tab into the current terminal page or this sidebar to create or extend a workspace.</source>
+        <translation type="unfinished">將終端標籤拖入目前終端頁面或此側邊欄，即可建立或擴充工作空間。</translation>
     </message>
 </context>
 </TS>

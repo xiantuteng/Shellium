@@ -188,6 +188,8 @@ set(SHELLIUM_APP_SOURCES
     src/terminal/VtermBridge.h
     src/terminal/TerminalWorkspace.cpp
     src/terminal/TerminalWorkspace.h
+    src/terminal/TerminalWorkspaceGroup.cpp
+    src/terminal/TerminalWorkspaceGroup.h
     src/ui/ConnectionDialog.cpp
     src/ui/ConnectionDialog.h
     src/ui/HostManagerWidget.cpp
