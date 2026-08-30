@@ -3460,6 +3460,7 @@ void MainWindow::openCommandPalette()
 
     QList<QAction *> candidates;
     QSet<QAction *> seen;
+    QSet<QString> seenText;
     for (QAction *action : findChildren<QAction *>()) {
         if (action == nullptr || seen.contains(action) || action->isSeparator()
             || action->menu() != nullptr || !action->isVisible() || !action->isEnabled()
@@ -3472,7 +3473,14 @@ void MainWindow::openCommandPalette()
         if (text.isEmpty()) {
             continue;
         }
+        // 同一逻辑动作可能来自多个控件实例（每个终端标签页各有一份远程文件管理器）。
+        // 按可见文案去重，避免面板里出现两行同义项——尤其在切换语言后，旧实例若有残留
+        // 文案会以另一种语言重复列出。
+        if (seenText.contains(text)) {
+            continue;
+        }
         seen.insert(action);
+        seenText.insert(text);
         const int actionIndex = candidates.size();
         candidates.append(action);
         QString display = text;

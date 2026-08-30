@@ -22,6 +22,7 @@
 #include <QTemporaryDir>
 #include <QTest>
 #include <QToolButton>
+#include <QTranslator>
 #include <QTreeView>
 #include <QTreeWidget>
 #include <QUrl>
@@ -163,6 +164,15 @@ private slots:
      * SHELLIUM_IT_* 环境变量时自动跳过。
      */
     void queuedUploadEmitsSuccessfulTransferResult();
+
+    /**
+     * @brief 语言切换时上传菜单里的 QAction 文案必须一起重译。
+     *
+     * 这两个动作挂在常驻 QMenu 上、只在构造期设过一次文案，而命令面板通过
+     * findChildren<QAction*> 收录它们。曾经 onRetranslate 闭包漏掉了这两项，切到新语言
+     * 后命令面板里会残留上一次语言的“上传文件/上传目录”。
+     */
+    void uploadMenuActionsRetranslateOnLanguageChange();
 
 private:
     /**
@@ -702,6 +712,56 @@ void RemoteFileManagerWidgetTest::closeButtonSitsNextToFullScreenAndOnlyRequests
     closeButton->click();
     QCOMPARE(closeSpy.count(), 1);
     QCOMPARE(widget.isHidden(), hiddenBeforeClick);
+}
+
+namespace {
+
+/**
+ * @brief 把任意源文案翻成「!!<原文>」的测试替身翻译器。
+ *
+ * 不需要 .qm，也不拉入 LocalizationService；只为触发 QEvent::LanguageChange 并让
+ * tr() 返回可辨识的结果。
+ */
+class MarkerTranslator final : public QTranslator {
+public:
+    QString translate(const char *context,
+                      const char *sourceText,
+                      const char *disambiguation = nullptr,
+                      int n = -1) const override
+    {
+        Q_UNUSED(context)
+        Q_UNUSED(disambiguation)
+        Q_UNUSED(n)
+        return QStringLiteral("!!") + QString::fromUtf8(sourceText);
+    }
+
+    bool isEmpty() const override { return false; }
+};
+
+} // namespace
+
+void RemoteFileManagerWidgetTest::uploadMenuActionsRetranslateOnLanguageChange()
+{
+    RemoteFileManagerWidget widget;
+    auto *uploadFilesAction =
+        widget.findChild<QAction *>(QStringLiteral("SftpUploadFilesAction"));
+    auto *uploadDirectoryAction =
+        widget.findChild<QAction *>(QStringLiteral("SftpUploadDirectoryAction"));
+    QVERIFY(uploadFilesAction != nullptr);
+    QVERIFY(uploadDirectoryAction != nullptr);
+    QCOMPARE(uploadFilesAction->text(), QStringLiteral("Upload Files…"));
+
+    MarkerTranslator translator;
+    QVERIFY(QCoreApplication::installTranslator(&translator));
+    // installTranslator 会向 qApp 投递 LanguageChange；Retranslator 的事件过滤器据此重跑闭包。
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::LanguageChange);
+
+    QCOMPARE(uploadFilesAction->text(), QStringLiteral("!!Upload Files…"));
+    QCOMPARE(uploadDirectoryAction->text(), QStringLiteral("!!Upload Directory…"));
+
+    QVERIFY(QCoreApplication::removeTranslator(&translator));
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::LanguageChange);
+    QCOMPARE(uploadFilesAction->text(), QStringLiteral("Upload Files…"));
 }
 
 QTEST_MAIN(RemoteFileManagerWidgetTest)

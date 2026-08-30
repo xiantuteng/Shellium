@@ -899,9 +899,11 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     QAction *uploadFilesAction = uploadMenu->addAction(
         UiIcons::symbol(this, UiIcons::Symbol::Send, this->palette().color(QPalette::WindowText)),
         tr("Upload Files…"));
+    uploadFilesAction->setObjectName(QStringLiteral("SftpUploadFilesAction"));
     QAction *uploadDirectoryAction = uploadMenu->addAction(
         UiIcons::symbol(this, UiIcons::Symbol::Folder, this->palette().color(QPalette::WindowText)),
         tr("Upload Directory…"));
+    uploadDirectoryAction->setObjectName(QStringLiteral("SftpUploadDirectoryAction"));
     connect(uploadFilesAction, &QAction::triggered,
             this, &RemoteFileManagerWidget::uploadSelectedFile);
     connect(uploadDirectoryAction, &QAction::triggered,
@@ -1502,11 +1504,15 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     // （m_statusLabel / m_pauseButton）是动态内容，随下一次传输事件转为新语言。
     i18n::onRetranslate(this,
                         [this, uploadButton, downloadButton, previewButton, chmodButton,
-                         renameButton, deleteButton] {
+                         renameButton, deleteButton, uploadFilesAction, uploadDirectoryAction] {
         const QStringList headers{tr("Name"), tr("Size"), tr("Modified"),
                                   tr("Permissions"), tr("Owner")};
         m_localTree->setHeaderLabels(headers);
         m_fileTree->setHeaderLabels(headers);
+        // 上传菜单里的这两个 QAction 只在构造期设过一次文案，且会被命令面板通过
+        // findChildren<QAction*> 收录；不在此处重设，切换语言后面板里会残留上一次语言。
+        uploadFilesAction->setText(tr("Upload Files…"));
+        uploadDirectoryAction->setText(tr("Upload Directory…"));
         uploadButton->setToolTip(tr("Upload"));
         downloadButton->setToolTip(tr("Download"));
         previewButton->setToolTip(tr("Preview"));
