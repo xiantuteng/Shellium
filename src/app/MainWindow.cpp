@@ -17,6 +17,7 @@
 #include "ui/HostManagerWidget.h"
 #include "ui/MacWindowChrome.h"
 #include "ui/SessionTabBar.h"
+#include "ui/SessionTabDropOverlay.h"
 #include "ui/SettingsDialog.h"
 #include "ui/SettingsWidgets.h"
 #include "ui/SshKeyManagerDialog.h"
@@ -578,6 +579,11 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     m_workspaceStack->addWidget(m_workspacePlaceholder);
     m_workspaceStack->addWidget(m_tabs);
     m_workspaceStack->setMinimumWidth(kWorkspaceMinimumWidth);
+
+    // 落点提示层是 m_workspaceStack 的浮动子控件（不进入其页面栈），拖动会话标签离开
+    // 标题栏时由 SessionTabBar::externalDragStarted 显示并置顶，释放时隐藏；它只画高亮，
+    // 真正的合并仍由 SessionTabBar::mouseReleaseEvent → mergeTerminalTabs 完成。
+    m_tabDropOverlay = new SessionTabDropOverlay(m_workspaceStack);
     m_sidebarSplitter->addWidget(m_sidebarPanel);
     m_sidebarSplitter->addWidget(m_workspaceStack);
     m_sidebarSplitter->setStretchFactor(0, 0);
@@ -1037,6 +1043,30 @@ MainWindow::MainWindow(ApplicationDatabase *database,
             &SessionTabBar::workspaceMergeRequested,
             this,
             &MainWindow::mergeTerminalTabs);
+    connect(m_titleTabBar,
+            &SessionTabBar::externalDragStarted,
+            this,
+            [this]() {
+                if (m_tabDropOverlay == nullptr || m_workspaceStack == nullptr) {
+                    return;
+                }
+                // 只在真的有可接收的当前页时提示；空态页拖入没有意义。
+                if (m_tabs == nullptr || m_tabs->count() == 0
+                    || m_workspaceStack->currentWidget() != m_tabs) {
+                    return;
+                }
+                m_tabDropOverlay->setGeometry(m_workspaceStack->rect());
+                m_tabDropOverlay->show();
+                m_tabDropOverlay->raise();
+            });
+    connect(m_titleTabBar,
+            &SessionTabBar::externalDragFinished,
+            this,
+            [this]() {
+                if (m_tabDropOverlay != nullptr) {
+                    m_tabDropOverlay->hide();
+                }
+            });
     connect(m_titleTabBar,
             &QTabBar::currentChanged,
             this,

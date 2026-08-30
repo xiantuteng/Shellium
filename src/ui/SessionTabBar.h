@@ -119,6 +119,17 @@ signals:
                                  bool droppedOnTargetTab);
 
     /**
+     * @brief 指针拖着一个终端标签离开了标签栏下沿，进入"拖进终端区/侧栏"手势。
+     *
+     * MainWindow 收到后显示并置顶中央落点提示层。此后跟随光标的是本控件创建的浮动标签
+     * 快照（一个无边框顶层控件），释放仍由 mouseReleaseEvent 按全局坐标决定是否合并。
+     */
+    void externalDragStarted();
+
+    /** @brief 上述手势结束（释放或取消），落点提示层应隐藏。 */
+    void externalDragFinished();
+
+    /**
      * @brief 标签是否溢出、以及两端是否还能继续滚动发生变化。
      * @param scrollable 标签总宽度超过可视宽度，需要显示外部滚动按钮。
      * @param canScrollLeft 左侧仍有被遮挡的标签。
@@ -313,6 +324,15 @@ private:
     /** @brief 把内置滚动按钮移出可视区域，并在状态变化时发出 scrollStateChanged。 */
     void syncScrollButtons();
 
+    /** @brief 创建跟随光标的浮动标签快照（无边框顶层控件），并发 externalDragStarted。 */
+    void startExternalDragGhost();
+
+    /** @brief 把浮动标签快照移到给定全局坐标下方偏移处。 */
+    void moveExternalDragGhost(const QPoint &globalPosition);
+
+    /** @brief 销毁浮动标签快照并发 externalDragFinished；无快照时安全无操作。 */
+    void endExternalDragGhost();
+
     /**
      * @brief QTabBar 自带的左右滚动按钮，由 Qt 在构造时创建并全权管理生命周期。
      *
@@ -394,6 +414,10 @@ private:
     QPoint m_lastDragPosition;
     /** @brief 是否已越过系统拖拽阈值并进入标签重排状态。 */
     bool m_dragActive = false;
+    /** @brief 本次手势是否已进入"拖出标签栏"状态（浮动快照可见、落点层已请求显示）。 */
+    bool m_externalDragActive = false;
+    /** @brief 跟随光标的浮动标签快照；无边框顶层控件，仅在拖出标签栏期间存在。 */
+    QPointer<QWidget> m_dragGhost;
 
     /**
      * @brief Qt 内部原生拖拽快照的弱引用。

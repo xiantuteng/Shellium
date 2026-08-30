@@ -11,6 +11,7 @@
 #include "ui/HostDistributionIcon.h"
 #include "ui/HostManagerWidget.h"
 #include "ui/SessionTabBar.h"
+#include "ui/SessionTabDropOverlay.h"
 
 #include <QAbstractButton>
 #include <QAction>
@@ -58,7 +59,8 @@ private slots:
     void sidebarWidthIsRestoredOnNextLaunch();
     void duplicateMenuItemOpensASecondCopyOfTheTab();
 
-    /** @brief 把终端拖入此前选中的标签后必须原位合并为可重命名的工作空间标签。 */
+    /** @brief 把终端拖入此前选中的标签后必须原位合并为可重命名的工作空间标签；
+     *         拖出标签栏期间必须亮出跟随光标的浮动快照与中央落点提示层。 */
     void draggingTerminalIntoSelectedTabCreatesWorkspace();
 
     /** @brief 铺开布局必须禁用远程文件管理，切换布局则恢复单终端完整能力。 */
@@ -200,6 +202,18 @@ void MainWindowShellTest::draggingTerminalIntoSelectedTabCreatesWorkspace()
     QCOMPARE(tabs->currentIndex(), 0);
     auto *targetWorkspace = qobject_cast<TerminalWorkspace *>(tabs->widget(0));
     QVERIFY(targetWorkspace != nullptr && targetWorkspace->activePane() != nullptr);
+    auto *overlay = window.findChild<SessionTabDropOverlay *>(
+        QStringLiteral("SessionTabDropOverlay"));
+    QVERIFY(overlay != nullptr);
+    QVERIFY2(overlay->isHidden(), "空闲时中央落点提示层必须隐藏");
+    const auto dragGhostExists = [] {
+        const QList<QWidget *> topLevels = QApplication::topLevelWidgets();
+        return std::any_of(topLevels.cbegin(), topLevels.cend(), [](const QWidget *widget) {
+            return widget->objectName() == QStringLiteral("SessionTabDragGhost");
+        });
+    };
+    QSignalSpy dragStartedSpy(tabBar, &SessionTabBar::externalDragStarted);
+
     const QPoint sourceCenter = tabBar->tabRect(1).center();
     const QPoint terminalDropPoint = tabBar->mapFromGlobal(
         targetWorkspace->activePane()->mapToGlobal(targetWorkspace->activePane()->rect().center()));
@@ -210,7 +224,15 @@ void MainWindowShellTest::draggingTerminalIntoSelectedTabCreatesWorkspace()
     QTest::mouseMove(tabBar, QPoint(sourceCenter.x(), tabBar->height() + 12), 40);
     QCOMPARE(tabs->currentIndex(), 0);
     QTest::mouseMove(tabBar, terminalDropPoint, 80);
+
+    // 指针离开标签栏下沿即进入"拖出"手势：亮出跟随光标的浮动标签快照与中央落点提示层。
+    QTRY_COMPARE(dragStartedSpy.count(), 1);
+    QVERIFY2(dragGhostExists(), "拖出标签栏后必须存在跟随光标的浮动标签快照");
+    QVERIFY2(!overlay->isHidden(), "拖出标签栏后中央落点提示层必须可见");
+
     QTest::mouseRelease(tabBar, Qt::LeftButton, Qt::NoModifier, terminalDropPoint);
+    QTRY_VERIFY2(!dragGhostExists(), "释放后浮动标签快照必须销毁");
+    QVERIFY2(overlay->isHidden(), "释放后中央落点提示层必须隐藏");
 
     QTRY_COMPARE(tabs->count(), 1);
     auto *group = qobject_cast<TerminalWorkspaceGroup *>(tabs->widget(0));

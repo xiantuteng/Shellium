@@ -7,10 +7,12 @@
 #include <QEasingCurve>
 #include <QEvent>
 #include <QFontMetrics>
+#include <QLabel>
 #include <QMetaMethod>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPaintEvent>
+#include <QPixmap>
 #include <QResizeEvent>
 #include <QSignalBlocker>
 #include <QStyle>
@@ -604,6 +606,21 @@ void SessionTabBar::mouseMoveEvent(QMouseEvent *event)
         // 向下离开标签栏代表用户把标签拖进中央终端内容，而不是继续做水平排序。这里只
         // 设置视觉预备态；MainWindow 会在释放时用中央 QTabWidget 的真实全局矩形做最终校验。
         const bool pointerBelowTabBar = position.y() >= height();
+        // 指针离开标签栏下沿：意图从"给标签排序"变成"把会话拖进终端区/侧栏"。此时亮出
+        // 跟随光标的浮动标签快照并请求 MainWindow 显示落点提示层；真正的合并仍由
+        // mouseReleaseEvent 按释放时的全局坐标决定，因此这条路径对自动化用例同样可驱动。
+        if (pointerBelowTabBar
+            && m_pressedTabId != 0
+            && tabKind(indexForTabId(m_pressedTabId)) == TabKind::Terminal) {
+            if (!m_externalDragActive) {
+                m_externalDragActive = true;
+                startExternalDragGhost();
+            }
+            moveExternalDragGhost(event->globalPosition().toPoint());
+        } else if (m_externalDragActive) {
+            // 指针又回到标签栏内：撤下浮动快照，恢复普通水平排序预览。
+            endExternalDragGhost();
+        }
         const bool dropArmed = m_workspaceDropTargetTabId != 0
             && (pointerOnTargetTab || pointerBelowTabBar);
         if (m_workspaceDropArmed != dropArmed) {
@@ -912,8 +929,78 @@ void SessionTabBar::hideNativeDragPreview(const QList<QWidget *> &childrenBefore
     }
 }
 
+void SessionTabBar::startExternalDragGhost()
+{
+    const int draggedIndex = indexForTabId(m_pressedTabId);
+    if (draggedIndex < 0 || !m_dragGhost.isNull()) {
+        return;
+    }
+
+    // 用与静态标签一致的绘制路径渲染快照；hovered=true 借用悬停底色，保证脱离胶囊背景后
+    // 快照仍是一块完整的圆角标签而不是悬空文字。
+    const QRect tabBox = tabRect(draggedIndex);
+    const qreal dpr = devicePixelRatioF();
+    QPixmap snapshot(tabBox.size() * dpr);
+    snapshot.setDevicePixelRatio(dpr);
+    snapshot.fill(Qt::transparent);
+    {
+        QPainter painter(&snapshot);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        painter.translate(-tabBox.topLeft());
+        drawSessionTab(painter, draggedIndex, tabBox, true);
+    }
+
+    // 无边框、鼠标穿透的顶层控件：只负责显示快照，不参与命中，也不抢窗口焦点。
+    auto *ghost = new QLabel(nullptr,
+                             Qt::ToolTip | Qt::FramelessWindowHint
+                                 | Qt::WindowTransparentForInput
+                                 | Qt::NoDropShadowWindowHint);
+    ghost->setObjectName(QStringLiteral("SessionTabDragGhost"));
+    ghost->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+    ghost->setAttribute(Qt::WA_ShowWithoutActivating, true);
+    ghost->setAttribute(Qt::WA_TranslucentBackground, true);
+    ghost->setWindowOpacity(0.9);
+    ghost->setPixmap(snapshot);
+    ghost->resize(tabBox.size());
+    m_dragGhost = ghost;
+
+    m_hoveredIndex = -1;
+    m_closeHoveredIndex = -1;
+    update();
+    emit externalDragStarted();
+}
+
+void SessionTabBar::moveExternalDragGhost(const QPoint &globalPosition)
+{
+    if (m_dragGhost.isNull()) {
+        return;
+    }
+    // 快照左边缘对齐最初的抓取位置，纵向让它稍稍位于光标下方，避免完全盖住落点。
+    m_dragGhost->move(globalPosition.x() - m_pressedOffsetWithinTab,
+                      globalPosition.y() + 6);
+    if (!m_dragGhost->isVisible()) {
+        m_dragGhost->show();
+        m_dragGhost->raise();
+    }
+}
+
+void SessionTabBar::endExternalDragGhost()
+{
+    const bool wasActive = m_externalDragActive || !m_dragGhost.isNull();
+    m_externalDragActive = false;
+    if (!m_dragGhost.isNull()) {
+        m_dragGhost->deleteLater();
+        m_dragGhost.clear();
+    }
+    if (wasActive) {
+        emit externalDragFinished();
+    }
+}
+
 void SessionTabBar::resetPointerDragState()
 {
+    // 撤下浮动快照并通知落点层隐藏；endExternalDragGhost 只在确有拖出手势时才发信号。
+    endExternalDragGhost();
     m_dragActive = false;
     m_pressedTabId = 0;
     m_workspaceDropTargetTabId = 0;

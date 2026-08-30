@@ -35,6 +35,7 @@ class QTimer;
 class QToolButton;
 class QWidget;
 class SessionTabBar;
+class SessionTabDropOverlay;
 class TerminalPane;
 class TerminalSettingsService;
 class TerminalWorkspace;
@@ -358,6 +359,8 @@ private:
     QStackedWidget *m_workspaceStack = nullptr;
     /** @brief 没有任何会话标签时显示的产品图标与名称页面。 */
     QWidget *m_workspacePlaceholder = nullptr;
+    /** @brief 拖动会话标签离开标题栏时，覆盖在中央工作区之上的落点提示层。 */
+    SessionTabDropOverlay *m_tabDropOverlay = nullptr;
     /** @brief 融入窗口标题栏的可交互会话标签，内容与 m_tabs 严格镜像。 */
     SessionTabBar *m_titleTabBar = nullptr;
     /**

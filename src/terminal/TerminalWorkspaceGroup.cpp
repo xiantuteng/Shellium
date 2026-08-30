@@ -38,8 +38,9 @@ public:
         setObjectName(QStringLiteral("WorkspaceTerminalFrame"));
         setMouseTracking(true);
         auto *layout = new QVBoxLayout(this);
-        // 边框绘制在控件内部，预留 4px 可避免实线或虚线覆盖终端文字和滚动条命中区域。
-        layout->setContentsMargins(4, 4, 4, 4);
+        // 卡片底色与边框绘制在控件内部，留 6px 让圆角卡片的描边和内衬在终端四周透出，
+        // 不覆盖终端文字与滚动条命中区域。
+        layout->setContentsMargins(6, 6, 6, 6);
         layout->setSpacing(0);
         layout->addWidget(workspace);
         // 动态属性为自动化和主题扩展提供稳定、无需了解内部子类的状态入口；实际边框仍由
@@ -107,20 +108,39 @@ protected:
     void paintEvent(QPaintEvent *event) override
     {
         QFrame::paintEvent(event);
-        if (!m_selected && !m_hovered) {
-            return;
-        }
         QPainter painter(this);
         painter.setRenderHint(QPainter::Antialiasing, true);
-        QColor color = palette().color(QPalette::Highlight);
-        color.setAlpha(m_selected ? 230 : 190);
-        painter.setPen(QPen(color,
-                            m_selected ? 2.0 : 1.5,
-                            m_selected ? Qt::SolidLine : Qt::DashLine,
-                            Qt::RoundCap,
-                            Qt::RoundJoin));
+
+        const QRectF cardRect = QRectF(rect()).adjusted(1.5, 1.5, -1.5, -1.5);
+        constexpr qreal radius = 10.0;
+
+        // 圆角卡片底：始终绘制，让网格里的每个终端都是一块独立的深色卡片而不是贴边裸终端。
+        // 终端控件本身不透明，只有 6px 内衬和四个圆角会露出这层底色。
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(palette().color(QPalette::Base));
+        painter.drawRoundedRect(cardRect, radius, radius);
+
+        // 三态边框：未选中淡实线、Hover 虚线、选中高对比实线；三者都画，避免切换时卡片
+        // 尺寸/描边突然出现或消失造成的跳动。
+        QColor borderColor;
+        qreal borderWidth = 1.0;
+        Qt::PenStyle borderStyle = Qt::SolidLine;
+        if (m_selected) {
+            borderColor = palette().color(QPalette::Highlight);
+            borderColor.setAlpha(230);
+            borderWidth = 2.0;
+        } else if (m_hovered) {
+            borderColor = palette().color(QPalette::Highlight);
+            borderColor.setAlpha(165);
+            borderWidth = 1.4;
+            borderStyle = Qt::DashLine;
+        } else {
+            borderColor = palette().color(QPalette::Mid);
+            borderColor.setAlpha(150);
+        }
+        painter.setPen(QPen(borderColor, borderWidth, borderStyle, Qt::RoundCap, Qt::RoundJoin));
         painter.setBrush(Qt::NoBrush);
-        painter.drawRoundedRect(QRectF(rect()).adjusted(1.5, 1.5, -1.5, -1.5), 9.0, 9.0);
+        painter.drawRoundedRect(cardRect, radius, radius);
     }
 
 private:
@@ -151,9 +171,9 @@ TerminalWorkspaceGroup::TerminalWorkspaceGroup(QWidget *parent)
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(0);
     layout->addWidget(m_content);
-    m_grid->setContentsMargins(4, 4, 4, 4);
-    m_grid->setHorizontalSpacing(4);
-    m_grid->setVerticalSpacing(4);
+    m_grid->setContentsMargins(8, 8, 8, 8);
+    m_grid->setHorizontalSpacing(8);
+    m_grid->setVerticalSpacing(8);
 }
 
 void TerminalWorkspaceGroup::addTerminal(TerminalWorkspace *workspace, const QString &title)

@@ -201,6 +201,8 @@ set(SHELLIUM_APP_SOURCES
     src/ui/SettingsWidgets.h
     src/ui/SessionTabBar.cpp
     src/ui/SessionTabBar.h
+    src/ui/SessionTabDropOverlay.cpp
+    src/ui/SessionTabDropOverlay.h
     src/ui/SshKeyManagerDialog.cpp
     src/ui/SshKeyManagerDialog.h
     src/ui/UiIcons.h
@@ -785,6 +787,8 @@ if(BUILD_TESTING)
         tests/SessionTabBarTest.cpp
         src/ui/SessionTabBar.cpp
         src/ui/SessionTabBar.h
+        src/ui/SessionTabDropOverlay.cpp
+        src/ui/SessionTabDropOverlay.h
     )
     target_include_directories(ShelliumSessionTabBarTests PRIVATE src)
     target_link_libraries(ShelliumSessionTabBarTests PRIVATE
