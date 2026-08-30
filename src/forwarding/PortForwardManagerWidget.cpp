@@ -2,6 +2,7 @@
 #include "platform/NativeSocket.h"
 
 #include "forwarding/PortForwardRuntime.h"
+#include "i18n/Retranslate.h"
 #include "ssh/SshSessionStack.h"
 #include "storage/ApplicationDatabase.h"
 #include "ui/UiIcons.h"
@@ -372,6 +373,7 @@ protected:
  * 又从数据结构上保证分组永远不会成为端口转发归属对象。
  */
 class HostTreeComboBox final : public QComboBox {
+    Q_DECLARE_TR_FUNCTIONS(HostTreeComboBox)
 public:
     /**
      * @brief 创建下拉框与现代化树形弹层。
@@ -647,6 +649,7 @@ private:
  * 规则，数据库外键和运行时安全确认仍由上层统一处理。
  */
 class PortForwardRuleDialog final : public QDialog {
+    Q_DECLARE_TR_FUNCTIONS(PortForwardRuleDialog)
 public:
     explicit PortForwardRuleDialog(const QString &hostId,
                                    const std::optional<PortForwardRule> &existing,
@@ -909,6 +912,7 @@ QString displayableForwardingError(const QString &message, const qsizetype maxim
  * 预先算好文本传入，本类只负责排版和配色，不重新访问数据库或规则对象。
  */
 class PortForwardRuleRow final : public QWidget {
+    Q_DECLARE_TR_FUNCTIONS(PortForwardRuleRow)
 public:
     PortForwardRuleRow(const QString &name,
                        const PortForwardType type,
@@ -1125,7 +1129,17 @@ PortForwardManagerWidget::PortForwardManagerWidget(ApplicationDatabase *database
                 menu.exec(m_ruleList->viewport()->mapToGlobal(position));
             });
 
-    reloadHosts();
+    // 常驻侧栏页：语言切换时重设固定文案，并重建主机下拉与规则卡片（其中含动态状态文案）。
+    i18n::onRetranslate(this, [this, hostLabel, addButton, startButton, stopButton] {
+        hostLabel->setText(tr("Hosts"));
+        addButton->setText(tr("New"));
+        startButton->setText(tr("Start"));
+        stopButton->setText(tr("Stop"));
+        addButton->setToolTip(tr("New port forwarding rule"));
+        startButton->setToolTip(tr("Start all forwarding rules for the current host"));
+        stopButton->setToolTip(tr("Stop all forwarding rules for the current host"));
+        reloadHosts();
+    });
 }
 
 PortForwardManagerWidget::~PortForwardManagerWidget()

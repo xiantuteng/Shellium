@@ -10,6 +10,7 @@
 #include "ui/HostDistributionIcon.h"
 #include "ui/HostManagerWidget.h"
 
+#include <QAbstractButton>
 #include <QAction>
 #include <QCoreApplication>
 #include <QEvent>
@@ -486,6 +487,19 @@ void MainWindowShellTest::languageChangeRetranslatesMenuBar()
     QCoreApplication::sendPostedEvents(nullptr, QEvent::LanguageChange);
     QCOMPARE(connectionMenu->title(), QStringLiteral("Connection"));
     QCOMPARE(connectionMenu->actions().constFirst()->text(), QStringLiteral("Connect to Server"));
+
+    // 常驻侧栏控件也必须随 i18n::onRetranslate 立即热切换，而不是等重开窗口。
+    auto *addHostButton = window.findChild<QAbstractButton *>(QStringLiteral("HostAddButton"));
+    QVERIFY(addHostButton != nullptr);
+    QCOMPARE(addHostButton->text(), QStringLiteral("New host"));
+
+    QVERIFY(localization.apply(QStringLiteral("zh_CN")));
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::LanguageChange);
+    QCOMPARE(addHostButton->text(), QString::fromUtf8("新建主机"));
+
+    QVERIFY(localization.apply(QStringLiteral("en")));
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::LanguageChange);
+    QCOMPARE(addHostButton->text(), QStringLiteral("New host"));
 }
 
 QTEST_MAIN(MainWindowShellTest)

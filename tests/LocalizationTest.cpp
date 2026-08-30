@@ -60,6 +60,13 @@ void LocalizationTest::applyLoadsCatalogAndEmitsSignal()
     QCOMPARE(QCoreApplication::translate("QObject", "Database initialization failed"),
              QString::fromUtf8("数据库初始化失败"));
     QCOMPARE(QLocale().language(), QLocale::Chinese);
+
+    // 无 Q_OBJECT 的嵌套对话框类（用 Q_DECLARE_TR_FUNCTIONS）其 tr() 上下文必须与 lupdate
+    // 提取时一致，否则按需弹出的“新建主机”等对话框会退回英文源文案。
+    QCOMPARE(QCoreApplication::translate("HostRecordDialog", "Host configuration"),
+             QString::fromUtf8("主机配置"));
+    QCOMPARE(QCoreApplication::translate("PortForwardRuleDialog", "New port forwarding"),
+             QString::fromUtf8("新建端口转发"));
 }
 
 void LocalizationTest::applySourceLanguageUninstallsCatalog()

@@ -3,6 +3,7 @@
 #include "ai/AiClient.h"
 #include "ai/AiSettings.h"
 #include "ai/AiSettingsService.h"
+#include "i18n/Retranslate.h"
 #include "ai/CommandRiskClassifier.h"
 #include "ui/UiIcons.h"
 
@@ -705,6 +706,20 @@ void AiAssistantWidget::buildUi()
     registerExecuteShortcut(
         QKeySequence(static_cast<int>(kCommandKeyModifier) | Qt::Key_Enter),
                             QStringLiteral("aiExecuteLatestKeypadShortcut"));
+    // 常驻聊天面板：语言切换时重设固定文案。上下文目标标签是动态内容（当前服务器名 /
+    // 未连接），由 setActiveTarget() 维护，这里只在未连接占位时兜底重译。
+    i18n::onRetranslate(this, [this, disclaimer] {
+        m_newSessionButton->setText(tr("New session"));
+        m_historyButton->setToolTip(tr("View the chat history for the current tab"));
+        m_inputEdit->setPlaceholderText(
+            tr("Describe what you want to accomplish on the current server…"));
+        m_sendButton->setToolTip(tr("Send (Enter)"));
+        disclaimer->setText(tr("The AI can make mistakes. Every command that changes the "
+                               "system requires your explicit confirmation."));
+        // 重新套用当前目标：未连接时回到本地化占位，已连接时保持服务器名不变。
+        setActiveTarget(m_activeTarget);
+    });
+
     updateInputEditorHeight();
     updateSendButtonMode();
 }

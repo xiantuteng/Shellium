@@ -1,5 +1,6 @@
 #include "terminal/TerminalPane.h"
 
+#include "i18n/Retranslate.h"
 #include "ssh/ShellShim.h"
 #include "ssh/SshCommandParser.h"
 #include "ssh/SshSessionStack.h"
@@ -196,6 +197,16 @@ TerminalPane::TerminalPane(QWidget *parent)
                 emit targetsChanged(this);
                 emit statusMessage(tr("Inner SSH authentication succeeded; the file manager has switched to the current server"));
             });
+
+    // 语言切换时重设终端标题栏的固定文案。已连接会话的标题是 host:port（与语言无关），
+    // 由 refreshHeaderLabel() 兜底；连接中/失败等瞬时提示会在下一次状态变化时转为新语言。
+    i18n::onRetranslate(this, [this] {
+        m_terminalMetaLabel->setToolTip(tr("Current terminal encoding and columns × rows"));
+        m_fileManagerButton->setToolTip(
+            tr("Show the remote file manager for the current session (Ctrl+Shift+F)"));
+        m_fileManagerButton->setAccessibleName(tr("Remote file manager"));
+        refreshHeaderLabel();
+    });
 }
 
 void TerminalPane::openLocalShell(const QString &shellPath)

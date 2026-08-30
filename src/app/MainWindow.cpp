@@ -1339,6 +1339,17 @@ void MainWindow::retranslateUi()
         }
     }
     setWindowTitle(tr("Shellium"));
+
+    if (m_sidebarTitle != nullptr) {
+        m_sidebarTitle->setText(tr("Hosts"));
+    }
+    if (m_hostCountLabel != nullptr && m_hostManager != nullptr) {
+        m_hostCountLabel->setText(tr("%1 hosts").arg(m_hostManager->hostCount()));
+    }
+    if (auto *hint = findChild<QLabel *>(QStringLiteral("WorkspacePlaceholderHint"))) {
+        hint->setText(tr("Press + in the title bar to open a new terminal tab, or connect "
+                         "to a server from the host list on the left."));
+    }
 }
 
 void MainWindow::applyLanguageSetting(const QString &storedLanguage)
@@ -1354,13 +1365,9 @@ void MainWindow::applyLanguageSetting(const QString &storedLanguage)
         showTransientMessage(tr("Could not switch to the selected language; check that the language pack is complete"), 8000);
         return;
     }
-    if (!m_languageChangeNoticeShown) {
-        m_languageChangeNoticeShown = true;
-        QMessageBox::information(
-            this,
-            tr("Interface language changed"),
-            tr("Menus updated immediately. Open terminal content, history, and some windows will fully use the new language after being reopened or after Shellium is restarted."));
-    }
+    // 界面已随 QEvent::LanguageChange 就地切换。已经滚动过的终端输出和历史日志沿用原文，
+    // 属于内容而非界面文案，不再提示重启。
+    showTransientMessage(tr("Interface language changed"), 4000);
 }
 
 void MainWindow::changeEvent(QEvent *event)

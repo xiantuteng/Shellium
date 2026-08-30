@@ -1,4 +1,5 @@
 #include "sftp/RemoteFileManagerWidget.h"
+#include "i18n/Retranslate.h"
 #include "ui/UiIcons.h"
 
 #include <QAction>
@@ -1496,6 +1497,30 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
                 }
                 dialog->show();
             });
+
+    // 常驻文件管理面板：语言切换时重设列头、工具栏按钮提示与固定文案。传输状态文案
+    // （m_statusLabel / m_pauseButton）是动态内容，随下一次传输事件转为新语言。
+    i18n::onRetranslate(this,
+                        [this, uploadButton, downloadButton, previewButton, chmodButton,
+                         renameButton, deleteButton] {
+        const QStringList headers{tr("Name"), tr("Size"), tr("Modified"),
+                                  tr("Permissions"), tr("Owner")};
+        m_localTree->setHeaderLabels(headers);
+        m_fileTree->setHeaderLabels(headers);
+        uploadButton->setToolTip(tr("Upload"));
+        downloadButton->setToolTip(tr("Download"));
+        previewButton->setToolTip(tr("Preview"));
+        chmodButton->setToolTip(tr("Permissions"));
+        renameButton->setToolTip(tr("Rename"));
+        deleteButton->setToolTip(tr("Delete"));
+        m_resumeTransfersCheck->setText(tr("Resumable transfer"));
+        m_closeButton->setToolTip(
+            tr("Close the remote file manager and give all the width back to the terminal"));
+        m_fullScreenButton->setToolTip(
+            m_localPanel != nullptr && m_localPanel->isVisible()
+                ? tr("Exit full screen and collapse local files")
+                : tr("Show the file manager full screen and expand local files for side-by-side copying"));
+    });
 
     rebuildTransferQueueView();
     updateFullScreenIcon();

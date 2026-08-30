@@ -1,6 +1,7 @@
 #include "ui/HostManagerWidget.h"
 
 #include "core/ConnectionConfigCodec.h"
+#include "i18n/Retranslate.h"
 #include "security/Vault.h"
 #include "ssh/SshSessionStack.h"
 #include "storage/ApplicationDatabase.h"
@@ -1091,6 +1092,7 @@ private:
  * 覆盖，而且无法表达“选中”所需的外圈描边。按钮本身可选中，交由 QButtonGroup 保证互斥。
  */
 class TagColorSwatch final : public QAbstractButton {
+    Q_DECLARE_TR_FUNCTIONS(TagColorSwatch)
 public:
     /**
      * @brief 创建一个展示指定颜色的可选中圆点。
@@ -1146,6 +1148,7 @@ private:
  * 挑好的配色也不会丢；反之若把配色也推迟到主机保存，同一标签在不同主机上就会出现分歧。
  */
 class HostTagDialog final : public QDialog {
+    Q_DECLARE_TR_FUNCTIONS(HostTagDialog)
 public:
     /**
      * @brief 创建标签编辑器。
@@ -1476,6 +1479,7 @@ private:
  * 开启保险箱密码时使用主密码加密，关闭时使用本机随机密钥透明加密。
  */
 class HostRecordDialog final : public QDialog {
+    Q_DECLARE_TR_FUNCTIONS(HostRecordDialog)
 public:
     /**
      * @brief 创建记录编辑器。
@@ -2630,6 +2634,7 @@ private:
  * 由调用方排除，避免用户直到保存阶段才收到“自身引用/重复主机”的迟到错误。
  */
 class HostPickerDialog final : public QDialog {
+    Q_DECLARE_TR_FUNCTIONS(HostPickerDialog)
 public:
     HostPickerDialog(const QList<HostRecord> &candidates,
                      const QSet<QString> &excludedIds,
@@ -2776,6 +2781,7 @@ private:
  * 新建主机则通过完整 HostRecordDialog 保存为可复用的普通主机，再自动加入当前草稿。
  */
 class HostChainDialog final : public QDialog {
+    Q_DECLARE_TR_FUNCTIONS(HostChainDialog)
 public:
     HostChainDialog(const HostRecord &target,
                     const QStringList &initialChain,
@@ -3276,7 +3282,21 @@ HostManagerWidget::HostManagerWidget(ApplicationDatabase *database,
 
     // 必须先加载持久化快照再首次刷新；否则首屏会按默认值构建，随后再恢复时产生可见跳变。
     loadFolderExpansionState();
-    refresh();
+
+    // 常驻侧栏：语言切换时就地重设标题行文案并重建主机树（"未分组"分区标题等在 refresh()
+    // 里产生）。闭包首次执行等价于原先构造末尾的初始化 + 首屏刷新。
+    i18n::onRetranslate(this, [this, addHostButton, addGroupButton, refreshButton, tagFilterButton] {
+        m_searchEdit->setPlaceholderText(tr("Search name / address…"));
+        addHostButton->setText(tr("New host"));
+        addGroupButton->setText(tr("New group"));
+        refreshButton->setText(tr("Refresh"));
+        tagFilterButton->setText(tr("#tag"));
+        tagFilterButton->setToolTip(tr("Filter hosts by exact tag"));
+        addHostButton->setToolTip(tr("Create a new SSH host in the current group"));
+        addGroupButton->setToolTip(tr("Create a new host group at the current level"));
+        refreshButton->setToolTip(tr("Reload hosts and groups"));
+        refresh();
+    });
 }
 
 QWidget *HostManagerWidget::headerActionsWidget() const

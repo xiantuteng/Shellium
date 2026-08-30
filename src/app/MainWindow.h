@@ -429,9 +429,6 @@ private:
     /** @brief 界面语言服务；可为空（如单元测试），此时仅保留被动重译能力。 */
     LocalizationService *m_localization = nullptr;
 
-    /** @brief 本次运行是否已就“重启后完全生效”提示过用户，避免每次微调都弹框。 */
-    bool m_languageChangeNoticeShown = false;
-
     /** @brief 记录一个菜单动作及其源文案，供语言切换时重译；同时设置初始文案。 */
     void registerTranslatable(QAction *action,
                               const char *sourceText,

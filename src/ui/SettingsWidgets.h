@@ -7,6 +7,8 @@
 #include <QString>
 #include <QWidget>
 
+#include <functional>
+
 class QAbstractSpinBox;
 class QBoxLayout;
 class QButtonGroup;
@@ -162,6 +164,12 @@ public:
      */
     void addSegment(const QString &text, int data);
 
+    /** @brief 与 addSegment 相同，但文案由提供器给出，语言切换时自动重译。 */
+    void addSegment(std::function<QString()> text, int data);
+
+    /** @brief 按 data 值重设某个分段的文案，供语言切换时就地更新。 */
+    void setSegmentText(int data, const QString &text);
+
     /** @brief 返回当前选中分段的 data；没有任何分段时返回 -1。 */
     [[nodiscard]] int currentData() const;
 
@@ -218,6 +226,9 @@ public:
                           const QColor &cursor,
                           const QColor &link);
 
+    /** @brief 更新次要说明文案，供语言切换时就地重设。 */
+    void setSubtitle(const QString &subtitle);
+
 protected:
     void paintEvent(QPaintEvent *event) override;
 
@@ -247,6 +258,9 @@ public:
      */
     explicit SettingsCard(const QString &title = QString(), QWidget *parent = nullptr);
 
+    /** @brief 标题由提供器给出，卡片在语言切换时自动重译标题。 */
+    SettingsCard(std::function<QString()> titleProvider, QWidget *parent);
+
     /**
      * @brief 追加一行“说明 + 控件”。
      * @param label 行标签文本。
@@ -254,7 +268,26 @@ public:
      * @param hint 标签下方的次要说明，可为空。
      * @return 传入的控件，便于链式设置属性。
      */
-    QWidget *addRow(const QString &label, QWidget *field, const QString &hint = QString());
+    QWidget *addRow(const QString &label, QWidget *field, const QString &hint = QString(),
+                    QLabel **outLabel = nullptr, QLabel **outHint = nullptr);
+
+    /**
+     * @brief 与 addRow 相同，但标签/说明由文案提供器给出，卡片会在语言切换时自动重译。
+     *
+     * 提供器应为 `[this]{ return tr("..."); }`：lupdate 仍能从中提取字符串，运行时每次
+     * `QEvent::LanguageChange` 由 i18n::onRetranslate 重新求值并写回标签。
+     */
+    QWidget *addRow(std::function<QString()> label, QWidget *field,
+                    std::function<QString()> hint = {});
+
+    /** @brief 追加一段可随语言切换自动重译的灰色说明。 */
+    QLabel *addNote(std::function<QString()> text);
+
+    /** @brief 设置可随语言切换自动重译的卡片标题。 */
+    void setTitleProvider(std::function<QString()> title);
+
+    /** @brief 卡片标题标签；无标题时为空。供语言切换时就地重设标题。 */
+    [[nodiscard]] QLabel *titleLabel() const { return m_titleLabel; }
 
     /**
      * @brief 追加一行“上方说明 + 下方全宽控件”，用于需要展示长内容的输入项。
@@ -268,6 +301,10 @@ public:
      * 能随卡片一起伸缩，避免通过硬编码固定宽度来适配某一种窗口尺寸。
      */
     QWidget *addWideRow(const QString &label, QWidget *field, const QString &hint = QString());
+
+    /** @brief 与 addWideRow 相同，但文案由提供器给出，语言切换时自动重译。 */
+    QWidget *addWideRow(std::function<QString()> label, QWidget *field,
+                        std::function<QString()> hint = {});
 
     /**
      * @brief 追加一个占满整行宽度的控件（色板网格、预览区、长段说明等）。
@@ -284,4 +321,5 @@ public:
 
 private:
     QVBoxLayout *m_layout = nullptr;
+    QLabel *m_titleLabel = nullptr;
 };

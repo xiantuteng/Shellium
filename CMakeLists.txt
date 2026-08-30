@@ -136,6 +136,7 @@ set(SHELLIUM_APP_SOURCES
     src/core/ConnectionTarget.h
     src/i18n/LocalizationService.cpp
     src/i18n/LocalizationService.h
+    src/i18n/Retranslate.h
     src/forwarding/PortForwardManagerWidget.cpp
     src/forwarding/PortForwardManagerWidget.h
     src/forwarding/PortForwardRule.h
@@ -884,6 +885,13 @@ if(BUILD_TESTING)
     target_include_directories(ShelliumSettingsUiTests PRIVATE src)
     target_link_libraries(ShelliumSettingsUiTests PRIVATE
         Qt6::Core Qt6::Gui Qt6::Network Qt6::Widgets Qt6::Sql Qt6::Test ShelliumDependencies::libsodium)
+    qt_add_translations(ShelliumSettingsUiTests
+        TS_FILES i18n/shellium_zh_CN.ts
+        RESOURCE_PREFIX "/i18n"
+        NO_GENERATE_PLURALS_TS_FILE
+        LUPDATE_TARGET ShelliumSettingsUiTests_lupdate
+        LRELEASE_TARGET ShelliumSettingsUiTests_lrelease
+        LUPDATE_OPTIONS -no-obsolete -locations none)
     add_test(NAME ShelliumSettingsUiTests COMMAND ShelliumSettingsUiTests)
 
     # AI 助手改版成单步交互回路后，"执行完命令自动读取真实输出并续问模型"这条链路完全靠

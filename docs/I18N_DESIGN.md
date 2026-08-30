@@ -239,13 +239,18 @@ CI：`ctest` 跑 `ShelliumLocalizationTests`；另跑一次 `lrelease` 确认 `.
 - 构建环境：已 `brew install qttools`（6.11.1）。
 - 已知无关问题：`SHELLIUM_UI_PREVIEW` 配合 `-platform offscreen` 在本机启动即崩（MacWindowChrome 向不存在的 NSWindow 发消息），与本改动无关，预览截图走真实 cocoa 平台。
 
-### P2 已完成（混合式热切换）
+### P2 已完成（全量免重启热切换）
 
-方案定为**混合式**：`MainWindow` 常驻菜单栏即时热切换，其余按需对话框下次打开时以新语言重建，并一次性提示“重开/重启后完全生效”。理由：UI 代码约 1.8 万行，全量 `retranslateUi` 风险与维护成本过高。
+改语言后**整个界面立即切换**，无需重启。
 
-- `MainWindow`：菜单栏的菜单与动作通过 `registerTranslatable(QAction*/QMenu*, QT_TRANSLATE_NOOP("MainWindow", ...))` 登记源字符串；`changeEvent(QEvent::LanguageChange)` → `retranslateUi()` 用当前翻译器重设全部已登记文案。动作原来是构造函数里的局部变量，改为 `new QAction(this)` + 登记，避免提升 25 个成员。
-- 安装翻译器后 Qt 自动向本窗口投递 `LanguageChange`，无需额外信号连接。
-- 按需对话框（`ConnectionDialog`、`VaultDialog`、`SshKeyManagerDialog`、`HostRecordDialog` 等）不登记：它们每次打开重新构造，自然使用当前语言。
+- **通用助手** `src/i18n/Retranslate.h`（纯头文件、无 moc）：`i18n::onRetranslate(owner, [&]{ ...重设 tr() 文案... })`。闭包立即执行一次（相当于初始化），之后每次装/卸翻译器（`QEvent::LanguageChange`，`installTranslator` 会向 `qApp` 投递）自动重跑；`owner` 销毁时自动注销。常驻控件用它替代构造函数里一次性 `setText(tr(...))`。
+- **MainWindow**：菜单/动作用 `registerTranslatable(x, QT_TRANSLATE_NOOP("MainWindow", ...))` 登记，`changeEvent(LanguageChange)` → `retranslateUi()`（含侧栏标题、主机数、空态提示）。
+- **常驻控件已接入 `onRetranslate`**：`HostManagerWidget`（标题行按钮/搜索框 + `refresh()` 重建树含"未分组"分区头）、`PortForwardManagerWidget`、`ProductivityWidget`（三个 Tab + 按钮 + 占位符）、`AiAssistantWidget`（新会话/输入占位/免责声明/上下文标签）、`TerminalPane`（编码/文件管理器提示 + `refreshHeaderLabel()`）、`RemoteFileManagerWidget`（列头 ×2 + 工具栏提示 + 续传勾选）、`SettingsDialog`（导航列表 + 页脚 + 窗口/侧栏标题 + 语言卡）。
+- **按需对话框**（`ConnectionDialog`、`VaultDialog`、`SshKeyManagerDialog` 等）不接入：下次打开即以新语言重建。
+- **`SettingsDialog` 正文也热切换**：`SettingsCard` / `SegmentedControl` / `ThemeSwatchButton` 新增「文案提供器」重载（`addRow([this]{ return tr("..."); }, field)`、`SettingsCard(provider, parent)`、`addSegment(provider, data)`、`setSubtitle()`），内部各自 `i18n::onRetranslate`；`buildXxxPage()` 的 `tr()` 实参由脚本统一包成 `[this]{ return tr(...); }`。设置窗口开着时切语言，卡片标题/行标签/说明/分段控件立即变。
+- **无 `Q_OBJECT` 的嵌套对话框类**（`HostRecordDialog`、`HostTagDialog`、`HostPickerDialog`、`HostChainDialog`、`TagColorSwatch`、`PortForwardRuleDialog`、`PortForwardRuleRow`、`HostTreeComboBox`）加了 `Q_DECLARE_TR_FUNCTIONS(类名)`：否则它们的 `tr()` 运行时用基类上下文（`QDialog`…），而 lupdate 按类名提取，上下文不匹配 → 这些「新建主机」等对话框会退回英文源。这是翻转源语言后才暴露的隐患。
+- **固有不切换**（内容而非界面文案，不再提示重启）：已经滚过的终端输出、历史 `ActivityLog` 条目、少数瞬时状态文案（连接中/失败等，随下一次状态变化转新语言）。
+- `MainWindow::applyLanguageSetting` 的模态"需重启"弹框已改为一条 4 秒 transient 提示。
 
 ### P3 已完成（语言下拉 + 接线）
 

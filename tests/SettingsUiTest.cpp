@@ -6,7 +6,10 @@
 #include "storage/ApplicationDatabase.h"
 #include "ui/ConnectionDialog.h"
 #include "ui/SettingsDialog.h"
+#include "i18n/LocalizationService.h"
 #include "ui/SettingsWidgets.h"
+
+#include <QLabel>
 
 #include <QAbstractSpinBox>
 #include <QAbstractButton>
@@ -108,6 +111,8 @@ private slots:
     void reconnectToggleGatesDependentRows();
     /** @brief 语言下拉必须列出候选语言，并把选择即时写入设置服务、重开时回显。 */
     void languageSelectorPersistsAndRoundTrips();
+    /** @brief 设置窗口打开时切换语言，卡片标题/行文案/分段控件必须就地热切换。 */
+    void settingsContentRetranslatesLiveWithoutReopen();
     void colorSchemeSwatchesAreExclusiveAndPersist();
     void navigationSelectsMatchingPage();
     /** @brief 设置页不再显示保存/取消，修改必须即时入库且关闭窗口不得回滚。 */
@@ -485,6 +490,46 @@ void SettingsUiTest::languageSelectorPersistsAndRoundTrips()
 
     QString error;
     QVERIFY2(service->save(TerminalSettings{}.normalized(), &error), qPrintable(error));
+}
+
+void SettingsUiTest::settingsContentRetranslatesLiveWithoutReopen()
+{
+    auto service = makeService();
+    LocalizationService localization;
+    QVERIFY(localization.apply(QStringLiteral("en")));
+
+    SettingsDialog dialog(service.get());
+    const QList<QLabel *> titles =
+        dialog.findChildren<QLabel *>(QStringLiteral("SettingsCardTitle"));
+    QVERIFY(!titles.isEmpty());
+    const auto hasTitle = [&titles](const QString &text) {
+        for (const QLabel *label : titles) {
+            if (label->text() == text) {
+                return true;
+            }
+        }
+        return false;
+    };
+    QVERIFY2(hasTitle(QStringLiteral("Interface language")), "英文源语言下应有英文卡片标题");
+
+    QVERIFY(localization.apply(QStringLiteral("zh_CN")));
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::LanguageChange);
+
+    // 卡片标题、行文案、分段控件都必须就地切换，无需重开设置窗口。
+    QVERIFY2(hasTitle(QString::fromUtf8("界面语言")), "设置窗口打开状态下卡片标题未热切换");
+    QVERIFY2(hasTitle(QString::fromUtf8("应用主题")), "设置窗口打开状态下卡片标题未热切换");
+    auto *themeSelector = dialog.findChild<SegmentedControl *>(QStringLiteral("themeSelector"));
+    QVERIFY(themeSelector != nullptr);
+    bool followSystemInChinese = false;
+    for (const QAbstractButton *button : themeSelector->findChildren<QAbstractButton *>()) {
+        followSystemInChinese =
+            followSystemInChinese || button->text() == QString::fromUtf8("跟随系统");
+    }
+    QVERIFY2(followSystemInChinese, "分段控件文案未热切换");
+
+    QVERIFY(localization.apply(QStringLiteral("en")));
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::LanguageChange);
+    QVERIFY(hasTitle(QStringLiteral("Interface language")));
 }
 
 void SettingsUiTest::colorSchemeSwatchesAreExclusiveAndPersist()

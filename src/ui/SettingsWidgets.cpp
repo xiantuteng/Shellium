@@ -1,5 +1,7 @@
 #include "ui/SettingsWidgets.h"
 
+#include "i18n/Retranslate.h"
+
 #include <QAbstractSpinBox>
 #include <QApplication>
 #include <QButtonGroup>
@@ -542,6 +544,22 @@ void SegmentedControl::addSegment(const QString &text, const int data)
     m_group->addButton(button, data);
 }
 
+void SegmentedControl::addSegment(std::function<QString()> text, const int data)
+{
+    addSegment(text ? text() : QString(), data);
+    if (QAbstractButton *button = m_group->button(data); button != nullptr && text) {
+        i18n::onRetranslate(button,
+                            [button, fn = std::move(text)] { button->setText(fn()); });
+    }
+}
+
+void SegmentedControl::setSegmentText(const int data, const QString &text)
+{
+    if (QAbstractButton *button = m_group->button(data)) {
+        button->setText(text);
+    }
+}
+
 int SegmentedControl::currentData() const
 {
     return m_group->checkedId();
@@ -591,6 +609,15 @@ void ThemeSwatchButton::setPreviewColors(const QColor &background,
     m_foreground = foreground;
     m_cursor = cursor;
     m_link = link;
+    update();
+}
+
+void ThemeSwatchButton::setSubtitle(const QString &subtitle)
+{
+    if (m_subtitle == subtitle) {
+        return;
+    }
+    m_subtitle = subtitle;
     update();
 }
 
@@ -671,13 +698,20 @@ SettingsCard::SettingsCard(const QString &title, QWidget *parent)
     m_layout->setSpacing(12);
 
     if (!title.isEmpty()) {
-        auto *titleLabel = new QLabel(title, this);
-        titleLabel->setObjectName(QStringLiteral("SettingsCardTitle"));
-        m_layout->addWidget(titleLabel);
+        m_titleLabel = new QLabel(title, this);
+        m_titleLabel->setObjectName(QStringLiteral("SettingsCardTitle"));
+        m_layout->addWidget(m_titleLabel);
     }
 }
 
-QWidget *SettingsCard::addRow(const QString &label, QWidget *field, const QString &hint)
+SettingsCard::SettingsCard(std::function<QString()> titleProvider, QWidget *parent)
+    : SettingsCard(titleProvider ? titleProvider() : QString(), parent)
+{
+    setTitleProvider(std::move(titleProvider));
+}
+
+QWidget *SettingsCard::addRow(const QString &label, QWidget *field, const QString &hint,
+                              QLabel **outLabel, QLabel **outHint)
 {
     Q_ASSERT(field != nullptr);
     auto *row = new QWidget(this);
@@ -692,11 +726,17 @@ QWidget *SettingsCard::addRow(const QString &label, QWidget *field, const QStrin
     auto *labelWidget = new QLabel(label, textColumn);
     labelWidget->setObjectName(QStringLiteral("SettingsRowLabel"));
     textLayout->addWidget(labelWidget);
+    if (outLabel != nullptr) {
+        *outLabel = labelWidget;
+    }
     if (!hint.isEmpty()) {
         auto *hintWidget = new QLabel(hint, textColumn);
         hintWidget->setObjectName(QStringLiteral("SettingsRowHint"));
         hintWidget->setWordWrap(true);
         textLayout->addWidget(hintWidget);
+        if (outHint != nullptr) {
+            *outHint = hintWidget;
+        }
     }
 
     field->setParent(row);
@@ -747,4 +787,58 @@ QLabel *SettingsCard::addNote(const QString &text)
     note->setWordWrap(true);
     m_layout->addWidget(note);
     return note;
+}
+
+QWidget *SettingsCard::addRow(std::function<QString()> label, QWidget *field,
+                              std::function<QString()> hint)
+{
+    QLabel *labelWidget = nullptr;
+    QLabel *hintWidget = nullptr;
+    QWidget *row = addRow(label ? label() : QString(), field,
+                          hint ? hint() : QString(), &labelWidget, &hintWidget);
+    if (labelWidget != nullptr && label) {
+        i18n::onRetranslate(labelWidget,
+                            [labelWidget, fn = std::move(label)] { labelWidget->setText(fn()); });
+    }
+    if (hintWidget != nullptr && hint) {
+        i18n::onRetranslate(hintWidget,
+                            [hintWidget, fn = std::move(hint)] { hintWidget->setText(fn()); });
+    }
+    return row;
+}
+
+QWidget *SettingsCard::addWideRow(std::function<QString()> label, QWidget *field,
+                                  std::function<QString()> hint)
+{
+    QWidget *row = addWideRow(label ? label() : QString(), field, hint ? hint() : QString());
+    // addWideRow 的标签/说明用固定 objectName；取回本行内新建的那两个即可挂重译。
+    const QList<QLabel *> labels = row->findChildren<QLabel *>();
+    for (QLabel *candidate : labels) {
+        if (label && candidate->objectName() == QLatin1String("SettingsRowLabel")) {
+            i18n::onRetranslate(candidate,
+                                [candidate, fn = label] { candidate->setText(fn()); });
+        } else if (hint && candidate->objectName() == QLatin1String("SettingsRowHint")) {
+            i18n::onRetranslate(candidate,
+                                [candidate, fn = hint] { candidate->setText(fn()); });
+        }
+    }
+    return row;
+}
+
+QLabel *SettingsCard::addNote(std::function<QString()> text)
+{
+    QLabel *note = addNote(text ? text() : QString());
+    if (text) {
+        i18n::onRetranslate(note, [note, fn = std::move(text)] { note->setText(fn()); });
+    }
+    return note;
+}
+
+void SettingsCard::setTitleProvider(std::function<QString()> title)
+{
+    if (m_titleLabel == nullptr || !title) {
+        return;
+    }
+    QLabel *label = m_titleLabel;
+    i18n::onRetranslate(label, [label, fn = std::move(title)] { label->setText(fn()); });
 }

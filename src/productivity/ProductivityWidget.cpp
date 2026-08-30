@@ -1,6 +1,7 @@
 #include "productivity/ProductivityWidget.h"
 
 #include "productivity/ProductivityModel.h"
+#include "i18n/Retranslate.h"
 #include "ui/UiIcons.h"
 
 #include <QAbstractItemModel>
@@ -147,7 +148,14 @@ void ProductivityWidget::buildUi()
     m_snippetList->setDefaultDropAction(Qt::MoveAction);
     m_snippetList->setContextMenuPolicy(Qt::CustomContextMenu);
     snippetPageLayout->addWidget(m_snippetList, 1);
-    m_tabs->addTab(snippetPage, tr("Command snippets"));
+    const int snippetTabIndex = m_tabs->addTab(snippetPage, tr("Command snippets"));
+    i18n::onRetranslate(this, [this, snippetTabIndex, newSnippetButton, removeButton] {
+        m_tabs->setTabText(snippetTabIndex, tr("Command snippets"));
+        newSnippetButton->setText(tr("New snippet"));
+        newSnippetButton->setToolTip(tr("Create an executable command snippet"));
+        removeButton->setText(tr("Delete"));
+        removeButton->setToolTip(tr("Delete the selected snippet"));
+    });
 
     connect(newSnippetButton, &QToolButton::clicked,
             this, [this]() { openSnippetEditor(QString()); });
@@ -248,7 +256,14 @@ void ProductivityWidget::buildUi()
         UiIcons::symbol(this, UiIcons::Symbol::Play, this->palette().color(QPalette::WindowText)),
         tr("Re-run the command on the host selected in the history filter"));
     historyLayout->addWidget(historyExecuteButton);
-    m_tabs->addTab(historyPage, tr("Command history"));
+    const int historyTabIndex = m_tabs->addTab(historyPage, tr("Command history"));
+    i18n::onRetranslate(this, [this, historyTabIndex, historyExecuteButton] {
+        m_tabs->setTabText(historyTabIndex, tr("Command history"));
+        m_historyPrefixEdit->setPlaceholderText(tr("Filter by command prefix"));
+        historyExecuteButton->setText(tr("Run on the selected host"));
+        historyExecuteButton->setToolTip(
+            tr("Re-run the command on the host selected in the history filter"));
+    });
 
     connect(m_historyHostCombo, &QComboBox::currentIndexChanged,
             this, &ProductivityWidget::reloadHistory);
@@ -324,6 +339,13 @@ void ProductivityWidget::buildUi()
     m_broadcastInput->setObjectName(QStringLiteral("productivityBroadcastInput"));
     m_broadcastInput->setPlaceholderText(tr("Send a command once to the selected targets"));
     auto *broadcastSendButton = new QPushButton(tr("Broadcast send"), broadcastPage);
+    i18n::onRetranslate(this, [this, broadcastSendButton] {
+        m_broadcastEnabled->setText(tr("Turn on live raw input broadcast"));
+        m_broadcastInput->setPlaceholderText(tr("Send a command once to the selected targets"));
+        broadcastSendButton->setText(tr("Broadcast send"));
+        broadcastSendButton->setToolTip(
+            tr("Send a command once to the terminals you explicitly checked"));
+    });
     broadcastSendButton->setProperty("primaryAction", true);
     UiIcons::decorateButton(
         broadcastSendButton,
@@ -333,7 +355,10 @@ void ProductivityWidget::buildUi()
     // 一次性命令输入与发送按钮同样采用单列通栏布局，防止按钮文字挤占命令输入空间。
     broadcastLayout->addWidget(m_broadcastInput);
     broadcastLayout->addWidget(broadcastSendButton);
-    m_tabs->addTab(broadcastPage, tr("Broadcast input"));
+    const int broadcastTabIndex = m_tabs->addTab(broadcastPage, tr("Broadcast input"));
+    i18n::onRetranslate(this, [this, broadcastTabIndex] {
+        m_tabs->setTabText(broadcastTabIndex, tr("Broadcast input"));
+    });
 
     connect(m_broadcastEnabled, &QCheckBox::toggled, this, [this](const bool enabled) {
         const QStringList ids = checkedTargetIds(m_broadcastTargets);
