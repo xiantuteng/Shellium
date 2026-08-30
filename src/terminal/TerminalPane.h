@@ -175,6 +175,9 @@ public:
     /** @brief 移除并销毁外挂动作容器里的全部子控件，恢复到干净的单终端状态栏。 */
     void clearHeaderExtras();
 
+    /** @brief 会话状态栏当前的图标线条色，随终端主题更新；供外挂按钮渲染同色图标。 */
+    [[nodiscard]] QColor headerIconColor() const;
+
     /**
      * @brief 在会话状态栏、紧邻服务器名之后，短暂展示一条状态文字。
      * @param message 待展示的文字；空字符串立即清空当前显示。

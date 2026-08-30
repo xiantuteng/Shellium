@@ -850,6 +850,11 @@ QWidget *TerminalPane::headerExtrasContainer() const
     return m_headerExtras;
 }
 
+QColor TerminalPane::headerIconColor() const
+{
+    return m_headerIconColor;
+}
+
 void TerminalPane::clearHeaderExtras()
 {
     const QList<QWidget *> children =

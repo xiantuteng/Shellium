@@ -497,12 +497,15 @@ void TerminalWorkspaceGroup::installMemberControls(TerminalWorkspace *workspace)
     if (slotLayout == nullptr) {
         return;
     }
-    // 状态栏背景恒为深色，图标用固定浅灰即可，不跟随应用深浅主题。
-    const QColor iconColor(QStringLiteral("#e6e6e6"));
-    // 与文件管理按钮一致：悬停显描边，选中（广播开启）填一块浅色圆角底，和参考图一致。
+    // 图标线条色与文件管理按钮完全一致（随终端主题走），读不到时回退浅灰。
+    QColor iconColor = pane->headerIconColor();
+    if (!iconColor.isValid()) {
+        iconColor = QColor(QStringLiteral("#e6e6e6"));
+    }
+    // 无外边框：悬停只轻微提亮底色，选中（广播开启）填一块浅色圆角底，和参考图一致。
     const QString buttonStyle = QStringLiteral(
-        "QToolButton { border: 1px solid transparent; border-radius: 5px; padding: 3px; }"
-        "QToolButton:hover { border-color: rgba(230,230,230,0.55); }"
+        "QToolButton { border: none; border-radius: 5px; padding: 3px; }"
+        "QToolButton:hover { background: rgba(230,230,230,0.12); }"
         "QToolButton:checked { background: rgba(230,230,230,0.22); }"
         "QToolButton:checked:hover { background: rgba(230,230,230,0.30); }");
     const auto makeButton = [&](const UiIcons::Symbol symbol,
