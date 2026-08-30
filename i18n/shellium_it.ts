@@ -1531,6 +1531,10 @@ Confermare che la chiave è cambiata, sostituire il vecchio record in known_host
         <translation type="unfinished">Riconnessione automatica a %1 (tentativo %2/%3)</translation>
     </message>
     <message>
+        <source>ssh, %1</source>
+        <translation type="unfinished">ssh, %1</translation>
+    </message>
+    <message>
         <source>Command palette</source>
         <translation type="unfinished">Palette comandi</translation>
     </message>
@@ -4809,6 +4813,14 @@ Reconnecting manually…<byte value="xd" />
     <message>
         <source>Drag a terminal tab into the current terminal page or this sidebar to create or extend a workspace.</source>
         <translation type="unfinished">Trascina una scheda del terminale nella pagina del terminale corrente o in questa barra laterale per creare o ampliare uno spazio di lavoro.</translation>
+    </message>
+    <message>
+        <source>Terminals</source>
+        <translation type="unfinished">Terminali</translation>
+    </message>
+    <message>
+        <source>Broadcast input to all terminals</source>
+        <translation type="unfinished">Trasmetti l'input a tutti i terminali</translation>
     </message>
 </context>
 </TS>

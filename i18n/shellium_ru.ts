@@ -1531,6 +1531,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">Автоматическое переподключение к %1 (попытка %2/%3)</translation>
     </message>
     <message>
+        <source>ssh, %1</source>
+        <translation type="unfinished">ssh, %1</translation>
+    </message>
+    <message>
         <source>Command palette</source>
         <translation type="unfinished">Палитра команд</translation>
     </message>
@@ -4809,6 +4813,14 @@ Reconnecting manually…<byte value="xd" />
     <message>
         <source>Drag a terminal tab into the current terminal page or this sidebar to create or extend a workspace.</source>
         <translation type="unfinished">Перетащите вкладку терминала на текущую страницу терминала или на эту боковую панель, чтобы создать или расширить рабочее пространство.</translation>
+    </message>
+    <message>
+        <source>Terminals</source>
+        <translation type="unfinished">Терминалы</translation>
+    </message>
+    <message>
+        <source>Broadcast input to all terminals</source>
+        <translation type="unfinished">Транслировать ввод во все терминалы</translation>
     </message>
 </context>
 </TS>

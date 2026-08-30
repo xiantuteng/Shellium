@@ -1531,6 +1531,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">%1 へ自動再接続中（試行 %2/%3）</translation>
     </message>
     <message>
+        <source>ssh, %1</source>
+        <translation type="unfinished">ssh, %1</translation>
+    </message>
+    <message>
         <source>Command palette</source>
         <translation type="unfinished">コマンドパレット</translation>
     </message>
@@ -4809,6 +4813,14 @@ Reconnecting manually…<byte value="xd" />
     <message>
         <source>Drag a terminal tab into the current terminal page or this sidebar to create or extend a workspace.</source>
         <translation type="unfinished">ターミナルタブを現在のターミナルページまたはこのサイドバーにドラッグすると、ワークスペースを作成または拡張できます。</translation>
+    </message>
+    <message>
+        <source>Terminals</source>
+        <translation type="unfinished">ターミナル</translation>
+    </message>
+    <message>
+        <source>Broadcast input to all terminals</source>
+        <translation type="unfinished">すべてのターミナルに入力をブロードキャスト</translation>
     </message>
 </context>
 </TS>

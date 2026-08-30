@@ -14,11 +14,15 @@
 #include "ui/SessionTabDropOverlay.h"
 
 #include <QAbstractButton>
+#include <QAbstractItemDelegate>
 #include <QAction>
+#include <QMouseEvent>
+#include <QStyleOptionViewItem>
 #include <QComboBox>
 #include <QCoreApplication>
 #include <QEvent>
 #include <QLabel>
+#include <QListWidget>
 #include <QMenu>
 #include <QMenuBar>
 #include <QSignalSpy>
@@ -77,6 +81,7 @@ private slots:
 
     /** @brief 工作空间成员标题栏必须有广播/布局切换/关闭三个按钮，广播开关整体同步。 */
     void workspaceMemberHeaderControls();
+    void workspaceSidebarListsMembersNumbersDuplicatesAndCloses();
 
     /** @brief 终端上报的发行版必须落库并让侧栏立刻换成对应图标，重启后依然保持。 */
     void detectedDistributionIsPersistedAndShownInSidebar();
@@ -540,12 +545,87 @@ void MainWindowShellTest::workspaceMemberHeaderControls()
     closeB->click();
     QCOMPARE(closeSpy.count(), 1);
 
+    // 分屏（组成员）模式必须放宽面板最小宽度，否则多块并列时递归分屏树的最小总宽超过
+    // 工作空间可用宽度，QSplitter 只能向右溢出，把最右那块连同右上角按钮挤出可视区。
+    modeA->click(); // 回到分屏
+    QCOMPARE(group.layoutMode(), TerminalWorkspaceGroup::LayoutMode::Tiled);
+    QVERIFY2(a->activePane()->minimumWidth() <= 200,
+             "分屏组成员的最小宽度必须放宽，避免多块并列时溢出裁切");
+    group.setLayoutMode(TerminalWorkspaceGroup::LayoutMode::Switch);
+    QVERIFY2(a->activePane()->minimumWidth() >= 360,
+             "切换模式单块显示，最小宽度恢复到 360");
+
     // 从组里摘除后，标题栏按钮与广播接线都要清掉（终端会作为独立标签继续存在）。
     QVERIFY(group.takeTerminal(a));
     QTRY_VERIFY(a->activePane()->findChild<QToolButton *>(
                     QStringLiteral("workspaceBroadcastToggle")) == nullptr);
     delete a;
     delete b;
+}
+
+void MainWindowShellTest::workspaceSidebarListsMembersNumbersDuplicatesAndCloses()
+{
+    TerminalWorkspaceGroup group;
+    auto *a = new TerminalWorkspace;
+    auto *b = new TerminalWorkspace;
+    auto *c = new TerminalWorkspace;
+    group.addTerminal(a, QStringLiteral("host-a"));
+    group.addTerminal(b, QStringLiteral("8.148.83.73"));
+    group.addTerminal(c, QStringLiteral("8.148.83.73"));
+
+    WorkspaceSidebarWidget sidebar;
+    sidebar.setWorkspace(&group);
+
+    auto *list = sidebar.findChild<QListWidget *>(QStringLiteral("WorkspaceTerminalThumbnails"));
+    QVERIFY(list != nullptr);
+    QCOMPARE(list->count(), 3);
+
+    // 同一主机开了多个终端时，所有同名行都带序号；唯一名称保持原样（与 Termius 一致）。
+    QCOMPARE(list->item(0)->text(), QStringLiteral("host-a"));
+    QCOMPARE(list->item(1)->text(), QStringLiteral("8.148.83.73 (1)"));
+    QCOMPARE(list->item(2)->text(), QStringLiteral("8.148.83.73 (2)"));
+
+    auto *title = sidebar.findChild<QLabel *>(QStringLiteral("WorkspaceSidebarTitle"));
+    QVERIFY(title != nullptr);
+    QVERIFY2(title->text().contains(QStringLiteral("3")), "标题需要显示成员数量");
+
+    // setMemberRows 下发的副标题与连接状态写入自定义数据角色，供委托绘制。
+    QList<WorkspaceSidebarRow> rows;
+    for (int index = 0; index < 3; ++index) {
+        WorkspaceSidebarRow row;
+        row.title = group.terminalTitle(group.terminals().at(index));
+        row.subtitle = QStringLiteral("ssh, root");
+        row.connectionState = 2;
+        rows.append(row);
+    }
+    sidebar.setMemberRows(rows);
+    QCOMPARE(list->item(1)->data(Qt::UserRole + 1).toString(), QStringLiteral("ssh, root"));
+    QCOMPARE(list->item(1)->data(Qt::UserRole + 3).toInt(), 2);
+
+    // 点选某行 → 组的活动终端跟随。
+    list->setCurrentRow(2);
+    QCOMPARE(group.activeTerminal(), c);
+
+    // 关闭按钮：委托在关闭命中矩形上收到释放事件时，通过侧栏发出 closeTerminalRequested。
+    QSignalSpy closeSpy(&sidebar, &WorkspaceSidebarWidget::closeTerminalRequested);
+    QAbstractItemDelegate *delegate = list->itemDelegate();
+    QVERIFY(delegate != nullptr);
+    QStyleOptionViewItem option;
+    option.rect = QRect(0, 54, 320, 54);
+    const QModelIndex rowIndex = list->model()->index(1, 0);
+    const QPointF hit(option.rect.left() + 12, option.rect.center().y());
+    QMouseEvent press(QEvent::MouseButtonPress, hit, hit,
+                      Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    QMouseEvent release(QEvent::MouseButtonRelease, hit, hit,
+                        Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    delegate->editorEvent(&press, list->model(), option, rowIndex);
+    delegate->editorEvent(&release, list->model(), option, rowIndex);
+    QCOMPARE(closeSpy.count(), 1);
+    QCOMPARE(closeSpy.first().first().value<TerminalWorkspace *>(), b);
+
+    delete a;
+    delete b;
+    delete c;
 }
 
 void MainWindowShellTest::desktopPlatformsUseProductTitleAndCustomWindowControls()

@@ -714,10 +714,18 @@ void AiAssistantWidget::buildUi()
         m_inputEdit->setPlaceholderText(
             tr("Describe what you want to accomplish on the current server…"));
         m_sendButton->setToolTip(tr("Send (Enter)"));
+        m_attachContextCheck->setText(tr("Include new terminal output"));
         disclaimer->setText(tr("The AI can make mistakes. Every command that changes the "
                                "system requires your explicit confirmation."));
         // 重新套用当前目标：未连接时回到本地化占位，已连接时保持服务器名不变。
         setActiveTarget(m_activeTarget);
+        // 聊天区里的系统提示（无配置、协议中断、命令卡片标题等）都是 tr() 文案，构造时
+        // 用的是当时的语言。从历史重建一次即可让它们跟随新语言；用户与模型的原文本身存在
+        // m_history 中按原样恢复，不受影响。请求进行中不重建，避免打断流式气泡。
+        if (!m_requestInFlight && !m_captureInFlight && m_chatLayout != nullptr) {
+            clearChatContent();
+            renderActiveConversation();
+        }
     });
 
     updateInputEditorHeight();

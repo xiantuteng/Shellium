@@ -1531,6 +1531,10 @@ Confirmi că cheia s-a schimbat, înlocuiești vechea înregistrare din known_ho
         <translation type="unfinished">Reconectare automată la %1 (încercarea %2/%3)</translation>
     </message>
     <message>
+        <source>ssh, %1</source>
+        <translation type="unfinished">ssh, %1</translation>
+    </message>
+    <message>
         <source>Command palette</source>
         <translation type="unfinished">Paletă de comenzi</translation>
     </message>
@@ -4809,6 +4813,14 @@ Reconnecting manually…<byte value="xd" />
     <message>
         <source>Drag a terminal tab into the current terminal page or this sidebar to create or extend a workspace.</source>
         <translation type="unfinished">Trageți o filă de terminal în pagina terminalului curent sau în această bară laterală pentru a crea sau extinde un spațiu de lucru.</translation>
+    </message>
+    <message>
+        <source>Terminals</source>
+        <translation type="unfinished">Terminale</translation>
+    </message>
+    <message>
+        <source>Broadcast input to all terminals</source>
+        <translation type="unfinished">Difuzează inputul către toate terminalele</translation>
     </message>
 </context>
 </TS>

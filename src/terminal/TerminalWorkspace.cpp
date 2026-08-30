@@ -152,6 +152,10 @@ void TerminalWorkspace::setFileManagerAllowed(const bool allowed)
     }
     m_fileManagerAllowed = allowed;
     m_pane->setFileManagerEnabled(allowed);
+    // 分屏（!allowed）时放宽终端面板的最小宽度：否则多块并列会让递归分屏树的最小总宽
+    // 超过工作空间可用宽度，QSplitter 只能向右溢出，把最靠右那块（连同右上角按钮）挤出
+    // 可视区。180px 仍能容下标题栏的全部按钮和一段可读终端。切回单终端布局恢复 360。
+    m_pane->setMinimumWidth(allowed ? 360 : 180);
 }
 
 bool TerminalWorkspace::isFileManagerAllowed() const

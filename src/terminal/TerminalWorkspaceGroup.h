@@ -2,6 +2,7 @@
 
 #include <QHash>
 #include <QList>
+#include <QString>
 #include <QWidget>
 
 class QLabel;
@@ -206,9 +207,28 @@ private:
 };
 
 /**
- * @brief 导航轨“工作空间”页面：分屏 / 切换二态开关 + 终端缩略图列表。
+ * @brief 侧栏中单个终端行的展示数据，由 MainWindow 组装后推给 WorkspaceSidebarWidget。
  *
- * 页面不拥有工作空间；MainWindow 在顶层标签切换时替换观察对象。
+ * 侧栏本身没有数据库和每会话连接状态，因此主机名、发行版、连接状态都在此结构里下发；
+ * 缺省（空列表或数量不匹配）时侧栏回退到 TerminalWorkspaceGroup::terminalTitle()。
+ */
+struct WorkspaceSidebarRow {
+    /** @brief 主标题：优先显示名/主机名，回退到工作空间成员标题。 */
+    QString title;
+    /** @brief 次级行，如 "ssh, root"；空表示不画第二行。 */
+    QString subtitle;
+    /** @brief /etc/os-release 的规范化 ID，可空（未探测到时用通用主机图标）。 */
+    QString distributionId;
+    /** @brief 连接状态，取值对齐 SessionTabBar::ConnectionState（0=Unknown…3=Failed）。 */
+    int connectionState = 0;
+};
+
+/**
+ * @brief 导航轨“工作空间”页面：Termius 风格的终端列表 + 布局 / 广播开关。
+ *
+ * 顶部一行是「Terminals · N」标题加两个图标按钮（布局模式、输入广播）；下方每行显示发行版
+ * 图标、主机名（同主机多开带序号）、"ssh, user" 次级行、连接状态点，悬停浮出关闭按钮。
+ * 页面不拥有工作空间；MainWindow 在顶层标签切换时替换观察对象并下发每行数据。
  */
 class WorkspaceSidebarWidget final : public QWidget {
     Q_OBJECT
@@ -219,6 +239,16 @@ public:
 
     /** @brief 切换当前观察的工作空间；传空会显示使用提示并禁用模式开关。 */
     void setWorkspace(TerminalWorkspaceGroup *workspace);
+
+    /**
+     * @brief 下发每行展示数据；行序与 TerminalWorkspaceGroup::terminals() 一一对应。
+     * @param rows 空或数量与成员数不符时忽略，回退到成员标题文本。
+     */
+    void setMemberRows(const QList<WorkspaceSidebarRow> &rows);
+
+signals:
+    /** @brief 用户在某行点了关闭按钮，请求把该终端移出工作空间。 */
+    void closeTerminalRequested(TerminalWorkspace *workspace);
 
 protected:
     /** @brief 语言热切换时重译常驻开关文案与空态提示。 */
@@ -232,7 +262,11 @@ private:
     void refreshTerminals();
 
     TerminalWorkspaceGroup *m_workspace = nullptr;
-    QPushButton *m_modeToggle = nullptr;
+    QLabel *m_title = nullptr;
+    QToolButton *m_layoutToggle = nullptr;
+    QToolButton *m_broadcastToggle = nullptr;
+    QWidget *m_headerRow = nullptr;
     QListWidget *m_terminalList = nullptr;
     QLabel *m_emptyHint = nullptr;
+    QList<WorkspaceSidebarRow> m_rows;
 };

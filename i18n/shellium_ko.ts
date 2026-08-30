@@ -1531,6 +1531,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">%1에 자동 재연결 중(시도 %2/%3)</translation>
     </message>
     <message>
+        <source>ssh, %1</source>
+        <translation type="unfinished">ssh, %1</translation>
+    </message>
+    <message>
         <source>Command palette</source>
         <translation type="unfinished">명령 팔레트</translation>
     </message>
@@ -4809,6 +4813,14 @@ Reconnecting manually…<byte value="xd" />
     <message>
         <source>Drag a terminal tab into the current terminal page or this sidebar to create or extend a workspace.</source>
         <translation type="unfinished">터미널 탭을 현재 터미널 페이지나 이 사이드바로 끌어 작업 공간을 만들거나 확장하세요.</translation>
+    </message>
+    <message>
+        <source>Terminals</source>
+        <translation type="unfinished">터미널</translation>
+    </message>
+    <message>
+        <source>Broadcast input to all terminals</source>
+        <translation type="unfinished">모든 터미널에 입력 브로드캐스트</translation>
     </message>
 </context>
 </TS>

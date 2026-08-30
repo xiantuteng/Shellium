@@ -444,6 +444,14 @@ private:
     /** @brief 已成功连接且尚未写入断开时间的面板与连接历史行 id。 */
     QHash<TerminalPane *, qint64> m_openHistoryRows;
 
+    /**
+     * @brief 每个终端面板最近一次连接状态，取值对齐 SessionTabBar::ConnectionState。
+     *
+     * 顶层标签的状态点按标签索引维护，工作空间侧栏需要按成员逐个展示，因此单独按面板记录；
+     * 面板销毁时清除。缺省视为 Unknown。
+     */
+    QHash<TerminalPane *, int> m_paneConnectionState;
+
     /** @brief 稳定设置动作 id 到主窗口 QAction 的映射，设置变化时统一更新快捷键。 */
     QHash<QString, QAction *> m_configurableActions;
 

@@ -1531,6 +1531,10 @@ Confirmer que la clé a changé, remplacer l'ancien enregistrement dans known_ho
         <translation type="unfinished">Reconnexion automatique à %1 (tentative %2/%3)</translation>
     </message>
     <message>
+        <source>ssh, %1</source>
+        <translation type="unfinished">ssh, %1</translation>
+    </message>
+    <message>
         <source>Command palette</source>
         <translation type="unfinished">Palette de commandes</translation>
     </message>
@@ -4809,6 +4813,14 @@ Reconnecting manually…<byte value="xd" />
     <message>
         <source>Drag a terminal tab into the current terminal page or this sidebar to create or extend a workspace.</source>
         <translation type="unfinished">Faites glisser un onglet de terminal dans la page de terminal actuelle ou dans cette barre latérale pour créer ou agrandir un espace de travail.</translation>
+    </message>
+    <message>
+        <source>Terminals</source>
+        <translation type="unfinished">Terminaux</translation>
+    </message>
+    <message>
+        <source>Broadcast input to all terminals</source>
+        <translation type="unfinished">Diffuser la saisie à tous les terminaux</translation>
     </message>
 </context>
 </TS>

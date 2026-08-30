@@ -2,12 +2,15 @@
 
 #include "terminal/TerminalPane.h"
 #include "terminal/TerminalWorkspace.h"
+#include "ui/HostDistributionIcon.h"
 #include "ui/UiIcons.h"
 
 #include <QAbstractButton>
+#include <QAbstractItemView>
 #include <QApplication>
 #include <QCursor>
 #include <QEvent>
+#include <QFontMetrics>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -17,10 +20,10 @@
 #include <QPainter>
 #include <QPlainTextEdit>
 #include <QPointer>
-#include <QPushButton>
 #include <QSignalBlocker>
 #include <QSplitter>
 #include <QStyle>
+#include <QStyledItemDelegate>
 #include <QTimer>
 #include <QToolButton>
 #include <QVBoxLayout>
@@ -609,6 +612,8 @@ bool TerminalWorkspaceGroup::takeTerminal(TerminalWorkspace *workspace)
         });
         pane->clearHeaderExtras();
     }
+    // 回到独立标签：恢复远程文件管理入口与标准最小宽度（分屏时被放宽到 180）。
+    workspace->setFileManagerAllowed(true);
     // 先把终端还给调用方，再销毁承载它的 frame；顺序反了会把仍在运行的会话一起删掉。
     workspace->setParent(this);
     workspace->show();
@@ -965,37 +970,243 @@ void TerminalWorkspaceGroup::endDockDrag(const QPoint &globalPosition)
     dockTerminal(source, target, hit.edge);
 }
 
+namespace {
+
+/** @brief 侧栏终端行的自定义数据角色。 */
+constexpr int kRowSubtitleRole = Qt::UserRole + 1;
+constexpr int kRowDistroRole = Qt::UserRole + 2;
+constexpr int kRowStateRole = Qt::UserRole + 3;
+
+/** @brief 连接状态点颜色，语义与 SessionTabBar::ConnectionState 一致；Unknown 不画点。 */
+[[nodiscard]] QColor connectionDotColor(const int state)
+{
+    switch (state) {
+    case 1: // Connecting
+        return QColor(QStringLiteral("#f59e0b"));
+    case 2: // Connected
+        return QColor(QStringLiteral("#22c55e"));
+    case 3: // Failed
+        return QColor(QStringLiteral("#ef4444"));
+    default:
+        return {};
+    }
+}
+
+/**
+ * @brief Termius 风格的工作空间终端行委托。
+ *
+ * 每行左侧发行版 Logo、主标题（同名多开带序号）、"ssh, user" 次级行，右侧连接图标与状态点；
+ * 选中行圆角实心高亮，悬停行浅色高亮且左侧图标处浮出关闭按钮。关闭点击通过 onCloseClicked
+ * 回调上报，样式与文件内其他匿名类保持“注入回调而非信号”的一致做法。
+ */
+class WorkspaceTerminalRowDelegate final : public QStyledItemDelegate {
+public:
+    using QStyledItemDelegate::QStyledItemDelegate;
+
+    std::function<void(int)> onCloseClicked;
+
+    [[nodiscard]] QSize sizeHint(const QStyleOptionViewItem & /*option*/,
+                                 const QModelIndex & /*index*/) const override
+    {
+        return {0, 54};
+    }
+
+    void paint(QPainter *painter,
+               const QStyleOptionViewItem &option,
+               const QModelIndex &index) const override
+    {
+        painter->save();
+        painter->setRenderHint(QPainter::Antialiasing, true);
+
+        const bool selected = (option.state & QStyle::State_Selected) != 0;
+        const bool hovered = (option.state & QStyle::State_MouseOver) != 0;
+        const QRect card = option.rect.adjusted(6, 3, -6, -3);
+        if (selected) {
+            QColor fill = option.palette.color(QPalette::Highlight);
+            fill.setAlpha(64);
+            painter->setPen(Qt::NoPen);
+            painter->setBrush(fill);
+            painter->drawRoundedRect(card, 10, 10);
+        } else if (hovered) {
+            QColor fill = option.palette.color(QPalette::Text);
+            fill.setAlpha(20);
+            painter->setPen(Qt::NoPen);
+            painter->setBrush(fill);
+            painter->drawRoundedRect(card, 10, 10);
+        }
+
+        const QWidget *host = option.widget;
+        const QColor textColor = option.palette.color(QPalette::Text);
+        QColor mutedColor = textColor;
+        mutedColor.setAlpha(140);
+        const int centerY = option.rect.center().y();
+        const QRect glyphRect(option.rect.left() + 14, centerY - 10, 20, 20);
+
+        if (hovered && host != nullptr) {
+            UiIcons::symbol(host, UiIcons::Symbol::Close, textColor, QSize(18, 18))
+                .paint(painter, glyphRect, Qt::AlignCenter);
+        } else {
+            QIcon distroIcon =
+                HostDistributionIcon::iconFor(index.data(kRowDistroRole).toString());
+            if (distroIcon.isNull() && host != nullptr) {
+                distroIcon =
+                    UiIcons::symbol(host, UiIcons::Symbol::HostItem, textColor, QSize(18, 18));
+            }
+            distroIcon.paint(painter, glyphRect, Qt::AlignCenter);
+        }
+
+        const int textLeft = option.rect.left() + 44;
+        const int textRight = option.rect.right() - 40;
+        const int textWidth = std::max(0, textRight - textLeft);
+        const QString subtitle = index.data(kRowSubtitleRole).toString();
+
+        QFont titleFont = option.font;
+        titleFont.setPixelSize(13);
+        titleFont.setWeight(QFont::DemiBold);
+        painter->setFont(titleFont);
+        painter->setPen(textColor);
+        const QFontMetrics titleMetrics(titleFont);
+        const QString title = titleMetrics.elidedText(
+            index.data(Qt::DisplayRole).toString(), Qt::ElideMiddle, textWidth);
+        const QRect titleRect(textLeft,
+                              subtitle.isEmpty() ? option.rect.top() : option.rect.top() + 8,
+                              textWidth,
+                              subtitle.isEmpty() ? option.rect.height() : 22);
+        painter->drawText(titleRect, Qt::AlignLeft | Qt::AlignVCenter, title);
+
+        if (!subtitle.isEmpty()) {
+            QFont subFont = option.font;
+            subFont.setPixelSize(11);
+            painter->setFont(subFont);
+            painter->setPen(mutedColor);
+            const QFontMetrics subMetrics(subFont);
+            const QString subText =
+                subMetrics.elidedText(subtitle, Qt::ElideRight, textWidth);
+            painter->drawText(QRect(textLeft, centerY, textWidth, 20),
+                              Qt::AlignLeft | Qt::AlignVCenter,
+                              subText);
+        }
+
+        if (host != nullptr) {
+            UiIcons::symbol(host, UiIcons::Symbol::Connect, mutedColor, QSize(15, 15))
+                .paint(painter,
+                       QRect(option.rect.right() - 34, centerY - 8, 16, 16),
+                       Qt::AlignCenter);
+        }
+        const QColor dot = connectionDotColor(index.data(kRowStateRole).toInt());
+        if (dot.isValid()) {
+            painter->setPen(Qt::NoPen);
+            painter->setBrush(dot);
+            painter->drawEllipse(QPointF(option.rect.right() - 15, centerY), 3.5, 3.5);
+        }
+
+        painter->restore();
+    }
+
+protected:
+    bool editorEvent(QEvent *event,
+                     QAbstractItemModel * /*model*/,
+                     const QStyleOptionViewItem &option,
+                     const QModelIndex &index) override
+    {
+        if (event->type() != QEvent::MouseButtonPress
+            && event->type() != QEvent::MouseButtonRelease) {
+            return false;
+        }
+        auto *mouseEvent = static_cast<QMouseEvent *>(event);
+        if (mouseEvent->button() != Qt::LeftButton) {
+            return false;
+        }
+        const int centerY = option.rect.center().y();
+        const QRect closeHit(option.rect.left() + 8, centerY - 14, 32, 28);
+        if (!closeHit.contains(mouseEvent->pos())) {
+            return false;
+        }
+        // 命中关闭区域时吞掉按下事件，避免顺带切换选中行；释放时才真正触发关闭。
+        if (event->type() == QEvent::MouseButtonRelease && onCloseClicked) {
+            onCloseClicked(index.row());
+        }
+        return true;
+    }
+};
+
+} // namespace
+
 WorkspaceSidebarWidget::WorkspaceSidebarWidget(QWidget *parent)
     : QWidget(parent)
-    , m_modeToggle(new QPushButton(this))
+    , m_title(new QLabel(this))
+    , m_layoutToggle(new QToolButton(this))
+    , m_broadcastToggle(new QToolButton(this))
+    , m_headerRow(new QWidget(this))
     , m_terminalList(new QListWidget(this))
     , m_emptyHint(new QLabel(this))
 {
     setObjectName(QStringLiteral("WorkspaceSidebar"));
-    m_modeToggle->setObjectName(QStringLiteral("WorkspaceLayoutToggle"));
-    m_modeToggle->setCheckable(true);
+    m_title->setObjectName(QStringLiteral("WorkspaceSidebarTitle"));
+
+    const QColor windowText = palette().color(QPalette::WindowText);
+    for (QToolButton *button : {m_layoutToggle, m_broadcastToggle}) {
+        button->setCheckable(true);
+        button->setAutoRaise(true);
+        button->setFocusPolicy(Qt::NoFocus);
+        button->setCursor(Qt::PointingHandCursor);
+        button->setProperty("compactIconButton", true);
+    }
+    m_layoutToggle->setObjectName(QStringLiteral("WorkspaceLayoutToggle"));
+    m_broadcastToggle->setObjectName(QStringLiteral("WorkspaceBroadcastToggle"));
+    UiIcons::decorateButton(
+        m_layoutToggle,
+        UiIcons::symbol(this, UiIcons::Symbol::Workspace, windowText, QSize(16, 16)));
+    UiIcons::decorateButton(
+        m_broadcastToggle,
+        UiIcons::symbol(this, UiIcons::Symbol::Broadcast, windowText, QSize(16, 16)));
+
     m_terminalList->setObjectName(QStringLiteral("WorkspaceTerminalThumbnails"));
-    m_terminalList->setIconSize(QSize(52, 34));
-    m_terminalList->setSpacing(4);
+    m_terminalList->setFrameShape(QFrame::NoFrame);
+    m_terminalList->setMouseTracking(true);
+    m_terminalList->setUniformItemSizes(true);
+    m_terminalList->setSelectionMode(QAbstractItemView::SingleSelection);
+    m_terminalList->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    auto *delegate = new WorkspaceTerminalRowDelegate(m_terminalList);
+    delegate->onCloseClicked = [this](const int row) {
+        if (m_workspace != nullptr && row >= 0 && row < m_workspace->terminals().size()) {
+            emit closeTerminalRequested(m_workspace->terminals().at(row));
+        }
+    };
+    m_terminalList->setItemDelegate(delegate);
+
     m_emptyHint->setObjectName(QStringLiteral("WorkspaceSidebarEmptyHint"));
     m_emptyHint->setWordWrap(true);
     m_emptyHint->setAlignment(Qt::AlignCenter);
 
+    auto *headerLayout = new QHBoxLayout(m_headerRow);
+    headerLayout->setContentsMargins(2, 0, 0, 0);
+    headerLayout->setSpacing(2);
+    headerLayout->addWidget(m_title);
+    headerLayout->addStretch(1);
+    headerLayout->addWidget(m_layoutToggle);
+    headerLayout->addWidget(m_broadcastToggle);
+
     auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(8);
-    layout->addWidget(m_modeToggle);
+    layout->addWidget(m_headerRow);
     layout->addWidget(m_terminalList, 1);
     layout->addWidget(m_emptyHint, 1);
     retranslateUi();
     setWorkspace(nullptr);
 
-    connect(m_modeToggle, &QPushButton::toggled, this, [this](const bool checked) {
+    connect(m_layoutToggle, &QToolButton::toggled, this, [this](const bool checked) {
         if (m_workspace != nullptr) {
             m_workspace->setLayoutMode(checked ? TerminalWorkspaceGroup::LayoutMode::Switch
                                                : TerminalWorkspaceGroup::LayoutMode::Tiled);
         }
         retranslateUi();
+    });
+    connect(m_broadcastToggle, &QToolButton::toggled, this, [this](const bool checked) {
+        if (m_workspace != nullptr) {
+            m_workspace->setBroadcastEnabled(checked);
+        }
     });
     connect(m_terminalList,
             &QListWidget::currentRowChanged,
@@ -1018,6 +1229,7 @@ void WorkspaceSidebarWidget::setWorkspace(TerminalWorkspaceGroup *workspace)
         disconnect(m_workspace, nullptr, this, nullptr);
     }
     m_workspace = workspace;
+    m_rows.clear();
     if (m_workspace != nullptr) {
         connect(m_workspace,
                 &TerminalWorkspaceGroup::terminalsChanged,
@@ -1031,7 +1243,17 @@ void WorkspaceSidebarWidget::setWorkspace(TerminalWorkspaceGroup *workspace)
                 &TerminalWorkspaceGroup::layoutModeChanged,
                 this,
                 [this](TerminalWorkspaceGroup::LayoutMode) { refreshTerminals(); });
+        connect(m_workspace,
+                &TerminalWorkspaceGroup::broadcastEnabledChanged,
+                this,
+                [this](bool) { refreshTerminals(); });
     }
+    refreshTerminals();
+}
+
+void WorkspaceSidebarWidget::setMemberRows(const QList<WorkspaceSidebarRow> &rows)
+{
+    m_rows = rows;
     refreshTerminals();
 }
 
@@ -1046,8 +1268,12 @@ void WorkspaceSidebarWidget::changeEvent(QEvent *event)
 
 void WorkspaceSidebarWidget::retranslateUi()
 {
-    // 按钮文案表达“当前处于哪种视图”，点一下切到另一种。
-    m_modeToggle->setText(m_modeToggle->isChecked() ? tr("Switch view") : tr("Tiled view"));
+    const int count = m_workspace == nullptr ? 0 : m_workspace->terminals().size();
+    m_title->setText(count > 0 ? QStringLiteral("%1 · %2").arg(tr("Terminals")).arg(count)
+                               : tr("Terminals"));
+    // 布局按钮 tooltip 表达“当前处于哪种视图”，点一下切到另一种。
+    m_layoutToggle->setToolTip(m_layoutToggle->isChecked() ? tr("Switch view") : tr("Tiled view"));
+    m_broadcastToggle->setToolTip(tr("Broadcast input to all terminals"));
     m_emptyHint->setText(tr("Drag a terminal tab into the current terminal page or this sidebar to create or extend a workspace."));
 }
 
@@ -1056,39 +1282,55 @@ void WorkspaceSidebarWidget::refreshTerminals()
     const QSignalBlocker listBlocker(m_terminalList);
     m_terminalList->clear();
     const bool hasWorkspace = m_workspace != nullptr;
-    m_modeToggle->setEnabled(hasWorkspace);
+    m_layoutToggle->setEnabled(hasWorkspace);
+    m_broadcastToggle->setEnabled(hasWorkspace);
     m_terminalList->setVisible(hasWorkspace);
     m_emptyHint->setVisible(!hasWorkspace);
     if (!hasWorkspace) {
+        retranslateUi();
         return;
     }
 
     {
-        const QSignalBlocker toggleBlocker(m_modeToggle);
-        m_modeToggle->setChecked(m_workspace->layoutMode()
-                                 == TerminalWorkspaceGroup::LayoutMode::Switch);
+        const QSignalBlocker toggleBlocker(m_layoutToggle);
+        m_layoutToggle->setChecked(m_workspace->layoutMode()
+                                   == TerminalWorkspaceGroup::LayoutMode::Switch);
+    }
+    {
+        const QSignalBlocker broadcastBlocker(m_broadcastToggle);
+        m_broadcastToggle->setChecked(m_workspace->isBroadcastEnabled());
     }
     retranslateUi();
 
     const QList<TerminalWorkspace *> terminals = m_workspace->terminals();
+    const bool useRows = m_rows.size() == terminals.size();
+
+    // 先统计每个标题出现的总次数：同一主机开了多个终端时，所有同名行都带序号（与 Termius 一致）。
+    QStringList titles;
+    titles.reserve(terminals.size());
+    QHash<QString, int> totals;
+    for (int index = 0; index < terminals.size(); ++index) {
+        QString title = useRows && !m_rows.at(index).title.isEmpty()
+            ? m_rows.at(index).title
+            : m_workspace->terminalTitle(terminals.at(index));
+        titles.append(title);
+        totals[title] += 1;
+    }
+
+    QHash<QString, int> running;
     for (int index = 0; index < terminals.size(); ++index) {
         TerminalWorkspace *workspace = terminals.at(index);
-        // 缩略图使用小型终端屏幕轮廓，而不抓取真实终端像素。真实截图可能包含密码、令牌等
-        // 敏感输出，也会因隐藏页面没有渲染而变成空白；语义预览既稳定又不会复制敏感内容。
-        QPixmap preview(52, 34);
-        preview.fill(Qt::transparent);
-        QPainter painter(&preview);
-        painter.setRenderHint(QPainter::Antialiasing, true);
-        painter.setPen(QPen(palette().color(QPalette::Mid), 1.2));
-        painter.setBrush(palette().color(QPalette::Base));
-        painter.drawRoundedRect(QRectF(1.0, 1.0, 50.0, 32.0), 4.0, 4.0);
-        painter.setPen(QPen(palette().color(QPalette::Highlight), 1.4));
-        painter.drawLine(QPointF(8.0, 11.0), QPointF(13.0, 16.0));
-        painter.drawLine(QPointF(13.0, 16.0), QPointF(8.0, 21.0));
-        painter.drawLine(QPointF(18.0, 21.0), QPointF(34.0, 21.0));
-        auto *item = new QListWidgetItem(QIcon(preview), m_workspace->terminalTitle(workspace));
-        item->setSizeHint(QSize(0, 48));
-        m_terminalList->addItem(item);
+        const QString &title = titles.at(index);
+        const int ordinal = ++running[title];
+        QString display = title;
+        if (totals.value(title) > 1) {
+            display += QStringLiteral(" (") + QString::number(ordinal) + QStringLiteral(")");
+        }
+
+        auto *item = new QListWidgetItem(std::move(display), m_terminalList);
+        item->setData(kRowSubtitleRole, useRows ? m_rows.at(index).subtitle : QString());
+        item->setData(kRowDistroRole, useRows ? m_rows.at(index).distributionId : QString());
+        item->setData(kRowStateRole, useRows ? m_rows.at(index).connectionState : 0);
         if (workspace == m_workspace->activeTerminal()) {
             m_terminalList->setCurrentRow(index);
         }

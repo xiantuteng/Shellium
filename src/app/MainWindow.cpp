@@ -545,6 +545,16 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     m_aiAssistantStack = new QStackedWidget(m_sidebarStack);
     m_aiAssistantStack->setObjectName(QStringLiteral("AiAssistantStack"));
     m_workspaceSidebar = new WorkspaceSidebarWidget(m_sidebarStack);
+    connect(m_workspaceSidebar,
+            &WorkspaceSidebarWidget::closeTerminalRequested,
+            this,
+            [](TerminalWorkspace *member) {
+                // 走与成员标题栏关闭按钮完全相同的上层路径：从组里摘除并清理其 AI 页，
+                // 最后一个成员被关时回退到相邻标签或品牌空态。
+                if (member != nullptr) {
+                    member->requestClose();
+                }
+            });
     m_sidebarStack->addWidget(m_hostManager);
     m_sidebarStack->addWidget(m_productivityWidget);
     m_sidebarStack->addWidget(m_portForwardManager);
@@ -1822,6 +1832,30 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
         QToolButton[compactIconButton="true"]:disabled {
             color: @MUTED@;
             background: transparent;
+        }
+        QToolButton#WorkspaceLayoutToggle:checked,
+        QToolButton#WorkspaceBroadcastToggle:checked {
+            background: @PROMINENT_SELECTION@;
+        }
+        QLabel#WorkspaceSidebarTitle {
+            color: @TEXT@;
+            font-size: 13px;
+            font-weight: 600;
+        }
+        QListWidget#WorkspaceTerminalThumbnails {
+            background: transparent;
+            border: 0;
+        }
+        QListWidget#WorkspaceTerminalThumbnails::item {
+            color: @TEXT@;
+            border: 0;
+        }
+        QListWidget#WorkspaceTerminalThumbnails::item:selected {
+            background: transparent;
+        }
+        QLabel#WorkspaceSidebarEmptyHint {
+            color: @MUTED@;
+            font-size: 12px;
         }
         QTabBar#SessionTitleTabs {
             background: transparent;
@@ -3565,6 +3599,9 @@ TerminalWorkspace *MainWindow::createWorkspaceTab(const QString &title)
                     m_titleTabBar->setTabConnectionState(topLevelIndexForWorkspace(workspace),
                                                          SessionTabBar::ConnectionState::Connected);
                 }
+                m_paneConnectionState.insert(
+                    pane, static_cast<int>(SessionTabBar::ConnectionState::Connected));
+                refreshWorkspaceSidebar();
                 if (!target.id.isEmpty() && pane->forwardingSessionStack() != nullptr) {
                     // 只有完成认证后的根栈才可承载规则；临时连接 id 不在数据库中，因此
                     // 管理器即使收到也不会找到任何持久化规则。
@@ -3603,6 +3640,8 @@ TerminalWorkspace *MainWindow::createWorkspaceTab(const QString &title)
                 // 图标由 HostRecord 重建得到，刷新能同时更新嵌套目录、搜索结果与所有主题下
                 // 的委托绘制，不需要直接持有或猜测某个 QTreeWidgetItem 的生命周期。
                 m_hostManager->refresh();
+                // 发行版探测通常在连接成功后不久到达，顺带刷新一次侧栏让终端行换上官方图标。
+                refreshWorkspaceSidebar();
             });
     connect(pane,
             &TerminalPane::automaticReconnectStarted,
@@ -3623,6 +3662,9 @@ TerminalWorkspace *MainWindow::createWorkspaceTab(const QString &title)
                     m_titleTabBar->setTabConnectionState(
                         topLevelIndexForWorkspace(workspace), SessionTabBar::ConnectionState::Connecting);
                 }
+                m_paneConnectionState.insert(
+                    pane, static_cast<int>(SessionTabBar::ConnectionState::Connecting));
+                refreshWorkspaceSidebar();
                 showTransientMessage(
                     tr("Reconnecting to %1 automatically (attempt %2/%3)")
                         .arg(target.connectionSpecifier())
@@ -3639,6 +3681,9 @@ TerminalWorkspace *MainWindow::createWorkspaceTab(const QString &title)
                     m_titleTabBar->setTabConnectionState(topLevelIndexForWorkspace(workspace),
                                                          SessionTabBar::ConnectionState::Failed);
                 }
+                m_paneConnectionState.insert(
+                    pane, static_cast<int>(SessionTabBar::ConnectionState::Failed));
+                refreshWorkspaceSidebar();
                 m_portForwardManager->unregisterSession(target.id,
                                                         pane->forwardingSessionStack());
             });
@@ -3655,6 +3700,11 @@ TerminalWorkspace *MainWindow::createWorkspaceTab(const QString &title)
                         exitStatus == -1 ? SessionTabBar::ConnectionState::Failed
                                          : SessionTabBar::ConnectionState::Unknown);
                 }
+                m_paneConnectionState.insert(
+                    pane,
+                    static_cast<int>(exitStatus == -1 ? SessionTabBar::ConnectionState::Failed
+                                                      : SessionTabBar::ConnectionState::Unknown));
+                refreshWorkspaceSidebar();
                 m_portForwardManager->unregisterSession(target.id,
                                                         pane->forwardingSessionStack());
             });
@@ -3671,6 +3721,7 @@ TerminalWorkspace *MainWindow::createWorkspaceTab(const QString &title)
         }
         m_pendingHistoryHosts.remove(pane);
         m_pendingHistoryStartedAt.remove(pane);
+        m_paneConnectionState.remove(pane);
     });
     connect(workspace, &QObject::destroyed, this, [this]() {
         // QObject::destroyed 发出时标签页对象尚在析构栈上；排到下一轮事件循环再枚举，避免
@@ -3718,9 +3769,59 @@ int MainWindow::topLevelIndexForWorkspace(TerminalWorkspace *workspace) const
 
 void MainWindow::refreshWorkspaceSidebar()
 {
-    if (m_workspaceSidebar != nullptr) {
-        m_workspaceSidebar->setWorkspace(activeWorkspaceGroup());
+    if (m_workspaceSidebar == nullptr) {
+        return;
     }
+    TerminalWorkspaceGroup *group = activeWorkspaceGroup();
+    m_workspaceSidebar->setWorkspace(group);
+    if (group == nullptr) {
+        return;
+    }
+
+    QList<WorkspaceSidebarRow> rows;
+    const QList<TerminalWorkspace *> members = group->terminals();
+    rows.reserve(members.size());
+    for (TerminalWorkspace *member : members) {
+        WorkspaceSidebarRow row;
+        TerminalPane *pane = member == nullptr ? nullptr : member->activePane();
+        const ConnectionTarget target =
+            pane == nullptr ? ConnectionTarget{} : pane->activeTarget();
+
+        if (!target.displayName.isEmpty()) {
+            row.title = target.displayName;
+        } else if (!target.host.isEmpty()) {
+            row.title = target.host;
+        } else {
+            row.title = group->terminalTitle(member);
+        }
+
+        if (target.host.isEmpty()) {
+            // 本地终端没有主机/用户，副标题留空，只显示标题。
+            row.subtitle.clear();
+        } else if (target.username.isEmpty()) {
+            row.subtitle = QStringLiteral("ssh");
+        } else {
+            row.subtitle = tr("ssh, %1").arg(target.username);
+        }
+
+        if (!target.id.isEmpty()) {
+            QString lookupError;
+            const std::optional<HostRecord> saved = m_database->findHost(target.id, &lookupError);
+            if (saved.has_value()) {
+                row.distributionId = saved->distributionId;
+            }
+        }
+
+        if (pane != nullptr) {
+            row.connectionState = m_paneConnectionState.contains(pane)
+                ? m_paneConnectionState.value(pane)
+                : static_cast<int>(pane->isConnected()
+                                       ? SessionTabBar::ConnectionState::Connected
+                                       : SessionTabBar::ConnectionState::Unknown);
+        }
+        rows.append(row);
+    }
+    m_workspaceSidebar->setMemberRows(rows);
 }
 
 QList<TerminalPane *> MainWindow::allTerminalPanes() const

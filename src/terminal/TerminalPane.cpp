@@ -55,6 +55,8 @@ TerminalPane::TerminalPane(QWidget *parent)
     // 有关，放在这里比塞进窗口标题栏的全局提示区更贴近用户正在看的上下文。
     m_statusMessageLabel->setObjectName(QStringLiteral("terminalSessionTransientStatus"));
     m_statusMessageLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    // 瞬时提示也让位给右侧按钮：窄宽度时它先被压缩，绝不把关键开关顶出可视区。
+    m_statusMessageLabel->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
     m_statusMessageIcon->setObjectName(QStringLiteral("terminalSessionTransientStatusIcon"));
     m_statusMessageIcon->setFixedSize(14, 14);
     m_statusMessageIcon->setVisible(false);
@@ -75,16 +77,18 @@ TerminalPane::TerminalPane(QWidget *parent)
     m_fileManagerButton->setAccessibleName(tr("Remote file manager"));
     updateFileManagerButtonIcon();
     // 会话状态栏最右侧的外挂动作容器：单终端标签为空、零占位；工作空间给成员挂上
-    // 广播 / 布局切换 / 关闭按钮。
+    // 广播 / 布局切换 / 关闭按钮。Fixed 策略保证宽度不够时它整体不被压缩——右上角
+    // 的按钮必须永远完整可见，被牺牲的只能是左侧可省略的服务器名和瞬时提示。
     auto *headerExtrasLayout = new QHBoxLayout(m_headerExtras);
     headerExtrasLayout->setContentsMargins(0, 0, 0, 0);
     headerExtrasLayout->setSpacing(2);
+    m_headerExtras->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
 
     headerLayout->addWidget(m_headerLabel, 1);
     headerLayout->addWidget(m_statusMessageIcon);
     headerLayout->addWidget(m_statusMessageLabel);
     headerLayout->addWidget(m_fileManagerButton);
-    headerLayout->addWidget(m_headerExtras);
+    headerLayout->addWidget(m_headerExtras, 0, Qt::AlignRight);
     layout->addWidget(m_headerBar);
     layout->addWidget(m_terminalView, 1);
 

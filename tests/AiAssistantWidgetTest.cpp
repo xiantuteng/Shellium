@@ -3,6 +3,7 @@
 #include "ai/AiClient.h"
 #include "ai/AiSettings.h"
 #include "ai/AiSettingsService.h"
+#include "i18n/LocalizationService.h"
 
 #include <QAction>
 #include <QApplication>
@@ -166,6 +167,8 @@ private slots:
     void fetchModelsParsesGatewayModelIds();
     /** @brief 切换到深色主题后面板与已有气泡都不能继续用浅色底。 */
     void panelFollowsApplicationThemeToDark();
+    /** @brief 语言热切换后聊天区的固定文案（附件开关、系统提示气泡）必须跟随新语言。 */
+    void chatChromeFollowsLanguageSwitch();
 };
 
 void AiAssistantWidgetTest::executingCommandAutoCapturesOutputAndContinuesConversation()
@@ -1039,6 +1042,55 @@ void AiAssistantWidgetTest::panelFollowsApplicationThemeToDark()
     QVERIFY(!userBubbleStyle().contains(QStringLiteral("#e6f2ec")));
 
     QApplication::setPalette(originalPalette);
+}
+
+void AiAssistantWidgetTest::chatChromeFollowsLanguageSwitch()
+{
+    MiniAiServer server;
+    QVERIFY(server.isListening());
+    server.responses.append(chatCompletionBody(QStringLiteral(
+        R"JSON({"state":"complete","message":"检查完成。"})JSON")));
+
+    AiSettingsService settingsService(nullptr, nullptr);
+    AiSettings settings;
+    settings.endpointUrl = QStringLiteral("http://127.0.0.1:%1").arg(server.port());
+    settings.model = QStringLiteral("test-model");
+    QVERIFY(settingsService.save(settings));
+
+    LocalizationService localization;
+    QVERIFY(localization.apply(QStringLiteral("en")));
+
+    AiAssistantWidget widget(&settingsService);
+    auto *attachCheck = widget.findChild<QCheckBox *>();
+    auto *sendButton = widget.findChild<QPushButton *>(QStringLiteral("aiSendButton"));
+    auto *inputEdit = widget.findChild<QTextEdit *>(QStringLiteral("aiInputEdit"));
+    QVERIFY(attachCheck != nullptr);
+    QVERIFY(sendButton != nullptr);
+    QVERIFY(inputEdit != nullptr);
+    QCOMPARE(attachCheck->text(), QStringLiteral("Include new terminal output"));
+
+    // 先渲染一张命令卡片：它的固定标签也是构造时按当时语言写死的，语言切换后必须一起重译。
+    server.responses.prepend(chatCompletionBody(QStringLiteral(
+        R"JSON({"state":"command","title":"看看磁盘","reason":"先读取现状。","command":"df -h"})JSON")));
+    inputEdit->setPlainText(QStringLiteral("看看磁盘占用"));
+    sendButton->click();
+    QTRY_VERIFY_WITH_TIMEOUT(
+        widget.findChild<QPushButton *>(QStringLiteral("aiExecuteButton")) != nullptr, 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(aiIsIdle(sendButton), 5000);
+
+    QVERIFY(localization.apply(QStringLiteral("zh_CN")));
+    QCoreApplication::sendPostedEvents();
+    QCoreApplication::processEvents();
+
+    QCOMPARE(attachCheck->text(), QString::fromUtf8("附带终端新增输出"));
+    auto *executeButton = widget.findChild<QPushButton *>(QStringLiteral("aiExecuteButton"));
+    QVERIFY(executeButton != nullptr);
+    QCOMPARE(executeButton->text(), QString::fromUtf8("执行  ⌘↵"));
+
+    QVERIFY(localization.apply(QStringLiteral("en")));
+    QCoreApplication::sendPostedEvents();
+    QCoreApplication::processEvents();
+    QCOMPARE(attachCheck->text(), QStringLiteral("Include new terminal output"));
 }
 
 QTEST_MAIN(AiAssistantWidgetTest)

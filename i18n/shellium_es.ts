@@ -1531,6 +1531,10 @@ Puede ser una reinstalación del servidor o una rotación de clave, o un ataque 
         <translation type="unfinished">Reconectando automáticamente a %1 (intento %2/%3)</translation>
     </message>
     <message>
+        <source>ssh, %1</source>
+        <translation type="unfinished">ssh, %1</translation>
+    </message>
+    <message>
         <source>Command palette</source>
         <translation type="unfinished">Paleta de comandos</translation>
     </message>
@@ -4809,6 +4813,14 @@ Reconnecting manually…<byte value="xd" />
     <message>
         <source>Drag a terminal tab into the current terminal page or this sidebar to create or extend a workspace.</source>
         <translation type="unfinished">Arrastra una pestaña de terminal a la página de terminal actual o a esta barra lateral para crear o ampliar un espacio de trabajo.</translation>
+    </message>
+    <message>
+        <source>Terminals</source>
+        <translation type="unfinished">Terminales</translation>
+    </message>
+    <message>
+        <source>Broadcast input to all terminals</source>
+        <translation type="unfinished">Difundir la entrada a todas las terminales</translation>
     </message>
 </context>
 </TS>

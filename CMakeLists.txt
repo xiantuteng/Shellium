@@ -934,6 +934,9 @@ if(BUILD_TESTING)
         src/core/ConnectionTarget.cpp
         src/core/ConnectionTarget.h
         src/core/HostRecord.h
+        src/i18n/LocalizationService.cpp
+        src/i18n/LocalizationService.h
+        src/i18n/Retranslate.h
         src/security/Vault.cpp
         src/security/Vault.h
         src/storage/ApplicationDatabase.cpp
@@ -942,6 +945,13 @@ if(BUILD_TESTING)
     target_include_directories(ShelliumAiAssistantTests PRIVATE src)
     target_link_libraries(ShelliumAiAssistantTests PRIVATE
         Qt6::Core Qt6::Gui Qt6::Network Qt6::Widgets Qt6::Sql Qt6::Test ShelliumDependencies::libsodium)
+    qt_add_translations(ShelliumAiAssistantTests
+        TS_FILES i18n/shellium_zh_CN.ts
+        RESOURCE_PREFIX "/i18n"
+        NO_GENERATE_PLURALS_TS_FILE
+        LUPDATE_TARGET ShelliumAiAssistantTests_lupdate
+        LRELEASE_TARGET ShelliumAiAssistantTests_lrelease
+        LUPDATE_OPTIONS -no-obsolete -locations none)
     add_test(NAME ShelliumAiAssistantTests COMMAND ShelliumAiAssistantTests)
 
     # 运行日志是界面提示条移除后唯一的消息去路：写入一旦静默失败，用户既看不到提示也查

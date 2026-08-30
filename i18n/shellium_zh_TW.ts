@@ -1531,6 +1531,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation>正在自動重連 %1（第 %2/%3 次）</translation>
     </message>
     <message>
+        <source>ssh, %1</source>
+        <translation type="unfinished">ssh, %1</translation>
+    </message>
+    <message>
         <source>Command palette</source>
         <translation>命令面板</translation>
     </message>
@@ -4820,6 +4824,14 @@ Reconnecting manually…<byte value="xd" />
     <message>
         <source>Drag a terminal tab into the current terminal page or this sidebar to create or extend a workspace.</source>
         <translation type="unfinished">將終端標籤拖入目前終端頁面或此側邊欄，即可建立或擴充工作空間。</translation>
+    </message>
+    <message>
+        <source>Terminals</source>
+        <translation type="unfinished">終端</translation>
+    </message>
+    <message>
+        <source>Broadcast input to all terminals</source>
+        <translation type="unfinished">向所有終端廣播輸入</translation>
     </message>
 </context>
 </TS>

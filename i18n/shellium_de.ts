@@ -1531,6 +1531,10 @@ Bestätigen Sie, dass sich der Schlüssel geändert hat, ersetzen Sie den alten 
         <translation type="unfinished">Automatische Neuverbindung mit %1 (Versuch %2/%3)</translation>
     </message>
     <message>
+        <source>ssh, %1</source>
+        <translation type="unfinished">ssh, %1</translation>
+    </message>
+    <message>
         <source>Command palette</source>
         <translation type="unfinished">Befehlspalette</translation>
     </message>
@@ -4809,6 +4813,14 @@ Reconnecting manually…<byte value="xd" />
     <message>
         <source>Drag a terminal tab into the current terminal page or this sidebar to create or extend a workspace.</source>
         <translation type="unfinished">Ziehen Sie einen Terminal-Tab auf die aktuelle Terminal-Seite oder in diese Seitenleiste, um einen Arbeitsbereich zu erstellen oder zu erweitern.</translation>
+    </message>
+    <message>
+        <source>Terminals</source>
+        <translation type="unfinished">Terminals</translation>
+    </message>
+    <message>
+        <source>Broadcast input to all terminals</source>
+        <translation type="unfinished">Eingabe an alle Terminals senden</translation>
     </message>
 </context>
 </TS>

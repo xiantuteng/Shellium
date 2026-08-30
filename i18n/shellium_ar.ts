@@ -1531,6 +1531,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">إعادة اتصال تلقائي بـ %1 (المحاولة %2/%3)</translation>
     </message>
     <message>
+        <source>ssh, %1</source>
+        <translation type="unfinished">ssh، %1</translation>
+    </message>
+    <message>
         <source>Command palette</source>
         <translation type="unfinished">لوحة الأوامر</translation>
     </message>
@@ -4809,6 +4813,14 @@ Reconnecting manually…<byte value="xd" />
     <message>
         <source>Drag a terminal tab into the current terminal page or this sidebar to create or extend a workspace.</source>
         <translation type="unfinished">اسحب علامة تبويب طرفية إلى صفحة الطرفية الحالية أو إلى هذا الشريط الجانبي لإنشاء مساحة عمل أو توسيعها.</translation>
+    </message>
+    <message>
+        <source>Terminals</source>
+        <translation type="unfinished">الطرفيات</translation>
+    </message>
+    <message>
+        <source>Broadcast input to all terminals</source>
+        <translation type="unfinished">بث الإدخال إلى جميع الطرفيات</translation>
     </message>
 </context>
 </TS>
