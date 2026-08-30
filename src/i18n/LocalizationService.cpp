@@ -37,16 +37,35 @@ QString LocalizationService::sourceLanguage()
 QStringList LocalizationService::supportedLanguages()
 {
     // 新增语言时，这里、availableLanguages() 与 CMake 的 TS_FILES 三处必须同步；只加 .ts
-    // 不加这里，resolve() 就永远不会把用户请求匹配到新语言。
-    return {QStringLiteral("en"), QStringLiteral("zh_CN")};
+    // 不加这里，resolve() 就永远不会把用户请求匹配到新语言。源语言 en 无 .qm。
+    return {
+        QStringLiteral("en"),    QStringLiteral("fr"),    QStringLiteral("de"),
+        QStringLiteral("it"),    QStringLiteral("ja"),    QStringLiteral("ko"),
+        QStringLiteral("pt_BR"), QStringLiteral("ro"),    QStringLiteral("ru"),
+        QStringLiteral("zh_CN"), QStringLiteral("es"),    QStringLiteral("zh_TW"),
+        QStringLiteral("uk"),    QStringLiteral("ar"),
+    };
 }
 
 QVector<LanguageOption> LocalizationService::availableLanguages()
 {
+    // 顺序即设置下拉的展示顺序；nativeName 用该语言自身写法，"system" 例外跟随当前界面语言。
     return {
         {QStringLiteral("system"), tr("Follow System")},
         {QStringLiteral("en"), QStringLiteral("English")},
+        {QStringLiteral("fr"), QStringLiteral("Français")},
+        {QStringLiteral("de"), QStringLiteral("Deutsch")},
+        {QStringLiteral("it"), QStringLiteral("Italiano")},
+        {QStringLiteral("ja"), QStringLiteral("日本語")},
+        {QStringLiteral("ko"), QStringLiteral("한국어")},
+        {QStringLiteral("pt_BR"), QStringLiteral("Português (BR)")},
+        {QStringLiteral("ro"), QStringLiteral("Română")},
+        {QStringLiteral("ru"), QStringLiteral("Русский")},
         {QStringLiteral("zh_CN"), QStringLiteral("简体中文")},
+        {QStringLiteral("es"), QStringLiteral("Español")},
+        {QStringLiteral("zh_TW"), QStringLiteral("繁體中文")},
+        {QStringLiteral("uk"), QStringLiteral("Українська")},
+        {QStringLiteral("ar"), QStringLiteral("العربية")},
     };
 }
 
@@ -66,7 +85,19 @@ QString LocalizationService::resolve(const QString &stored) const
                 return code;
             }
         }
-        // 再按语言前缀匹配：zh_HK -> zh_CN、en_GB -> en。
+        // 中文按书写系统区分：Hant/TW/HK/MO -> 繁体，其余中文 -> 简体。放在语言前缀匹配
+        // 之前，否则 zh_HK 会先落到列表里更靠前的 zh_CN。
+        const QString lower = unified.toLower();
+        if (lower.startsWith(QLatin1String("zh"))) {
+            const bool traditional = lower.contains(QLatin1String("hant"))
+                || lower.contains(QLatin1String("_tw")) || lower.contains(QLatin1String("_hk"))
+                || lower.contains(QLatin1String("_mo"));
+            const QString target = traditional ? QStringLiteral("zh_TW") : QStringLiteral("zh_CN");
+            if (supported.contains(target)) {
+                return target;
+            }
+        }
+        // 再按语言前缀匹配：pt_PT -> pt_BR、en_GB -> en。
         const QString languageOnly = unified.section(QLatin1Char('_'), 0, 0).toLower();
         for (const QString &code : supported) {
             if (code.section(QLatin1Char('_'), 0, 0).toLower() == languageOnly) {

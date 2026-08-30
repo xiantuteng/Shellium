@@ -1,0 +1,1049 @@
+0	Aucun terminal connecté
+1	Historique de discussion
+2	Afficher l'historique de discussion de l'onglet actuel
+3	Nouvelle session
+4	Décrivez ce que vous souhaitez accomplir sur le serveur actuel…
+5	Inclure la nouvelle sortie du terminal
+6	Envoyer (Entrée)
+7	L'IA peut se tromper. Toute commande qui modifie le système nécessite votre confirmation explicite.
+8	Aucune commande en attente d'exécution
+9	Une requête est en cours ; attendez avant de démarrer une nouvelle session
+10	Session sans titre
+11	Pas encore d'historique de discussion
+12	%1  ·  %2
+13	La session actuelle est encore en cours de traitement ; attendez avant de changer d'historique de discussion
+14	%1  %2
+15	[Résultat de la commande `%1`]
+16	[Nouvelle sortie du terminal]\n%1
+17	Configurez d'abord l'URL du LLM et le nom du modèle dans Paramètres → Assistant IA
+18	L'IA n'a pas renvoyé de résultat conforme au protocole d'interaction en une étape ; ce tour a été arrêté. Réessayez ou passez à un modèle qui prend en charge les instructions JSON.
+19	La réponse de l'IA n'est pas conforme au protocole d'agent en une étape : %1
+20	Votre dernière réponse a enfreint le protocole en une étape : %1. Décidez à nouveau et ne renvoyez qu'un seul objet JSON tel que défini par le message système ; ne produisez pas de plan complet, ni plusieurs commandes, ni d'explication du protocole lui-même.
+21	Analyse…
+22	En attente de confirmation
+23	Insérer
+24	Copier
+25	Modifier
+26	Exécuter  ⌘↵
+27	Exécuter la dernière commande en attente de confirmation (Commande+Entrée)
+28	Exécutée
+29	Commande copiée dans le presse-papiers
+30	Modifier la commande
+31	Après confirmation, elle est insérée dans le terminal actuel et non exécutée automatiquement :
+32	Seule une commande sur une seule ligne peut être insérée dans le terminal
+33	La commande précédente attend encore sa sortie ; veuillez patienter avant d'en exécuter une autre
+34	Confirmer l'exécution d'une commande à haut risque
+35	Cette commande peut avoir des effets irréversibles ou de grande ampleur :\n\n%1\n\nL'exécuter dans le terminal actuel ?
+36	Envoyée au terminal actuel pour exécution ; l'IA attendra automatiquement la fin
+37	Arrêter
+38	Cette analyse a été arrêtée. Ajoutez des détails et renvoyez.
+39	Analyse IA arrêtée
+40	Attente du résultat de la commande arrêtée ; la commande continue de s'exécuter dans le terminal.
+41	Attente du résultat de la commande arrêtée
+42	Impossible de lire l'état actuel du terminal ; impossible d'attendre automatiquement la fin de la commande.
+43	En attente de la fin de la commande…
+44	En attente de la fin de la commande… %1 s écoulées
+45	(aucune sortie)
+46	[Résultat de la commande `%1`]\n%2
+47	Saisissez d'abord l'URL du service LLM
+48	Échec de la connexion : %1
+49	Connecté ; la passerelle a renvoyé %1 modèles disponibles
+50	Connecté
+51	Échec de la récupération de la liste des modèles : %1
+52	La passerelle n'a renvoyé aucun modèle
+53	%1 modèles récupérés
+54	La requête précédente n'est pas terminée
+55	Terminez d'abord la configuration de l'URL du LLM et du nom du modèle dans les Paramètres
+56	Échec de la requête : %1
+57	La passerelle a renvoyé une réponse impossible à analyser
+58	La passerelle n'a renvoyé aucune réponse
+59	Se connecter à un serveur SSH
+60	Facultatif ; non enregistré sur le disque
+61	Facultatif ; laissez vide pour utiliser l'agent SSH ou la clé par défaut
+62	Serveur
+63	Nom d'affichage
+64	Si vide, utilisateur@hôte:port est utilisé automatiquement.
+65	Adresse de l'hôte
+66	Nom d'utilisateur
+67	Port
+68	Parcourir…
+69	Authentification
+70	Mot de passe / phrase secrète de la clé privée
+71	Fichier de clé privée
+72	Compatibilité héritée
+73	Pour les serveurs anciens qui ne prennent en charge que hmac-sha1 (non recommandé).
+74	Le terminal se connecte via un PTY interactif libssh ; le gestionnaire de fichiers utilise la même configuration pour ouvrir un canal SFTP distinct.
+75	Annuler
+76	Se connecter
+77	Les informations de connexion sont incomplètes
+78	Saisissez le nom d'hôte ou l'adresse IP du serveur.
+79	Sélectionner un fichier de clé privée SSH
+80	Modifier la chaîne d'hôtes
+81	Les hôtes que vous ajoutez se connectent dans l'ordre suivant, atteignant finalement <span style="font-family: monospace; font-weight: 600;">%1</span>.
+82	Ajouter un hôte
+83	Choisir ou créer un hôte de rebond dans le Gestionnaire d'hôtes
+84	Hôte cible
+85	Retirer de la chaîne
+86	Enregistrer
+87	Abandonner les modifications de la chaîne d'hôtes actuelle
+88	Enregistrer l'ordre actuel de la chaîne d'hôtes
+89	Référence d'hôte non valide
+90	Échec de la lecture de l'hôte
+91	Identifiants de connexion pour %1
+92	Échec de la création de l'hôte de rebond
+93	Rechercher un nom / une adresse…
+94	#étiquette
+95	Filtrer les hôtes par étiquette exacte
+96	Nouveau groupe
+97	Nouvel hôte
+98	Actualiser
+99	Créer un nouveau groupe d'hôtes au niveau actuel
+100	Créer un nouvel hôte SSH dans le groupe actuel
+101	Recharger les hôtes et les groupes
+102	Supprimer
+103	Importer des hôtes…
+104	Exporter des hôtes…
+105	Non groupé
+106	Échec de la lecture de l'état de déploiement des dossiers d'hôtes : %1
+107	L'état de déploiement des dossiers d'hôtes est corrompu ; utilisation du déploiement par défaut : %1 (décalage %2)
+108	La version ou la structure de l'état de déploiement des dossiers d'hôtes n'est pas prise en charge ; utilisation du déploiement par défaut
+109	Enregistrer l'état de déploiement des dossiers d'hôtes
+110	Charger l'arborescence des hôtes
+111	Rechercher des hôtes
+112	Filtrer les hôtes par cette étiquette exacte
+113	Lire la configuration du groupe parent
+114	Le groupe parent n'existe pas
+115	Enregistrer les identifiants chiffrés
+116	Enregistrer l'hôte
+117	Lire l'hôte
+118	Lire le groupe actuel
+119	Dupliquer l'hôte
+120	Lire le nœud
+121	Mettre à jour les identifiants chiffrés
+122	Mettre à jour le nœud
+123	La suppression du groupe '%1' supprime également tous ses sous-groupes et hôtes, et est irréversible. Continuer ?
+124	Supprimer l'hôte '%1' ? Cette action est irréversible.
+125	Confirmer la suppression
+126	Supprimer le nœud
+127	Importer la configuration d'hôtes
+128	Configuration prise en charge (*.json *.conf *.config);;Tous les fichiers (*)
+129	Impossible de lire le fichier d'importation
+130	Impossible d'ouvrir %1 : %2
+131	Échec de l'importation
+132	Aucun hôte à importer
+133	Le fichier ne contient aucun enregistrement utilisable.
+134	%1 enregistrements d'hôtes/groupes seront importés. Chaque enregistrement reçoit une nouvelle clé primaire locale, et les identifiants ne sont pas importés du fichier de configuration.
+135	Confirmer l'importation
+136	Importer des hôtes
+137	Importation terminée
+138	%1 enregistrements importés avec succès.
+139	Lire les données d'exportation
+140	Aucun hôte à exporter
+141	L'arborescence des hôtes est actuellement vide.
+142	Exporter les hôtes Shellium
+143	Shellium JSON (*.json)
+144	Impossible d'écrire le fichier d'exportation
+145	Échec de l'exportation
+146	Impossible d'encoder la configuration d'hôtes
+147	Échec de l'écriture de %1 : %2
+148	Exportation terminée
+149	%1 enregistrements d'hôtes/groupes exportés. Le fichier ne contient aucun identifiant.
+150	Le conteneur d'enregistrements d'exportation est vide
+151	Résoudre la chaîne d'hôtes
+152	L'enregistrement d'hôte ou la chaîne n'existe pas
+153	 · via %1
+154	Hôte de rebond non valide
+155	 · via %1 et %2 hôtes de rebond
+156	%1\nSystème : %2
+157	Enregistrer l'ordre du glisser-déposer
+158	Nœud %1 introuvable
+159	Échec de l'opération sur les données d'hôtes
+160	Échec de %1 : %2
+161	Sélectionner un hôte de rebond
+162	Sélectionner un hôte existant
+163	Rechercher un nom, une adresse ou un compte
+164	Sélectionner
+165	Créer un hôte de rebond réutilisable
+166	Ajouter l'hôte sélectionné à la chaîne
+167	Configuration de l'hôte
+168	Configuration du groupe
+169	Hôtes
+170	Groupe
+171	Nom
+172	Laisser vide pour hériter du groupe parent
+173	Enregistré automatiquement avec l'hôte après la saisie
+174	Laisser vide pour hériter du groupe parent ou utiliser l'agent / la clé par défaut
+175	Séparés par des virgules ; laisser vide pour hériter du groupe parent
+176	Modifier les hôtes de rebond que l'hôte actuel traverse avant la connexion finale
+177	Authentification et hôtes de rebond
+178	Afficher le mot de passe
+179	Afficher le mot de passe enregistré ; lorsque le coffre-fort est verrouillé, le mot de passe maître est demandé en premier
+180	Cliquez pour voir comment activer la protection par mot de passe maître
+181	Mot de passe
+182	Le mot de passe est enregistré automatiquement ; activez la protection par mot de passe maître pour le déverrouiller et afficher le texte en clair.
+183	Chaîne d'hôtes
+184	Choisissez un hôte existant dans le Gestionnaire d'hôtes comme hôte de rebond, ou ajoutez un hôte dans l'éditeur de chaîne.
+185	Autoriser hmac-sha1 pour cet hôte uniquement (non hérité).
+186	Développer les paramètres avancés ProxyJump
+187	ProxyJump
+188	Configuration manuelle avancée d'hôtes de rebond compatible OpenSSH ; préférez normalement la chaîne d'hôtes ci-dessus.
+189	Protection par mot de passe maître requise
+190	L'affichage des mots de passe d'hôtes nécessite la protection par mot de passe maître. Allez dans 'Paramètres → Connexions et sécurité → Coffre-fort d'identifiants' et activez 'Protéger les identifiants avec un mot de passe maître'.
+191	Masquer le mot de passe
+192	Le coffre-fort a été réinitialisé ; veuillez ressaisir vos identifiants
+193	Abandonner cette modification de configuration
+194	Enregistrer la configuration actuelle
+195	Tester la connexion
+196	Tester la connexion SSH avec la configuration actuelle non enregistrée
+197	La configuration est incomplète
+198	Saisissez un nom.
+199	Saisissez un nom d'hôte ou une adresse IP.
+200	Enregistré ; visible après le déverrouillage du coffre-fort
+201	Impossible de lire le mot de passe enregistré
+202	L'identifiant n'existe pas ou est corrompu.
+203	Choisir à quel groupe cet hôte appartient dans le Gestionnaire d'hôtes
+204	Ajouter des étiquettes à cet hôte et choisir une couleur d'étiquette
+205	Modifier l'étiquette
+206	Paramètres avancés
+207	Paramètres avancés · ProxyJump configuré
+208	Paramètres avancés · hérite de ProxyJump
+209	Réduire les paramètres avancés ProxyJump
+210	À utiliser uniquement pour une configuration compatible OpenSSH ou lorsqu'une adresse d'hôte de rebond doit être spécifiée manuellement
+211	Chaîne d'hôtes  ·  directe  ›
+212	Chaîne d'hôtes  ·  via %1  ›
+213	Hôte non valide
+214	Chaîne d'hôtes  ·  %1 hôtes de rebond  ›
+215	Impossible de tester la chaîne d'hôtes
+216	L'hôte de rebond n'existe pas ou la chaîne n'est pas valide : %1
+217	La chaîne d'hôtes contient des nœuds en double ou une boucle : %1
+218	Impossible de tester la connexion
+219	Impossible de lire les identifiants enregistrés pour '%1'.
+220	Test en cours…
+221	Connexion réussie à %1.
+222	Le serveur ne prend en charge que hmac-sha1 hérité. Si vous avez accepté le risque, activez 'Compatibilité héritée' et réessayez.\n\n%1
+223	Échec de l'authentification SSH. Vérifiez le mot de passe ou la phrase secrète de la clé privée et réessayez.
+224	Le serveur exige un mot de passe ou une phrase secrète de clé privée. Renseignez 'Mot de passe' et réessayez.
+225	Confirmer la clé d'hôte du serveur
+226	Première connexion à %1.\n\nEmpreinte SHA-256 :\n%2\n\nVérifiez l'empreinte via un canal de confiance. Lui faire confiance et poursuivre le test ?
+227	La clé d'hôte du serveur a changé
+228	La clé d'hôte renvoyée par %1 ne correspond pas à l'enregistrement local.\n\nNouvelle empreinte SHA-256 :\n%2\n\nIl peut s'agir d'une réinstallation du serveur ou d'une rotation de clé, ou d'une attaque de l'homme du milieu. Vérifiez d'abord la nouvelle empreinte via un canal de confiance.\n\nConfirmer que la clé a changé, remplacer l'ancien enregistrement dans known_hosts et poursuivre le test ?
+229	Test de connexion réussi
+230	Échec du test de connexion
+231	Impossible d'établir la connexion SSH. Vérifiez la configuration actuelle.
+232	Étiquette
+233	Saisissez un nom d'étiquette, par ex. production
+234	Couleur
+235	Cliquez sur une étiquette pour charger son nom et sa couleur ci-dessus, pour modification ou confirmation directe.
+236	OK
+237	Abandonner cette modification d'onglet
+238	Confirmer l'étiquette et la couleur
+239	Supprimer l'étiquette
+240	Supprimer cette étiquette
+241	Étiquette non valide
+242	Un nom d'étiquette ne peut pas contenir de virgule.
+243	Charger le nom et la couleur
+244	Hôtes de redirection de port
+245	%1  (%2)
+246	Le shell local n'existe pas : %1
+247	%1 : %2
+248	Impossible de créer le tube ConPTY
+249	Impossible de créer le ConPTY Windows
+250	Impossible de configurer les attributs du processus enfant ConPTY
+251	Impossible de démarrer le shell local Windows
+252	Impossible de configurer le nettoyage de l'arborescence de processus pour le shell local : %1
+253	Échec du redimensionnement de ConPTY : HRESULT 0x%1
+254	Échec de l'écriture dans ConPTY
+255	Impossible de créer le PTY local : %1
+256	Échec de l'écriture dans le PTY local : %1
+257	Échec de l'interrogation du PTY local : %1
+258	Suivre le système
+259	Échec de la lecture des paramètres : %1
+260	Shellium
+261	Productivité
+262	Redirection de port
+263	Assistant IA
+264	0 hôte
+265	Échec de la lecture de la configuration de l'assistant IA : %1
+266	%1 hôtes
+267	Se connecter au serveur
+268	Se connecter à un serveur SSH dans le volet de terminal actuel
+269	Connexion imbriquée à…
+270	Se connecte à un hôte interne via le serveur actuel. L'application gère elle-même les couches, ce qui permet au gestionnaire de fichiers de basculer précisément entre elles.
+271	Terminal local
+272	Démarrer un zsh de connexion local dans le volet de terminal actuel
+273	Nouvel onglet
+274	Fermer l'onglet
+275	Renommer l'onglet
+276	Basculer le gestionnaire de fichiers distant
+277	Afficher ou masquer la zone du gestionnaire de fichiers distant dans l'onglet de terminal actuel
+278	Rechercher dans la sortie du terminal…
+279	Exporter la sortie du terminal…
+280	Paramètres…
+281	Palette de commandes…
+282	Enregistrer l'espace de travail actuel…
+283	Ouvrir un espace de travail…
+284	Supprimer un espace de travail…
+285	Afficher la barre latérale
+286	Développer ou réduire les zones Hôtes, Productivité et Redirection de port à gauche
+287	Nom du produit Shellium
+288	Faire défiler les onglets vers la gauche
+289	Faire défiler les onglets vers la droite
+290	Réduire
+291	Réduire la fenêtre
+292	Fermer
+293	Fermer la fenêtre
+294	Connexion
+295	Espace de travail
+296	Affichage
+297	Terminal
+298	Déverrouiller le coffre-fort d'identifiants…
+299	Verrouiller le coffre-fort d'identifiants
+300	Gestion des clés SSH…
+301	Sécurité
+302	Terminal %1
+303	Nom de l'étiquette :
+304	Le coffre-fort d'identifiants est verrouillé
+305	Le coffre-fort d'identifiants est déverrouillé
+306	Le coffre-fort a été réinitialisé, mais la synchronisation de l'état des paramètres a échoué : %1
+307	Le coffre-fort a été réinitialisé ; les configurations d'hôtes sont conservées. Ressaisissez les identifiants nécessaires.
+308	Diffusion en direct activée : %1 cibles
+309	Diffusion en direct désactivée
+310	Le coffre-fort d'identifiants a été verrouillé automatiquement pour cause d'inactivité
+311	Impossible de passer à la langue sélectionnée ; vérifiez que le pack de langue est complet
+312	Langue de l'interface modifiée
+313	Restaurer
+314	Agrandir
+315	Restaurer la fenêtre
+316	Agrandir la fenêtre
+317	Échec de la lecture de la largeur de la barre latérale : %1
+318	Échec de l'enregistrement de la largeur de la barre latérale : %1
+319	Nouvel onglet de terminal
+320	Copier l'étiquette
+321	Renommer
+322	Fermer les autres onglets
+323	Impossible d'établir la connexion imbriquée
+324	L'onglet actuel n'est pas encore connecté à un serveur distant. Connectez-vous d'abord à un serveur, puis poursuivez vers un hôte interne à partir de celui-ci.
+325	Impossible de se connecter à l'hôte enregistré
+326	L'enregistrement d'hôte ou la chaîne d'hôtes n'existe pas
+327	Impossible de lire la chaîne d'hôtes
+328	L'hôte de la chaîne n'existe pas : %1
+329	Impossible de lire les identifiants de l'hôte
+330	L'identifiant n'existe pas
+331	Connecté, mais l'écriture de l'historique de connexion a échoué : %1
+332	La connexion a échoué, et l'écriture de l'historique de connexion a également échoué : %1
+333	Échec de l'écriture de l'heure de déconnexion : %1
+334	L'assistant IA ne prend pas en charge l'exécution de commandes sur plusieurs terminaux
+335	L'onglet de terminal correspondant est déjà fermé
+336	L'insertion d'une commande non exécutée dans plusieurs terminaux n'est pas encore prise en charge
+337	La commande a été insérée dans le terminal correspondant ; appuyez sur Entrée pour l'exécuter
+338	Appuyez sur + dans la barre de titre pour ouvrir un nouvel onglet de terminal, ou connectez-vous à un serveur depuis la liste des hôtes à gauche.
+339	Échec de l'enregistrement des informations de distribution de l'hôte : %1
+340	Reconnexion automatique à %1 (tentative %2/%3)
+341	Palette de commandes
+342	Saisissez un nom de commande pour filtrer…
+343	Entrée pour exécuter, Échap pour fermer ; seules les actions actuellement disponibles sont affichées ici.
+344	Rechercher dans la sortie du terminal
+345	Rechercher le texte :
+346	'%1' est introuvable dans la sortie du terminal
+347	Exporter la sortie du terminal
+348	Fichiers texte (*.txt);;Tous les fichiers (*)
+349	Sortie du terminal exportée vers %1
+350	L'espace de travail contient des connexions temporaires
+351	L'onglet '%1' n'est pas un hôte persistant ouvert depuis l'arborescence des hôtes. Enregistrez d'abord cette connexion dans l'arborescence des hôtes, puis l'espace de travail.
+352	Échec de la vérification de l'enregistrement d'hôte pour l'onglet '%1' : %2
+353	Aucun onglet à enregistrer
+354	La fenêtre actuelle n'a pas d'onglet de terminal valide.
+355	Enregistrer l'espace de travail
+356	Nom de l'espace de travail :
+357	Échec de l'enregistrement de l'espace de travail
+358	Écraser l'espace de travail existant
+359	Un espace de travail nommé '%1' existe déjà. L'écraser avec l'ensemble d'onglets actuel ?
+360	Espace de travail '%1' enregistré (%2 onglets)
+361	Échec de la lecture de l'espace de travail
+362	Aucun espace de travail
+363	Enregistrez d'abord l'espace de travail actuel.
+364	Ouvrir un espace de travail
+365	Sélectionner un espace de travail :
+366	L'espace de travail sélectionné a été supprimé
+367	La disposition de l'espace de travail est corrompue
+368	La version, la liste d'onglets ou le nombre de l'espace de travail '%1' n'est pas valide ; la session actuelle n'a pas été modifiée.
+369	L'entrée d'étiquette n'est pas un objet
+370	Type de champ d'étiquette non valide
+371	La référence d'hôte n'existe pas : %1
+372	Impossible de résoudre la chaîne d'hôtes : %1
+373	L'espace de travail '%1' n'a pas pu être entièrement restauré : %2. La session actuelle n'a pas été modifiée.
+374	Remplacer l'espace de travail actuel
+375	L'ouverture de '%1' ferme les %2 onglets actuels et leurs connexions, puis restaure %3 onglets. Continuer ?
+376	Espace de travail '%1' restauré
+377	Il n'y a aucun espace de travail à supprimer.
+378	Supprimer l'espace de travail
+379	Sélectionner un espace de travail à supprimer :
+380	Confirmer la suppression de l'espace de travail
+381	Seule la disposition enregistrée est supprimée ; les terminaux actuels ne sont pas fermés. Cette action est irréversible.
+382	Échec de la suppression de l'espace de travail
+383	Espace de travail supprimé
+384	L'espace de travail n'existe plus
+385	La cible sélectionnée est fermée ou pas encore connectée
+386	Aucune redirection de port en cours
+387	Nouveau
+388	Démarrer
+389	Nouvelle règle de redirection de port
+390	Démarrer toutes les règles de redirection pour l'hôte actuel
+391	Arrêter toutes les règles de redirection pour l'hôte actuel
+392	Nouvelle règle
+393	Sélectionner une règle à modifier
+394	Échec de la lecture des hôtes de redirection de port : %1
+395	Échec de la lecture du nombre de redirections de port : %1
+396	Enregistrez d'abord un hôte dans le Gestionnaire d'hôtes
+397	Échec de la lecture des règles de redirection de port : %1
+398	%1 règles, %2 connexions actives, %3 trafic total ; %4
+399	Hôte non connecté · session SSH indisponible
+400	Hôte connecté · session SSH disponible
+401	Aucun hôte enregistré
+402	Créez d'abord un hôte dans le Gestionnaire d'hôtes.
+403	La règle est en cours d'exécution
+404	Arrêtez d'abord la règle, puis modifiez les paramètres d'écoute ou de cible.
+405	Confirmer l'exposition du port d'écoute
+406	La règle écoute sur toutes les interfaces réseau, d'autres appareils peuvent donc atteindre ce port. Confirmez que votre pare-feu est configuré et poursuivez l'enregistrement ?
+407	Échec de l'enregistrement de la règle
+408	Sélectionner une règle de redirection de port à supprimer
+409	Confirmer la suppression de la règle
+410	Ceci est irréversible ; les écouteurs en cours s'arrêtent immédiatement.
+411	Échec de la suppression de la règle
+412	Sélectionner une règle à démarrer
+413	L'hôte n'est pas encore connecté
+414	Connectez-vous d'abord à '%1' depuis l'arborescence des hôtes, puis démarrez cette règle.
+415	Échec du démarrage de la redirection
+416	La règle sélectionnée n'est pas en cours d'exécution
+417	Créez et sélectionnez d'abord un hôte dans le Gestionnaire d'hôtes.
+418	Échec de la lecture des règles de redirection
+419	Aucune règle de redirection
+420	L'hôte actuel n'a pas encore de règle de redirection de port à démarrer.
+421	Connectez-vous d'abord à '%1' depuis l'arborescence des hôtes, puis démarrez toutes les règles de redirection.
+422	Confirmer le démarrage de toutes les redirections
+423	Ceci démarrera les %2 règles de redirection sous l'hôte '%1' ; les règles déjà en cours restent inchangées. Continuer ?
+424	Certaines règles n'ont pas pu être démarrées
+425	%1 règles n'ont pas pu être soumises au démarrage :\n%2
+426	%1 tâches de démarrage de redirection de port soumises pour l'hôte actuel
+427	L'hôte actuel n'a aucune règle de redirection de port en cours d'exécution
+428	Confirmer l'arrêt de toutes les redirections
+429	Ceci arrêtera %2 règles de redirection actives sous l'hôte '%1' et fermera les connexions associées. Continuer ?
+430	%1 tâches d'arrêt de redirection de port soumises pour l'hôte actuel
+431	La session SSH de l'hôte est indisponible
+432	Démarrage de la redirection de port : %1
+433	Échec de la redirection de port : %1
+434	Aucun message d'erreur précis n'a été renvoyé au moment de l'exécution
+435	Échec de la lecture des règles de redirection automatique : %1
+436	Échec du démarrage automatique de '%1' : %2
+437	Démarrage
+438	En cours d'exécution
+439	Arrêt
+440	Échec
+441	Arrêté
+442	Local %1\n← Distant %2
+443	Local %1\n→ Distant (selon la requête SOCKS)
+444	Local %1\n→ Distant %2
+445	%1 %2
+446	Modifier la redirection de port
+447	Nouvelle redirection de port
+448	Redirection locale (-L)
+449	Redirection distante (-R)
+450	SOCKS5 dynamique (-D)
+451	Démarre automatiquement après la réussite de la connexion SSH racine
+452	Nom :
+453	Type :
+454	Écoute :
+455	Cible :
+456	Note de sécurité : définir l'adresse d'écoute sur 0.0.0.0 ou :: expose le port au réseau local et à Internet ; l'accessibilité dépend toujours du pare-feu système et du paramètre GatewayPorts du serveur SSH.
+457	La règle est incomplète
+458	%1 · %2
+459	Raison : %1
+460	Dernière erreur : %1
+461	La session SSH n'est pas prête ; impossible de démarrer la redirection '%1'
+462	Échec du démarrage de la redirection distante '%1' : %2
+463	L'adresse d'écoute '%1' n'est pas une adresse IP locale liable
+464	Échec de l'écoute sur %1:%2 : %3
+465	Échec de la prise en charge du canal SSH de redirection distante
+466	La redirection distante n'a pas pu se connecter à la cible locale %1:%2 : %3
+467	La négociation SOCKS5 a dépassé la limite de sécurité de 64 Kio
+468	Impossible de se connecter à la cible %1:%2 via SSH : %3
+469	Échec de la prise en charge du canal SSH de redirection local
+470	La productivité n'est pas encore connectée à la base de données de l'application
+471	Échec de l'enregistrement de l'extrait : %1
+472	Échec de la suppression de l'extrait : %1
+473	Échec de la lecture des groupes d'extraits : %1
+474	Échec de la lecture des extraits : %1
+475	Échec de l'écriture de l'historique des commandes : %1
+476	Échec de la lecture de l'historique des commandes : %1
+477	Nouvel extrait
+478	Créer un extrait de commande exécutable
+479	Supprimer l'extrait sélectionné
+480	Extraits de commandes
+481	Exécuter
+482	Filtrer par préfixe de commande
+483	Exécuter sur l'hôte sélectionné
+484	Réexécuter la commande sur l'hôte sélectionné dans le filtre d'historique
+485	Historique des commandes
+486	Sélectionnez d'abord une entrée d'historique de commandes
+487	Copier la commande
+488	Après avoir choisi les cibles, vous pouvez activer la diffusion clavier en direct ; le terminal source est lié par la fenêtre principale à l'onglet actuel.
+489	Activer la diffusion en direct de l'entrée brute
+490	Envoyer une commande une fois aux cibles sélectionnées
+491	Envoyer la diffusion
+492	Envoyer une commande une fois aux terminaux que vous avez explicitement cochés
+493	Entrée de diffusion
+494	Cochez explicitement au moins un terminal cible avant d'activer la diffusion
+495	L'envoi de la diffusion nécessite une commande non vide et au moins une cible explicite
+496	Commande
+497	Description
+498	Enregistrer les modifications de l'extrait actuel
+499	Exécuter  %1
+500	Raccourci %1
+501	Le modèle de productivité n'est pas encore prêt
+502	L'extrait sélectionné n'existe plus ; actualisez la liste
+503	Modifier l'extrait
+504	Le nom et la commande ne peuvent pas être vides
+505	Extrait enregistré
+506	Sélectionnez d'abord un extrait à supprimer
+507	Supprimer l'extrait sélectionné ?
+508	Extrait supprimé
+509	Sélectionnez d'abord un extrait à exécuter
+510	L'extrait n'existe plus ou sa commande est vide
+511	L'extrait n'existe plus
+512	Local / terminal actuel
+513	Démarrer avec la langue d'interface indiquée (par ex. zh_CN, en ou system).
+514	Échec de l'initialisation de la base de données
+515	Impossible d'initialiser les données locales de Shellium : %1
+516	Échec de l'initialisation de l'aperçu de l'interface
+517	Impossible de créer les données isolées d'aperçu de la page des hôtes : %1
+518	Impossible d'écrire le thème d'aperçu isolé : %1
+519	Impossible d'initialiser le coffre-fort en mémoire isolé : %1
+520	Échec de la lecture des paramètres
+521	La configuration du coffre-fort est corrompue
+522	Shellium · Aperçu de l'interface
+523	Lecture seule · autorisé
+524	Modifie le système · nécessite une approbation
+525	Risque élevé · nécessite une approbation
+526	Ouvrir un terminal local
+527	Afficher/masquer les fichiers distants
+528	Ouvrir la palette de commandes
+529	Ouvrir les paramètres
+530	Le raccourci %1 est attribué à la fois à '%2' et à '%3'
+531	Par défaut
+532	Inconnu
+533	%1 s
+534	%1 min %2 s
+535	%1 h %2 min
+536	Le chemin SFTP normal a échoué : %1\nLe repli SFTP par clé distante a également échoué : %2
+537	Erreur libssh inconnue
+538	Impossible de réutiliser la session SSH externe : %1
+539	SFTP
+540	Le serveur n'a pas pu initialiser le sous-système SFTP : %1
+541	SSH externe
+542	Impossible de créer le canal relais SFTP distant : %1
+543	Le serveur externe a refusé de démarrer la session relais SFTP : %1
+544	Le serveur externe n'a pas pu exécuter l'OpenSSH interne : %1
+545	Impossible de lier le canal de données SFTP de l'OpenSSH distant : %1
+546	L'OpenSSH externe n'a pas pu établir le SFTP interne : %1
+547	Impossible de créer une session libssh.
+548	Impossible de lier le tunnel SSH interne : %1
+549	Impossible de configurer la chaîne de rebond : %1
+550	Le serveur ne prend en charge que hmac-sha1 hérité : %1
+551	Échec de la connexion SSH : %1
+552	Échec de l'authentification pour %1 : %2. Vérifiez le nom d'utilisateur, le mot de passe, la clé privée ou l'agent SSH.
+553	Impossible de lire l'empreinte
+554	La clé d'hôte du serveur ne correspond pas à l'enregistrement known_hosts ; la nouvelle empreinte doit d'abord être vérifiée.
+555	Échec du remplacement de l'ancienne clé d'hôte dans known_hosts : %1
+556	Ce serveur n'est pas encore approuvé.
+557	Échec de la lecture de known_hosts : %1
+558	Échec de l'écriture de known_hosts : %1
+559	Impossible de renommer le fichier temporaire en %1 : %2
+560	Impossible de lire le fichier local : %1
+561	La vérification de fin du fragment a échoué ; retransfert
+562	Impossible de créer le fichier temporaire distant %1 : %2
+563	Impossible de se positionner au décalage de reprise local %1 : %2
+564	Échec du téléversement de %1 : %2
+565	Le fichier local %1 a été modifié pendant le transfert ; ce résultat est abandonné
+566	La longueur du fichier temporaire distant ne correspond pas à celle du local (%1 / %2 octets) ; renommage abandonné
+567	Impossible de lire le fichier distant %1 : %2
+568	Impossible d'écrire le fichier temporaire local %1 : %2
+569	Échec du téléchargement de %1 : %2
+570	Échec de l'enregistrement de %1 : %2
+571	Échec de l'actualisation du fichier local %1 : %2
+572	Le fichier distant %1 a été modifié pendant le transfert ; ce résultat est abandonné
+573	La longueur du fichier temporaire local ne correspond pas à celle du distant (%1 / %2 octets) ; renommage abandonné
+574	Impossible de créer le répertoire distant %1 : %2
+575	Impossible d'ouvrir le répertoire distant : %1
+576	Le distant a renvoyé un nom d'élément contenant un séparateur de chemin ; il a été ignoré
+577	L'analyse préalable au remplacement a été annulée
+578	Impossible d'analyser entièrement le répertoire à remplacer : %1
+579	Le processus de remplacement a été annulé
+580	Impossible de supprimer %1 : %2
+581	Impossible d'ouvrir le répertoire distant %1 : %2
+582	La connexion a été interrompue lors de la lecture du répertoire distant %1 : %2
+583	Téléversement de %1 annulé
+584	%1 est identique (%2), non retéléversé
+585	Téléversé vers %1
+586	Téléchargement de %1 annulé
+587	%1 est identique (%2), non retéléchargé
+588	Téléchargé vers %1
+589	Impossible de créer le répertoire local %1
+590	Impossible de créer le répertoire local
+591	Impossible de lire le fichier d'aperçu %1 : %2
+592	Échec de la lecture du fichier d'aperçu %1 : %2
+593	Échec de la modification des permissions de %1 : %2
+594	Permissions de %1 modifiées en %2
+595	Échec du renommage : %1
+596	Renommé en %1
+597	Échec de la suppression de %1 : %2. Le répertoire doit être vide.
+598	%1 supprimé
+599	Transfert annulé : %1
+600	%1 transféré : %2/%3 fichiers, %4 octets au total
+601	 ; %1 autres fichiers sont identiques et n'ont pas été retéléversés
+602	Le mode remplacement a supprimé %1 éléments en trop sur la cible
+603	  · %1 de plus omis
+604	%1 ignorés :
+605	%1 échoués :
+606	Lien symbolique (non suivi)
+607	Le chemin sort du répertoire cible
+608	Retéléversement avec écrasement sélectionné
+609	Le hachage du contenu correspond
+610	Identique au dernier enregistrement de synchronisation
+611	Le fragment a été vérifié par hachage du contenu
+612	Le fragment a été vérifié par taille et heure de modification
+613	Le fichier source a changé ; le fragment est invalide
+614	Le fragment ne correspond pas à l'identifiant de reprise ; retransfert
+615	Aucun identifiant de reprise disponible
+616	La session SSH n'est pas valide ; impossible de mettre à jour known_hosts.
+617	La session SSH actuelle n'est plus en état de conflit de clé d'hôte.
+618	Impossible de déterminer l'emplacement de votre fichier known_hosts.
+619	Impossible d'exporter la nouvelle clé d'hôte du serveur : %1
+620	L'enregistrement de nouvelle clé d'hôte exporté par libssh a un format non valide.
+621	Impossible de lire %1 : %2
+622	Échec de la lecture de %1 : %2
+623	L'enregistrement en conflit n'est pas dans votre fichier known_hosts %1 ; il provient peut-être d'une configuration au niveau système. Contactez votre administrateur pour le vérifier et le mettre à jour.
+624	Échec de la mise à jour de %1 : %2
+625	La revérification après l'écriture de la nouvelle clé d'hôte a échoué ; le fichier known_hosts d'origine a été restauré.
+626	La revérification après l'écriture de la nouvelle clé d'hôte a échoué, et la restauration du fichier d'origine a également échoué : %1
+627	Le coffre-fort est indisponible
+628	L'application n'a pas initialisé le service de coffre-fort d'identifiants.
+629	Les données du coffre-fort sont corrompues
+630	Impossible de lire le coffre-fort local en toute sécurité : %1\n\nPour éviter d'écraser des identifiants existants, Shellium ne crée pas automatiquement de nouveau coffre-fort.
+631	Impossible d'activer la protection par mot de passe maître
+632	L'état actuel du coffre-fort ne permet pas de réactiver la protection par mot de passe maître.
+633	Impossible de désactiver la protection par mot de passe maître
+634	Le coffre-fort n'a aucune configuration de mot de passe maître à vérifier.
+635	Suivre automatiquement la couche la plus interne
+636	Suivre le répertoire du terminal
+637	Sélectionner un serveur de terminal
+638	Préférer le transfert avec reprise
+639	Afficher le gestionnaire de fichiers en plein écran et développer les fichiers locaux pour une copie côte à côte
+640	Plein écran
+641	Fermer le gestionnaire de fichiers distant et redonner toute la largeur au terminal
+642	Fichiers locaux
+643	Aller au répertoire parent local
+644	Actualiser le répertoire local
+645	Taille
+646	Modifié
+647	Permissions
+648	Propriétaire
+649	Fichiers distants
+650	Aller au répertoire parent distant
+651	Actualiser le répertoire distant actuel
+652	Lorsque cette option est activée, le champ de chemin saute automatiquement au répertoire distant où se trouve actuellement le terminal de gauche
+653	Quitter le plein écran et réduire les fichiers locaux
+654	Téléverser
+655	Téléverser des fichiers…
+656	Téléverser un répertoire…
+657	Télécharger
+658	Aperçu
+659	Suspendre ou reprendre le transfert actuel
+660	Annuler le transfert actuel ou la tâche en attente sélectionnée
+661	Transfert avec reprise
+662	Activé : les fichiers dont le contenu est réellement identique sont ignorés, et les fragments partiels laissés par une interruption reprennent après vérification ;\nDésactivé : tout est retéléversé intégralement, que le contenu corresponde ou non.
+663	Les transferts s'exécutent strictement dans l'ordre ; sélectionnez un élément en attente et cliquez sur 'Désélectionner' pour le retirer directement.
+664	Ouvrir le répertoire
+665	Téléverser vers le répertoire distant actuel
+666	Téléverser des fichiers vers le répertoire actuel
+667	Téléverser un répertoire vers le répertoire actuel
+668	Modifier les permissions
+669	Actualiser le répertoire distant
+670	Reprendre le transfert actuel
+671	Suspendre le transfert actuel
+672	Désélectionner la tâche
+673	%1 éléments
+674	Première connexion à %1.\n\nEmpreinte SHA-256 :\n%2\n\nVérifiez l'empreinte via un canal de confiance. Lui faire confiance et l'écrire dans known_hosts ?
+675	La clé d'hôte renvoyée par %1 ne correspond pas à l'enregistrement local.\n\nNouvelle empreinte SHA-256 :\n%2\n\nIl peut s'agir d'une réinstallation du serveur ou d'une rotation de clé, ou d'une attaque de l'homme du milieu. Vérifiez d'abord la nouvelle empreinte via un canal de confiance.\n\nConfirmer que la clé a changé et remplacer l'ancien enregistrement dans known_hosts ?
+676	Transfert de %1/%2 : %3
+677	Un élément du même nom existe déjà sur le distant
+678	Un fichier du même nom existe déjà sur le distant :\n%1
+679	Pour téléverser un répertoire, ce fichier doit d'abord être supprimé. Le remplacer ?
+680	Remplacer
+681	Un répertoire du même nom existe déjà sur le distant :\n%1
+682	Fusion : compare le contenu fichier par fichier et ne retéléverse que les fichiers réellement modifiés ; les fichiers supplémentaires sur le distant sont conservés.\n\nRemplacement : supprime l'intégralité du répertoire distant et retéléverse tout pour que le résultat corresponde exactement au local ; les fichiers supplémentaires sur le distant sont définitivement supprimés.
+683	Fusionner la mise à jour
+684	Aperçu sécurisé de %1 chargé
+685	Aperçu sécurisé · %1
+686	Affichage des %1 premiers uniquement ; le contenu du fichier est tronqué.
+687	Ce fichier n'est pas un fichier texte pris en charge ni une image matricielle sûre ; le contenu binaire n'est pas affiché.\nMIME : %1
+688	%1 transféré
+689	 · %1/s
+690	 · %1 restant
+691	Couche %1 · ⚠ déduit · %2
+692	Couche %1 · %2
+693	Le terminal actuel n'est pas encore connecté à un serveur
+694	Chemin local non valide
+695	Le répertoire local n'existe pas ou n'est pas accessible :\n%1
+696	Impossible de parcourir le répertoire local
+697	Aucune permission de lecture sur ce répertoire :\n%1
+698	Suspendre
+699	Exécution : %1
+700	Suspendu
+701	En cours
+702	En attente
+703	Pas encore connecté
+704	Connectez-vous d'abord et sélectionnez un serveur distant.
+705	Chemin distant inconnu
+706	Entrez d'abord dans un répertoire distant, puis déposez des fichiers locaux.
+707	Rien à téléverser
+708	L'élément déposé n'existe pas, ne peut pas être lu ou est un lien symbolique non suivi.
+709	Téléverser %1 → %2
+710	%1 fichiers locaux ajoutés à la file de transfert
+711	Remplacer le téléversement %1 → %2
+712	Répertoire %1 ajouté à la file de transfert
+713	La cible de téléchargement n'est pas un répertoire accessible :\n%1
+714	Télécharger %1 → %2
+715	Chemin non valide
+716	Saisissez un chemin absolu distant commençant par /.
+717	Lecture du répertoire personnel…
+718	Lecture de %1…
+719	Sélectionner un ou plusieurs fichiers à téléverser
+720	Entrez d'abord dans un répertoire dans le gestionnaire de fichiers distant, puis lancez le téléversement depuis le terminal.
+721	Sélectionner un répertoire à téléverser
+722	Chemin inconnu
+723	Entrez d'abord dans un répertoire distant, puis téléversez le répertoire local.
+724	Confirmer le téléversement du répertoire
+725	Le répertoire local sera téléversé de manière récursive :\n%1\n\nvers l'emplacement distant :\n%2\n\nSi un répertoire du même nom existe déjà sur le distant, l'étape suivante vous laissera choisir entre fusionner la mise à jour ou remplacer. Continuer ?
+726	Sélectionner un élément
+727	Sélectionnez un fichier ou un répertoire distant à télécharger.
+728	Choisir le répertoire local pour le téléchargement groupé
+729	Élément en attente annulé : %1
+730	Annulation du transfert demandée ; finalisation…
+731	Reprendre
+732	Reprendre le transfert actuel
+733	Le transfert se suspendra à la prochaine limite de bloc de 64 Kio
+734	Transfert repris
+735	Aperçu impossible
+736	Sélectionnez un fichier distant ordinaire ; les répertoires et les liens symboliques ne sont pas ouverts dans l'aperçu sécurisé.
+737	Lecture sécurisée de l'aperçu de %1…
+738	Sélectionnez un fichier ou un répertoire dont modifier les permissions.
+739	Modifier les permissions distantes
+740	Saisissez trois ou quatre chiffres octaux de permissions (par ex. 0644, 0755) :
+741	Format de permissions non valide
+742	Les permissions ne peuvent contenir que 0 à 7 et doivent comporter trois ou quatre chiffres.
+743	La valeur de permission est en dehors de la plage autorisée par POSIX.
+744	Modification des permissions de %1…
+745	Sélectionnez un fichier ou un répertoire à renommer.
+746	Nouveau nom :
+747	Nom non valide
+748	Le nom ne peut pas contenir le séparateur de chemin /.
+749	Renommage…
+750	Sélectionnez un fichier ou un répertoire vide à supprimer.
+751	Vous êtes sur le point de supprimer définitivement %2 sur le serveur %1 :\n\n%3\n\nCette action est irréversible.
+752	Répertoire
+753	Fichier
+754	\n\n⚠ Ce serveur a été déduit en analysant des commandes du terminal et n'est peut-être pas celui que vous attendez. Exécutez 'hostname' dans le terminal pour vérifier avant de continuer.
+755	Suppression de %1…
+756	Le transfert du répertoire est terminé (certains éléments sont incomplets)
+757	Annulé
+758	La connexion à l'hôte de rebond a été temporairement interrompue ; nouvelle tentative (tentative %1)…
+759	%1 ; retour au répertoire personnel
+760	L'authentification SSH interne n'est pas terminée ; ressaisissez le mot de passe directement dans le terminal
+761	Saisir les identifiants du serveur interne
+762	Le serveur a rejeté les identifiants de session actuels. Saisissez un nouveau mot de passe ou une phrase secrète de clé privée pour %1 :
+763	Le serveur ne prend en charge que des algorithmes MAC hérités
+764	Le service SFTP du serveur %1 ne propose que hmac-sha1.\n\nCet algorithme est obsolète ; il est recommandé de mettre à jour la configuration SSH du serveur. L'activer pour cette connexion et réessayer ?\n\n%2
+765	L'opération SFTP a échoué
+766	Paramètres
+767	Shellium %1
+768	Restaurer les valeurs par défaut
+769	Apparence
+770	Connexions et sécurité
+771	Raccourci
+772	Langue de l'interface
+773	Langue d'affichage
+774	Toute l'interface bascule immédiatement. La sortie du terminal déjà défilée conserve sa langue d'origine.
+775	Clair
+776	Sombre
+777	Thème de l'application
+778	Apparence de l'interface
+779	'Suivre le système' se synchronise automatiquement lorsque le système d'exploitation bascule entre l'apparence claire et sombre.
+780	Palette de couleurs du terminal
+781	Rechercher des palettes de couleurs, par ex. Nord, Dark, Gruvbox
+782	Suivre le thème de l'application
+783	Aucune palette de couleurs correspondante.
+784	Aperçu en direct
+785	 px
+786	Police
+787	Police à chasse fixe
+788	Taille de la police
+789	Hauteur de ligne
+790	Espacement des caractères
+791	Bloc
+792	Souligné
+793	Barre
+794	Curseur
+795	Forme
+796	Curseur clignotant
+797	 lignes
+798	Session
+799	Historique de défilement
+800	Réduire cette valeur supprime immédiatement l'historique le plus ancien au-delà de la limite ; le contenu supprimé ne peut pas être récupéré.
+801	Son d'alerte
+802	Jouer le son d'alerte du système lorsqu'un octet BEL du terminal est reçu.
+803	Suggestions automatiques de ligne de commande
+804	Après avoir saisi au moins deux caractères, des suggestions sont affichées automatiquement à partir de l'historique des commandes de l'hôte actuel ; désactivé par défaut.
+805	Confirmation de collage multiligne
+806	Avant de coller du contenu multiligne, afficher le contenu complet et demander confirmation ; désactivé par défaut, c'est-à-dire collage direct. Une confirmation est toujours forcée lorsque le contenu contient des caractères invisibles susceptibles d'injecter des séquences de contrôle du terminal.
+807	 fois
+808	 s
+809	Coffre-fort d'identifiants
+810	Protéger les identifiants avec un mot de passe maître
+811	L'activation comme la désactivation nécessitent un mot de passe ; une fois activé, vous pouvez déverrouiller et afficher le texte en clair sur la page de l'éditeur d'hôtes.
+812	Lors de la désactivation, le mot de passe maître actuel est d'abord vérifié, puis les identifiants sont migrés vers un chiffrement local et la configuration du mot de passe maître est effacée. Les mots de passe d'hôtes continuent d'être utilisés automatiquement pour les connexions, mais leur texte en clair ne peut pas être affiché dans l'interface et ils n'ont plus de protection par mot de passe maître.
+813	Reconnexion automatique
+814	Se reconnecter automatiquement en cas d'erreur réseau
+815	Ne réessayer que les déconnexions anormales qui avaient été établies avec succès et n'ont reçu aucun statut de sortie distant.
+816	Nombre max. de tentatives
+817	Attente initiale
+818	Les tentatives suivantes utilisent un backoff exponentiel de 2×, jusqu'à 60 secondes.
+819	Une sortie normale, un changement de connexion effectué par vous-même, un premier échec d'authentification ou un rejet de clé d'hôte ne déclenchent jamais de reconnexion automatique.
+820	Raccourcis globaux
+821	Le laisser vide supprime le raccourci de cette action ; le même raccourci ne peut pas être attribué à deux actions.
+822	Connexion au LLM
+823	URL du service
+824	URL de base d'une passerelle compatible avec le protocole OpenAI Chat Completions, sans /chat/completions.
+825	Vide signifie que la passerelle ne nécessite aucune authentification
+826	Clé API
+827	Envoyée avec chaque requête sous forme de jeton Bearer, stockée chiffrée dans le coffre-fort d'identifiants.
+828	Récupérer la liste des modèles depuis le serveur
+829	Actualiser la liste des modèles
+830	Nom du modèle
+831	Vous pouvez le saisir manuellement, ou cliquer sur le bouton d'actualisation à droite pour récupérer la liste des modèles du serveur et choisir dans le menu déroulant.
+832	Activer la réflexion
+833	Demander au modèle de raisonner avant de répondre ; les réponses sont plus fiables mais plus lentes. Efficace uniquement sur les passerelles qui prennent en charge le mode réflexion ; lorsqu'il est désactivé, le corps de la requête omet ce champ.
+834	Contrairement aux autres paramètres, les modifications de l'adresse et de la clé ne sont pas enregistrées caractère par caractère ; cliquez sur 'Enregistrer', afin que chaque frappe ne déclenche pas une écriture chiffrée.
+835	Le service de configuration de l'assistant IA est indisponible
+836	Test de la connexion…
+837	Récupération de la liste des modèles…
+838	Enregistré
+839	Échec de l'enregistrement : %1
+840	La fenêtre actuelle n'est pas connectée à un service de coffre-fort d'identifiants ; la protection par mot de passe maître ne peut pas être modifiée.
+841	Le coffre-fort a été réinitialisé
+842	Les identifiants ont été effacés, mais la synchronisation de l'état des paramètres a échoué : %1
+843	Les paramètres n'ont pas été entièrement enregistrés
+844	La protection par mot de passe maître a été basculée, mais l'écriture des autres paramètres a échoué : %1\nLes modifications non enregistrées ont été annulées.
+845	Impossible d'enregistrer les paramètres
+846	%1 (non installé)
+847	Cet appel ssh n'entre pas dans un shell interactif
+848	Cet appel ssh demande une sortie OpenSSH détaillée
+849	Cet appel ssh utilise un chemin de connexion que Shellium ne peut pas reproduire fidèlement
+850	Cet appel ssh spécifie un fichier de clé privée sur le distant
+851	Impossible d'analyser un hôte cible à partir de la commande
+852	Cet appel ssh n'exécute qu'une commande unique sur le distant
+853	Copier la clé publique
+854	Gestion des clés SSH
+855	Sélectionner…
+856	Peut être laissé vide ; une phrase secrète est recommandée pour les clés à longue durée de vie
+857	Saisir à nouveau la même phrase secrète
+858	Algorithme :
+859	Chemin de la clé privée :
+860	Phrase secrète de protection :
+861	Confirmer la phrase secrète :
+862	Commentaire de la clé publique :
+863	Bits RSA :
+864	Note de sécurité : Shellium n'écrase jamais une clé existante ; la clé privée est enregistrée de manière atomique avec des permissions de lecture et d'écriture réservées à l'utilisateur actuel, et la phrase secrète n'est pas écrite dans la base de données. Sauvegardez vous-même votre clé privée.
+865	Générer une paire de clés
+866	Générer
+867	Requis pour une clé privée chiffrée ; utilisé uniquement pendant cette vérification
+868	Clé privée existante :
+869	Vérifier et extraire la clé publique
+870	Après une vérification réussie, la clé publique au format authorized_keys est affichée ici
+871	Vérifier / importer
+872	Choisir où enregistrer la nouvelle clé privée
+873	Chemin d'enregistrement manquant
+874	Choisissez où enregistrer la nouvelle clé privée.
+875	Les phrases secrètes ne correspondent pas
+876	Les deux phrases secrètes de protection ne correspondent pas.
+877	Aucun algorithme disponible
+878	La version actuelle de libssh ne prend pas en charge la génération de l'algorithme de clé SSH prévu.
+879	Échec de la génération de la clé
+880	Une clé %1 a été générée.\nClé privée : %2\nClé publique : %3
+881	Sélectionner une clé privée SSH existante
+882	Fichiers de clé privée (*)
+883	Le fichier n'existe pas
+884	Sélectionnez un fichier de clé privée SSH existant.
+885	Cette clé privée est chiffrée ; saisissez la phrase secrète et vérifiez à nouveau.
+886	La clé privée est indisponible
+887	Le format de la clé privée n'est pas pris en charge, le fichier est corrompu ou la phrase secrète est incorrecte.
+888	Vérification réussie : %1%2. Vous pouvez sélectionner ce fichier dans le champ 'Clé privée' de l'éditeur d'hôtes.
+889	, protégée par phrase secrète
+890	Impossible de lier le socket du tunnel SSH : %1
+891	Impossible de configurer la chaîne de rebond SSH : %1
+892	Cette couche n'a pas encore commencé à se connecter ou a déjà échoué.
+893	Délai de connexion à %1 dépassé.
+894	L'utilisateur n'a pas confirmé le changement de clé d'hôte du serveur ; la connexion a été interrompue.
+895	L'utilisateur a rejeté la clé d'hôte inconnue du serveur.
+896	L'utilisateur a annulé l'authentification pour %1.
+897	Impossible de créer le canal shell SSH : %1
+898	Le serveur a refusé d'allouer un PTY interactif : %1
+899	Le serveur a refusé de démarrer un shell interactif : %1
+900	La machine à états de connexion est entrée dans un état indéfini.
+901	Échec de l'authentification SSH : %1. Vérifiez le mot de passe, la clé privée ou l'agent SSH.
+902	La machine à états d'authentification est entrée dans un état indéfini.
+903	Délai du commande en arrière-plan dépassé
+904	Impossible d'ouvrir le canal de commande en arrière-plan : %1
+905	Le distant a refusé d'exécuter la commande en arrière-plan : %1
+906	Le distant n'a renvoyé aucun code de sortie
+907	Code de sortie %1
+908	La session SSH de cette couche n'est pas encore établie
+909	Impossible de créer le socket du tunnel SFTP : %1
+910	Impossible d'allouer un canal de redirection sur %1 : %2
+911	Le serveur %1 a dépassé le délai de redirection vers %2:%3 (%4 s)
+912	Le serveur %1 n'a pas pu rediriger vers %2:%3 : %4
+913	Le serveur %1 n'a pas pu relayer vers %2:%3 : %4
+914	Toujours pas établi après %1 s d'attente
+915	La commande relais distante s'est arrêtée immédiatement après le démarrage
+916	La machine à états du relais est entrée dans un état indéfini
+917	Diagnostic du relais exec pour le serveur %1 : %2
+918	La session SSH n'a pas terminé l'authentification
+919	La règle, l'adresse et le port d'écoute distante doivent être valides
+920	Cette règle de redirection distante est déjà démarrée ou en cours de démarrage
+921	Délai de demande d'écoute distante sur %1:%2 dépassé
+922	Le serveur a refusé l'écoute distante sur %1:%2 : %3
+923	Échec de l'annulation de l'écouteur distant %1:%2 : %3
+924	La session SSH externe s'est terminée
+925	Délai de création du canal de redirection SSH interne dépassé
+926	La session SSH racine s'est terminée
+927	Délai d'attente de la mise en place de l'écoute distante par le serveur dépassé
+928	Le plan de connexion est vide ou le premier saut n'est pas valide
+929	La session SSH s'est terminée
+930	Le distant n'a renvoyé aucun résultat d'installation
+931	La couche de session SSH portant cette requête est déjà fermée
+932	Échec de l'écriture de données vers le terminal distant : %1
+933	La chaîne d'hôtes a échoué à %1 : %2
+934	Aucune session prête n'est disponible pour établir une connexion interne
+935	La session portant cette connexion interne est déjà fermée
+936	Requête de tunnel SFTP annulée
+937	Impossible de créer le canal d'installation de script distant
+938	La demande d'écoute distante a été annulée
+939	La session SSH externe portant cette cible est indisponible
+940	La demande d'écoute distante s'est arrêtée
+941	La session SSH racine n'est pas encore prête
+942	Couleur d'étiquette %1
+943	Non connecté
+944	UTF-8 · 80×24
+945	Encodage du terminal actuel et colonnes × lignes
+946	Afficher le gestionnaire de fichiers distant pour la session actuelle (Ctrl+Maj+F)
+947	Gestionnaire de fichiers distant
+948	UTF-8 · %1×%2
+949	En attente du mot de passe SSH interne ; cette saisie est également utilisée pour la session SFTP
+950	Échec de la connexion SSH interne
+951	Connexion SSH interne annulée
+952	Authentification SSH interne réussie ; le gestionnaire de fichiers a basculé vers le serveur actuel
+953	Démarrage du terminal local…
+954	Démarrage du terminal local…\r\n
+955	Terminal local démarré
+956	Erreur du terminal local
+957	Terminal local terminé (code de sortie %1)
+958	Connexion à %1…
+959	Connexion à %1…\r\n
+960	Connecté à %1
+961	L'intégration du shell pour %1 n'est pas activée ; la détection imbriquée est dégradée : %2
+962	Autorisation refusée, veuillez réessayer.\r\nMot de passe de %1 :
+963	Mot de passe de %1 :
+964	\r\nImpossible d'établir la connexion imbriquée à %1 : %2\r\n
+965	Échec de la connexion imbriquée : %1
+966	Ce serveur a désactivé la redirection TCP
+967	La connexion imbriquée n'a pas été prise en charge : %1
+968	Échec de la connexion
+969	Le serveur %1 ne propose que hmac-sha1, que la politique de sécurité par défaut ne peut pas utiliser pour établir la connexion.\n\nhmac-sha1 est obsolète ; il est recommandé de mettre à jour la configuration SSH du serveur. Activer cet algorithme uniquement pour cette connexion et réessayer ?\n\nDétails : %2
+970	Connexion annulée : le serveur exige hmac-sha1, qui est désactivé. Mettez à jour la configuration du serveur.
+971	La connexion SSH a été interrompue par une erreur réseau ; préparation de la reconnexion automatique
+972	La connexion SSH a été interrompue par une erreur réseau
+973	La connexion SSH s'est terminée (statut de sortie %1)
+974	La clé d'hôte renvoyée par %1 ne correspond pas à l'enregistrement local.\n\nNouvelle empreinte SHA-256 :\n%2\n\nIl peut s'agir d'une réinstallation du serveur ou d'une rotation de clé, ou d'une attaque de l'homme du milieu. Vérifiez d'abord la nouvelle empreinte auprès de l'administrateur du serveur via un canal de confiance.\n\nConfirmer que la clé a changé et remplacer l'ancien enregistrement dans known_hosts ?
+975	Connexion à %1
+976	Établissement d'une connexion imbriquée à %1 via le serveur actuel…
+977	Masquer le gestionnaire de fichiers distant pour la session actuelle (Ctrl+Maj+F)
+978	Appuyez sur r pour vous reconnecter à %1, sur x pour fermer cet onglet
+979	\r\nAucun serveur pour se reconnecter ; appuyez sur x pour fermer cet onglet\r\n
+980	\r\nReconnexion manuelle…\r\n
+981	La reconnexion automatique a atteint sa limite de %1 tentatives
+982	Reconnexion automatique à %2 dans %1 s (tentative %3/%4)
+983	Le terminal actuel n'est pas prêt ; impossible d'exécuter la commande
+984	Le terminal actuel n'est pas prêt ; impossible d'insérer la commande
+985	Identifiants SSH internes synchronisés ; le gestionnaire de fichiers se connecte au serveur actuel
+986	Mot de passe SSH interne reçu ; en attente de confirmation du serveur
+987	%1 (cible imbriquée)
+988	Cible SSH imbriquée détectée : %1
+989	Retour au serveur : %1
+990	Ce ssh n'a pas été pris en charge (%1) ; il a été laissé au distant pour qu'il l'exécute lui-même
+991	Shellium n'a pas pu prendre en charge cette connexion (%1) ; elle est transmise au ssh distant pour exécution directe.\r\n
+992	%1, repli sur %2
+993	Le service de paramètres n'a aucune base de données d'application disponible
+994	La valeur '%2' du paramètre %1 n'est pas un entier ; la valeur par défaut a été restaurée
+995	La valeur '%2' du paramètre %1 n'est pas un booléen ; la valeur par défaut a été restaurée
+996	Thème inconnu '%1' ; rétabli sur suivre le système
+997	Palette de couleurs de terminal inconnue '%1' ; rétablie sur la palette par défaut
+998	L'espacement des caractères '%1' n'est pas valide ; la valeur par défaut a été restaurée
+999	Forme de curseur inconnue '%1' ; rétablie sur le curseur bloc
+1000	Le raccourci '%2' pour l'action '%1' n'est pas valide ; la valeur par défaut a été restaurée
+1001	 ; tous les raccourcis ont été rétablis à leurs valeurs par défaut
+1002	Téléverser vers le répertoire distant actuel…
+1003	Le contenu comporte %1 lignes et peut exécuter plusieurs commandes immédiatement après l'envoi.
+1004	%1 caractères invisibles susceptibles d'injecter des séquences de contrôle du terminal ont été supprimés.
+1005	Envoyer le contenu suivant au terminal actuel ?
+1006	Confirmer le collage dans le terminal
+1007	Coller
+1008	Déduit ·
+1009	Pas encore connecté ; impossible de téléverser les fichiers déposés.
+1010	Ceci est un terminal local ; les fichiers déposés ne peuvent pas être téléversés.
+1011	Le répertoire actuel n'est pas encore connu ; appuyez une fois sur Entrée dans le terminal, puis déposez les fichiers.
+1012	Téléverser vers le répertoire actuel ?
+1013	Téléverser les %1 fichiers locaux déposés vers le répertoire actuel de %2 :\n%3
+1014	Activer la protection par mot de passe maître
+1015	Désactiver la protection par mot de passe maître
+1016	Créer le coffre-fort Shellium
+1017	Déverrouiller le coffre-fort Shellium
+1018	Définissez un nouveau mot de passe maître. Les identifiants d'hôtes existants sont migrés en toute sécurité vers la protection par mot de passe maître.
+1019	Saisissez le mot de passe maître actuel pour confirmer la désactivation. Les identifiants existants sont migrés vers un chiffrement local, puis la configuration du mot de passe maître est effacée.
+1020	Définissez un mot de passe maître. Shellium dérive la clé avec Argon2id et chiffre les identifiants SSH enregistrés avec XChaCha20-Poly1305.
+1021	Le coffre-fort est verrouillé. Saisissez le mot de passe maître pour utiliser les identifiants SSH enregistrés.
+1022	Au moins 8 caractères
+1023	Saisir le mot de passe maître
+1024	Saisir à nouveau pour confirmer
+1025	Mot de passe maître
+1026	Confirmer le mot de passe maître
+1027	Mot de passe oublié ?
+1028	L'ancien mot de passe ne peut pas être récupéré ; effacez tous les identifiants enregistrés et recommencez
+1029	Le mot de passe maître ne peut pas être récupéré ; conservez-le en lieu sûr. En cas de perte, le coffre-fort ne peut être que réinitialisé, et les mots de passe SSH et phrases secrètes de clés privées enregistrés seront définitivement supprimés.
+1030	Activer la protection
+1031	Confirmer la fermeture
+1032	Créer le coffre-fort
+1033	Déverrouiller
+1034	Déverrouiller le coffre-fort
+1035	Réinitialiser le coffre-fort
+1036	Impossible de restaurer les anciens identifiants
+1037	La réinitialisation supprime définitivement tous les mots de passe SSH et phrases secrètes de clés privées enregistrés et supprime leur association aux hôtes. Les adresses d'hôtes, comptes, ports, chemins de fichiers de clés privées, groupes et chaînes d'hôtes sont conservés. Cette action est irréversible.
+1038	Saisissez '%1' pour confirmer :
+1039	Supprimer définitivement et réinitialiser
+1040	Impossible de réinitialiser le coffre-fort : %1
+1041	Échec de l'écriture dans la base de données locale
+1042	Saisissez le mot de passe maître.
+1043	Le mot de passe maître doit comporter au moins 8 caractères pour réduire le risque de devinette hors ligne.
+1044	Les deux mots de passe maîtres ne correspondent pas. Veuillez confirmer à nouveau.
+1045	Impossible d'activer la protection par mot de passe maître : %1
+1046	Impossible de désactiver la protection par mot de passe maître : %1
+1047	Impossible de créer le coffre-fort : %1
+1048	Impossible de déverrouiller le coffre-fort : %1

@@ -278,9 +278,23 @@ CI：`ctest` 跑 `ShelliumLocalizationTests`；另跑一次 `lrelease` 确认 `.
 
 刷新 `.ts`：`cmake --build build --target Shellium_lupdate`（现在提取英文源、回填中文译文由译者在 Linguist 完成）。
 
+### 已支持 14 种语言（框架层面）
+
+`en`（源）、`fr` `de` `it` `ja` `ko` `pt_BR` `ro` `ru` `es` `uk` `ar` `zh_CN` `zh_TW`。
+
+- `LocalizationService::supportedLanguages()` / `availableLanguages()` 列全 14 种；`CMakeLists.txt` 用 `SHELLIUM_TS_FILES` 变量统一登记 13 个 `.ts`（源语言 en 无 .ts）。
+- `resolve()` 增加中文书写系统判定：`zh-Hant` / `zh_TW` / `zh_HK` / `zh_MO` → `zh_TW`，其余中文 → `zh_CN`；`pt` → `pt_BR`；`fr-CA` → `fr` 等按语言前缀。
+- **阿拉伯语 RTL**：`apply()` 已按 `QLocale(code).textDirection()` 设 `qApp` 布局方向，`ar` 自动右到左，切回自动恢复。
+- **译文进度**：
+  - `zh_CN` —— 完整（1128 条）。
+  - `zh_TW` —— 由 `scripts/i18n/make_zh_tw.py`（OpenCC `s2twp`）从 zh_CN 转换，1128 条，作为可直接用的草稿，个别用词（新建/新增）待母语者润色。
+  - `fr de it es pt_BR ro ru uk ja ko ar` —— 均已由 Claude 直接翻译填充（各 1128 条，`type="unfinished"`，`lrelease` 仍会编进 `.qm` 并在 Qt Linguist 标记待校）。占位符 `%1..%9` 集合与源文不一致时保留英文源（`fill_drafts.py` 保护，实测 0 处触发）。`ar` 为逻辑序 Unicode，未做视觉反转，RTL 由 `apply()` 处理。
+  - 流水线：`scripts/i18n/sources.json`（1049 条去重英文源）+ `scripts/i18n/drafts/<lang>.tsv`（`<行号>\t<译文>`，字面 `\n`/`\r`）→ `python3 scripts/i18n/fill_drafts.py <lang…>` 写回 `.ts`。
+- 测试：`ShelliumLocalizationTests` 加 `untranslatedLanguageStillAppliesAndFallsBackToEnglish`（fr 有 `Nouvel hôte` 译文；zh_TW 有 `設定`）、`arabicSetsRightToLeftLayout`；`resolvesExplicitSupportedLanguage` 覆盖 zh 书写系统、pt、fr-CA、ar_EG。该目标 `qt_add_translations` 用 `${SHELLIUM_TS_FILES}` 内嵌全部 `.qm`。全量 `ctest` 通过（仅 `ShelliumHostManagerTests` 2 条像素对比用例失败，`develop` 干净树同样失败，与 i18n 无关）。
+
 ### 待办
 
-- **P0/P4**：仍以 `QStringLiteral` 承载的用户可见文案审计整改（进 `tr()`）、消运行期拼接、中文译文人工校对、伪本地化。
-- **发版清单**：macOS/Windows 打包需携带 **`qtbase_zh_CN.qm`**（英文是 Qt 源语言无需 qm；中文界面下 Qt 自带控件文案依赖它）。
-- **P2 扩展（可选）**：更多常驻控件（`HostManagerWidget` 侧栏、`SessionTabBar`、`AiAssistantWidget`、终端空态页）热切换，按 `registerTranslatable` 模式逐个加。
-- **P5**：`zh_TW` / `ja`，`QLocale` 日期数字格式本地化。
+- **14 语言初稿校对**：`fr de it es pt_BR ro ru uk ja ko ar zh_TW` 均为 Claude / OpenCC 初稿，`type="unfinished"`，建议母语者在 Qt Linguist 逐条 finish。
+- **发版清单**：打包按已启用语言携带对应 `qtbase_<locale>.qm`（Qt 自带控件文案；`ar` 还需确认 RTL 镜像资源）。英文是 Qt 源语言无需 qm。
+- **P0/P4**：仍以 `QStringLiteral` 承载的用户可见文案进 `tr()`、消运行期拼接、伪本地化。
+- `QLocale` 日期/数字格式本地化。

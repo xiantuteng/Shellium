@@ -275,9 +275,26 @@ shellium_add_bundled_fonts(Shellium)
 # 开发者改动可见文案后运行：
 #   cmake --build <build-dir> --target update_translations
 # 即可用 lupdate 刷新 .ts；CI 可据其 git diff 是否为空判断有无未提取文案。
+# 全部受支持语言的 .ts 清单，供正式程序与需要内嵌 .qm 的测试目标共用（新增语言只改这里
+# 和 LocalizationService 的 supportedLanguages()/availableLanguages()）。
+set(SHELLIUM_TS_FILES
+    i18n/shellium_ar.ts
+    i18n/shellium_de.ts
+    i18n/shellium_es.ts
+    i18n/shellium_fr.ts
+    i18n/shellium_it.ts
+    i18n/shellium_ja.ts
+    i18n/shellium_ko.ts
+    i18n/shellium_pt_BR.ts
+    i18n/shellium_ro.ts
+    i18n/shellium_ru.ts
+    i18n/shellium_uk.ts
+    i18n/shellium_zh_CN.ts
+    i18n/shellium_zh_TW.ts
+)
+
 qt_add_translations(Shellium
-    TS_FILES
-        i18n/shellium_zh_CN.ts
+    TS_FILES ${SHELLIUM_TS_FILES}
     RESOURCE_PREFIX "/i18n"
     NO_GENERATE_PLURALS_TS_FILE
     LUPDATE_OPTIONS -no-obsolete -locations none
@@ -507,8 +524,7 @@ if(BUILD_TESTING)
         Qt6::Test
     )
     qt_add_translations(ShelliumLocalizationTests
-        TS_FILES
-            i18n/shellium_zh_CN.ts
+        TS_FILES ${SHELLIUM_TS_FILES}
         RESOURCE_PREFIX "/i18n"
         NO_GENERATE_PLURALS_TS_FILE
         LUPDATE_TARGET ShelliumLocalizationTests_lupdate

@@ -1,0 +1,1049 @@
+0	Niciun terminal conectat
+1	Istoricul conversației
+2	Afișează istoricul conversației din fila curentă
+3	Sesiune nouă
+4	Descrie ce vrei să realizezi pe serverul curent…
+5	Include ieșirea nouă a terminalului
+6	Trimite (Enter)
+7	IA poate greși. Orice comandă care modifică sistemul necesită confirmarea ta explicită.
+8	Nicio comandă în așteptare de execuție
+9	O cerere este în curs; așteaptă înainte de a începe o sesiune nouă
+10	Sesiune fără titlu
+11	Încă nu există istoric al conversației
+12	%1  ·  %2
+13	Sesiunea curentă este încă procesată; așteaptă înainte de a schimba istoricul conversației
+14	%1  %2
+15	[Rezultatul comenzii `%1`]
+16	[Ieșire nouă a terminalului]\n%1
+17	Configurează mai întâi URL-ul LLM și numele modelului în „Setări → Asistent IA”
+18	IA nu a returnat un rezultat conform protocolului de interacțiune într-un singur pas; această rundă a fost oprită. Încearcă din nou sau treci la un model care acceptă instrucțiuni JSON.
+19	Răspunsul IA nu respectă protocolul agentului într-un singur pas: %1
+20	Ultimul tău răspuns a încălcat protocolul într-un singur pas: %1. Ia decizia din nou și returnează un singur obiect JSON, așa cum este definit de mesajul de sistem; nu afișa planul complet, mai multe comenzi sau o explicație a protocolului însuși.
+21	Se analizează…
+22	Se așteaptă confirmarea
+23	Lipește
+24	Copiază
+25	Modifică
+26	Execută  ⌘↵
+27	Execută ultima comandă în așteptare de confirmare (Command+Enter)
+28	Executat
+29	Comanda a fost copiată în clipboard
+30	Modifică comanda
+31	După confirmare, este lipită în terminalul curent și nu se execută automat:
+32	Se poate lipi în terminal doar o comandă pe un singur rând
+33	Comanda anterioară încă așteaptă ieșirea; așteaptă înainte de a executa alta
+34	Confirmă execuția unei comenzi cu risc ridicat
+35	Această comandă poate avea consecințe ireversibile sau de amploare:\n\n%1\n\nO execuți în terminalul curent?
+36	Trimisă spre execuție în terminalul curent; IA va aștepta automat finalizarea
+37	Oprește
+38	Această analiză a fost oprită. Adaugă detalii și trimite din nou.
+39	Analiza IA a fost oprită
+40	Așteptarea rezultatului comenzii a fost întreruptă; comanda continuă să se execute în terminal.
+41	Așteptarea rezultatului comenzii a fost întreruptă
+42	Nu s-a putut citi starea curentă a terminalului; nu se poate aștepta automat finalizarea comenzii.
+43	Se așteaptă finalizarea comenzii…
+44	Se așteaptă finalizarea comenzii… au trecut %1 s
+45	(nicio ieșire)
+46	[Rezultatul comenzii `%1`]\n%2
+47	Introdu mai întâi URL-ul serviciului LLM
+48	Conectare eșuată: %1
+49	Conectat; gateway-ul a returnat modele disponibile: %1
+50	Conectat
+51	Nu s-a putut obține lista de modele: %1
+52	Gateway-ul nu a returnat niciun model
+53	Modele obținute: %1
+54	Cererea anterioară nu s-a finalizat
+55	Finalizează mai întâi configurarea URL-ului LLM și a numelui modelului în setări
+56	Cerere eșuată: %1
+57	Gateway-ul a returnat un răspuns care nu a putut fi analizat
+58	Gateway-ul nu a returnat niciun răspuns
+59	Conectare la serverul SSH
+60	Opțional; nu se salvează pe disc
+61	Opțional; lasă gol pentru a folosi agentul SSH sau cheia implicită
+62	Server
+63	Nume afișat
+64	Dacă este gol, se folosește automat utilizator@gazdă:port.
+65	Adresa gazdei
+66	Nume de utilizator
+67	Port
+68	Răsfoiește…
+69	Autentificare
+70	Parolă / frază de acces a cheii private
+71	Fișierul cheii private
+72	Compatibilitate cu versiunile vechi
+73	Pentru servere vechi care acceptă doar hmac-sha1 (nerecomandat).
+74	Terminalul se conectează printr-un PTY interactiv libssh; managerul de fișiere folosește aceeași configurație pentru a deschide un canal SFTP separat.
+75	Anulează
+76	Conectează
+77	Datele conexiunii sunt incomplete
+78	Introdu numele gazdei sau adresa IP a serverului.
+79	Selectează fișierul cheii private SSH
+80	Modifică lanțul de gazde
+81	Gazdele adăugate se conectează în ordinea următoare, ajungând în final la <span style="font-family: monospace; font-weight: 600;">%1</span>.
+82	Adaugă gazdă
+83	Selectează sau creează o gazdă intermediară în Managerul de gazde
+84	Gazda țintă
+85	Elimină din lanț
+86	Salvează
+87	Anulează modificările lanțului de gazde curent
+88	Salvează ordinea curentă a lanțului de gazde
+89	Referință de gazdă nevalidă
+90	Nu s-a putut citi gazda
+91	Date de autentificare pentru %1
+92	Nu s-a putut crea gazda intermediară
+93	Caută după nume / adresă…
+94	#etichetă
+95	Filtrează gazdele după eticheta exactă
+96	Grup nou
+97	Gazdă nouă
+98	Reîmprospătează
+99	Creează un grup nou de gazde la nivelul curent
+100	Creează o gazdă SSH nouă în grupul curent
+101	Reîncarcă gazdele și grupurile
+102	Șterge
+103	Importă gazde…
+104	Exportă gazde…
+105	Fără grup
+106	Nu s-a putut citi starea de extindere a folderelor de gazde: %1
+107	Starea de extindere a folderelor de gazde este coruptă; se folosește extinderea implicită: %1 (decalaj %2)
+108	Versiunea sau structura stării de extindere a folderelor de gazde nu este acceptată; se folosește extinderea implicită
+109	Salvează starea de extindere a folderelor de gazde
+110	Încarcă arborele de gazde
+111	Caută gazde
+112	Filtrează gazdele după această etichetă exactă
+113	Citește configurația grupului părinte
+114	Grupul părinte nu există
+115	Salvează datele de autentificare criptate
+116	Salvează gazda
+117	Citește gazda
+118	Citește grupul curent
+119	Duplică gazda
+120	Citește nodul
+121	Actualizează datele de autentificare criptate
+122	Actualizează nodul
+123	Ștergerea grupului „%1” va șterge și toate subgrupurile și gazdele sale și nu poate fi anulată. Continui?
+124	Ștergi gazda „%1”? Această acțiune nu poate fi anulată.
+125	Confirmă ștergerea
+126	Șterge nodul
+127	Importă configurația de gazde
+128	Configurație acceptată (*.json *.conf *.config);;Toate fișierele (*)
+129	Nu s-a putut citi fișierul de import
+130	Nu s-a putut deschide %1: %2
+131	Import eșuat
+132	Nicio gazdă de importat
+133	Fișierul nu conține înregistrări utilizabile.
+134	Se vor importa %1 înregistrări de gazde/grupuri. Fiecărei înregistrări i se atribuie o nouă cheie primară locală, iar datele de autentificare din fișierul de configurare nu se importă.
+135	Confirmă importul
+136	Importă gazde
+137	Import finalizat
+138	%1 înregistrări importate cu succes.
+139	Citește datele de export
+140	Nicio gazdă de exportat
+141	Arborele de gazde este momentan gol.
+142	Exportă gazdele Shellium
+143	Shellium JSON (*.json)
+144	Nu s-a putut scrie fișierul de export
+145	Export eșuat
+146	Nu s-a putut codifica configurația de gazde
+147	Nu s-a putut scrie %1: %2
+148	Export finalizat
+149	%1 înregistrări de gazde/grupuri exportate. Fișierul nu conține date de autentificare.
+150	Containerul înregistrărilor de export este gol
+151	Rezolvă lanțul de gazde
+152	Înregistrarea gazdei sau lanțul nu există
+153	 · prin %1
+154	Gazdă intermediară nevalidă
+155	 · prin %1 și încă %2 gazde intermediare
+156	%1\nSistem: %2
+157	Salvează ordinea prin glisare
+158	Nodul %1 nu a fost găsit
+159	Operațiune cu datele de gazde eșuată
+160	%1 a eșuat: %2
+161	Selectează gazda intermediară
+162	Selectează o gazdă existentă
+163	Caută după nume, adresă sau cont
+164	Selectează
+165	Creează o gazdă intermediară reutilizabilă
+166	Adaugă gazda selectată în lanț
+167	Configurația gazdei
+168	Configurația grupului
+169	Gazde
+170	Grup
+171	Nume
+172	Lasă gol pentru a moșteni de la grupul părinte
+173	Se salvează automat împreună cu gazda după introducere
+174	Lasă gol pentru a moșteni de la grupul părinte sau a folosi agentul / cheia implicită
+175	Separate prin virgulă; lasă gol pentru a moșteni de la grupul părinte
+176	Modifică gazdele intermediare prin care trece gazda curentă înainte de conexiunea finală
+177	Autentificare și gazde intermediare
+178	Afișează parola
+179	Afișează parola salvată; când seiful este blocat, se solicită mai întâi parola principală
+180	Apasă pentru a afla cum să activezi protecția cu parolă principală
+181	Parolă
+182	Parola se salvează automat; activează protecția cu parolă principală pentru a debloca și a vedea textul clar.
+183	Lanț de gazde
+184	Selectează o gazdă existentă în Managerul de gazde ca intermediară sau adaugă o gazdă în editorul de lanț.
+185	Permite hmac-sha1 doar pentru această gazdă (nu se moștenește).
+186	Extinde setările avansate ProxyJump
+187	ProxyJump
+188	Configurare manuală avansată a gazdelor intermediare, compatibilă cu OpenSSH; de obicei este de preferat lanțul de gazde de mai sus.
+189	Este necesară protecția cu parolă principală
+190	Vizualizarea parolelor gazdelor necesită protecția cu parolă principală. Accesează „Setări → Conexiuni și securitate → Seiful de date de autentificare” și activează „Protejează datele de autentificare cu o parolă principală”.
+191	Ascunde parola
+192	Seiful a fost resetat; introdu din nou datele de autentificare
+193	Anulează această modificare de configurație
+194	Salvează configurația curentă
+195	Testează conexiunea
+196	Testează conexiunea SSH cu configurația curentă nesalvată
+197	Configurație incompletă
+198	Introdu un nume.
+199	Introdu numele gazdei sau adresa IP.
+200	Salvat; va fi vizibil după deblocarea seifului
+201	Nu s-a putut citi parola salvată
+202	Datele de autentificare nu există sau sunt corupte.
+203	Selectează grupul din Managerul de gazde căruia îi aparține această gazdă
+204	Adaugă etichete acestei gazde și alege o culoare pentru etichetă
+205	Modifică eticheta
+206	Setări avansate
+207	Setări avansate · ProxyJump configurat
+208	Setări avansate · moștenește ProxyJump
+209	Restrânge setările avansate ProxyJump
+210	Folosește doar pentru configurație compatibilă cu OpenSSH sau când adresa gazdei intermediare trebuie specificată manual
+211	Lanț de gazde  ·  direct  ›
+212	Lanț de gazde  ·  prin %1  ›
+213	Gazdă nevalidă
+214	Lanț de gazde  ·  %1 gazde intermediare  ›
+215	Nu s-a putut valida lanțul de gazde
+216	Gazda intermediară nu există sau lanțul este nevalid: %1
+217	Lanțul de gazde conține noduri duplicate sau o buclă: %1
+218	Nu s-a putut testa conexiunea
+219	Nu s-au putut citi datele de autentificare salvate pentru „%1”.
+220	Se testează…
+221	Conectare reușită la %1.
+222	Serverul acceptă doar hmac-sha1, învechit. Dacă ai acceptat riscul, activează „Compatibilitate cu versiunile vechi” și încearcă din nou.\n\n%1
+223	Autentificare SSH eșuată. Verifică parola sau fraza de acces a cheii private și încearcă din nou.
+224	Serverul cere o parolă sau o frază de acces a cheii private. Completează „Parolă” și încearcă din nou.
+225	Confirmă cheia gazdei serverului
+226	Prima conectare la %1.\n\nAmprentă SHA-256:\n%2\n\nVerifică amprenta printr-un canal de încredere. Ai încredere în ea și continui verificarea?
+227	Cheia gazdei serverului s-a schimbat
+228	Cheia gazdei returnată de %1 nu corespunde înregistrării locale.\n\nAmprentă SHA-256 nouă:\n%2\n\nAceasta poate fi o reinstalare a serverului sau o rotație de chei, dar poate fi și un atac de tip „om la mijloc”. Verifică mai întâi amprenta nouă printr-un canal de încredere.\n\nConfirmi că cheia s-a schimbat, înlocuiești vechea înregistrare din known_hosts și continui verificarea?
+229	Testarea conexiunii a reușit
+230	Testarea conexiunii a eșuat
+231	Nu s-a putut stabili conexiunea SSH. Verifică configurația curentă.
+232	Etichetă
+233	Introdu numele etichetei, de exemplu „production”
+234	Culoare
+235	Apasă pe o etichetă pentru a-i încărca numele și culoarea mai sus, pentru modificare sau confirmare directă.
+236	OK
+237	Anulează această modificare de filă
+238	Confirmă eticheta și culoarea
+239	Șterge eticheta
+240	Șterge această etichetă
+241	Etichetă nevalidă
+242	Numele etichetei nu poate conține virgulă.
+243	Încarcă numele și culoarea
+244	Gazde de redirecționare a porturilor
+245	%1  (%2)
+246	Shell-ul local nu există: %1
+247	%1: %2
+248	Nu s-a putut crea canalul ConPTY
+249	Nu s-a putut crea Windows ConPTY
+250	Nu s-au putut configura atributele procesului copil ConPTY
+251	Nu s-a putut porni shell-ul local Windows
+252	Nu s-a putut configura curățarea arborelui de procese pentru shell-ul local: %1
+253	Nu s-a putut redimensiona ConPTY: HRESULT 0x%1
+254	Nu s-a putut scrie în ConPTY
+255	Nu s-a putut crea PTY-ul local: %1
+256	Nu s-a putut scrie în PTY-ul local: %1
+257	Nu s-a putut interoga PTY-ul local: %1
+258	Urmează sistemul
+259	Nu s-au putut citi setările: %1
+260	Shellium
+261	Productivitate
+262	Redirecționare porturi
+263	Asistent IA
+264	0 gazde
+265	Nu s-a putut citi configurația asistentului IA: %1
+266	%1 gazde
+267	Conectare la server
+268	Conectează-te la un server SSH în panoul de terminal curent
+269	Conectare imbricată la…
+270	Se conectează la o gazdă internă prin serverul curent. Aplicația gestionează singură nivelurile, astfel încât managerul de fișiere poate comuta precis între ele.
+271	Terminal local
+272	Pornește o autentificare locală zsh în panoul de terminal curent
+273	Filă nouă
+274	Închide fila
+275	Redenumește fila
+276	Comută managerul de fișiere la distanță
+277	Afișează sau ascunde zona managerului de fișiere la distanță din fila de terminal curentă
+278	Caută în ieșirea terminalului…
+279	Exportă ieșirea terminalului…
+280	Setări…
+281	Paletă de comenzi…
+282	Salvează spațiul de lucru curent…
+283	Deschide spațiul de lucru…
+284	Șterge spațiul de lucru…
+285	Afișează bara laterală
+286	Extinde sau restrânge zonele „Gazde”, „Productivitate” și „Redirecționare porturi” din stânga
+287	Numele produsului Shellium
+288	Derulează filele spre stânga
+289	Derulează filele spre dreapta
+290	Minimizează
+291	Minimizează fereastra
+292	Închide
+293	Închide fereastra
+294	Conexiune
+295	Spațiu de lucru
+296	Vizualizare
+297	Terminal
+298	Deblochează seiful de date de autentificare…
+299	Blochează seiful de date de autentificare
+300	Gestionare chei SSH…
+301	Securitate
+302	Terminal %1
+303	Nume etichetă:
+304	Seiful de date de autentificare este blocat
+305	Seiful de date de autentificare este deblocat
+306	Seiful a fost resetat, dar starea setărilor nu s-a putut sincroniza: %1
+307	Seiful a fost resetat; configurațiile de gazde au fost păstrate. Introdu din nou datele de autentificare necesare.
+308	Difuzarea directă este activată: %1 ținte
+309	Difuzarea directă este dezactivată
+310	Seiful de date de autentificare a fost blocat automat din cauza inactivității
+311	Nu s-a putut comuta la limba selectată; verifică dacă pachetul de limbă este complet
+312	Limba interfeței a fost schimbată
+313	Restaurează
+314	Maximizează
+315	Restaurează fereastra
+316	Maximizează fereastra
+317	Nu s-a putut citi lățimea barei laterale: %1
+318	Nu s-a putut salva lățimea barei laterale: %1
+319	Filă nouă de terminal
+320	Copiază eticheta
+321	Redenumește
+322	Închide celelalte file
+323	Nu s-a putut stabili conexiunea imbricată
+324	Fila curentă nu este încă conectată la un server la distanță. Conectează-te mai întâi la un server, apoi treci de la el la gazda internă.
+325	Nu s-a putut conecta la gazda salvată
+326	Înregistrarea gazdei sau lanțul de gazde nu există
+327	Nu s-a putut citi lanțul de gazde
+328	Gazda din lanț nu există: %1
+329	Nu s-au putut citi datele de autentificare ale gazdei
+330	Datele de autentificare nu există
+331	Conectat, dar istoricul conexiunilor nu s-a putut scrie: %1
+332	Conectarea a eșuat, iar scrierea istoricului conexiunilor a eșuat și ea: %1
+333	Nu s-a putut scrie ora deconectării: %1
+334	Asistentul IA nu acceptă execuția comenzilor pe mai multe terminale
+335	Fila de terminal corespunzătoare este deja închisă
+336	Lipirea unei comenzi neexecutate în mai multe terminale nu este încă acceptată
+337	Comanda a fost lipită în terminalul corespunzător; apasă Enter pentru a o executa
+338	Apasă + în bara de titlu pentru a deschide o filă nouă de terminal sau conectează-te la un server din lista de gazde din stânga.
+339	Nu s-au putut salva detaliile distribuției gazdei: %1
+340	Reconectare automată la %1 (încercarea %2/%3)
+341	Paletă de comenzi
+342	Introdu numele unei comenzi pentru a filtra…
+343	Enter pentru a executa, Esc pentru a închide; aici sunt afișate doar acțiunile disponibile acum.
+344	Caută în ieșirea terminalului
+345	Găsește textul:
+346	„%1” nu a fost găsit în ieșirea terminalului
+347	Exportă ieșirea terminalului
+348	Fișiere text (*.txt);;Toate fișierele (*)
+349	Ieșirea terminalului a fost exportată în %1
+350	Spațiul de lucru conține conexiuni temporare
+351	Fila „%1” nu este o gazdă permanentă deschisă din arborele de gazde. Salvează mai întâi această conexiune în arborele de gazde, apoi spațiul de lucru.
+352	Nu s-a putut verifica înregistrarea gazdei pentru fila „%1”: %2
+353	Nicio filă de salvat
+354	Fereastra curentă nu are nicio filă de terminal validă.
+355	Salvează spațiul de lucru
+356	Numele spațiului de lucru:
+357	Nu s-a putut salva spațiul de lucru
+358	Suprascrie spațiul de lucru existent
+359	Un spațiu de lucru cu numele „%1” există deja. Îl suprascrii cu setul curent de file?
+360	Spațiul de lucru „%1” a fost salvat (%2 file)
+361	Nu s-a putut citi spațiul de lucru
+362	Niciun spațiu de lucru
+363	Salvează mai întâi spațiul de lucru curent.
+364	Deschide spațiul de lucru
+365	Selectează un spațiu de lucru:
+366	Spațiul de lucru selectat a fost șters
+367	Aspectul spațiului de lucru este corupt
+368	Versiunea, lista de file sau numărul spațiului de lucru „%1” nu sunt valide; sesiunea curentă nu a fost modificată.
+369	Înregistrarea etichetei nu este un obiect
+370	Tip nevalid de câmp de etichetă
+371	Referința de gazdă nu există: %1
+372	Nu s-a putut rezolva lanțul de gazde: %1
+373	Nu s-a putut restaura complet spațiul de lucru „%1”: %2. Sesiunea curentă nu a fost modificată.
+374	Înlocuiește spațiul de lucru curent
+375	Deschiderea „%1” va închide filele curente (%2) și conexiunile lor, apoi va restaura %3 file. Continui?
+376	Spațiul de lucru „%1” a fost restaurat
+377	Niciun spațiu de lucru de șters.
+378	Șterge spațiul de lucru
+379	Selectează un spațiu de lucru de șters:
+380	Confirmă ștergerea spațiului de lucru
+381	Se șterge doar aspectul salvat; terminalele curente nu se închid. Această acțiune nu poate fi anulată.
+382	Nu s-a putut șterge spațiul de lucru
+383	Spațiul de lucru a fost șters
+384	Spațiul de lucru nu mai există
+385	Ținta selectată este închisă sau nu este încă conectată
+386	Redirecționarea porturilor nu a fost încă pornită
+387	Creează
+388	Pornește
+389	Regulă nouă de redirecționare a porturilor
+390	Pornește toate regulile de redirecționare pentru gazda curentă
+391	Oprește toate regulile de redirecționare pentru gazda curentă
+392	Regulă nouă
+393	Selectează o regulă de modificat
+394	Nu s-au putut citi gazdele de redirecționare a porturilor: %1
+395	Nu s-a putut citi numărul de redirecționări de porturi: %1
+396	Salvează mai întâi gazda în Managerul de gazde
+397	Nu s-au putut citi regulile de redirecționare a porturilor: %1
+398	%1 reguli, %2 conexiuni active, trafic total: %3; %4
+399	Gazdă neconectată · sesiunea SSH indisponibilă
+400	Gazdă conectată · sesiunea SSH disponibilă
+401	Nicio gazdă salvată
+402	Creează mai întâi o gazdă în Managerul de gazde.
+403	Regula se execută
+404	Oprește mai întâi regula, apoi modifică parametrii de ascultare sau țintele.
+405	Confirmă deschiderea portului de ascultare
+406	Regula ascultă pe toate interfețele de rețea, deci alte dispozitive pot ajunge la acest port. Confirmi că firewallul este configurat și continui salvarea?
+407	Nu s-a putut salva regula
+408	Selectează o regulă de redirecționare a porturilor de șters
+409	Confirmă ștergerea regulii
+410	Aceasta nu poate fi anulată; ascultătorii activi se opresc imediat.
+411	Nu s-a putut șterge regula
+412	Selectează o regulă de pornit
+413	Gazda nu este încă conectată
+414	Conectează-te mai întâi la „%1” din arborele de gazde, apoi pornește această regulă.
+415	Nu s-a putut porni redirecționarea
+416	Regula selectată nu se execută
+417	Creează și selectează mai întâi o gazdă în Managerul de gazde.
+418	Nu s-au putut citi regulile de redirecționare
+419	Nicio regulă de redirecționare
+420	Gazda curentă nu are încă reguli de redirecționare a porturilor de pornit.
+421	Conectează-te mai întâi la „%1” din arborele de gazde, apoi pornește toate regulile de redirecționare.
+422	Confirmă pornirea tuturor redirecționărilor
+423	Se vor porni toate cele %2 reguli de redirecționare pentru gazda „%1”; regulile deja active rămân neschimbate. Continui?
+424	Unele reguli nu au putut fi pornite
+425	Nu s-au putut trimite reguli pentru pornire: %1\n%2
+426	%1 sarcini de pornire a redirecționării porturilor trimise pentru gazda curentă
+427	Gazda curentă nu are reguli active de redirecționare a porturilor
+428	Confirmă oprirea tuturor redirecționărilor
+429	Se vor opri cele %2 reguli active de redirecționare pentru gazda „%1” și se vor închide conexiunile asociate. Continui?
+430	%1 sarcini de oprire a redirecționării porturilor trimise pentru gazda curentă
+431	Sesiunea SSH a gazdei este indisponibilă
+432	Pornire redirecționare porturi: %1
+433	Redirecționare porturi eșuată: %1
+434	Nu a fost returnat niciun mesaj de eroare specific în timpul execuției
+435	Nu s-au putut citi regulile de redirecționare automată: %1
+436	Nu s-a putut porni automat „%1”: %2
+437	Pornire
+438	În execuție
+439	Oprire
+440	Eșuat
+441	Oprit
+442	Local %1\n← La distanță %2
+443	Local %1\n→ La distanță (la cerere SOCKS)
+444	Local %1\n→ La distanță %2
+445	%1 %2
+446	Modifică redirecționarea porturilor
+447	Redirecționare nouă a porturilor
+448	Redirecționare locală (-L)
+449	Redirecționare la distanță (-R)
+450	SOCKS5 dinamic (-D)
+451	Pornește automat după o conexiune SSH rădăcină reușită
+452	Nume:
+453	Tip:
+454	Ascultare:
+455	Țintă:
+456	Notă de securitate: setarea adresei de ascultare la 0.0.0.0 sau :: deschide portul rețelei locale și internetului; accesibilitatea depinde totuși de firewallul sistemului și de setarea GatewayPorts de pe serverul SSH.
+457	Regulă incompletă
+458	%1 · %2
+459	Motiv: %1
+460	Ultima eroare: %1
+461	Sesiunea SSH nu este pregătită; nu se poate porni redirecționarea „%1”
+462	Nu s-a putut porni redirecționarea la distanță „%1”: %2
+463	Adresa de ascultare „%1” nu este o adresă IP locală pe care se poate lega
+464	Nu s-a putut asculta pe %1:%2: %3
+465	Nu s-a putut intercepta canalul SSH al redirecționării la distanță
+466	Redirecționarea la distanță nu s-a putut conecta la ținta locală %1:%2: %3
+467	Negocierea SOCKS5 a depășit limita de securitate de 64 KiB
+468	Nu s-a putut conecta la ținta %1:%2 prin SSH: %3
+469	Nu s-a putut intercepta canalul SSH al redirecționării locale
+470	Productivitatea nu este încă conectată la baza de date a aplicației
+471	Nu s-a putut salva fragmentul: %1
+472	Nu s-a putut șterge fragmentul: %1
+473	Nu s-au putut citi grupurile de fragmente: %1
+474	Nu s-au putut citi fragmentele: %1
+475	Nu s-a putut scrie istoricul comenzilor: %1
+476	Nu s-a putut citi istoricul comenzilor: %1
+477	Fragment nou
+478	Creează un fragment de comandă executabil
+479	Șterge fragmentul selectat
+480	Fragmente de comandă
+481	Execută
+482	Filtrează după prefixul comenzii
+483	Execută pe gazda selectată
+484	Execută din nou comanda pe gazda selectată în filtrul de istoric
+485	Istoricul comenzilor
+486	Selectează mai întâi o înregistrare din istoricul comenzilor
+487	Copiază comanda
+488	După selectarea țintelor, poți activa difuzarea directă a tastaturii; terminalul sursă este legat de fereastra principală de fila curentă.
+489	Activează difuzarea directă a intrării brute
+490	Trimite comanda o dată către țintele selectate
+491	Trimite difuzarea
+492	Trimite comanda o dată către terminalele marcate explicit
+493	Intrare de difuzare
+494	Marchează explicit cel puțin un terminal țintă înainte de a activa difuzarea
+495	Trimiterea difuzării necesită o comandă nevidă și cel puțin o țintă explicită
+496	Comandă
+497	Descriere
+498	Salvează modificările fragmentului curent
+499	Execută  %1
+500	Comandă rapidă %1
+501	Modelul de productivitate nu este încă pregătit
+502	Fragmentul selectat nu mai există; reîmprospătează lista
+503	Modifică fragmentul
+504	Numele și comanda nu pot fi goale
+505	Fragmentul a fost salvat
+506	Selectează mai întâi un fragment de șters
+507	Ștergi fragmentul selectat?
+508	Fragmentul a fost șters
+509	Selectează mai întâi un fragment de executat
+510	Fragmentul nu mai există sau comanda sa este goală
+511	Fragmentul nu mai există
+512	Local / terminalul curent
+513	Pornește cu limba de interfață specificată (de exemplu, zh_CN, en sau system).
+514	Inițializarea bazei de date a eșuat
+515	Nu s-au putut inițializa datele locale Shellium: %1
+516	Inițializarea previzualizării interfeței a eșuat
+517	Nu s-au putut crea datele izolate de previzualizare a paginii de gazde: %1
+518	Nu s-a putut scrie tema izolată de previzualizare: %1
+519	Nu s-a putut inițializa seiful izolat în memorie: %1
+520	Nu s-au putut citi setările
+521	Configurația seifului este coruptă
+522	Shellium · Previzualizarea interfeței
+523	Doar citire · permis
+524	Modifică sistemul · necesită aprobare
+525	Risc ridicat · necesită aprobare
+526	Deschide terminalul local
+527	Afișează/ascunde fișierele la distanță
+528	Deschide paleta de comenzi
+529	Deschide setările
+530	Comanda rapidă %1 este atribuită atât lui „%2”, cât și lui „%3”
+531	Implicit
+532	Necunoscut
+533	%1 s
+534	%1 min %2 s
+535	%1 h %2 min
+536	Calea SFTP obișnuită a eșuat: %1\nRezerva SFTP prin cheia la distanță a eșuat și ea: %2
+537	Eroare libssh necunoscută
+538	Nu s-a putut reutiliza sesiunea SSH externă: %1
+539	SFTP
+540	Serverul nu a putut inițializa subsistemul SFTP: %1
+541	SSH extern
+542	Nu s-a putut crea canalul de retransmisie SFTP la distanță: %1
+543	Serverul extern a refuzat să înceapă sesiunea de retransmisie SFTP: %1
+544	Serverul extern nu a putut porni OpenSSH-ul intern: %1
+545	Nu s-a putut lega canalul de date SFTP al OpenSSH-ului la distanță: %1
+546	OpenSSH-ul extern nu a putut stabili SFTP-ul intern: %1
+547	Nu s-a putut crea sesiunea libssh.
+548	Nu s-a putut lega tunelul SSH intern: %1
+549	Nu s-a putut configura lanțul de gazde intermediare: %1
+550	Serverul acceptă doar hmac-sha1, învechit: %1
+551	Conexiune SSH eșuată: %1
+552	Autentificare eșuată pentru %1: %2. Verifică numele de utilizator, parola, cheia privată sau agentul SSH.
+553	Nu s-a putut citi amprenta
+554	Cheia gazdei serverului nu corespunde înregistrării known_hosts; noua amprentă trebuie verificată mai întâi.
+555	Nu s-a putut înlocui vechea cheie a gazdei din known_hosts: %1
+556	Acest server nu este încă de încredere.
+557	Nu s-a putut citi known_hosts: %1
+558	Nu s-a putut scrie known_hosts: %1
+559	Nu s-a putut redenumi fișierul temporar în %1: %2
+560	Nu s-a putut citi fișierul local: %1
+561	Verificarea sfârșitului fragmentului a eșuat; se retransmite
+562	Nu s-a putut crea fișierul temporar la distanță %1: %2
+563	Nu s-a putut sări la decalajul local de reluare %1: %2
+564	Încărcarea %1 a eșuat: %2
+565	Fișierul local %1 a fost modificat în timpul transferului; acest rezultat a fost eliminat
+566	Lungimea fișierului temporar la distanță nu corespunde celei locale (%1 / %2 octeți); redenumirea a fost anulată
+567	Nu s-a putut citi fișierul la distanță %1: %2
+568	Nu s-a putut scrie fișierul temporar local %1: %2
+569	Descărcarea %1 a eșuat: %2
+570	Nu s-a putut salva %1: %2
+571	Nu s-a putut actualiza fișierul local %1: %2
+572	Fișierul la distanță %1 a fost modificat în timpul transferului; acest rezultat a fost eliminat
+573	Lungimea fișierului temporar local nu corespunde celei la distanță (%1 / %2 octeți); redenumirea a fost anulată
+574	Nu s-a putut crea directorul la distanță %1: %2
+575	Nu s-a putut deschide directorul la distanță: %1
+576	Partea la distanță a returnat un nume de element care conține un separator de cale; a fost ignorat
+577	Scanarea de dinaintea înlocuirii a fost anulată
+578	Nu s-a putut scana complet directorul de înlocuit: %1
+579	Procesul de înlocuire a fost anulat
+580	Nu s-a putut șterge %1: %2
+581	Nu s-a putut deschide directorul la distanță %1: %2
+582	Conexiunea s-a întrerupt la citirea directorului la distanță %1: %2
+583	Încărcarea %1 a fost anulată
+584	%1 este identic (%2), nu a fost reîncărcat
+585	Încărcat în %1
+586	Descărcarea %1 a fost anulată
+587	%1 este identic (%2), nu a fost redescărcat
+588	Descărcat în %1
+589	Nu s-a putut crea directorul local %1
+590	Nu s-a putut crea directorul local
+591	Nu s-a putut citi fișierul de previzualizare %1: %2
+592	Nu s-a putut citi fișierul de previzualizare %1: %2
+593	Nu s-au putut modifica permisiunile pentru %1: %2
+594	Permisiunile pentru %1 au fost modificate în %2
+595	Redenumire eșuată: %1
+596	Redenumit în %1
+597	Nu s-a putut șterge %1: %2. Directorul trebuie să fie gol.
+598	%1 a fost șters
+599	Transfer anulat: %1
+600	%1 transferat: %2/%3 fișiere, %4 octeți în total
+601	; încă %1 fișiere identice nu au fost reîncărcate
+602	În modul de înlocuire, %1 elemente în plus au fost șterse pe partea țintă
+603	  · încă %1 omise
+604	%1 omise:
+605	%1 eșuate:
+606	Legătură simbolică (nu se urmărește)
+607	Calea iese din directorul țintă
+608	S-a ales reîncărcarea cu suprascriere
+609	Hash-ul conținutului corespunde
+610	Identic cu ultima înregistrare de sincronizare
+611	Fragment verificat prin hash-ul conținutului
+612	Fragment verificat prin dimensiune și ora modificării
+613	Fișierul sursă s-a schimbat; fragmentul este nevalid
+614	Fragmentul nu corespunde datelor de reluare; se retransmite
+615	Nu sunt disponibile date de reluare
+616	Sesiunea SSH este nevalidă; nu se poate actualiza known_hosts.
+617	Sesiunea SSH curentă nu se mai află într-o stare de conflict al cheii gazdei.
+618	Nu s-a putut determina locația fișierului tău known_hosts.
+619	Nu s-a putut exporta noua cheie a gazdei serverului: %1
+620	Înregistrarea noii chei a gazdei exportată de libssh are un format nevalid.
+621	Nu s-a putut citi %1: %2
+622	Nu s-a putut citi %1: %2
+623	Înregistrarea în conflict nu se află în fișierul tău known_hosts %1; este posibil să provină din configurația sistemului. Contactează administratorul pentru a o verifica și actualiza.
+624	Nu s-a putut actualiza %1: %2
+625	Reverificarea de după scrierea noii chei a gazdei a eșuat; fișierul known_hosts original a fost restaurat.
+626	Reverificarea de după scrierea noii chei a gazdei a eșuat, iar restaurarea fișierului original a eșuat și ea: %1
+627	Seiful este indisponibil
+628	Aplicația nu a inițializat serviciul seifului de date de autentificare.
+629	Datele seifului sunt corupte
+630	Nu s-a putut citi în siguranță seiful local: %1\n\nPentru a nu suprascrie datele de autentificare existente, Shellium nu creează automat un seif nou.
+631	Nu s-a putut activa protecția cu parolă principală
+632	Starea curentă a seifului nu permite reactivarea protecției cu parolă principală.
+633	Nu s-a putut dezactiva protecția cu parolă principală
+634	Seiful nu conține nicio configurație de parolă principală de verificat.
+635	Urmărește automat nivelul cel mai interior
+636	Urmărește directorul terminalului
+637	Selectează serverul terminalului
+638	Preferă transferul care poate fi reluat
+639	Afișează managerul de fișiere pe tot ecranul și extinde fișierele locale pentru copiere alăturată
+640	Ecran complet
+641	Închide managerul de fișiere la distanță și redă toată lățimea terminalului
+642	Fișiere locale
+643	Mergi la directorul părinte local
+644	Reîmprospătează directorul local
+645	Dimensiune
+646	Modificat
+647	Permisiuni
+648	Proprietar
+649	Fișiere la distanță
+650	Mergi la directorul părinte la distanță
+651	Reîmprospătează directorul la distanță curent
+652	Când este activat, câmpul de cale sare automat la directorul la distanță în care se află acum terminalul din stânga
+653	Ieși din ecranul complet și restrânge fișierele locale
+654	Încarcă
+655	Încarcă fișiere…
+656	Încarcă director…
+657	Descarcă
+658	Previzualizare
+659	Întrerupe sau reia transferul curent
+660	Anulează transferul curent sau sarcina selectată din coadă
+661	Transfer care poate fi reluat
+662	Activat: fișierele cu conținut cu adevărat identic sunt omise, iar fragmentele parțiale rămase după o întrerupere se continuă după verificare;\nDezactivat: totul se încarcă complet, indiferent dacă conținutul corespunde.
+663	Transferurile se execută strict în ordine; selectează un element în așteptare și apasă „Deselectează” pentru a-l elimina direct.
+664	Deschide directorul
+665	Încarcă în directorul la distanță curent
+666	Încarcă fișiere în directorul curent
+667	Încarcă directorul în directorul curent
+668	Modifică permisiunile
+669	Reîmprospătează directorul la distanță
+670	Continuă transferul curent
+671	Întrerupe transferul curent
+672	Deselectează sarcina
+673	%1 elemente
+674	Prima conectare la %1.\n\nAmprentă SHA-256:\n%2\n\nVerifică amprenta printr-un canal de încredere. Ai încredere în ea și o scrii în known_hosts?
+675	Cheia gazdei returnată de %1 nu corespunde înregistrării locale.\n\nAmprentă SHA-256 nouă:\n%2\n\nAceasta poate fi o reinstalare a serverului sau o rotație de chei, dar poate fi și un atac de tip „om la mijloc”. Verifică mai întâi amprenta nouă printr-un canal de încredere.\n\nConfirmi că cheia s-a schimbat și înlocuiești vechea înregistrare din known_hosts?
+676	Transfer %1/%2: %3
+677	Un element cu același nume există deja pe partea la distanță
+678	Un fișier cu același nume există deja pe partea la distanță:\n%1
+679	Pentru a încărca un director, acest fișier trebuie șters mai întâi. Îl înlocuiești?
+680	Înlocuiește
+681	Un director cu același nume există deja pe partea la distanță:\n%1
+682	Îmbinare actualizări: compară conținutul fișier cu fișier și reîncarcă doar fișierele cu adevărat modificate; fișierele în plus de pe partea la distanță se păstrează.\n\nÎnlocuire: șterge întregul director la distanță și încarcă totul din nou pentru ca rezultatul să corespundă exact celui local; fișierele în plus de pe partea la distanță se șterg definitiv.
+683	Îmbinare actualizări
+684	Previzualizarea sigură a %1 a fost încărcată
+685	Previzualizare sigură · %1
+686	Sunt afișate doar primele %1; conținutul fișierului a fost trunchiat.
+687	Acest fișier nu este un fișier text acceptat sau o imagine bitmap sigură; conținutul binar nu este afișat.\nMIME: %1
+688	%1 transferat
+689	 · %1/s
+690	 · %1 rămas
+691	Nivelul %1 · ⚠ presupus · %2
+692	Nivelul %1 · %2
+693	Terminalul curent nu este încă conectat la un server
+694	Cale locală nevalidă
+695	Directorul local nu există sau nu este accesibil:\n%1
+696	Nu s-a putut răsfoi directorul local
+697	Nu ai permisiunea de a citi acest director:\n%1
+698	Pauză
+699	În execuție: %1
+700	Întrerupt
+701	În curs
+702	În așteptare
+703	Nu este încă conectat
+704	Conectează-te mai întâi și selectează un server la distanță.
+705	Calea la distanță este necunoscută
+706	Mergi mai întâi la un director la distanță, apoi glisează fișierele locale.
+707	Nimic de încărcat
+708	Elementul glisat nu există, nu poate fi citit sau este o legătură simbolică care nu se urmărește.
+709	Încarcă %1 → %2
+710	%1 adăugat în coada de transfer a fișierelor locale
+711	Înlocuiește încărcarea %1 → %2
+712	Directorul %1 a fost adăugat în coada de transfer
+713	Ținta de descărcare nu este un director accesibil:\n%1
+714	Descarcă %1 → %2
+715	Cale nevalidă
+716	Introdu o cale absolută la distanță care începe cu /.
+717	Se citește directorul personal…
+718	Se citește %1…
+719	Selectează unul sau mai multe fișiere de încărcat
+720	Mergi mai întâi la un director în managerul de fișiere la distanță, apoi începe încărcarea din terminal.
+721	Selectează un director de încărcat
+722	Cale necunoscută
+723	Mergi mai întâi la un director la distanță, apoi încarcă directorul local.
+724	Confirmă încărcarea directorului
+725	Directorul local va fi încărcat recursiv:\n%1\n\nîn locația la distanță:\n%2\n\nDacă un director cu același nume există deja pe partea la distanță, la pasul următor vei putea alege îmbinarea actualizărilor sau înlocuirea. Continui?
+726	Selectează un element
+727	Selectează un fișier sau un director la distanță de descărcat.
+728	Selectează un director local pentru descărcarea în bloc
+729	Element în așteptare anulat: %1
+730	S-a solicitat anularea transferului; se finalizează…
+731	Reia
+732	Reia transferul curent
+733	Transferul va fi întrerupt la următoarea limită de bloc de 64 KiB
+734	Transferul a fost reluat
+735	Previzualizare imposibilă
+736	Selectează un fișier obișnuit la distanță; directoarele și legăturile simbolice nu se deschid în previzualizarea sigură.
+737	Se citește în siguranță previzualizarea %1…
+738	Selectează un fișier sau un director căruia să-i modifici permisiunile.
+739	Modifică permisiunile la distanță
+740	Introdu trei sau patru cifre octale de permisiuni (de exemplu, 0644, 0755):
+741	Format de permisiuni nevalid
+742	Permisiunile pot conține doar cifre de la 0 la 7 și trebuie să aibă trei sau patru cifre.
+743	Valoarea permisiunilor este în afara intervalului permis de POSIX.
+744	Se modifică permisiunile pentru %1…
+745	Selectează un fișier sau un director de redenumit.
+746	Nume nou:
+747	Nume nevalid
+748	Numele nu poate conține separatorul de cale /.
+749	Se redenumește…
+750	Selectează un fișier sau un director gol de șters.
+751	Ești pe cale să ștergi definitiv %2 de pe serverul %1:\n\n%3\n\nAceastă acțiune nu poate fi anulată.
+752	Director
+753	Fișier
+754	\n\n⚠ Acest server a fost identificat prin presupunere, analizând comenzile din terminal, și poate să nu fie cel la care te aștepți. Execută „hostname” în terminal pentru a verifica înainte de a continua.
+755	Se șterge %1…
+756	Transferul directorului s-a finalizat (unele elemente sunt incomplete)
+757	Anulat
+758	Conexiunea la gazda intermediară s-a întrerupt temporar; se reîncearcă (încercarea %1)…
+759	%1; s-a revenit la directorul personal
+760	Autentificarea SSH internă nu s-a finalizat; introdu din nou parola direct în terminal
+761	Introdu datele de autentificare ale serverului intern
+762	Serverul a respins datele de autentificare curente ale sesiunii. Introdu o parolă nouă sau fraza de acces a cheii private pentru %1:
+763	Serverul acceptă doar algoritmi MAC învechiți
+764	Serviciul SFTP al serverului %1 oferă doar hmac-sha1.\n\nAcest algoritm este învechit; se recomandă actualizarea configurației SSH a serverului. Îl activezi pentru această conexiune și încerci din nou?\n\n%2
+765	Operațiune SFTP eșuată
+766	Setări
+767	Shellium %1
+768	Restaurează valorile implicite
+769	Aspect
+770	Conexiuni și securitate
+771	Comandă rapidă
+772	Limba interfeței
+773	Limba de afișare
+774	Întreaga interfață se schimbă imediat. Ieșirea terminalului deja derulată își păstrează limba originală.
+775	Luminoasă
+776	Întunecată
+777	Tema aplicației
+778	Aspectul interfeței
+779	„Urmează sistemul” se sincronizează automat când sistemul de operare comută între aspectul luminos și cel întunecat.
+780	Schema de culori a terminalului
+781	Caută scheme de culori, de exemplu Nord, Dark, Gruvbox
+782	Urmează tema aplicației
+783	Nicio schemă de culori potrivită.
+784	Previzualizare în timp real
+785	 px
+786	Font
+787	Font monospațiat
+788	Dimensiunea fontului
+789	Înălțimea rândului
+790	Spațierea dintre litere
+791	Bloc
+792	Subliniere
+793	Bară
+794	Cursor
+795	Formă
+796	Cursor clipitor
+797	 rânduri
+798	Sesiune
+799	Buffer de derulare
+800	Reducerea acestei valori elimină imediat cel mai vechi istoric peste limită; conținutul eliminat nu poate fi recuperat.
+801	Sunet de alertă
+802	Redă sunetul de alertă al sistemului la primirea unui octet BEL de la terminal.
+803	Sugestii automate în linia de comandă
+804	După introducerea a cel puțin două caractere, sugestiile sunt afișate automat din istoricul comenzilor gazdei curente; dezactivat implicit.
+805	Confirmarea lipirii pe mai multe rânduri
+806	Înainte de a lipi conținut pe mai multe rânduri, afișează conținutul complet și cere confirmarea; dezactivat implicit, adică lipirea se face direct. Confirmarea este totuși necesară când conținutul conține caractere invizibile care pot injecta secvențe de control ale terminalului.
+807	 ori
+808	 s
+809	Seiful de date de autentificare
+810	Protejează datele de autentificare cu o parolă principală
+811	Atât activarea, cât și dezactivarea necesită o parolă; după activare, poți debloca și vedea textul clar în pagina editorului de gazde.
+812	La dezactivare, se verifică mai întâi parola principală curentă, apoi datele de autentificare sunt migrate la criptare locală, iar configurația parolei principale este ștearsă. Parolele gazdelor sunt încă folosite automat pentru conexiuni, dar textul lor clar nu poate fi văzut în interfață și nu mai au protecția cu parolă principală.
+813	Reconectare automată
+814	Reconectare automată la erori de rețea
+815	Reîncearcă doar deconectările anormale care au fost stabilite cu succes anterior și nu au primit un cod de ieșire de la distanță.
+816	Nr. maxim de încercări
+817	Așteptare inițială
+818	Încercările ulterioare folosesc o întârziere exponențială cu factor 2×, până la 60 de secunde.
+819	Ieșirea normală, comutarea proprie a conexiunii, prima eroare de autentificare sau respingerea cheii gazdei nu declanșează niciodată reconectarea automată.
+820	Comenzi rapide globale
+821	Dacă lași gol, comanda rapidă pentru această acțiune este eliminată; aceeași comandă rapidă nu poate fi atribuită la două acțiuni.
+822	Conexiune LLM
+823	URL-ul serviciului
+824	URL-ul de bază al unui gateway compatibil cu protocolul OpenAI Chat Completions, fără /chat/completions.
+825	Gol înseamnă că gateway-ul nu necesită autentificare
+826	Cheie API
+827	Se trimite cu fiecare cerere ca token Bearer, stocată criptat în seiful de date de autentificare.
+828	Obține lista de modele de la server
+829	Reîmprospătează lista de modele
+830	Numele modelului
+831	Îl poți introduce manual sau poți apăsa butonul de reîmprospătare din dreapta pentru a obține lista de modele a serverului și a alege din lista derulantă.
+832	Activează raționamentul
+833	Cere modelului să raționeze înainte de a răspunde; răspunsurile sunt mai fiabile, dar mai lente. Are efect doar pe gateway-urile care acceptă modul de raționament; când este dezactivat, corpul cererii omite acest câmp.
+834	Spre deosebire de alte setări, modificările adresei și cheii nu se salvează caracter cu caracter; apasă „Salvează” pentru ca fiecare apăsare de tastă să nu declanșeze o scriere criptată.
+835	Serviciul de configurare a asistentului IA este indisponibil
+836	Se testează conexiunea…
+837	Se obține lista de modele…
+838	Salvat
+839	Salvare eșuată: %1
+840	Fereastra curentă nu este conectată la serviciul seifului de date de autentificare; protecția cu parolă principală nu poate fi modificată.
+841	Seiful a fost resetat
+842	Datele de autentificare au fost șterse, dar starea setărilor nu s-a putut sincroniza: %1
+843	Setările nu au fost salvate complet
+844	Protecția cu parolă principală a fost comutată, dar scrierea celorlalte setări a eșuat: %1\nModificările nesalvate au fost anulate.
+845	Nu s-au putut salva setările
+846	%1 (neinstalat)
+847	Acest apel ssh nu intră într-un shell interactiv
+848	Acest apel ssh solicită ieșire detaliată de la OpenSSH
+849	Acest apel ssh folosește o cale de conectare pe care Shellium nu o poate reproduce exact
+850	Acest apel ssh specifică un fișier de cheie privată pe partea la distanță
+851	Nu s-a putut analiza gazda țintă din comandă
+852	Acest apel ssh doar execută o comandă unică pe partea la distanță
+853	Copiază cheia publică
+854	Gestionare chei SSH
+855	Selectează…
+856	Poate rămâne gol; pentru chei de lungă durată se recomandă o frază de acces
+857	Introdu aceeași frază de acces din nou
+858	Algoritm:
+859	Calea cheii private:
+860	Frază de acces de protecție:
+861	Confirmă fraza de acces:
+862	Comentariu pentru cheia publică:
+863	Biți RSA:
+864	Notă de securitate: Shellium nu suprascrie niciodată o cheie existentă; cheia privată se salvează atomic cu drepturi de citire și scriere doar pentru utilizatorul curent, iar fraza de acces nu se scrie în baza de date. Fă tu însuți o copie de rezervă a cheii private.
+865	Generează perechea de chei
+866	Generează
+867	Necesară pentru o cheie privată criptată; folosită doar în timpul acestei verificări
+868	Cheie privată existentă:
+869	Verifică și extrage cheia publică
+870	După o verificare reușită, aici este afișată cheia publică în format authorized_keys
+871	Verifică / importă
+872	Selectează unde să salvezi noua cheie privată
+873	Lipsește calea de salvare
+874	Selectează unde să salvezi noua cheie privată.
+875	Frazele de acces nu corespund
+876	Cele două fraze de acces de protecție nu corespund.
+877	Niciun algoritm disponibil
+878	Compilarea curentă a libssh nu acceptă generarea algoritmului de cheie SSH planificat.
+879	Nu s-a putut genera cheia
+880	Cheia %1 a fost generată.\nCheie privată: %2\nCheie publică: %3
+881	Selectează o cheie privată SSH existentă
+882	Fișiere de cheie privată (*)
+883	Fișierul nu există
+884	Selectează un fișier de cheie privată SSH existent.
+885	Această cheie privată este criptată; introdu fraza de acces și verifică din nou.
+886	Cheia privată este indisponibilă
+887	Formatul cheii private nu este acceptat, fișierul este corupt sau fraza de acces este incorectă.
+888	Verificare trecută: %1%2. Poți selecta acest fișier în câmpul „Cheie privată” al editorului de gazde.
+889	, protejată cu frază de acces
+890	Nu s-a putut lega soclul tunelului SSH: %1
+891	Nu s-a putut configura lanțul de gazde intermediare SSH: %1
+892	Acest nivel nu a început încă să se conecteze sau a eșuat deja.
+893	Timpul de conectare la %1 a expirat.
+894	Utilizatorul nu a confirmat schimbarea cheii gazdei serverului; conexiunea a fost întreruptă.
+895	Utilizatorul a respins cheia necunoscută a gazdei serverului.
+896	Utilizatorul a anulat autentificarea pentru %1.
+897	Nu s-a putut crea canalul de shell SSH: %1
+898	Serverul a refuzat să aloce un PTY interactiv: %1
+899	Serverul a refuzat să pornească un shell interactiv: %1
+900	Automatul de stare al conexiunii a intrat într-o stare nedefinită.
+901	Autentificare SSH eșuată: %1. Verifică parola, cheia privată sau agentul SSH.
+902	Automatul de stare al autentificării a intrat într-o stare nedefinită.
+903	Timpul comenzii de fundal a expirat
+904	Nu s-a putut deschide canalul de comenzi de fundal: %1
+905	Partea la distanță a refuzat să execute comanda de fundal: %1
+906	Partea la distanță nu a returnat un cod de ieșire
+907	Cod de ieșire %1
+908	Sesiunea SSH pentru acest nivel nu este încă stabilită
+909	Nu s-a putut crea soclul tunelului SFTP: %1
+910	Nu s-a putut aloca canalul de redirecționare pe %1: %2
+911	Serverul %1 a depășit timpul la redirecționarea către %2:%3 (%4 s)
+912	Serverul %1 nu a putut redirecționa către %2:%3: %4
+913	Serverul %1 nu a putut retransmite către %2:%3: %4
+914	Tot nestabilit după o așteptare de %1 s
+915	Comanda de retransmisie la distanță s-a încheiat imediat după pornire
+916	Automatul de stare al retransmisiei a intrat într-o stare nedefinită
+917	Diagnostic de retransmisie exec pentru serverul %1: %2
+918	Sesiunea SSH nu a finalizat autentificarea
+919	Regula, adresa și portul de ascultare la distanță trebuie să fie valide
+920	Această regulă de redirecționare la distanță este deja pornită sau în curs de pornire
+921	Timpul a expirat la solicitarea ascultării la distanță pe %1:%2
+922	Serverul a refuzat ascultarea la distanță pe %1:%2: %3
+923	Nu s-a putut anula ascultătorul la distanță %1:%2: %3
+924	Sesiunea SSH externă s-a încheiat
+925	Timpul a expirat la crearea canalului de redirecționare SSH intern
+926	Sesiunea SSH rădăcină s-a încheiat
+927	Timpul de așteptare pentru configurarea ascultării la distanță de către server a expirat
+928	Planul de conectare este gol sau primul salt este nevalid
+929	Sesiunea SSH s-a încheiat
+930	Partea la distanță nu a returnat un rezultat de stabilire
+931	Nivelul de sesiune SSH care poartă această cerere este deja închis
+932	Nu s-au putut scrie date în terminalul la distanță: %1
+933	Lanțul de gazde a eșuat la %1: %2
+934	Nicio sesiune pregătită pentru a stabili conexiunea internă
+935	Sesiunea care poartă această conexiune internă este deja închisă
+936	Cererea de tunel SFTP a fost anulată
+937	Nu s-a putut crea canalul de configurare a scriptului la distanță
+938	Cererea de ascultare la distanță a fost anulată
+939	Sesiunea SSH externă care poartă această țintă este indisponibilă
+940	Cererea de ascultare la distanță a fost oprită
+941	Sesiunea SSH rădăcină nu este încă pregătită
+942	Culoarea etichetei %1
+943	Neconectat
+944	UTF-8 · 80×24
+945	Codarea curentă a terminalului și coloane × rânduri
+946	Afișează managerul de fișiere la distanță pentru sesiunea curentă (Ctrl+Shift+F)
+947	Manager de fișiere la distanță
+948	UTF-8 · %1×%2
+949	Se așteaptă parola SSH internă; această intrare se folosește și pentru sesiunea SFTP
+950	Conexiunea SSH internă a eșuat
+951	Conexiunea SSH internă a fost anulată
+952	Autentificarea SSH internă a reușit; managerul de fișiere a comutat la serverul curent
+953	Se pornește terminalul local…
+954	Se pornește terminalul local…\r\n
+955	Terminalul local a pornit
+956	Eroare de terminal local
+957	Terminalul local s-a încheiat (cod de ieșire %1)
+958	Se conectează la %1…
+959	Se conectează la %1…\r\n
+960	Conectat la %1
+961	Integrarea shell pentru %1 nu este activată; identificarea imbricată este degradată: %2
+962	Acces refuzat, încearcă din nou.\r\nParola pentru %1:
+963	Parola pentru %1:
+964	\r\nNu s-a putut stabili conexiunea imbricată la %1: %2\r\n
+965	Conexiunea imbricată a eșuat: %1
+966	Redirecționarea TCP este dezactivată pe acest server
+967	Conexiunea imbricată nu a fost interceptată: %1
+968	Conectare eșuată
+969	Serverul %1 oferă doar hmac-sha1, pe care politica de securitate implicită nu îl poate folosi pentru a finaliza conexiunea.\n\nhmac-sha1 este învechit; se recomandă actualizarea configurației SSH a serverului. Activezi acest algoritm doar pentru această conexiune și încerci din nou?\n\nDetalii: %2
+970	Conexiune anulată: serverul cere hmac-sha1, care este dezactivat. Actualizează configurația serverului.
+971	Conexiunea SSH s-a întrerupt din cauza unei erori de rețea; se pregătește reconectarea automată
+972	Conexiunea SSH s-a întrerupt din cauza unei erori de rețea
+973	Conexiunea SSH s-a încheiat (stare de ieșire %1)
+974	Cheia gazdei returnată de %1 nu corespunde înregistrării locale.\n\nAmprentă SHA-256 nouă:\n%2\n\nAceasta poate fi o reinstalare a serverului sau o rotație de chei, dar poate fi și un atac de tip „om la mijloc”. Verifică mai întâi amprenta nouă cu administratorul serverului printr-un canal de încredere.\n\nConfirmi că cheia s-a schimbat și înlocuiești vechea înregistrare din known_hosts?
+975	Conectare la %1
+976	Se stabilește conexiunea imbricată la %1 prin serverul curent…
+977	Ascunde managerul de fișiere la distanță pentru sesiunea curentă (Ctrl+Shift+F)
+978	Apasă r pentru a te reconecta la %1, x pentru a închide această filă
+979	\r\nNiciun server de reconectat; apasă x pentru a închide această filă\r\n
+980	\r\nReconectare manuală…\r\n
+981	Reconectarea automată a atins limita de %1 încercări
+982	Reconectare automată la %2 în %1 s (încercarea %3/%4)
+983	Terminalul curent nu este pregătit; comanda nu poate fi executată
+984	Terminalul curent nu este pregătit; comanda nu poate fi lipită
+985	Datele de autentificare SSH interne au fost sincronizate; managerul de fișiere se conectează la serverul curent
+986	Parola SSH internă a fost obținută; se așteaptă confirmarea serverului
+987	%1 (țintă imbricată)
+988	Țintă SSH imbricată detectată: %1
+989	S-a revenit la server: %1
+990	Acest ssh nu a fost interceptat (%1); a fost lăsat părții la distanță să îl execute singură
+991	Shellium nu a putut intercepta această conexiune (%1); a fost predată către ssh-ul la distanță pentru execuție directă.\r\n
+992	%1, s-a revenit la %2
+993	Serviciul de setări nu are o bază de date a aplicației disponibilă
+994	Valoarea „%2” a setării %1 nu este un număr întreg; s-a restaurat valoarea implicită
+995	Valoarea „%2” a setării %1 nu este o valoare logică; s-a restaurat valoarea implicită
+996	Temă necunoscută „%1”; se revine la „Urmează sistemul”
+997	Schemă de culori a terminalului necunoscută „%1”; se revine la schema implicită
+998	Spațierea dintre litere „%1” nu este validă; s-a restaurat valoarea implicită
+999	Formă de cursor necunoscută „%1”; se revine la cursorul bloc
+1000	Comanda rapidă „%2” pentru acțiunea „%1” nu este validă; s-a restaurat valoarea implicită
+1001	; toate comenzile rapide au fost restaurate la valorile implicite
+1002	Încarcă în directorul la distanță curent…
+1003	Conținutul are %1 rânduri și poate executa mai multe comenzi imediat după trimitere.
+1004	%1 caractere invizibile care pot injecta secvențe de control ale terminalului au fost eliminate.
+1005	Trimiți următorul conținut în terminalul curent?
+1006	Confirmă lipirea în terminal
+1007	Lipește
+1008	Presupus ·
+1009	Nu este încă conectat; fișierele glisate nu pot fi trimise.
+1010	Acesta este un terminal local; fișierele glisate nu pot fi trimise.
+1011	Directorul curent este încă necunoscut; apasă Enter o dată în terminal, apoi glisează fișierele.
+1012	Trimiți în directorul curent?
+1013	Trimiți %1 fișiere locale glisate în directorul curent %2:\n%3
+1014	Activează protecția cu parolă principală
+1015	Dezactivează protecția cu parolă principală
+1016	Creează seiful Shellium
+1017	Deblochează seiful Shellium
+1018	Setează o parolă principală nouă. Datele de autentificare existente ale gazdelor sunt migrate în siguranță sub protecția cu parolă principală.
+1019	Introdu parola principală curentă pentru a confirma dezactivarea. Datele de autentificare existente sunt migrate la criptare locală, apoi configurația parolei principale este ștearsă.
+1020	Setează o parolă principală. Shellium derivă cheia cu Argon2id și criptează datele de autentificare SSH stocate cu XChaCha20-Poly1305.
+1021	Seiful este blocat. Introdu parola principală pentru a folosi datele de autentificare SSH stocate.
+1022	Cel puțin 8 caractere
+1023	Introdu parola principală
+1024	Introdu din nou pentru confirmare
+1025	Parolă principală
+1026	Confirmă parola principală
+1027	Ai uitat parola?
+1028	Parola veche nu poate fi recuperată; șterge toate datele de autentificare stocate și începe din nou
+1029	Parola principală nu poate fi recuperată; păstreaz-o într-un loc sigur. Dacă o pierzi, seiful poate fi doar resetat, iar parolele SSH și frazele de acces ale cheilor private stocate vor fi șterse definitiv.
+1030	Activează protecția
+1031	Confirmă închiderea
+1032	Creează seiful
+1033	Deblochează
+1034	Deblochează seiful
+1035	Resetează seiful
+1036	Nu s-au putut recupera datele de autentificare vechi
+1037	Resetarea șterge definitiv toate parolele SSH și frazele de acces ale cheilor private stocate și le desface legătura cu gazdele. Adresele gazdelor, conturile, porturile, căile fișierelor de chei private, grupurile și lanțurile de gazde se păstrează. Această acțiune nu poate fi anulată.
+1038	Introdu „%1” pentru a confirma:
+1039	Șterge definitiv și resetează
+1040	Nu s-a putut reseta seiful: %1
+1041	Scrierea în baza de date locală a eșuat
+1042	Introdu parola principală.
+1043	Parola principală trebuie să aibă cel puțin 8 caractere pentru a reduce riscul unui atac offline prin forță brută.
+1044	Cele două parole principale nu corespund. Confirmă din nou.
+1045	Nu s-a putut activa protecția cu parolă principală: %1
+1046	Nu s-a putut dezactiva protecția cu parolă principală: %1
+1047	Nu s-a putut crea seiful: %1
+1048	Nu s-a putut debloca seiful: %1

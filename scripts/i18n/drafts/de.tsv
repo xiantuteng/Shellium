@@ -1,0 +1,1049 @@
+0	Kein verbundenes Terminal
+1	Chat-Verlauf
+2	Chat-Verlauf des aktuellen Tabs anzeigen
+3	Neue Sitzung
+4	Beschreiben Sie, was Sie auf dem aktuellen Server erreichen möchten …
+5	Neue Terminalausgabe einbeziehen
+6	Senden (Eingabe)
+7	Die KI kann Fehler machen. Jeder Befehl, der das System verändert, erfordert Ihre ausdrückliche Bestätigung.
+8	Es wartet kein Befehl auf die Ausführung
+9	Eine Anfrage läuft; warten Sie, bevor Sie eine neue Sitzung starten
+10	Unbenannte Sitzung
+11	Noch kein Chat-Verlauf
+12	%1  ·  %2
+13	Die aktuelle Sitzung wird noch verarbeitet; warten Sie, bevor Sie den Chat-Verlauf wechseln
+14	%1  %2
+15	[Ergebnis von Befehl `%1`]
+16	[Neue Terminalausgabe]\n%1
+17	Konfigurieren Sie zuerst die LLM-URL und den Modellnamen unter Einstellungen → KI-Assistent
+18	Die KI hat kein Ergebnis gemäß dem Einzelschritt-Protokoll geliefert; diese Runde wurde gestoppt. Versuchen Sie es erneut oder wechseln Sie zu einem Modell, das JSON-Anweisungen unterstützt.
+19	Die KI-Antwort entspricht nicht dem Einzelschritt-Agent-Protokoll: %1
+20	Ihre letzte Antwort verstieß gegen das Einzelschritt-Protokoll: %1. Entscheiden Sie erneut und geben Sie nur ein JSON-Objekt gemäß der Systemnachricht zurück; kein vollständiger Plan, keine mehreren Befehle, keine Erklärung des Protokolls.
+21	Analysieren …
+22	Warten auf Bestätigung
+23	Einfügen
+24	Kopieren
+25	Bearbeiten
+26	Ausführen  ⌘↵
+27	Den letzten auf Bestätigung wartenden Befehl ausführen (Command+Eingabe)
+28	Ausgeführt
+29	Befehl in die Zwischenablage kopiert
+30	Befehl bearbeiten
+31	Nach der Bestätigung wird er in das aktuelle Terminal eingefügt und nicht automatisch ausgeführt:
+32	Es kann nur ein einzeiliger Befehl in das Terminal eingefügt werden
+33	Der vorherige Befehl wartet noch auf Ausgabe; bitte warten Sie, bevor Sie einen weiteren ausführen
+34	Ausführung eines risikoreichen Befehls bestätigen
+35	Dieser Befehl kann irreversible oder weitreichende Auswirkungen haben:\n\n%1\n\nIm aktuellen Terminal ausführen?
+36	An das aktuelle Terminal zur Ausführung gesendet; die KI wartet automatisch auf den Abschluss
+37	Stopp
+38	Diese Analyse wurde gestoppt. Ergänzen Sie Details und senden Sie erneut.
+39	KI-Analyse gestoppt
+40	Warten auf das Befehlsergebnis beendet; der Befehl läuft weiterhin im Terminal.
+41	Warten auf das Befehlsergebnis beendet
+42	Der aktuelle Terminalzustand kann nicht gelesen werden; der Befehlsabschluss kann nicht automatisch abgewartet werden.
+43	Warten auf den Abschluss des Befehls …
+44	Warten auf den Abschluss des Befehls … %1 s gewartet
+45	(keine Ausgabe)
+46	[Ergebnis von Befehl `%1`]\n%2
+47	Geben Sie zuerst die LLM-Dienst-URL ein
+48	Verbindung fehlgeschlagen: %1
+49	Verbunden; das Gateway meldete %1 verfügbare Modelle
+50	Verbunden
+51	Modellliste konnte nicht abgerufen werden: %1
+52	Das Gateway lieferte keine Modelle
+53	%1 Modelle abgerufen
+54	Die vorherige Anfrage ist noch nicht abgeschlossen
+55	Vervollständigen Sie zuerst die LLM-URL und den Modellnamen in den Einstellungen
+56	Anfrage fehlgeschlagen: %1
+57	Das Gateway lieferte eine nicht auswertbare Antwort
+58	Das Gateway lieferte keine Antwort
+59	Mit einem SSH-Server verbinden
+60	Optional; wird nicht auf der Festplatte gespeichert
+61	Optional; leer lassen, um den SSH-Agenten oder Standardschlüssel zu verwenden
+62	Server
+63	Anzeigename
+64	Wenn leer, wird automatisch benutzer@host:port verwendet.
+65	Hostadresse
+66	Benutzername
+67	Port
+68	Durchsuchen …
+69	Authentifizierung
+70	Passwort / Passphrase des privaten Schlüssels
+71	Datei des privaten Schlüssels
+72	Legacy-Kompatibilität
+73	Für ältere Server, die nur hmac-sha1 unterstützen (nicht empfohlen).
+74	Das Terminal verbindet sich über ein interaktives libssh-PTY; der Dateimanager öffnet mit derselben Konfiguration einen separaten SFTP-Kanal.
+75	Abbrechen
+76	Verbinden
+77	Die Verbindungsdaten sind unvollständig
+78	Geben Sie den Hostnamen oder die IP-Adresse des Servers ein.
+79	SSH-Datei des privaten Schlüssels auswählen
+80	Host-Kette bearbeiten
+81	Die hinzugefügten Hosts verbinden sich in der folgenden Reihenfolge und erreichen zuletzt <span style="font-family: monospace; font-weight: 600;">%1</span>.
+82	Host hinzufügen
+83	Wählen oder erstellen Sie einen Jump-Host im Host-Manager
+84	Ziel-Host
+85	Aus der Kette entfernen
+86	Speichern
+87	Änderungen an der aktuellen Host-Kette verwerfen
+88	Aktuelle Reihenfolge der Host-Kette speichern
+89	Ungültige Host-Referenz
+90	Host konnte nicht gelesen werden
+91	Anmeldedaten für %1
+92	Jump-Host konnte nicht erstellt werden
+93	Name / Adresse suchen …
+94	#Tag
+95	Hosts nach exaktem Tag filtern
+96	Neue Gruppe
+97	Neuer Host
+98	Aktualisieren
+99	Eine neue Host-Gruppe auf der aktuellen Ebene erstellen
+100	Einen neuen SSH-Host in der aktuellen Gruppe erstellen
+101	Hosts und Gruppen neu laden
+102	Löschen
+103	Hosts importieren …
+104	Hosts exportieren …
+105	Nicht gruppiert
+106	Aufklappzustand der Host-Ordner konnte nicht gelesen werden: %1
+107	Aufklappzustand der Host-Ordner ist beschädigt; Standardaufklappung wird verwendet: %1 (Offset %2)
+108	Version oder Struktur des Aufklappzustands der Host-Ordner wird nicht unterstützt; Standardaufklappung wird verwendet
+109	Aufklappzustand der Host-Ordner speichern
+110	Host-Baum laden
+111	Hosts suchen
+112	Hosts nach genau diesem Tag filtern
+113	Konfiguration der übergeordneten Gruppe lesen
+114	Die übergeordnete Gruppe existiert nicht
+115	Verschlüsselte Anmeldedaten speichern
+116	Host speichern
+117	Host lesen
+118	Aktuelle Gruppe lesen
+119	Host duplizieren
+120	Knoten lesen
+121	Verschlüsselte Anmeldedaten aktualisieren
+122	Knoten aktualisieren
+123	Beim Löschen der Gruppe '%1' werden auch alle Untergruppen und Hosts gelöscht; dies kann nicht rückgängig gemacht werden. Fortfahren?
+124	Host '%1' löschen? Diese Aktion kann nicht rückgängig gemacht werden.
+125	Löschen bestätigen
+126	Knoten löschen
+127	Host-Konfiguration importieren
+128	Unterstützte Konfiguration (*.json *.conf *.config);;Alle Dateien (*)
+129	Die Importdatei konnte nicht gelesen werden
+130	%1 konnte nicht geöffnet werden: %2
+131	Import fehlgeschlagen
+132	Keine Hosts zum Importieren
+133	Die Datei enthält keine verwendbaren Datensätze.
+134	%1 Host-/Gruppendatensätze werden importiert. Jeder Datensatz erhält einen neuen lokalen Primärschlüssel; Anmeldedaten werden nicht aus der Konfigurationsdatei importiert.
+135	Import bestätigen
+136	Hosts importieren
+137	Import abgeschlossen
+138	%1 Datensätze erfolgreich importiert.
+139	Exportdaten lesen
+140	Keine Hosts zum Exportieren
+141	Der Host-Baum ist derzeit leer.
+142	Shellium-Hosts exportieren
+143	Shellium JSON (*.json)
+144	Die Exportdatei konnte nicht geschrieben werden
+145	Export fehlgeschlagen
+146	Die Host-Konfiguration konnte nicht kodiert werden
+147	Schreiben von %1 fehlgeschlagen: %2
+148	Export abgeschlossen
+149	%1 Host-/Gruppendatensätze exportiert. Die Datei enthält keine Anmeldedaten.
+150	Der Exportdatensatz-Container ist leer
+151	Host-Kette auflösen
+152	Der Host-Datensatz oder die Kette existiert nicht
+153	 · über %1
+154	Ungültiger Jump-Host
+155	 · über %1 und %2 Jump-Hosts
+156	%1\nSystem: %2
+157	Drag-and-Drop-Reihenfolge speichern
+158	Knoten %1 nicht gefunden
+159	Host-Datenoperation fehlgeschlagen
+160	%1 fehlgeschlagen: %2
+161	Jump-Host auswählen
+162	Vorhandenen Host auswählen
+163	Name, Adresse oder Konto suchen
+164	Auswählen
+165	Einen wiederverwendbaren Jump-Host erstellen
+166	Den ausgewählten Host zur Kette hinzufügen
+167	Host-Konfiguration
+168	Gruppenkonfiguration
+169	Hosts
+170	Gruppe
+171	Name
+172	Leer lassen, um von der übergeordneten Gruppe zu erben
+173	Wird nach der Eingabe automatisch mit dem Host gespeichert
+174	Leer lassen, um von der übergeordneten Gruppe zu erben oder den Agenten / Standardschlüssel zu verwenden
+175	Durch Kommas getrennt; leer lassen, um von der übergeordneten Gruppe zu erben
+176	Die Jump-Hosts bearbeiten, die der aktuelle Host vor der endgültigen Verbindung durchläuft
+177	Authentifizierung und Jump-Hosts
+178	Passwort anzeigen
+179	Das gespeicherte Passwort anzeigen; bei gesperrtem Tresor wird zuerst das Master-Passwort abgefragt
+180	Klicken, um zu erfahren, wie der Master-Passwort-Schutz aktiviert wird
+181	Passwort
+182	Das Passwort wird automatisch gespeichert; aktivieren Sie den Master-Passwort-Schutz, um es zu entsperren und den Klartext anzuzeigen.
+183	Host-Kette
+184	Wählen Sie einen vorhandenen Host im Host-Manager als Jump-Host oder fügen Sie im Ketteneditor einen Host hinzu.
+185	hmac-sha1 nur für diesen Host erlauben (nicht vererbt).
+186	Erweiterte ProxyJump-Einstellungen aufklappen
+187	ProxyJump
+188	OpenSSH-kompatible erweiterte manuelle Jump-Host-Konfiguration; normalerweise die Host-Kette oben bevorzugen.
+189	Master-Passwort-Schutz erforderlich
+190	Zum Anzeigen von Host-Passwörtern ist der Master-Passwort-Schutz erforderlich. Gehen Sie zu 'Einstellungen → Verbindungen & Sicherheit → Anmeldedaten-Tresor' und aktivieren Sie 'Anmeldedaten mit einem Master-Passwort schützen'.
+191	Passwort verbergen
+192	Der Tresor wurde zurückgesetzt; bitte geben Sie Ihre Anmeldedaten erneut ein
+193	Diese Konfigurationsänderung verwerfen
+194	Aktuelle Konfiguration speichern
+195	Verbindung testen
+196	Die SSH-Verbindung mit der aktuellen, nicht gespeicherten Konfiguration testen
+197	Die Konfiguration ist unvollständig
+198	Geben Sie einen Namen ein.
+199	Geben Sie einen Hostnamen oder eine IP-Adresse ein.
+200	Gespeichert; nach dem Entsperren des Tresors sichtbar
+201	Das gespeicherte Passwort konnte nicht gelesen werden
+202	Die Anmeldedaten existieren nicht oder sind beschädigt.
+203	Wählen Sie, zu welcher Gruppe dieser Host im Host-Manager gehört
+204	Tags zu diesem Host hinzufügen und eine Tag-Farbe wählen
+205	Tag bearbeiten
+206	Erweiterte Einstellungen
+207	Erweiterte Einstellungen · ProxyJump konfiguriert
+208	Erweiterte Einstellungen · erbt ProxyJump
+209	Erweiterte ProxyJump-Einstellungen einklappen
+210	Nur für OpenSSH-kompatible Konfiguration verwenden oder wenn eine Jump-Host-Adresse manuell angegeben werden muss
+211	Host-Kette  ·  direkt  ›
+212	Host-Kette  ·  über %1  ›
+213	Ungültiger Host
+214	Host-Kette  ·  %1 Jump-Hosts  ›
+215	Die Host-Kette konnte nicht getestet werden
+216	Der Jump-Host existiert nicht oder die Kette ist ungültig: %1
+217	Die Host-Kette enthält doppelte Knoten oder eine Schleife: %1
+218	Die Verbindung konnte nicht getestet werden
+219	Die gespeicherten Anmeldedaten für '%1' konnten nicht gelesen werden.
+220	Wird getestet …
+221	Erfolgreich mit %1 verbunden.
+222	Der Server unterstützt nur veraltetes hmac-sha1. Wenn Sie das Risiko akzeptiert haben, aktivieren Sie 'Legacy-Kompatibilität' und versuchen Sie es erneut.\n\n%1
+223	SSH-Authentifizierung fehlgeschlagen. Prüfen Sie das Passwort oder die Passphrase des privaten Schlüssels und versuchen Sie es erneut.
+224	Der Server erfordert ein Passwort oder eine Passphrase des privaten Schlüssels. Füllen Sie 'Passwort' aus und versuchen Sie es erneut.
+225	Server-Hostschlüssel bestätigen
+226	Erste Verbindung zu %1.\n\nSHA-256-Fingerabdruck:\n%2\n\nÜberprüfen Sie den Fingerabdruck über einen vertrauenswürdigen Kanal. Vertrauen und Test fortsetzen?
+227	Der Server-Hostschlüssel hat sich geändert
+228	Der von %1 zurückgegebene Hostschlüssel stimmt nicht mit dem lokalen Datensatz überein.\n\nNeuer SHA-256-Fingerabdruck:\n%2\n\nDies kann eine Server-Neuinstallation oder ein Schlüsselwechsel sein oder ein Man-in-the-Middle-Angriff. Überprüfen Sie den neuen Fingerabdruck zuerst über einen vertrauenswürdigen Kanal.\n\nBestätigen Sie, dass sich der Schlüssel geändert hat, ersetzen Sie den alten Eintrag in known_hosts und setzen Sie den Test fort?
+229	Verbindungstest erfolgreich
+230	Verbindungstest fehlgeschlagen
+231	Die SSH-Verbindung konnte nicht hergestellt werden. Prüfen Sie die aktuelle Konfiguration.
+232	Tag
+233	Geben Sie einen Tag-Namen ein, z. B. Produktion
+234	Farbe
+235	Klicken Sie auf ein Tag, um seinen Namen und seine Farbe oben zum Bearbeiten oder direkten Bestätigen zu laden.
+236	OK
+237	Diese Tab-Änderung verwerfen
+238	Tag und Farbe bestätigen
+239	Tag löschen
+240	Dieses Tag löschen
+241	Ungültiges Tag
+242	Ein Tag-Name darf kein Komma enthalten.
+243	Name und Farbe laden
+244	Portweiterleitungs-Hosts
+245	%1  (%2)
+246	Die lokale Shell existiert nicht: %1
+247	%1: %2
+248	Die ConPTY-Pipe konnte nicht erstellt werden
+249	Die Windows-ConPTY konnte nicht erstellt werden
+250	Die ConPTY-Kindprozessattribute konnten nicht konfiguriert werden
+251	Die lokale Windows-Shell konnte nicht gestartet werden
+252	Die Prozessbaum-Bereinigung für die lokale Shell konnte nicht konfiguriert werden: %1
+253	Größenänderung von ConPTY fehlgeschlagen: HRESULT 0x%1
+254	Schreiben in ConPTY fehlgeschlagen
+255	Das lokale PTY konnte nicht erstellt werden: %1
+256	Schreiben in das lokale PTY fehlgeschlagen: %1
+257	Abfragen des lokalen PTY fehlgeschlagen: %1
+258	Systemeinstellung folgen
+259	Einstellungen konnten nicht gelesen werden: %1
+260	Shellium
+261	Produktivität
+262	Portweiterleitung
+263	KI-Assistent
+264	0 Hosts
+265	Konfiguration des KI-Assistenten konnte nicht gelesen werden: %1
+266	%1 Hosts
+267	Mit Server verbinden
+268	Im aktuellen Terminalbereich mit einem SSH-Server verbinden
+269	Verschachtelt verbinden mit …
+270	Verbindet sich über den aktuellen Server mit einem internen Host. Die App verwaltet die Ebenen selbst, sodass der Dateimanager genau zwischen ihnen wechseln kann.
+271	Lokales Terminal
+272	Eine lokale Login-zsh im aktuellen Terminalbereich starten
+273	Neuer Tab
+274	Tab schließen
+275	Tab umbenennen
+276	Remote-Dateimanager umschalten
+277	Den Remote-Dateimanager-Bereich innerhalb des aktuellen Terminal-Tabs anzeigen oder verbergen
+278	Terminalausgabe durchsuchen …
+279	Terminalausgabe exportieren …
+280	Einstellungen …
+281	Befehlspalette …
+282	Aktuellen Arbeitsbereich speichern …
+283	Arbeitsbereich öffnen …
+284	Arbeitsbereich löschen …
+285	Seitenleiste anzeigen
+286	Die Bereiche Hosts, Produktivität und Portweiterleitung links ein- oder ausklappen
+287	Shellium-Produktname
+288	Tabs nach links scrollen
+289	Tabs nach rechts scrollen
+290	Minimieren
+291	Fenster minimieren
+292	Schließen
+293	Fenster schließen
+294	Verbindung
+295	Arbeitsbereich
+296	Ansicht
+297	Terminal
+298	Anmeldedaten-Tresor entsperren …
+299	Anmeldedaten-Tresor sperren
+300	SSH-Schlüsselverwaltung …
+301	Sicherheit
+302	Terminal %1
+303	Tag-Name:
+304	Der Anmeldedaten-Tresor ist gesperrt
+305	Der Anmeldedaten-Tresor ist entsperrt
+306	Der Tresor wurde zurückgesetzt, aber die Synchronisierung des Einstellungsstatus schlug fehl: %1
+307	Der Tresor wurde zurückgesetzt; Host-Konfigurationen bleiben erhalten. Geben Sie die benötigten Anmeldedaten erneut ein.
+308	Live-Broadcast aktiviert: %1 Ziele
+309	Live-Broadcast deaktiviert
+310	Der Anmeldedaten-Tresor wurde wegen Inaktivität automatisch gesperrt
+311	Zur ausgewählten Sprache konnte nicht gewechselt werden; prüfen Sie, ob das Sprachpaket vollständig ist
+312	Oberflächensprache geändert
+313	Wiederherstellen
+314	Maximieren
+315	Fenster wiederherstellen
+316	Fenster maximieren
+317	Breite der Seitenleiste konnte nicht gelesen werden: %1
+318	Breite der Seitenleiste konnte nicht gespeichert werden: %1
+319	Neuer Terminal-Tab
+320	Tag kopieren
+321	Umbenennen
+322	Andere Tabs schließen
+323	Die verschachtelte Verbindung konnte nicht hergestellt werden
+324	Der aktuelle Tab ist noch nicht mit einem Remote-Server verbunden. Verbinden Sie sich zuerst mit einem Server und fahren Sie dann von dort zu einem internen Host fort.
+325	Verbindung zum gespeicherten Host nicht möglich
+326	Der Host-Datensatz oder die Host-Kette existiert nicht
+327	Die Host-Kette konnte nicht gelesen werden
+328	Der Ketten-Host existiert nicht: %1
+329	Die Host-Anmeldedaten konnten nicht gelesen werden
+330	Die Anmeldedaten existieren nicht
+331	Verbunden, aber das Schreiben des Verbindungsverlaufs schlug fehl: %1
+332	Die Verbindung schlug fehl und das Schreiben des Verbindungsverlaufs schlug ebenfalls fehl: %1
+333	Trennungszeit konnte nicht geschrieben werden: %1
+334	Der KI-Assistent unterstützt das Ausführen von Befehlen auf mehreren Terminals nicht
+335	Der zugehörige Terminal-Tab ist bereits geschlossen
+336	Das Einfügen eines nicht ausgeführten Befehls in mehrere Terminals wird noch nicht unterstützt
+337	Der Befehl wurde in das zugehörige Terminal eingefügt; drücken Sie die Eingabetaste, um ihn auszuführen
+338	Drücken Sie + in der Titelleiste, um einen neuen Terminal-Tab zu öffnen, oder verbinden Sie sich über die Host-Liste links mit einem Server.
+339	Speichern der Host-Distributionsinformationen fehlgeschlagen: %1
+340	Automatische Neuverbindung mit %1 (Versuch %2/%3)
+341	Befehlspalette
+342	Befehlsnamen zum Filtern eingeben …
+343	Eingabe zum Ausführen, Esc zum Schließen; hier werden nur derzeit verfügbare Aktionen angezeigt.
+344	Terminalausgabe durchsuchen
+345	Text suchen:
+346	'%1' wurde in der Terminalausgabe nicht gefunden
+347	Terminalausgabe exportieren
+348	Textdateien (*.txt);;Alle Dateien (*)
+349	Terminalausgabe exportiert nach %1
+350	Der Arbeitsbereich enthält temporäre Verbindungen
+351	Tab '%1' ist kein persistenter, aus dem Host-Baum geöffneter Host. Speichern Sie diese Verbindung zuerst im Host-Baum und dann den Arbeitsbereich.
+352	Prüfen des Host-Datensatzes für Tab '%1' fehlgeschlagen: %2
+353	Keine Tabs zum Speichern
+354	Das aktuelle Fenster hat keinen gültigen Terminal-Tab.
+355	Arbeitsbereich speichern
+356	Name des Arbeitsbereichs:
+357	Speichern des Arbeitsbereichs fehlgeschlagen
+358	Vorhandenen Arbeitsbereich überschreiben
+359	Ein Arbeitsbereich mit dem Namen '%1' existiert bereits. Mit der aktuellen Tab-Kombination überschreiben?
+360	Arbeitsbereich '%1' gespeichert (%2 Tabs)
+361	Lesen des Arbeitsbereichs fehlgeschlagen
+362	Keine Arbeitsbereiche
+363	Speichern Sie zuerst den aktuellen Arbeitsbereich.
+364	Arbeitsbereich öffnen
+365	Arbeitsbereich auswählen:
+366	Der ausgewählte Arbeitsbereich wurde gelöscht
+367	Das Layout des Arbeitsbereichs ist beschädigt
+368	Version, Tab-Liste oder Anzahl des Arbeitsbereichs '%1' ist ungültig; die aktuelle Sitzung wurde nicht geändert.
+369	Der Tag-Eintrag ist kein Objekt
+370	Ungültiger Typ des Tag-Felds
+371	Die Host-Referenz existiert nicht: %1
+372	Die Host-Kette konnte nicht aufgelöst werden: %1
+373	Arbeitsbereich '%1' konnte nicht vollständig wiederhergestellt werden: %2. Die aktuelle Sitzung wurde nicht geändert.
+374	Aktuellen Arbeitsbereich ersetzen
+375	Beim Öffnen von '%1' werden die aktuellen %2 Tabs und ihre Verbindungen geschlossen, dann %3 Tabs wiederhergestellt. Fortfahren?
+376	Arbeitsbereich '%1' wiederhergestellt
+377	Es gibt keine Arbeitsbereiche zum Löschen.
+378	Arbeitsbereich löschen
+379	Zu löschenden Arbeitsbereich auswählen:
+380	Löschen des Arbeitsbereichs bestätigen
+381	Nur das gespeicherte Layout wird gelöscht; die aktuellen Terminals werden nicht geschlossen. Diese Aktion kann nicht rückgängig gemacht werden.
+382	Löschen des Arbeitsbereichs fehlgeschlagen
+383	Arbeitsbereich gelöscht
+384	Der Arbeitsbereich existiert nicht mehr
+385	Das ausgewählte Ziel ist geschlossen oder noch nicht verbunden
+386	Es läuft noch keine Portweiterleitung
+387	Neu
+388	Starten
+389	Neue Portweiterleitungsregel
+390	Alle Weiterleitungsregeln für den aktuellen Host starten
+391	Alle Weiterleitungsregeln für den aktuellen Host stoppen
+392	Neue Regel
+393	Zu bearbeitende Regel auswählen
+394	Portweiterleitungs-Hosts konnten nicht gelesen werden: %1
+395	Anzahl der Portweiterleitungen konnte nicht gelesen werden: %1
+396	Speichern Sie zuerst einen Host im Host-Manager
+397	Portweiterleitungsregeln konnten nicht gelesen werden: %1
+398	%1 Regeln, %2 aktive Verbindungen, %3 Gesamtverkehr; %4
+399	Host nicht verbunden · SSH-Sitzung nicht verfügbar
+400	Host verbunden · SSH-Sitzung verfügbar
+401	Keine gespeicherten Hosts
+402	Erstellen Sie zuerst einen Host im Host-Manager.
+403	Die Regel läuft
+404	Stoppen Sie zuerst die Regel, ändern Sie dann die Listen- oder Zielparameter.
+405	Freigabe des Listen-Ports bestätigen
+406	Die Regel lauscht auf allen Netzwerkschnittstellen, sodass andere Geräte diesen Port erreichen können. Bestätigen Sie, dass Ihre Firewall konfiguriert ist, und fahren Sie mit dem Speichern fort?
+407	Speichern der Regel fehlgeschlagen
+408	Zu löschende Portweiterleitungsregel auswählen
+409	Löschen der Regel bestätigen
+410	Dies kann nicht rückgängig gemacht werden; laufende Listener stoppen sofort.
+411	Löschen der Regel fehlgeschlagen
+412	Zu startende Regel auswählen
+413	Der Host ist noch nicht verbunden
+414	Verbinden Sie sich zuerst über den Host-Baum mit '%1' und starten Sie dann diese Regel.
+415	Starten der Weiterleitung fehlgeschlagen
+416	Die ausgewählte Regel läuft nicht
+417	Erstellen und wählen Sie zuerst einen Host im Host-Manager.
+418	Weiterleitungsregeln konnten nicht gelesen werden
+419	Keine Weiterleitungsregeln
+420	Der aktuelle Host hat noch keine startbaren Portweiterleitungsregeln.
+421	Verbinden Sie sich zuerst über den Host-Baum mit '%1' und starten Sie dann alle Weiterleitungsregeln.
+422	Starten aller Weiterleitungen bestätigen
+423	Es werden alle %2 Weiterleitungsregeln unter Host '%1' gestartet; bereits laufende Regeln bleiben unverändert. Fortfahren?
+424	Einige Regeln konnten nicht gestartet werden
+425	%1 Regeln konnten nicht zum Start übermittelt werden:\n%2
+426	%1 Portweiterleitungs-Start-Aufgaben für den aktuellen Host übermittelt
+427	Der aktuelle Host hat keine laufenden Portweiterleitungsregeln
+428	Stoppen aller Weiterleitungen bestätigen
+429	Es werden %2 aktive Weiterleitungsregeln unter Host '%1' gestoppt und die zugehörigen Verbindungen geschlossen. Fortfahren?
+430	%1 Portweiterleitungs-Stopp-Aufgaben für den aktuellen Host übermittelt
+431	Die Host-SSH-Sitzung ist nicht verfügbar
+432	Portweiterleitung wird gestartet: %1
+433	Portweiterleitung fehlgeschlagen: %1
+434	Zur Laufzeit wurde keine konkrete Fehlermeldung zurückgegeben
+435	Automatische Weiterleitungsregeln konnten nicht gelesen werden: %1
+436	Automatischer Start von '%1' fehlgeschlagen: %2
+437	Wird gestartet
+438	Läuft
+439	Wird gestoppt
+440	Fehlgeschlagen
+441	Gestoppt
+442	Lokal %1\n← Remote %2
+443	Lokal %1\n→ Remote (auf SOCKS-Anfrage)
+444	Lokal %1\n→ Remote %2
+445	%1 %2
+446	Portweiterleitung bearbeiten
+447	Neue Portweiterleitung
+448	Lokale Weiterleitung (-L)
+449	Remote-Weiterleitung (-R)
+450	Dynamisches SOCKS5 (-D)
+451	Startet automatisch, nachdem die Root-SSH-Verbindung erfolgreich war
+452	Name:
+453	Typ:
+454	Lauschen:
+455	Ziel:
+456	Sicherheitshinweis: Wenn Sie die Lausch-Adresse auf 0.0.0.0 oder :: setzen, wird der Port im lokalen Netzwerk und im Internet freigegeben; die Erreichbarkeit hängt weiterhin von der Systemfirewall und der GatewayPorts-Einstellung des SSH-Servers ab.
+457	Die Regel ist unvollständig
+458	%1 · %2
+459	Grund: %1
+460	Letzter Fehler: %1
+461	Die SSH-Sitzung ist nicht bereit; die Weiterleitung '%1' kann nicht gestartet werden
+462	Starten der Remote-Weiterleitung '%1' fehlgeschlagen: %2
+463	Die Lausch-Adresse '%1' ist keine bindbare lokale IP-Adresse
+464	Lauschen auf %1:%2 fehlgeschlagen: %3
+465	Übernahme des Remote-Weiterleitungs-SSH-Kanals fehlgeschlagen
+466	Remote-Weiterleitung konnte keine Verbindung zum lokalen Ziel %1:%2 herstellen: %3
+467	SOCKS5-Handshake überschritt das Sicherheitslimit von 64 KiB
+468	Verbindung zum Ziel %1:%2 über SSH nicht möglich: %3
+469	Übernahme des lokalen SSH-Weiterleitungskanals fehlgeschlagen
+470	Produktivität ist noch nicht mit der App-Datenbank verbunden
+471	Speichern des Snippets fehlgeschlagen: %1
+472	Löschen des Snippets fehlgeschlagen: %1
+473	Lesen der Snippet-Gruppen fehlgeschlagen: %1
+474	Lesen der Snippets fehlgeschlagen: %1
+475	Schreiben des Befehlsverlaufs fehlgeschlagen: %1
+476	Lesen des Befehlsverlaufs fehlgeschlagen: %1
+477	Neues Snippet
+478	Ein ausführbares Befehls-Snippet erstellen
+479	Das ausgewählte Snippet löschen
+480	Befehls-Snippets
+481	Ausführen
+482	Nach Befehlspräfix filtern
+483	Auf dem ausgewählten Host ausführen
+484	Den Befehl auf dem im Verlaufsfilter ausgewählten Host erneut ausführen
+485	Befehlsverlauf
+486	Wählen Sie zuerst einen Befehlsverlaufseintrag
+487	Befehl kopieren
+488	Nach der Auswahl der Ziele können Sie den Live-Tastatur-Broadcast aktivieren; das Quellterminal wird vom Hauptfenster an den aktuellen Tab gebunden.
+489	Live-Broadcast der Roh-Eingabe aktivieren
+490	Einen Befehl einmalig an die ausgewählten Ziele senden
+491	Broadcast senden
+492	Einen Befehl einmalig an die von Ihnen ausdrücklich markierten Terminals senden
+493	Broadcast-Eingabe
+494	Markieren Sie ausdrücklich mindestens ein Zielterminal, bevor Sie den Broadcast aktivieren
+495	Broadcast senden erfordert einen nicht leeren Befehl und mindestens ein ausdrückliches Ziel
+496	Befehl
+497	Beschreibung
+498	Änderungen am aktuellen Snippet speichern
+499	Ausführen  %1
+500	Kurzbefehl %1
+501	Das Produktivitätsmodell ist noch nicht bereit
+502	Das ausgewählte Snippet existiert nicht mehr; aktualisieren Sie die Liste
+503	Snippet bearbeiten
+504	Name und Befehl dürfen nicht leer sein
+505	Snippet gespeichert
+506	Wählen Sie zuerst ein zu löschendes Snippet
+507	Das ausgewählte Snippet löschen?
+508	Snippet gelöscht
+509	Wählen Sie zuerst ein auszuführendes Snippet
+510	Das Snippet existiert nicht mehr oder sein Befehl ist leer
+511	Das Snippet existiert nicht mehr
+512	Lokal / aktuelles Terminal
+513	Mit der angegebenen Oberflächensprache starten (z. B. zh_CN, en oder system).
+514	Datenbankinitialisierung fehlgeschlagen
+515	Lokale Shellium-Daten konnten nicht initialisiert werden: %1
+516	Initialisierung der UI-Vorschau fehlgeschlagen
+517	Die isolierten Vorschaudaten der Host-Seite konnten nicht erstellt werden: %1
+518	Das isolierte Vorschau-Thema konnte nicht geschrieben werden: %1
+519	Der isolierte In-Memory-Tresor konnte nicht initialisiert werden: %1
+520	Einstellungen konnten nicht gelesen werden
+521	Die Tresor-Konfiguration ist beschädigt
+522	Shellium · UI-Vorschau
+523	Schreibgeschützt · erlaubt
+524	Verändert das System · benötigt Genehmigung
+525	Hohes Risiko · benötigt Genehmigung
+526	Ein lokales Terminal öffnen
+527	Remote-Dateien anzeigen/verbergen
+528	Die Befehlspalette öffnen
+529	Einstellungen öffnen
+530	Kurzbefehl %1 ist sowohl '%2' als auch '%3' zugewiesen
+531	Standard
+532	Unbekannt
+533	%1 s
+534	%1 Min %2 s
+535	%1 Std %2 Min
+536	Der reguläre SFTP-Pfad schlug fehl: %1\nDer SFTP-Fallback mit Remote-Schlüssel schlug ebenfalls fehl: %2
+537	Unbekannter libssh-Fehler
+538	Die äußere SSH-Sitzung konnte nicht wiederverwendet werden: %1
+539	SFTP
+540	Der Server konnte das SFTP-Subsystem nicht initialisieren: %1
+541	Äußeres SSH
+542	Der Remote-SFTP-Relais-Kanal konnte nicht erstellt werden: %1
+543	Der äußere Server verweigerte den Start der SFTP-Relais-Sitzung: %1
+544	Der äußere Server konnte das innere OpenSSH nicht ausführen: %1
+545	Der SFTP-Datenkanal des Remote-OpenSSH konnte nicht gebunden werden: %1
+546	Das äußere OpenSSH konnte das innere SFTP nicht herstellen: %1
+547	Es konnte keine libssh-Sitzung erstellt werden.
+548	Der innere SSH-Tunnel konnte nicht gebunden werden: %1
+549	Die Jump-Kette konnte nicht konfiguriert werden: %1
+550	Der Server unterstützt nur veraltetes hmac-sha1: %1
+551	SSH-Verbindung fehlgeschlagen: %1
+552	Authentifizierung für %1 fehlgeschlagen: %2. Prüfen Sie Benutzername, Passwort, privaten Schlüssel oder SSH-Agent.
+553	Der Fingerabdruck konnte nicht gelesen werden
+554	Der Server-Hostschlüssel stimmt nicht mit dem known_hosts-Eintrag überein; der neue Fingerabdruck muss zuerst überprüft werden.
+555	Ersetzen des alten Hostschlüssels in known_hosts fehlgeschlagen: %1
+556	Diesem Server wird noch nicht vertraut.
+557	Lesen von known_hosts fehlgeschlagen: %1
+558	Schreiben von known_hosts fehlgeschlagen: %1
+559	Die temporäre Datei konnte nicht in %1 umbenannt werden: %2
+560	Die lokale Datei konnte nicht gelesen werden: %1
+561	Die Endprüfung des Fragments schlug fehl; wird erneut übertragen
+562	Remote-Temporärdatei %1 konnte nicht erstellt werden: %2
+563	Zum lokalen Fortsetzungs-Offset %1 konnte nicht gesprungen werden: %2
+564	Hochladen von %1 fehlgeschlagen: %2
+565	Die lokale Datei %1 wurde während der Übertragung geändert; dieses Ergebnis wird verworfen
+566	Die Länge der Remote-Temporärdatei stimmt nicht mit der lokalen überein (%1 / %2 Bytes); Umbenennen abgebrochen
+567	Remote-Datei %1 konnte nicht gelesen werden: %2
+568	Lokale Temporärdatei %1 konnte nicht geschrieben werden: %2
+569	Herunterladen von %1 fehlgeschlagen: %2
+570	Speichern von %1 fehlgeschlagen: %2
+571	Aktualisieren der lokalen Datei %1 fehlgeschlagen: %2
+572	Die Remote-Datei %1 wurde während der Übertragung geändert; dieses Ergebnis wird verworfen
+573	Die Länge der lokalen Temporärdatei stimmt nicht mit der Remote-Datei überein (%1 / %2 Bytes); Umbenennen abgebrochen
+574	Remote-Verzeichnis %1 konnte nicht erstellt werden: %2
+575	Das Remote-Verzeichnis konnte nicht geöffnet werden: %1
+576	Der Remote gab einen Eintragsnamen mit einem Pfadtrennzeichen zurück; er wurde ignoriert
+577	Der Scan vor dem Ersetzen wurde abgebrochen
+578	Das zu ersetzende Verzeichnis konnte nicht vollständig gescannt werden: %1
+579	Der Ersetzungsvorgang wurde abgebrochen
+580	%1 konnte nicht gelöscht werden: %2
+581	Remote-Verzeichnis %1 konnte nicht geöffnet werden: %2
+582	Die Verbindung wurde beim Lesen von Remote-Verzeichnis %1 unterbrochen: %2
+583	Hochladen von %1 abgebrochen
+584	%1 ist identisch (%2), nicht erneut hochgeladen
+585	Hochgeladen nach %1
+586	Herunterladen von %1 abgebrochen
+587	%1 ist identisch (%2), nicht erneut heruntergeladen
+588	Heruntergeladen nach %1
+589	Lokales Verzeichnis %1 konnte nicht erstellt werden
+590	Das lokale Verzeichnis konnte nicht erstellt werden
+591	Vorschaudatei %1 konnte nicht gelesen werden: %2
+592	Lesen der Vorschaudatei %1 fehlgeschlagen: %2
+593	Ändern der Berechtigungen von %1 fehlgeschlagen: %2
+594	Berechtigungen von %1 auf %2 geändert
+595	Umbenennen fehlgeschlagen: %1
+596	Umbenannt in %1
+597	Löschen von %1 fehlgeschlagen: %2. Das Verzeichnis muss leer sein.
+598	%1 gelöscht
+599	Übertragung abgebrochen: %1
+600	%1 übertragen: %2/%3 Dateien, insgesamt %4 Bytes
+601	; %1 weitere Dateien sind identisch und wurden nicht erneut hochgeladen
+602	Im Ersetzungsmodus wurden %1 zusätzliche Einträge auf dem Ziel gelöscht
+603	  · %1 weitere ausgelassen
+604	%1 übersprungen:
+605	%1 fehlgeschlagen:
+606	Symlink (nicht verfolgt)
+607	Der Pfad verlässt das Zielverzeichnis
+608	Überschreiben-Neuupload ausgewählt
+609	Inhalts-Hash stimmt überein
+610	Identisch mit dem letzten Sync-Datensatz
+611	Das Fragment wurde per Inhalts-Hash verifiziert
+612	Das Fragment wurde per Größe und Änderungszeit verifiziert
+613	Die Quelldatei hat sich geändert; das Fragment ist ungültig
+614	Das Fragment stimmt nicht mit den Fortsetzungs-Anmeldedaten überein; wird erneut übertragen
+615	Keine Fortsetzungs-Anmeldedaten verfügbar
+616	Die SSH-Sitzung ist ungültig; known_hosts kann nicht aktualisiert werden.
+617	Die aktuelle SSH-Sitzung befindet sich nicht mehr in einem Hostschlüssel-Konflikt.
+618	Der Speicherort Ihrer known_hosts-Datei konnte nicht ermittelt werden.
+619	Der neue Hostschlüssel des Servers konnte nicht exportiert werden: %1
+620	Der von libssh exportierte neue Hostschlüssel-Datensatz hat ein ungültiges Format.
+621	%1 konnte nicht gelesen werden: %2
+622	Lesen von %1 fehlgeschlagen: %2
+623	Der Konflikt-Eintrag ist nicht in Ihrer known_hosts-Datei %1; er stammt möglicherweise aus einer systemweiten Konfiguration. Wenden Sie sich an Ihren Administrator, um ihn zu überprüfen und zu aktualisieren.
+624	Aktualisieren von %1 fehlgeschlagen: %2
+625	Die erneute Prüfung nach dem Schreiben des neuen Hostschlüssels schlug fehl; die ursprüngliche known_hosts-Datei wurde wiederhergestellt.
+626	Die erneute Prüfung nach dem Schreiben des neuen Hostschlüssels schlug fehl, und die Wiederherstellung der Originaldatei schlug ebenfalls fehl: %1
+627	Der Tresor ist nicht verfügbar
+628	Die App hat den Anmeldedaten-Tresor-Dienst nicht initialisiert.
+629	Die Tresor-Daten sind beschädigt
+630	Der lokale Tresor konnte nicht sicher gelesen werden: %1\n\nUm vorhandene Anmeldedaten nicht zu überschreiben, erstellt Shellium nicht automatisch einen neuen Tresor.
+631	Der Master-Passwort-Schutz konnte nicht aktiviert werden
+632	Der aktuelle Zustand des Tresors erlaubt es nicht, den Master-Passwort-Schutz erneut zu aktivieren.
+633	Der Master-Passwort-Schutz konnte nicht deaktiviert werden
+634	Der Tresor hat keine Master-Passwort-Konfiguration zum Abgleich.
+635	Automatisch der innersten Ebene folgen
+636	Terminalverzeichnis folgen
+637	Einen Terminal-Server auswählen
+638	Fortsetzbare Übertragung bevorzugen
+639	Den Dateimanager im Vollbild anzeigen und lokale Dateien für das nebeneinander Kopieren aufklappen
+640	Vollbild
+641	Den Remote-Dateimanager schließen und die gesamte Breite an das Terminal zurückgeben
+642	Lokale Dateien
+643	Zum lokalen übergeordneten Verzeichnis wechseln
+644	Lokales Verzeichnis aktualisieren
+645	Größe
+646	Geändert
+647	Berechtigungen
+648	Eigentümer
+649	Remote-Dateien
+650	Zum übergeordneten Remote-Verzeichnis wechseln
+651	Das aktuelle Remote-Verzeichnis aktualisieren
+652	Wenn aktiviert, springt das Pfadfeld automatisch zu dem Remote-Verzeichnis, in dem sich das linke Terminal gerade befindet
+653	Vollbild verlassen und lokale Dateien einklappen
+654	Hochladen
+655	Dateien hochladen …
+656	Verzeichnis hochladen …
+657	Herunterladen
+658	Vorschau
+659	Aktuelle Übertragung pausieren oder fortsetzen
+660	Die aktuelle Übertragung oder die ausgewählte wartende Aufgabe abbrechen
+661	Fortsetzbare Übertragung
+662	An: Dateien mit wirklich identischem Inhalt werden übersprungen, und durch eine Unterbrechung hinterlassene Teilfragmente werden nach Verifizierung fortgesetzt;\nAus: alles wird vollständig erneut hochgeladen, unabhängig davon, ob der Inhalt übereinstimmt.
+663	Übertragungen laufen strikt der Reihe nach; wählen Sie einen wartenden Eintrag und klicken Sie auf 'Abwählen', um ihn direkt zu entfernen.
+664	Verzeichnis öffnen
+665	In das aktuelle Remote-Verzeichnis hochladen
+666	Dateien in das aktuelle Verzeichnis hochladen
+667	Ein Verzeichnis in das aktuelle Verzeichnis hochladen
+668	Berechtigungen ändern
+669	Remote-Verzeichnis aktualisieren
+670	Die aktuelle Übertragung fortsetzen
+671	Die aktuelle Übertragung pausieren
+672	Aufgabe abwählen
+673	%1 Einträge
+674	Erste Verbindung zu %1.\n\nSHA-256-Fingerabdruck:\n%2\n\nÜberprüfen Sie den Fingerabdruck über einen vertrauenswürdigen Kanal. Vertrauen und in known_hosts schreiben?
+675	Der von %1 zurückgegebene Hostschlüssel stimmt nicht mit dem lokalen Datensatz überein.\n\nNeuer SHA-256-Fingerabdruck:\n%2\n\nDies kann eine Server-Neuinstallation oder ein Schlüsselwechsel sein oder ein Man-in-the-Middle-Angriff. Überprüfen Sie den neuen Fingerabdruck zuerst über einen vertrauenswürdigen Kanal.\n\nBestätigen Sie, dass sich der Schlüssel geändert hat, und ersetzen Sie den alten Eintrag in known_hosts?
+676	Übertrage %1/%2: %3
+677	Ein Eintrag mit demselben Namen existiert bereits auf dem Remote
+678	Eine Datei mit demselben Namen existiert bereits auf dem Remote:\n%1
+679	Zum Hochladen eines Verzeichnisses muss diese Datei zuerst gelöscht werden. Ersetzen?
+680	Ersetzen
+681	Ein Verzeichnis mit demselben Namen existiert bereits auf dem Remote:\n%1
+682	Zusammenführen: vergleicht den Inhalt Datei für Datei und lädt nur die tatsächlich geänderten Dateien erneut hoch; zusätzliche Dateien auf dem Remote bleiben erhalten.\n\nErsetzen: löscht das gesamte Remote-Verzeichnis und lädt alles erneut hoch, sodass das Ergebnis exakt dem lokalen entspricht; zusätzliche Dateien auf dem Remote werden dauerhaft gelöscht.
+683	Zusammenführen
+684	Sichere Vorschau von %1 geladen
+685	Sichere Vorschau · %1
+686	Es werden nur die ersten %1 angezeigt; der Dateiinhalt ist abgeschnitten.
+687	Diese Datei ist keine unterstützte Textdatei oder sicheres Rasterbild; binärer Inhalt wird nicht angezeigt.\nMIME: %1
+688	%1 übertragen
+689	 · %1/s
+690	 · %1 übrig
+691	Ebene %1 · ⚠ vermutet · %2
+692	Ebene %1 · %2
+693	Das aktuelle Terminal ist noch nicht mit einem Server verbunden
+694	Ungültiger lokaler Pfad
+695	Das lokale Verzeichnis existiert nicht oder ist nicht zugänglich:\n%1
+696	Das lokale Verzeichnis konnte nicht durchsucht werden
+697	Keine Berechtigung, dieses Verzeichnis zu lesen:\n%1
+698	Pause
+699	Läuft: %1
+700	Pausiert
+701	In Bearbeitung
+702	Wartet
+703	Noch nicht verbunden
+704	Verbinden und wählen Sie zuerst einen Remote-Server.
+705	Remote-Pfad unbekannt
+706	Wechseln Sie zuerst in ein Remote-Verzeichnis und ziehen Sie dann lokale Dateien hinein.
+707	Nichts zum Hochladen
+708	Der abgelegte Eintrag existiert nicht, kann nicht gelesen werden oder ist ein nicht verfolgter Symlink.
+709	Hochladen %1 → %2
+710	%1 lokale Dateien zur Übertragungswarteschlange hinzugefügt
+711	Ersetzen-Hochladen %1 → %2
+712	Verzeichnis %1 zur Übertragungswarteschlange hinzugefügt
+713	Das Download-Ziel ist kein zugängliches Verzeichnis:\n%1
+714	Herunterladen %1 → %2
+715	Ungültiger Pfad
+716	Geben Sie einen absoluten Remote-Pfad ein, der mit / beginnt.
+717	Home-Verzeichnis wird gelesen …
+718	%1 wird gelesen …
+719	Eine oder mehrere hochzuladende Dateien auswählen
+720	Wechseln Sie zuerst im Remote-Dateimanager in ein Verzeichnis und starten Sie dann den Upload vom Terminal aus.
+721	Ein hochzuladendes Verzeichnis auswählen
+722	Pfad unbekannt
+723	Wechseln Sie zuerst in ein Remote-Verzeichnis und laden Sie dann das lokale Verzeichnis hoch.
+724	Verzeichnis-Upload bestätigen
+725	Das lokale Verzeichnis wird rekursiv hochgeladen:\n%1\n\nan den Remote-Speicherort:\n%2\n\nWenn auf dem Remote bereits ein Verzeichnis mit demselben Namen existiert, können Sie im nächsten Schritt zwischen Zusammenführen und Ersetzen wählen. Fortfahren?
+726	Einen Eintrag auswählen
+727	Eine herunterzuladende Remote-Datei oder ein Verzeichnis auswählen.
+728	Das lokale Verzeichnis für den Massen-Download wählen
+729	Wartender Eintrag abgebrochen: %1
+730	Abbruch der Übertragung angefordert; wird abgeschlossen …
+731	Fortsetzen
+732	Die aktuelle Übertragung fortsetzen
+733	Die Übertragung pausiert an der nächsten 64-KiB-Blockgrenze
+734	Übertragung fortgesetzt
+735	Vorschau nicht möglich
+736	Wählen Sie eine reguläre Remote-Datei; Verzeichnisse und Symlinks werden in der sicheren Vorschau nicht geöffnet.
+737	Sicheres Lesen der Vorschau von %1 …
+738	Wählen Sie eine Datei oder ein Verzeichnis zum Ändern der Berechtigungen.
+739	Remote-Berechtigungen ändern
+740	Geben Sie drei oder vier oktale Berechtigungsziffern ein (z. B. 0644, 0755):
+741	Ungültiges Berechtigungsformat
+742	Berechtigungen dürfen nur 0 bis 7 enthalten und müssen drei oder vier Ziffern lang sein.
+743	Der Berechtigungswert liegt außerhalb des von POSIX erlaubten Bereichs.
+744	Berechtigungen von %1 werden geändert …
+745	Wählen Sie eine Datei oder ein Verzeichnis zum Umbenennen.
+746	Neuer Name:
+747	Ungültiger Name
+748	Der Name darf das Pfadtrennzeichen / nicht enthalten.
+749	Wird umbenannt …
+750	Wählen Sie eine Datei oder ein leeres Verzeichnis zum Löschen.
+751	Sie sind dabei, %2 auf Server %1 dauerhaft zu löschen:\n\n%3\n\nDiese Aktion kann nicht rückgängig gemacht werden.
+752	Verzeichnis
+753	Datei
+754	\n\n⚠ Dieser Server wurde durch Auswerten von Terminalbefehlen vermutet und ist möglicherweise nicht der erwartete. Führen Sie 'hostname' im Terminal aus, um dies vor dem Fortfahren zu überprüfen.
+755	%1 wird gelöscht …
+756	Die Verzeichnisübertragung ist beendet (einige Einträge sind unvollständig)
+757	Abgebrochen
+758	Die Jump-Host-Verbindung wurde vorübergehend getrennt; erneuter Versuch (Versuch %1) …
+759	%1; zum Home-Verzeichnis zurückgekehrt
+760	Die innere SSH-Authentifizierung ist nicht abgeschlossen; geben Sie das Passwort direkt im Terminal erneut ein
+761	Anmeldedaten des inneren Servers eingeben
+762	Der Server hat die aktuellen Sitzungs-Anmeldedaten abgelehnt. Geben Sie ein neues Passwort oder eine Passphrase des privaten Schlüssels für %1 ein:
+763	Der Server unterstützt nur veraltete MAC-Algorithmen
+764	Der SFTP-Dienst von Server %1 bietet nur hmac-sha1.\n\nDieser Algorithmus ist veraltet; es wird empfohlen, die SSH-Konfiguration des Servers zu aktualisieren. Für diese Verbindung aktivieren und erneut versuchen?\n\n%2
+765	SFTP-Operation fehlgeschlagen
+766	Einstellungen
+767	Shellium %1
+768	Standardwerte wiederherstellen
+769	Erscheinungsbild
+770	Verbindungen & Sicherheit
+771	Kurzbefehl
+772	Oberflächensprache
+773	Anzeigesprache
+774	Die gesamte Oberfläche wechselt sofort. Bereits durchgelaufene Terminalausgabe behält ihre ursprüngliche Sprache.
+775	Hell
+776	Dunkel
+777	App-Design
+778	Erscheinungsbild der Oberfläche
+779	'Systemeinstellung folgen' synchronisiert automatisch, wenn das Betriebssystem zwischen hellem und dunklem Erscheinungsbild wechselt.
+780	Terminal-Farbschema
+781	Farbschemata suchen, z. B. Nord, Dark, Gruvbox
+782	App-Design folgen
+783	Keine passenden Farbschemata.
+784	Live-Vorschau
+785	 px
+786	Schriftart
+787	Monospace-Schriftart
+788	Schriftgröße
+789	Zeilenhöhe
+790	Zeichenabstand
+791	Block
+792	Unterstrich
+793	Balken
+794	Cursor
+795	Form
+796	Blinkender Cursor
+797	 Zeilen
+798	Sitzung
+799	Scrollback
+800	Das Verringern dieses Werts verwirft sofort den ältesten Verlauf über dem Limit; verworfener Inhalt kann nicht wiederhergestellt werden.
+801	Warnton
+802	Den System-Warnton abspielen, wenn ein Terminal-BEL-Byte empfangen wird.
+803	Autovervollständigung der Befehlszeile
+804	Nachdem Sie mindestens zwei Zeichen eingegeben haben, werden automatisch Vorschläge aus dem Befehlsverlauf des aktuellen Hosts angezeigt; standardmäßig aus.
+805	Bestätigung bei mehrzeiligem Einfügen
+806	Vor dem Einfügen mehrzeiligen Inhalts den vollständigen Inhalt anzeigen und um Bestätigung bitten; standardmäßig aus, d. h. direkt einfügen. Eine Bestätigung wird weiterhin erzwungen, wenn der Inhalt unsichtbare Zeichen enthält, die Terminal-Steuersequenzen einschleusen könnten.
+807	 mal
+808	 s
+809	Anmeldedaten-Tresor
+810	Anmeldedaten mit einem Master-Passwort schützen
+811	Sowohl das Aktivieren als auch das Deaktivieren erfordert ein Passwort; nach der Aktivierung können Sie auf der Host-Editor-Seite entsperren und den Klartext anzeigen.
+812	Beim Deaktivieren wird zuerst das aktuelle Master-Passwort überprüft, dann werden die Anmeldedaten auf lokale Verschlüsselung umgestellt und die Master-Passwort-Konfiguration gelöscht. Host-Passwörter werden weiterhin automatisch für Verbindungen verwendet, aber ihr Klartext kann nicht in der Oberfläche angezeigt werden und sie haben keinen Master-Passwort-Schutz mehr.
+813	Automatische Neuverbindung
+814	Bei Netzwerkfehlern automatisch neu verbinden
+815	Nur abnormale Trennungen erneut versuchen, die zuvor erfolgreich hergestellt wurden und keinen Remote-Exit-Status erhalten haben.
+816	Max. Versuche
+817	Anfängliche Wartezeit
+818	Spätere Versuche verwenden 2× exponentielles Backoff, bis zu 60 Sekunden.
+819	Ein normaler Exit, ein selbst durchgeführter Verbindungswechsel, ein erstmaliger Authentifizierungsfehler oder eine Hostschlüssel-Ablehnung lösen niemals eine automatische Neuverbindung aus.
+820	Globale Kurzbefehle
+821	Wenn Sie es leer lassen, wird der Kurzbefehl für diese Aktion entfernt; derselbe Kurzbefehl kann nicht zwei Aktionen zugewiesen werden.
+822	LLM-Verbindung
+823	Dienst-URL
+824	Basis-URL eines Gateways, das mit dem OpenAI-Chat-Completions-Protokoll kompatibel ist, ohne /chat/completions.
+825	Leer bedeutet, dass das Gateway keine Authentifizierung erfordert
+826	API-Schlüssel
+827	Wird mit jeder Anfrage als Bearer-Token gesendet, verschlüsselt im Anmeldedaten-Tresor gespeichert.
+828	Die Modellliste vom Server abrufen
+829	Modellliste aktualisieren
+830	Modellname
+831	Sie können ihn manuell eingeben oder auf die Aktualisieren-Schaltfläche rechts klicken, um die Server-Modellliste abzurufen und aus dem Dropdown auszuwählen.
+832	Denken aktivieren
+833	Das Modell bitten, vor der Antwort zu schlussfolgern; Antworten sind zuverlässiger, aber langsamer. Nur bei Gateways wirksam, die den Denkmodus unterstützen; wenn aus, lässt der Anfragetext dieses Feld weg.
+834	Anders als andere Einstellungen werden Änderungen an Adresse und Schlüssel nicht Zeichen für Zeichen gespeichert; klicken Sie auf 'Speichern', damit nicht jeder Tastendruck einen verschlüsselten Schreibvorgang auslöst.
+835	Der Konfigurationsdienst des KI-Assistenten ist nicht verfügbar
+836	Verbindung wird getestet …
+837	Modellliste wird abgerufen …
+838	Gespeichert
+839	Speichern fehlgeschlagen: %1
+840	Das aktuelle Fenster ist nicht mit einem Anmeldedaten-Tresor-Dienst verbunden; der Master-Passwort-Schutz kann nicht geändert werden.
+841	Der Tresor wurde zurückgesetzt
+842	Anmeldedaten wurden gelöscht, aber die Synchronisierung des Einstellungsstatus schlug fehl: %1
+843	Die Einstellungen wurden nicht vollständig gespeichert
+844	Der Master-Passwort-Schutz wurde umgeschaltet, aber das Schreiben anderer Einstellungen schlug fehl: %1\nNicht gespeicherte Änderungen wurden zurückgesetzt.
+845	Die Einstellungen konnten nicht gespeichert werden
+846	%1 (nicht installiert)
+847	Dieser ssh-Aufruf betritt keine interaktive Shell
+848	Dieser ssh-Aufruf fordert ausführliche OpenSSH-Ausgabe an
+849	Dieser ssh-Aufruf verwendet einen Verbindungspfad, den Shellium nicht originalgetreu reproduzieren kann
+850	Dieser ssh-Aufruf gibt eine Datei mit privatem Schlüssel auf dem Remote an
+851	Aus dem Befehl konnte kein Ziel-Host ausgewertet werden
+852	Dieser ssh-Aufruf führt nur einen einmaligen Befehl auf dem Remote aus
+853	Öffentlichen Schlüssel kopieren
+854	SSH-Schlüsselverwaltung
+855	Auswählen …
+856	Kann leer gelassen werden; für langlebige Schlüssel wird eine Passphrase empfohlen
+857	Dieselbe Passphrase erneut eingeben
+858	Algorithmus:
+859	Pfad des privaten Schlüssels:
+860	Schutz-Passphrase:
+861	Passphrase bestätigen:
+862	Kommentar des öffentlichen Schlüssels:
+863	RSA-Bits:
+864	Sicherheitshinweis: Shellium überschreibt niemals einen vorhandenen Schlüssel; der private Schlüssel wird atomar mit Berechtigungen gespeichert, die nur der aktuelle Benutzer lesen und schreiben kann, und die Passphrase wird nicht in die Datenbank geschrieben. Sichern Sie Ihren privaten Schlüssel selbst.
+865	Schlüsselpaar generieren
+866	Generieren
+867	Erforderlich für einen verschlüsselten privaten Schlüssel; nur während dieser Prüfung verwendet
+868	Vorhandener privater Schlüssel:
+869	Den öffentlichen Schlüssel prüfen und extrahieren
+870	Nach erfolgreicher Verifizierung wird hier der öffentliche Schlüssel im authorized_keys-Format angezeigt
+871	Prüfen / importieren
+872	Wählen, wo der neue private Schlüssel gespeichert wird
+873	Speicherpfad fehlt
+874	Wählen Sie, wo der neue private Schlüssel gespeichert wird.
+875	Passphrasen stimmen nicht überein
+876	Die beiden Schutz-Passphrasen stimmen nicht überein.
+877	Keine Algorithmen verfügbar
+878	Das aktuelle libssh-Build unterstützt die Generierung des geplanten SSH-Schlüsselalgorithmus nicht.
+879	Schlüsselgenerierung fehlgeschlagen
+880	Ein %1-Schlüssel wurde generiert.\nPrivater Schlüssel: %2\nÖffentlicher Schlüssel: %3
+881	Einen vorhandenen privaten SSH-Schlüssel auswählen
+882	Dateien mit privatem Schlüssel (*)
+883	Die Datei existiert nicht
+884	Wählen Sie eine vorhandene SSH-Datei mit privatem Schlüssel.
+885	Dieser private Schlüssel ist verschlüsselt; geben Sie die Passphrase ein und prüfen Sie erneut.
+886	Der private Schlüssel ist nicht verfügbar
+887	Das Format des privaten Schlüssels wird nicht unterstützt, die Datei ist beschädigt oder die Passphrase ist falsch.
+888	Verifizierung bestanden: %1%2. Sie können diese Datei im Feld 'Privater Schlüssel' des Host-Editors auswählen.
+889	, passphrasengeschützt
+890	Der SSH-Tunnel-Socket konnte nicht gebunden werden: %1
+891	Die SSH-Jump-Kette konnte nicht konfiguriert werden: %1
+892	Diese Ebene hat den Verbindungsaufbau noch nicht begonnen oder ist bereits fehlgeschlagen.
+893	Zeitüberschreitung bei der Verbindung zu %1.
+894	Der Benutzer hat die Änderung des Server-Hostschlüssels nicht bestätigt; die Verbindung wurde beendet.
+895	Der Benutzer hat den unbekannten Server-Hostschlüssel abgelehnt.
+896	Der Benutzer hat die Authentifizierung für %1 abgebrochen.
+897	Der SSH-Shell-Kanal konnte nicht erstellt werden: %1
+898	Der Server verweigerte die Zuweisung eines interaktiven PTY: %1
+899	Der Server verweigerte den Start einer interaktiven Shell: %1
+900	Die Verbindungs-Zustandsmaschine ist in einen undefinierten Zustand geraten.
+901	SSH-Authentifizierung fehlgeschlagen: %1. Prüfen Sie Passwort, privaten Schlüssel oder SSH-Agent.
+902	Die Authentifizierungs-Zustandsmaschine ist in einen undefinierten Zustand geraten.
+903	Zeitüberschreitung beim Hintergrundbefehl
+904	Der Hintergrundbefehlskanal konnte nicht geöffnet werden: %1
+905	Der Remote verweigerte die Ausführung des Hintergrundbefehls: %1
+906	Der Remote gab keinen Exit-Code zurück
+907	Exit-Code %1
+908	Die SSH-Sitzung für diese Ebene ist noch nicht hergestellt
+909	Der SFTP-Tunnel-Socket konnte nicht erstellt werden: %1
+910	Auf %1 konnte kein Weiterleitungskanal zugewiesen werden: %2
+911	Server %1 hatte eine Zeitüberschreitung bei der Weiterleitung an %2:%3 (%4 s)
+912	Server %1 konnte nicht an %2:%3 weiterleiten: %4
+913	Server %1 konnte nicht an %2:%3 relayen: %4
+914	Nach %1 s Warten immer noch nicht hergestellt
+915	Der Remote-Relay-Befehl wurde direkt nach dem Start beendet
+916	Die Relay-Zustandsmaschine ist in einen undefinierten Zustand geraten
+917	exec-Relay-Diagnose für Server %1: %2
+918	Die SSH-Sitzung hat die Authentifizierung nicht abgeschlossen
+919	Regel, Adresse und Port für das Remote-Lauschen müssen gültig sein
+920	Diese Remote-Weiterleitungsregel ist bereits gestartet oder wird gestartet
+921	Zeitüberschreitung beim Anfordern des Remote-Lauschens auf %1:%2
+922	Der Server verweigerte das Remote-Lauschen auf %1:%2: %3
+923	Abbrechen des Remote-Listeners %1:%2 fehlgeschlagen: %3
+924	Die äußere SSH-Sitzung wurde beendet
+925	Zeitüberschreitung beim Erstellen des inneren SSH-Weiterleitungskanals
+926	Die Root-SSH-Sitzung wurde beendet
+927	Zeitüberschreitung beim Warten darauf, dass der Server das Remote-Lauschen einrichtet
+928	Der Verbindungsplan ist leer oder der erste Hop ist ungültig
+929	Die SSH-Sitzung wurde beendet
+930	Der Remote gab kein Installationsergebnis zurück
+931	Die SSH-Sitzungsebene, die diese Anfrage trägt, ist bereits geschlossen
+932	Schreiben von Daten an das Remote-Terminal fehlgeschlagen: %1
+933	Die Host-Kette schlug bei %1 fehl: %2
+934	Es ist keine bereite Sitzung verfügbar, um eine innere Verbindung herzustellen
+935	Die Sitzung, die diese innere Verbindung trägt, ist bereits geschlossen
+936	SFTP-Tunnel-Anfrage abgebrochen
+937	Der Remote-Skript-Installationskanal konnte nicht erstellt werden
+938	Die Remote-Lausch-Anfrage wurde abgebrochen
+939	Die äußere SSH-Sitzung, die dieses Ziel trägt, ist nicht verfügbar
+940	Die Remote-Lausch-Anfrage wurde gestoppt
+941	Die Root-SSH-Sitzung ist noch nicht bereit
+942	Tag-Farbe %1
+943	Nicht verbunden
+944	UTF-8 · 80×24
+945	Aktuelle Terminalkodierung und Spalten × Zeilen
+946	Den Remote-Dateimanager für die aktuelle Sitzung anzeigen (Strg+Umschalt+F)
+947	Remote-Dateimanager
+948	UTF-8 · %1×%2
+949	Warten auf das innere SSH-Passwort; diese Eingabe wird auch für die SFTP-Sitzung verwendet
+950	Innere SSH-Verbindung fehlgeschlagen
+951	Innere SSH-Verbindung abgebrochen
+952	Innere SSH-Authentifizierung erfolgreich; der Dateimanager ist zum aktuellen Server gewechselt
+953	Lokales Terminal wird gestartet …
+954	Lokales Terminal wird gestartet …\r\n
+955	Lokales Terminal gestartet
+956	Lokaler Terminalfehler
+957	Lokales Terminal beendet (Exit-Code %1)
+958	Verbinde mit %1 …
+959	Verbinde mit %1 …\r\n
+960	Verbunden mit %1
+961	Die Shell-Integration für %1 ist nicht aktiviert; die verschachtelte Erkennung ist eingeschränkt: %2
+962	Zugriff verweigert, bitte erneut versuchen.\r\nPasswort für %1:
+963	Passwort für %1:
+964	\r\nDie verschachtelte Verbindung zu %1 konnte nicht hergestellt werden: %2\r\n
+965	Verschachtelte Verbindung fehlgeschlagen: %1
+966	Dieser Server hat TCP-Weiterleitung deaktiviert
+967	Die verschachtelte Verbindung wurde nicht übernommen: %1
+968	Verbindung fehlgeschlagen
+969	Server %1 bietet nur hmac-sha1, das die Standard-Sicherheitsrichtlinie nicht zum Abschließen der Verbindung verwenden kann.\n\nhmac-sha1 ist veraltet; es wird empfohlen, die SSH-Konfiguration des Servers zu aktualisieren. Diesen Algorithmus nur für diese Verbindung aktivieren und erneut versuchen?\n\nDetails: %2
+970	Verbindung abgebrochen: Der Server erfordert hmac-sha1, das deaktiviert ist. Aktualisieren Sie die Server-Konfiguration.
+971	Die SSH-Verbindung wurde durch einen Netzwerkfehler unterbrochen; automatische Neuverbindung wird vorbereitet
+972	Die SSH-Verbindung wurde durch einen Netzwerkfehler unterbrochen
+973	Die SSH-Verbindung wurde beendet (Exit-Status %1)
+974	Der von %1 zurückgegebene Hostschlüssel stimmt nicht mit dem lokalen Datensatz überein.\n\nNeuer SHA-256-Fingerabdruck:\n%2\n\nDies kann eine Server-Neuinstallation oder ein Schlüsselwechsel sein oder ein Man-in-the-Middle-Angriff. Überprüfen Sie den neuen Fingerabdruck zuerst mit dem Server-Administrator über einen vertrauenswürdigen Kanal.\n\nBestätigen Sie, dass sich der Schlüssel geändert hat, und ersetzen Sie den alten Eintrag in known_hosts?
+975	Verbinde mit %1
+976	Eine verschachtelte Verbindung zu %1 über den aktuellen Server wird hergestellt …
+977	Den Remote-Dateimanager für die aktuelle Sitzung verbergen (Strg+Umschalt+F)
+978	Drücken Sie r, um sich erneut mit %1 zu verbinden, x, um diesen Tab zu schließen
+979	\r\nKein Server für eine Neuverbindung; drücken Sie x, um diesen Tab zu schließen\r\n
+980	\r\nManuelle Neuverbindung …\r\n
+981	Die automatische Neuverbindung hat ihr Limit von %1 Versuchen erreicht
+982	Automatische Neuverbindung mit %2 in %1 s (Versuch %3/%4)
+983	Das aktuelle Terminal ist nicht bereit; der Befehl kann nicht ausgeführt werden
+984	Das aktuelle Terminal ist nicht bereit; der Befehl kann nicht eingefügt werden
+985	Innere SSH-Anmeldedaten synchronisiert; der Dateimanager verbindet sich mit dem aktuellen Server
+986	Inneres SSH-Passwort empfangen; warte auf Bestätigung des Servers
+987	%1 (verschachteltes Ziel)
+988	Verschachteltes SSH-Ziel erkannt: %1
+989	Zum Server zurückgekehrt: %1
+990	Dieses ssh wurde nicht übernommen (%1); es wurde dem Remote überlassen, es selbst auszuführen
+991	Shellium konnte diese Verbindung nicht übernehmen (%1); sie wird zur direkten Ausführung an das Remote-ssh übergeben.\r\n
+992	%1, auf %2 zurückgefallen
+993	Der Einstellungsdienst hat keine App-Datenbank verfügbar
+994	Der Wert '%2' der Einstellung %1 ist keine Ganzzahl; der Standardwert wurde wiederhergestellt
+995	Der Wert '%2' der Einstellung %1 ist kein Boolescher Wert; der Standardwert wurde wiederhergestellt
+996	Unbekanntes Design '%1'; auf Systemeinstellung zurückgesetzt
+997	Unbekanntes Terminal-Farbschema '%1'; auf das Standardschema zurückgesetzt
+998	Zeichenabstand '%1' ist ungültig; der Standardwert wurde wiederhergestellt
+999	Unbekannte Cursor-Form '%1'; auf Block-Cursor zurückgesetzt
+1000	Der Kurzbefehl '%2' für Aktion '%1' ist ungültig; der Standardwert wurde wiederhergestellt
+1001	; alle Kurzbefehle wurden auf ihre Standardwerte zurückgesetzt
+1002	In das aktuelle Remote-Verzeichnis hochladen …
+1003	Der Inhalt hat %1 Zeilen und kann nach dem Senden sofort mehrere Befehle ausführen.
+1004	%1 unsichtbare Zeichen entfernt, die Terminal-Steuersequenzen einschleusen könnten.
+1005	Den folgenden Inhalt an das aktuelle Terminal senden?
+1006	Terminal-Einfügen bestätigen
+1007	Einfügen
+1008	Vermutet ·
+1009	Noch nicht verbunden; die abgelegten Dateien können nicht hochgeladen werden.
+1010	Dies ist ein lokales Terminal; abgelegte Dateien können nicht hochgeladen werden.
+1011	Das aktuelle Verzeichnis ist noch nicht bekannt; drücken Sie einmal die Eingabetaste im Terminal und legen Sie dann die Dateien ab.
+1012	In das aktuelle Verzeichnis hochladen?
+1013	Die %1 abgelegten lokalen Dateien in das aktuelle Verzeichnis von %2 hochladen:\n%3
+1014	Master-Passwort-Schutz aktivieren
+1015	Master-Passwort-Schutz deaktivieren
+1016	Den Shellium-Tresor erstellen
+1017	Den Shellium-Tresor entsperren
+1018	Legen Sie ein neues Master-Passwort fest. Vorhandene Host-Anmeldedaten werden sicher zum Master-Passwort-Schutz migriert.
+1019	Geben Sie das aktuelle Master-Passwort ein, um das Deaktivieren zu bestätigen. Vorhandene Anmeldedaten werden auf lokale Verschlüsselung migriert, dann wird die Master-Passwort-Konfiguration gelöscht.
+1020	Legen Sie ein Master-Passwort fest. Shellium leitet den Schlüssel mit Argon2id ab und verschlüsselt gespeicherte SSH-Anmeldedaten mit XChaCha20-Poly1305.
+1021	Der Tresor ist gesperrt. Geben Sie das Master-Passwort ein, um gespeicherte SSH-Anmeldedaten zu verwenden.
+1022	Mindestens 8 Zeichen
+1023	Master-Passwort eingeben
+1024	Zur Bestätigung erneut eingeben
+1025	Master-Passwort
+1026	Master-Passwort bestätigen
+1027	Passwort vergessen?
+1028	Das alte Passwort kann nicht wiederhergestellt werden; löschen Sie alle gespeicherten Anmeldedaten und beginnen Sie neu
+1029	Das Master-Passwort kann nicht wiederhergestellt werden; bewahren Sie es sicher auf. Bei Verlust kann der Tresor nur zurückgesetzt werden, und gespeicherte SSH-Passwörter und Passphrasen privater Schlüssel werden dauerhaft gelöscht.
+1030	Schutz aktivieren
+1031	Schließen bestätigen
+1032	Tresor erstellen
+1033	Entsperren
+1034	Tresor entsperren
+1035	Tresor zurücksetzen
+1036	Die alten Anmeldedaten konnten nicht wiederhergestellt werden
+1037	Das Zurücksetzen löscht dauerhaft alle gespeicherten SSH-Passwörter und Passphrasen privater Schlüssel und entfernt ihre Zuordnung zu Hosts. Host-Adressen, Konten, Ports, Pfade privater Schlüsseldateien, Gruppen und Host-Ketten bleiben erhalten. Diese Aktion kann nicht rückgängig gemacht werden.
+1038	Geben Sie '%1' zur Bestätigung ein:
+1039	Dauerhaft löschen und zurücksetzen
+1040	Der Tresor konnte nicht zurückgesetzt werden: %1
+1041	Schreiben in die lokale Datenbank fehlgeschlagen
+1042	Geben Sie das Master-Passwort ein.
+1043	Das Master-Passwort muss mindestens 8 Zeichen lang sein, um das Risiko des Offline-Ratens zu verringern.
+1044	Die beiden Master-Passwörter stimmen nicht überein. Bitte bestätigen Sie erneut.
+1045	Der Master-Passwort-Schutz konnte nicht aktiviert werden: %1
+1046	Der Master-Passwort-Schutz konnte nicht deaktiviert werden: %1
+1047	Der Tresor konnte nicht erstellt werden: %1
+1048	Der Tresor konnte nicht entsperrt werden: %1
