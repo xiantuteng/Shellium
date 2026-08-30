@@ -4818,20 +4818,12 @@ Reconnecting manually…<byte value="xd" />
 <context>
     <name>WorkspaceSidebarWidget</name>
     <message>
-        <source>Horizontal</source>
-        <translation type="unfinished">水平</translation>
+        <source>Switch view</source>
+        <translation type="unfinished">切換檢視</translation>
     </message>
     <message>
-        <source>Vertical</source>
-        <translation type="unfinished">垂直</translation>
-    </message>
-    <message>
-        <source>Grid</source>
-        <translation type="unfinished">網格</translation>
-    </message>
-    <message>
-        <source>Switch</source>
-        <translation type="unfinished">切換</translation>
+        <source>Tiled view</source>
+        <translation type="unfinished">分割檢視</translation>
     </message>
     <message>
         <source>Drag a terminal tab into the current terminal page or this sidebar to create or extend a workspace.</source>

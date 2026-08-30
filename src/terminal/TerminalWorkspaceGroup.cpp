@@ -2,32 +2,73 @@
 
 #include "terminal/TerminalWorkspace.h"
 
-#include <QComboBox>
+#include <QAbstractButton>
+#include <QApplication>
 #include <QCursor>
 #include <QEvent>
 #include <QFrame>
-#include <QGridLayout>
 #include <QLabel>
 #include <QListWidget>
 #include <QListWidgetItem>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QPlainTextEdit>
 #include <QPointer>
+#include <QPushButton>
 #include <QSignalBlocker>
+#include <QSplitter>
 #include <QStyle>
 #include <QTimer>
 #include <QVBoxLayout>
 
 #include <algorithm>
-#include <cmath>
 #include <functional>
 #include <utility>
 
+namespace {
+
+/** @brief 会话状态栏容器的对象名，见 TerminalPane 构造。分屏拖动以它作为把手。 */
+const char *const kSessionHeaderObjectName = "terminalSessionStatusBar";
+
 /**
- * @brief 为工作空间中的单个终端绘制选中、悬停和未选中三态边框。
+ * @brief 取一个成员终端当前的背景色，作为工作空间容器与卡片的底色。
  *
- * 未选中态不绘制任何边框；悬停态绘制虚线圆角矩形；选中态绘制实线圆角矩形。事件过滤
- * 安装到终端的全部既有子控件上，因此点击终端正文、滚动条或会话标题都能选中同一成员。
+ * 工作空间的空隙、内衬和卡片底必须与终端会话背景保持一致，否则深色终端四周会出现一圈
+ * 突兀的浅色（应用在浅色主题下的 QPalette::Window/Base）。终端主题色写在 TerminalView 的
+ * QPalette::Base 上；读不到时回退到与标题栏一致的深色，而不是应用窗口色。
+ */
+[[nodiscard]] QColor terminalChromeBackground(const TerminalWorkspace *workspace)
+{
+    if (workspace != nullptr) {
+        if (const auto *view =
+                workspace->findChild<QPlainTextEdit *>(QStringLiteral("TerminalView"))) {
+            const QColor base = view->palette().color(QPalette::Base);
+            if (base.isValid()) {
+                return base;
+            }
+        }
+    }
+    return QColor(QStringLiteral("#1c2333"));
+}
+
+/** @brief 判断某个控件是否处在终端会话状态栏内（用于识别分屏拖动把手）。 */
+[[nodiscard]] bool isWithinSessionHeader(const QObject *object)
+{
+    for (const QObject *node = object; node != nullptr; node = node->parent()) {
+        if (node->objectName() == QLatin1String(kSessionHeaderObjectName)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+} // namespace
+
+/**
+ * @brief 为工作空间中的单个终端绘制三态边框，并把会话状态栏变成分屏拖动把手。
+ *
+ * 事件过滤器安装到终端的全部既有子控件上：点击终端正文/滚动条选中该成员；在会话状态栏
+ * 上按下并拖动则发起分屏停靠拖动（浮动快照跟随光标，落点由 TerminalWorkspaceGroup 高亮）。
  */
 class WorkspaceTerminalFrame final : public QFrame {
 public:
@@ -70,22 +111,92 @@ public:
         m_selectionCallback = std::move(callback);
     }
 
+    /** @brief 注册分屏拖动三阶段回调（开始 / 移动 / 结束），参数为鼠标全局坐标。 */
+    void setDockDragCallbacks(std::function<void()> begin,
+                              std::function<void(const QPoint &)> move,
+                              std::function<void(const QPoint &)> end)
+    {
+        m_dockDragBegin = std::move(begin);
+        m_dockDragMove = std::move(move);
+        m_dockDragEnd = std::move(end);
+    }
+
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override
     {
-        Q_UNUSED(watched)
-        if (event->type() == QEvent::MouseButtonPress) {
-            const auto *mouseEvent = static_cast<QMouseEvent *>(event);
-            if (mouseEvent->button() == Qt::LeftButton && m_selectionCallback) {
+        switch (event->type()) {
+        case QEvent::MouseButtonPress: {
+            auto *mouseEvent = static_cast<QMouseEvent *>(event);
+            if (mouseEvent->button() != Qt::LeftButton) {
+                break;
+            }
+            if (m_selectionCallback) {
                 m_selectionCallback();
             }
-        } else if (event->type() == QEvent::Enter || event->type() == QEvent::MouseMove) {
+            // 会话状态栏（非按钮区域）按下即进入“可能拖动”；正文/滚动条按下只做选中。
+            const bool onHeaderHandle = isWithinSessionHeader(watched)
+                && qobject_cast<QAbstractButton *>(watched) == nullptr;
+            if (onHeaderHandle && m_dockDragBegin) {
+                m_dockPressGlobal = mouseEvent->globalPosition().toPoint();
+                m_dockPressed = true;
+                m_dockDragging = false;
+            }
+            break;
+        }
+        case QEvent::MouseMove: {
+            auto *mouseEvent = static_cast<QMouseEvent *>(event);
+            if (m_dockPressed && mouseEvent->buttons().testFlag(Qt::LeftButton)) {
+                const QPoint global = mouseEvent->globalPosition().toPoint();
+                if (!m_dockDragging
+                    && (global - m_dockPressGlobal).manhattanLength()
+                        > QApplication::startDragDistance()) {
+                    m_dockDragging = true;
+                    createDragGhost();
+                    if (m_dockDragBegin) {
+                        m_dockDragBegin();
+                    }
+                }
+                if (m_dockDragging) {
+                    moveDragGhost(global);
+                    if (m_dockDragMove) {
+                        m_dockDragMove(global);
+                    }
+                    return true;
+                }
+                break;
+            }
             if (!m_hovered) {
                 m_hovered = true;
                 setProperty("workspaceHovered", true);
                 update();
             }
-        } else if (event->type() == QEvent::Leave) {
+            break;
+        }
+        case QEvent::Enter:
+            if (!m_hovered) {
+                m_hovered = true;
+                setProperty("workspaceHovered", true);
+                update();
+            }
+            break;
+        case QEvent::MouseButtonRelease: {
+            auto *mouseEvent = static_cast<QMouseEvent *>(event);
+            if (mouseEvent->button() == Qt::LeftButton && m_dockPressed) {
+                const bool wasDragging = m_dockDragging;
+                const QPoint global = mouseEvent->globalPosition().toPoint();
+                m_dockPressed = false;
+                m_dockDragging = false;
+                destroyDragGhost();
+                if (wasDragging) {
+                    if (m_dockDragEnd) {
+                        m_dockDragEnd(global);
+                    }
+                    return true;
+                }
+            }
+            break;
+        }
+        case QEvent::Leave: {
             // 子控件之间移动会连续产生 Leave/Enter。延迟到本轮事件结束后检查全局指针是否
             // 真的离开整个框，避免虚线在终端正文与滚动条之间闪烁。
             QPointer<WorkspaceTerminalFrame> guard(this);
@@ -101,6 +212,10 @@ protected:
                     guard->update();
                 }
             });
+            break;
+        }
+        default:
+            break;
         }
         return false;
     }
@@ -114,10 +229,11 @@ protected:
         const QRectF cardRect = QRectF(rect()).adjusted(1.5, 1.5, -1.5, -1.5);
         constexpr qreal radius = 10.0;
 
-        // 圆角卡片底：始终绘制，让网格里的每个终端都是一块独立的深色卡片而不是贴边裸终端。
-        // 终端控件本身不透明，只有 6px 内衬和四个圆角会露出这层底色。
+        // 圆角卡片底：始终绘制，让每个终端都是一块独立的深色卡片而不是贴边裸终端。
+        // 终端控件本身不透明，只有 6px 内衬和四个圆角会露出这层底色——因此必须取终端自己
+        // 的背景色，浅色主题下的 QPalette::Base 会在深色终端四周留下突兀的白边。
         painter.setPen(Qt::NoPen);
-        painter.setBrush(palette().color(QPalette::Base));
+        painter.setBrush(terminalChromeBackground(m_workspace));
         painter.drawRoundedRect(cardRect, radius, radius);
 
         // 三态边框：未选中淡实线、Hover 虚线、选中高对比实线；三者都画，避免切换时卡片
@@ -155,25 +271,185 @@ private:
         }
     }
 
+    /** @brief 创建跟随光标的浮动快照：无边框、鼠标穿透、不抢焦点的顶层控件。 */
+    void createDragGhost()
+    {
+        if (!m_dragGhost.isNull()) {
+            return;
+        }
+        const QPixmap shot = grab().scaled(width() / 2,
+                                           height() / 2,
+                                           Qt::KeepAspectRatio,
+                                           Qt::SmoothTransformation);
+        auto *ghost = new QLabel(nullptr,
+                                 Qt::ToolTip | Qt::FramelessWindowHint
+                                     | Qt::WindowTransparentForInput
+                                     | Qt::NoDropShadowWindowHint);
+        ghost->setObjectName(QStringLiteral("WorkspaceDockDragGhost"));
+        ghost->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+        ghost->setAttribute(Qt::WA_ShowWithoutActivating, true);
+        ghost->setAttribute(Qt::WA_TranslucentBackground, true);
+        ghost->setWindowOpacity(0.85);
+        ghost->setPixmap(shot);
+        ghost->resize(shot.size());
+        m_dragGhost = ghost;
+    }
+
+    void moveDragGhost(const QPoint &globalPosition)
+    {
+        if (m_dragGhost.isNull()) {
+            return;
+        }
+        m_dragGhost->move(globalPosition.x() - m_dragGhost->width() / 2,
+                          globalPosition.y() + 10);
+        if (!m_dragGhost->isVisible()) {
+            m_dragGhost->show();
+            m_dragGhost->raise();
+        }
+    }
+
+    void destroyDragGhost()
+    {
+        if (!m_dragGhost.isNull()) {
+            m_dragGhost->deleteLater();
+            m_dragGhost.clear();
+        }
+    }
+
     TerminalWorkspace *m_workspace = nullptr;
     std::function<void()> m_selectionCallback;
+    std::function<void()> m_dockDragBegin;
+    std::function<void(const QPoint &)> m_dockDragMove;
+    std::function<void(const QPoint &)> m_dockDragEnd;
+    QPointer<QWidget> m_dragGhost;
+    QPoint m_dockPressGlobal;
+    bool m_dockPressed = false;
+    bool m_dockDragging = false;
     bool m_selected = false;
     bool m_hovered = false;
+};
+
+/**
+ * @brief 分屏拖动时覆盖在工作空间内容区之上的落点高亮层。
+ *
+ * 平时隐藏、对鼠标透明；拖动期间由 TerminalWorkspaceGroup 显示并置顶，按命中的目标半区
+ * 填一块半透明高亮，明确告诉用户松手后新分块会落在哪。
+ */
+class WorkspaceDockOverlay final : public QWidget {
+public:
+    explicit WorkspaceDockOverlay(QWidget *parent)
+        : QWidget(parent)
+    {
+        setObjectName(QStringLiteral("WorkspaceDockOverlay"));
+        setAttribute(Qt::WA_TransparentForMouseEvents, true);
+        setAttribute(Qt::WA_NoSystemBackground, true);
+        setAttribute(Qt::WA_TranslucentBackground, true);
+        hide();
+    }
+
+    /** @brief 设置当前高亮矩形（本控件局部坐标）；空矩形表示无有效落点。 */
+    void setZone(const QRect &zone)
+    {
+        if (m_zone == zone) {
+            return;
+        }
+        m_zone = zone;
+        update();
+    }
+
+protected:
+    void paintEvent(QPaintEvent *) override
+    {
+        if (m_zone.isEmpty()) {
+            return;
+        }
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        QColor accent = palette().color(QPalette::Highlight);
+        QColor fill = accent;
+        fill.setAlpha(70);
+        painter.setBrush(fill);
+        accent.setAlpha(220);
+        painter.setPen(QPen(accent, 2.0));
+        painter.drawRoundedRect(QRectF(m_zone).adjusted(1.5, 1.5, -1.5, -1.5), 8.0, 8.0);
+    }
+
+private:
+    QRect m_zone;
 };
 
 TerminalWorkspaceGroup::TerminalWorkspaceGroup(QWidget *parent)
     : QWidget(parent)
     , m_content(new QWidget(this))
-    , m_grid(new QGridLayout(m_content))
 {
     setObjectName(QStringLiteral("TerminalWorkspaceGroup"));
     auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(0);
     layout->addWidget(m_content);
-    m_grid->setContentsMargins(8, 8, 8, 8);
-    m_grid->setHorizontalSpacing(8);
-    m_grid->setVerticalSpacing(8);
+
+    m_contentLayout = new QVBoxLayout(m_content);
+    m_contentLayout->setContentsMargins(8, 8, 8, 8);
+    m_contentLayout->setSpacing(0);
+    m_splitRoot = makeSplitter(Qt::Horizontal);
+    m_splitRoot->setObjectName(QStringLiteral("WorkspaceSplitRoot"));
+    m_contentLayout->addWidget(m_splitRoot);
+
+    m_dockOverlay = new WorkspaceDockOverlay(m_content);
+}
+
+QSplitter *TerminalWorkspaceGroup::makeSplitter(const Qt::Orientation orientation)
+{
+    auto *splitter = new QSplitter(orientation, m_content);
+    splitter->setObjectName(QStringLiteral("WorkspaceSplitNode"));
+    splitter->setChildrenCollapsible(false);
+    splitter->setOpaqueResize(true);
+    splitter->setHandleWidth(8);
+    return splitter;
+}
+
+void TerminalWorkspaceGroup::equalizeSplitter(QSplitter *splitter)
+{
+    if (splitter == nullptr) {
+        return;
+    }
+    const int count = splitter->count();
+    if (count <= 1) {
+        return;
+    }
+    const int extent = splitter->orientation() == Qt::Horizontal ? splitter->width()
+                                                                 : splitter->height();
+    const int each = std::max(1, extent / count);
+    QList<int> sizes;
+    sizes.reserve(count);
+    for (int index = 0; index < count; ++index) {
+        sizes.append(each);
+    }
+    splitter->setSizes(sizes);
+}
+
+void TerminalWorkspaceGroup::pruneSplitter(QSplitter *splitter)
+{
+    if (splitter == nullptr || splitter == m_splitRoot) {
+        return;
+    }
+    auto *grandParent = qobject_cast<QSplitter *>(splitter->parentWidget());
+    if (splitter->count() == 0) {
+        splitter->setParent(nullptr);
+        splitter->deleteLater();
+        pruneSplitter(grandParent);
+        return;
+    }
+    if (splitter->count() == 1 && grandParent != nullptr) {
+        QWidget *only = splitter->widget(0);
+        const int index = grandParent->indexOf(splitter);
+        const QList<int> sizes = grandParent->sizes();
+        grandParent->insertWidget(index, only); // reparents `only` out of `splitter`
+        splitter->setParent(nullptr);
+        splitter->deleteLater();
+        grandParent->setSizes(sizes);
+        pruneSplitter(grandParent);
+    }
 }
 
 void TerminalWorkspaceGroup::addTerminal(TerminalWorkspace *workspace, const QString &title)
@@ -183,10 +459,13 @@ void TerminalWorkspaceGroup::addTerminal(TerminalWorkspace *workspace, const QSt
     }
     auto *frame = new WorkspaceTerminalFrame(workspace, m_content);
     frame->setSelectionCallback([this, workspace]() { setActiveTerminal(workspace); });
-    // 从 QTabWidget 移出的非当前页会带着显式 hidden 状态。仅重设父对象并加入布局不会
-    // 自动清除该状态，结果是新拖入的终端虽然已在模型中，网格内却是空白的，也无法
-    // 再作为后续拖放目标。在框架已完成重挂后显式 show()；切换模式仍会由下方
-    // refreshSelection() 按活动成员隐藏整个 frame，不会因此把多个终端同时露出。
+    frame->setDockDragCallbacks(
+        [this, workspace]() { beginDockDrag(workspace); },
+        [this](const QPoint &global) { updateDockDrag(global); },
+        [this](const QPoint &global) { endDockDrag(global); });
+    // 从 QTabWidget 移出的非当前页会带着显式 hidden 状态。仅重设父对象不会自动清除它，
+    // 结果是新拖入的终端虽已在模型中、树里却是空白。重挂完成后显式 show()；切换模式仍会
+    // 由 refreshSelection() 按活动成员隐藏整个 frame。
     workspace->show();
     m_terminals.append(workspace);
     m_frames.insert(workspace, frame);
@@ -194,6 +473,8 @@ void TerminalWorkspaceGroup::addTerminal(TerminalWorkspace *workspace, const QSt
     if (m_activeTerminal == nullptr) {
         m_activeTerminal = workspace;
     }
+    m_splitRoot->addWidget(frame);
+    equalizeSplitter(m_splitRoot);
     rebuildLayout();
     emit terminalsChanged();
 }
@@ -205,10 +486,13 @@ bool TerminalWorkspaceGroup::takeTerminal(TerminalWorkspace *workspace)
         return false;
     }
     WorkspaceTerminalFrame *frame = m_frames.take(workspace);
-    m_grid->removeWidget(frame);
+    auto *oldParent = qobject_cast<QSplitter *>(frame->parentWidget());
+    // 先把终端还给调用方，再销毁承载它的 frame；顺序反了会把仍在运行的会话一起删掉。
     workspace->setParent(this);
     workspace->show();
+    frame->setParent(nullptr);
     frame->deleteLater();
+    pruneSplitter(oldParent);
     m_terminals.removeAt(index);
     m_titles.remove(workspace);
     if (m_activeTerminal == workspace) {
@@ -220,6 +504,73 @@ bool TerminalWorkspaceGroup::takeTerminal(TerminalWorkspace *workspace)
     rebuildLayout();
     emit terminalsChanged();
     return true;
+}
+
+void TerminalWorkspaceGroup::dockTerminal(TerminalWorkspace *source,
+                                          TerminalWorkspace *target,
+                                          const DockEdge edge)
+{
+    WorkspaceTerminalFrame *sourceFrame = m_frames.value(source);
+    WorkspaceTerminalFrame *targetFrame = target == nullptr ? nullptr : m_frames.value(target);
+    if (sourceFrame == nullptr || sourceFrame == targetFrame) {
+        return;
+    }
+
+    // 1. 从当前父节点摘除，随后收拾旧父。
+    auto *oldParent = qobject_cast<QSplitter *>(sourceFrame->parentWidget());
+    sourceFrame->setParent(nullptr);
+
+    const bool wantHorizontal = edge == DockEdge::Left || edge == DockEdge::Right;
+    const Qt::Orientation want = wantHorizontal ? Qt::Horizontal : Qt::Vertical;
+    const bool sourceBefore = edge == DockEdge::Left || edge == DockEdge::Top;
+
+    if (targetFrame == nullptr) {
+        // 停靠到最外层：始终作用在根节点上，根节点本身永不被替换，只在需要反向时向内嵌套。
+        if (m_splitRoot->count() <= 1) {
+            m_splitRoot->setOrientation(want);
+            m_splitRoot->insertWidget(sourceBefore ? 0 : m_splitRoot->count(), sourceFrame);
+        } else if (m_splitRoot->orientation() == want) {
+            m_splitRoot->insertWidget(sourceBefore ? 0 : m_splitRoot->count(), sourceFrame);
+        } else {
+            QSplitter *inner = makeSplitter(m_splitRoot->orientation());
+            while (m_splitRoot->count() > 0) {
+                inner->addWidget(m_splitRoot->widget(0));
+            }
+            m_splitRoot->setOrientation(want);
+            m_splitRoot->addWidget(inner);
+            m_splitRoot->insertWidget(sourceBefore ? 0 : 1, sourceFrame);
+            equalizeSplitter(inner);
+        }
+        equalizeSplitter(m_splitRoot);
+    } else {
+        auto *parent = qobject_cast<QSplitter *>(targetFrame->parentWidget());
+        if (parent == nullptr) {
+            // 理论上不会发生：每个 frame 都挂在某个 QSplitter 下。安全回退到根。
+            m_splitRoot->addWidget(sourceFrame);
+            equalizeSplitter(m_splitRoot);
+        } else if (parent->orientation() == want) {
+            const int targetIndex = parent->indexOf(targetFrame);
+            parent->insertWidget(sourceBefore ? targetIndex : targetIndex + 1, sourceFrame);
+            equalizeSplitter(parent);
+        } else {
+            const int targetIndex = parent->indexOf(targetFrame);
+            const QList<int> parentSizes = parent->sizes();
+            QSplitter *nested = makeSplitter(want);
+            parent->insertWidget(targetIndex, nested);
+            nested->addWidget(targetFrame); // reparents targetFrame out of `parent`
+            nested->insertWidget(sourceBefore ? 0 : 1, sourceFrame);
+            if (parentSizes.size() == parent->count()) {
+                parent->setSizes(parentSizes);
+            }
+            equalizeSplitter(nested);
+        }
+    }
+
+    pruneSplitter(oldParent);
+    sourceFrame->show();
+    setActiveTerminal(source);
+    rebuildLayout();
+    emit terminalsChanged();
 }
 
 QList<TerminalWorkspace *> TerminalWorkspaceGroup::terminals() const
@@ -269,36 +620,19 @@ void TerminalWorkspaceGroup::setLayoutMode(const LayoutMode mode)
 
 void TerminalWorkspaceGroup::rebuildLayout()
 {
-    for (WorkspaceTerminalFrame *frame : std::as_const(m_frames)) {
-        m_grid->removeWidget(frame);
+    // 容器与内容区跟随终端会话背景一起变深，让分块之间的空隙、外边距和标题栏融为一体，
+    // 而不是露出应用在浅色主题下的窗口色。
+    const QColor chrome = terminalChromeBackground(m_terminals.value(0));
+    for (QWidget *surface : {static_cast<QWidget *>(this), m_content}) {
+        QPalette surfacePalette = surface->palette();
+        surfacePalette.setColor(QPalette::Window, chrome);
+        surface->setPalette(surfacePalette);
+        surface->setAutoFillBackground(true);
     }
 
     const bool switchMode = m_layoutMode == LayoutMode::Switch;
-    const int terminalCount = m_terminals.size();
-    const int gridColumns = terminalCount <= 1
-        ? 1
-        : static_cast<int>(std::ceil(std::sqrt(static_cast<double>(terminalCount))));
-    for (int index = 0; index < terminalCount; ++index) {
-        TerminalWorkspace *workspace = m_terminals.at(index);
-        WorkspaceTerminalFrame *frame = m_frames.value(workspace);
-        int row = 0;
-        int column = 0;
-        switch (m_layoutMode) {
-        case LayoutMode::Horizontal:
-            column = index;
-            break;
-        case LayoutMode::Vertical:
-            row = index;
-            break;
-        case LayoutMode::Grid:
-            row = index / gridColumns;
-            column = index % gridColumns;
-            break;
-        case LayoutMode::Switch:
-            // 所有成员占同一网格单元，但只显示当前项；这种写法不会在切换时重建控件或会话。
-            break;
-        }
-        m_grid->addWidget(frame, row, column);
+    for (TerminalWorkspace *workspace : std::as_const(m_terminals)) {
+        // 分屏模式禁用远程文件管理（多块并列时目标歧义、单元格尺寸被破坏）；切换模式恢复。
         workspace->setFileManagerAllowed(switchMode);
     }
     refreshSelection();
@@ -309,19 +643,150 @@ void TerminalWorkspaceGroup::refreshSelection()
     const bool switchMode = m_layoutMode == LayoutMode::Switch;
     for (TerminalWorkspace *workspace : std::as_const(m_terminals)) {
         WorkspaceTerminalFrame *frame = m_frames.value(workspace);
+        if (frame == nullptr) {
+            continue;
+        }
         frame->setSelected(workspace == m_activeTerminal);
+        // 切换模式：QSplitter 对隐藏子控件自动收起 handle 并把空间给唯一可见项，
+        // 无需重新 reparent，切回分屏只是再次全部 setVisible(true)。
         frame->setVisible(!switchMode || workspace == m_activeTerminal);
     }
 }
 
+TerminalWorkspaceGroup::DockTargetHit
+TerminalWorkspaceGroup::hitTestDock(const QPoint &globalPosition) const
+{
+    DockTargetHit hit;
+    if (m_content == nullptr) {
+        return hit;
+    }
+    const QPoint contentPoint = m_content->mapFromGlobal(globalPosition);
+    const QRect contentRect = m_content->rect();
+    if (!contentRect.contains(contentPoint)) {
+        return hit;
+    }
+
+    // 靠近内容区边缘的窄带优先解释为“停靠到最外层”。
+    constexpr int kOuterBand = 28;
+    if (contentPoint.x() <= contentRect.left() + kOuterBand) {
+        hit = {nullptr, DockEdge::Left, QRect(contentRect.topLeft(),
+                                              QSize(contentRect.width() / 2, contentRect.height())),
+               true};
+        return hit;
+    }
+    if (contentPoint.x() >= contentRect.right() - kOuterBand) {
+        hit = {nullptr, DockEdge::Right,
+               QRect(contentRect.left() + contentRect.width() / 2, contentRect.top(),
+                     contentRect.width() / 2, contentRect.height()),
+               true};
+        return hit;
+    }
+    if (contentPoint.y() <= contentRect.top() + kOuterBand) {
+        hit = {nullptr, DockEdge::Top,
+               QRect(contentRect.topLeft(), QSize(contentRect.width(), contentRect.height() / 2)),
+               true};
+        return hit;
+    }
+    if (contentPoint.y() >= contentRect.bottom() - kOuterBand) {
+        hit = {nullptr, DockEdge::Bottom,
+               QRect(contentRect.left(), contentRect.top() + contentRect.height() / 2,
+                     contentRect.width(), contentRect.height() / 2),
+               true};
+        return hit;
+    }
+
+    // 否则命中光标所在的可见成员，按象限判定边。
+    for (TerminalWorkspace *workspace : m_terminals) {
+        WorkspaceTerminalFrame *frame = m_frames.value(workspace);
+        if (frame == nullptr || !frame->isVisible() || workspace == m_dockDragSource) {
+            continue;
+        }
+        const QPoint framePoint = frame->mapFromGlobal(globalPosition);
+        if (!frame->rect().contains(framePoint)) {
+            continue;
+        }
+        const qreal nx = static_cast<qreal>(framePoint.x()) / std::max(1, frame->width()) - 0.5;
+        const qreal ny = static_cast<qreal>(framePoint.y()) / std::max(1, frame->height()) - 0.5;
+        DockEdge edge = DockEdge::Right;
+        if (std::abs(nx) >= std::abs(ny)) {
+            edge = nx < 0 ? DockEdge::Left : DockEdge::Right;
+        } else {
+            edge = ny < 0 ? DockEdge::Top : DockEdge::Bottom;
+        }
+
+        const QRect frameInContent(frame->mapTo(m_content, QPoint(0, 0)), frame->size());
+        QRect zone = frameInContent;
+        switch (edge) {
+        case DockEdge::Left:
+            zone.setWidth(frameInContent.width() / 2);
+            break;
+        case DockEdge::Right:
+            zone.setLeft(frameInContent.left() + frameInContent.width() / 2);
+            break;
+        case DockEdge::Top:
+            zone.setHeight(frameInContent.height() / 2);
+            break;
+        case DockEdge::Bottom:
+            zone.setTop(frameInContent.top() + frameInContent.height() / 2);
+            break;
+        }
+        hit = {frame, edge, zone, true};
+        return hit;
+    }
+    return hit;
+}
+
+void TerminalWorkspaceGroup::beginDockDrag(TerminalWorkspace *source)
+{
+    if (m_layoutMode != LayoutMode::Tiled || !contains(source)) {
+        return;
+    }
+    m_dockDragSource = source;
+    m_dockOverlay->setZone({});
+    m_dockOverlay->setGeometry(m_content->rect());
+    m_dockOverlay->show();
+    m_dockOverlay->raise();
+}
+
+void TerminalWorkspaceGroup::updateDockDrag(const QPoint &globalPosition)
+{
+    if (m_dockDragSource == nullptr) {
+        return;
+    }
+    const DockTargetHit hit = hitTestDock(globalPosition);
+    m_dockOverlay->setZone(hit.valid ? hit.zoneInContent : QRect());
+}
+
+void TerminalWorkspaceGroup::endDockDrag(const QPoint &globalPosition)
+{
+    TerminalWorkspace *source = m_dockDragSource;
+    m_dockDragSource = nullptr;
+    m_dockOverlay->setZone({});
+    m_dockOverlay->hide();
+    if (source == nullptr) {
+        return;
+    }
+    const DockTargetHit hit = hitTestDock(globalPosition);
+    if (!hit.valid) {
+        return;
+    }
+    TerminalWorkspace *target =
+        hit.targetFrame == nullptr ? nullptr : hit.targetFrame->workspace();
+    if (target == source) {
+        return;
+    }
+    dockTerminal(source, target, hit.edge);
+}
+
 WorkspaceSidebarWidget::WorkspaceSidebarWidget(QWidget *parent)
     : QWidget(parent)
-    , m_modeCombo(new QComboBox(this))
+    , m_modeToggle(new QPushButton(this))
     , m_terminalList(new QListWidget(this))
     , m_emptyHint(new QLabel(this))
 {
     setObjectName(QStringLiteral("WorkspaceSidebar"));
-    m_modeCombo->setObjectName(QStringLiteral("WorkspaceLayoutMode"));
+    m_modeToggle->setObjectName(QStringLiteral("WorkspaceLayoutToggle"));
+    m_modeToggle->setCheckable(true);
     m_terminalList->setObjectName(QStringLiteral("WorkspaceTerminalThumbnails"));
     m_terminalList->setIconSize(QSize(52, 34));
     m_terminalList->setSpacing(4);
@@ -332,22 +797,19 @@ WorkspaceSidebarWidget::WorkspaceSidebarWidget(QWidget *parent)
     auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(8);
-    layout->addWidget(m_modeCombo);
+    layout->addWidget(m_modeToggle);
     layout->addWidget(m_terminalList, 1);
     layout->addWidget(m_emptyHint, 1);
     retranslateUi();
     setWorkspace(nullptr);
 
-    connect(m_modeCombo,
-            &QComboBox::currentIndexChanged,
-            this,
-            [this](const int index) {
-                if (m_workspace == nullptr || index < 0) {
-                    return;
-                }
-                m_workspace->setLayoutMode(static_cast<TerminalWorkspaceGroup::LayoutMode>(
-                    m_modeCombo->itemData(index).toInt()));
-            });
+    connect(m_modeToggle, &QPushButton::toggled, this, [this](const bool checked) {
+        if (m_workspace != nullptr) {
+            m_workspace->setLayoutMode(checked ? TerminalWorkspaceGroup::LayoutMode::Switch
+                                               : TerminalWorkspaceGroup::LayoutMode::Tiled);
+        }
+        retranslateUi();
+    });
     connect(m_terminalList,
             &QListWidget::currentRowChanged,
             this,
@@ -397,15 +859,8 @@ void WorkspaceSidebarWidget::changeEvent(QEvent *event)
 
 void WorkspaceSidebarWidget::retranslateUi()
 {
-    const int previousMode = m_modeCombo->currentData().toInt();
-    const QSignalBlocker blocker(m_modeCombo);
-    m_modeCombo->clear();
-    m_modeCombo->addItem(tr("Horizontal"), static_cast<int>(TerminalWorkspaceGroup::LayoutMode::Horizontal));
-    m_modeCombo->addItem(tr("Vertical"), static_cast<int>(TerminalWorkspaceGroup::LayoutMode::Vertical));
-    m_modeCombo->addItem(tr("Grid"), static_cast<int>(TerminalWorkspaceGroup::LayoutMode::Grid));
-    m_modeCombo->addItem(tr("Switch"), static_cast<int>(TerminalWorkspaceGroup::LayoutMode::Switch));
-    const int restoredIndex = m_modeCombo->findData(previousMode);
-    m_modeCombo->setCurrentIndex(restoredIndex >= 0 ? restoredIndex : 2);
+    // 按钮文案表达“当前处于哪种视图”，点一下切到另一种。
+    m_modeToggle->setText(m_modeToggle->isChecked() ? tr("Switch view") : tr("Tiled view"));
     m_emptyHint->setText(tr("Drag a terminal tab into the current terminal page or this sidebar to create or extend a workspace."));
 }
 
@@ -414,7 +869,7 @@ void WorkspaceSidebarWidget::refreshTerminals()
     const QSignalBlocker listBlocker(m_terminalList);
     m_terminalList->clear();
     const bool hasWorkspace = m_workspace != nullptr;
-    m_modeCombo->setEnabled(hasWorkspace);
+    m_modeToggle->setEnabled(hasWorkspace);
     m_terminalList->setVisible(hasWorkspace);
     m_emptyHint->setVisible(!hasWorkspace);
     if (!hasWorkspace) {
@@ -422,10 +877,12 @@ void WorkspaceSidebarWidget::refreshTerminals()
     }
 
     {
-        const QSignalBlocker comboBlocker(m_modeCombo);
-        const int modeIndex = m_modeCombo->findData(static_cast<int>(m_workspace->layoutMode()));
-        m_modeCombo->setCurrentIndex(modeIndex);
+        const QSignalBlocker toggleBlocker(m_modeToggle);
+        m_modeToggle->setChecked(m_workspace->layoutMode()
+                                 == TerminalWorkspaceGroup::LayoutMode::Switch);
     }
+    retranslateUi();
+
     const QList<TerminalWorkspace *> terminals = m_workspace->terminals();
     for (int index = 0; index < terminals.size(); ++index) {
         TerminalWorkspace *workspace = terminals.at(index);

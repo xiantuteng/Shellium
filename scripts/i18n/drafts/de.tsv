@@ -1051,8 +1051,6 @@
 1050	Arbeitsbereich %1
 1051	Die Remote-Dateiverwaltung ist nicht verfügbar, während mehrere Terminals angezeigt werden.
 1052	Der Remote-Dateimanager ist im aktuellen Arbeitsbereichslayout nicht verfügbar
-1053	Horizontal
-1054	Vertikal
-1055	Raster
-1056	Umschalten
 1057	Ziehen Sie einen Terminal-Tab auf die aktuelle Terminal-Seite oder in diese Seitenleiste, um einen Arbeitsbereich zu erstellen oder zu erweitern.
+1058	Kachelansicht
+1059	Wechselansicht

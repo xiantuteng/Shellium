@@ -63,8 +63,14 @@ private slots:
      *         拖出标签栏期间必须亮出跟随光标的浮动快照与中央落点提示层。 */
     void draggingTerminalIntoSelectedTabCreatesWorkspace();
 
-    /** @brief 铺开布局必须禁用远程文件管理，切换布局则恢复单终端完整能力。 */
+    /** @brief 分屏模式必须禁用远程文件管理，切换模式则恢复单终端完整能力。 */
     void workspaceLayoutControlsRemoteFileAvailability();
+
+    /** @brief 把成员停靠到另一成员的某条边必须构建/解包递归 QSplitter 树。 */
+    void dockingTerminalBuildsRecursiveSplitterTree();
+
+    /** @brief 拖动组内某终端的会话状态栏必须亮出浮动快照与落点高亮，并在松手后重排分屏。 */
+    void draggingTerminalHeaderReDocksWithinWorkspace();
 
     /** @brief 终端上报的发行版必须落库并让侧栏立刻换成对应图标，重启后依然保持。 */
     void detectedDistributionIsPersistedAndShownInSidebar();
@@ -316,8 +322,8 @@ void MainWindowShellTest::workspaceLayoutControlsRemoteFileAvailability()
     group.addTerminal(first, QStringLiteral("one"));
     group.addTerminal(second, QStringLiteral("two"));
 
-    // 默认网格与另外两种铺开布局共享限制：所有文件管理器必须先收起并禁用入口。
-    QCOMPARE(group.layoutMode(), TerminalWorkspaceGroup::LayoutMode::Grid);
+    // 默认分屏模式：多块同时显示，所有文件管理器必须先收起并禁用入口。
+    QCOMPARE(group.layoutMode(), TerminalWorkspaceGroup::LayoutMode::Tiled);
     QVERIFY(!first->isFileManagerAllowed());
     QVERIFY(!second->isFileManagerAllowed());
     first->setFileManagerVisible(true);
@@ -329,7 +335,7 @@ void MainWindowShellTest::workspaceLayoutControlsRemoteFileAvailability()
     first->setFileManagerVisible(true);
     QVERIFY(first->isFileManagerVisible());
 
-    group.setLayoutMode(TerminalWorkspaceGroup::LayoutMode::Horizontal);
+    group.setLayoutMode(TerminalWorkspaceGroup::LayoutMode::Tiled);
     QVERIFY(!first->isFileManagerAllowed());
     QVERIFY(!first->isFileManagerVisible());
 
@@ -356,6 +362,96 @@ void MainWindowShellTest::workspaceLayoutControlsRemoteFileAvailability()
     QCoreApplication::sendEvent(first, &enterEvent);
     QVERIFY2(firstFrame->property("workspaceHovered").toBool(),
              "鼠标进入未选中终端后必须进入虚线 Hover 状态");
+}
+
+void MainWindowShellTest::dockingTerminalBuildsRecursiveSplitterTree()
+{
+    TerminalWorkspaceGroup group;
+    auto *a = new TerminalWorkspace;
+    auto *b = new TerminalWorkspace;
+    auto *c = new TerminalWorkspace;
+    group.addTerminal(a, QStringLiteral("a"));
+    group.addTerminal(b, QStringLiteral("b"));
+    group.addTerminal(c, QStringLiteral("c"));
+
+    auto *root = group.findChild<QSplitter *>(QStringLiteral("WorkspaceSplitRoot"));
+    QVERIFY(root != nullptr);
+    QCOMPARE(root->orientation(), Qt::Horizontal);
+    QCOMPARE(root->count(), 3);
+
+    const auto frameFor = [&group](TerminalWorkspace *terminal) -> QWidget * {
+        const QList<QWidget *> frames = group.findChildren<QWidget *>(
+            QStringLiteral("WorkspaceTerminalFrame"));
+        const auto it = std::find_if(frames.cbegin(), frames.cend(), [terminal](QWidget *f) {
+            return f->isAncestorOf(terminal) || f == terminal->parentWidget();
+        });
+        return it == frames.cend() ? nullptr : *it;
+    };
+
+    // 把 c 停靠到 a 的下方：a、c 进入一个新的垂直 QSplitter，a 在前。
+    group.dockTerminal(c, a, TerminalWorkspaceGroup::DockEdge::Bottom);
+    QWidget *frameA = frameFor(a);
+    QWidget *frameC = frameFor(c);
+    QVERIFY(frameA != nullptr && frameC != nullptr);
+    auto *nested = qobject_cast<QSplitter *>(frameA->parentWidget());
+    QVERIFY2(nested != nullptr && nested != root, "a 必须落进一个新的内层 QSplitter");
+    QCOMPARE(nested->orientation(), Qt::Vertical);
+    QCOMPARE(frameC->parentWidget(), nested);
+    QCOMPARE(nested->indexOf(frameA), 0);
+    QCOMPARE(nested->indexOf(frameC), 1);
+    QCOMPARE(nested->objectName(), QStringLiteral("WorkspaceSplitNode"));
+    QCOMPARE(root->orientation(), Qt::Horizontal);
+    // 只数工作空间自己的分屏节点（终端面板内部各自也有一个无名 QSplitter）。
+    QCOMPARE(group.findChildren<QSplitter *>(QStringLiteral("WorkspaceSplitNode")).size(), 1);
+
+    // 抽走 c：只剩 a 的内层 splitter 必须被解包，a 直接回到根。
+    QVERIFY(group.takeTerminal(c));
+    QTRY_COMPARE(group.findChildren<QSplitter *>(QStringLiteral("WorkspaceSplitNode")).size(), 0);
+    QCOMPARE(frameFor(a)->parentWidget(), root);
+    QCOMPARE(root->count(), 2);
+
+    delete c;
+}
+
+void MainWindowShellTest::draggingTerminalHeaderReDocksWithinWorkspace()
+{
+    TerminalWorkspaceGroup group;
+    group.resize(1000, 700);
+    group.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&group));
+    auto *a = new TerminalWorkspace;
+    auto *b = new TerminalWorkspace;
+    group.addTerminal(a, QStringLiteral("a"));
+    group.addTerminal(b, QStringLiteral("b"));
+    QTest::qWait(30);
+
+    auto *overlay = group.findChild<QWidget *>(QStringLiteral("WorkspaceDockOverlay"));
+    QVERIFY(overlay != nullptr && overlay->isHidden());
+    const auto dockGhostExists = [] {
+        const QList<QWidget *> topLevels = QApplication::topLevelWidgets();
+        return std::any_of(topLevels.cbegin(), topLevels.cend(), [](const QWidget *w) {
+            return w->objectName() == QStringLiteral("WorkspaceDockDragGhost");
+        });
+    };
+
+    auto *headerA = a->findChild<QWidget *>(QStringLiteral("terminalSessionStatusBar"));
+    QVERIFY(headerA != nullptr);
+    const QPoint pressGlobal = headerA->mapToGlobal(headerA->rect().center());
+    const QPoint overBGlobal = b->mapToGlobal(b->rect().center());
+
+    QCursor::setPos(pressGlobal);
+    QTest::mousePress(headerA, Qt::LeftButton, Qt::NoModifier, headerA->rect().center());
+    // 分几步移动跨过拖拽阈值并进入 b：位置以 headerA 为参照，允许越界为负/超出。
+    QTest::mouseMove(headerA, headerA->rect().center() + QPoint(0, 40));
+    QTest::mouseMove(headerA, headerA->mapFromGlobal(overBGlobal));
+
+    QTRY_VERIFY2(dockGhostExists(), "拖动会话状态栏必须出现跟随光标的浮动快照");
+    QTRY_VERIFY2(!overlay->isHidden(), "拖动会话状态栏必须显示落点高亮层");
+
+    QTest::mouseRelease(headerA, Qt::LeftButton, Qt::NoModifier,
+                        headerA->mapFromGlobal(overBGlobal));
+    QTRY_VERIFY2(!dockGhostExists(), "松手后浮动快照必须销毁");
+    QVERIFY2(overlay->isHidden(), "松手后落点高亮层必须隐藏");
 }
 
 void MainWindowShellTest::desktopPlatformsUseProductTitleAndCustomWindowControls()

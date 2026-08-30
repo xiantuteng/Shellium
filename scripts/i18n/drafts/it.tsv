@@ -1051,8 +1051,6 @@
 1050	Spazio di lavoro %1
 1051	La gestione dei file remoti non è disponibile mentre sono visualizzati più terminali.
 1052	Il gestore file remoto non è disponibile nel layout corrente dello spazio di lavoro
-1053	Orizzontale
-1054	Verticale
-1055	Griglia
-1056	Commutazione
 1057	Trascina una scheda del terminale nella pagina del terminale corrente o in questa barra laterale per creare o ampliare uno spazio di lavoro.
+1058	Vista affiancata
+1059	Vista alternata

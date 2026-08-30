@@ -349,8 +349,8 @@ Run it in the current terminal?</source>
         <translation type="unfinished">تعديل سلسلة المضيفين</translation>
     </message>
     <message>
-        <source>The hosts you add connect in the following order, finally reaching &lt;span style=&quot;font-family: monospace; font-weight: 600;&quot;&gt;%1&lt;/span&gt;.</source>
-        <translation type="unfinished">تتصل المضيفات المضافة بالترتيب التالي، لتصل في النهاية إلى &lt;span style=&quot;font-family: monospace; font-weight: 600;&quot;&gt;%1&lt;/span&gt;.</translation>
+        <source>The hosts you add connect in the following order, finally reaching &lt;span style="font-family: monospace; font-weight: 600;"&gt;%1&lt;/span&gt;.</source>
+        <translation type="unfinished">تتصل المضيفات المضافة بالترتيب التالي، لتصل في النهاية إلى &lt;span style="font-family: monospace; font-weight: 600;"&gt;%1&lt;/span&gt;.</translation>
     </message>
     <message>
         <source>Add host</source>
@@ -540,11 +540,11 @@ Run it in the current terminal?</source>
         <translation type="unfinished">تحديث العقدة</translation>
     </message>
     <message>
-        <source>Deleting group &apos;%1&apos; also deletes all of its subgroups and hosts, and cannot be undone. Continue?</source>
+        <source>Deleting group '%1' also deletes all of its subgroups and hosts, and cannot be undone. Continue?</source>
         <translation type="unfinished">سيؤدي حذف المجموعة «%1» أيضًا إلى حذف جميع مجموعاتها الفرعية ومضيفيها، ولا يمكن التراجع عن ذلك. هل تريد المتابعة؟</translation>
     </message>
     <message>
-        <source>Delete host &apos;%1&apos;? This action cannot be undone.</source>
+        <source>Delete host '%1'? This action cannot be undone.</source>
         <translation type="unfinished">هل تريد حذف المضيف «%1»؟ لا يمكن التراجع عن هذا الإجراء.</translation>
     </message>
     <message>
@@ -848,7 +848,7 @@ System: %2</source>
         <translation type="unfinished">الحماية بكلمة المرور الرئيسية مطلوبة</translation>
     </message>
     <message>
-        <source>Viewing host passwords requires master password protection. Go to &apos;Settings → Connections &amp; Security → Credential Vault&apos; and turn on &apos;Protect credentials with a master password&apos;.</source>
+        <source>Viewing host passwords requires master password protection. Go to 'Settings → Connections &amp; Security → Credential Vault' and turn on 'Protect credentials with a master password'.</source>
         <translation type="unfinished">يتطلب عرض كلمات مرور المضيفين الحماية بكلمة المرور الرئيسية. انتقل إلى «الإعدادات ← الاتصالات والأمان ← خزنة بيانات الاعتماد» وفعِّل «حماية بيانات الاعتماد بكلمة مرور رئيسية».</translation>
     </message>
     <message>
@@ -980,7 +980,7 @@ System: %2</source>
         <translation type="unfinished">تعذّر اختبار الاتصال</translation>
     </message>
     <message>
-        <source>Could not read the saved credentials for &apos;%1&apos;.</source>
+        <source>Could not read the saved credentials for '%1'.</source>
         <translation type="unfinished">تعذّرت قراءة بيانات الاعتماد المحفوظة لـ «%1».</translation>
     </message>
     <message>
@@ -992,7 +992,7 @@ System: %2</source>
         <translation type="unfinished">تم الاتصال بـ %1 بنجاح.</translation>
     </message>
     <message>
-        <source>The server only supports legacy hmac-sha1. If you have accepted the risk, turn on &apos;Legacy compatibility&apos; and retry.
+        <source>The server only supports legacy hmac-sha1. If you have accepted the risk, turn on 'Legacy compatibility' and retry.
 
 %1</source>
         <translation type="unfinished">يدعم الخادم hmac-sha1 القديم فقط. إذا قبلت المخاطرة، فعِّل «التوافق مع الإصدارات القديمة» وأعد المحاولة.
@@ -1004,7 +1004,7 @@ System: %2</source>
         <translation type="unfinished">فشلت مصادقة SSH. تحقق من كلمة المرور أو عبارة مرور المفتاح الخاص وأعد المحاولة.</translation>
     </message>
     <message>
-        <source>The server requires a password or private key passphrase. Fill in &apos;Password&apos; and retry.</source>
+        <source>The server requires a password or private key passphrase. Fill in 'Password' and retry.</source>
         <translation type="unfinished">يتطلب الخادم كلمة مرور أو عبارة مرور المفتاح الخاص. املأ «كلمة المرور» وأعد المحاولة.</translation>
     </message>
     <message>
@@ -1551,7 +1551,7 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">البحث عن نص:</translation>
     </message>
     <message>
-        <source>&apos;%1&apos; was not found in the terminal output</source>
+        <source>'%1' was not found in the terminal output</source>
         <translation type="unfinished">لم يُعثر على «%1» في مخرجات الطرفية</translation>
     </message>
     <message>
@@ -1583,11 +1583,11 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">تحتوي مساحة العمل على اتصالات مؤقتة</translation>
     </message>
     <message>
-        <source>Tab &apos;%1&apos; is not a persistent host opened from the host tree. Save this connection to the host tree first, then save the workspace.</source>
+        <source>Tab '%1' is not a persistent host opened from the host tree. Save this connection to the host tree first, then save the workspace.</source>
         <translation type="unfinished">علامة التبويب «%1» ليست مضيفًا دائمًا مفتوحًا من شجرة المضيفين. احفظ أولاً هذا الاتصال في شجرة المضيفين، ثم مساحة العمل.</translation>
     </message>
     <message>
-        <source>Failed to check the host record for tab &apos;%1&apos;: %2</source>
+        <source>Failed to check the host record for tab '%1': %2</source>
         <translation type="unfinished">تعذّر التحقق من سجل المضيف لعلامة التبويب «%1»: %2</translation>
     </message>
     <message>
@@ -1615,11 +1615,11 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">استبدال مساحة العمل الموجودة</translation>
     </message>
     <message>
-        <source>A workspace named &apos;%1&apos; already exists. Overwrite it with the current set of tabs?</source>
+        <source>A workspace named '%1' already exists. Overwrite it with the current set of tabs?</source>
         <translation type="unfinished">توجد مساحة عمل بالاسم «%1» بالفعل. هل تستبدلها بمجموعة علامات التبويب الحالية؟</translation>
     </message>
     <message>
-        <source>Workspace &apos;%1&apos; saved (%2 tabs)</source>
+        <source>Workspace '%1' saved (%2 tabs)</source>
         <translation type="unfinished">تم حفظ مساحة العمل «%1» (%2 علامة تبويب)</translation>
     </message>
     <message>
@@ -1655,7 +1655,7 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">تخطيط مساحة العمل تالف</translation>
     </message>
     <message>
-        <source>The version, tab list, or count of workspace &apos;%1&apos; is invalid; the current session was not modified.</source>
+        <source>The version, tab list, or count of workspace '%1' is invalid; the current session was not modified.</source>
         <translation type="unfinished">إصدار مساحة العمل «%1» أو قائمة علامات التبويب أو العدد غير صالح؛ لم تتغير الجلسة الحالية.</translation>
     </message>
     <message>
@@ -1675,7 +1675,7 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">تعذّر حلّ سلسلة المضيفين: %1</translation>
     </message>
     <message>
-        <source>Workspace &apos;%1&apos; could not be fully restored: %2. The current session was not modified.</source>
+        <source>Workspace '%1' could not be fully restored: %2. The current session was not modified.</source>
         <translation type="unfinished">تعذّرت استعادة مساحة العمل «%1» بالكامل: %2. لم تتغير الجلسة الحالية.</translation>
     </message>
     <message>
@@ -1683,11 +1683,11 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">استبدال مساحة العمل الحالية</translation>
     </message>
     <message>
-        <source>Opening &apos;%1&apos; closes the current %2 tabs and their connections, then restores %3 tabs. Continue?</source>
+        <source>Opening '%1' closes the current %2 tabs and their connections, then restores %3 tabs. Continue?</source>
         <translation type="unfinished">سيؤدي فتح «%1» إلى إغلاق علامات التبويب الحالية (%2) واتصالاتها، ثم استعادة %3 علامة تبويب. هل تريد المتابعة؟</translation>
     </message>
     <message>
-        <source>Workspace &apos;%1&apos; restored</source>
+        <source>Workspace '%1' restored</source>
         <translation type="unfinished">تمت استعادة مساحة العمل «%1»</translation>
     </message>
     <message>
@@ -1858,7 +1858,7 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">المضيف غير متصل بعد</translation>
     </message>
     <message>
-        <source>Connect to &apos;%1&apos; from the host tree first, then start this rule.</source>
+        <source>Connect to '%1' from the host tree first, then start this rule.</source>
         <translation type="unfinished">اتصل أولاً بـ «%1» من شجرة المضيفين، ثم ابدأ هذه القاعدة.</translation>
     </message>
     <message>
@@ -1886,7 +1886,7 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">ليس لدى المضيف الحالي قواعد إعادة توجيه منافذ لبدئها بعد.</translation>
     </message>
     <message>
-        <source>Connect to &apos;%1&apos; from the host tree first, then start all forwarding rules.</source>
+        <source>Connect to '%1' from the host tree first, then start all forwarding rules.</source>
         <translation type="unfinished">اتصل أولاً بـ «%1» من شجرة المضيفين، ثم ابدأ جميع قواعد إعادة التوجيه.</translation>
     </message>
     <message>
@@ -1894,7 +1894,7 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">تأكيد بدء جميع عمليات إعادة التوجيه</translation>
     </message>
     <message>
-        <source>This will start all %2 forwarding rules under host &apos;%1&apos;; rules already running are left unchanged. Continue?</source>
+        <source>This will start all %2 forwarding rules under host '%1'; rules already running are left unchanged. Continue?</source>
         <translation type="unfinished">سيتم بدء جميع قواعد إعادة التوجيه (%2) للمضيف «%1»؛ تبقى القواعد النشطة بالفعل دون تغيير. هل تريد المتابعة؟</translation>
     </message>
     <message>
@@ -1924,7 +1924,7 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">تأكيد إيقاف جميع عمليات إعادة التوجيه</translation>
     </message>
     <message>
-        <source>This will stop %2 active forwarding rules under host &apos;%1&apos; and close the related connections. Continue?</source>
+        <source>This will stop %2 active forwarding rules under host '%1' and close the related connections. Continue?</source>
         <translation type="unfinished">سيتم إيقاف قواعد إعادة التوجيه النشطة (%2) للمضيف «%1» وإغلاق الاتصالات المرتبطة. هل تريد المتابعة؟</translation>
     </message>
     <message>
@@ -1952,7 +1952,7 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">تعذّرت قراءة قواعد إعادة التوجيه التلقائية: %1</translation>
     </message>
     <message>
-        <source>Failed to auto-start &apos;%1&apos;: %2</source>
+        <source>Failed to auto-start '%1': %2</source>
         <translation type="unfinished">تعذّر بدء «%1» تلقائيًا: %2</translation>
     </message>
     <message>
@@ -2041,7 +2041,7 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">الهدف:</translation>
     </message>
     <message>
-        <source>Security note: setting the listen address to 0.0.0.0 or :: exposes the port to the local network and the internet; reachability still depends on the system firewall and the SSH server&apos;s GatewayPorts setting.</source>
+        <source>Security note: setting the listen address to 0.0.0.0 or :: exposes the port to the local network and the internet; reachability still depends on the system firewall and the SSH server's GatewayPorts setting.</source>
         <translation type="unfinished">ملاحظة أمنية: ضبط عنوان الاستماع على 0.0.0.0 أو :: يفتح المنفذ للشبكة المحلية والإنترنت؛ ولا تزال إمكانية الوصول تعتمد على جدار حماية النظام وإعداد GatewayPorts على خادم SSH.</translation>
     </message>
     <message>
@@ -2071,15 +2071,15 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
 <context>
     <name>PortForwardWorker</name>
     <message>
-        <source>The SSH session is not ready; cannot start forwarding &apos;%1&apos;</source>
+        <source>The SSH session is not ready; cannot start forwarding '%1'</source>
         <translation type="unfinished">جلسة SSH غير جاهزة؛ لا يمكن بدء إعادة التوجيه «%1»</translation>
     </message>
     <message>
-        <source>Failed to start remote forwarding &apos;%1&apos;: %2</source>
+        <source>Failed to start remote forwarding '%1': %2</source>
         <translation type="unfinished">تعذّر بدء إعادة التوجيه البعيدة «%1»: %2</translation>
     </message>
     <message>
-        <source>The listen address &apos;%1&apos; is not a bindable local IP address</source>
+        <source>The listen address '%1' is not a bindable local IP address</source>
         <translation type="unfinished">عنوان الاستماع «%1» ليس عنوان IP محليًا قابلاً للربط</translation>
     </message>
     <message>
@@ -2412,7 +2412,7 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">فتح الإعدادات</translation>
     </message>
     <message>
-        <source>Shortcut %1 is assigned to both &apos;%2&apos; and &apos;%3&apos;</source>
+        <source>Shortcut %1 is assigned to both '%2' and '%3'</source>
         <translation type="unfinished">الاختصار %1 مخصَّص لكلٍّ من «%2» و«%3»</translation>
     </message>
     <message>
@@ -2770,7 +2770,7 @@ The remote-key SFTP fallback also failed: %2</source>
         <translation type="unfinished">تعذّر تحديد موقع ملف known_hosts الخاص بك.</translation>
     </message>
     <message>
-        <source>Could not export the server&apos;s new host key: %1</source>
+        <source>Could not export the server's new host key: %1</source>
         <translation type="unfinished">تعذّر تصدير مفتاح مضيف الخادم الجديد: %1</translation>
     </message>
     <message>
@@ -2826,7 +2826,7 @@ To avoid overwriting existing credentials, Shellium does not create a new vault 
         <translation type="unfinished">تعذّر تفعيل الحماية بكلمة المرور الرئيسية</translation>
     </message>
     <message>
-        <source>The vault&apos;s current state does not allow enabling master password protection again.</source>
+        <source>The vault's current state does not allow enabling master password protection again.</source>
         <translation type="unfinished">لا تسمح حالة الخزنة الحالية بإعادة تفعيل الحماية بكلمة المرور الرئيسية.</translation>
     </message>
     <message>
@@ -2975,7 +2975,7 @@ Off: everything is re-uploaded in full regardless of whether content matches.</s
 معطّل: يُرفع كل شيء بالكامل بغض النظر عن تطابق المحتوى.</translation>
     </message>
     <message>
-        <source>Transfers run strictly in order; select a waiting item and click &apos;Deselect&apos; to remove it directly.</source>
+        <source>Transfers run strictly in order; select a waiting item and click 'Deselect' to remove it directly.</source>
         <translation type="unfinished">تُنفَّذ عمليات النقل بترتيب صارم؛ اختر عنصرًا في الانتظار واضغط «إلغاء الاختيار» لحذفه مباشرةً.</translation>
     </message>
     <message>
@@ -3413,7 +3413,7 @@ This action cannot be undone.</source>
     <message>
         <source>
 
-⚠ This server was inferred by parsing terminal commands and may not be the one you expect. Run &apos;hostname&apos; in the terminal to verify before continuing.</source>
+⚠ This server was inferred by parsing terminal commands and may not be the one you expect. Run 'hostname' in the terminal to verify before continuing.</source>
         <translation type="unfinished">⚠ حُدِّد هذا الخادم بالافتراض من تحليل أوامر الطرفية وقد لا يكون الخادم الذي تتوقعه. نفِّذ «hostname» في الطرفية للتحقق قبل المتابعة.</translation>
     </message>
     <message>
@@ -3459,7 +3459,7 @@ This action cannot be undone.</source>
     <message>
         <source>The SFTP service of server %1 offers only hmac-sha1.
 
-This algorithm is obsolete; upgrading the server&apos;s SSH configuration is recommended. Enable it for this connection only and retry?
+This algorithm is obsolete; upgrading the server's SSH configuration is recommended. Enable it for this connection only and retry?
 
 %2</source>
         <translation type="unfinished">تقدّم خدمة SFTP للخادم %1 خوارزمية hmac-sha1 فقط.
@@ -3548,7 +3548,7 @@ This algorithm is obsolete; upgrading the server&apos;s SSH configuration is rec
         <translation type="unfinished">مظهر الواجهة</translation>
     </message>
     <message>
-        <source>&apos;Follow system&apos; syncs automatically when the operating system switches between light and dark appearance.</source>
+        <source>'Follow system' syncs automatically when the operating system switches between light and dark appearance.</source>
         <translation type="unfinished">«اتّباع النظام» يتزامن تلقائيًا عندما يبدّل نظام التشغيل بين المظهر الفاتح والداكن.</translation>
     </message>
     <message>
@@ -3648,7 +3648,7 @@ This algorithm is obsolete; upgrading the server&apos;s SSH configuration is rec
         <translation type="unfinished">اقتراحات سطر الأوامر التلقائية</translation>
     </message>
     <message>
-        <source>After you type at least two characters, suggestions are shown automatically from the current host&apos;s command history; off by default.</source>
+        <source>After you type at least two characters, suggestions are shown automatically from the current host's command history; off by default.</source>
         <translation type="unfinished">بعد إدخال حرفين على الأقل، تُعرض الاقتراحات تلقائيًا من سجل أوامر المضيف الحالي؛ معطّل افتراضيًا.</translation>
     </message>
     <message>
@@ -3776,7 +3776,7 @@ This algorithm is obsolete; upgrading the server&apos;s SSH configuration is rec
         <translation type="unfinished">حفظ</translation>
     </message>
     <message>
-        <source>Unlike other settings, changes to the address and key are not saved character by character; click &apos;Save&apos;, so that every keystroke does not trigger an encrypted write.</source>
+        <source>Unlike other settings, changes to the address and key are not saved character by character; click 'Save', so that every keystroke does not trigger an encrypted write.</source>
         <translation type="unfinished">على عكس الإعدادات الأخرى، لا تُحفظ تغييرات العنوان والمفتاح حرفًا بحرف؛ اضغط «حفظ» حتى لا تؤدي كل ضغطة مفتاح إلى كتابة مشفَّرة.</translation>
     </message>
     <message>
@@ -4008,7 +4008,7 @@ Public key: %3</source>
         <translation type="unfinished">تنسيق المفتاح الخاص غير مدعوم، أو الملف تالف، أو عبارة المرور غير صحيحة.</translation>
     </message>
     <message>
-        <source>Verification passed: %1%2. You can select this file in the &apos;Private key&apos; field of the host editor.</source>
+        <source>Verification passed: %1%2. You can select this file in the 'Private key' field of the host editor.</source>
         <translation type="unfinished">اجتاز التحقق: %1%2. يمكنك اختيار هذا الملف في حقل «المفتاح الخاص» في محرر المضيفين.</translation>
     </message>
     <message>
@@ -4308,7 +4308,7 @@ Public key: %3</source>
         <translation type="unfinished">جارٍ بدء الطرفية المحلية…</translation>
     </message>
     <message>
-        <source>Starting local terminal…<byte value="xd"/>
+        <source>Starting local terminal…<byte value="xd" />
 </source>
         <translation type="unfinished">جارٍ بدء الطرفية المحلية…</translation>
     </message>
@@ -4333,7 +4333,7 @@ Public key: %3</source>
         <translation type="unfinished">جارٍ الاتصال بـ %1…</translation>
     </message>
     <message>
-        <source>Connecting to %1…<byte value="xd"/>
+        <source>Connecting to %1…<byte value="xd" />
 </source>
         <translation type="unfinished">جارٍ الاتصال بـ %1…</translation>
     </message>
@@ -4346,18 +4346,18 @@ Public key: %3</source>
         <translation type="unfinished">تكامل الصدفة لـ %1 غير مفعّل؛ التعرّف المتداخل متدهور: %2</translation>
     </message>
     <message>
-        <source>Permission denied, please try again.<byte value="xd"/>
-%1&apos;s password: </source>
+        <source>Permission denied, please try again.<byte value="xd" />
+%1's password: </source>
         <translation type="unfinished">الوصول مرفوض، أعد المحاولة.
 كلمة مرور %1:</translation>
     </message>
     <message>
-        <source>%1&apos;s password: </source>
+        <source>%1's password: </source>
         <translation type="unfinished">كلمة مرور %1:</translation>
     </message>
     <message>
-        <source><byte value="xd"/>
-Could not establish the nested connection to %1: %2<byte value="xd"/>
+        <source><byte value="xd" />
+Could not establish the nested connection to %1: %2<byte value="xd" />
 </source>
         <translation type="unfinished">تعذّر إنشاء الاتصال المتداخل بـ %1: %2</translation>
     </message>
@@ -4384,7 +4384,7 @@ Could not establish the nested connection to %1: %2<byte value="xd"/>
     <message>
         <source>Server %1 offers only hmac-sha1, which the default security policy cannot use to complete the connection.
 
-hmac-sha1 is obsolete; upgrading the server&apos;s SSH configuration is recommended. Enable this algorithm for this connection only and retry?
+hmac-sha1 is obsolete; upgrading the server's SSH configuration is recommended. Enable this algorithm for this connection only and retry?
 
 Details: %2</source>
         <translation type="unfinished">يقدّم الخادم %1 خوارزمية hmac-sha1 فقط، والتي لا تستطيع سياسة الأمان الافتراضية استخدامها لإكمال الاتصال.
@@ -4474,14 +4474,14 @@ Confirm the key has changed and replace the old record in known_hosts?</source>
         <translation type="unfinished">اضغط r لإعادة الاتصال بـ %1، وx لإغلاق علامة التبويب هذه</translation>
     </message>
     <message>
-        <source><byte value="xd"/>
-No server to reconnect to; press x to close this tab<byte value="xd"/>
+        <source><byte value="xd" />
+No server to reconnect to; press x to close this tab<byte value="xd" />
 </source>
         <translation type="unfinished">لا يوجد خادم لإعادة الاتصال به؛ اضغط x لإغلاق علامة التبويب هذه</translation>
     </message>
     <message>
-        <source><byte value="xd"/>
-Reconnecting manually…<byte value="xd"/>
+        <source><byte value="xd" />
+Reconnecting manually…<byte value="xd" />
 </source>
         <translation type="unfinished">جارٍ إعادة الاتصال يدويًا…</translation>
     </message>
@@ -4534,7 +4534,7 @@ Reconnecting manually…<byte value="xd"/>
         <translation type="unfinished">لم يُعترَض ssh هذا (%1)؛ تُرك للطرف البعيد لينفّذه بنفسه</translation>
     </message>
     <message>
-        <source>Shellium could not take over this connection (%1); handing it to the remote ssh to run directly.<byte value="xd"/>
+        <source>Shellium could not take over this connection (%1); handing it to the remote ssh to run directly.<byte value="xd" />
 </source>
         <translation type="unfinished">تعذّر على Shellium اعتراض هذا الاتصال (%1)؛ سُلِّم إلى ssh البعيد للتنفيذ المباشر.</translation>
     </message>
@@ -4550,31 +4550,31 @@ Reconnecting manually…<byte value="xd"/>
         <translation type="unfinished">لا تتوفر لخدمة الإعدادات قاعدة بيانات تطبيق</translation>
     </message>
     <message>
-        <source>The value &apos;%2&apos; of setting %1 is not an integer; the default has been restored</source>
+        <source>The value '%2' of setting %1 is not an integer; the default has been restored</source>
         <translation type="unfinished">قيمة «%2» للإعداد %1 ليست عددًا صحيحًا؛ استُعيدت القيمة الافتراضية</translation>
     </message>
     <message>
-        <source>The value &apos;%2&apos; of setting %1 is not a boolean; the default has been restored</source>
+        <source>The value '%2' of setting %1 is not a boolean; the default has been restored</source>
         <translation type="unfinished">قيمة «%2» للإعداد %1 ليست قيمة منطقية؛ استُعيدت القيمة الافتراضية</translation>
     </message>
     <message>
-        <source>Unknown theme &apos;%1&apos;; reverted to follow system</source>
+        <source>Unknown theme '%1'; reverted to follow system</source>
         <translation type="unfinished">سمة غير معروفة «%1»؛ يُرجَع إلى «اتّباع النظام»</translation>
     </message>
     <message>
-        <source>Unknown terminal color scheme &apos;%1&apos;; reverted to the default scheme</source>
+        <source>Unknown terminal color scheme '%1'; reverted to the default scheme</source>
         <translation type="unfinished">نظام ألوان طرفية غير معروف «%1»؛ يُرجَع إلى النظام الافتراضي</translation>
     </message>
     <message>
-        <source>Letter spacing &apos;%1&apos; is invalid; the default has been restored</source>
+        <source>Letter spacing '%1' is invalid; the default has been restored</source>
         <translation type="unfinished">تباعد الأحرف «%1» غير صالح؛ استُعيدت القيمة الافتراضية</translation>
     </message>
     <message>
-        <source>Unknown cursor shape &apos;%1&apos;; reverted to block cursor</source>
+        <source>Unknown cursor shape '%1'; reverted to block cursor</source>
         <translation type="unfinished">شكل مؤشر غير معروف «%1»؛ يُرجَع إلى المؤشر المربع</translation>
     </message>
     <message>
-        <source>The shortcut &apos;%2&apos; for action &apos;%1&apos; is invalid; the default has been restored</source>
+        <source>The shortcut '%2' for action '%1' is invalid; the default has been restored</source>
         <translation type="unfinished">الاختصار «%2» للإجراء «%1» غير صالح؛ استُعيدت القيمة الافتراضية</translation>
     </message>
     <message>
@@ -4760,7 +4760,7 @@ Reconnecting manually…<byte value="xd"/>
         <translation type="unfinished">تحذف إعادة التعيين نهائيًا جميع كلمات مرور SSH وعبارات مرور المفاتيح الخاصة المخزَّنة وتفك ارتباطها بالمضيفين. تُحفظ عناوين المضيفين والحسابات والمنافذ ومسارات ملفات المفاتيح الخاصة والمجموعات وسلاسل المضيفين. لا يمكن التراجع عن هذا الإجراء.</translation>
     </message>
     <message>
-        <source>Type &apos;%1&apos; to confirm:</source>
+        <source>Type '%1' to confirm:</source>
         <translation type="unfinished">أدخل «%1» للتأكيد:</translation>
     </message>
     <message>
@@ -4807,20 +4807,12 @@ Reconnecting manually…<byte value="xd"/>
 <context>
     <name>WorkspaceSidebarWidget</name>
     <message>
-        <source>Horizontal</source>
-        <translation type="unfinished">أفقي</translation>
+        <source>Switch view</source>
+        <translation type="unfinished">عرض متناوب</translation>
     </message>
     <message>
-        <source>Vertical</source>
-        <translation type="unfinished">عمودي</translation>
-    </message>
-    <message>
-        <source>Grid</source>
-        <translation type="unfinished">شبكة</translation>
-    </message>
-    <message>
-        <source>Switch</source>
-        <translation type="unfinished">تبديل</translation>
+        <source>Tiled view</source>
+        <translation type="unfinished">عرض مبلّط</translation>
     </message>
     <message>
         <source>Drag a terminal tab into the current terminal page or this sidebar to create or extend a workspace.</source>

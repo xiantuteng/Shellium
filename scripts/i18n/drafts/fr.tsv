@@ -1051,8 +1051,6 @@
 1050	Espace de travail %1
 1051	La gestion des fichiers distants n’est pas disponible lorsque plusieurs terminaux sont affichés.
 1052	Le gestionnaire de fichiers distants n’est pas disponible dans la disposition actuelle de l’espace de travail
-1053	Horizontal
-1054	Vertical
-1055	Grille
-1056	Basculement
 1057	Faites glisser un onglet de terminal dans la page de terminal actuelle ou dans cette barre latérale pour créer ou agrandir un espace de travail.
+1058	Vue mosaïque
+1059	Vue alternée

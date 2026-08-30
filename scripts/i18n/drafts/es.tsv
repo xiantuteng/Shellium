@@ -1051,8 +1051,6 @@
 1050	Espacio de trabajo %1
 1051	La gestión de archivos remotos no está disponible mientras se muestran varios terminales.
 1052	El administrador de archivos remotos no está disponible en la disposición actual del espacio de trabajo
-1053	Horizontal
-1054	Vertical
-1055	Cuadrícula
-1056	Cambio
 1057	Arrastra una pestaña de terminal a la página de terminal actual o a esta barra lateral para crear o ampliar un espacio de trabajo.
+1058	Vista en mosaico
+1059	Vista alterna
