@@ -467,6 +467,9 @@ viewport()->setAcceptDrops(true);
 - 新增常驻控件文案按 `src/i18n/Retranslate.h` 的 `i18n::onRetranslate` 接入免重启热切换；
   无 `Q_OBJECT` 的嵌套对话框类必须加 `Q_DECLARE_TR_FUNCTIONS(类名)`，否则运行时 tr() 上下文
   与 lupdate 提取的类名不匹配，切换语言后退回英文。
+- **挂在常驻 `QMenu` 上、只在构造期设过一次文案的 `QAction` 也必须进 `onRetranslate` 闭包**——
+  命令面板 `openCommandPalette()` 通过 `findChildren<QAction*>` 收录全部动作，且每个终端标签页
+  各有一份文件管理器实例，漏掉的话切换语言后面板里会以上一次语言重复列出该项。
 - 构建依赖 `brew install qttools`（lupdate/lrelease）+ `brew install opencc`（生成 `zh_TW`）。
 - `LocalizationService` 析构必须 `removeTranslator`；用到它的测试 main 必须建 `QApplication`
   而非 `QCoreApplication`。
