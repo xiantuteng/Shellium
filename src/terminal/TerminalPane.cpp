@@ -35,8 +35,8 @@ TerminalPane::TerminalPane(QWidget *parent)
     , m_statusMessageLabel(new QLabel(this))
     , m_statusMessageIcon(new QLabel(this))
     , m_statusMessageTimer(new QTimer(this))
-    , m_terminalMetaLabel(new QLabel(tr("UTF-8 · 80×24"), this))
     , m_fileManagerButton(new QToolButton(this))
+    , m_headerExtras(new QWidget(this))
     , m_terminalView(new TerminalView(this))
 {
     auto *layout = new QVBoxLayout(this);
@@ -64,8 +64,6 @@ TerminalPane::TerminalPane(QWidget *parent)
         m_statusMessageIcon->clear();
         m_statusMessageIcon->setVisible(false);
     });
-    m_terminalMetaLabel->setObjectName(QStringLiteral("terminalSessionMeta"));
-    m_terminalMetaLabel->setToolTip(tr("Current terminal encoding and columns × rows"));
     m_fileManagerButton->setObjectName(QStringLiteral("terminalFileManagerToggle"));
     m_fileManagerButton->setCheckable(true);
     // 远程文件管理默认收起：多数会话只用终端，一进来就占掉三分之一宽度并立刻发起 SFTP
@@ -76,11 +74,17 @@ TerminalPane::TerminalPane(QWidget *parent)
     m_fileManagerButton->setToolTip(tr("Show the remote file manager for the current session (Ctrl+Shift+F)"));
     m_fileManagerButton->setAccessibleName(tr("Remote file manager"));
     updateFileManagerButtonIcon();
+    // 会话状态栏最右侧的外挂动作容器：单终端标签为空、零占位；工作空间给成员挂上
+    // 广播 / 布局切换 / 关闭按钮。
+    auto *headerExtrasLayout = new QHBoxLayout(m_headerExtras);
+    headerExtrasLayout->setContentsMargins(0, 0, 0, 0);
+    headerExtrasLayout->setSpacing(2);
+
     headerLayout->addWidget(m_headerLabel, 1);
     headerLayout->addWidget(m_statusMessageIcon);
     headerLayout->addWidget(m_statusMessageLabel);
-    headerLayout->addWidget(m_terminalMetaLabel);
     headerLayout->addWidget(m_fileManagerButton);
+    headerLayout->addWidget(m_headerExtras);
     layout->addWidget(m_headerBar);
     layout->addWidget(m_terminalView, 1);
 
@@ -88,16 +92,6 @@ TerminalPane::TerminalPane(QWidget *parent)
         updateFileManagerButtonIcon();
         emit fileManagerVisibilityRequested(visible);
     });
-    connect(m_terminalView,
-            &TerminalView::terminalSizeChanged,
-            this,
-            [this](const int columns, const int rows) {
-                // 编码当前固定为 UTF-8；尺寸直接来自 TerminalView 的真实布局结果，避免依赖
-                // 主窗口底部状态栏或在标签切换时串用其他会话的缓存值。
-                m_terminalMetaLabel->setText(
-                    tr("UTF-8 · %1×%2").arg(columns).arg(rows));
-            });
-
     connect(m_terminalView, &TerminalView::inputBytes, this, [this](const QByteArray &bytes) {
         if (m_awaitingManualRecovery) {
             // 断线提示期间的按键属于本地选择，不是会话输入：既不能写入任何 PTY，也绝不能
@@ -201,7 +195,6 @@ TerminalPane::TerminalPane(QWidget *parent)
     // 语言切换时重设终端标题栏的固定文案。已连接会话的标题是 host:port（与语言无关），
     // 由 refreshHeaderLabel() 兜底；连接中/失败等瞬时提示会在下一次状态变化时转为新语言。
     i18n::onRetranslate(this, [this] {
-        m_terminalMetaLabel->setToolTip(tr("Current terminal encoding and columns × rows"));
         m_fileManagerButton->setToolTip(
             tr("Show the remote file manager for the current session (Ctrl+Shift+F)"));
         m_fileManagerButton->setAccessibleName(tr("Remote file manager"));
@@ -839,20 +832,31 @@ void TerminalPane::setFileManagerVisible(const bool visible)
 void TerminalPane::setFileManagerEnabled(const bool enabled)
 {
     m_fileManagerButton->setEnabled(enabled);
+    // 布局不允许时直接隐藏按钮，而不是留一个灰按钮：分屏模式下它永远点不动，只会占位。
+    m_fileManagerButton->setVisible(enabled);
     if (!enabled) {
-        m_fileManagerButton->setToolTip(
-            tr("Remote file management is unavailable while multiple terminals are displayed."));
-        m_fileManagerButton->setAccessibleName(
-            tr("Remote file manager unavailable in the current workspace layout"));
         return;
     }
-    // 恢复可用时根据真实勾选态重建提示，不能沿用禁用说明，否则切换模式后按钮虽可点击，
-    // 辅助技术和鼠标用户看到的仍是“不可用”。
+    // 恢复可用时根据真实勾选态重建提示。
     m_fileManagerButton->setToolTip(
         m_fileManagerButton->isChecked()
             ? tr("Hide the remote file manager for the current session (Ctrl+Shift+F)")
             : tr("Show the remote file manager for the current session (Ctrl+Shift+F)"));
     m_fileManagerButton->setAccessibleName(tr("Remote file manager"));
+}
+
+QWidget *TerminalPane::headerExtrasContainer() const
+{
+    return m_headerExtras;
+}
+
+void TerminalPane::clearHeaderExtras()
+{
+    const QList<QWidget *> children =
+        m_headerExtras->findChildren<QWidget *>(QString(), Qt::FindDirectChildrenOnly);
+    for (QWidget *child : children) {
+        child->deleteLater();
+    }
 }
 
 void TerminalPane::showTransientStatus(const QString &message)

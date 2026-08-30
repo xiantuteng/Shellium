@@ -42,6 +42,14 @@ public:
     /** @brief 返回远程文件管理当前是否被所属布局允许。 */
     [[nodiscard]] bool isFileManagerAllowed() const;
 
+    /**
+     * @brief 主动请求关闭本终端（发出 closeRequested）。
+     *
+     * 供工作空间成员标题栏的关闭按钮调用，走与断线恢复提示里"关闭"完全相同的上层路径：
+     * 单终端标签 → 关标签页；工作空间成员 → 从组里摘除并清理其 AI 页。
+     */
+    void requestClose();
+
 signals:
     /** @brief 当前面板的嵌套服务器链变化。 */
     void activeTargetsChanged(TerminalPane *pane);

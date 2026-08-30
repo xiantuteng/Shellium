@@ -1,13 +1,16 @@
 #pragma once
 
 #include <QHash>
+#include <QList>
 #include <QWidget>
 
 class QLabel;
 class QListWidget;
 class QPushButton;
 class QSplitter;
+class QToolButton;
 class QVBoxLayout;
+class TerminalPane;
 class TerminalWorkspace;
 class WorkspaceDockOverlay;
 class WorkspaceTerminalFrame;
@@ -113,6 +116,17 @@ public:
     /** @brief 返回当前显示模式。 */
     [[nodiscard]] LayoutMode layoutMode() const;
 
+    /** @brief 是否已开启工作空间内实时输入广播。 */
+    [[nodiscard]] bool isBroadcastEnabled() const;
+
+    /**
+     * @brief 开关工作空间内实时输入广播。
+     *
+     * 开启后，任意成员终端里键入 / 粘贴 / 输入法提交的原始字节会被同步写入其他所有成员的
+     * PTY，因此各终端的操作完全一致。接收端不再次广播，不会形成回路。
+     */
+    void setBroadcastEnabled(bool enabled);
+
     /**
      * @brief 切换分屏 / 切换模式并重新排列既有会话。
      * @param mode 新模式。
@@ -128,6 +142,9 @@ signals:
 
     /** @brief 显示模式发生变化。 */
     void layoutModeChanged(TerminalWorkspaceGroup::LayoutMode mode);
+
+    /** @brief 广播开关状态发生变化。 */
+    void broadcastEnabledChanged(bool enabled);
 
 private:
     /** @brief 按当前模式刷新容器底色、成员可见性与远程文件管理开关。 */
@@ -147,6 +164,12 @@ private:
      *        空节点直接删掉；根节点永不删除。会向上级联。
      */
     void pruneSplitter(QSplitter *splitter);
+
+    /** @brief 给一个成员的会话状态栏挂上广播 / 布局切换 / 关闭三个按钮并接线。 */
+    void installMemberControls(TerminalWorkspace *workspace);
+
+    /** @brief 把 source 的原始输入同步写入其他所有成员（广播开启时）。 */
+    void relayBroadcastInput(TerminalPane *source, const QByteArray &bytes);
 
     /** @brief 分屏拖动过程中根据全局坐标算出停靠目标与边；target 为空表示最外层。 */
     struct DockTargetHit {
@@ -176,6 +199,9 @@ private:
     TerminalWorkspace *m_dockDragSource = nullptr;
     DockTargetHit m_externalHit;
     bool m_externalDropActive = false;
+    bool m_broadcastEnabled = false;
+    /** @brief 各成员标题栏里的广播按钮，开关状态整体同步。 */
+    QList<QToolButton *> m_broadcastButtons;
     LayoutMode m_layoutMode = LayoutMode::Tiled;
 };
 

@@ -75,6 +75,9 @@ private slots:
     /** @brief 从标签栏拖入既有工作空间时，落点半区必须走与内部拖动相同的命中逻辑。 */
     void externalDropHintResolvesToDockTarget();
 
+    /** @brief 工作空间成员标题栏必须有广播/布局切换/关闭三个按钮，广播开关整体同步。 */
+    void workspaceMemberHeaderControls();
+
     /** @brief 终端上报的发行版必须落库并让侧栏立刻换成对应图标，重启后依然保持。 */
     void detectedDistributionIsPersistedAndShownInSidebar();
 
@@ -325,16 +328,24 @@ void MainWindowShellTest::workspaceLayoutControlsRemoteFileAvailability()
     group.addTerminal(first, QStringLiteral("one"));
     group.addTerminal(second, QStringLiteral("two"));
 
-    // 默认分屏模式：多块同时显示，所有文件管理器必须先收起并禁用入口。
+    auto *firstFileToggle = first->activePane()->findChild<QToolButton *>(
+        QStringLiteral("terminalFileManagerToggle"));
+    QVERIFY(firstFileToggle != nullptr);
+    QVERIFY2(first->activePane()->findChild<QLabel *>(QStringLiteral("terminalSessionMeta")) == nullptr,
+             "终端会话状态栏不再显示 UTF-8·列×行 字样");
+
+    // 默认分屏模式：多块同时显示，所有文件管理器必须先收起、入口禁用并隐藏。
     QCOMPARE(group.layoutMode(), TerminalWorkspaceGroup::LayoutMode::Tiled);
     QVERIFY(!first->isFileManagerAllowed());
     QVERIFY(!second->isFileManagerAllowed());
+    QVERIFY2(firstFileToggle->isHidden(), "分屏模式下文件管理按钮必须隐藏而不是灰显");
     first->setFileManagerVisible(true);
     QVERIFY(!first->isFileManagerVisible());
 
     group.setLayoutMode(TerminalWorkspaceGroup::LayoutMode::Switch);
     QVERIFY(first->isFileManagerAllowed());
     QVERIFY(second->isFileManagerAllowed());
+    QVERIFY2(!firstFileToggle->isHidden(), "切换模式下文件管理按钮必须恢复显示");
     first->setFileManagerVisible(true);
     QVERIFY(first->isFileManagerVisible());
 
@@ -489,6 +500,52 @@ void MainWindowShellTest::externalDropHintResolvesToDockTarget()
     QCOMPARE(edge, TerminalWorkspaceGroup::DockEdge::Right);
     // 命中结果只能取一次。
     QVERIFY(!group.consumeExternalDropTarget(&target, &edge));
+}
+
+void MainWindowShellTest::workspaceMemberHeaderControls()
+{
+    TerminalWorkspaceGroup group;
+    auto *a = new TerminalWorkspace;
+    auto *b = new TerminalWorkspace;
+    group.addTerminal(a, QStringLiteral("a"));
+    group.addTerminal(b, QStringLiteral("b"));
+
+    const auto controlsOf = [](TerminalWorkspace *w) {
+        return std::make_tuple(
+            w->activePane()->findChild<QToolButton *>(QStringLiteral("workspaceBroadcastToggle")),
+            w->activePane()->findChild<QToolButton *>(QStringLiteral("workspaceModeToggle")),
+            w->activePane()->findChild<QToolButton *>(QStringLiteral("workspaceMemberClose")));
+    };
+    auto [bcA, modeA, closeA] = controlsOf(a);
+    auto [bcB, modeB, closeB] = controlsOf(b);
+    QVERIFY(bcA && modeA && closeA && bcB && modeB && closeB);
+    QVERIFY(bcA->isCheckable() && !modeA->isCheckable() && !closeA->isCheckable());
+
+    // 广播开关整体同步：在 a 上打开，b 的按钮也应变为选中，组状态为 true。
+    QVERIFY(!group.isBroadcastEnabled());
+    bcA->setChecked(true);
+    QVERIFY(group.isBroadcastEnabled());
+    QVERIFY(bcB->isChecked());
+    bcB->setChecked(false);
+    QVERIFY(!group.isBroadcastEnabled());
+    QVERIFY(!bcA->isChecked());
+
+    // 布局切换按钮等价于侧栏开关。
+    QCOMPARE(group.layoutMode(), TerminalWorkspaceGroup::LayoutMode::Tiled);
+    modeA->click();
+    QCOMPARE(group.layoutMode(), TerminalWorkspaceGroup::LayoutMode::Switch);
+
+    // 关闭按钮走 TerminalWorkspace::closeRequested。
+    QSignalSpy closeSpy(b, &TerminalWorkspace::closeRequested);
+    closeB->click();
+    QCOMPARE(closeSpy.count(), 1);
+
+    // 从组里摘除后，标题栏按钮与广播接线都要清掉（终端会作为独立标签继续存在）。
+    QVERIFY(group.takeTerminal(a));
+    QTRY_VERIFY(a->activePane()->findChild<QToolButton *>(
+                    QStringLiteral("workspaceBroadcastToggle")) == nullptr);
+    delete a;
+    delete b;
 }
 
 void MainWindowShellTest::desktopPlatformsUseProductTitleAndCustomWindowControls()

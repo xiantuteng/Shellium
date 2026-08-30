@@ -165,6 +165,17 @@ public:
     void setFileManagerEnabled(bool enabled);
 
     /**
+     * @brief 会话状态栏最右侧的外挂动作容器（在文件管理按钮之后）。
+     *
+     * 调用方把自己的按钮 setParent 到该容器并加入其布局即可；容器在有可见子控件时才占位。
+     * 返回值不转移所有权。
+     */
+    [[nodiscard]] QWidget *headerExtrasContainer() const;
+
+    /** @brief 移除并销毁外挂动作容器里的全部子控件，恢复到干净的单终端状态栏。 */
+    void clearHeaderExtras();
+
+    /**
      * @brief 在会话状态栏、紧邻服务器名之后，短暂展示一条状态文字。
      * @param message 待展示的文字；空字符串立即清空当前显示。
      *
@@ -410,11 +421,16 @@ private:
     /** @brief 清空 m_statusMessageLabel/m_statusMessageIcon 的定时器；每次新消息到达都会重新启动。 */
     QTimer *m_statusMessageTimer = nullptr;
 
-    /** @brief 当前终端编码和列×行尺寸，随 PTY 尺寸信号实时更新。 */
-    QLabel *m_terminalMetaLabel = nullptr;
-
     /** @brief 当前标签专属的远程文件管理显隐按钮，位于状态栏最右侧。 */
     QToolButton *m_fileManagerButton = nullptr;
+
+    /**
+     * @brief 会话状态栏最右侧的外挂动作容器，默认空且不占位。
+     *
+     * 单终端标签用不到；工作空间在这里为每个成员挂上广播 / 布局切换 / 关闭按钮，避免
+     * TerminalPane 反向依赖工作空间，也让这些按钮随终端一起在状态栏里对齐。
+     */
+    QWidget *m_headerExtras = nullptr;
 
     /** @brief 状态栏图标线条色，随终端主题更新，供文件管理按钮重绘图标使用。 */
     QColor m_headerIconColor = QColor(QStringLiteral("#e6e6e6"));

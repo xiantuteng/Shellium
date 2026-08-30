@@ -1054,3 +1054,6 @@
 1057	Faites glisser un onglet de terminal dans la page de terminal actuelle ou dans cette barre latérale pour créer ou agrandir un espace de travail.
 1058	Vue mosaïque
 1059	Vue alternée
+1060	Diffuser la saisie vers tous les terminaux de cet espace de travail
+1061	Basculer entre la vue en mosaïque et l'affichage d'un terminal à la fois
+1062	Fermer ce terminal

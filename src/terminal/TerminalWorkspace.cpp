@@ -159,6 +159,11 @@ bool TerminalWorkspace::isFileManagerAllowed() const
     return m_fileManagerAllowed;
 }
 
+void TerminalWorkspace::requestClose()
+{
+    emit closeRequested(this);
+}
+
 void TerminalWorkspace::synchronizeFileManager(const bool followInnermost)
 {
     // SFTP 会立即建立独立连接，因此必须等终端完成主机密钥确认和认证。连接中、已断开或

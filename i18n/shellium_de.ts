@@ -4268,24 +4268,12 @@ Privater Schlüssel: %2
         <translation type="unfinished">Nicht verbunden</translation>
     </message>
     <message>
-        <source>UTF-8 · 80×24</source>
-        <translation type="unfinished">UTF-8 · 80×24</translation>
-    </message>
-    <message>
-        <source>Current terminal encoding and columns × rows</source>
-        <translation type="unfinished">Aktuelle Terminalkodierung und Spalten × Zeilen</translation>
-    </message>
-    <message>
         <source>Show the remote file manager for the current session (Ctrl+Shift+F)</source>
         <translation type="unfinished">Den Remote-Dateimanager für die aktuelle Sitzung anzeigen (Strg+Umschalt+F)</translation>
     </message>
     <message>
         <source>Remote file manager</source>
         <translation type="unfinished">Remote-Dateimanager</translation>
-    </message>
-    <message>
-        <source>UTF-8 · %1×%2</source>
-        <translation type="unfinished">UTF-8 · %1×%2</translation>
     </message>
     <message>
         <source>Waiting for the inner SSH password; this entry is also used for the SFTP session</source>
@@ -4460,14 +4448,6 @@ Bestätigen Sie, dass sich der Schlüssel geändert hat, und ersetzen Sie den al
     <message>
         <source>Hide the remote file manager for the current session (Ctrl+Shift+F)</source>
         <translation type="unfinished">Den Remote-Dateimanager für die aktuelle Sitzung verbergen (Strg+Umschalt+F)</translation>
-    </message>
-    <message>
-        <source>Remote file management is unavailable while multiple terminals are displayed.</source>
-        <translation type="unfinished">Die Remote-Dateiverwaltung ist nicht verfügbar, während mehrere Terminals angezeigt werden.</translation>
-    </message>
-    <message>
-        <source>Remote file manager unavailable in the current workspace layout</source>
-        <translation type="unfinished">Der Remote-Dateimanager ist im aktuellen Arbeitsbereichslayout nicht verfügbar</translation>
     </message>
     <message>
         <source>Press r to reconnect to %1, press x to close this tab</source>
@@ -4655,6 +4635,18 @@ Reconnecting manually…<byte value="xd" />
     <message>
         <source>Terminal</source>
         <translation type="unfinished">Terminal</translation>
+    </message>
+    <message>
+        <source>Broadcast input to every terminal in this workspace</source>
+        <translation type="unfinished">Eingabe an alle Terminals in diesem Arbeitsbereich senden</translation>
+    </message>
+    <message>
+        <source>Toggle between tiled split view and one-terminal-at-a-time view</source>
+        <translation type="unfinished">Zwischen Kachelansicht und Einzelterminal-Ansicht wechseln</translation>
+    </message>
+    <message>
+        <source>Close this terminal</source>
+        <translation type="unfinished">Dieses Terminal schließen</translation>
     </message>
 </context>
 <context>

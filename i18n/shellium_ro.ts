@@ -4268,24 +4268,12 @@ Cheie publică: %3</translation>
         <translation type="unfinished">Neconectat</translation>
     </message>
     <message>
-        <source>UTF-8 · 80×24</source>
-        <translation type="unfinished">UTF-8 · 80×24</translation>
-    </message>
-    <message>
-        <source>Current terminal encoding and columns × rows</source>
-        <translation type="unfinished">Codarea curentă a terminalului și coloane × rânduri</translation>
-    </message>
-    <message>
         <source>Show the remote file manager for the current session (Ctrl+Shift+F)</source>
         <translation type="unfinished">Afișează managerul de fișiere la distanță pentru sesiunea curentă (Ctrl+Shift+F)</translation>
     </message>
     <message>
         <source>Remote file manager</source>
         <translation type="unfinished">Manager de fișiere la distanță</translation>
-    </message>
-    <message>
-        <source>UTF-8 · %1×%2</source>
-        <translation type="unfinished">UTF-8 · %1×%2</translation>
     </message>
     <message>
         <source>Waiting for the inner SSH password; this entry is also used for the SFTP session</source>
@@ -4460,14 +4448,6 @@ Confirmi că cheia s-a schimbat și înlocuiești vechea înregistrare din known
     <message>
         <source>Hide the remote file manager for the current session (Ctrl+Shift+F)</source>
         <translation type="unfinished">Ascunde managerul de fișiere la distanță pentru sesiunea curentă (Ctrl+Shift+F)</translation>
-    </message>
-    <message>
-        <source>Remote file management is unavailable while multiple terminals are displayed.</source>
-        <translation type="unfinished">Gestionarea fișierelor la distanță nu este disponibilă când sunt afișate mai multe terminale.</translation>
-    </message>
-    <message>
-        <source>Remote file manager unavailable in the current workspace layout</source>
-        <translation type="unfinished">Managerul de fișiere la distanță nu este disponibil în aspectul curent al spațiului de lucru</translation>
     </message>
     <message>
         <source>Press r to reconnect to %1, press x to close this tab</source>
@@ -4655,6 +4635,18 @@ Reconnecting manually…<byte value="xd" />
     <message>
         <source>Terminal</source>
         <translation type="unfinished">Terminal</translation>
+    </message>
+    <message>
+        <source>Broadcast input to every terminal in this workspace</source>
+        <translation type="unfinished">Difuzează introducerea către toate terminalele din acest spațiu de lucru</translation>
+    </message>
+    <message>
+        <source>Toggle between tiled split view and one-terminal-at-a-time view</source>
+        <translation type="unfinished">Comută între vizualizarea mozaic și afișarea unui singur terminal</translation>
+    </message>
+    <message>
+        <source>Close this terminal</source>
+        <translation type="unfinished">Închide acest terminal</translation>
     </message>
 </context>
 <context>

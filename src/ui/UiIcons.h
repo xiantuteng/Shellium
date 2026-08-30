@@ -47,6 +47,8 @@ enum class Symbol {
     Terminal,
     /** @brief 四宫格工作空间，用于区分多终端容器与单终端标签。 */
     Workspace,
+    /** @brief 共享节点样式的广播图标：一个源连到多个目标，表示同步输入到所有终端。 */
+    Broadcast,
     Folder,
     /** @brief 带斜杠的文件夹，表示远程文件管理当前处于隐藏状态。 */
     FolderHidden,
@@ -189,6 +191,17 @@ enum class Symbol {
             }
         }
         break;
+    case Symbol::Broadcast: {
+        // 左侧一个实心源节点，两条连线指向右侧两个目标节点：一处输入同步到多处。
+        painter.setBrush(color);
+        painter.drawEllipse(QPointF(5.5, 12.0), 2.6, 2.6);
+        painter.setBrush(Qt::NoBrush);
+        painter.drawLine(QPointF(7.6, 10.6), QPointF(15.0, 6.5));
+        painter.drawLine(QPointF(7.6, 13.4), QPointF(15.0, 17.5));
+        painter.drawEllipse(QPointF(17.0, 6.0), 2.4, 2.4);
+        painter.drawEllipse(QPointF(17.0, 18.0), 2.4, 2.4);
+        break;
+    }
     case Symbol::Folder: {
         QPainterPath folder;
         folder.moveTo(3.0, 7.0);

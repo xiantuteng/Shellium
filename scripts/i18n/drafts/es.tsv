@@ -1054,3 +1054,6 @@
 1057	Arrastra una pestaña de terminal a la página de terminal actual o a esta barra lateral para crear o ampliar un espacio de trabajo.
 1058	Vista en mosaico
 1059	Vista alterna
+1060	Difundir la entrada a todas las terminales de este espacio de trabajo
+1061	Alternar entre vista en mosaico y ver una terminal a la vez
+1062	Cerrar esta terminal

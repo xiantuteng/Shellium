@@ -4270,24 +4270,12 @@ Public key: %3</source>
         <translation>未連線</translation>
     </message>
     <message>
-        <source>UTF-8 · 80×24</source>
-        <translation>UTF-8 · 80×24</translation>
-    </message>
-    <message>
-        <source>Current terminal encoding and columns × rows</source>
-        <translation>當前終端編碼和列×行尺寸</translation>
-    </message>
-    <message>
         <source>Show the remote file manager for the current session (Ctrl+Shift+F)</source>
         <translation>顯示當前會話的遠端檔案管理（Ctrl+Shift+F）</translation>
     </message>
     <message>
         <source>Remote file manager</source>
         <translation>遠端檔案管理</translation>
-    </message>
-    <message>
-        <source>UTF-8 · %1×%2</source>
-        <translation>UTF-8 · %1×%2</translation>
     </message>
     <message>
         <source>Waiting for the inner SSH password; this entry is also used for the SFTP session</source>
@@ -4466,14 +4454,6 @@ Confirm the key has changed and replace the old record in known_hosts?</source>
     <message>
         <source>Hide the remote file manager for the current session (Ctrl+Shift+F)</source>
         <translation>隱藏當前會話的遠端檔案管理（Ctrl+Shift+F）</translation>
-    </message>
-    <message>
-        <source>Remote file management is unavailable while multiple terminals are displayed.</source>
-        <translation type="unfinished">同時顯示多個終端時無法使用遠端檔案管理。</translation>
-    </message>
-    <message>
-        <source>Remote file manager unavailable in the current workspace layout</source>
-        <translation type="unfinished">目前工作空間版面配置不支援遠端檔案管理員</translation>
     </message>
     <message>
         <source>Press r to reconnect to %1, press x to close this tab</source>
@@ -4666,6 +4646,18 @@ Reconnecting manually…<byte value="xd" />
     <message>
         <source>Terminal</source>
         <translation type="unfinished">終端</translation>
+    </message>
+    <message>
+        <source>Broadcast input to every terminal in this workspace</source>
+        <translation type="unfinished">將輸入廣播到此工作區的所有終端</translation>
+    </message>
+    <message>
+        <source>Toggle between tiled split view and one-terminal-at-a-time view</source>
+        <translation type="unfinished">在分割檢視與逐一終端檢視之間切換</translation>
+    </message>
+    <message>
+        <source>Close this terminal</source>
+        <translation type="unfinished">關閉此終端</translation>
     </message>
 </context>
 <context>

@@ -4268,24 +4268,12 @@ Public key: %3</source>
         <translation type="unfinished">연결되지 않음</translation>
     </message>
     <message>
-        <source>UTF-8 · 80×24</source>
-        <translation type="unfinished">UTF-8 · 80×24</translation>
-    </message>
-    <message>
-        <source>Current terminal encoding and columns × rows</source>
-        <translation type="unfinished">현재 터미널 인코딩과 열 × 행</translation>
-    </message>
-    <message>
         <source>Show the remote file manager for the current session (Ctrl+Shift+F)</source>
         <translation type="unfinished">현재 세션의 원격 파일 관리자 표시 (Ctrl+Shift+F)</translation>
     </message>
     <message>
         <source>Remote file manager</source>
         <translation type="unfinished">원격 파일 관리자</translation>
-    </message>
-    <message>
-        <source>UTF-8 · %1×%2</source>
-        <translation type="unfinished">UTF-8 · %1×%2</translation>
     </message>
     <message>
         <source>Waiting for the inner SSH password; this entry is also used for the SFTP session</source>
@@ -4460,14 +4448,6 @@ Confirm the key has changed and replace the old record in known_hosts?</source>
     <message>
         <source>Hide the remote file manager for the current session (Ctrl+Shift+F)</source>
         <translation type="unfinished">현재 세션의 원격 파일 관리자 숨기기 (Ctrl+Shift+F)</translation>
-    </message>
-    <message>
-        <source>Remote file management is unavailable while multiple terminals are displayed.</source>
-        <translation type="unfinished">여러 터미널을 표시하는 동안에는 원격 파일 관리를 사용할 수 없습니다.</translation>
-    </message>
-    <message>
-        <source>Remote file manager unavailable in the current workspace layout</source>
-        <translation type="unfinished">현재 작업 공간 레이아웃에서는 원격 파일 관리자를 사용할 수 없습니다</translation>
     </message>
     <message>
         <source>Press r to reconnect to %1, press x to close this tab</source>
@@ -4655,6 +4635,18 @@ Reconnecting manually…<byte value="xd" />
     <message>
         <source>Terminal</source>
         <translation type="unfinished">터미널</translation>
+    </message>
+    <message>
+        <source>Broadcast input to every terminal in this workspace</source>
+        <translation type="unfinished">이 작업 공간의 모든 터미널에 입력 브로드캐스트</translation>
+    </message>
+    <message>
+        <source>Toggle between tiled split view and one-terminal-at-a-time view</source>
+        <translation type="unfinished">타일 보기와 한 번에 하나씩 보기 전환</translation>
+    </message>
+    <message>
+        <source>Close this terminal</source>
+        <translation type="unfinished">이 터미널 닫기</translation>
     </message>
 </context>
 <context>

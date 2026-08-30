@@ -4268,24 +4268,12 @@ Public key: %3</source>
         <translation type="unfinished">غير متصل</translation>
     </message>
     <message>
-        <source>UTF-8 · 80×24</source>
-        <translation type="unfinished">UTF-8 · 80×24</translation>
-    </message>
-    <message>
-        <source>Current terminal encoding and columns × rows</source>
-        <translation type="unfinished">ترميز الطرفية الحالي والأعمدة × الأسطر</translation>
-    </message>
-    <message>
         <source>Show the remote file manager for the current session (Ctrl+Shift+F)</source>
         <translation type="unfinished">عرض مدير الملفات البعيد للجلسة الحالية (Ctrl+Shift+F)</translation>
     </message>
     <message>
         <source>Remote file manager</source>
         <translation type="unfinished">مدير الملفات البعيد</translation>
-    </message>
-    <message>
-        <source>UTF-8 · %1×%2</source>
-        <translation type="unfinished">UTF-8 · %1×%2</translation>
     </message>
     <message>
         <source>Waiting for the inner SSH password; this entry is also used for the SFTP session</source>
@@ -4460,14 +4448,6 @@ Confirm the key has changed and replace the old record in known_hosts?</source>
     <message>
         <source>Hide the remote file manager for the current session (Ctrl+Shift+F)</source>
         <translation type="unfinished">إخفاء مدير الملفات البعيد للجلسة الحالية (Ctrl+Shift+F)</translation>
-    </message>
-    <message>
-        <source>Remote file management is unavailable while multiple terminals are displayed.</source>
-        <translation type="unfinished">لا تتوفر إدارة الملفات البعيدة عند عرض عدة أطرافية.</translation>
-    </message>
-    <message>
-        <source>Remote file manager unavailable in the current workspace layout</source>
-        <translation type="unfinished">مدير الملفات البعيدة غير متاح في تخطيط مساحة العمل الحالي</translation>
     </message>
     <message>
         <source>Press r to reconnect to %1, press x to close this tab</source>
@@ -4655,6 +4635,18 @@ Reconnecting manually…<byte value="xd" />
     <message>
         <source>Terminal</source>
         <translation type="unfinished">الطرفية</translation>
+    </message>
+    <message>
+        <source>Broadcast input to every terminal in this workspace</source>
+        <translation type="unfinished">بث الإدخال إلى كل الطرفيات في مساحة العمل هذه</translation>
+    </message>
+    <message>
+        <source>Toggle between tiled split view and one-terminal-at-a-time view</source>
+        <translation type="unfinished">التبديل بين العرض المبلّط وعرض طرفية واحدة في كل مرة</translation>
+    </message>
+    <message>
+        <source>Close this terminal</source>
+        <translation type="unfinished">إغلاق هذه الطرفية</translation>
     </message>
 </context>
 <context>

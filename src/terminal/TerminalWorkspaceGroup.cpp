@@ -1,12 +1,15 @@
 #include "terminal/TerminalWorkspaceGroup.h"
 
+#include "terminal/TerminalPane.h"
 #include "terminal/TerminalWorkspace.h"
+#include "ui/UiIcons.h"
 
 #include <QAbstractButton>
 #include <QApplication>
 #include <QCursor>
 #include <QEvent>
 #include <QFrame>
+#include <QHBoxLayout>
 #include <QLabel>
 #include <QListWidget>
 #include <QListWidgetItem>
@@ -19,6 +22,7 @@
 #include <QSplitter>
 #include <QStyle>
 #include <QTimer>
+#include <QToolButton>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -475,8 +479,114 @@ void TerminalWorkspaceGroup::addTerminal(TerminalWorkspace *workspace, const QSt
     }
     m_splitRoot->addWidget(frame);
     equalizeSplitter(m_splitRoot);
+    installMemberControls(workspace);
+    connect(workspace->activePane(), &TerminalPane::broadcastSourceInput,
+            this, &TerminalWorkspaceGroup::relayBroadcastInput, Qt::UniqueConnection);
     rebuildLayout();
     emit terminalsChanged();
+}
+
+void TerminalWorkspaceGroup::installMemberControls(TerminalWorkspace *workspace)
+{
+    TerminalPane *pane = workspace == nullptr ? nullptr : workspace->activePane();
+    if (pane == nullptr) {
+        return;
+    }
+    QWidget *slot = pane->headerExtrasContainer();
+    auto *slotLayout = qobject_cast<QHBoxLayout *>(slot->layout());
+    if (slotLayout == nullptr) {
+        return;
+    }
+    // 状态栏背景恒为深色，图标用固定浅灰即可，不跟随应用深浅主题。
+    const QColor iconColor(QStringLiteral("#e6e6e6"));
+    // 与文件管理按钮一致：悬停显描边，选中（广播开启）填一块浅色圆角底，和参考图一致。
+    const QString buttonStyle = QStringLiteral(
+        "QToolButton { border: 1px solid transparent; border-radius: 5px; padding: 3px; }"
+        "QToolButton:hover { border-color: rgba(230,230,230,0.55); }"
+        "QToolButton:checked { background: rgba(230,230,230,0.22); }"
+        "QToolButton:checked:hover { background: rgba(230,230,230,0.30); }");
+    const auto makeButton = [&](const UiIcons::Symbol symbol,
+                                const QString &objectName,
+                                const QString &tooltip,
+                                const bool checkable) {
+        auto *button = new QToolButton(slot);
+        button->setObjectName(objectName);
+        button->setAutoRaise(true);
+        button->setCheckable(checkable);
+        button->setIconSize(QSize(16, 16));
+        button->setIcon(UiIcons::symbol(slot, symbol, iconColor));
+        button->setToolTip(tooltip);
+        button->setCursor(Qt::PointingHandCursor);
+        button->setStyleSheet(buttonStyle);
+        slotLayout->addWidget(button);
+        return button;
+    };
+
+    auto *broadcastButton = makeButton(
+        UiIcons::Symbol::Broadcast,
+        QStringLiteral("workspaceBroadcastToggle"),
+        tr("Broadcast input to every terminal in this workspace"),
+        true);
+    {
+        const QSignalBlocker blocker(broadcastButton);
+        broadcastButton->setChecked(m_broadcastEnabled);
+    }
+    connect(broadcastButton, &QToolButton::toggled, this,
+            [this](const bool on) { setBroadcastEnabled(on); });
+    m_broadcastButtons.append(broadcastButton);
+
+    auto *modeButton = makeButton(
+        UiIcons::Symbol::Workspace,
+        QStringLiteral("workspaceModeToggle"),
+        tr("Toggle between tiled split view and one-terminal-at-a-time view"),
+        false);
+    connect(modeButton, &QToolButton::clicked, this, [this]() {
+        setLayoutMode(m_layoutMode == LayoutMode::Tiled ? LayoutMode::Switch
+                                                        : LayoutMode::Tiled);
+    });
+
+    auto *closeButton = makeButton(
+        UiIcons::Symbol::Close,
+        QStringLiteral("workspaceMemberClose"),
+        tr("Close this terminal"),
+        false);
+    connect(closeButton, &QToolButton::clicked, workspace,
+            [workspace]() { workspace->requestClose(); });
+}
+
+bool TerminalWorkspaceGroup::isBroadcastEnabled() const
+{
+    return m_broadcastEnabled;
+}
+
+void TerminalWorkspaceGroup::setBroadcastEnabled(const bool enabled)
+{
+    if (m_broadcastEnabled == enabled) {
+        return;
+    }
+    m_broadcastEnabled = enabled;
+    for (QToolButton *button : std::as_const(m_broadcastButtons)) {
+        if (button == nullptr) {
+            continue;
+        }
+        const QSignalBlocker blocker(button);
+        button->setChecked(enabled);
+    }
+    emit broadcastEnabledChanged(enabled);
+}
+
+void TerminalWorkspaceGroup::relayBroadcastInput(TerminalPane *source, const QByteArray &bytes)
+{
+    if (!m_broadcastEnabled || source == nullptr || bytes.isEmpty()) {
+        return;
+    }
+    for (TerminalWorkspace *workspace : std::as_const(m_terminals)) {
+        TerminalPane *pane = workspace == nullptr ? nullptr : workspace->activePane();
+        if (pane != nullptr && pane != source) {
+            // sendInputBytes 不再次发出 broadcastSourceInput，因此不会 A→B→A 回环。
+            pane->sendInputBytes(bytes);
+        }
+    }
 }
 
 bool TerminalWorkspaceGroup::takeTerminal(TerminalWorkspace *workspace)
@@ -487,6 +597,15 @@ bool TerminalWorkspaceGroup::takeTerminal(TerminalWorkspace *workspace)
     }
     WorkspaceTerminalFrame *frame = m_frames.take(workspace);
     auto *oldParent = qobject_cast<QSplitter *>(frame->parentWidget());
+    // 终端会以独立标签的形式继续存在：必须撤掉工作空间挂上的标题栏按钮与广播接线，
+    // 否则一个已离开工作空间的终端仍会把输入广播进来、标题栏也残留三个按钮。
+    if (TerminalPane *pane = workspace->activePane()) {
+        disconnect(pane, &TerminalPane::broadcastSourceInput, this, nullptr);
+        m_broadcastButtons.removeIf([pane](QToolButton *button) {
+            return button == nullptr || pane->isAncestorOf(button);
+        });
+        pane->clearHeaderExtras();
+    }
     // 先把终端还给调用方，再销毁承载它的 frame；顺序反了会把仍在运行的会话一起删掉。
     workspace->setParent(this);
     workspace->show();

@@ -4270,24 +4270,12 @@ Public key: %3</source>
         <translation>未连接</translation>
     </message>
     <message>
-        <source>UTF-8 · 80×24</source>
-        <translation>UTF-8 · 80×24</translation>
-    </message>
-    <message>
-        <source>Current terminal encoding and columns × rows</source>
-        <translation>当前终端编码和列×行尺寸</translation>
-    </message>
-    <message>
         <source>Show the remote file manager for the current session (Ctrl+Shift+F)</source>
         <translation>显示当前会话的远程文件管理（Ctrl+Shift+F）</translation>
     </message>
     <message>
         <source>Remote file manager</source>
         <translation>远程文件管理</translation>
-    </message>
-    <message>
-        <source>UTF-8 · %1×%2</source>
-        <translation>UTF-8 · %1×%2</translation>
     </message>
     <message>
         <source>Waiting for the inner SSH password; this entry is also used for the SFTP session</source>
@@ -4466,14 +4454,6 @@ Confirm the key has changed and replace the old record in known_hosts?</source>
     <message>
         <source>Hide the remote file manager for the current session (Ctrl+Shift+F)</source>
         <translation>隐藏当前会话的远程文件管理（Ctrl+Shift+F）</translation>
-    </message>
-    <message>
-        <source>Remote file management is unavailable while multiple terminals are displayed.</source>
-        <translation type="unfinished">同时显示多个终端时无法使用远程文件管理。</translation>
-    </message>
-    <message>
-        <source>Remote file manager unavailable in the current workspace layout</source>
-        <translation type="unfinished">当前工作空间布局不支持远程文件管理器</translation>
     </message>
     <message>
         <source>Press r to reconnect to %1, press x to close this tab</source>
@@ -4666,6 +4646,18 @@ Reconnecting manually…<byte value="xd" />
     <message>
         <source>Terminal</source>
         <translation type="unfinished">终端</translation>
+    </message>
+    <message>
+        <source>Broadcast input to every terminal in this workspace</source>
+        <translation type="unfinished">将输入广播到此工作空间的所有终端</translation>
+    </message>
+    <message>
+        <source>Toggle between tiled split view and one-terminal-at-a-time view</source>
+        <translation type="unfinished">在分屏视图和逐个终端视图之间切换</translation>
+    </message>
+    <message>
+        <source>Close this terminal</source>
+        <translation type="unfinished">关闭此终端</translation>
     </message>
 </context>
 <context>
