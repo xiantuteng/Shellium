@@ -17,9 +17,11 @@
 #include <QListWidget>
 #include <QPushButton>
 #include <QSignalSpy>
+#include <QTabWidget>
 #include <QTest>
 #include <QTextEdit>
 #include <QToolButton>
+#include <QTranslator>
 #include <QVBoxLayout>
 
 #include <memory>
@@ -89,6 +91,12 @@ private slots:
 
     /** @brief 复制按钮应把命令原样写入系统剪贴板，而不改动数据库。 */
     void snippetRowCopyButtonWritesCommandToClipboard();
+
+    /**
+     * @brief 切换程序语言后，标签页标题、行内“执行/复制”按钮等所有常驻文案必须立即
+     * 跟随新语言，而不是残留上一次语言（行内按钮是每次 reloadSnippets 重建的，最容易漏）。
+     */
+    void snippetRowsAndTabsRetranslateOnLanguageChange();
 
     /** @brief 拖拽排序完成后，新的可见顺序必须回写为持久化的 sortOrder。 */
     void reorderingSnippetListPersistsNewSortOrder();
@@ -629,6 +637,73 @@ void ProductivityTest::tunnelBrokerReturnsRemoteSftpRelayEndpoints()
     // 注销后不能继续泄露或复用外层认证材料；后台任务必须看到路由已经失效。
     broker.unregisterRoute(inner.id);
     QVERIFY(!broker.remoteSftpRelay(inner.id, &resolvedOuter, &resolvedInner));
+}
+
+namespace {
+
+/**
+ * @brief 把任意源文案翻成「!!<原文>」的测试替身翻译器，只为触发 QEvent::LanguageChange。
+ */
+class MarkerTranslator final : public QTranslator {
+public:
+    QString translate(const char *context,
+                      const char *sourceText,
+                      const char *disambiguation = nullptr,
+                      int n = -1) const override
+    {
+        Q_UNUSED(context)
+        Q_UNUSED(disambiguation)
+        Q_UNUSED(n)
+        return QStringLiteral("!!") + QString::fromUtf8(sourceText);
+    }
+
+    bool isEmpty() const override { return false; }
+};
+
+} // namespace
+
+void ProductivityTest::snippetRowsAndTabsRetranslateOnLanguageChange()
+{
+    SnippetRecord snippet;
+    snippet.id = QStringLiteral("snippet-mem");
+    snippet.kind = SnippetNodeKind::Snippet;
+    snippet.name = QStringLiteral("内存占用");
+    snippet.command = QStringLiteral("free -m");
+    snippet.sortOrder = 0;
+    QVERIFY(m_model->saveSnippet(snippet));
+
+    ProductivityWidget widget(m_model.get());
+
+    auto *tabs = widget.findChild<QTabWidget *>(QStringLiteral("productivityTabs"));
+    QVERIFY(tabs != nullptr);
+    QCOMPARE(tabs->tabText(0), QStringLiteral("Command snippets"));
+
+    auto *list = widget.findChild<QListWidget *>(QStringLiteral("productivitySnippetList"));
+    QVERIFY(list != nullptr);
+    // 语言切换会整表重建，行控件指针随之失效，因此每次都按 id 重新定位当前行。
+    const auto buttonText = [&](const QString &objectName) {
+        QListWidgetItem *item = findSnippetItem(list, snippet.id);
+        return list->itemWidget(item)->findChild<QPushButton *>(objectName)->text();
+    };
+    const auto executeText = [&]() {
+        return buttonText(QStringLiteral("productivitySnippetExecute"));
+    };
+    const auto copyText = [&]() {
+        return buttonText(QStringLiteral("productivitySnippetCopy"));
+    };
+    QCOMPARE(copyText(), QStringLiteral("Copy"));
+
+    MarkerTranslator translator;
+    QVERIFY(QCoreApplication::installTranslator(&translator));
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::LanguageChange);
+
+    QCOMPARE(tabs->tabText(0), QStringLiteral("!!Command snippets"));
+    QCOMPARE(copyText(), QStringLiteral("!!Copy"));
+    QCOMPARE(executeText(), QStringLiteral("!!Run  %1").arg(QStringLiteral("Ctrl+1")));
+
+    QVERIFY(QCoreApplication::removeTranslator(&translator));
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::LanguageChange);
+    QCOMPARE(copyText(), QStringLiteral("Copy"));
 }
 
 QTEST_MAIN(ProductivityTest)

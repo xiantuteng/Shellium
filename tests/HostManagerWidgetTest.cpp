@@ -69,6 +69,7 @@ private slots:
 
     /** @brief 主机配置字段顺序、ProxyJump 高级入口、页脚和按钮图标必须符合新版交互。 */
     void hostDialogUsesRequestedFieldOrderAndIcons();
+    void newHostFocusesAddressFieldAndDropsInheritanceCopy();
 
     /** @brief 新建主机输入的密码与私钥路径必须随保存自动持久化，不再依赖额外开关。 */
     void newHostAutomaticallyPersistsPasswordAndIdentityFile();
@@ -649,6 +650,63 @@ void HostManagerWidgetTest::hostDialogUsesRequestedFieldOrderAndIcons()
                 failure = QStringLiteral("主机配置按钮“%1”缺少图标").arg(button->text());
             }
         }
+        dialog->close();
+    });
+
+    addHostButton->click();
+    QVERIFY2(failure.isEmpty(), qPrintable(failure));
+}
+
+void HostManagerWidgetTest::newHostFocusesAddressFieldAndDropsInheritanceCopy()
+{
+    HostManagerWidget widget(m_database.get(), m_vault.get());
+
+    QAbstractButton *addHostButton = nullptr;
+    for (QAbstractButton *button : widget.headerActionsWidget()->findChildren<QAbstractButton *>()) {
+        if (button->text() == QStringLiteral("New host")) {
+            addHostButton = button;
+            break;
+        }
+    }
+    QVERIFY2(addHostButton != nullptr, "侧栏没有新建主机按钮");
+
+    QString failure;
+    QTimer::singleShot(0, [&failure]() {
+        auto *dialog = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+        if (dialog == nullptr) {
+            failure = QStringLiteral("新建主机窗口未打开");
+            return;
+        }
+
+        auto *address = dialog->findChild<QLineEdit *>(QStringLiteral("hostAddressEdit"));
+        if (address == nullptr) {
+            failure = QStringLiteral("主机配置缺少主机地址输入框");
+        } else if (dialog->focusWidget() != address) {
+            failure = QStringLiteral("新增主机时初始焦点没有落在主机地址输入框");
+        }
+
+        // 「继承」这一概念已从界面移除：任何占位符、说明标签或摘要都不得再提及。
+        if (failure.isEmpty()) {
+            for (const QLineEdit *edit : dialog->findChildren<QLineEdit *>()) {
+                if (edit->placeholderText().contains(QStringLiteral("继承"))
+                    || edit->placeholderText().contains(QStringLiteral("繼承"))
+                    || edit->placeholderText().contains(QStringLiteral("inherit"), Qt::CaseInsensitive)) {
+                    failure = QStringLiteral("占位符仍提及继承：%1").arg(edit->placeholderText());
+                    break;
+                }
+            }
+        }
+        if (failure.isEmpty()) {
+            for (const QLabel *label : dialog->findChildren<QLabel *>()) {
+                if (label->text().contains(QStringLiteral("继承"))
+                    || label->text().contains(QStringLiteral("繼承"))
+                    || label->text().contains(QStringLiteral("inherit"), Qt::CaseInsensitive)) {
+                    failure = QStringLiteral("说明文字仍提及继承：%1").arg(label->text());
+                    break;
+                }
+            }
+        }
+
         dialog->close();
     });
 

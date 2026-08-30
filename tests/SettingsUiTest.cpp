@@ -22,6 +22,7 @@
 #include <QLineEdit>
 #include <QSet>
 #include <QListWidget>
+#include <QPushButton>
 #include <QSignalSpy>
 #include <QSpinBox>
 #include <QStackedWidget>
@@ -527,9 +528,57 @@ void SettingsUiTest::settingsContentRetranslatesLiveWithoutReopen()
     }
     QVERIFY2(followSystemInChinese, "分段控件文案未热切换");
 
+    // QSpinBox 后缀是一次性 setSuffix，必须显式登记进热切换闭包。
+    auto *scrollbackSpin = dialog.findChild<QSpinBox *>(QStringLiteral("scrollbackSpin"));
+    QVERIFY(scrollbackSpin != nullptr);
+    QVERIFY2(!scrollbackSpin->suffix().trimmed().isEmpty()
+                 && scrollbackSpin->suffix() != QStringLiteral(" lines"),
+             QString::fromUtf8("滚动历史 spin 的后缀未随语言热切换：'%1'")
+                 .arg(scrollbackSpin->suffix())
+                 .toUtf8());
+    auto *retriesSpin =
+        dialog.findChild<QSpinBox *>(QStringLiteral("reconnectMaxAttemptsSpin"));
+    QVERIFY(retriesSpin != nullptr);
+    QVERIFY2(retriesSpin->suffix() != QStringLiteral(" times"),
+             "重连次数 spin 的后缀未随语言热切换");
+
+    // AI 设置页的宽行标签与「测试连接 / 保存」按钮同样必须就地热切换。
+    auto *aiSave = dialog.findChild<QPushButton *>(QStringLiteral("settingsAiSave"));
+    auto *aiTest = dialog.findChild<QPushButton *>(QStringLiteral("settingsAiTest"));
+    QVERIFY(aiSave != nullptr);
+    QVERIFY(aiTest != nullptr);
+    QVERIFY2(aiSave->text() != QStringLiteral("Save"), "AI 页“保存”按钮未热切换");
+    QVERIFY2(aiTest->text() != QStringLiteral("Test connection"),
+             "AI 页“测试连接”按钮未热切换");
+    bool aiServiceUrlLabelTranslated = false;
+    bool shortcutActionNameTranslated = false;
+    for (const QLabel *label :
+         dialog.findChildren<QLabel *>(QStringLiteral("SettingsRowLabel"))) {
+        if (label->text() == QString::fromUtf8("服务地址")) {
+            aiServiceUrlLabelTranslated = true;
+        }
+        if (label->text() == QString::fromUtf8("连接服务器")) {
+            shortcutActionNameTranslated = true;
+        }
+        QVERIFY2(label->text() != QStringLiteral("Service URL"),
+                 "AI 页宽行标签未热切换");
+        QVERIFY2(label->text() != QStringLiteral("Connect to Server"),
+                 "快捷键设置页动作名未热切换（shortcutDisplayName 被 static 缓存冻结）");
+    }
+    QVERIFY2(aiServiceUrlLabelTranslated, "AI 页“服务地址”宽行标签未热切换");
+    QVERIFY2(shortcutActionNameTranslated, "快捷键设置页动作名未热切换");
+
+    // 配色色板的“默认”标题（themePresets() 里唯一被翻译的名字）必须实时重译。
+    auto *defaultSwatch =
+        dialog.findChild<ThemeSwatchButton *>(QStringLiteral("colorSchemeSwatch_default"));
+    QVERIFY(defaultSwatch != nullptr);
+    QCOMPARE(defaultSwatch->text(), QString::fromUtf8("默认"));
+
     QVERIFY(localization.apply(QStringLiteral("en")));
     QCoreApplication::sendPostedEvents(nullptr, QEvent::LanguageChange);
     QVERIFY(hasTitle(QStringLiteral("Interface language")));
+    QCOMPARE(scrollbackSpin->suffix(), QStringLiteral(" lines"));
+    QCOMPARE(aiSave->text(), QStringLiteral("Save"));
 }
 
 void SettingsUiTest::colorSchemeSwatchesAreExclusiveAndPersist()

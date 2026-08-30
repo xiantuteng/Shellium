@@ -349,8 +349,8 @@ Run it in the current terminal?</source>
         <translation type="unfinished">Изменить цепочку хостов</translation>
     </message>
     <message>
-        <source>The hosts you add connect in the following order, finally reaching &lt;span style="font-family: monospace; font-weight: 600;"&gt;%1&lt;/span&gt;.</source>
-        <translation type="unfinished">Добавленные хосты подключаются в следующем порядке, в итоге достигая &lt;span style="font-family: monospace; font-weight: 600;"&gt;%1&lt;/span&gt;.</translation>
+        <source>The hosts you add connect in the following order, finally reaching &lt;span style=&quot;font-family: monospace; font-weight: 600;&quot;&gt;%1&lt;/span&gt;.</source>
+        <translation type="unfinished">Добавленные хосты подключаются в следующем порядке, в итоге достигая &lt;span style=&quot;font-family: monospace; font-weight: 600;&quot;&gt;%1&lt;/span&gt;.</translation>
     </message>
     <message>
         <source>Add host</source>
@@ -540,11 +540,11 @@ Run it in the current terminal?</source>
         <translation type="unfinished">Обновить узел</translation>
     </message>
     <message>
-        <source>Deleting group '%1' also deletes all of its subgroups and hosts, and cannot be undone. Continue?</source>
+        <source>Deleting group &apos;%1&apos; also deletes all of its subgroups and hosts, and cannot be undone. Continue?</source>
         <translation type="unfinished">Удаление группы «%1» также удалит все её подгруппы и хосты, и это нельзя отменить. Продолжить?</translation>
     </message>
     <message>
-        <source>Delete host '%1'? This action cannot be undone.</source>
+        <source>Delete host &apos;%1&apos;? This action cannot be undone.</source>
         <translation type="unfinished">Удалить хост «%1»? Это действие нельзя отменить.</translation>
     </message>
     <message>
@@ -748,20 +748,8 @@ System: %2</source>
         <translation type="unfinished">Имя</translation>
     </message>
     <message>
-        <source>Leave empty to inherit from the parent group</source>
-        <translation type="unfinished">Оставьте пустым для наследования от родительской группы</translation>
-    </message>
-    <message>
         <source>Saved automatically with the host after you type it</source>
         <translation type="unfinished">Сохраняется автоматически вместе с хостом после ввода</translation>
-    </message>
-    <message>
-        <source>Leave empty to inherit from the parent group or use the agent / default key</source>
-        <translation type="unfinished">Оставьте пустым для наследования от родительской группы или использования агента / ключа по умолчанию</translation>
-    </message>
-    <message>
-        <source>Comma-separated; leave empty to inherit from the parent group</source>
-        <translation type="unfinished">Через запятую; оставьте пустым для наследования от родительской группы</translation>
     </message>
     <message>
         <source>Edit the jump hosts the current host passes through before the final connection</source>
@@ -828,8 +816,20 @@ System: %2</source>
         <translation type="unfinished">Совместимость с устаревшими версиями</translation>
     </message>
     <message>
-        <source>Allow hmac-sha1 for this host only (not inherited).</source>
-        <translation type="unfinished">Разрешить hmac-sha1 только для этого хоста (не наследуется).</translation>
+        <source>SSH username</source>
+        <translation type="unfinished">Имя пользователя SSH</translation>
+    </message>
+    <message>
+        <source>Leave empty to use the agent or default key</source>
+        <translation type="unfinished">Оставьте пустым, чтобы использовать агент или ключ по умолчанию</translation>
+    </message>
+    <message>
+        <source>Comma-separated jump host list</source>
+        <translation type="unfinished">Список узлов-посредников через запятую</translation>
+    </message>
+    <message>
+        <source>Allow hmac-sha1 for this host only.</source>
+        <translation type="unfinished">Разрешить hmac-sha1 только для этого узла.</translation>
     </message>
     <message>
         <source>Expand ProxyJump advanced settings</source>
@@ -848,7 +848,7 @@ System: %2</source>
         <translation type="unfinished">Требуется защита мастер-паролем</translation>
     </message>
     <message>
-        <source>Viewing host passwords requires master password protection. Go to 'Settings → Connections &amp; Security → Credential Vault' and turn on 'Protect credentials with a master password'.</source>
+        <source>Viewing host passwords requires master password protection. Go to &apos;Settings → Connections &amp; Security → Credential Vault&apos; and turn on &apos;Protect credentials with a master password&apos;.</source>
         <translation type="unfinished">Для просмотра паролей хостов требуется защита мастер-паролем. Перейдите в «Настройки → Подключения и безопасность → Хранилище учётных данных» и включите «Защищать учётные данные мастер-паролем».</translation>
     </message>
     <message>
@@ -936,10 +936,6 @@ System: %2</source>
         <translation type="unfinished">Расширенные настройки · ProxyJump настроен</translation>
     </message>
     <message>
-        <source>Advanced settings · inherits ProxyJump</source>
-        <translation type="unfinished">Расширенные настройки · наследует ProxyJump</translation>
-    </message>
-    <message>
         <source>Collapse ProxyJump advanced settings</source>
         <translation type="unfinished">Свернуть расширенные настройки ProxyJump</translation>
     </message>
@@ -984,7 +980,7 @@ System: %2</source>
         <translation type="unfinished">Не удалось проверить подключение</translation>
     </message>
     <message>
-        <source>Could not read the saved credentials for '%1'.</source>
+        <source>Could not read the saved credentials for &apos;%1&apos;.</source>
         <translation type="unfinished">Не удалось прочитать сохранённые учётные данные для «%1».</translation>
     </message>
     <message>
@@ -996,7 +992,7 @@ System: %2</source>
         <translation type="unfinished">Успешное подключение к %1.</translation>
     </message>
     <message>
-        <source>The server only supports legacy hmac-sha1. If you have accepted the risk, turn on 'Legacy compatibility' and retry.
+        <source>The server only supports legacy hmac-sha1. If you have accepted the risk, turn on &apos;Legacy compatibility&apos; and retry.
 
 %1</source>
         <translation type="unfinished">Сервер поддерживает только устаревший hmac-sha1. Если вы приняли риск, включите «Совместимость с устаревшими версиями» и повторите попытку.
@@ -1008,7 +1004,7 @@ System: %2</source>
         <translation type="unfinished">Сбой аутентификации SSH. Проверьте пароль или парольную фразу закрытого ключа и повторите попытку.</translation>
     </message>
     <message>
-        <source>The server requires a password or private key passphrase. Fill in 'Password' and retry.</source>
+        <source>The server requires a password or private key passphrase. Fill in &apos;Password&apos; and retry.</source>
         <translation type="unfinished">Сервер требует пароль или парольную фразу закрытого ключа. Заполните «Пароль» и повторите попытку.</translation>
     </message>
     <message>
@@ -1547,7 +1543,7 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">Найти текст:</translation>
     </message>
     <message>
-        <source>'%1' was not found in the terminal output</source>
+        <source>&apos;%1&apos; was not found in the terminal output</source>
         <translation type="unfinished">«%1» не найдено в выводе терминала</translation>
     </message>
     <message>
@@ -1579,11 +1575,11 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">Рабочее пространство содержит временные подключения</translation>
     </message>
     <message>
-        <source>Tab '%1' is not a persistent host opened from the host tree. Save this connection to the host tree first, then save the workspace.</source>
+        <source>Tab &apos;%1&apos; is not a persistent host opened from the host tree. Save this connection to the host tree first, then save the workspace.</source>
         <translation type="unfinished">Вкладка «%1» не является постоянным хостом, открытым из дерева хостов. Сначала сохраните это подключение в дерево хостов, затем рабочее пространство.</translation>
     </message>
     <message>
-        <source>Failed to check the host record for tab '%1': %2</source>
+        <source>Failed to check the host record for tab &apos;%1&apos;: %2</source>
         <translation type="unfinished">Не удалось проверить запись хоста для вкладки «%1»: %2</translation>
     </message>
     <message>
@@ -1611,11 +1607,11 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">Перезаписать существующее рабочее пространство</translation>
     </message>
     <message>
-        <source>A workspace named '%1' already exists. Overwrite it with the current set of tabs?</source>
+        <source>A workspace named &apos;%1&apos; already exists. Overwrite it with the current set of tabs?</source>
         <translation type="unfinished">Рабочее пространство с именем «%1» уже существует. Перезаписать его текущим набором вкладок?</translation>
     </message>
     <message>
-        <source>Workspace '%1' saved (%2 tabs)</source>
+        <source>Workspace &apos;%1&apos; saved (%2 tabs)</source>
         <translation type="unfinished">Рабочее пространство «%1» сохранено (вкладок: %2)</translation>
     </message>
     <message>
@@ -1651,7 +1647,7 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">Макет рабочего пространства повреждён</translation>
     </message>
     <message>
-        <source>The version, tab list, or count of workspace '%1' is invalid; the current session was not modified.</source>
+        <source>The version, tab list, or count of workspace &apos;%1&apos; is invalid; the current session was not modified.</source>
         <translation type="unfinished">Версия, список вкладок или количество рабочего пространства «%1» недопустимы; текущий сеанс не изменён.</translation>
     </message>
     <message>
@@ -1671,7 +1667,7 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">Не удалось разрешить цепочку хостов: %1</translation>
     </message>
     <message>
-        <source>Workspace '%1' could not be fully restored: %2. The current session was not modified.</source>
+        <source>Workspace &apos;%1&apos; could not be fully restored: %2. The current session was not modified.</source>
         <translation type="unfinished">Не удалось полностью восстановить рабочее пространство «%1»: %2. Текущий сеанс не изменён.</translation>
     </message>
     <message>
@@ -1679,11 +1675,11 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">Заменить текущее рабочее пространство</translation>
     </message>
     <message>
-        <source>Opening '%1' closes the current %2 tabs and their connections, then restores %3 tabs. Continue?</source>
+        <source>Opening &apos;%1&apos; closes the current %2 tabs and their connections, then restores %3 tabs. Continue?</source>
         <translation type="unfinished">Открытие «%1» закроет текущие вкладки (%2) и их подключения, затем восстановит вкладок: %3. Продолжить?</translation>
     </message>
     <message>
-        <source>Workspace '%1' restored</source>
+        <source>Workspace &apos;%1&apos; restored</source>
         <translation type="unfinished">Рабочее пространство «%1» восстановлено</translation>
     </message>
     <message>
@@ -1854,7 +1850,7 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">Хост ещё не подключён</translation>
     </message>
     <message>
-        <source>Connect to '%1' from the host tree first, then start this rule.</source>
+        <source>Connect to &apos;%1&apos; from the host tree first, then start this rule.</source>
         <translation type="unfinished">Сначала подключитесь к «%1» из дерева хостов, затем запустите это правило.</translation>
     </message>
     <message>
@@ -1882,7 +1878,7 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">У текущего хоста пока нет правил переадресации портов для запуска.</translation>
     </message>
     <message>
-        <source>Connect to '%1' from the host tree first, then start all forwarding rules.</source>
+        <source>Connect to &apos;%1&apos; from the host tree first, then start all forwarding rules.</source>
         <translation type="unfinished">Сначала подключитесь к «%1» из дерева хостов, затем запустите все правила переадресации.</translation>
     </message>
     <message>
@@ -1890,7 +1886,7 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">Подтвердите запуск всех переадресаций</translation>
     </message>
     <message>
-        <source>This will start all %2 forwarding rules under host '%1'; rules already running are left unchanged. Continue?</source>
+        <source>This will start all %2 forwarding rules under host &apos;%1&apos;; rules already running are left unchanged. Continue?</source>
         <translation type="unfinished">Будут запущены все правила переадресации (%2) для хоста «%1»; уже работающие правила останутся без изменений. Продолжить?</translation>
     </message>
     <message>
@@ -1920,7 +1916,7 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">Подтвердите остановку всех переадресаций</translation>
     </message>
     <message>
-        <source>This will stop %2 active forwarding rules under host '%1' and close the related connections. Continue?</source>
+        <source>This will stop %2 active forwarding rules under host &apos;%1&apos; and close the related connections. Continue?</source>
         <translation type="unfinished">Будут остановлены активные правила переадресации (%2) для хоста «%1» и закрыты связанные подключения. Продолжить?</translation>
     </message>
     <message>
@@ -1948,7 +1944,7 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">Не удалось прочитать правила автопереадресации: %1</translation>
     </message>
     <message>
-        <source>Failed to auto-start '%1': %2</source>
+        <source>Failed to auto-start &apos;%1&apos;: %2</source>
         <translation type="unfinished">Не удалось автоматически запустить «%1»: %2</translation>
     </message>
     <message>
@@ -2037,7 +2033,7 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">Цель:</translation>
     </message>
     <message>
-        <source>Security note: setting the listen address to 0.0.0.0 or :: exposes the port to the local network and the internet; reachability still depends on the system firewall and the SSH server's GatewayPorts setting.</source>
+        <source>Security note: setting the listen address to 0.0.0.0 or :: exposes the port to the local network and the internet; reachability still depends on the system firewall and the SSH server&apos;s GatewayPorts setting.</source>
         <translation type="unfinished">Примечание о безопасности: установка адреса прослушивания на 0.0.0.0 или :: открывает порт локальной сети и интернету; доступность всё ещё зависит от системного брандмауэра и параметра GatewayPorts на сервере SSH.</translation>
     </message>
     <message>
@@ -2067,15 +2063,15 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
 <context>
     <name>PortForwardWorker</name>
     <message>
-        <source>The SSH session is not ready; cannot start forwarding '%1'</source>
+        <source>The SSH session is not ready; cannot start forwarding &apos;%1&apos;</source>
         <translation type="unfinished">Сеанс SSH не готов; невозможно запустить переадресацию «%1»</translation>
     </message>
     <message>
-        <source>Failed to start remote forwarding '%1': %2</source>
+        <source>Failed to start remote forwarding &apos;%1&apos;: %2</source>
         <translation type="unfinished">Не удалось запустить удалённую переадресацию «%1»: %2</translation>
     </message>
     <message>
-        <source>The listen address '%1' is not a bindable local IP address</source>
+        <source>The listen address &apos;%1&apos; is not a bindable local IP address</source>
         <translation type="unfinished">Адрес прослушивания «%1» не является привязываемым локальным IP-адресом</translation>
     </message>
     <message>
@@ -2408,7 +2404,7 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">Открыть настройки</translation>
     </message>
     <message>
-        <source>Shortcut %1 is assigned to both '%2' and '%3'</source>
+        <source>Shortcut %1 is assigned to both &apos;%2&apos; and &apos;%3&apos;</source>
         <translation type="unfinished">Сочетание клавиш %1 назначено сразу «%2» и «%3»</translation>
     </message>
     <message>
@@ -2766,7 +2762,7 @@ The remote-key SFTP fallback also failed: %2</source>
         <translation type="unfinished">Не удалось определить расположение вашего файла known_hosts.</translation>
     </message>
     <message>
-        <source>Could not export the server's new host key: %1</source>
+        <source>Could not export the server&apos;s new host key: %1</source>
         <translation type="unfinished">Не удалось экспортировать новый ключ хоста сервера: %1</translation>
     </message>
     <message>
@@ -2822,7 +2818,7 @@ To avoid overwriting existing credentials, Shellium does not create a new vault 
         <translation type="unfinished">Не удалось включить защиту мастер-паролем</translation>
     </message>
     <message>
-        <source>The vault's current state does not allow enabling master password protection again.</source>
+        <source>The vault&apos;s current state does not allow enabling master password protection again.</source>
         <translation type="unfinished">Текущее состояние хранилища не позволяет снова включить защиту мастер-паролем.</translation>
     </message>
     <message>
@@ -2971,7 +2967,7 @@ Off: everything is re-uploaded in full regardless of whether content matches.</s
 Выключено: всё отправляется полностью, независимо от совпадения содержимого.</translation>
     </message>
     <message>
-        <source>Transfers run strictly in order; select a waiting item and click 'Deselect' to remove it directly.</source>
+        <source>Transfers run strictly in order; select a waiting item and click &apos;Deselect&apos; to remove it directly.</source>
         <translation type="unfinished">Передачи выполняются строго по порядку; выберите ожидающий элемент и нажмите «Снять выбор», чтобы удалить его напрямую.</translation>
     </message>
     <message>
@@ -3409,7 +3405,7 @@ This action cannot be undone.</source>
     <message>
         <source>
 
-⚠ This server was inferred by parsing terminal commands and may not be the one you expect. Run 'hostname' in the terminal to verify before continuing.</source>
+⚠ This server was inferred by parsing terminal commands and may not be the one you expect. Run &apos;hostname&apos; in the terminal to verify before continuing.</source>
         <translation type="unfinished">⚠ Этот сервер определён предположительно путём анализа команд терминала и может не быть тем, который вы ожидаете. Выполните «hostname» в терминале, чтобы проверить, прежде чем продолжить.</translation>
     </message>
     <message>
@@ -3455,7 +3451,7 @@ This action cannot be undone.</source>
     <message>
         <source>The SFTP service of server %1 offers only hmac-sha1.
 
-This algorithm is obsolete; upgrading the server's SSH configuration is recommended. Enable it for this connection only and retry?
+This algorithm is obsolete; upgrading the server&apos;s SSH configuration is recommended. Enable it for this connection only and retry?
 
 %2</source>
         <translation type="unfinished">Служба SFTP сервера %1 предлагает только hmac-sha1.
@@ -3544,7 +3540,7 @@ This algorithm is obsolete; upgrading the server's SSH configuration is recommen
         <translation type="unfinished">Оформление интерфейса</translation>
     </message>
     <message>
-        <source>'Follow system' syncs automatically when the operating system switches between light and dark appearance.</source>
+        <source>&apos;Follow system&apos; syncs automatically when the operating system switches between light and dark appearance.</source>
         <translation type="unfinished">«Следовать системе» синхронизируется автоматически, когда операционная система переключается между светлым и тёмным оформлением.</translation>
     </message>
     <message>
@@ -3644,7 +3640,7 @@ This algorithm is obsolete; upgrading the server's SSH configuration is recommen
         <translation type="unfinished">Автоподсказки командной строки</translation>
     </message>
     <message>
-        <source>After you type at least two characters, suggestions are shown automatically from the current host's command history; off by default.</source>
+        <source>After you type at least two characters, suggestions are shown automatically from the current host&apos;s command history; off by default.</source>
         <translation type="unfinished">После ввода не менее двух символов подсказки автоматически показываются из истории команд текущего хоста; по умолчанию выключено.</translation>
     </message>
     <message>
@@ -3772,7 +3768,7 @@ This algorithm is obsolete; upgrading the server's SSH configuration is recommen
         <translation type="unfinished">Сохранить</translation>
     </message>
     <message>
-        <source>Unlike other settings, changes to the address and key are not saved character by character; click 'Save', so that every keystroke does not trigger an encrypted write.</source>
+        <source>Unlike other settings, changes to the address and key are not saved character by character; click &apos;Save&apos;, so that every keystroke does not trigger an encrypted write.</source>
         <translation type="unfinished">В отличие от других настроек, изменения адреса и ключа не сохраняются посимвольно; нажмите «Сохранить», чтобы каждое нажатие клавиши не запускало зашифрованную запись.</translation>
     </message>
     <message>
@@ -4004,7 +4000,7 @@ Public key: %3</source>
         <translation type="unfinished">Формат закрытого ключа не поддерживается, файл повреждён или парольная фраза неверна.</translation>
     </message>
     <message>
-        <source>Verification passed: %1%2. You can select this file in the 'Private key' field of the host editor.</source>
+        <source>Verification passed: %1%2. You can select this file in the &apos;Private key&apos; field of the host editor.</source>
         <translation type="unfinished">Проверка пройдена: %1%2. Вы можете выбрать этот файл в поле «Закрытый ключ» редактора хостов.</translation>
     </message>
     <message>
@@ -4304,7 +4300,7 @@ Public key: %3</source>
         <translation type="unfinished">Запуск локального терминала…</translation>
     </message>
     <message>
-        <source>Starting local terminal…<byte value="xd" />
+        <source>Starting local terminal…<byte value="xd"/>
 </source>
         <translation type="unfinished">Запуск локального терминала…</translation>
     </message>
@@ -4329,7 +4325,7 @@ Public key: %3</source>
         <translation type="unfinished">Подключение к %1…</translation>
     </message>
     <message>
-        <source>Connecting to %1…<byte value="xd" />
+        <source>Connecting to %1…<byte value="xd"/>
 </source>
         <translation type="unfinished">Подключение к %1…</translation>
     </message>
@@ -4342,18 +4338,18 @@ Public key: %3</source>
         <translation type="unfinished">Интеграция оболочки для %1 не включена; вложенное определение ухудшено: %2</translation>
     </message>
     <message>
-        <source>Permission denied, please try again.<byte value="xd" />
-%1's password: </source>
+        <source>Permission denied, please try again.<byte value="xd"/>
+%1&apos;s password: </source>
         <translation type="unfinished">Доступ запрещён, повторите попытку.
 Пароль для %1:</translation>
     </message>
     <message>
-        <source>%1's password: </source>
+        <source>%1&apos;s password: </source>
         <translation type="unfinished">Пароль для %1:</translation>
     </message>
     <message>
-        <source><byte value="xd" />
-Could not establish the nested connection to %1: %2<byte value="xd" />
+        <source><byte value="xd"/>
+Could not establish the nested connection to %1: %2<byte value="xd"/>
 </source>
         <translation type="unfinished">Не удалось установить вложенное подключение к %1: %2</translation>
     </message>
@@ -4380,7 +4376,7 @@ Could not establish the nested connection to %1: %2<byte value="xd" />
     <message>
         <source>Server %1 offers only hmac-sha1, which the default security policy cannot use to complete the connection.
 
-hmac-sha1 is obsolete; upgrading the server's SSH configuration is recommended. Enable this algorithm for this connection only and retry?
+hmac-sha1 is obsolete; upgrading the server&apos;s SSH configuration is recommended. Enable this algorithm for this connection only and retry?
 
 Details: %2</source>
         <translation type="unfinished">Сервер %1 предлагает только hmac-sha1, который политика безопасности по умолчанию не может использовать для завершения подключения.
@@ -4462,14 +4458,14 @@ Confirm the key has changed and replace the old record in known_hosts?</source>
         <translation type="unfinished">Нажмите r, чтобы переподключиться к %1, x, чтобы закрыть эту вкладку</translation>
     </message>
     <message>
-        <source><byte value="xd" />
-No server to reconnect to; press x to close this tab<byte value="xd" />
+        <source><byte value="xd"/>
+No server to reconnect to; press x to close this tab<byte value="xd"/>
 </source>
         <translation type="unfinished">Нет сервера для переподключения; нажмите x, чтобы закрыть эту вкладку</translation>
     </message>
     <message>
-        <source><byte value="xd" />
-Reconnecting manually…<byte value="xd" />
+        <source><byte value="xd"/>
+Reconnecting manually…<byte value="xd"/>
 </source>
         <translation type="unfinished">Ручное переподключение…</translation>
     </message>
@@ -4522,7 +4518,7 @@ Reconnecting manually…<byte value="xd" />
         <translation type="unfinished">Этот ssh не был перехвачен (%1); он оставлен удалённой стороне для самостоятельного выполнения</translation>
     </message>
     <message>
-        <source>Shellium could not take over this connection (%1); handing it to the remote ssh to run directly.<byte value="xd" />
+        <source>Shellium could not take over this connection (%1); handing it to the remote ssh to run directly.<byte value="xd"/>
 </source>
         <translation type="unfinished">Shellium не смог перехватить это подключение (%1); оно передано удалённому ssh для прямого выполнения.</translation>
     </message>
@@ -4538,31 +4534,31 @@ Reconnecting manually…<byte value="xd" />
         <translation type="unfinished">У службы настроек нет доступной базы данных приложения</translation>
     </message>
     <message>
-        <source>The value '%2' of setting %1 is not an integer; the default has been restored</source>
+        <source>The value &apos;%2&apos; of setting %1 is not an integer; the default has been restored</source>
         <translation type="unfinished">Значение «%2» настройки %1 не является целым числом; восстановлено значение по умолчанию</translation>
     </message>
     <message>
-        <source>The value '%2' of setting %1 is not a boolean; the default has been restored</source>
+        <source>The value &apos;%2&apos; of setting %1 is not a boolean; the default has been restored</source>
         <translation type="unfinished">Значение «%2» настройки %1 не является логическим; восстановлено значение по умолчанию</translation>
     </message>
     <message>
-        <source>Unknown theme '%1'; reverted to follow system</source>
+        <source>Unknown theme &apos;%1&apos;; reverted to follow system</source>
         <translation type="unfinished">Неизвестная тема «%1»; возврат к «Следовать системе»</translation>
     </message>
     <message>
-        <source>Unknown terminal color scheme '%1'; reverted to the default scheme</source>
+        <source>Unknown terminal color scheme &apos;%1&apos;; reverted to the default scheme</source>
         <translation type="unfinished">Неизвестная цветовая схема терминала «%1»; возврат к схеме по умолчанию</translation>
     </message>
     <message>
-        <source>Letter spacing '%1' is invalid; the default has been restored</source>
+        <source>Letter spacing &apos;%1&apos; is invalid; the default has been restored</source>
         <translation type="unfinished">Межбуквенный интервал «%1» недопустим; восстановлено значение по умолчанию</translation>
     </message>
     <message>
-        <source>Unknown cursor shape '%1'; reverted to block cursor</source>
+        <source>Unknown cursor shape &apos;%1&apos;; reverted to block cursor</source>
         <translation type="unfinished">Неизвестная форма курсора «%1»; возврат к прямоугольному курсору</translation>
     </message>
     <message>
-        <source>The shortcut '%2' for action '%1' is invalid; the default has been restored</source>
+        <source>The shortcut &apos;%2&apos; for action &apos;%1&apos; is invalid; the default has been restored</source>
         <translation type="unfinished">Сочетание клавиш «%2» для действия «%1» недопустимо; восстановлено значение по умолчанию</translation>
     </message>
     <message>
@@ -4741,7 +4737,7 @@ Reconnecting manually…<byte value="xd" />
         <translation type="unfinished">Сброс безвозвратно удаляет все сохранённые пароли SSH и парольные фразы закрытых ключей и снимает их связь с хостами. Адреса хостов, учётные записи, порты, пути к файлам закрытых ключей, группы и цепочки хостов сохраняются. Это действие нельзя отменить.</translation>
     </message>
     <message>
-        <source>Type '%1' to confirm:</source>
+        <source>Type &apos;%1&apos; to confirm:</source>
         <translation type="unfinished">Введите «%1» для подтверждения:</translation>
     </message>
     <message>

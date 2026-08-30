@@ -810,7 +810,14 @@ QWidget *SettingsCard::addRow(std::function<QString()> label, QWidget *field,
 QWidget *SettingsCard::addWideRow(std::function<QString()> label, QWidget *field,
                                   std::function<QString()> hint)
 {
-    QWidget *row = addWideRow(label ? label() : QString(), field, hint ? hint() : QString());
+    // 字符串版 addWideRow 返回的是 field 本身而非行容器，因此必须从 field 的父控件
+    // （行容器）去找标签，否则 findChildren 在 field 内部什么也搜不到，语言切换时宽行
+    // 标签/说明会残留上一次语言。
+    QWidget *fieldWidget = addWideRow(label ? label() : QString(), field, hint ? hint() : QString());
+    QWidget *row = fieldWidget != nullptr ? fieldWidget->parentWidget() : nullptr;
+    if (row == nullptr) {
+        return fieldWidget;
+    }
     // addWideRow 的标签/说明用固定 objectName；取回本行内新建的那两个即可挂重译。
     const QList<QLabel *> labels = row->findChildren<QLabel *>();
     for (QLabel *candidate : labels) {

@@ -1341,7 +1341,12 @@ void MainWindow::retranslateUi()
     setWindowTitle(tr("Shellium"));
 
     if (m_sidebarTitle != nullptr) {
-        m_sidebarTitle->setText(tr("Hosts"));
+        m_sidebarTitle->setText(sidebarPageTitle(m_activeSidebarPage));
+    }
+    for (int pageIndex = 0; pageIndex < m_navigationButtons.size(); ++pageIndex) {
+        const QString title = sidebarPageTitle(pageIndex);
+        m_navigationButtons.at(pageIndex)->setToolTip(title);
+        m_navigationButtons.at(pageIndex)->setAccessibleName(title);
     }
     if (m_hostCountLabel != nullptr && m_hostManager != nullptr) {
         m_hostCountLabel->setText(tr("%1 hosts").arg(m_hostManager->hostCount()));
@@ -1531,6 +1536,13 @@ void MainWindow::setSidebarVisible(const bool visible)
     }
 }
 
+QString MainWindow::sidebarPageTitle(const int pageIndex) const
+{
+    const QStringList pageTitles = {
+        tr("Hosts"), tr("Productivity"), tr("Port forwarding"), tr("AI Assistant")};
+    return pageTitles.value(pageIndex);
+}
+
 void MainWindow::showSidebarPage(const int pageIndex)
 {
     if (m_sidebarStack == nullptr
@@ -1539,12 +1551,10 @@ void MainWindow::showSidebarPage(const int pageIndex)
         return;
     }
 
-    static const QStringList pageTitles = {
-        tr("Hosts"), tr("Productivity"), tr("Port forwarding"), tr("AI Assistant")};
     m_activeSidebarPage = pageIndex;
     m_sidebarStack->setCurrentIndex(pageIndex);
     if (m_sidebarTitle != nullptr) {
-        m_sidebarTitle->setText(pageTitles.value(pageIndex));
+        m_sidebarTitle->setText(sidebarPageTitle(pageIndex));
     }
     if (m_hostCountLabel != nullptr) {
         // 数量摘要只解释“主机”这一页；放在效率工具或端口转发标题后会被误读成相应页面的

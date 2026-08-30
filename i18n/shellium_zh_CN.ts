@@ -748,20 +748,8 @@ System: %2</source>
         <translation>名称</translation>
     </message>
     <message>
-        <source>Leave empty to inherit from the parent group</source>
-        <translation>留空则继承父分组</translation>
-    </message>
-    <message>
         <source>Saved automatically with the host after you type it</source>
         <translation>输入后随主机自动保存</translation>
-    </message>
-    <message>
-        <source>Leave empty to inherit from the parent group or use the agent / default key</source>
-        <translation>留空则继承父分组或使用 Agent/默认密钥</translation>
-    </message>
-    <message>
-        <source>Comma-separated; leave empty to inherit from the parent group</source>
-        <translation>逗号分隔；留空则继承父分组</translation>
     </message>
     <message>
         <source>Edit the jump hosts the current host passes through before the final connection</source>
@@ -828,8 +816,20 @@ System: %2</source>
         <translation>旧版兼容</translation>
     </message>
     <message>
-        <source>Allow hmac-sha1 for this host only (not inherited).</source>
-        <translation>仅为该主机允许 hmac-sha1（不继承）。</translation>
+        <source>SSH username</source>
+        <translation>SSH 用户名</translation>
+    </message>
+    <message>
+        <source>Leave empty to use the agent or default key</source>
+        <translation>留空则使用 Agent 或默认密钥</translation>
+    </message>
+    <message>
+        <source>Comma-separated jump host list</source>
+        <translation>逗号分隔的跳板主机列表</translation>
+    </message>
+    <message>
+        <source>Allow hmac-sha1 for this host only.</source>
+        <translation>仅为该主机允许 hmac-sha1。</translation>
     </message>
     <message>
         <source>Expand ProxyJump advanced settings</source>
@@ -934,10 +934,6 @@ System: %2</source>
     <message>
         <source>Advanced settings · ProxyJump configured</source>
         <translation>高级设置 · ProxyJump 已配置</translation>
-    </message>
-    <message>
-        <source>Advanced settings · inherits ProxyJump</source>
-        <translation>高级设置 · 继承 ProxyJump</translation>
     </message>
     <message>
         <source>Collapse ProxyJump advanced settings</source>

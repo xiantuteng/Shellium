@@ -349,8 +349,8 @@ Run it in the current terminal?</source>
         <translation>編輯主機鏈</translation>
     </message>
     <message>
-        <source>The hosts you add connect in the following order, finally reaching &lt;span style=&quot;font-family: monospace; font-weight: 600;&quot;&gt;%1&lt;/span&gt;.</source>
-        <translation>新增的主機將按下列順序建立連線，最後進入 &lt;span style=&quot;font-family: monospace; font-weight: 600;&quot;&gt;%1&lt;/span&gt;。</translation>
+        <source>The hosts you add connect in the following order, finally reaching &lt;span style="font-family: monospace; font-weight: 600;"&gt;%1&lt;/span&gt;.</source>
+        <translation>新增的主機將按下列順序建立連線，最後進入 &lt;span style="font-family: monospace; font-weight: 600;"&gt;%1&lt;/span&gt;。</translation>
     </message>
     <message>
         <source>Add host</source>
@@ -540,11 +540,11 @@ Run it in the current terminal?</source>
         <translation>更新節點</translation>
     </message>
     <message>
-        <source>Deleting group &apos;%1&apos; also deletes all of its subgroups and hosts, and cannot be undone. Continue?</source>
+        <source>Deleting group '%1' also deletes all of its subgroups and hosts, and cannot be undone. Continue?</source>
         <translation>刪除分組“%1”會同時刪除其全部子分組和主機，且無法撤銷。確定繼續嗎？</translation>
     </message>
     <message>
-        <source>Delete host &apos;%1&apos;? This action cannot be undone.</source>
+        <source>Delete host '%1'? This action cannot be undone.</source>
         <translation>確定刪除主機“%1”嗎？此操作無法撤銷。</translation>
     </message>
     <message>
@@ -748,20 +748,8 @@ System: %2</source>
         <translation>名稱</translation>
     </message>
     <message>
-        <source>Leave empty to inherit from the parent group</source>
-        <translation>留空則繼承父分組</translation>
-    </message>
-    <message>
         <source>Saved automatically with the host after you type it</source>
         <translation>輸入後隨主機自動儲存</translation>
-    </message>
-    <message>
-        <source>Leave empty to inherit from the parent group or use the agent / default key</source>
-        <translation>留空則繼承父分組或使用 Agent/預設金鑰</translation>
-    </message>
-    <message>
-        <source>Comma-separated; leave empty to inherit from the parent group</source>
-        <translation>逗號分隔；留空則繼承父分組</translation>
     </message>
     <message>
         <source>Edit the jump hosts the current host passes through before the final connection</source>
@@ -828,8 +816,20 @@ System: %2</source>
         <translation>舊版相容</translation>
     </message>
     <message>
-        <source>Allow hmac-sha1 for this host only (not inherited).</source>
-        <translation>僅為該主機允許 hmac-sha1（不繼承）。</translation>
+        <source>SSH username</source>
+        <translation>SSH 使用者名稱</translation>
+    </message>
+    <message>
+        <source>Leave empty to use the agent or default key</source>
+        <translation>留空則使用 Agent 或預設金鑰</translation>
+    </message>
+    <message>
+        <source>Comma-separated jump host list</source>
+        <translation>逗號分隔的跳板主機列表</translation>
+    </message>
+    <message>
+        <source>Allow hmac-sha1 for this host only.</source>
+        <translation>僅為該主機允許 hmac-sha1。</translation>
     </message>
     <message>
         <source>Expand ProxyJump advanced settings</source>
@@ -848,7 +848,7 @@ System: %2</source>
         <translation>需要主密碼保護</translation>
     </message>
     <message>
-        <source>Viewing host passwords requires master password protection. Go to &apos;Settings → Connections &amp; Security → Credential Vault&apos; and turn on &apos;Protect credentials with a master password&apos;.</source>
+        <source>Viewing host passwords requires master password protection. Go to 'Settings → Connections &amp; Security → Credential Vault' and turn on 'Protect credentials with a master password'.</source>
         <translation>檢視主機密碼需要先啟用主密碼保護。請前往“設定 → 連線與安全 → 憑據保險箱”，開啟“使用主密碼保護憑據”。</translation>
     </message>
     <message>
@@ -936,10 +936,6 @@ System: %2</source>
         <translation>進階設定 · ProxyJump 已配置</translation>
     </message>
     <message>
-        <source>Advanced settings · inherits ProxyJump</source>
-        <translation>進階設定 · 繼承 ProxyJump</translation>
-    </message>
-    <message>
         <source>Collapse ProxyJump advanced settings</source>
         <translation>收起 ProxyJump 進階設定</translation>
     </message>
@@ -984,7 +980,7 @@ System: %2</source>
         <translation>無法測試連線</translation>
     </message>
     <message>
-        <source>Could not read the saved credentials for &apos;%1&apos;.</source>
+        <source>Could not read the saved credentials for '%1'.</source>
         <translation>無法讀取“%1”的已儲存憑據。</translation>
     </message>
     <message>
@@ -996,7 +992,7 @@ System: %2</source>
         <translation>已成功連線 %1。</translation>
     </message>
     <message>
-        <source>The server only supports legacy hmac-sha1. If you have accepted the risk, turn on &apos;Legacy compatibility&apos; and retry.
+        <source>The server only supports legacy hmac-sha1. If you have accepted the risk, turn on 'Legacy compatibility' and retry.
 
 %1</source>
         <translation>伺服器只支援舊版 hmac-sha1。若已確認風險，請開啟“舊版相容”後重試。
@@ -1008,7 +1004,7 @@ System: %2</source>
         <translation>SSH 認證失敗，請檢查密碼或私鑰口令後重試。</translation>
     </message>
     <message>
-        <source>The server requires a password or private key passphrase. Fill in &apos;Password&apos; and retry.</source>
+        <source>The server requires a password or private key passphrase. Fill in 'Password' and retry.</source>
         <translation>伺服器需要密碼或私鑰口令，請填寫“密碼”後重試。</translation>
     </message>
     <message>
@@ -1547,7 +1543,7 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation>查詢文本：</translation>
     </message>
     <message>
-        <source>&apos;%1&apos; was not found in the terminal output</source>
+        <source>'%1' was not found in the terminal output</source>
         <translation>終端輸出中未找到“%1”</translation>
     </message>
     <message>
@@ -1579,11 +1575,11 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation>工作區包含臨時連線</translation>
     </message>
     <message>
-        <source>Tab &apos;%1&apos; is not a persistent host opened from the host tree. Save this connection to the host tree first, then save the workspace.</source>
+        <source>Tab '%1' is not a persistent host opened from the host tree. Save this connection to the host tree first, then save the workspace.</source>
         <translation>標籤“%1”不是從主機樹開啟的持久化主機。請先把該連線儲存到主機樹，再儲存工作區。</translation>
     </message>
     <message>
-        <source>Failed to check the host record for tab &apos;%1&apos;: %2</source>
+        <source>Failed to check the host record for tab '%1': %2</source>
         <translation>檢查標籤“%1”的主機記錄失敗：%2</translation>
     </message>
     <message>
@@ -1611,11 +1607,11 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation>覆蓋已有工作區</translation>
     </message>
     <message>
-        <source>A workspace named &apos;%1&apos; already exists. Overwrite it with the current set of tabs?</source>
+        <source>A workspace named '%1' already exists. Overwrite it with the current set of tabs?</source>
         <translation>已存在名為“%1”的工作區，是否用當前標籤組合覆蓋？</translation>
     </message>
     <message>
-        <source>Workspace &apos;%1&apos; saved (%2 tabs)</source>
+        <source>Workspace '%1' saved (%2 tabs)</source>
         <translation>工作區“%1”已儲存（%2 個標籤）</translation>
     </message>
     <message>
@@ -1651,7 +1647,7 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation>工作區佈局損壞</translation>
     </message>
     <message>
-        <source>The version, tab list, or count of workspace &apos;%1&apos; is invalid; the current session was not modified.</source>
+        <source>The version, tab list, or count of workspace '%1' is invalid; the current session was not modified.</source>
         <translation>工作區“%1”的版本、標籤列表或數量無效，當前會話未被修改。</translation>
     </message>
     <message>
@@ -1671,7 +1667,7 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation>主機鏈無法解析：%1</translation>
     </message>
     <message>
-        <source>Workspace &apos;%1&apos; could not be fully restored: %2. The current session was not modified.</source>
+        <source>Workspace '%1' could not be fully restored: %2. The current session was not modified.</source>
         <translation>工作區“%1”無法完整恢復：%2。當前會話未被修改。</translation>
     </message>
     <message>
@@ -1679,11 +1675,11 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation>替換當前工作區</translation>
     </message>
     <message>
-        <source>Opening &apos;%1&apos; closes the current %2 tabs and their connections, then restores %3 tabs. Continue?</source>
+        <source>Opening '%1' closes the current %2 tabs and their connections, then restores %3 tabs. Continue?</source>
         <translation>開啟“%1”會關閉當前 %2 個標籤及其連線，然後恢復 %3 個標籤。是否繼續？</translation>
     </message>
     <message>
-        <source>Workspace &apos;%1&apos; restored</source>
+        <source>Workspace '%1' restored</source>
         <translation>工作區“%1”已恢復</translation>
     </message>
     <message>
@@ -1854,7 +1850,7 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation>主機尚未連線</translation>
     </message>
     <message>
-        <source>Connect to &apos;%1&apos; from the host tree first, then start this rule.</source>
+        <source>Connect to '%1' from the host tree first, then start this rule.</source>
         <translation>請先從主機樹連線“%1”，再啟動這條規則。</translation>
     </message>
     <message>
@@ -1882,7 +1878,7 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation>當前主機還沒有可啟動的埠轉發規則。</translation>
     </message>
     <message>
-        <source>Connect to &apos;%1&apos; from the host tree first, then start all forwarding rules.</source>
+        <source>Connect to '%1' from the host tree first, then start all forwarding rules.</source>
         <translation>請先從主機樹連線“%1”，再啟動全部轉發規則。</translation>
     </message>
     <message>
@@ -1890,7 +1886,7 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation>確認啟動全部轉發</translation>
     </message>
     <message>
-        <source>This will start all %2 forwarding rules under host &apos;%1&apos;; rules already running are left unchanged. Continue?</source>
+        <source>This will start all %2 forwarding rules under host '%1'; rules already running are left unchanged. Continue?</source>
         <translation>將啟動主機“%1”下的全部 %2 條轉發規則；已在執行的規則會保持不變。是否繼續？</translation>
     </message>
     <message>
@@ -1920,7 +1916,7 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation>確認停止全部轉發</translation>
     </message>
     <message>
-        <source>This will stop %2 active forwarding rules under host &apos;%1&apos; and close the related connections. Continue?</source>
+        <source>This will stop %2 active forwarding rules under host '%1' and close the related connections. Continue?</source>
         <translation>將停止主機“%1”下的 %2 條活動轉發規則，並關閉相關連線。是否繼續？</translation>
     </message>
     <message>
@@ -1948,7 +1944,7 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation>讀取自動轉發規則失敗：%1</translation>
     </message>
     <message>
-        <source>Failed to auto-start &apos;%1&apos;: %2</source>
+        <source>Failed to auto-start '%1': %2</source>
         <translation>自動啟動“%1”失敗：%2</translation>
     </message>
     <message>
@@ -2037,7 +2033,7 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation>目標：</translation>
     </message>
     <message>
-        <source>Security note: setting the listen address to 0.0.0.0 or :: exposes the port to the local network and the internet; reachability still depends on the system firewall and the SSH server&apos;s GatewayPorts setting.</source>
+        <source>Security note: setting the listen address to 0.0.0.0 or :: exposes the port to the local network and the internet; reachability still depends on the system firewall and the SSH server's GatewayPorts setting.</source>
         <translation>安全提示：把監聽地址設為 0.0.0.0 或 :: 會向區域網/公網暴露埠；是否可達仍受系統防火牆和 SSH 服務端 GatewayPorts 限制。</translation>
     </message>
     <message>
@@ -2067,15 +2063,15 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
 <context>
     <name>PortForwardWorker</name>
     <message>
-        <source>The SSH session is not ready; cannot start forwarding &apos;%1&apos;</source>
+        <source>The SSH session is not ready; cannot start forwarding '%1'</source>
         <translation>SSH 會話尚未就緒，無法啟動轉發“%1”</translation>
     </message>
     <message>
-        <source>Failed to start remote forwarding &apos;%1&apos;: %2</source>
+        <source>Failed to start remote forwarding '%1': %2</source>
         <translation>啟動遠端轉發“%1”失敗：%2</translation>
     </message>
     <message>
-        <source>The listen address &apos;%1&apos; is not a bindable local IP address</source>
+        <source>The listen address '%1' is not a bindable local IP address</source>
         <translation>監聽地址“%1”不是可繫結的本機 IP 地址</translation>
     </message>
     <message>
@@ -2408,7 +2404,7 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation>開啟設定</translation>
     </message>
     <message>
-        <source>Shortcut %1 is assigned to both &apos;%2&apos; and &apos;%3&apos;</source>
+        <source>Shortcut %1 is assigned to both '%2' and '%3'</source>
         <translation>快捷鍵 %1 同時分配給“%2”和“%3”</translation>
     </message>
     <message>
@@ -2766,7 +2762,7 @@ The remote-key SFTP fallback also failed: %2</source>
         <translation>無法確定使用者 known_hosts 檔案位置。</translation>
     </message>
     <message>
-        <source>Could not export the server&apos;s new host key: %1</source>
+        <source>Could not export the server's new host key: %1</source>
         <translation>無法匯出伺服器的新主機金鑰：%1</translation>
     </message>
     <message>
@@ -2822,7 +2818,7 @@ To avoid overwriting existing credentials, Shellium does not create a new vault 
         <translation>無法啟用主密碼保護</translation>
     </message>
     <message>
-        <source>The vault&apos;s current state does not allow enabling master password protection again.</source>
+        <source>The vault's current state does not allow enabling master password protection again.</source>
         <translation>保險箱當前狀態不允許重複啟用主密碼保護。</translation>
     </message>
     <message>
@@ -2971,7 +2967,7 @@ Off: everything is re-uploaded in full regardless of whether content matches.</s
 關閉時：無論內容是否相同，一律完整重傳。</translation>
     </message>
     <message>
-        <source>Transfers run strictly in order; select a waiting item and click &apos;Deselect&apos; to remove it directly.</source>
+        <source>Transfers run strictly in order; select a waiting item and click 'Deselect' to remove it directly.</source>
         <translation>傳輸嚴格按順序執行；選擇等待項後點擊“取消選中”可直接移除。</translation>
     </message>
     <message>
@@ -3409,7 +3405,7 @@ This action cannot be undone.</source>
     <message>
         <source>
 
-⚠ This server was inferred by parsing terminal commands and may not be the one you expect. Run &apos;hostname&apos; in the terminal to verify before continuing.</source>
+⚠ This server was inferred by parsing terminal commands and may not be the one you expect. Run 'hostname' in the terminal to verify before continuing.</source>
         <translation>
 
 ⚠ 該伺服器是由解析終端命令推測得出的，可能並非你以為的那一臺。請先在終端執行 hostname 核對後再繼續。</translation>
@@ -3457,7 +3453,7 @@ This action cannot be undone.</source>
     <message>
         <source>The SFTP service of server %1 offers only hmac-sha1.
 
-This algorithm is obsolete; upgrading the server&apos;s SSH configuration is recommended. Enable it for this connection only and retry?
+This algorithm is obsolete; upgrading the server's SSH configuration is recommended. Enable it for this connection only and retry?
 
 %2</source>
         <translation>伺服器 %1 的 SFTP 服務僅提供 hmac-sha1。
@@ -3546,7 +3542,7 @@ This algorithm is obsolete; upgrading the server&apos;s SSH configuration is rec
         <translation>介面外觀</translation>
     </message>
     <message>
-        <source>&apos;Follow system&apos; syncs automatically when the operating system switches between light and dark appearance.</source>
+        <source>'Follow system' syncs automatically when the operating system switches between light and dark appearance.</source>
         <translation>“跟隨系統”會在作業系統切換深淺外觀時自動同步。</translation>
     </message>
     <message>
@@ -3646,7 +3642,7 @@ This algorithm is obsolete; upgrading the server&apos;s SSH configuration is rec
         <translation>命令列自動提示</translation>
     </message>
     <message>
-        <source>After you type at least two characters, suggestions are shown automatically from the current host&apos;s command history; off by default.</source>
+        <source>After you type at least two characters, suggestions are shown automatically from the current host's command history; off by default.</source>
         <translation>輸入至少兩個字元後，根據當前主機的命令歷史自動顯示候選；預設關閉。</translation>
     </message>
     <message>
@@ -3774,7 +3770,7 @@ This algorithm is obsolete; upgrading the server&apos;s SSH configuration is rec
         <translation>儲存</translation>
     </message>
     <message>
-        <source>Unlike other settings, changes to the address and key are not saved character by character; click &apos;Save&apos;, so that every keystroke does not trigger an encrypted write.</source>
+        <source>Unlike other settings, changes to the address and key are not saved character by character; click 'Save', so that every keystroke does not trigger an encrypted write.</source>
         <translation>地址和金鑰的改動不會像其他設定項那樣逐字元自動儲存，需要點選“儲存”，避免每敲一個字元都觸發一次加密寫入。</translation>
     </message>
     <message>
@@ -4006,7 +4002,7 @@ Public key: %3</source>
         <translation>私鑰格式不支援、檔案損壞或口令錯誤。</translation>
     </message>
     <message>
-        <source>Verification passed: %1%2. You can select this file in the &apos;Private key&apos; field of the host editor.</source>
+        <source>Verification passed: %1%2. You can select this file in the 'Private key' field of the host editor.</source>
         <translation>校驗通過：%1%2。可在主機編輯器的“私鑰”欄位選擇此檔案。</translation>
     </message>
     <message>
@@ -4306,7 +4302,7 @@ Public key: %3</source>
         <translation>正在啟動本地終端…</translation>
     </message>
     <message>
-        <source>Starting local terminal…<byte value="xd"/>
+        <source>Starting local terminal…<byte value="xd" />
 </source>
         <translation>正在啟動本地終端…
 </translation>
@@ -4332,7 +4328,7 @@ Public key: %3</source>
         <translation>正在連線 %1…</translation>
     </message>
     <message>
-        <source>Connecting to %1…<byte value="xd"/>
+        <source>Connecting to %1…<byte value="xd" />
 </source>
         <translation>正在連線 %1…
 </translation>
@@ -4346,18 +4342,18 @@ Public key: %3</source>
         <translation>%1 的 Shell 整合未啟用，巢狀識別已降級：%2</translation>
     </message>
     <message>
-        <source>Permission denied, please try again.<byte value="xd"/>
-%1&apos;s password: </source>
+        <source>Permission denied, please try again.<byte value="xd" />
+%1's password: </source>
         <translation>Permission denied, please try again.
 %1’s password: </translation>
     </message>
     <message>
-        <source>%1&apos;s password: </source>
-        <translation>%1&apos;s password: </translation>
+        <source>%1's password: </source>
+        <translation>%1's password: </translation>
     </message>
     <message>
-        <source><byte value="xd"/>
-Could not establish the nested connection to %1: %2<byte value="xd"/>
+        <source><byte value="xd" />
+Could not establish the nested connection to %1: %2<byte value="xd" />
 </source>
         <translation>
 無法建立到 %1 的巢狀連線：%2
@@ -4386,7 +4382,7 @@ Could not establish the nested connection to %1: %2<byte value="xd"/>
     <message>
         <source>Server %1 offers only hmac-sha1, which the default security policy cannot use to complete the connection.
 
-hmac-sha1 is obsolete; upgrading the server&apos;s SSH configuration is recommended. Enable this algorithm for this connection only and retry?
+hmac-sha1 is obsolete; upgrading the server's SSH configuration is recommended. Enable this algorithm for this connection only and retry?
 
 Details: %2</source>
         <translation>伺服器 %1 僅提供 hmac-sha1，預設安全策略無法完成連線。
@@ -4468,16 +4464,16 @@ Confirm the key has changed and replace the old record in known_hosts?</source>
         <translation>按 r 重新連線 %1，按 x 關閉該標籤頁</translation>
     </message>
     <message>
-        <source><byte value="xd"/>
-No server to reconnect to; press x to close this tab<byte value="xd"/>
+        <source><byte value="xd" />
+No server to reconnect to; press x to close this tab<byte value="xd" />
 </source>
         <translation>
 沒有可重連的伺服器，請按 x 關閉該標籤頁
 </translation>
     </message>
     <message>
-        <source><byte value="xd"/>
-Reconnecting manually…<byte value="xd"/>
+        <source><byte value="xd" />
+Reconnecting manually…<byte value="xd" />
 </source>
         <translation>
 正在手動重連…
@@ -4532,7 +4528,7 @@ Reconnecting manually…<byte value="xd"/>
         <translation>未接管本次 ssh（%1），已交由遠端自行執行</translation>
     </message>
     <message>
-        <source>Shellium could not take over this connection (%1); handing it to the remote ssh to run directly.<byte value="xd"/>
+        <source>Shellium could not take over this connection (%1); handing it to the remote ssh to run directly.<byte value="xd" />
 </source>
         <translation>Shellium 未能接管本次連線（%1），正在交由遠端 ssh 直接執行。
 </translation>
@@ -4549,31 +4545,31 @@ Reconnecting manually…<byte value="xd"/>
         <translation>設定服務沒有可用的應用資料庫</translation>
     </message>
     <message>
-        <source>The value &apos;%2&apos; of setting %1 is not an integer; the default has been restored</source>
+        <source>The value '%2' of setting %1 is not an integer; the default has been restored</source>
         <translation>設定項 %1 的值“%2”不是整數，已恢復預設值</translation>
     </message>
     <message>
-        <source>The value &apos;%2&apos; of setting %1 is not a boolean; the default has been restored</source>
+        <source>The value '%2' of setting %1 is not a boolean; the default has been restored</source>
         <translation>設定項 %1 的值“%2”不是布林值，已恢復預設值</translation>
     </message>
     <message>
-        <source>Unknown theme &apos;%1&apos;; reverted to follow system</source>
+        <source>Unknown theme '%1'; reverted to follow system</source>
         <translation>未知主題“%1”，已恢復為跟隨系統</translation>
     </message>
     <message>
-        <source>Unknown terminal color scheme &apos;%1&apos;; reverted to the default scheme</source>
+        <source>Unknown terminal color scheme '%1'; reverted to the default scheme</source>
         <translation>未知終端配色“%1”，已恢復預設配色</translation>
     </message>
     <message>
-        <source>Letter spacing &apos;%1&apos; is invalid; the default has been restored</source>
+        <source>Letter spacing '%1' is invalid; the default has been restored</source>
         <translation>字元間距“%1”無效，已恢復預設值</translation>
     </message>
     <message>
-        <source>Unknown cursor shape &apos;%1&apos;; reverted to block cursor</source>
+        <source>Unknown cursor shape '%1'; reverted to block cursor</source>
         <translation>未知游標形態“%1”，已恢復為塊狀游標</translation>
     </message>
     <message>
-        <source>The shortcut &apos;%2&apos; for action &apos;%1&apos; is invalid; the default has been restored</source>
+        <source>The shortcut '%2' for action '%1' is invalid; the default has been restored</source>
         <translation>動作“%1”的快捷鍵“%2”無效，已恢復預設值</translation>
     </message>
     <message>
@@ -4752,7 +4748,7 @@ Reconnecting manually…<byte value="xd"/>
         <translation>重置會永久刪除全部已儲存的 SSH 密碼和私鑰口令，並解除它們與主機的關聯。主機地址、賬號、埠、私鑰檔案路徑、分組和主機鏈會保留。此操作無法撤銷。</translation>
     </message>
     <message>
-        <source>Type &apos;%1&apos; to confirm:</source>
+        <source>Type '%1' to confirm:</source>
         <translation>請輸入“%1”確認：</translation>
     </message>
     <message>

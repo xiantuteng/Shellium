@@ -1538,7 +1538,7 @@ public:
 
             m_usernameEdit = new QLineEdit(initial.username, this);
             m_usernameEdit->setObjectName(QStringLiteral("hostUsernameEdit"));
-            m_usernameEdit->setPlaceholderText(tr("Leave empty to inherit from the parent group"));
+            m_usernameEdit->setPlaceholderText(tr("SSH username"));
             m_passwordEdit = new QLineEdit(this);
             m_passwordEdit->setObjectName(QStringLiteral("hostPasswordEdit"));
             m_passwordEdit->setEchoMode(QLineEdit::Password);
@@ -1546,11 +1546,11 @@ public:
             m_identityEdit = new QLineEdit(initial.identityFile, this);
             m_identityEdit->setObjectName(QStringLiteral("hostIdentityEdit"));
             m_identityEdit->setPlaceholderText(
-                tr("Leave empty to inherit from the parent group or use the agent / default key"));
+                tr("Leave empty to use the agent or default key"));
             m_proxyJumpsEdit = new QLineEdit(
                 initial.proxyJumps.join(QLatin1Char(',')), this);
             m_proxyJumpsEdit->setObjectName(QStringLiteral("hostProxyJumpsEdit"));
-            m_proxyJumpsEdit->setPlaceholderText(tr("Comma-separated; leave empty to inherit from the parent group"));
+            m_proxyJumpsEdit->setPlaceholderText(tr("Comma-separated jump host list"));
             m_hostChain = initial.hostChain;
             m_hostChainButton = new QPushButton(this);
             m_hostChainButton->setObjectName(QStringLiteral("hostChainButton"));
@@ -1631,7 +1631,7 @@ public:
                              tr("Choose an existing host in Host Manager as a jump host, or add a host in the chain editor."));
             authCard->addRow(tr("Legacy compatibility"),
                              m_legacyHmacToggle,
-                             tr("Allow hmac-sha1 for this host only (not inherited)."));
+                             tr("Allow hmac-sha1 for this host only."));
 
             m_advancedSettingsButton = new QToolButton(authCard);
             m_advancedSettingsButton->setObjectName(
@@ -1869,6 +1869,14 @@ public:
             }
             QDialog::accept();
         });
+
+        // 新增/编辑主机时用户第一步永远是填地址，因此把初始焦点显式落在地址框；否则
+        // 按子控件构造顺序，名称框会抢到默认焦点。
+        if (m_hostEdit != nullptr) {
+            setTabOrder(m_hostEdit, m_portSpin);
+            setTabOrder(m_portSpin, m_nameEdit);
+            m_hostEdit->setFocus();
+        }
     }
 
     /**
@@ -2130,8 +2138,8 @@ private:
     /**
      * @brief 同步 ProxyJump 高级入口的摘要、箭头和明细行可见性。
      *
-     * 折叠状态下仍显示“已配置”或“继承”摘要，是为了让用户无需展开即可判断连接是否还
-     * 存在手工跳板路径；展开状态只控制展示，不改变字段内容或父分组继承语义。
+     * 折叠状态下仍显示“已配置”摘要，是为了让用户无需展开即可判断连接是否还存在手工
+     * 跳板路径；展开状态只控制展示，不改变字段内容。
      */
     void refreshProxyJumpDisclosure()
     {
@@ -2142,15 +2150,9 @@ private:
 
         const bool expanded = m_advancedSettingsButton->isChecked();
         const bool hasExplicitProxyJump = !m_proxyJumpsEdit->text().trimmed().isEmpty();
-        // 非空受管链拥有路由优先级，此时父分组即使配置了 ProxyJump 也不会参与连接，摘要
-        // 不能错误宣称“正在继承”；只有直连草稿才提示潜在生效的继承路径。
-        const bool inheritsProxyJump = !hasExplicitProxyJump && m_hostChain.isEmpty()
-            && !m_inheritedParent.proxyJumps.isEmpty();
         QString summary = tr("Advanced settings");
         if (hasExplicitProxyJump) {
             summary = tr("Advanced settings · ProxyJump configured");
-        } else if (inheritsProxyJump) {
-            summary = tr("Advanced settings · inherits ProxyJump");
         }
 
         m_advancedSettingsButton->setText(summary);

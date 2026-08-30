@@ -258,7 +258,10 @@ QStringList TerminalSettings::shortcutIds()
 
 QString TerminalSettings::shortcutDisplayName(const QString &id)
 {
-    static const QHash<QString, QString> names = {
+    // 不能用 static 缓存：tr() 只会在首次调用时按当时语言求值一次，之后切换语言这里
+    // 永远返回旧译文，快捷键设置页的动作名就再也不跟随语言（设置页每次重译都会重新
+    // 调用本函数，10 条目重建一个局部 QHash 的开销可忽略）。
+    const QHash<QString, QString> names = {
         {QStringLiteral("connection.new"), QObject::tr("Connect to Server")},
         {QStringLiteral("terminal.local"), QObject::tr("Open a local terminal")},
         {QStringLiteral("tab.new"), QObject::tr("New tab")},

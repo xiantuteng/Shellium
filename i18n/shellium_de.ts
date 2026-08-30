@@ -349,8 +349,8 @@ Im aktuellen Terminal ausführen?</translation>
         <translation type="unfinished">Host-Kette bearbeiten</translation>
     </message>
     <message>
-        <source>The hosts you add connect in the following order, finally reaching &lt;span style="font-family: monospace; font-weight: 600;"&gt;%1&lt;/span&gt;.</source>
-        <translation type="unfinished">Die hinzugefügten Hosts verbinden sich in der folgenden Reihenfolge und erreichen zuletzt &lt;span style="font-family: monospace; font-weight: 600;"&gt;%1&lt;/span&gt;.</translation>
+        <source>The hosts you add connect in the following order, finally reaching &lt;span style=&quot;font-family: monospace; font-weight: 600;&quot;&gt;%1&lt;/span&gt;.</source>
+        <translation type="unfinished">Die hinzugefügten Hosts verbinden sich in der folgenden Reihenfolge und erreichen zuletzt &lt;span style=&quot;font-family: monospace; font-weight: 600;&quot;&gt;%1&lt;/span&gt;.</translation>
     </message>
     <message>
         <source>Add host</source>
@@ -540,12 +540,12 @@ Im aktuellen Terminal ausführen?</translation>
         <translation type="unfinished">Knoten aktualisieren</translation>
     </message>
     <message>
-        <source>Deleting group '%1' also deletes all of its subgroups and hosts, and cannot be undone. Continue?</source>
-        <translation type="unfinished">Beim Löschen der Gruppe '%1' werden auch alle Untergruppen und Hosts gelöscht; dies kann nicht rückgängig gemacht werden. Fortfahren?</translation>
+        <source>Deleting group &apos;%1&apos; also deletes all of its subgroups and hosts, and cannot be undone. Continue?</source>
+        <translation type="unfinished">Beim Löschen der Gruppe &apos;%1&apos; werden auch alle Untergruppen und Hosts gelöscht; dies kann nicht rückgängig gemacht werden. Fortfahren?</translation>
     </message>
     <message>
-        <source>Delete host '%1'? This action cannot be undone.</source>
-        <translation type="unfinished">Host '%1' löschen? Diese Aktion kann nicht rückgängig gemacht werden.</translation>
+        <source>Delete host &apos;%1&apos;? This action cannot be undone.</source>
+        <translation type="unfinished">Host &apos;%1&apos; löschen? Diese Aktion kann nicht rückgängig gemacht werden.</translation>
     </message>
     <message>
         <source>Confirm delete</source>
@@ -748,20 +748,8 @@ System: %2</translation>
         <translation type="unfinished">Name</translation>
     </message>
     <message>
-        <source>Leave empty to inherit from the parent group</source>
-        <translation type="unfinished">Leer lassen, um von der übergeordneten Gruppe zu erben</translation>
-    </message>
-    <message>
         <source>Saved automatically with the host after you type it</source>
         <translation type="unfinished">Wird nach der Eingabe automatisch mit dem Host gespeichert</translation>
-    </message>
-    <message>
-        <source>Leave empty to inherit from the parent group or use the agent / default key</source>
-        <translation type="unfinished">Leer lassen, um von der übergeordneten Gruppe zu erben oder den Agenten / Standardschlüssel zu verwenden</translation>
-    </message>
-    <message>
-        <source>Comma-separated; leave empty to inherit from the parent group</source>
-        <translation type="unfinished">Durch Kommas getrennt; leer lassen, um von der übergeordneten Gruppe zu erben</translation>
     </message>
     <message>
         <source>Edit the jump hosts the current host passes through before the final connection</source>
@@ -828,8 +816,20 @@ System: %2</translation>
         <translation type="unfinished">Legacy-Kompatibilität</translation>
     </message>
     <message>
-        <source>Allow hmac-sha1 for this host only (not inherited).</source>
-        <translation type="unfinished">hmac-sha1 nur für diesen Host erlauben (nicht vererbt).</translation>
+        <source>SSH username</source>
+        <translation type="unfinished">SSH-Benutzername</translation>
+    </message>
+    <message>
+        <source>Leave empty to use the agent or default key</source>
+        <translation type="unfinished">Leer lassen, um den Agenten oder den Standardschlüssel zu verwenden</translation>
+    </message>
+    <message>
+        <source>Comma-separated jump host list</source>
+        <translation type="unfinished">Kommagetrennte Liste von Jump-Hosts</translation>
+    </message>
+    <message>
+        <source>Allow hmac-sha1 for this host only.</source>
+        <translation type="unfinished">hmac-sha1 nur für diesen Host zulassen.</translation>
     </message>
     <message>
         <source>Expand ProxyJump advanced settings</source>
@@ -848,8 +848,8 @@ System: %2</translation>
         <translation type="unfinished">Master-Passwort-Schutz erforderlich</translation>
     </message>
     <message>
-        <source>Viewing host passwords requires master password protection. Go to 'Settings → Connections &amp; Security → Credential Vault' and turn on 'Protect credentials with a master password'.</source>
-        <translation type="unfinished">Zum Anzeigen von Host-Passwörtern ist der Master-Passwort-Schutz erforderlich. Gehen Sie zu 'Einstellungen → Verbindungen &amp; Sicherheit → Anmeldedaten-Tresor' und aktivieren Sie 'Anmeldedaten mit einem Master-Passwort schützen'.</translation>
+        <source>Viewing host passwords requires master password protection. Go to &apos;Settings → Connections &amp; Security → Credential Vault&apos; and turn on &apos;Protect credentials with a master password&apos;.</source>
+        <translation type="unfinished">Zum Anzeigen von Host-Passwörtern ist der Master-Passwort-Schutz erforderlich. Gehen Sie zu &apos;Einstellungen → Verbindungen &amp; Sicherheit → Anmeldedaten-Tresor&apos; und aktivieren Sie &apos;Anmeldedaten mit einem Master-Passwort schützen&apos;.</translation>
     </message>
     <message>
         <source>Hide password</source>
@@ -936,10 +936,6 @@ System: %2</translation>
         <translation type="unfinished">Erweiterte Einstellungen · ProxyJump konfiguriert</translation>
     </message>
     <message>
-        <source>Advanced settings · inherits ProxyJump</source>
-        <translation type="unfinished">Erweiterte Einstellungen · erbt ProxyJump</translation>
-    </message>
-    <message>
         <source>Collapse ProxyJump advanced settings</source>
         <translation type="unfinished">Erweiterte ProxyJump-Einstellungen einklappen</translation>
     </message>
@@ -984,8 +980,8 @@ System: %2</translation>
         <translation type="unfinished">Die Verbindung konnte nicht getestet werden</translation>
     </message>
     <message>
-        <source>Could not read the saved credentials for '%1'.</source>
-        <translation type="unfinished">Die gespeicherten Anmeldedaten für '%1' konnten nicht gelesen werden.</translation>
+        <source>Could not read the saved credentials for &apos;%1&apos;.</source>
+        <translation type="unfinished">Die gespeicherten Anmeldedaten für &apos;%1&apos; konnten nicht gelesen werden.</translation>
     </message>
     <message>
         <source>Testing…</source>
@@ -996,10 +992,10 @@ System: %2</translation>
         <translation type="unfinished">Erfolgreich mit %1 verbunden.</translation>
     </message>
     <message>
-        <source>The server only supports legacy hmac-sha1. If you have accepted the risk, turn on 'Legacy compatibility' and retry.
+        <source>The server only supports legacy hmac-sha1. If you have accepted the risk, turn on &apos;Legacy compatibility&apos; and retry.
 
 %1</source>
-        <translation type="unfinished">Der Server unterstützt nur veraltetes hmac-sha1. Wenn Sie das Risiko akzeptiert haben, aktivieren Sie 'Legacy-Kompatibilität' und versuchen Sie es erneut.
+        <translation type="unfinished">Der Server unterstützt nur veraltetes hmac-sha1. Wenn Sie das Risiko akzeptiert haben, aktivieren Sie &apos;Legacy-Kompatibilität&apos; und versuchen Sie es erneut.
 
 %1</translation>
     </message>
@@ -1008,8 +1004,8 @@ System: %2</translation>
         <translation type="unfinished">SSH-Authentifizierung fehlgeschlagen. Prüfen Sie das Passwort oder die Passphrase des privaten Schlüssels und versuchen Sie es erneut.</translation>
     </message>
     <message>
-        <source>The server requires a password or private key passphrase. Fill in 'Password' and retry.</source>
-        <translation type="unfinished">Der Server erfordert ein Passwort oder eine Passphrase des privaten Schlüssels. Füllen Sie 'Passwort' aus und versuchen Sie es erneut.</translation>
+        <source>The server requires a password or private key passphrase. Fill in &apos;Password&apos; and retry.</source>
+        <translation type="unfinished">Der Server erfordert ein Passwort oder eine Passphrase des privaten Schlüssels. Füllen Sie &apos;Passwort&apos; aus und versuchen Sie es erneut.</translation>
     </message>
     <message>
         <source>Confirm the server host key</source>
@@ -1547,8 +1543,8 @@ Bestätigen Sie, dass sich der Schlüssel geändert hat, ersetzen Sie den alten 
         <translation type="unfinished">Text suchen:</translation>
     </message>
     <message>
-        <source>'%1' was not found in the terminal output</source>
-        <translation type="unfinished">'%1' wurde in der Terminalausgabe nicht gefunden</translation>
+        <source>&apos;%1&apos; was not found in the terminal output</source>
+        <translation type="unfinished">&apos;%1&apos; wurde in der Terminalausgabe nicht gefunden</translation>
     </message>
     <message>
         <source>Export terminal output</source>
@@ -1579,12 +1575,12 @@ Bestätigen Sie, dass sich der Schlüssel geändert hat, ersetzen Sie den alten 
         <translation type="unfinished">Der Arbeitsbereich enthält temporäre Verbindungen</translation>
     </message>
     <message>
-        <source>Tab '%1' is not a persistent host opened from the host tree. Save this connection to the host tree first, then save the workspace.</source>
-        <translation type="unfinished">Tab '%1' ist kein persistenter, aus dem Host-Baum geöffneter Host. Speichern Sie diese Verbindung zuerst im Host-Baum und dann den Arbeitsbereich.</translation>
+        <source>Tab &apos;%1&apos; is not a persistent host opened from the host tree. Save this connection to the host tree first, then save the workspace.</source>
+        <translation type="unfinished">Tab &apos;%1&apos; ist kein persistenter, aus dem Host-Baum geöffneter Host. Speichern Sie diese Verbindung zuerst im Host-Baum und dann den Arbeitsbereich.</translation>
     </message>
     <message>
-        <source>Failed to check the host record for tab '%1': %2</source>
-        <translation type="unfinished">Prüfen des Host-Datensatzes für Tab '%1' fehlgeschlagen: %2</translation>
+        <source>Failed to check the host record for tab &apos;%1&apos;: %2</source>
+        <translation type="unfinished">Prüfen des Host-Datensatzes für Tab &apos;%1&apos; fehlgeschlagen: %2</translation>
     </message>
     <message>
         <source>No tabs to save</source>
@@ -1611,12 +1607,12 @@ Bestätigen Sie, dass sich der Schlüssel geändert hat, ersetzen Sie den alten 
         <translation type="unfinished">Vorhandenen Arbeitsbereich überschreiben</translation>
     </message>
     <message>
-        <source>A workspace named '%1' already exists. Overwrite it with the current set of tabs?</source>
-        <translation type="unfinished">Ein Arbeitsbereich mit dem Namen '%1' existiert bereits. Mit der aktuellen Tab-Kombination überschreiben?</translation>
+        <source>A workspace named &apos;%1&apos; already exists. Overwrite it with the current set of tabs?</source>
+        <translation type="unfinished">Ein Arbeitsbereich mit dem Namen &apos;%1&apos; existiert bereits. Mit der aktuellen Tab-Kombination überschreiben?</translation>
     </message>
     <message>
-        <source>Workspace '%1' saved (%2 tabs)</source>
-        <translation type="unfinished">Arbeitsbereich '%1' gespeichert (%2 Tabs)</translation>
+        <source>Workspace &apos;%1&apos; saved (%2 tabs)</source>
+        <translation type="unfinished">Arbeitsbereich &apos;%1&apos; gespeichert (%2 Tabs)</translation>
     </message>
     <message>
         <source>Failed to read workspace</source>
@@ -1651,8 +1647,8 @@ Bestätigen Sie, dass sich der Schlüssel geändert hat, ersetzen Sie den alten 
         <translation type="unfinished">Das Layout des Arbeitsbereichs ist beschädigt</translation>
     </message>
     <message>
-        <source>The version, tab list, or count of workspace '%1' is invalid; the current session was not modified.</source>
-        <translation type="unfinished">Version, Tab-Liste oder Anzahl des Arbeitsbereichs '%1' ist ungültig; die aktuelle Sitzung wurde nicht geändert.</translation>
+        <source>The version, tab list, or count of workspace &apos;%1&apos; is invalid; the current session was not modified.</source>
+        <translation type="unfinished">Version, Tab-Liste oder Anzahl des Arbeitsbereichs &apos;%1&apos; ist ungültig; die aktuelle Sitzung wurde nicht geändert.</translation>
     </message>
     <message>
         <source>The tag entry is not an object</source>
@@ -1671,20 +1667,20 @@ Bestätigen Sie, dass sich der Schlüssel geändert hat, ersetzen Sie den alten 
         <translation type="unfinished">Die Host-Kette konnte nicht aufgelöst werden: %1</translation>
     </message>
     <message>
-        <source>Workspace '%1' could not be fully restored: %2. The current session was not modified.</source>
-        <translation type="unfinished">Arbeitsbereich '%1' konnte nicht vollständig wiederhergestellt werden: %2. Die aktuelle Sitzung wurde nicht geändert.</translation>
+        <source>Workspace &apos;%1&apos; could not be fully restored: %2. The current session was not modified.</source>
+        <translation type="unfinished">Arbeitsbereich &apos;%1&apos; konnte nicht vollständig wiederhergestellt werden: %2. Die aktuelle Sitzung wurde nicht geändert.</translation>
     </message>
     <message>
         <source>Replace the current workspace</source>
         <translation type="unfinished">Aktuellen Arbeitsbereich ersetzen</translation>
     </message>
     <message>
-        <source>Opening '%1' closes the current %2 tabs and their connections, then restores %3 tabs. Continue?</source>
-        <translation type="unfinished">Beim Öffnen von '%1' werden die aktuellen %2 Tabs und ihre Verbindungen geschlossen, dann %3 Tabs wiederhergestellt. Fortfahren?</translation>
+        <source>Opening &apos;%1&apos; closes the current %2 tabs and their connections, then restores %3 tabs. Continue?</source>
+        <translation type="unfinished">Beim Öffnen von &apos;%1&apos; werden die aktuellen %2 Tabs und ihre Verbindungen geschlossen, dann %3 Tabs wiederhergestellt. Fortfahren?</translation>
     </message>
     <message>
-        <source>Workspace '%1' restored</source>
-        <translation type="unfinished">Arbeitsbereich '%1' wiederhergestellt</translation>
+        <source>Workspace &apos;%1&apos; restored</source>
+        <translation type="unfinished">Arbeitsbereich &apos;%1&apos; wiederhergestellt</translation>
     </message>
     <message>
         <source>There are no workspaces to delete.</source>
@@ -1854,8 +1850,8 @@ Bestätigen Sie, dass sich der Schlüssel geändert hat, ersetzen Sie den alten 
         <translation type="unfinished">Der Host ist noch nicht verbunden</translation>
     </message>
     <message>
-        <source>Connect to '%1' from the host tree first, then start this rule.</source>
-        <translation type="unfinished">Verbinden Sie sich zuerst über den Host-Baum mit '%1' und starten Sie dann diese Regel.</translation>
+        <source>Connect to &apos;%1&apos; from the host tree first, then start this rule.</source>
+        <translation type="unfinished">Verbinden Sie sich zuerst über den Host-Baum mit &apos;%1&apos; und starten Sie dann diese Regel.</translation>
     </message>
     <message>
         <source>Failed to start forwarding</source>
@@ -1882,16 +1878,16 @@ Bestätigen Sie, dass sich der Schlüssel geändert hat, ersetzen Sie den alten 
         <translation type="unfinished">Der aktuelle Host hat noch keine startbaren Portweiterleitungsregeln.</translation>
     </message>
     <message>
-        <source>Connect to '%1' from the host tree first, then start all forwarding rules.</source>
-        <translation type="unfinished">Verbinden Sie sich zuerst über den Host-Baum mit '%1' und starten Sie dann alle Weiterleitungsregeln.</translation>
+        <source>Connect to &apos;%1&apos; from the host tree first, then start all forwarding rules.</source>
+        <translation type="unfinished">Verbinden Sie sich zuerst über den Host-Baum mit &apos;%1&apos; und starten Sie dann alle Weiterleitungsregeln.</translation>
     </message>
     <message>
         <source>Confirm starting all forwarding</source>
         <translation type="unfinished">Starten aller Weiterleitungen bestätigen</translation>
     </message>
     <message>
-        <source>This will start all %2 forwarding rules under host '%1'; rules already running are left unchanged. Continue?</source>
-        <translation type="unfinished">Es werden alle %2 Weiterleitungsregeln unter Host '%1' gestartet; bereits laufende Regeln bleiben unverändert. Fortfahren?</translation>
+        <source>This will start all %2 forwarding rules under host &apos;%1&apos;; rules already running are left unchanged. Continue?</source>
+        <translation type="unfinished">Es werden alle %2 Weiterleitungsregeln unter Host &apos;%1&apos; gestartet; bereits laufende Regeln bleiben unverändert. Fortfahren?</translation>
     </message>
     <message>
         <source>%1: %2</source>
@@ -1920,8 +1916,8 @@ Bestätigen Sie, dass sich der Schlüssel geändert hat, ersetzen Sie den alten 
         <translation type="unfinished">Stoppen aller Weiterleitungen bestätigen</translation>
     </message>
     <message>
-        <source>This will stop %2 active forwarding rules under host '%1' and close the related connections. Continue?</source>
-        <translation type="unfinished">Es werden %2 aktive Weiterleitungsregeln unter Host '%1' gestoppt und die zugehörigen Verbindungen geschlossen. Fortfahren?</translation>
+        <source>This will stop %2 active forwarding rules under host &apos;%1&apos; and close the related connections. Continue?</source>
+        <translation type="unfinished">Es werden %2 aktive Weiterleitungsregeln unter Host &apos;%1&apos; gestoppt und die zugehörigen Verbindungen geschlossen. Fortfahren?</translation>
     </message>
     <message>
         <source>Submitted %1 port forwarding stop tasks for the current host</source>
@@ -1948,8 +1944,8 @@ Bestätigen Sie, dass sich der Schlüssel geändert hat, ersetzen Sie den alten 
         <translation type="unfinished">Automatische Weiterleitungsregeln konnten nicht gelesen werden: %1</translation>
     </message>
     <message>
-        <source>Failed to auto-start '%1': %2</source>
-        <translation type="unfinished">Automatischer Start von '%1' fehlgeschlagen: %2</translation>
+        <source>Failed to auto-start &apos;%1&apos;: %2</source>
+        <translation type="unfinished">Automatischer Start von &apos;%1&apos; fehlgeschlagen: %2</translation>
     </message>
     <message>
         <source>Starting</source>
@@ -2037,7 +2033,7 @@ Bestätigen Sie, dass sich der Schlüssel geändert hat, ersetzen Sie den alten 
         <translation type="unfinished">Ziel:</translation>
     </message>
     <message>
-        <source>Security note: setting the listen address to 0.0.0.0 or :: exposes the port to the local network and the internet; reachability still depends on the system firewall and the SSH server's GatewayPorts setting.</source>
+        <source>Security note: setting the listen address to 0.0.0.0 or :: exposes the port to the local network and the internet; reachability still depends on the system firewall and the SSH server&apos;s GatewayPorts setting.</source>
         <translation type="unfinished">Sicherheitshinweis: Wenn Sie die Lausch-Adresse auf 0.0.0.0 oder :: setzen, wird der Port im lokalen Netzwerk und im Internet freigegeben; die Erreichbarkeit hängt weiterhin von der Systemfirewall und der GatewayPorts-Einstellung des SSH-Servers ab.</translation>
     </message>
     <message>
@@ -2067,16 +2063,16 @@ Bestätigen Sie, dass sich der Schlüssel geändert hat, ersetzen Sie den alten 
 <context>
     <name>PortForwardWorker</name>
     <message>
-        <source>The SSH session is not ready; cannot start forwarding '%1'</source>
-        <translation type="unfinished">Die SSH-Sitzung ist nicht bereit; die Weiterleitung '%1' kann nicht gestartet werden</translation>
+        <source>The SSH session is not ready; cannot start forwarding &apos;%1&apos;</source>
+        <translation type="unfinished">Die SSH-Sitzung ist nicht bereit; die Weiterleitung &apos;%1&apos; kann nicht gestartet werden</translation>
     </message>
     <message>
-        <source>Failed to start remote forwarding '%1': %2</source>
-        <translation type="unfinished">Starten der Remote-Weiterleitung '%1' fehlgeschlagen: %2</translation>
+        <source>Failed to start remote forwarding &apos;%1&apos;: %2</source>
+        <translation type="unfinished">Starten der Remote-Weiterleitung &apos;%1&apos; fehlgeschlagen: %2</translation>
     </message>
     <message>
-        <source>The listen address '%1' is not a bindable local IP address</source>
-        <translation type="unfinished">Die Lausch-Adresse '%1' ist keine bindbare lokale IP-Adresse</translation>
+        <source>The listen address &apos;%1&apos; is not a bindable local IP address</source>
+        <translation type="unfinished">Die Lausch-Adresse &apos;%1&apos; ist keine bindbare lokale IP-Adresse</translation>
     </message>
     <message>
         <source>Failed to listen on %1:%2: %3</source>
@@ -2408,8 +2404,8 @@ Bestätigen Sie, dass sich der Schlüssel geändert hat, ersetzen Sie den alten 
         <translation type="unfinished">Einstellungen öffnen</translation>
     </message>
     <message>
-        <source>Shortcut %1 is assigned to both '%2' and '%3'</source>
-        <translation type="unfinished">Kurzbefehl %1 ist sowohl '%2' als auch '%3' zugewiesen</translation>
+        <source>Shortcut %1 is assigned to both &apos;%2&apos; and &apos;%3&apos;</source>
+        <translation type="unfinished">Kurzbefehl %1 ist sowohl &apos;%2&apos; als auch &apos;%3&apos; zugewiesen</translation>
     </message>
     <message>
         <source>Default</source>
@@ -2766,7 +2762,7 @@ Der SFTP-Fallback mit Remote-Schlüssel schlug ebenfalls fehl: %2</translation>
         <translation type="unfinished">Der Speicherort Ihrer known_hosts-Datei konnte nicht ermittelt werden.</translation>
     </message>
     <message>
-        <source>Could not export the server's new host key: %1</source>
+        <source>Could not export the server&apos;s new host key: %1</source>
         <translation type="unfinished">Der neue Hostschlüssel des Servers konnte nicht exportiert werden: %1</translation>
     </message>
     <message>
@@ -2822,7 +2818,7 @@ Um vorhandene Anmeldedaten nicht zu überschreiben, erstellt Shellium nicht auto
         <translation type="unfinished">Der Master-Passwort-Schutz konnte nicht aktiviert werden</translation>
     </message>
     <message>
-        <source>The vault's current state does not allow enabling master password protection again.</source>
+        <source>The vault&apos;s current state does not allow enabling master password protection again.</source>
         <translation type="unfinished">Der aktuelle Zustand des Tresors erlaubt es nicht, den Master-Passwort-Schutz erneut zu aktivieren.</translation>
     </message>
     <message>
@@ -2971,8 +2967,8 @@ Off: everything is re-uploaded in full regardless of whether content matches.</s
 Aus: alles wird vollständig erneut hochgeladen, unabhängig davon, ob der Inhalt übereinstimmt.</translation>
     </message>
     <message>
-        <source>Transfers run strictly in order; select a waiting item and click 'Deselect' to remove it directly.</source>
-        <translation type="unfinished">Übertragungen laufen strikt der Reihe nach; wählen Sie einen wartenden Eintrag und klicken Sie auf 'Abwählen', um ihn direkt zu entfernen.</translation>
+        <source>Transfers run strictly in order; select a waiting item and click &apos;Deselect&apos; to remove it directly.</source>
+        <translation type="unfinished">Übertragungen laufen strikt der Reihe nach; wählen Sie einen wartenden Eintrag und klicken Sie auf &apos;Abwählen&apos;, um ihn direkt zu entfernen.</translation>
     </message>
     <message>
         <source>Open directory</source>
@@ -3409,8 +3405,8 @@ Diese Aktion kann nicht rückgängig gemacht werden.</translation>
     <message>
         <source>
 
-⚠ This server was inferred by parsing terminal commands and may not be the one you expect. Run 'hostname' in the terminal to verify before continuing.</source>
-        <translation type="unfinished">⚠ Dieser Server wurde durch Auswerten von Terminalbefehlen vermutet und ist möglicherweise nicht der erwartete. Führen Sie 'hostname' im Terminal aus, um dies vor dem Fortfahren zu überprüfen.</translation>
+⚠ This server was inferred by parsing terminal commands and may not be the one you expect. Run &apos;hostname&apos; in the terminal to verify before continuing.</source>
+        <translation type="unfinished">⚠ Dieser Server wurde durch Auswerten von Terminalbefehlen vermutet und ist möglicherweise nicht der erwartete. Führen Sie &apos;hostname&apos; im Terminal aus, um dies vor dem Fortfahren zu überprüfen.</translation>
     </message>
     <message>
         <source>Confirm delete</source>
@@ -3455,7 +3451,7 @@ Diese Aktion kann nicht rückgängig gemacht werden.</translation>
     <message>
         <source>The SFTP service of server %1 offers only hmac-sha1.
 
-This algorithm is obsolete; upgrading the server's SSH configuration is recommended. Enable it for this connection only and retry?
+This algorithm is obsolete; upgrading the server&apos;s SSH configuration is recommended. Enable it for this connection only and retry?
 
 %2</source>
         <translation type="unfinished">Der SFTP-Dienst von Server %1 bietet nur hmac-sha1.
@@ -3544,8 +3540,8 @@ Dieser Algorithmus ist veraltet; es wird empfohlen, die SSH-Konfiguration des Se
         <translation type="unfinished">Erscheinungsbild der Oberfläche</translation>
     </message>
     <message>
-        <source>'Follow system' syncs automatically when the operating system switches between light and dark appearance.</source>
-        <translation type="unfinished">'Systemeinstellung folgen' synchronisiert automatisch, wenn das Betriebssystem zwischen hellem und dunklem Erscheinungsbild wechselt.</translation>
+        <source>&apos;Follow system&apos; syncs automatically when the operating system switches between light and dark appearance.</source>
+        <translation type="unfinished">&apos;Systemeinstellung folgen&apos; synchronisiert automatisch, wenn das Betriebssystem zwischen hellem und dunklem Erscheinungsbild wechselt.</translation>
     </message>
     <message>
         <source>Terminal color scheme</source>
@@ -3644,7 +3640,7 @@ Dieser Algorithmus ist veraltet; es wird empfohlen, die SSH-Konfiguration des Se
         <translation type="unfinished">Autovervollständigung der Befehlszeile</translation>
     </message>
     <message>
-        <source>After you type at least two characters, suggestions are shown automatically from the current host's command history; off by default.</source>
+        <source>After you type at least two characters, suggestions are shown automatically from the current host&apos;s command history; off by default.</source>
         <translation type="unfinished">Nachdem Sie mindestens zwei Zeichen eingegeben haben, werden automatisch Vorschläge aus dem Befehlsverlauf des aktuellen Hosts angezeigt; standardmäßig aus.</translation>
     </message>
     <message>
@@ -3772,8 +3768,8 @@ Dieser Algorithmus ist veraltet; es wird empfohlen, die SSH-Konfiguration des Se
         <translation type="unfinished">Speichern</translation>
     </message>
     <message>
-        <source>Unlike other settings, changes to the address and key are not saved character by character; click 'Save', so that every keystroke does not trigger an encrypted write.</source>
-        <translation type="unfinished">Anders als andere Einstellungen werden Änderungen an Adresse und Schlüssel nicht Zeichen für Zeichen gespeichert; klicken Sie auf 'Speichern', damit nicht jeder Tastendruck einen verschlüsselten Schreibvorgang auslöst.</translation>
+        <source>Unlike other settings, changes to the address and key are not saved character by character; click &apos;Save&apos;, so that every keystroke does not trigger an encrypted write.</source>
+        <translation type="unfinished">Anders als andere Einstellungen werden Änderungen an Adresse und Schlüssel nicht Zeichen für Zeichen gespeichert; klicken Sie auf &apos;Speichern&apos;, damit nicht jeder Tastendruck einen verschlüsselten Schreibvorgang auslöst.</translation>
     </message>
     <message>
         <source>The AI assistant configuration service is unavailable</source>
@@ -4004,8 +4000,8 @@ Privater Schlüssel: %2
         <translation type="unfinished">Das Format des privaten Schlüssels wird nicht unterstützt, die Datei ist beschädigt oder die Passphrase ist falsch.</translation>
     </message>
     <message>
-        <source>Verification passed: %1%2. You can select this file in the 'Private key' field of the host editor.</source>
-        <translation type="unfinished">Verifizierung bestanden: %1%2. Sie können diese Datei im Feld 'Privater Schlüssel' des Host-Editors auswählen.</translation>
+        <source>Verification passed: %1%2. You can select this file in the &apos;Private key&apos; field of the host editor.</source>
+        <translation type="unfinished">Verifizierung bestanden: %1%2. Sie können diese Datei im Feld &apos;Privater Schlüssel&apos; des Host-Editors auswählen.</translation>
     </message>
     <message>
         <source>, passphrase-protected</source>
@@ -4304,7 +4300,7 @@ Privater Schlüssel: %2
         <translation type="unfinished">Lokales Terminal wird gestartet …</translation>
     </message>
     <message>
-        <source>Starting local terminal…<byte value="xd" />
+        <source>Starting local terminal…<byte value="xd"/>
 </source>
         <translation type="unfinished">Lokales Terminal wird gestartet …</translation>
     </message>
@@ -4329,7 +4325,7 @@ Privater Schlüssel: %2
         <translation type="unfinished">Verbinde mit %1 …</translation>
     </message>
     <message>
-        <source>Connecting to %1…<byte value="xd" />
+        <source>Connecting to %1…<byte value="xd"/>
 </source>
         <translation type="unfinished">Verbinde mit %1 …</translation>
     </message>
@@ -4342,18 +4338,18 @@ Privater Schlüssel: %2
         <translation type="unfinished">Die Shell-Integration für %1 ist nicht aktiviert; die verschachtelte Erkennung ist eingeschränkt: %2</translation>
     </message>
     <message>
-        <source>Permission denied, please try again.<byte value="xd" />
-%1's password: </source>
+        <source>Permission denied, please try again.<byte value="xd"/>
+%1&apos;s password: </source>
         <translation type="unfinished">Zugriff verweigert, bitte erneut versuchen.
 Passwort für %1:</translation>
     </message>
     <message>
-        <source>%1's password: </source>
+        <source>%1&apos;s password: </source>
         <translation type="unfinished">Passwort für %1:</translation>
     </message>
     <message>
-        <source><byte value="xd" />
-Could not establish the nested connection to %1: %2<byte value="xd" />
+        <source><byte value="xd"/>
+Could not establish the nested connection to %1: %2<byte value="xd"/>
 </source>
         <translation type="unfinished">Die verschachtelte Verbindung zu %1 konnte nicht hergestellt werden: %2</translation>
     </message>
@@ -4380,7 +4376,7 @@ Could not establish the nested connection to %1: %2<byte value="xd" />
     <message>
         <source>Server %1 offers only hmac-sha1, which the default security policy cannot use to complete the connection.
 
-hmac-sha1 is obsolete; upgrading the server's SSH configuration is recommended. Enable this algorithm for this connection only and retry?
+hmac-sha1 is obsolete; upgrading the server&apos;s SSH configuration is recommended. Enable this algorithm for this connection only and retry?
 
 Details: %2</source>
         <translation type="unfinished">Server %1 bietet nur hmac-sha1, das die Standard-Sicherheitsrichtlinie nicht zum Abschließen der Verbindung verwenden kann.
@@ -4462,14 +4458,14 @@ Bestätigen Sie, dass sich der Schlüssel geändert hat, und ersetzen Sie den al
         <translation type="unfinished">Drücken Sie r, um sich erneut mit %1 zu verbinden, x, um diesen Tab zu schließen</translation>
     </message>
     <message>
-        <source><byte value="xd" />
-No server to reconnect to; press x to close this tab<byte value="xd" />
+        <source><byte value="xd"/>
+No server to reconnect to; press x to close this tab<byte value="xd"/>
 </source>
         <translation type="unfinished">Kein Server für eine Neuverbindung; drücken Sie x, um diesen Tab zu schließen</translation>
     </message>
     <message>
-        <source><byte value="xd" />
-Reconnecting manually…<byte value="xd" />
+        <source><byte value="xd"/>
+Reconnecting manually…<byte value="xd"/>
 </source>
         <translation type="unfinished">Manuelle Neuverbindung …</translation>
     </message>
@@ -4522,7 +4518,7 @@ Reconnecting manually…<byte value="xd" />
         <translation type="unfinished">Dieses ssh wurde nicht übernommen (%1); es wurde dem Remote überlassen, es selbst auszuführen</translation>
     </message>
     <message>
-        <source>Shellium could not take over this connection (%1); handing it to the remote ssh to run directly.<byte value="xd" />
+        <source>Shellium could not take over this connection (%1); handing it to the remote ssh to run directly.<byte value="xd"/>
 </source>
         <translation type="unfinished">Shellium konnte diese Verbindung nicht übernehmen (%1); sie wird zur direkten Ausführung an das Remote-ssh übergeben.</translation>
     </message>
@@ -4538,32 +4534,32 @@ Reconnecting manually…<byte value="xd" />
         <translation type="unfinished">Der Einstellungsdienst hat keine App-Datenbank verfügbar</translation>
     </message>
     <message>
-        <source>The value '%2' of setting %1 is not an integer; the default has been restored</source>
-        <translation type="unfinished">Der Wert '%2' der Einstellung %1 ist keine Ganzzahl; der Standardwert wurde wiederhergestellt</translation>
+        <source>The value &apos;%2&apos; of setting %1 is not an integer; the default has been restored</source>
+        <translation type="unfinished">Der Wert &apos;%2&apos; der Einstellung %1 ist keine Ganzzahl; der Standardwert wurde wiederhergestellt</translation>
     </message>
     <message>
-        <source>The value '%2' of setting %1 is not a boolean; the default has been restored</source>
-        <translation type="unfinished">Der Wert '%2' der Einstellung %1 ist kein Boolescher Wert; der Standardwert wurde wiederhergestellt</translation>
+        <source>The value &apos;%2&apos; of setting %1 is not a boolean; the default has been restored</source>
+        <translation type="unfinished">Der Wert &apos;%2&apos; der Einstellung %1 ist kein Boolescher Wert; der Standardwert wurde wiederhergestellt</translation>
     </message>
     <message>
-        <source>Unknown theme '%1'; reverted to follow system</source>
-        <translation type="unfinished">Unbekanntes Design '%1'; auf Systemeinstellung zurückgesetzt</translation>
+        <source>Unknown theme &apos;%1&apos;; reverted to follow system</source>
+        <translation type="unfinished">Unbekanntes Design &apos;%1&apos;; auf Systemeinstellung zurückgesetzt</translation>
     </message>
     <message>
-        <source>Unknown terminal color scheme '%1'; reverted to the default scheme</source>
-        <translation type="unfinished">Unbekanntes Terminal-Farbschema '%1'; auf das Standardschema zurückgesetzt</translation>
+        <source>Unknown terminal color scheme &apos;%1&apos;; reverted to the default scheme</source>
+        <translation type="unfinished">Unbekanntes Terminal-Farbschema &apos;%1&apos;; auf das Standardschema zurückgesetzt</translation>
     </message>
     <message>
-        <source>Letter spacing '%1' is invalid; the default has been restored</source>
-        <translation type="unfinished">Zeichenabstand '%1' ist ungültig; der Standardwert wurde wiederhergestellt</translation>
+        <source>Letter spacing &apos;%1&apos; is invalid; the default has been restored</source>
+        <translation type="unfinished">Zeichenabstand &apos;%1&apos; ist ungültig; der Standardwert wurde wiederhergestellt</translation>
     </message>
     <message>
-        <source>Unknown cursor shape '%1'; reverted to block cursor</source>
-        <translation type="unfinished">Unbekannte Cursor-Form '%1'; auf Block-Cursor zurückgesetzt</translation>
+        <source>Unknown cursor shape &apos;%1&apos;; reverted to block cursor</source>
+        <translation type="unfinished">Unbekannte Cursor-Form &apos;%1&apos;; auf Block-Cursor zurückgesetzt</translation>
     </message>
     <message>
-        <source>The shortcut '%2' for action '%1' is invalid; the default has been restored</source>
-        <translation type="unfinished">Der Kurzbefehl '%2' für Aktion '%1' ist ungültig; der Standardwert wurde wiederhergestellt</translation>
+        <source>The shortcut &apos;%2&apos; for action &apos;%1&apos; is invalid; the default has been restored</source>
+        <translation type="unfinished">Der Kurzbefehl &apos;%2&apos; für Aktion &apos;%1&apos; ist ungültig; der Standardwert wurde wiederhergestellt</translation>
     </message>
     <message>
         <source>; all shortcuts have been restored to their defaults</source>
@@ -4741,8 +4737,8 @@ Reconnecting manually…<byte value="xd" />
         <translation type="unfinished">Das Zurücksetzen löscht dauerhaft alle gespeicherten SSH-Passwörter und Passphrasen privater Schlüssel und entfernt ihre Zuordnung zu Hosts. Host-Adressen, Konten, Ports, Pfade privater Schlüsseldateien, Gruppen und Host-Ketten bleiben erhalten. Diese Aktion kann nicht rückgängig gemacht werden.</translation>
     </message>
     <message>
-        <source>Type '%1' to confirm:</source>
-        <translation type="unfinished">Geben Sie '%1' zur Bestätigung ein:</translation>
+        <source>Type &apos;%1&apos; to confirm:</source>
+        <translation type="unfinished">Geben Sie &apos;%1&apos; zur Bestätigung ein:</translation>
     </message>
     <message>
         <source>Permanently delete and reset</source>

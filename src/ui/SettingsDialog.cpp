@@ -438,6 +438,25 @@ QWidget *SettingsDialog::buildAppearancePage()
         });
     }
     relayoutColorSchemeGrid(QString());
+
+    // 色板标题（“Default”会翻译，其余是品牌名保持原样）和「跟随应用主题 / 深色 / 浅色」
+    // 副标题都是构造期一次性写入的，必须显式登记热切换。
+    i18n::onRetranslate(this, [this] {
+        for (const TerminalThemePreset &preset : TerminalSettings::themePresets()) {
+            ThemeSwatchButton *swatch = m_colorSchemeSwatches.value(preset.id);
+            if (swatch == nullptr) {
+                continue;
+            }
+            const bool isDefault = preset.id == QLatin1String("default");
+            // themePresets() 是 static 缓存，其中唯一被翻译的 "Default" 名字会冻结在首次
+            // 求值时的语言，这里按同一 QObject 上下文实时重译；其余是品牌名，原样使用。
+            swatch->setText(isDefault
+                                ? QCoreApplication::translate("QObject", "Default")
+                                : preset.name);
+            swatch->setSubtitle(isDefault ? tr("Follow app theme")
+                                          : (preset.dark ? tr("Dark") : tr("Light")));
+        }
+    });
     schemeCard->addFullWidthWidget(m_colorSchemeGrid);
     m_colorSchemeEmptyLabel = schemeCard->addNote([this] { return tr("No matching color schemes."); });
     m_colorSchemeEmptyLabel->setVisible(false);
@@ -496,7 +515,6 @@ QWidget *SettingsDialog::buildTerminalPage()
     m_letterSpacingSpin->setRange(-2.0, 10.0);
     m_letterSpacingSpin->setDecimals(1);
     m_letterSpacingSpin->setSingleStep(0.5);
-    m_letterSpacingSpin->setSuffix(tr(" px"));
 
     auto *fontCard = new SettingsCard([this] { return tr("Font"); }, page);
     fontCard->addRow([this] { return tr("Monospace font"); }, m_fontCombo);
@@ -520,8 +538,14 @@ QWidget *SettingsDialog::buildTerminalPage()
     m_scrollbackSpin->setObjectName(QStringLiteral("scrollbackSpin"));
     m_scrollbackSpin->setRange(100, 1000000);
     m_scrollbackSpin->setSingleStep(1000);
-    m_scrollbackSpin->setSuffix(tr(" lines"));
     m_scrollbackSpin->setMinimumWidth(120);
+
+    // QSpinBox 的后缀是一次性 setSuffix，语言切换时不会自己更新；显式登记进热切换闭包，
+    // 否则切到别的语言后数值旁仍残留上一次语言的“行 / px”。
+    i18n::onRetranslate(this, [this] {
+        m_letterSpacingSpin->setSuffix(tr(" px"));
+        m_scrollbackSpin->setSuffix(tr(" lines"));
+    });
     m_audibleBellToggle->setObjectName(QStringLiteral("audibleBellToggle"));
     m_commandAutoCompletionToggle->setObjectName(
         QStringLiteral("commandAutoCompletionToggle"));
@@ -560,10 +584,13 @@ QWidget *SettingsDialog::buildConnectionPage()
     m_automaticReconnectToggle->setObjectName(QStringLiteral("automaticReconnectToggle"));
     m_reconnectMaxAttemptsSpin->setObjectName(QStringLiteral("reconnectMaxAttemptsSpin"));
     m_reconnectMaxAttemptsSpin->setRange(0, 10);
-    m_reconnectMaxAttemptsSpin->setSuffix(tr(" times"));
     m_reconnectBaseDelaySpin->setObjectName(QStringLiteral("reconnectBaseDelaySpin"));
     m_reconnectBaseDelaySpin->setRange(1, 60);
-    m_reconnectBaseDelaySpin->setSuffix(tr(" s"));
+    // 后缀同样必须随语言热切换，见 buildTerminalPage 的同类闭包。
+    i18n::onRetranslate(this, [this] {
+        m_reconnectMaxAttemptsSpin->setSuffix(tr(" times"));
+        m_reconnectBaseDelaySpin->setSuffix(tr(" s"));
+    });
 
     m_vaultPasswordEnabledToggle->setObjectName(
         QStringLiteral("vaultPasswordEnabledToggle"));
@@ -699,14 +726,24 @@ QWidget *SettingsDialog::buildAiPage()
     auto *buttonRow = new QWidget(card);
     auto *buttonLayout = new QHBoxLayout(buttonRow);
     buttonLayout->setContentsMargins(0, 4, 0, 0);
-    m_aiTestButton = new QPushButton(tr("Test connection"), buttonRow);
-    m_aiSaveButton = new QPushButton(tr("Save"), buttonRow);
+    m_aiTestButton = new QPushButton(buttonRow);
+    m_aiTestButton->setObjectName(QStringLiteral("settingsAiTest"));
+    m_aiSaveButton = new QPushButton(buttonRow);
     m_aiSaveButton->setObjectName(QStringLiteral("settingsAiSave"));
     buttonLayout->addWidget(m_aiTestButton);
     buttonLayout->addWidget(m_aiSaveButton);
     buttonLayout->addStretch(1);
     card->addFullWidthWidget(buttonRow);
     layout->addWidget(card);
+
+    // 这两个按钮不是 SettingsCard 的托管行，文案要自己登记热切换；刷新按钮的 Tooltip/
+    // 无障碍名同理。
+    i18n::onRetranslate(this, [this] {
+        m_aiTestButton->setText(tr("Test connection"));
+        m_aiSaveButton->setText(tr("Save"));
+        m_aiModelRefreshButton->setToolTip(tr("Fetch the model list from the server"));
+        m_aiModelRefreshButton->setAccessibleName(tr("Refresh model list"));
+    });
 
     card->addNote(
         [this] { return tr("Unlike other settings, changes to the address and key are not saved character by character; click 'Save', so that every keystroke does not trigger an encrypted write."); });

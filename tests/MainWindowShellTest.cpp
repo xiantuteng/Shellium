@@ -500,6 +500,26 @@ void MainWindowShellTest::languageChangeRetranslatesMenuBar()
     QVERIFY(localization.apply(QStringLiteral("en")));
     QCoreApplication::sendPostedEvents(nullptr, QEvent::LanguageChange);
     QCOMPARE(addHostButton->text(), QStringLiteral("New host"));
+
+    // 停在非「主机」页时切换语言，侧栏标题必须跟随当前页（端口转发）而不是被 retranslateUi
+    // 硬编码回「主机」，也不能残留上一次语言。
+    auto *sidebarTitle = window.findChild<QLabel *>(QStringLiteral("SidebarHeader"));
+    QVERIFY(sidebarTitle != nullptr);
+    for (QToolButton *navButton : window.findChildren<QToolButton *>()) {
+        if (navButton->property("navButton").toBool()
+            && navButton->toolTip() == QStringLiteral("Port forwarding")) {
+            navButton->setChecked(true);
+            break;
+        }
+    }
+    QCOMPARE(sidebarTitle->text(), QStringLiteral("Port forwarding"));
+    QVERIFY(localization.apply(QStringLiteral("zh_CN")));
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::LanguageChange);
+    QCOMPARE(sidebarTitle->text(), QString::fromUtf8("端口转发"));
+
+    QVERIFY(localization.apply(QStringLiteral("en")));
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::LanguageChange);
+    QCOMPARE(sidebarTitle->text(), QStringLiteral("Port forwarding"));
 }
 
 QTEST_MAIN(MainWindowShellTest)

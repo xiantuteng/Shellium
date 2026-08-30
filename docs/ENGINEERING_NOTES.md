@@ -470,6 +470,28 @@ viewport()->setAcceptDrops(true);
 - **挂在常驻 `QMenu` 上、只在构造期设过一次文案的 `QAction` 也必须进 `onRetranslate` 闭包**——
   命令面板 `openCommandPalette()` 通过 `findChildren<QAction*>` 收录全部动作，且每个终端标签页
   各有一份文件管理器实例，漏掉的话切换语言后面板里会以上一次语言重复列出该项。
+- **由某个 `reloadXxx()` / 数据驱动重建出来的列表行、卡片内控件（`QListWidget::setItemWidget`
+  的行按钮等），文案在重建函数里一次性写死，`onRetranslate` 闭包必须重跑该重建函数**，
+  否则切换语言后已有行会残留上一次（甚至更早）语言——`ProductivityWidget` 片段行的
+  “执行/复制”按钮即因此在闭包里调 `reloadSnippets()`。右键菜单是按需构造的，不受影响。
+- **其它容易漏掉的一次性写文案，全部要进 `onRetranslate` 闭包**：
+  - `QSpinBox::setSuffix()`（`SettingsDialog` 的“行 / px / 次 / 秒”后缀）——它不是
+    lambda 文案提供器，构造期设一次就不会再变。
+  - 不由 `SettingsCard` 托管的裸 `QPushButton`（AI 设置页的“测试连接 / 保存”）、裸
+    `QToolButton` 的 `setToolTip/setAccessibleName`。
+  - `MainWindow` 侧栏标题/导航栏 Tooltip：**绝不能把 `{tr("Hosts"), …}` 存进
+    `static QStringList`**，static 只在首次调用时按当时语言求值一次；用每次实时求值的
+    `sidebarPageTitle(int)`，并在 `retranslateUi()` 里按 `m_activeSidebarPage` 重设。
+- `SettingsCard::addWideRow(...)` 的字符串版返回的是 **field 本身**而非行容器；lambda 版
+  要挂重译得从 `field->parentWidget()` 去 `findChildren<QLabel*>`，直接对返回值找会什么
+  都搜不到。
+- **`static` + `tr()` 是隐蔽的语言冻结源**：`static const QHash/QList{ …, tr("x"), … }` 只在
+  首次调用时按当时语言求值一次，之后永远返回旧译文。已知踩过的：
+  `TerminalSettings::shortcutDisplayName()`（快捷键设置页动作名，已去掉 static）、
+  `TerminalSettings::themePresets()` 里的 `"Default"`（色板标题，SettingsDialog 闭包按
+  `QCoreApplication::translate("QObject","Default")` 实时重译，其余是品牌名保持原样）。
+  新写查找表时，含 `tr()` 就不要 `static`；无法去 static 的，就在调用点/`onRetranslate`
+  闭包里对那几个字符串单独重译。
 - 构建依赖 `brew install qttools`（lupdate/lrelease）+ `brew install opencc`（生成 `zh_TW`）。
 - `LocalizationService` 析构必须 `removeTranslator`；用到它的测试 main 必须建 `QApplication`
   而非 `QCoreApplication`。

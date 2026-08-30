@@ -223,6 +223,9 @@ private:
      */
     void showSidebarPage(int pageIndex);
 
+    /** @brief 侧栏各页的标题文案，随当前语言实时求值（不能缓存进 static）。 */
+    QString sidebarPageTitle(int pageIndex) const;
+
     /**
      * @brief 读取上次持久化的侧栏宽度并应用到分隔器。
      *

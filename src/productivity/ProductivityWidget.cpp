@@ -155,6 +155,10 @@ void ProductivityWidget::buildUi()
         newSnippetButton->setToolTip(tr("Create an executable command snippet"));
         removeButton->setText(tr("Delete"));
         removeButton->setToolTip(tr("Delete the selected snippet"));
+        // 行内“执行/复制”按钮的文字在 createSnippetRowWidget 里一次性写死，语言切换时
+        // 不会自己更新；整表重建是让每一行都回到当前语言最省心的做法（右键菜单是按需
+        // 构造的，下次弹出即为新语言，无需在此处理）。
+        reloadSnippets();
     });
 
     connect(newSnippetButton, &QToolButton::clicked,
