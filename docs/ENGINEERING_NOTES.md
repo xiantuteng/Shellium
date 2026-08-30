@@ -363,3 +363,110 @@ Qt 的默认 `QString` 可处于“长度为 0 且 `isNull()` 为 true”的状�
 只有全部成功后才能移除当前标签并新建工作区。逐个“关一个、解析一个”会让中途损坏的
 工作区把用户现有会话破坏到一半。临时连接也不能被静默保存成本地 Shell：没有持久主机记录，
 下次无法可靠恢复地址、跳板链与凭据引用，应在保存阶段整体拒绝并提示先保存主机。
+
+---
+
+## 十五、终端渲染（libvterm + QPlainTextEdit）
+
+### 15.1 备用屏不是滚动历史
+
+备用屏（vim/top/less 等全屏程序）与主屏是两套完全不同的显示契约。`VtermBridge::render`
+在备用屏下必须跳过 scrollback、固定渲染全部 `m_rows` 行；`TerminalView::renderPreservingScroll`
+必须把滚动条钉在 `minimum()` 而不是贴底。主屏是不断增长的历史、按底部对齐阅读；备用屏是
+尺寸恰好等于 PTY 网格的画布，行 0 必须落在视口顶部。两者混在一起渲染，网格会整体沉到
+历史之下，被裁掉的正是光标最常停留的前几行。
+
+备用屏里的按键属于全屏程序自己的键位表：继续累积 `m_currentCommand` 会弹出历史补全浮层，
+抢走 vim 的 Tab / 回车 / Esc；Ctrl-D、Ctrl+C 若照常发 commandSubmitted / nestedSshAborted
+会凭空弹掉一层真实服务器。任何涉及渲染、滚动、按键分发的改动都先看
+`VtermBridge::isAlternateScreen()`。方向键/Home/End 一律走 `VtermBridge::sendKey`，不要硬编码
+CSI——vim 开 DECCKM 后正确的是 SS3（`ESC OA`）。回归见 `tests/TerminalAltScreenTest.cpp`。
+
+### 15.2 上报行数按控件能完整显示的段数算
+
+`TerminalView::recalculateTerminalGeometry` 报给 PTY 的行数必须是
+`(viewportHeight - 2 * documentMargin - 1) / cellHeight`，即 QPlainTextEdit 真正能完整显示的
+段数，不是 `viewportHeight / cellHeight`。直接除会多报一行——主屏看不出（只顶掉最旧一行
+历史），备用屏下会把网格第 0 行连同光标推出视口上方，现象是“vim 里没有光标、文件从中间
+开始显示”，极易误判成光标渲染坏了。改动字号、行高、padding、documentMargin 后跑
+`ShelliumTerminalAltScreenTests::reportedRowsMatchDisplayableRows`。
+
+### 15.3 主题必须自带 ANSI 16 色表
+
+libvterm 内置 ANSI 调色板是 VGA 那套值（ANSI 蓝 = #0000e0），且**不随**
+`vterm_screen_set_default_colors()` 变化。只配 background/foreground 时，`ls` 目录名、grep
+高亮、vim 语法色仍是 1980 年代暗色，在深色主题上读不清。每套主题必须通过
+`vterm_state_set_palette_color()` 自带 16 色表（`TerminalPalette::ansi`），缺失的由
+`TerminalSettings::defaultAnsiPalette(dark)` 兜底。换调色板后必须 `invalidateDocument()`——
+已渲染的段存的是解析后 RGB，不会自己更新。
+
+### 15.4 改默认色要同步刷新 libvterm 画笔
+
+`vterm_screen_set_default_colors()` 只改 state 的 default_fg/default_bg；当前画笔 `state->pen`
+里是复位那一刻**已解析成 RGB** 的副本。平时无碍，但 DECSC/DECRC（vim 进出备用屏的
+`CSI ?1049h/l`）会把 pen 存档再回灌，那份陈旧 RGB 被当成“显式指定的背景色”，退出 vim 后
+每行都顶着一块与主题不符的底色。`setDefaultColors()` 之后调 `refreshPenDefaultColors()`：用
+`vterm_state_get_penattr` 确认画笔当前确实是默认色，再注入 `ESC[39m`/`ESC[49m` 让 libvterm
+重取副本；远端正显式着色时不要注入。写回归时主题色必须**不等于**兜底色 `#111318`，否则恒过。
+
+### 15.5 双宽字符右半格的哨兵是 0xFFFFFFFF
+
+libvterm 把双宽字符（中日韩、全角标点、部分 emoji）的**右半格**标记为
+`cell.chars[0] == 0xFFFFFFFF`，不是 0，且 `cell.width` 对右半格仍是 1。判空只写
+`chars[0] != 0` 会把哨兵当有效码位，`QString::fromUcs4` 转成 U+FFFD——`正在连接` 渲染成
+`正�在�连�接�`，列计数也被打乱。`VtermBridge::convertCell` 里先查哨兵、命中就置 `width = 0`
+并返回；渲染循环与 `cursorLineText()` 都按 `width > 0` 过滤。任何新增终端渲染路径都复用
+`convertCell`，不要另写码位转换。回归 `terminalViewRendersWideCharacters`。
+
+### 15.6 行高锚点只能按字符格式剔除
+
+复制与导出剔除行高锚点走 `TerminalView::textWithoutLineAnchors()`，**按
+`VtermBridge::isLineAnchorFormat()` 的字符格式逐 fragment 判定**。`lineAnchorSuffix()` 只是
+锚点的上限集合，仅能用于断言，不能用于剔除——实际锚点个数由本机字体探测决定
+（`buildLineAnchors()`），emoji 后备字体与 CJK 相同或探测不到时只有一个 U+4E2D，与写死的
+`中`+U+200B 后缀对不上，那个本该不可见的“中”就原样进了剪贴板。凡是把文档内容交给外部
+（剪贴板、导出、日志、搜索比对）的路径都用格式判定，绝不无差别删除 U+4E2D。回归
+`TerminalAltScreenTest::partialSelectionDropsLineHeightAnchors`。
+
+---
+
+## 十六、Qt 拖拽：非 item-view 的 QAbstractScrollArea 要注册 viewport
+
+给 `QPlainTextEdit` / `QTextEdit` / `QScrollArea` 等直接继承 `QAbstractScrollArea` 的控件手写
+拖拽支持时，两行缺一不可：
+
+```cpp
+setAcceptDrops(true);
+viewport()->setAcceptDrops(true);
+```
+
+真正接收操作系统原生拖拽事件的是 viewport 子控件。viewport 没注册时 macOS 原生视图从不
+接受该拖拽类型，Qt 层完全收不到事件，且**没有任何日志线索**。`QAbstractItemView`
+（QTreeWidget/QListWidget）不受此坑影响——`setDragDropMode()` 内部已替你注册。
+
+第二个坑：viewport 注册后仍可能“能拖进来但松手无反应、一直显示禁止图标”。`QPlainTextEdit`
+/ `QTextEdit` 自带一份 `dragMoveEvent`，按 `canInsertFromMimeData` 判定；控件只读、拖的是
+文件 URL 时每次鼠标移动都 `ignore()`，覆盖掉 dragEnter 阶段的 accept，`dropEvent` 永不触发。
+**`dragEnterEvent`、`dragMoveEvent`、`dropEvent` 三个都要显式重写并对同一 MIME 条件 accept。**
+
+单元测试只把合成事件发给 `widget.viewport()` 绕过了操作系统注册环节，测试全绿也不能证明
+真机可用——这一步必须真机手动验证一次。
+
+---
+
+## 十七、多语言（i18n）
+
+改动界面用户可见文字时的强制流程见 [`AGENTS.md`](../AGENTS.md) 的「多语言」一节，设计与
+现状见 [`docs/I18N_DESIGN.md`](I18N_DESIGN.md)。要点：
+
+- 源语言是英文，`tr()` 字面量即英文；14 种语言的 `.ts` 都登记在 CMake 的
+  `SHELLIUM_TS_FILES`，`.qm` 编进 Qt 资源前缀 `/i18n`。
+- **只要增删改了 `tr()` / `QT_TRANSLATE_NOOP` 文案，必须在同一次改动里同步更新其余 13 种
+  语言的对应译文**，不允许只改英文源。流程：`Shellium_lupdate` 刷 `.ts` →
+  `scripts/i18n/drafts/<lang>.tsv` 填译文 → `scripts/i18n/fill_drafts.py` 回填 → 跑 `ctest`。
+- 新增常驻控件文案按 `src/i18n/Retranslate.h` 的 `i18n::onRetranslate` 接入免重启热切换；
+  无 `Q_OBJECT` 的嵌套对话框类必须加 `Q_DECLARE_TR_FUNCTIONS(类名)`，否则运行时 tr() 上下文
+  与 lupdate 提取的类名不匹配，切换语言后退回英文。
+- 构建依赖 `brew install qttools`（lupdate/lrelease）+ `brew install opencc`（生成 `zh_TW`）。
+- `LocalizationService` 析构必须 `removeTranslator`；用到它的测试 main 必须建 `QApplication`
+  而非 `QCoreApplication`。
