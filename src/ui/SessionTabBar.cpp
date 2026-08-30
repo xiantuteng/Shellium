@@ -982,6 +982,7 @@ void SessionTabBar::moveExternalDragGhost(const QPoint &globalPosition)
         m_dragGhost->show();
         m_dragGhost->raise();
     }
+    emit externalDragMoved(globalPosition);
 }
 
 void SessionTabBar::endExternalDragGhost()

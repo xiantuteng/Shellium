@@ -126,6 +126,9 @@ signals:
      */
     void externalDragStarted();
 
+    /** @brief 拖出手势进行中，浮动快照移到了新的全局坐标。用于更新落点提示。 */
+    void externalDragMoved(const QPoint &globalPosition);
+
     /** @brief 上述手势结束（释放或取消），落点提示层应隐藏。 */
     void externalDragFinished();
 

@@ -630,12 +630,77 @@ void TerminalWorkspaceGroup::rebuildLayout()
         surface->setAutoFillBackground(true);
     }
 
+    restyleSplitterHandles(chrome);
+
     const bool switchMode = m_layoutMode == LayoutMode::Switch;
     for (TerminalWorkspace *workspace : std::as_const(m_terminals)) {
         // 分屏模式禁用远程文件管理（多块并列时目标歧义、单元格尺寸被破坏）；切换模式恢复。
         workspace->setFileManagerAllowed(switchMode);
     }
     refreshSelection();
+}
+
+void TerminalWorkspaceGroup::restyleSplitterHandles(const QColor &chromeColor)
+{
+    // QSplitter 分隔条默认由样式引擎绘制成一条浅色细线；分屏里那是终端之间唯一的浅色噪点。
+    // 直接把 handle 背景刷成终端会话底色，分隔条就“消失”成一条同色缝隙。
+    const QString handleStyle =
+        QStringLiteral("QSplitter::handle { background-color: %1; }")
+            .arg(chromeColor.name(QColor::HexRgb));
+    const QList<QSplitter *> splitters = findChildren<QSplitter *>();
+    for (QSplitter *splitter : splitters) {
+        const QString name = splitter->objectName();
+        if (name == QLatin1String("WorkspaceSplitRoot")
+            || name == QLatin1String("WorkspaceSplitNode")) {
+            splitter->setStyleSheet(handleStyle);
+        }
+    }
+}
+
+void TerminalWorkspaceGroup::beginExternalDropHint()
+{
+    m_externalHit = {};
+    m_externalDropActive = true;
+    m_dockDragSource = nullptr;
+    m_dockOverlay->setZone({});
+    m_dockOverlay->setGeometry(m_content->rect());
+    m_dockOverlay->show();
+    m_dockOverlay->raise();
+}
+
+void TerminalWorkspaceGroup::updateExternalDropHint(const QPoint &globalPosition)
+{
+    if (!m_externalDropActive) {
+        return;
+    }
+    m_externalHit = hitTestDock(globalPosition);
+    m_dockOverlay->setGeometry(m_content->rect());
+    m_dockOverlay->raise();
+    m_dockOverlay->setZone(m_externalHit.valid ? m_externalHit.zoneInContent : QRect());
+}
+
+void TerminalWorkspaceGroup::endExternalDropHint()
+{
+    // 只收起高亮，保留 m_externalHit 供随后的合并读取（consumeExternalDropTarget 会清空）。
+    m_externalDropActive = false;
+    m_dockOverlay->setZone({});
+    m_dockOverlay->hide();
+}
+
+bool TerminalWorkspaceGroup::consumeExternalDropTarget(TerminalWorkspace **target, DockEdge *edge)
+{
+    const DockTargetHit hit = m_externalHit;
+    m_externalHit = {};
+    if (!hit.valid) {
+        return false;
+    }
+    if (target != nullptr) {
+        *target = hit.targetFrame == nullptr ? nullptr : hit.targetFrame->workspace();
+    }
+    if (edge != nullptr) {
+        *edge = hit.edge;
+    }
+    return true;
 }
 
 void TerminalWorkspaceGroup::refreshSelection()

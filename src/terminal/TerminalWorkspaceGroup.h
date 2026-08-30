@@ -77,6 +77,24 @@ public:
      */
     void dockTerminal(TerminalWorkspace *source, TerminalWorkspace *target, DockEdge edge);
 
+    /**
+     * @brief 从标签栏把一个终端拖入本工作空间时的落点预览（与内部拖动同一套高亮）。
+     *
+     * MainWindow 在 SessionTabBar 的拖出信号里驱动这三个方法：begin 时亮出高亮层，move 时
+     * 按全局坐标刷新目标半区，end 时收起高亮但保留最后一次命中结果，供随后的合并读取。
+     */
+    void beginExternalDropHint();
+    void updateExternalDropHint(const QPoint &globalPosition);
+    void endExternalDropHint();
+
+    /**
+     * @brief 取出并清空最近一次外部落点命中。
+     * @param target 命中的参照成员；停靠到最外层时写入 nullptr。
+     * @param edge 停靠方向。
+     * @return 有有效命中返回 true；否则返回 false 且不改写出参。
+     */
+    bool consumeExternalDropTarget(TerminalWorkspace **target, DockEdge *edge);
+
     /** @brief 返回工作空间内全部终端，顺序与侧栏缩略图一致（与分屏树结构无关）。 */
     [[nodiscard]] QList<TerminalWorkspace *> terminals() const;
 
@@ -139,6 +157,9 @@ private:
     };
     [[nodiscard]] DockTargetHit hitTestDock(const QPoint &globalPosition) const;
 
+    /** @brief 把分屏树里所有 QSplitter 的分隔条刷成终端背景色，消除浅色分隔条。 */
+    void restyleSplitterHandles(const QColor &chromeColor);
+
     /** @brief 成员会话状态栏拖动的三个阶段回调，注入给每个 WorkspaceTerminalFrame。 */
     void beginDockDrag(TerminalWorkspace *source);
     void updateDockDrag(const QPoint &globalPosition);
@@ -153,6 +174,8 @@ private:
     QHash<TerminalWorkspace *, QString> m_titles;
     TerminalWorkspace *m_activeTerminal = nullptr;
     TerminalWorkspace *m_dockDragSource = nullptr;
+    DockTargetHit m_externalHit;
+    bool m_externalDropActive = false;
     LayoutMode m_layoutMode = LayoutMode::Tiled;
 };
 

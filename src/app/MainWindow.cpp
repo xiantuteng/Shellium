@@ -1055,9 +1055,28 @@ MainWindow::MainWindow(ApplicationDatabase *database,
                     || m_workspaceStack->currentWidget() != m_tabs) {
                     return;
                 }
+                // 当前页已是多终端工作空间：交给它显示与内部拖动一致的半区高亮；否则用
+                // 中央整块高亮层。
+                if (auto *group =
+                        qobject_cast<TerminalWorkspaceGroup *>(m_tabs->currentWidget())) {
+                    group->beginExternalDropHint();
+                    return;
+                }
                 m_tabDropOverlay->setGeometry(m_workspaceStack->rect());
                 m_tabDropOverlay->show();
                 m_tabDropOverlay->raise();
+            });
+    connect(m_titleTabBar,
+            &SessionTabBar::externalDragMoved,
+            this,
+            [this](const QPoint &globalPosition) {
+                if (m_tabs == nullptr) {
+                    return;
+                }
+                if (auto *group =
+                        qobject_cast<TerminalWorkspaceGroup *>(m_tabs->currentWidget())) {
+                    group->updateExternalDropHint(globalPosition);
+                }
             });
     connect(m_titleTabBar,
             &SessionTabBar::externalDragFinished,
@@ -1065,6 +1084,12 @@ MainWindow::MainWindow(ApplicationDatabase *database,
             [this]() {
                 if (m_tabDropOverlay != nullptr) {
                     m_tabDropOverlay->hide();
+                }
+                if (m_tabs != nullptr) {
+                    if (auto *group =
+                            qobject_cast<TerminalWorkspaceGroup *>(m_tabs->currentWidget())) {
+                        group->endExternalDropHint();
+                    }
                 }
             });
     connect(m_titleTabBar,
@@ -2964,7 +2989,16 @@ void MainWindow::mergeTerminalTabs(const int sourceIndex,
             ? qobject_cast<QStackedWidget *>(m_aiAssistantStack->widget(groupIndex))
             : nullptr;
         targetGroup->addTerminal(sourceWorkspace, sourceTitle);
-        targetGroup->setActiveTerminal(sourceWorkspace);
+        // 若拖入时在某个成员的半区上松手，就按同一套停靠语义把新成员放到那条边；
+        // 否则维持默认追加，只把它设为当前项。
+        TerminalWorkspace *dockTarget = nullptr;
+        TerminalWorkspaceGroup::DockEdge dockEdge{};
+        if (targetGroup->consumeExternalDropTarget(&dockTarget, &dockEdge)
+            && dockTarget != sourceWorkspace) {
+            targetGroup->dockTerminal(sourceWorkspace, dockTarget, dockEdge);
+        } else {
+            targetGroup->setActiveTerminal(sourceWorkspace);
+        }
         if (assistantGroup != nullptr && sourceAssistant != nullptr) {
             assistantGroup->addWidget(sourceAssistant);
             assistantGroup->setCurrentWidget(sourceAssistant);

@@ -72,6 +72,9 @@ private slots:
     /** @brief 拖动组内某终端的会话状态栏必须亮出浮动快照与落点高亮，并在松手后重排分屏。 */
     void draggingTerminalHeaderReDocksWithinWorkspace();
 
+    /** @brief 从标签栏拖入既有工作空间时，落点半区必须走与内部拖动相同的命中逻辑。 */
+    void externalDropHintResolvesToDockTarget();
+
     /** @brief 终端上报的发行版必须落库并让侧栏立刻换成对应图标，重启后依然保持。 */
     void detectedDistributionIsPersistedAndShownInSidebar();
 
@@ -452,6 +455,40 @@ void MainWindowShellTest::draggingTerminalHeaderReDocksWithinWorkspace()
                         headerA->mapFromGlobal(overBGlobal));
     QTRY_VERIFY2(!dockGhostExists(), "松手后浮动快照必须销毁");
     QVERIFY2(overlay->isHidden(), "松手后落点高亮层必须隐藏");
+}
+
+void MainWindowShellTest::externalDropHintResolvesToDockTarget()
+{
+    TerminalWorkspaceGroup group;
+    group.resize(1000, 700);
+    group.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&group));
+    auto *a = new TerminalWorkspace;
+    auto *b = new TerminalWorkspace;
+    group.addTerminal(a, QStringLiteral("a"));
+    group.addTerminal(b, QStringLiteral("b"));
+    QTest::qWait(30);
+
+    auto *overlay = group.findChild<QWidget *>(QStringLiteral("WorkspaceDockOverlay"));
+    QVERIFY(overlay != nullptr && overlay->isHidden());
+
+    group.beginExternalDropHint();
+    QVERIFY2(!overlay->isHidden(), "外部拖入预览必须亮出落点高亮层");
+
+    // 指向 a 的右半区（远离中心，确保是水平方向）。
+    const QPoint rightOfA =
+        a->mapToGlobal(QPoint(a->width() * 9 / 10, a->height() / 2));
+    group.updateExternalDropHint(rightOfA);
+    group.endExternalDropHint();
+    QVERIFY2(overlay->isHidden(), "松手后落点高亮层必须隐藏");
+
+    TerminalWorkspace *target = nullptr;
+    TerminalWorkspaceGroup::DockEdge edge{};
+    QVERIFY(group.consumeExternalDropTarget(&target, &edge));
+    QCOMPARE(target, a);
+    QCOMPARE(edge, TerminalWorkspaceGroup::DockEdge::Right);
+    // 命中结果只能取一次。
+    QVERIFY(!group.consumeExternalDropTarget(&target, &edge));
 }
 
 void MainWindowShellTest::desktopPlatformsUseProductTitleAndCustomWindowControls()
