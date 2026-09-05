@@ -444,6 +444,10 @@ Run it in the current terminal?</source>
         <translation type="unfinished">اتصال</translation>
     </message>
     <message>
+        <source>Connect in Workspace</source>
+        <translation type="unfinished">الاتصال في مساحة العمل</translation>
+    </message>
+    <message>
         <source>Copy</source>
         <translation type="unfinished">نسخ</translation>
     </message>
@@ -1493,6 +1497,18 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>The credential does not exist</source>
         <translation type="unfinished">بيانات الاعتماد غير موجودة</translation>
+    </message>
+    <message>
+        <source>Could not connect the group</source>
+        <translation type="unfinished">تعذر الاتصال بالمجموعة</translation>
+    </message>
+    <message>
+        <source>Reading the group failed</source>
+        <translation type="unfinished">فشلت قراءة المجموعة</translation>
+    </message>
+    <message>
+        <source>The group “%1” has no hosts to connect</source>
+        <translation type="unfinished">لا تحتوي المجموعة "%1" على أي مضيفين للاتصال بهم</translation>
     </message>
     <message>
         <source>Connected, but writing the connection history failed: %1</source>

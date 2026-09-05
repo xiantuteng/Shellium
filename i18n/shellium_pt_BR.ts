@@ -444,6 +444,10 @@ Executá-lo no terminal atual?</translation>
         <translation type="unfinished">Conectar</translation>
     </message>
     <message>
+        <source>Connect in Workspace</source>
+        <translation type="unfinished">Conectar em um espaço de trabalho</translation>
+    </message>
+    <message>
         <source>Copy</source>
         <translation type="unfinished">Copiar</translation>
     </message>
@@ -1493,6 +1497,18 @@ Confirmar que a chave mudou, substituir o registro antigo em known_hosts e conti
     <message>
         <source>The credential does not exist</source>
         <translation type="unfinished">A credencial não existe</translation>
+    </message>
+    <message>
+        <source>Could not connect the group</source>
+        <translation type="unfinished">Não foi possível conectar o grupo</translation>
+    </message>
+    <message>
+        <source>Reading the group failed</source>
+        <translation type="unfinished">Falha ao ler o grupo</translation>
+    </message>
+    <message>
+        <source>The group “%1” has no hosts to connect</source>
+        <translation type="unfinished">O grupo “%1” não tem hosts para conectar</translation>
     </message>
     <message>
         <source>Connected, but writing the connection history failed: %1</source>

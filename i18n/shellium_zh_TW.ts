@@ -444,6 +444,10 @@ Run it in the current terminal?</source>
         <translation>連線</translation>
     </message>
     <message>
+        <source>Connect in Workspace</source>
+        <translation type="unfinished">在工作空間中連線</translation>
+    </message>
+    <message>
         <source>Copy</source>
         <translation>複製</translation>
     </message>
@@ -1489,6 +1493,18 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>The credential does not exist</source>
         <translation>憑據不存在</translation>
+    </message>
+    <message>
+        <source>Could not connect the group</source>
+        <translation type="unfinished">無法連線該分組</translation>
+    </message>
+    <message>
+        <source>Reading the group failed</source>
+        <translation type="unfinished">讀取分組失敗</translation>
+    </message>
+    <message>
+        <source>The group “%1” has no hosts to connect</source>
+        <translation type="unfinished">分組「%1」內沒有可連線的主機</translation>
     </message>
     <message>
         <source>Connected, but writing the connection history failed: %1</source>

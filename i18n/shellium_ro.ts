@@ -444,6 +444,10 @@ O execuți în terminalul curent?</translation>
         <translation type="unfinished">Conectează</translation>
     </message>
     <message>
+        <source>Connect in Workspace</source>
+        <translation type="unfinished">Conectare într-un spațiu de lucru</translation>
+    </message>
+    <message>
         <source>Copy</source>
         <translation type="unfinished">Copiază</translation>
     </message>
@@ -1493,6 +1497,18 @@ Confirmi că cheia s-a schimbat, înlocuiești vechea înregistrare din known_ho
     <message>
         <source>The credential does not exist</source>
         <translation type="unfinished">Datele de autentificare nu există</translation>
+    </message>
+    <message>
+        <source>Could not connect the group</source>
+        <translation type="unfinished">Nu s-a putut conecta grupul</translation>
+    </message>
+    <message>
+        <source>Reading the group failed</source>
+        <translation type="unfinished">Citirea grupului a eșuat</translation>
+    </message>
+    <message>
+        <source>The group “%1” has no hosts to connect</source>
+        <translation type="unfinished">Grupul „%1” nu are gazde de conectat</translation>
     </message>
     <message>
         <source>Connected, but writing the connection history failed: %1</source>

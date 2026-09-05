@@ -3343,6 +3343,23 @@ void HostManagerWidget::populateContextMenu(QMenu *menu, QTreeWidgetItem *item)
     connect(addHostAction, &QAction::triggered, this, &HostManagerWidget::addHost);
     connect(addGroupAction, &QAction::triggered, this, &HostManagerWidget::addGroup);
 
+    // 只在真实分组节点上提供“在工作空间中连接”：根层空白区域和“未分组”标题都不对应
+    // 单一分组 id，主机节点本身也没有可展开的子主机集合。
+    const bool isFolder = item != nullptr
+        && static_cast<HostNodeKind>(item->data(0, HostKindRole).toInt()) == HostNodeKind::Folder;
+    if (isFolder) {
+        QAction *connectGroupAction = menu->addAction(
+            UiIcons::symbol(this,
+                            UiIcons::Symbol::Workspace,
+                            this->palette().color(QPalette::WindowText)),
+            tr("Connect in Workspace"));
+        connect(connectGroupAction, &QAction::triggered, this, [this, item]() {
+            const QString groupId = item->data(0, HostIdRole).toString();
+            const QString groupName = item->text(0);
+            emit hostGroupConnectionRequested(groupId, groupName);
+        });
+    }
+
     // “未分组”分区标题不对应任何数据库记录，右键它时不提供编辑/删除——那两个动作
     // 只会因为没有选中项而静默无效，不如直接不显示。复制进一步限定为真实主机，避免
     // 用户误以为可以通过复制分组来递归克隆整棵子树。
@@ -4106,6 +4123,23 @@ void HostManagerWidget::exportHosts()
                              tr("Export complete"),
                              tr("%1 host/group records exported. The file contains no credentials.")
                                  .arg(records.size()));
+}
+
+bool HostManagerWidget::collectHostsInGroup(const QString &groupId,
+                                            QList<HostRecord> *hosts,
+                                            QString *errorMessage) const
+{
+    Q_ASSERT(hosts != nullptr);
+    QList<HostRecord> records;
+    if (!collectRecords(groupId, &records, errorMessage)) {
+        return false;
+    }
+    for (const HostRecord &record : records) {
+        if (record.kind == HostNodeKind::Host) {
+            hosts->append(record);
+        }
+    }
+    return true;
 }
 
 bool HostManagerWidget::collectRecords(const QString &parentId,

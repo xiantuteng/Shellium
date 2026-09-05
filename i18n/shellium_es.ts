@@ -444,6 +444,10 @@ Run it in the current terminal?</source>
         <translation type="unfinished">Conectar</translation>
     </message>
     <message>
+        <source>Connect in Workspace</source>
+        <translation type="unfinished">Conectar en un espacio de trabajo</translation>
+    </message>
+    <message>
         <source>Copy</source>
         <translation type="unfinished">Copiar</translation>
     </message>
@@ -1493,6 +1497,18 @@ Puede ser una reinstalación del servidor o una rotación de clave, o un ataque 
     <message>
         <source>The credential does not exist</source>
         <translation type="unfinished">La credencial no existe</translation>
+    </message>
+    <message>
+        <source>Could not connect the group</source>
+        <translation type="unfinished">No se pudo conectar el grupo</translation>
+    </message>
+    <message>
+        <source>Reading the group failed</source>
+        <translation type="unfinished">No se pudo leer el grupo</translation>
+    </message>
+    <message>
+        <source>The group “%1” has no hosts to connect</source>
+        <translation type="unfinished">El grupo «%1» no tiene hosts para conectar</translation>
     </message>
     <message>
         <source>Connected, but writing the connection history failed: %1</source>

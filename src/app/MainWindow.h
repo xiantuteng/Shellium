@@ -139,6 +139,17 @@ private:
                           const QList<ConnectionTarget> &connectionPlan,
                           bool openInNewTab = false);
 
+    /**
+     * @brief 连接某个主机分组下的全部主机，并把它们放进同一个新建工作空间标签。
+     * @param groupId 数据库中该分组的稳定主键。
+     * @param groupName 分组名称，直接作为新工作空间标签的标题。
+     *
+     * 依次复用 connectSavedHost() 为每台主机新建独立标签（保留其保险库解锁、历史记录等
+     * 既有行为），再仿照拖拽合并路径把这些标签重新挂进同一个 TerminalWorkspaceGroup，
+     * 默认以切换模式打开并把侧栏切到“工作空间”页。
+     */
+    void connectHostGroupInWorkspace(const QString &groupId, const QString &groupName);
+
     /** @brief 根连接认证成功后写入进行中的成功历史。 */
     void recordConnectionSucceeded(TerminalPane *pane, const ConnectionTarget &target);
 

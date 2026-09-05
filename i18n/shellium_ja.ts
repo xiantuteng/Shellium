@@ -444,6 +444,10 @@ Run it in the current terminal?</source>
         <translation type="unfinished">接続</translation>
     </message>
     <message>
+        <source>Connect in Workspace</source>
+        <translation type="unfinished">ワークスペースで接続</translation>
+    </message>
+    <message>
         <source>Copy</source>
         <translation type="unfinished">コピー</translation>
     </message>
@@ -1493,6 +1497,18 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>The credential does not exist</source>
         <translation type="unfinished">認証情報が存在しません</translation>
+    </message>
+    <message>
+        <source>Could not connect the group</source>
+        <translation type="unfinished">グループに接続できませんでした</translation>
+    </message>
+    <message>
+        <source>Reading the group failed</source>
+        <translation type="unfinished">グループの読み込みに失敗しました</translation>
+    </message>
+    <message>
+        <source>The group “%1” has no hosts to connect</source>
+        <translation type="unfinished">グループ「%1」に接続できるホストがありません</translation>
     </message>
     <message>
         <source>Connected, but writing the connection history failed: %1</source>

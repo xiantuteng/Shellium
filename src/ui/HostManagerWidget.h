@@ -62,6 +62,17 @@ public:
      */
     [[nodiscard]] QWidget *headerActionsWidget() const;
 
+    /**
+     * @brief 递归收集某个分组下的全部可连接主机（含任意深度子分组）。
+     * @param groupId 分组稳定 id；传空字符串表示根层级。
+     * @param hosts 输出参数，按数据库原始顺序追加，只包含 Host 类型记录。
+     * @param errorMessage 失败时写入数据库错误详情。
+     * @return 成功返回 true；数据库读取失败返回 false 且不修改 hosts。
+     */
+    bool collectHostsInGroup(const QString &groupId,
+                             QList<HostRecord> *hosts,
+                             QString *errorMessage) const;
+
 signals:
     /** @brief 主机或分组列表已重新加载，依赖 hostId 的其他侧栏应同步刷新。 */
     void hostsChanged();
@@ -82,6 +93,13 @@ signals:
     void hostConnectionRequested(const QString &hostId,
                                  const QList<ConnectionTarget> &connectionPlan,
                                  bool openInNewTab);
+
+    /**
+     * @brief 用户要求把某个分组下的全部主机一次性连接到同一个新工作空间。
+     * @param groupId 数据库中该分组的稳定主键。
+     * @param groupName 分组名称，接收方据此命名新建的工作空间标签。
+     */
+    void hostGroupConnectionRequested(const QString &groupId, const QString &groupName);
 
 private:
     /** @brief 从数据库递归加载某个分组的直接子节点。 */

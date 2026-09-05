@@ -61,6 +61,15 @@ private slots:
     /** @brief 主机右键菜单必须提供复制，并把新建主机排在新建分组之前。 */
     void hostContextMenuProvidesCopyAndRequestedCreationOrder();
 
+    /**
+     * @brief “在工作空间中连接”只应出现在分组右键菜单里、紧跟在“新建分组”之后，
+     * 点击后必须携带正确的分组 id 与名称发出信号。
+     */
+    void folderContextMenuOffersConnectInWorkspaceAndEmitsGroupSignal();
+
+    /** @brief 分组连接必须递归收集任意深度子分组下的主机，且不包含分组节点本身。 */
+    void collectHostsInGroupRecursesNestedFolders();
+
     /** @brief 连续复制必须递增名称序号，同时保留完整配置与父分组。 */
     void copyHostKeepsConfigurationInSameGroup();
 
@@ -317,6 +326,97 @@ void HostManagerWidgetTest::hostContextMenuProvidesCopyAndRequestedCreationOrder
     QVERIFY2(addGroupIndex >= 0, "主机右键菜单缺少新建分组动作");
     QVERIFY2(addHostIndex < addGroupIndex, "新建主机没有排在新建分组之前");
     QVERIFY2(actionTexts.contains(QStringLiteral("Copy")), "主机右键菜单缺少复制动作");
+
+    // 主机不是分组，右键菜单不应提供“在工作空间中连接”——它没有可展开的子主机集合。
+    QVERIFY2(!actionTexts.contains(QStringLiteral("Connect in Workspace")),
+             "主机右键菜单不应出现分组专属的工作空间连接动作");
+}
+
+void HostManagerWidgetTest::folderContextMenuOffersConnectInWorkspaceAndEmitsGroupSignal()
+{
+    HostRecord group;
+    group.id = QStringLiteral("workspace-connect-group");
+    group.kind = HostNodeKind::Folder;
+    group.name = QStringLiteral("互联网");
+    QString error;
+    QVERIFY2(m_database->saveHost(group, &error), qPrintable(error));
+
+    HostManagerWidget widget(m_database.get(), m_vault.get());
+    QTreeWidgetItem *groupItem = findItem(widget, group.name);
+    QVERIFY2(groupItem != nullptr, "分组节点未出现在树中");
+
+    QMenu menu;
+    widget.populateContextMenu(&menu, groupItem);
+    QStringList actionTexts;
+    QAction *connectGroupAction = nullptr;
+    for (QAction *action : menu.actions()) {
+        if (action->isSeparator()) {
+            continue;
+        }
+        actionTexts.append(action->text());
+        if (action->text() == QStringLiteral("Connect in Workspace")) {
+            connectGroupAction = action;
+        }
+    }
+
+    const qsizetype addGroupIndex = actionTexts.indexOf(QStringLiteral("New group"));
+    const qsizetype connectGroupIndex = actionTexts.indexOf(QStringLiteral("Connect in Workspace"));
+    QVERIFY2(addGroupIndex >= 0, "分组右键菜单缺少新建分组动作");
+    QVERIFY2(connectGroupIndex == addGroupIndex + 1,
+             "“在工作空间中连接”必须紧跟在“新建分组”之后");
+    QVERIFY2(connectGroupAction != nullptr, "分组右键菜单缺少工作空间连接动作");
+
+    QSignalSpy groupConnectSpy(&widget, &HostManagerWidget::hostGroupConnectionRequested);
+    connectGroupAction->trigger();
+    QCOMPARE(groupConnectSpy.count(), 1);
+    const QList<QVariant> emitted = groupConnectSpy.constFirst();
+    QCOMPARE(emitted.at(0).toString(), group.id);
+    QCOMPARE(emitted.at(1).toString(), group.name);
+}
+
+void HostManagerWidgetTest::collectHostsInGroupRecursesNestedFolders()
+{
+    HostRecord topGroup;
+    topGroup.id = QStringLiteral("nested-top-group");
+    topGroup.kind = HostNodeKind::Folder;
+    topGroup.name = QStringLiteral("顶层分组");
+    QString error;
+    QVERIFY2(m_database->saveHost(topGroup, &error), qPrintable(error));
+
+    HostRecord childGroup;
+    childGroup.id = QStringLiteral("nested-child-group");
+    childGroup.parentId = topGroup.id;
+    childGroup.kind = HostNodeKind::Folder;
+    childGroup.name = QStringLiteral("子分组");
+    QVERIFY2(m_database->saveHost(childGroup, &error), qPrintable(error));
+
+    HostRecord directHost;
+    directHost.id = QStringLiteral("nested-direct-host");
+    directHost.parentId = topGroup.id;
+    directHost.kind = HostNodeKind::Host;
+    directHost.name = QStringLiteral("直属主机");
+    directHost.host = QStringLiteral("192.0.2.30");
+    QVERIFY2(m_database->saveHost(directHost, &error), qPrintable(error));
+
+    HostRecord nestedHost;
+    nestedHost.id = QStringLiteral("nested-child-host");
+    nestedHost.parentId = childGroup.id;
+    nestedHost.kind = HostNodeKind::Host;
+    nestedHost.name = QStringLiteral("子分组主机");
+    nestedHost.host = QStringLiteral("192.0.2.31");
+    QVERIFY2(m_database->saveHost(nestedHost, &error), qPrintable(error));
+
+    HostManagerWidget widget(m_database.get(), m_vault.get());
+    QList<HostRecord> hosts;
+    QVERIFY2(widget.collectHostsInGroup(topGroup.id, &hosts, &error), qPrintable(error));
+
+    QStringList hostIds;
+    for (const HostRecord &host : hosts) {
+        QCOMPARE(static_cast<int>(host.kind), static_cast<int>(HostNodeKind::Host));
+        hostIds.append(host.id);
+    }
+    hostIds.sort();
+    QCOMPARE(hostIds, (QStringList{nestedHost.id, directHost.id}));
 }
 
 void HostManagerWidgetTest::copyHostKeepsConfigurationInSameGroup()

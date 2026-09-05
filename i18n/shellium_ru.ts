@@ -444,6 +444,10 @@ Run it in the current terminal?</source>
         <translation type="unfinished">Подключиться</translation>
     </message>
     <message>
+        <source>Connect in Workspace</source>
+        <translation type="unfinished">Подключить в рабочей области</translation>
+    </message>
+    <message>
         <source>Copy</source>
         <translation type="unfinished">Копировать</translation>
     </message>
@@ -1493,6 +1497,18 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>The credential does not exist</source>
         <translation type="unfinished">Учётные данные не существуют</translation>
+    </message>
+    <message>
+        <source>Could not connect the group</source>
+        <translation type="unfinished">Не удалось подключить группу</translation>
+    </message>
+    <message>
+        <source>Reading the group failed</source>
+        <translation type="unfinished">Не удалось прочитать группу</translation>
+    </message>
+    <message>
+        <source>The group “%1” has no hosts to connect</source>
+        <translation type="unfinished">В группе «%1» нет узлов для подключения</translation>
     </message>
     <message>
         <source>Connected, but writing the connection history failed: %1</source>

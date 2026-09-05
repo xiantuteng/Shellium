@@ -444,6 +444,10 @@ Run it in the current terminal?</source>
         <translation type="unfinished">연결</translation>
     </message>
     <message>
+        <source>Connect in Workspace</source>
+        <translation type="unfinished">워크스페이스에서 연결</translation>
+    </message>
+    <message>
         <source>Copy</source>
         <translation type="unfinished">복사</translation>
     </message>
@@ -1493,6 +1497,18 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>The credential does not exist</source>
         <translation type="unfinished">자격 증명이 존재하지 않습니다</translation>
+    </message>
+    <message>
+        <source>Could not connect the group</source>
+        <translation type="unfinished">그룹을 연결할 수 없습니다</translation>
+    </message>
+    <message>
+        <source>Reading the group failed</source>
+        <translation type="unfinished">그룹을 읽지 못했습니다</translation>
+    </message>
+    <message>
+        <source>The group “%1” has no hosts to connect</source>
+        <translation type="unfinished">"%1" 그룹에 연결할 호스트가 없습니다</translation>
     </message>
     <message>
         <source>Connected, but writing the connection history failed: %1</source>

@@ -1169,6 +1169,10 @@ MainWindow::MainWindow(ApplicationDatabase *database,
             this,
             &MainWindow::connectSavedHost);
     connect(m_hostManager,
+            &HostManagerWidget::hostGroupConnectionRequested,
+            this,
+            &MainWindow::connectHostGroupInWorkspace);
+    connect(m_hostManager,
             &HostManagerWidget::hostsChanged,
             m_portForwardManager,
             &PortForwardManagerWidget::refresh);
@@ -3289,6 +3293,132 @@ void MainWindow::connectSavedHost(const QString &hostId,
                                                  SessionTabBar::ConnectionState::Connecting);
         }
     }
+}
+
+void MainWindow::connectHostGroupInWorkspace(const QString &groupId, const QString &groupName)
+{
+    QString error;
+    QList<HostRecord> hosts;
+    if (!m_hostManager->collectHostsInGroup(groupId, &hosts, &error)) {
+        QMessageBox::critical(this,
+                              tr("Could not connect the group"),
+                              error.isEmpty() ? tr("Reading the group failed") : error);
+        return;
+    }
+    if (hosts.isEmpty()) {
+        showTransientMessage(tr("The group “%1” has no hosts to connect").arg(groupName), 5000);
+        return;
+    }
+
+    // 逐台复用既有单主机连接路径：每台主机各自新建一个顶层标签，从而不重复实现保险库
+    // 解锁、连接历史和跳板链解析；随后再把这些刚创建的标签摘下来合并进同一个工作空间，
+    // 与拖拽合并（mergeTerminalTabs）使用完全相同的重挂步骤。
+    QList<TerminalWorkspace *> members;
+    QStringList memberTitles;
+    members.reserve(hosts.size());
+    for (const HostRecord &host : hosts) {
+        connectSavedHost(host.id, {}, true);
+        auto *workspace = qobject_cast<TerminalWorkspace *>(m_tabs->currentWidget());
+        if (workspace == nullptr) {
+            continue;
+        }
+        members.append(workspace);
+        memberTitles.append(host.name.isEmpty() ? host.host : host.name);
+    }
+    if (members.isEmpty()) {
+        return;
+    }
+    if (members.size() == 1) {
+        // 分组里只有一台可连接主机时没有必要包一层工作空间容器，保留普通单终端标签即可。
+        showSidebarPage(4);
+        return;
+    }
+
+    QList<QWidget *> assistants;
+    assistants.reserve(members.size());
+    for (TerminalWorkspace *member : members) {
+        const int index = m_tabs->indexOf(member);
+        Q_ASSERT(index >= 0);
+        QWidget *assistant = m_aiAssistantStack != nullptr && index < m_aiAssistantStack->count()
+            ? m_aiAssistantStack->widget(index)
+            : nullptr;
+        {
+            const QSignalBlocker titleBlocker(m_titleTabBar);
+            if (m_titleTabBar != nullptr) {
+                m_titleTabBar->removeTab(index);
+            }
+            m_tabs->removeTab(index);
+            if (assistant != nullptr) {
+                m_aiAssistantStack->removeWidget(assistant);
+            }
+        }
+        assistants.append(assistant);
+    }
+
+    auto *group = new TerminalWorkspaceGroup(m_tabs);
+    for (int i = 0; i < members.size(); ++i) {
+        group->addTerminal(members.at(i), memberTitles.at(i));
+    }
+    group->setActiveTerminal(members.constFirst());
+    // 用户要求分组连接默认打开成截图里的样式：侧栏缩略图 + 单一铺满的当前终端，即工作
+    // 空间的“切换”模式，而不是同时铺开全部终端的分屏模式。
+    group->setLayoutMode(TerminalWorkspaceGroup::LayoutMode::Switch);
+
+    const QIcon groupIcon = UiIcons::symbol(
+        this, UiIcons::Symbol::Workspace, palette().color(QPalette::WindowText));
+    const int insertIndex = m_tabs->count();
+    m_tabs->insertTab(insertIndex, group, groupIcon, groupName);
+    m_tabs->tabBar()->hide();
+    if (m_titleTabBar != nullptr) {
+        const QSignalBlocker titleBlocker(m_titleTabBar);
+        m_titleTabBar->insertTab(insertIndex, groupIcon, groupName);
+        m_titleTabBar->setTabKind(insertIndex, SessionTabBar::TabKind::Workspace);
+    }
+
+    auto *assistantGroup = new QStackedWidget(m_aiAssistantStack);
+    assistantGroup->setObjectName(QStringLiteral("WorkspaceAiAssistantStack"));
+    for (QWidget *assistant : assistants) {
+        if (assistant != nullptr) {
+            assistantGroup->addWidget(assistant);
+        }
+    }
+    if (m_aiAssistantStack != nullptr) {
+        m_aiAssistantStack->insertWidget(insertIndex, assistantGroup);
+    }
+
+    connect(group,
+            &TerminalWorkspaceGroup::activeTerminalChanged,
+            this,
+            [this, group, assistantGroup](TerminalWorkspace *workspace) {
+                const int memberIndex = group->terminals().indexOf(workspace);
+                if (memberIndex >= 0 && memberIndex < assistantGroup->count()) {
+                    assistantGroup->setCurrentIndex(memberIndex);
+                }
+                m_workspace = workspace;
+                refreshWorkspaceSidebar();
+                refreshProductivityTargets();
+            });
+    connect(group,
+            &TerminalWorkspaceGroup::terminalsChanged,
+            this,
+            [this]() {
+                refreshWorkspaceSidebar();
+                refreshProductivityTargets();
+            });
+
+    m_tabs->setCurrentWidget(group);
+    if (m_titleTabBar != nullptr) {
+        m_titleTabBar->setCurrentIndex(insertIndex);
+    }
+    if (m_aiAssistantStack != nullptr) {
+        m_aiAssistantStack->setCurrentIndex(insertIndex);
+    }
+    updateWorkspacePlaceholder();
+    refreshWorkspaceSidebar();
+    refreshProductivityTargets();
+    // 分组连接的意图就是查看这批新终端，因此直接把侧栏切到“工作空间”页，不需要用户
+    // 再手动点导航轨。
+    showSidebarPage(4);
 }
 
 bool MainWindow::ensureVaultUnlocked()

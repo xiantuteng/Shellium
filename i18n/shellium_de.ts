@@ -444,6 +444,10 @@ Im aktuellen Terminal ausführen?</translation>
         <translation type="unfinished">Verbinden</translation>
     </message>
     <message>
+        <source>Connect in Workspace</source>
+        <translation type="unfinished">In Arbeitsbereich verbinden</translation>
+    </message>
+    <message>
         <source>Copy</source>
         <translation type="unfinished">Kopieren</translation>
     </message>
@@ -1493,6 +1497,18 @@ Bestätigen Sie, dass sich der Schlüssel geändert hat, ersetzen Sie den alten 
     <message>
         <source>The credential does not exist</source>
         <translation type="unfinished">Die Anmeldedaten existieren nicht</translation>
+    </message>
+    <message>
+        <source>Could not connect the group</source>
+        <translation type="unfinished">Die Gruppe konnte nicht verbunden werden</translation>
+    </message>
+    <message>
+        <source>Reading the group failed</source>
+        <translation type="unfinished">Das Lesen der Gruppe ist fehlgeschlagen</translation>
+    </message>
+    <message>
+        <source>The group “%1” has no hosts to connect</source>
+        <translation type="unfinished">Die Gruppe „%1“ enthält keine Hosts zum Verbinden</translation>
     </message>
     <message>
         <source>Connected, but writing the connection history failed: %1</source>
