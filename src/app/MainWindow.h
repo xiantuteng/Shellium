@@ -140,6 +140,22 @@ private:
                           bool openInNewTab = false);
 
     /**
+     * @brief 由"通过主机链连接"菜单手动指定跳板发起连接。
+     * @param hostId 最终目标主机的稳定 id。
+     * @param jumpHostId 用户手动选中的跳板主机稳定 id；只有本次连接握手成功后才会被记为
+     *        该目标主机"上一次连接使用的跳板"，供下次打开菜单时置顶同一跳板。
+     * @param connectionPlan 已拼接好跳板与目标两段的完整连接计划。
+     * @param openInNewTab true 时新建标签页，与 connectSavedHost() 语义一致。
+     *
+     * 内部只是给 connectSavedHost() 暂存 jumpHostId 后原样转发，复用其全部凭据解锁与
+     * 标签页创建逻辑，避免维护第二套几乎相同的连接流程。
+     */
+    void connectSavedHostViaChain(const QString &hostId,
+                                  const QString &jumpHostId,
+                                  const QList<ConnectionTarget> &connectionPlan,
+                                  bool openInNewTab);
+
+    /**
      * @brief 连接某个主机分组下的全部主机，并把它们放进同一个新建工作空间标签。
      * @param groupId 数据库中该分组的稳定主键。
      * @param groupName 分组名称，直接作为新工作空间标签的标题。
@@ -454,6 +470,23 @@ private:
 
     /** @brief 已成功连接且尚未写入断开时间的面板与连接历史行 id。 */
     QHash<TerminalPane *, qint64> m_openHistoryRows;
+
+    /**
+     * @brief 正在连接、且由"通过主机链连接"菜单手动指定了跳板的面板与该跳板 id。
+     *
+     * 只有认证成功后才会据此把跳板记为目标主机的"上一次连接"；失败或面板销毁时直接
+     * 丢弃，绝不能把未验证成功的跳板选择当作历史结果持久化。
+     */
+    QHash<TerminalPane *, QString> m_pendingChainJumpHosts;
+
+    /**
+     * @brief connectSavedHostViaChain() 到 connectSavedHost() 之间暂存跳板 id 的临时变量。
+     *
+     * connectSavedHost() 从发起连接到拿到目标 TerminalPane* 之间要经过标签页创建、凭据
+     * 解锁等多步同步调用，中途没有让出事件循环的机会，因此可以安全地用单个成员而不是
+     * 按面板建表暂存；调用结束后立即清空，不会跨越两次连接请求。
+     */
+    QString m_pendingChainJumpHostId;
 
     /**
      * @brief 每个终端面板最近一次连接状态，取值对齐 SessionTabBar::ConnectionState。

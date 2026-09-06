@@ -444,6 +444,10 @@ Run it in the current terminal?</source>
         <translation>连接</translation>
     </message>
     <message>
+        <source>Connect via Host Chain</source>
+        <translation type="unfinished">通过主机链连接</translation>
+    </message>
+    <message>
         <source>Connect in Workspace</source>
         <translation type="unfinished">在工作空间中连接</translation>
     </message>
@@ -466,6 +470,22 @@ Run it in the current terminal?</source>
     <message>
         <source>Export Hosts…</source>
         <translation>导出主机…</translation>
+    </message>
+    <message>
+        <source>Failed to load hosts</source>
+        <translation type="unfinished">加载主机列表失败</translation>
+    </message>
+    <message>
+        <source>No other hosts available</source>
+        <translation type="unfinished">没有其他可用主机</translation>
+    </message>
+    <message>
+        <source>%1 (%2)</source>
+        <translation type="unfinished">%1（%2）</translation>
+    </message>
+    <message>
+        <source>Last connected: %1</source>
+        <translation type="unfinished">上次连接：%1</translation>
     </message>
     <message>
         <source>Ungrouped</source>

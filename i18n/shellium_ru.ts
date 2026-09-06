@@ -444,6 +444,10 @@ Run it in the current terminal?</source>
         <translation type="unfinished">Подключиться</translation>
     </message>
     <message>
+        <source>Connect via Host Chain</source>
+        <translation type="unfinished">Подключиться через цепочку хостов</translation>
+    </message>
+    <message>
         <source>Connect in Workspace</source>
         <translation type="unfinished">Подключить в рабочей области</translation>
     </message>
@@ -466,6 +470,22 @@ Run it in the current terminal?</source>
     <message>
         <source>Export Hosts…</source>
         <translation type="unfinished">Экспорт хостов…</translation>
+    </message>
+    <message>
+        <source>Failed to load hosts</source>
+        <translation type="unfinished">Не удалось загрузить хосты</translation>
+    </message>
+    <message>
+        <source>No other hosts available</source>
+        <translation type="unfinished">Нет других доступных хостов</translation>
+    </message>
+    <message>
+        <source>%1 (%2)</source>
+        <translation type="unfinished">%1 (%2)</translation>
+    </message>
+    <message>
+        <source>Last connected: %1</source>
+        <translation type="unfinished">Последнее подключение: %1</translation>
     </message>
     <message>
         <source>Ungrouped</source>

@@ -67,6 +67,14 @@ private slots:
      */
     void folderContextMenuOffersConnectInWorkspaceAndEmitsGroupSignal();
 
+    /**
+     * @brief 主机右键菜单的“Connect”之后必须紧跟“通过主机链连接”子菜单；子菜单需要把
+     * “上一次成功连接到*本目标主机*所用的跳板”排在最前面——这与其他主机的连接历史或
+     * 全局最近连接无关，必须严格按目标主机区分，并排除目标主机自身。点击任一候选项都
+     * 必须发出携带“跳板 + 目标”两跳连接计划的 hostChainConnectionRequested 信号。
+     */
+    void hostContextMenuOffersHostChainSubmenuLedByLastConnectedHost();
+
     /** @brief 分组连接必须递归收集任意深度子分组下的主机，且不包含分组节点本身。 */
     void collectHostsInGroupRecursesNestedFolders();
 
@@ -372,6 +380,120 @@ void HostManagerWidgetTest::folderContextMenuOffersConnectInWorkspaceAndEmitsGro
     const QList<QVariant> emitted = groupConnectSpy.constFirst();
     QCOMPARE(emitted.at(0).toString(), group.id);
     QCOMPARE(emitted.at(1).toString(), group.name);
+}
+
+void HostManagerWidgetTest::hostContextMenuOffersHostChainSubmenuLedByLastConnectedHost()
+{
+    HostRecord target;
+    target.id = QStringLiteral("chain-target-host");
+    target.kind = HostNodeKind::Host;
+    target.name = QStringLiteral("链目标主机");
+    target.host = QStringLiteral("192.0.2.30");
+    QString error;
+    QVERIFY2(m_database->saveHost(target, &error), qPrintable(error));
+
+    HostRecord otherTarget;
+    otherTarget.id = QStringLiteral("chain-other-target-host");
+    otherTarget.kind = HostNodeKind::Host;
+    otherTarget.name = QStringLiteral("另一台目标主机");
+    otherTarget.host = QStringLiteral("192.0.2.33");
+    QVERIFY2(m_database->saveHost(otherTarget, &error), qPrintable(error));
+
+    HostRecord jumpA;
+    jumpA.id = QStringLiteral("chain-jump-a");
+    jumpA.kind = HostNodeKind::Host;
+    jumpA.name = QStringLiteral("跳板A-未成功过");
+    jumpA.host = QStringLiteral("192.0.2.31");
+    QVERIFY2(m_database->saveHost(jumpA, &error), qPrintable(error));
+
+    HostRecord jumpB;
+    jumpB.id = QStringLiteral("chain-jump-b");
+    jumpB.kind = HostNodeKind::Host;
+    jumpB.name = QStringLiteral("跳板B-上次成功连接目标主机");
+    jumpB.host = QStringLiteral("192.0.2.32");
+    QVERIFY2(m_database->saveHost(jumpB, &error), qPrintable(error));
+
+    HostManagerWidget widget(m_database.get(), m_vault.get());
+
+    // “上一次连接”必须严格绑定到具体目标主机：跳板 A 曾经成功连接过*另一台*目标主机，
+    // 这不应该让它出现在“链目标主机”的置顶位置——不同目标习惯经过的跳板通常并不相同。
+    widget.recordSuccessfulChainConnection(otherTarget.id, jumpA.id);
+    // 跳板 B 才是上一次成功连接到*本次目标主机*所用的跳板，必须置顶。
+    widget.recordSuccessfulChainConnection(target.id, jumpB.id);
+
+    QTreeWidgetItem *targetItem = findItem(widget, target.name);
+    QVERIFY2(targetItem != nullptr, "目标主机节点未出现在树中");
+
+    QMenu menu;
+    widget.populateContextMenu(&menu, targetItem);
+    const QList<QAction *> topLevelActions = menu.actions();
+    const qsizetype connectIndex = std::find_if(topLevelActions.constBegin(),
+                                                topLevelActions.constEnd(),
+                                                [](const QAction *action) {
+                                                    return action->text() == QStringLiteral("Connect");
+                                                })
+        - topLevelActions.constBegin();
+    QVERIFY2(connectIndex < topLevelActions.size(), "主机右键菜单缺少 Connect 动作");
+    QVERIFY2(connectIndex + 1 < topLevelActions.size(),
+             "Connect 之后缺少通过主机链连接子菜单");
+    QAction *chainMenuAction = topLevelActions.at(connectIndex + 1);
+    QCOMPARE(chainMenuAction->text(), QStringLiteral("Connect via Host Chain"));
+    QMenu *chainMenu = chainMenuAction->menu();
+    QVERIFY2(chainMenu != nullptr, "通过主机链连接必须是一个子菜单而不是直接动作");
+
+    const QList<QAction *> chainActions = chainMenu->actions();
+    QVERIFY2(!chainActions.isEmpty(), "通过主机链连接子菜单不应为空");
+    QVERIFY2(chainActions.constFirst()->text().startsWith(QStringLiteral("Last connected: ")),
+             "上一次成功连接过的跳板没有排在子菜单最前面");
+    QVERIFY2(chainActions.constFirst()->text().contains(jumpB.name),
+             "子菜单最前面必须是上一次成功连接到本目标主机所用的跳板B，而不是跳板A");
+
+    QStringList otherActionTexts;
+    for (QAction *action : chainActions) {
+        if (!action->isSeparator()) {
+            otherActionTexts.append(action->text());
+        }
+    }
+    QVERIFY2(!otherActionTexts.join(QLatin1Char('\n')).contains(target.name),
+             "通过主机链连接子菜单不应把目标主机自身列为候选跳板");
+    // 跳板 A 只成功连接过“另一台目标主机”，对“链目标主机”而言它仍然只是普通候选项，
+    // 不应该被误置顶——否则就是把全局最近连接当成了“当前目标的上一次连接”。
+    const bool jumpAListedAsOrdinaryCandidate =
+        std::any_of(chainActions.constBegin() + 1,
+                   chainActions.constEnd(),
+                   [&jumpA](const QAction *action) { return action->text().contains(jumpA.name); });
+    QVERIFY2(jumpAListedAsOrdinaryCandidate, "子菜单遗漏了未针对本目标成功连接过的其他主机");
+    QVERIFY2(!chainActions.constFirst()->text().contains(jumpA.name),
+             "跳板A不应被当作本目标主机的“上一次连接”置顶");
+
+    int connectionRequestCount = 0;
+    QString requestedHostId;
+    QString requestedJumpHostId;
+    QList<ConnectionTarget> requestedPlan;
+    bool requestedNewTab = false;
+    connect(&widget,
+            &HostManagerWidget::hostChainConnectionRequested,
+            this,
+            [&](const QString &hostId,
+                const QString &jumpHostId,
+                const QList<ConnectionTarget> &connectionPlan,
+                const bool openInNewTab) {
+                ++connectionRequestCount;
+                requestedHostId = hostId;
+                requestedJumpHostId = jumpHostId;
+                requestedPlan = connectionPlan;
+                requestedNewTab = openInNewTab;
+            });
+
+    chainActions.constFirst()->trigger();
+
+    QCOMPARE(connectionRequestCount, 1);
+    QCOMPARE(requestedHostId, target.id);
+    QCOMPARE(requestedJumpHostId, jumpB.id);
+    QVERIFY2(requestedNewTab, "通过主机链连接必须像 Connect 一样新开标签页");
+    QCOMPARE(requestedPlan.size(), 2);
+    QCOMPARE(requestedPlan.at(0).host, jumpB.host);
+    QCOMPARE(requestedPlan.at(1).host, target.host);
 }
 
 void HostManagerWidgetTest::collectHostsInGroupRecursesNestedFolders()

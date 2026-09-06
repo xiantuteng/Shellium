@@ -73,6 +73,18 @@ public:
                              QList<HostRecord> *hosts,
                              QString *errorMessage) const;
 
+    /**
+     * @brief 把一次成功的"通过主机链连接"记为该目标主机的最新跳板选择。
+     * @param targetHostId 最终目标主机的稳定 id。
+     * @param jumpHostId 本次握手成功所使用的跳板主机稳定 id。
+     *
+     * 只应在调用方已确认握手成功后调用；本方法不做成功与否的判断，也不校验两个 id
+     * 是否仍然存在——下次打开子菜单时会按当前主机树重新过滤失效的记录。持久化到全局
+     * 设置里而不是 hostChain 字段，因为这是"最近一次手动选择"的轻量记忆，不代表用户想
+     * 把跳板固定进这台主机的正式配置。
+     */
+    void recordSuccessfulChainConnection(const QString &targetHostId, const QString &jumpHostId);
+
 signals:
     /** @brief 主机或分组列表已重新加载，依赖 hostId 的其他侧栏应同步刷新。 */
     void hostsChanged();
@@ -93,6 +105,18 @@ signals:
     void hostConnectionRequested(const QString &hostId,
                                  const QList<ConnectionTarget> &connectionPlan,
                                  bool openInNewTab);
+
+    /**
+     * @brief 用户在"通过主机链连接"子菜单里手动选中了跳板主机。
+     * @param hostId 最终目标主机的稳定 id。
+     * @param jumpHostId 用户手动选中的跳板主机稳定 id。
+     * @param connectionPlan 跳板受管链与目标受管链拼接后的完整连接计划。
+     * @param openInNewTab true 表示应在新标签页中连接。
+     */
+    void hostChainConnectionRequested(const QString &hostId,
+                                      const QString &jumpHostId,
+                                      const QList<ConnectionTarget> &connectionPlan,
+                                      bool openInNewTab);
 
     /**
      * @brief 用户要求把某个分组下的全部主机一次性连接到同一个新工作空间。
@@ -202,6 +226,17 @@ private:
                            const ConnectionTarget &sessionTarget = ConnectionTarget{},
                            bool openInNewTab = false);
 
+    /**
+     * @brief 手动指定一个跳板主机，在其受管链之后再连接目标主机。
+     * @param hostId 最终目标主机的稳定 id。
+     * @param jumpHostId 用户在"通过主机链连接"子菜单中选中的跳板主机稳定 id。
+     *
+     * 跳板主机自身的受管链会先展开，再拼接目标主机自身的受管链，构成一条完整的
+     * 连接计划。与 requestConnection() 不同，这里的跳板不落库到目标主机的
+     * hostChain 字段，只影响本次连接。
+     */
+    void requestConnectionViaChain(const QString &hostId, const QString &jumpHostId);
+
     /** @brief 返回当前选中节点；没有选择时返回空记录。 */
     [[nodiscard]] std::optional<HostRecord> selectedRecord(QString *errorMessage = nullptr) const;
 
@@ -217,6 +252,16 @@ private:
      * 原生弹出窗口即可核对菜单内容。动作仍统一调用面板方法，不复制业务实现。
      */
     void populateContextMenu(QMenu *menu, QTreeWidgetItem *item);
+
+    /**
+     * @brief 为"通过主机链连接"子菜单填充候选跳板主机。
+     * @param menu 子菜单对象，由调用方通过 QMenu::addMenu() 创建。
+     * @param targetHostId 当前右键命中的目标主机稳定 id，用于从候选列表中排除自身。
+     *
+     * 第一项固定为最近一次成功连接过的主机（若存在且不是目标主机自身），随后是分隔线，
+     * 再列出其余全部可连接主机；点击任一项都会调用 requestConnectionViaChain()。
+     */
+    void populateHostChainMenu(QMenu *menu, const QString &targetHostId);
 
     /** @brief 把一条主机/分组记录转换为树节点，并保存稳定 id 与类型到 UserRole。 */
     [[nodiscard]] QTreeWidgetItem *createTreeItem(const HostRecord &record) const;

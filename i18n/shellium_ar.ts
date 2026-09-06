@@ -444,6 +444,10 @@ Run it in the current terminal?</source>
         <translation type="unfinished">اتصال</translation>
     </message>
     <message>
+        <source>Connect via Host Chain</source>
+        <translation type="unfinished">الاتصال عبر سلسلة مضيفين</translation>
+    </message>
+    <message>
         <source>Connect in Workspace</source>
         <translation type="unfinished">الاتصال في مساحة العمل</translation>
     </message>
@@ -466,6 +470,22 @@ Run it in the current terminal?</source>
     <message>
         <source>Export Hosts…</source>
         <translation type="unfinished">تصدير المضيفين…</translation>
+    </message>
+    <message>
+        <source>Failed to load hosts</source>
+        <translation type="unfinished">تعذّر تحميل المضيفين</translation>
+    </message>
+    <message>
+        <source>No other hosts available</source>
+        <translation type="unfinished">لا يوجد مضيفون آخرون متاحون</translation>
+    </message>
+    <message>
+        <source>%1 (%2)</source>
+        <translation type="unfinished">%1 (%2)</translation>
+    </message>
+    <message>
+        <source>Last connected: %1</source>
+        <translation type="unfinished">آخر اتصال: %1</translation>
     </message>
     <message>
         <source>Ungrouped</source>

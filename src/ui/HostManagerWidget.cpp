@@ -108,6 +108,59 @@ const QString kHostTagColorSettingKey = QStringLiteral("ui/host_tag_colors_v1");
 constexpr int kHostTagColorStateVersion = 1;
 
 /**
+ * @brief "通过主机链连接"最近一次成功跳板选择在 settings 表中的稳定键名。
+ *
+ * 值是 {"version":1,"jumps":{"<目标主机id>":"<跳板主机id>"}} 形式的 JSON，按目标主机
+ * 而不是全局记录，因为不同目标主机习惯经过的跳板通常不同；只在握手真正成功后才会
+ * 更新某个目标的条目，绝不能把尝试中或已失败的跳板选择当作"上一次连接"展示出来。
+ */
+const QString kHostChainLastJumpSettingKey =
+    QStringLiteral("ui/host_chain_last_jump_v1");
+
+/** @brief 当前"主机链最近跳板"JSON 结构版本。 */
+constexpr int kHostChainLastJumpStateVersion = 1;
+
+/** @brief 读取全部目标主机 -> 最近一次成功跳板 id 的映射。 */
+[[nodiscard]] QHash<QString, QString> loadLastChainJumps(const ApplicationDatabase *database)
+{
+    QHash<QString, QString> jumps;
+    if (database == nullptr) {
+        return jumps;
+    }
+    const std::optional<QString> stored = database->setting(kHostChainLastJumpSettingKey);
+    if (!stored.has_value()) {
+        return jumps;
+    }
+    const QJsonObject root = QJsonDocument::fromJson(stored->toUtf8()).object();
+    const QJsonObject entries = root.value(QStringLiteral("jumps")).toObject();
+    for (auto entry = entries.constBegin(); entry != entries.constEnd(); ++entry) {
+        const QString jumpHostId = entry.value().toString();
+        if (!jumpHostId.isEmpty()) {
+            jumps.insert(entry.key(), jumpHostId);
+        }
+    }
+    return jumps;
+}
+
+/** @brief 覆盖写入全部目标主机 -> 最近一次成功跳板 id 的映射。 */
+bool saveLastChainJumps(ApplicationDatabase *database, const QHash<QString, QString> &jumps)
+{
+    if (database == nullptr) {
+        return false;
+    }
+    QJsonObject entries;
+    for (auto entry = jumps.constBegin(); entry != jumps.constEnd(); ++entry) {
+        entries.insert(entry.key(), entry.value());
+    }
+    QJsonObject root;
+    root.insert(QStringLiteral("version"), kHostChainLastJumpStateVersion);
+    root.insert(QStringLiteral("jumps"), entries);
+    return database->setSetting(
+        kHostChainLastJumpSettingKey,
+        QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Compact)));
+}
+
+/**
  * @brief 标签可选配色。
  *
  * 刻意只提供有限的一组，而不是打开系统取色器：标签颜色要在浅色和深色主题、以及很小的
@@ -3327,6 +3380,15 @@ void HostManagerWidget::populateContextMenu(QMenu *menu, QTreeWidgetItem *item)
             tr("Connect"));
         connect(connectAction, &QAction::triggered,
                 this, [this, item]() { activateTreeItem(item); });
+
+        QMenu *chainMenu = menu->addMenu(
+            UiIcons::symbol(this,
+                            UiIcons::Symbol::Connect,
+                            this->palette().color(QPalette::WindowText)),
+            tr("Connect via Host Chain"));
+        UiIcons::modernizePopup(chainMenu);
+        populateHostChainMenu(chainMenu, item->data(0, HostIdRole).toString());
+
         menu->addSeparator();
     }
 
@@ -3412,6 +3474,78 @@ void HostManagerWidget::populateContextMenu(QMenu *menu, QTreeWidgetItem *item)
                         this->palette().color(QPalette::WindowText)),
         tr("Refresh"));
     connect(refreshAction, &QAction::triggered, this, &HostManagerWidget::refresh);
+}
+
+void HostManagerWidget::populateHostChainMenu(QMenu *menu, const QString &targetHostId)
+{
+    QString error;
+    QList<HostRecord> allRecords;
+    if (!collectRecords({}, &allRecords, &error)) {
+        QAction *errorAction = menu->addAction(tr("Failed to load hosts"));
+        errorAction->setEnabled(false);
+        return;
+    }
+
+    QList<HostRecord> candidates;
+    candidates.reserve(allRecords.size());
+    for (const HostRecord &record : allRecords) {
+        if (record.kind == HostNodeKind::Host && record.id != targetHostId) {
+            candidates.append(record);
+        }
+    }
+
+    if (candidates.isEmpty()) {
+        QAction *emptyAction = menu->addAction(tr("No other hosts available"));
+        emptyAction->setEnabled(false);
+        return;
+    }
+
+    // 副标题复用 createTreeItem() 的展示口径：resolveHost 补齐继承字段，避免只显示
+    // 记录自身的空账号/空端口。
+    auto candidateLabel = [this](const HostRecord &record) {
+        const std::optional<HostRecord> resolved = m_database->resolveHost(record.id);
+        const HostRecord displayRecord = resolved.has_value() ? *resolved : record;
+        return tr("%1 (%2)").arg(record.name,
+                                 displayRecord.toConnectionTarget().connectionSpecifier(true));
+    };
+    auto addCandidateAction = [this, menu, targetHostId, &candidateLabel](const HostRecord &record) {
+        QAction *action = menu->addAction(candidateLabel(record));
+        const QString jumpHostId = record.id;
+        connect(action, &QAction::triggered, this, [this, targetHostId, jumpHostId]() {
+            requestConnectionViaChain(targetHostId, jumpHostId);
+        });
+    };
+
+    // "上一次连接"专指：上一次通过本菜单成功连接到*这台目标主机*时用的那个跳板，不是
+    // 任意主机的全局最近连接记录——不同目标主机习惯经过的跳板通常并不相同，混用全局
+    // 最近连接会把无关的跳板推荐给完全不同的目标。未成功过或跳板已被删除时不展示。
+    const QHash<QString, QString> lastChainJumps = loadLastChainJumps(m_database);
+    std::optional<HostRecord> lastConnected;
+    const auto lastJumpIt = lastChainJumps.constFind(targetHostId);
+    if (lastJumpIt != lastChainJumps.constEnd()) {
+        const auto it = std::find_if(
+            candidates.constBegin(), candidates.constEnd(),
+            [&lastJumpIt](const HostRecord &record) { return record.id == lastJumpIt.value(); });
+        if (it != candidates.constEnd()) {
+            lastConnected = *it;
+        }
+    }
+
+    if (lastConnected.has_value()) {
+        QAction *recentAction = menu->addAction(tr("Last connected: %1").arg(candidateLabel(*lastConnected)));
+        const QString jumpHostId = lastConnected->id;
+        connect(recentAction, &QAction::triggered, this, [this, targetHostId, jumpHostId]() {
+            requestConnectionViaChain(targetHostId, jumpHostId);
+        });
+        menu->addSeparator();
+    }
+
+    for (const HostRecord &record : candidates) {
+        if (lastConnected.has_value() && record.id == lastConnected->id) {
+            continue;
+        }
+        addCandidateAction(record);
+    }
 }
 
 void HostManagerWidget::refresh()
@@ -4211,6 +4345,54 @@ void HostManagerWidget::requestConnection(const QString &hostId,
         }
     }
     emit hostConnectionRequested(hostId, connectionPlan, openInNewTab);
+}
+
+void HostManagerWidget::requestConnectionViaChain(const QString &hostId, const QString &jumpHostId)
+{
+    QString error;
+    const QList<HostRecord> jumpRecords = m_database->resolveConnectionChain(jumpHostId, &error);
+    if (jumpRecords.isEmpty()) {
+        showDatabaseError(tr("Resolve host chain"),
+                          error.isEmpty() ? tr("The host record or chain does not exist") : error);
+        return;
+    }
+    const QList<HostRecord> targetRecords = m_database->resolveConnectionChain(hostId, &error);
+    if (targetRecords.isEmpty()) {
+        showDatabaseError(tr("Resolve host chain"),
+                          error.isEmpty() ? tr("The host record or chain does not exist") : error);
+        return;
+    }
+
+    QList<ConnectionTarget> connectionPlan;
+    connectionPlan.reserve(jumpRecords.size() + targetRecords.size());
+    for (const HostRecord &record : jumpRecords) {
+        ConnectionTarget target = record.toConnectionTarget();
+        // 手动选择的跳板同样由 Shellium 逐层建立，必须清空手动 ProxyJump，避免同一跳
+        // 既被自持链处理又被交给 libssh 处理两次。
+        target.proxyJumps.clear();
+        connectionPlan.append(target);
+    }
+    for (const HostRecord &record : targetRecords) {
+        ConnectionTarget target = record.toConnectionTarget();
+        target.proxyJumps.clear();
+        connectionPlan.append(target);
+    }
+
+    // 与"Connect"保持一致，手动挑选主机链是一次显式操作，总是新开标签页而不是复用当前页。
+    // 是否把 jumpHostId 记为"上一次连接"由 MainWindow 在握手结果确定后决定，这里只负责
+    // 把跳板身份随请求一起带出去。
+    emit hostChainConnectionRequested(hostId, jumpHostId, connectionPlan, true);
+}
+
+void HostManagerWidget::recordSuccessfulChainConnection(const QString &targetHostId,
+                                                         const QString &jumpHostId)
+{
+    if (targetHostId.isEmpty() || jumpHostId.isEmpty()) {
+        return;
+    }
+    QHash<QString, QString> jumps = loadLastChainJumps(m_database);
+    jumps.insert(targetHostId, jumpHostId);
+    saveLastChainJumps(m_database, jumps);
 }
 
 std::optional<HostRecord> HostManagerWidget::selectedRecord(QString *errorMessage) const

@@ -444,6 +444,10 @@ Im aktuellen Terminal ausführen?</translation>
         <translation type="unfinished">Verbinden</translation>
     </message>
     <message>
+        <source>Connect via Host Chain</source>
+        <translation type="unfinished">Über Host-Kette verbinden</translation>
+    </message>
+    <message>
         <source>Connect in Workspace</source>
         <translation type="unfinished">In Arbeitsbereich verbinden</translation>
     </message>
@@ -466,6 +470,22 @@ Im aktuellen Terminal ausführen?</translation>
     <message>
         <source>Export Hosts…</source>
         <translation type="unfinished">Hosts exportieren …</translation>
+    </message>
+    <message>
+        <source>Failed to load hosts</source>
+        <translation type="unfinished">Hosts konnten nicht geladen werden</translation>
+    </message>
+    <message>
+        <source>No other hosts available</source>
+        <translation type="unfinished">Keine weiteren Hosts verfügbar</translation>
+    </message>
+    <message>
+        <source>%1 (%2)</source>
+        <translation type="unfinished">%1 (%2)</translation>
+    </message>
+    <message>
+        <source>Last connected: %1</source>
+        <translation type="unfinished">Zuletzt verbunden: %1</translation>
     </message>
     <message>
         <source>Ungrouped</source>

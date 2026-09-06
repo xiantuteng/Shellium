@@ -444,6 +444,10 @@ Run it in the current terminal?</source>
         <translation type="unfinished">연결</translation>
     </message>
     <message>
+        <source>Connect via Host Chain</source>
+        <translation type="unfinished">호스트 체인을 통해 연결</translation>
+    </message>
+    <message>
         <source>Connect in Workspace</source>
         <translation type="unfinished">워크스페이스에서 연결</translation>
     </message>
@@ -466,6 +470,22 @@ Run it in the current terminal?</source>
     <message>
         <source>Export Hosts…</source>
         <translation type="unfinished">호스트 내보내기…</translation>
+    </message>
+    <message>
+        <source>Failed to load hosts</source>
+        <translation type="unfinished">호스트를 불러오지 못했습니다</translation>
+    </message>
+    <message>
+        <source>No other hosts available</source>
+        <translation type="unfinished">사용 가능한 다른 호스트가 없습니다</translation>
+    </message>
+    <message>
+        <source>%1 (%2)</source>
+        <translation type="unfinished">%1(%2)</translation>
+    </message>
+    <message>
+        <source>Last connected: %1</source>
+        <translation type="unfinished">마지막 연결: %1</translation>
     </message>
     <message>
         <source>Ungrouped</source>

@@ -1169,6 +1169,10 @@ MainWindow::MainWindow(ApplicationDatabase *database,
             this,
             &MainWindow::connectSavedHost);
     connect(m_hostManager,
+            &HostManagerWidget::hostChainConnectionRequested,
+            this,
+            &MainWindow::connectSavedHostViaChain);
+    connect(m_hostManager,
             &HostManagerWidget::hostGroupConnectionRequested,
             this,
             &MainWindow::connectHostGroupInWorkspace);
@@ -3281,6 +3285,9 @@ void MainWindow::connectSavedHost(const QString &hostId,
         savedLogicalHost.has_value() && savedLogicalHost->distributionId.isEmpty());
     m_pendingHistoryHosts.insert(pane, hostId);
     m_pendingHistoryStartedAt.insert(pane, QDateTime::currentDateTimeUtc());
+    if (!m_pendingChainJumpHostId.isEmpty()) {
+        m_pendingChainJumpHosts.insert(pane, m_pendingChainJumpHostId);
+    }
     pane->connectToHosts(connectionPlan);
 
     const int tabIndex = topLevelIndexForWorkspace(workspace);
@@ -3293,6 +3300,18 @@ void MainWindow::connectSavedHost(const QString &hostId,
                                                  SessionTabBar::ConnectionState::Connecting);
         }
     }
+}
+
+void MainWindow::connectSavedHostViaChain(const QString &hostId,
+                                          const QString &jumpHostId,
+                                          const QList<ConnectionTarget> &connectionPlan,
+                                          const bool openInNewTab)
+{
+    // 全程同步：connectSavedHost() 中途不会让出事件循环，暂存到取用之间不会被下一次
+    // 连接请求覆盖。调用结束后立即清空，避免残留状态污染后续普通 Connect。
+    m_pendingChainJumpHostId = jumpHostId;
+    connectSavedHost(hostId, connectionPlan, openInNewTab);
+    m_pendingChainJumpHostId.clear();
 }
 
 void MainWindow::connectHostGroupInWorkspace(const QString &groupId, const QString &groupName)
@@ -3439,6 +3458,13 @@ void MainWindow::recordConnectionSucceeded(TerminalPane *pane,
     entry.connectedAt = m_pendingHistoryStartedAt.take(pane);
     entry.succeeded = true;
 
+    // 只有握手真正成功才能把这次手选的跳板记为"上一次连接"；连接历史写库失败不影响这一
+    // 判断——历史记录只是展示用的旁路统计，不是本次连接是否成功的依据。
+    const QString chainJumpHostId = m_pendingChainJumpHosts.take(pane);
+    if (!chainJumpHostId.isEmpty()) {
+        m_hostManager->recordSuccessfulChainConnection(entry.hostId, chainJumpHostId);
+    }
+
     QString error;
     const std::optional<qint64> historyId =
         m_database->appendConnectionHistory(entry, &error);
@@ -3458,6 +3484,9 @@ void MainWindow::recordConnectionFailed(TerminalPane *pane,
     if (pane == nullptr || !m_pendingHistoryHosts.contains(pane)) {
         return;
     }
+
+    // 没有成功握手，手选的跳板不能被记为"上一次连接"，直接丢弃即可。
+    m_pendingChainJumpHosts.remove(pane);
 
     ConnectionHistoryEntry entry;
     entry.hostId = m_pendingHistoryHosts.take(pane);
@@ -3851,6 +3880,7 @@ TerminalWorkspace *MainWindow::createWorkspaceTab(const QString &title)
         }
         m_pendingHistoryHosts.remove(pane);
         m_pendingHistoryStartedAt.remove(pane);
+        m_pendingChainJumpHosts.remove(pane);
         m_paneConnectionState.remove(pane);
     });
     connect(workspace, &QObject::destroyed, this, [this]() {

@@ -444,6 +444,10 @@ Run it in the current terminal?</source>
         <translation type="unfinished">接続</translation>
     </message>
     <message>
+        <source>Connect via Host Chain</source>
+        <translation type="unfinished">ホストチェーン経由で接続</translation>
+    </message>
+    <message>
         <source>Connect in Workspace</source>
         <translation type="unfinished">ワークスペースで接続</translation>
     </message>
@@ -466,6 +470,22 @@ Run it in the current terminal?</source>
     <message>
         <source>Export Hosts…</source>
         <translation type="unfinished">ホストをエクスポート…</translation>
+    </message>
+    <message>
+        <source>Failed to load hosts</source>
+        <translation type="unfinished">ホストの読み込みに失敗しました</translation>
+    </message>
+    <message>
+        <source>No other hosts available</source>
+        <translation type="unfinished">他に利用可能なホストがありません</translation>
+    </message>
+    <message>
+        <source>%1 (%2)</source>
+        <translation type="unfinished">%1（%2）</translation>
+    </message>
+    <message>
+        <source>Last connected: %1</source>
+        <translation type="unfinished">前回接続: %1</translation>
     </message>
     <message>
         <source>Ungrouped</source>

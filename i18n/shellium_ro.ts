@@ -444,6 +444,10 @@ O execuți în terminalul curent?</translation>
         <translation type="unfinished">Conectează</translation>
     </message>
     <message>
+        <source>Connect via Host Chain</source>
+        <translation type="unfinished">Conectare printr-un lanț de gazde</translation>
+    </message>
+    <message>
         <source>Connect in Workspace</source>
         <translation type="unfinished">Conectare într-un spațiu de lucru</translation>
     </message>
@@ -466,6 +470,22 @@ O execuți în terminalul curent?</translation>
     <message>
         <source>Export Hosts…</source>
         <translation type="unfinished">Exportă gazde…</translation>
+    </message>
+    <message>
+        <source>Failed to load hosts</source>
+        <translation type="unfinished">Încărcarea gazdelor a eșuat</translation>
+    </message>
+    <message>
+        <source>No other hosts available</source>
+        <translation type="unfinished">Nu există alte gazde disponibile</translation>
+    </message>
+    <message>
+        <source>%1 (%2)</source>
+        <translation type="unfinished">%1 (%2)</translation>
+    </message>
+    <message>
+        <source>Last connected: %1</source>
+        <translation type="unfinished">Ultima conectare: %1</translation>
     </message>
     <message>
         <source>Ungrouped</source>

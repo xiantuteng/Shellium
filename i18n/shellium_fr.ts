@@ -444,6 +444,10 @@ L'exécuter dans le terminal actuel ?</translation>
         <translation type="unfinished">Se connecter</translation>
     </message>
     <message>
+        <source>Connect via Host Chain</source>
+        <translation type="unfinished">Se connecter via une chaîne d'hôtes</translation>
+    </message>
+    <message>
         <source>Connect in Workspace</source>
         <translation type="unfinished">Se connecter dans un espace de travail</translation>
     </message>
@@ -466,6 +470,22 @@ L'exécuter dans le terminal actuel ?</translation>
     <message>
         <source>Export Hosts…</source>
         <translation type="unfinished">Exporter des hôtes…</translation>
+    </message>
+    <message>
+        <source>Failed to load hosts</source>
+        <translation type="unfinished">Échec du chargement des hôtes</translation>
+    </message>
+    <message>
+        <source>No other hosts available</source>
+        <translation type="unfinished">Aucun autre hôte disponible</translation>
+    </message>
+    <message>
+        <source>%1 (%2)</source>
+        <translation type="unfinished">%1 (%2)</translation>
+    </message>
+    <message>
+        <source>Last connected: %1</source>
+        <translation type="unfinished">Dernière connexion : %1</translation>
     </message>
     <message>
         <source>Ungrouped</source>
