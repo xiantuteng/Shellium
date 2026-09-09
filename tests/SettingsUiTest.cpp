@@ -116,6 +116,8 @@ private slots:
     void languageSelectorPersistsAndRoundTrips();
     /** @brief 密度即时入库、服务重载及外部修改回显，默认值仍为宽松。 */
     void sidebarDensityPersistsAndSynchronizes();
+    /** @brief 双击侧边栏分隔条的确认提示开关可即时保存，并在设置重开后回显。 */
+    void sidebarDoubleClickPromptPersistsAndSynchronizes();
     /** @brief 设置窗口打开时切换语言，卡片标题/行文案/分段控件必须就地热切换。 */
     void settingsContentRetranslatesLiveWithoutReopen();
     void colorSchemeSwatchesAreExclusiveAndPersist();
@@ -493,6 +495,41 @@ void SettingsUiTest::sidebarDensityPersistsAndSynchronizes()
     QVERIFY2(service->save(relaxed, &error), qPrintable(error));
     QCOMPARE(selector->currentData(), 0);
     QCOMPARE(changes.count(), 2);
+}
+
+void SettingsUiTest::sidebarDoubleClickPromptPersistsAndSynchronizes()
+{
+    auto service = makeService();
+    SettingsDialog dialog(service.get());
+    auto *promptToggle =
+        dialog.findChild<ToggleSwitch *>(QStringLiteral("sidebarDoubleClickPromptToggle"));
+    QVERIFY(promptToggle != nullptr);
+    QVERIFY(promptToggle->isChecked());
+    QVERIFY(service->currentSettings().sidebarDoubleClickPrompt);
+
+    promptToggle->click();
+    QVERIFY(!dialog.editedSettings().sidebarDoubleClickPrompt);
+    QVERIFY(!service->currentSettings().sidebarDoubleClickPrompt);
+    QCOMPARE(m_database->intSetting(QStringLiteral("layout/sidebar_double_click_prompt"))
+                 .value_or(-1),
+             0);
+
+    // 新建服务并重新打开设置，验证该开关不是只停留在当前对话框的控件状态中。
+    TerminalSettingsService reloaded(m_database.get());
+    QString error;
+    QVERIFY2(reloaded.load(&error), qPrintable(error));
+    QVERIFY(!reloaded.currentSettings().sidebarDoubleClickPrompt);
+    SettingsDialog reopened(&reloaded);
+    auto *reopenedToggle = reopened.findChild<ToggleSwitch *>(
+        QStringLiteral("sidebarDoubleClickPromptToggle"));
+    QVERIFY(reopenedToggle != nullptr);
+    QVERIFY(!reopenedToggle->isChecked());
+
+    // 通过同一服务改回开启，覆盖“误选不再提示后在设置中恢复”的入口。
+    TerminalSettings restored = reloaded.currentSettings();
+    restored.sidebarDoubleClickPrompt = true;
+    QVERIFY2(reloaded.save(restored, &error), qPrintable(error));
+    QVERIFY(reopenedToggle->isChecked());
 }
 
 void SettingsUiTest::languageSelectorPersistsAndRoundTrips()

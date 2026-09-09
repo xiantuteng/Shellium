@@ -103,6 +103,14 @@ struct TerminalSettings {
     bool compactSidebar = false;
 
     /**
+     * @brief 双击侧边栏分隔条时是否先显示隐藏确认提示；默认开启。
+     *
+     * 该偏好只控制提示，不改变双击隐藏侧边栏本身的行为；关闭后双击会直接隐藏，用户仍
+     * 可在“设置 → 外观”中重新打开提示，避免误选“不再提示”后失去恢复入口。
+     */
+    bool sidebarDoubleClickPrompt = true;
+
+    /**
      * @brief 终端配色预设 id，默认 "default" 表示跟随 ThemeMode 的内置浅色/深色配色。
      *
      * 未知 id（旧版本、手工改库或插件写入）会在 normalized() 中回退为 "default"，不会让终端

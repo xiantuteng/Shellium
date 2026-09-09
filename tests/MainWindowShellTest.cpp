@@ -38,6 +38,7 @@
 #include <QToolButton>
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
+#include <QVariantAnimation>
 
 #include <algorithm>
 #include <memory>
@@ -65,6 +66,10 @@ private slots:
     /** @brief Windows/Linux 产品名、标签与自绘窗口按钮必须共用唯一的无边框标题行。 */
     void desktopPlatformsUseProductTitleAndCustomWindowControls();
     void sidebarWidthIsRestoredOnNextLaunch();
+    /** @brief 侧边栏显隐使用连续尺寸动画，且收起后再次展开能恢复用户宽度。 */
+    void sidebarToggleAnimatesAndRestoresWidth();
+    /** @brief 关闭确认提示后，双击分隔条直接收起侧边栏而不弹出模态框。 */
+    void sidebarDividerDoubleClickHidesWithoutPromptWhenDisabled();
     /** @brief 菜单切换即时缩小侧栏并持久化，重启恢复紧凑模式且可切回宽松。 */
     void sidebarDensityPersistsAndRestores();
     /** @brief 导航轨中工作空间入口紧跟主机入口，页面索引与点击路由保持不变。 */
@@ -927,6 +932,84 @@ void MainWindowShellTest::sidebarWidthIsRestoredOnNextLaunch()
     auto *restoredSplitter = restarted.findChild<QSplitter *>(QStringLiteral("SidebarSplitter"));
     QVERIFY(restoredSplitter != nullptr);
     QCOMPARE(restoredSplitter->sizes().constFirst(), draggedWidth);
+}
+
+void MainWindowShellTest::sidebarToggleAnimatesAndRestoresWidth()
+{
+    MainWindow window(m_database, m_vault);
+    window.resize(1400, 800);
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+    auto *panel = window.findChild<QWidget *>(QStringLiteral("SidebarPanel"));
+    auto *splitter = window.findChild<QSplitter *>(QStringLiteral("SidebarSplitter"));
+    QVERIFY(panel != nullptr && splitter != nullptr);
+    QToolButton *sidebarButton = nullptr;
+    for (QToolButton *button : window.findChildren<QToolButton *>()) {
+        if (button->property("chromeRole").toString() == QStringLiteral("sidebar")) {
+            sidebarButton = button;
+            break;
+        }
+    }
+    QVERIFY(sidebarButton != nullptr);
+
+    const int expandedWidth = panel->width();
+    QTest::mouseClick(sidebarButton, Qt::LeftButton);
+    // 动画不是阻塞式 setVisible：事件循环返回时侧栏仍应有一段过渡宽度，而不是瞬间跳到目标。
+    QVERIFY(panel->isVisible());
+    QVERIFY(panel->width() > 0);
+    // 固定动画时刻检查末段：剩余约 6% 时仍必须逐像素收起，不能卡在内容最小宽度。
+    auto *animation = window.findChild<QVariantAnimation *>();
+    QVERIFY(animation != nullptr);
+    animation->setCurrentTime(animation->duration() * 3 / 4);
+    QVERIFY2(splitter->sizes().first() < expandedWidth / 4,
+             "收起末段必须小于原宽度的四分之一，不能到一半后突然隐藏");
+    auto *content = panel->findChild<QWidget *>(QStringLiteral("SidebarSlidingContent"));
+    QVERIFY(content != nullptr);
+    QCOMPARE(content->width(), expandedWidth);
+    QCOMPARE(content->x(), panel->width() - expandedWidth);
+    QTRY_VERIFY_WITH_TIMEOUT(!panel->isVisible(), 1000);
+
+    QTest::mouseClick(sidebarButton, Qt::LeftButton);
+    // 展开的前四分之一也必须从边缘连续滑入，内容宽度和方向与收起完全对称。
+    animation = window.findChild<QVariantAnimation *>();
+    QVERIFY(animation != nullptr);
+    animation->setCurrentTime(animation->duration() / 4);
+    QVERIFY(splitter->sizes().first() > 0);
+    QVERIFY(splitter->sizes().first() < expandedWidth / 4);
+    QCOMPARE(content->width(), expandedWidth);
+    QCOMPARE(content->x(), panel->width() - expandedWidth);
+    // 中途反向不应跳回起点，也不能把过渡宽度当成用户的展开宽度。
+    const int intermediateWidth = panel->width();
+    QTest::mouseClick(sidebarButton, Qt::LeftButton);
+    QCOMPARE(panel->width(), intermediateWidth);
+    QTRY_VERIFY_WITH_TIMEOUT(!panel->isVisible(), 1000);
+    QTest::mouseClick(sidebarButton, Qt::LeftButton);
+    QTRY_VERIFY_WITH_TIMEOUT(panel->isVisible(), 1000);
+    QTRY_VERIFY_WITH_TIMEOUT(panel->width() >= expandedWidth - 2, 1000);
+}
+
+void MainWindowShellTest::sidebarDividerDoubleClickHidesWithoutPromptWhenDisabled()
+{
+    MainWindow window(m_database, m_vault);
+    window.resize(1400, 800);
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+    auto *service = window.findChild<TerminalSettingsService *>();
+    auto *splitter = window.findChild<QSplitter *>(QStringLiteral("SidebarSplitter"));
+    auto *panel = window.findChild<QWidget *>(QStringLiteral("SidebarPanel"));
+    QVERIFY(service != nullptr && splitter != nullptr && panel != nullptr);
+    TerminalSettings settings = service->currentSettings();
+    settings.sidebarDoubleClickPrompt = false;
+    QString error;
+    QVERIFY2(service->save(settings, &error), qPrintable(error));
+
+    QSplitterHandle *handle = splitter->handle(1);
+    QVERIFY(handle != nullptr);
+    QTest::mouseDClick(handle, Qt::LeftButton, Qt::NoModifier, handle->rect().center());
+    QTRY_VERIFY_WITH_TIMEOUT(!panel->isVisible(), 1000);
+    QVERIFY(!service->currentSettings().sidebarDoubleClickPrompt);
 }
 
 void MainWindowShellTest::duplicateMenuItemOpensASecondCopyOfTheTab()

@@ -19,6 +19,8 @@ namespace {
 const QString kLanguageKey = QStringLiteral("appearance/language");
 /** @brief 沿用视图菜单已有的密度键，升级后无需迁移用户选择。 */
 const QString kCompactSidebarKey = QStringLiteral("layout/sidebar_compact");
+/** @brief 双击侧边栏分隔条的确认提示开关；缺失时保持默认开启以保护既有操作习惯。 */
+const QString kSidebarDoubleClickPromptKey = QStringLiteral("layout/sidebar_double_click_prompt");
 const QString kThemeKey = QStringLiteral("appearance/theme");
 const QString kColorSchemeKey = QStringLiteral("appearance/color_scheme");
 const QString kFontFamilyKey = QStringLiteral("terminal/font_family");
@@ -919,6 +921,7 @@ bool TerminalSettings::operator==(const TerminalSettings &other) const
     return language == other.language
         && themeMode == other.themeMode
         && compactSidebar == other.compactSidebar
+        && sidebarDoubleClickPrompt == other.sidebarDoubleClickPrompt
         && colorSchemeId == other.colorSchemeId
         && fontFamily == other.fontFamily
         && fontPointSize == other.fontPointSize
@@ -1079,6 +1082,7 @@ bool TerminalSettingsService::load(QString *errorMessage)
     }
     // 统一布尔解析同时兼容旧菜单写入的 0/1，并沿用读取失败与非法值处理。
     assignBoolean(kCompactSidebarKey, &loaded.compactSidebar);
+    assignBoolean(kSidebarDoubleClickPromptKey, &loaded.sidebarDoubleClickPrompt);
     assignBoolean(kCursorBlinkKey, &loaded.cursorBlink);
     assignInteger(kScrollbackKey, &loaded.scrollbackLines);
     assignBoolean(kAudibleBellKey, &loaded.audibleBell);
@@ -1177,6 +1181,8 @@ bool TerminalSettingsService::save(const TerminalSettings &settings, QString *er
             if (!write(kLanguageKey, normalizedSettings.language)
                 || !write(kThemeKey, serializeTheme(normalizedSettings.themeMode))
                 || !write(kCompactSidebarKey, serializeBool(normalizedSettings.compactSidebar))
+                || !write(kSidebarDoubleClickPromptKey,
+                          serializeBool(normalizedSettings.sidebarDoubleClickPrompt))
                 || !write(kColorSchemeKey, normalizedSettings.colorSchemeId)
                 || !write(kFontFamilyKey, normalizedSettings.fontFamily)
                 || !write(kFontSizeKey, QString::number(normalizedSettings.fontPointSize))

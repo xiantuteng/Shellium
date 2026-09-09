@@ -33,7 +33,7 @@
     </message>
     <message>
         <source>The AI can make mistakes. Every command that changes the system requires your explicit confirmation.</source>
-        <translation type="unfinished">L'IA può commettere errori. Ogni comando che modifica il sistema richiede la tua conferma esplicita.</translation>
+        <translation type="unfinished">L&apos;IA può commettere errori. Ogni comando che modifica il sistema richiede la tua conferma esplicita.</translation>
     </message>
     <message>
         <source>There is no command waiting to run</source>
@@ -75,15 +75,15 @@
     </message>
     <message>
         <source>Configure the LLM URL and model name in Settings → AI Assistant first</source>
-        <translation type="unfinished">Configura prima l'URL dell'LLM e il nome del modello in Impostazioni → Assistente IA</translation>
+        <translation type="unfinished">Configura prima l&apos;URL dell&apos;LLM e il nome del modello in Impostazioni → Assistente IA</translation>
     </message>
     <message>
         <source>The AI did not return a result following the single-step interaction protocol; this round has been stopped. Retry or switch to a model that supports JSON instructions.</source>
-        <translation type="unfinished">L'IA non ha restituito un risultato conforme al protocollo di interazione a passo singolo; questo turno è stato interrotto. Riprova o passa a un modello che supporta le istruzioni JSON.</translation>
+        <translation type="unfinished">L&apos;IA non ha restituito un risultato conforme al protocollo di interazione a passo singolo; questo turno è stato interrotto. Riprova o passa a un modello che supporta le istruzioni JSON.</translation>
     </message>
     <message>
         <source>The AI response does not conform to the single-step agent protocol: %1</source>
-        <translation type="unfinished">La risposta dell'IA non è conforme al protocollo di agente a passo singolo: %1</translation>
+        <translation type="unfinished">La risposta dell&apos;IA non è conforme al protocollo di agente a passo singolo: %1</translation>
     </message>
     <message>
         <source>Your last response violated the single-step protocol: %1. Decide again and return only one JSON object as defined by the system message; do not output a full plan, multiple commands, or an explanation of the protocol itself.</source>
@@ -115,7 +115,7 @@
     </message>
     <message>
         <source>Run the last command awaiting confirmation (Command+Enter)</source>
-        <translation type="unfinished">Esegui l'ultimo comando in attesa di conferma (Comando+Invio)</translation>
+        <translation type="unfinished">Esegui l&apos;ultimo comando in attesa di conferma (Comando+Invio)</translation>
     </message>
     <message>
         <source>Executed</source>
@@ -143,7 +143,7 @@
     </message>
     <message>
         <source>Confirm running a high-risk command</source>
-        <translation type="unfinished">Conferma l'esecuzione di un comando ad alto rischio</translation>
+        <translation type="unfinished">Conferma l&apos;esecuzione di un comando ad alto rischio</translation>
     </message>
     <message>
         <source>This command may have irreversible or wide-ranging effects:
@@ -159,7 +159,7 @@ Eseguirlo nel terminale corrente?</translation>
     </message>
     <message>
         <source>Sent to the current terminal to run; the AI will wait for it to finish automatically</source>
-        <translation type="unfinished">Inviato al terminale corrente per l'esecuzione; l'IA attenderà automaticamente il completamento</translation>
+        <translation type="unfinished">Inviato al terminale corrente per l&apos;esecuzione; l&apos;IA attenderà automaticamente il completamento</translation>
     </message>
     <message>
         <source>Stop</source>
@@ -208,7 +208,7 @@ Eseguirlo nel terminale corrente?</translation>
     <name>AiClient</name>
     <message>
         <source>Fill in the LLM service URL first</source>
-        <translation type="unfinished">Inserisci prima l'URL del servizio LLM</translation>
+        <translation type="unfinished">Inserisci prima l&apos;URL del servizio LLM</translation>
     </message>
     <message>
         <source>Connection failed: %1</source>
@@ -224,7 +224,7 @@ Eseguirlo nel terminale corrente?</translation>
     </message>
     <message>
         <source>Failed to fetch the model list: %1</source>
-        <translation type="unfinished">Impossibile recuperare l'elenco dei modelli: %1</translation>
+        <translation type="unfinished">Impossibile recuperare l&apos;elenco dei modelli: %1</translation>
     </message>
     <message>
         <source>The gateway returned no models</source>
@@ -240,7 +240,7 @@ Eseguirlo nel terminale corrente?</translation>
     </message>
     <message>
         <source>Finish configuring the LLM URL and model name in Settings first</source>
-        <translation type="unfinished">Completa prima la configurazione dell'URL dell'LLM e del nome del modello nelle Impostazioni</translation>
+        <translation type="unfinished">Completa prima la configurazione dell&apos;URL dell&apos;LLM e del nome del modello nelle Impostazioni</translation>
     </message>
     <message>
         <source>Request failed: %1</source>
@@ -267,7 +267,7 @@ Eseguirlo nel terminale corrente?</translation>
     </message>
     <message>
         <source>Optional; leave empty to use the SSH agent or default key</source>
-        <translation type="unfinished">Facoltativo; lascia vuoto per usare l'agente SSH o la chiave predefinita</translation>
+        <translation type="unfinished">Facoltativo; lascia vuoto per usare l&apos;agente SSH o la chiave predefinita</translation>
     </message>
     <message>
         <source>Server</source>
@@ -335,7 +335,7 @@ Eseguirlo nel terminale corrente?</translation>
     </message>
     <message>
         <source>Enter the server host name or IP address.</source>
-        <translation type="unfinished">Inserisci il nome host o l'indirizzo IP del server.</translation>
+        <translation type="unfinished">Inserisci il nome host o l&apos;indirizzo IP del server.</translation>
     </message>
     <message>
         <source>Select SSH private key file</source>
@@ -408,8 +408,8 @@ Eseguirlo nel terminale corrente?</translation>
         <translation type="unfinished">Modifica catena di host</translation>
     </message>
     <message>
-        <source>The hosts you add connect in the following order, finally reaching &lt;span style="font-family: monospace; font-weight: 600;"&gt;%1&lt;/span&gt;.</source>
-        <translation type="unfinished">Gli host che aggiungi si connettono nel seguente ordine, raggiungendo infine &lt;span style="font-family: monospace; font-weight: 600;"&gt;%1&lt;/span&gt;.</translation>
+        <source>The hosts you add connect in the following order, finally reaching &lt;span style=&quot;font-family: monospace; font-weight: 600;&quot;&gt;%1&lt;/span&gt;.</source>
+        <translation type="unfinished">Gli host che aggiungi si connettono nel seguente ordine, raggiungendo infine &lt;span style=&quot;font-family: monospace; font-weight: 600;&quot;&gt;%1&lt;/span&gt;.</translation>
     </message>
     <message>
         <source>Add host</source>
@@ -441,7 +441,7 @@ Eseguirlo nel terminale corrente?</translation>
     </message>
     <message>
         <source>Save the current host chain order</source>
-        <translation type="unfinished">Salva l'ordine corrente della catena di host</translation>
+        <translation type="unfinished">Salva l&apos;ordine corrente della catena di host</translation>
     </message>
     <message>
         <source>Invalid host reference</source>
@@ -449,7 +449,7 @@ Eseguirlo nel terminale corrente?</translation>
     </message>
     <message>
         <source>Failed to read host</source>
-        <translation type="unfinished">Impossibile leggere l'host</translation>
+        <translation type="unfinished">Impossibile leggere l&apos;host</translation>
     </message>
     <message>
         <source>Login credentials for %1</source>
@@ -457,7 +457,7 @@ Eseguirlo nel terminale corrente?</translation>
     </message>
     <message>
         <source>Failed to create jump host</source>
-        <translation type="unfinished">Impossibile creare l'host di salto</translation>
+        <translation type="unfinished">Impossibile creare l&apos;host di salto</translation>
     </message>
 </context>
 <context>
@@ -508,7 +508,7 @@ Eseguirlo nel terminale corrente?</translation>
     </message>
     <message>
         <source>Connect in Workspace</source>
-        <translation type="unfinished">Connetti in un'area di lavoro</translation>
+        <translation type="unfinished">Connetti in un&apos;area di lavoro</translation>
     </message>
     <message>
         <source>Copy</source>
@@ -526,7 +526,7 @@ Eseguirlo nel terminale corrente?</translation>
         <source>Import Hosts…</source>
         <translation type="unfinished">Importa host…</translation>
     </message>
-<message>
+    <message>
         <source>Import from Excel…</source>
         <translation>Importa da Excel…</translation>
     </message>
@@ -560,11 +560,11 @@ Eseguirlo nel terminale corrente?</translation>
     </message>
     <message>
         <source>The host folder expansion state is corrupt; using the default expansion: %1 (offset %2)</source>
-        <translation type="unfinished">Lo stato di espansione delle cartelle host è danneggiato; viene usata l'espansione predefinita: %1 (offset %2)</translation>
+        <translation type="unfinished">Lo stato di espansione delle cartelle host è danneggiato; viene usata l&apos;espansione predefinita: %1 (offset %2)</translation>
     </message>
     <message>
         <source>The host folder expansion state version or structure is unsupported; using the default expansion</source>
-        <translation type="unfinished">La versione o la struttura dello stato di espansione delle cartelle host non è supportata; viene usata l'espansione predefinita</translation>
+        <translation type="unfinished">La versione o la struttura dello stato di espansione delle cartelle host non è supportata; viene usata l&apos;espansione predefinita</translation>
     </message>
     <message>
         <source>Save host folder expansion state</source>
@@ -572,7 +572,7 @@ Eseguirlo nel terminale corrente?</translation>
     </message>
     <message>
         <source>Load host tree</source>
-        <translation type="unfinished">Carica l'albero degli host</translation>
+        <translation type="unfinished">Carica l&apos;albero degli host</translation>
     </message>
     <message>
         <source>Search hosts</source>
@@ -627,12 +627,12 @@ Eseguirlo nel terminale corrente?</translation>
         <translation type="unfinished">Aggiorna nodo</translation>
     </message>
     <message>
-        <source>Deleting group '%1' also deletes all of its subgroups and hosts, and cannot be undone. Continue?</source>
-        <translation type="unfinished">L'eliminazione del gruppo '%1' elimina anche tutti i suoi sottogruppi e host, e non può essere annullata. Continuare?</translation>
+        <source>Deleting group &apos;%1&apos; also deletes all of its subgroups and hosts, and cannot be undone. Continue?</source>
+        <translation type="unfinished">L&apos;eliminazione del gruppo &apos;%1&apos; elimina anche tutti i suoi sottogruppi e host, e non può essere annullata. Continuare?</translation>
     </message>
     <message>
-        <source>Delete host '%1'? This action cannot be undone.</source>
-        <translation type="unfinished">Eliminare l'host '%1'? Questa azione non può essere annullata.</translation>
+        <source>Delete host &apos;%1&apos;? This action cannot be undone.</source>
+        <translation type="unfinished">Eliminare l&apos;host &apos;%1&apos;? Questa azione non può essere annullata.</translation>
     </message>
     <message>
         <source>Confirm delete</source>
@@ -690,35 +690,35 @@ Eseguirlo nel terminale corrente?</translation>
         <source>Successfully imported %1 records.</source>
         <translation type="unfinished">%1 record importati correttamente.</translation>
     </message>
-<message>
+    <message>
         <source>The Excel file has no usable host records.</source>
         <translation>Il file Excel non contiene record host utilizzabili.</translation>
     </message>
-<message>
+    <message>
         <source>The host database or credential vault is unavailable.</source>
         <translation>Il database host o il deposito credenziali non è disponibile.</translation>
     </message>
-<message>
+    <message>
         <source>Excel import failed</source>
         <translation>Importazione Excel non riuscita</translation>
     </message>
-<message>
+    <message>
         <source>%1 host records will be imported into the current folder. Passwords will be encrypted automatically.</source>
         <translation>%1 record host verranno importati nella cartella corrente. Le password saranno crittografate automaticamente.</translation>
     </message>
-<message>
+    <message>
         <source>Confirm Excel import</source>
         <translation>Conferma importazione Excel</translation>
     </message>
-<message>
+    <message>
         <source>Import hosts from Excel</source>
         <translation>Importa host da Excel</translation>
     </message>
-<message>
+    <message>
         <source>Excel import complete</source>
         <translation>Importazione Excel completata</translation>
     </message>
-<message>
+    <message>
         <source>Successfully imported %1 hosts.</source>
         <translation>%1 host importati correttamente.</translation>
     </message>
@@ -732,7 +732,7 @@ Eseguirlo nel terminale corrente?</translation>
     </message>
     <message>
         <source>The host tree is currently empty.</source>
-        <translation type="unfinished">L'albero degli host è attualmente vuoto.</translation>
+        <translation type="unfinished">L&apos;albero degli host è attualmente vuoto.</translation>
     </message>
     <message>
         <source>Export Shellium hosts</source>
@@ -798,7 +798,7 @@ Sistema: %2</translation>
     </message>
     <message>
         <source>Save drag-and-drop order</source>
-        <translation type="unfinished">Salva l'ordine di trascinamento</translation>
+        <translation type="unfinished">Salva l&apos;ordine di trascinamento</translation>
     </message>
     <message>
         <source>Node %1 not found</source>
@@ -841,7 +841,7 @@ Sistema: %2</translation>
     </message>
     <message>
         <source>Add the selected host to the chain</source>
-        <translation type="unfinished">Aggiungi l'host selezionato alla catena</translation>
+        <translation type="unfinished">Aggiungi l&apos;host selezionato alla catena</translation>
     </message>
 </context>
 <context>
@@ -868,11 +868,11 @@ Sistema: %2</translation>
     </message>
     <message>
         <source>Saved automatically with the host after you type it</source>
-        <translation type="unfinished">Salvato automaticamente con l'host dopo la digitazione</translation>
+        <translation type="unfinished">Salvato automaticamente con l&apos;host dopo la digitazione</translation>
     </message>
     <message>
         <source>Edit the jump hosts the current host passes through before the final connection</source>
-        <translation type="unfinished">Modifica gli host di salto che l'host corrente attraversa prima della connessione finale</translation>
+        <translation type="unfinished">Modifica gli host di salto che l&apos;host corrente attraversa prima della connessione finale</translation>
     </message>
     <message>
         <source>Host address</source>
@@ -928,7 +928,7 @@ Sistema: %2</translation>
     </message>
     <message>
         <source>Choose an existing host in Host Manager as a jump host, or add a host in the chain editor.</source>
-        <translation type="unfinished">Scegli un host esistente nel Gestore host come host di salto, oppure aggiungi un host nell'editor della catena.</translation>
+        <translation type="unfinished">Scegli un host esistente nel Gestore host come host di salto, oppure aggiungi un host nell&apos;editor della catena.</translation>
     </message>
     <message>
         <source>Legacy compatibility</source>
@@ -940,7 +940,7 @@ Sistema: %2</translation>
     </message>
     <message>
         <source>Leave empty to use the agent or default key</source>
-        <translation type="unfinished">Lascia vuoto per usare l'agent o la chiave predefinita</translation>
+        <translation type="unfinished">Lascia vuoto per usare l&apos;agent o la chiave predefinita</translation>
     </message>
     <message>
         <source>Comma-separated jump host list</source>
@@ -967,8 +967,8 @@ Sistema: %2</translation>
         <translation type="unfinished">È richiesta la protezione con password principale</translation>
     </message>
     <message>
-        <source>Viewing host passwords requires master password protection. Go to 'Settings → Connections &amp; Security → Credential Vault' and turn on 'Protect credentials with a master password'.</source>
-        <translation type="unfinished">Per visualizzare le password degli host è richiesta la protezione con password principale. Vai in 'Impostazioni → Connessioni e sicurezza → Cassaforte credenziali' e attiva 'Proteggi le credenziali con una password principale'.</translation>
+        <source>Viewing host passwords requires master password protection. Go to &apos;Settings → Connections &amp; Security → Credential Vault&apos; and turn on &apos;Protect credentials with a master password&apos;.</source>
+        <translation type="unfinished">Per visualizzare le password degli host è richiesta la protezione con password principale. Vai in &apos;Impostazioni → Connessioni e sicurezza → Cassaforte credenziali&apos; e attiva &apos;Proteggi le credenziali con una password principale&apos;.</translation>
     </message>
     <message>
         <source>Hide password</source>
@@ -1088,7 +1088,7 @@ Sistema: %2</translation>
     </message>
     <message>
         <source>The jump host does not exist or the chain is invalid: %1</source>
-        <translation type="unfinished">L'host di salto non esiste o la catena non è valida: %1</translation>
+        <translation type="unfinished">L&apos;host di salto non esiste o la catena non è valida: %1</translation>
     </message>
     <message>
         <source>The host chain contains duplicate nodes or a loop: %1</source>
@@ -1099,8 +1099,8 @@ Sistema: %2</translation>
         <translation type="unfinished">Impossibile provare la connessione</translation>
     </message>
     <message>
-        <source>Could not read the saved credentials for '%1'.</source>
-        <translation type="unfinished">Impossibile leggere le credenziali salvate per '%1'.</translation>
+        <source>Could not read the saved credentials for &apos;%1&apos;.</source>
+        <translation type="unfinished">Impossibile leggere le credenziali salvate per &apos;%1&apos;.</translation>
     </message>
     <message>
         <source>Testing…</source>
@@ -1111,10 +1111,10 @@ Sistema: %2</translation>
         <translation type="unfinished">Connesso correttamente a %1.</translation>
     </message>
     <message>
-        <source>The server only supports legacy hmac-sha1. If you have accepted the risk, turn on 'Legacy compatibility' and retry.
+        <source>The server only supports legacy hmac-sha1. If you have accepted the risk, turn on &apos;Legacy compatibility&apos; and retry.
 
 %1</source>
-        <translation type="unfinished">Il server supporta solo hmac-sha1 legacy. Se hai accettato il rischio, attiva 'Compatibilità legacy' e riprova.
+        <translation type="unfinished">Il server supporta solo hmac-sha1 legacy. Se hai accettato il rischio, attiva &apos;Compatibilità legacy&apos; e riprova.
 
 %1</translation>
     </message>
@@ -1123,8 +1123,8 @@ Sistema: %2</translation>
         <translation type="unfinished">Autenticazione SSH non riuscita. Controlla la password o la passphrase della chiave privata e riprova.</translation>
     </message>
     <message>
-        <source>The server requires a password or private key passphrase. Fill in 'Password' and retry.</source>
-        <translation type="unfinished">Il server richiede una password o una passphrase della chiave privata. Compila 'Password' e riprova.</translation>
+        <source>The server requires a password or private key passphrase. Fill in &apos;Password&apos; and retry.</source>
+        <translation type="unfinished">Il server richiede una password o una passphrase della chiave privata. Compila &apos;Password&apos; e riprova.</translation>
     </message>
     <message>
         <source>Confirm the server host key</source>
@@ -1142,7 +1142,7 @@ Verify the fingerprint through a trusted channel. Trust it and continue testing?
 Impronta SHA-256:
 %2
 
-Verifica l'impronta tramite un canale attendibile. Considerarla attendibile e continuare la prova?</translation>
+Verifica l&apos;impronta tramite un canale attendibile. Considerarla attendibile e continuare la prova?</translation>
     </message>
     <message>
         <source>The server host key has changed</source>
@@ -1277,7 +1277,7 @@ Confermare che la chiave è cambiata, sostituire il vecchio record in known_host
     </message>
     <message>
         <source>Could not configure process tree cleanup for the local shell: %1</source>
-        <translation type="unfinished">Impossibile configurare la pulizia dell'albero dei processi per la shell locale: %1</translation>
+        <translation type="unfinished">Impossibile configurare la pulizia dell&apos;albero dei processi per la shell locale: %1</translation>
     </message>
     <message>
         <source>Failed to resize ConPTY: HRESULT 0x%1</source>
@@ -1343,7 +1343,7 @@ Confermare che la chiave è cambiata, sostituire il vecchio record in known_host
     </message>
     <message>
         <source>Failed to read the AI assistant configuration: %1</source>
-        <translation type="unfinished">Lettura della configurazione dell'assistente IA non riuscita: %1</translation>
+        <translation type="unfinished">Lettura della configurazione dell&apos;assistente IA non riuscita: %1</translation>
     </message>
     <message>
         <source>%1 hosts</source>
@@ -1363,7 +1363,7 @@ Confermare che la chiave è cambiata, sostituire il vecchio record in known_host
     </message>
     <message>
         <source>Connects to an internal host through the current server. The app maintains the layers itself, so the file manager can switch accurately between them.</source>
-        <translation type="unfinished">Si connette a un host interno tramite il server corrente. L'app gestisce da sola i livelli, così il gestore file può passare tra di essi con precisione.</translation>
+        <translation type="unfinished">Si connette a un host interno tramite il server corrente. L&apos;app gestisce da sola i livelli, così il gestore file può passare tra di essi con precisione.</translation>
     </message>
     <message>
         <source>Local terminal</source>
@@ -1391,15 +1391,15 @@ Confermare che la chiave è cambiata, sostituire il vecchio record in known_host
     </message>
     <message>
         <source>Show or hide the remote file manager area inside the current terminal tab</source>
-        <translation type="unfinished">Mostra o nascondi l'area del gestore file remoto all'interno della scheda del terminale corrente</translation>
+        <translation type="unfinished">Mostra o nascondi l&apos;area del gestore file remoto all&apos;interno della scheda del terminale corrente</translation>
     </message>
     <message>
         <source>Search Terminal Output…</source>
-        <translation type="unfinished">Cerca nell'output del terminale…</translation>
+        <translation type="unfinished">Cerca nell&apos;output del terminale…</translation>
     </message>
     <message>
         <source>Export Terminal Output…</source>
-        <translation type="unfinished">Esporta l'output del terminale…</translation>
+        <translation type="unfinished">Esporta l&apos;output del terminale…</translation>
     </message>
     <message>
         <source>Settings…</source>
@@ -1526,8 +1526,32 @@ Confermare che la chiave è cambiata, sostituire il vecchio record in known_host
         <translation type="unfinished">La cassaforte credenziali è stata bloccata automaticamente per inattività</translation>
     </message>
     <message>
+        <source>Hide the sidebar?</source>
+        <translation>Nascondere la barra laterale?</translation>
+    </message>
+    <message>
+        <source>Double-clicking this divider hides the sidebar. Hide it now?</source>
+        <translation>Facendo doppio clic su questo separatore la barra laterale viene nascosta. Nasconderla ora?</translation>
+    </message>
+    <message>
+        <source>Do not show this again</source>
+        <translation>Non mostrare più</translation>
+    </message>
+    <message>
+        <source>Hide sidebar</source>
+        <translation>Nascondi barra laterale</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation type="unfinished">Annulla</translation>
+    </message>
+    <message>
+        <source>Failed to save sidebar prompt preference: %1</source>
+        <translation>Impossibile salvare la preferenza del prompt della barra laterale: %1</translation>
+    </message>
+    <message>
         <source>Press + in the title bar to open a new terminal tab, or connect to a server from the host list on the left.</source>
-        <translation type="unfinished">Premi + nella barra del titolo per aprire una nuova scheda del terminale, oppure connettiti a un server dall'elenco degli host a sinistra.</translation>
+        <translation type="unfinished">Premi + nella barra del titolo per aprire una nuova scheda del terminale, oppure connettiti a un server dall&apos;elenco degli host a sinistra.</translation>
     </message>
     <message>
         <source>Could not switch to the selected language; check that the language pack is complete</source>
@@ -1535,7 +1559,7 @@ Confermare che la chiave è cambiata, sostituire il vecchio record in known_host
     </message>
     <message>
         <source>Interface language changed</source>
-        <translation type="unfinished">Lingua dell'interfaccia cambiata</translation>
+        <translation type="unfinished">Lingua dell&apos;interfaccia cambiata</translation>
     </message>
     <message>
         <source>Restore</source>
@@ -1591,7 +1615,7 @@ Confermare che la chiave è cambiata, sostituire il vecchio record in known_host
     </message>
     <message>
         <source>Could not connect to the saved host</source>
-        <translation type="unfinished">Impossibile connettersi all'host salvato</translation>
+        <translation type="unfinished">Impossibile connettersi all&apos;host salvato</translation>
     </message>
     <message>
         <source>The host record or host chain does not exist</source>
@@ -1603,11 +1627,11 @@ Confermare che la chiave è cambiata, sostituire il vecchio record in known_host
     </message>
     <message>
         <source>The chain host does not exist: %1</source>
-        <translation type="unfinished">L'host della catena non esiste: %1</translation>
+        <translation type="unfinished">L&apos;host della catena non esiste: %1</translation>
     </message>
     <message>
         <source>Could not read the host credentials</source>
-        <translation type="unfinished">Impossibile leggere le credenziali dell'host</translation>
+        <translation type="unfinished">Impossibile leggere le credenziali dell&apos;host</translation>
     </message>
     <message>
         <source>The credential does not exist</source>
@@ -1623,7 +1647,7 @@ Confermare che la chiave è cambiata, sostituire il vecchio record in known_host
     </message>
     <message>
         <source>The group “%1” has no hosts to connect</source>
-        <translation type="unfinished">Il gruppo "%1" non contiene host da connettere</translation>
+        <translation type="unfinished">Il gruppo &quot;%1&quot; non contiene host da connettere</translation>
     </message>
     <message>
         <source>Connected, but writing the connection history failed: %1</source>
@@ -1635,11 +1659,11 @@ Confermare che la chiave è cambiata, sostituire il vecchio record in known_host
     </message>
     <message>
         <source>Failed to write disconnect time: %1</source>
-        <translation type="unfinished">Scrittura dell'ora di disconnessione non riuscita: %1</translation>
+        <translation type="unfinished">Scrittura dell&apos;ora di disconnessione non riuscita: %1</translation>
     </message>
     <message>
         <source>The AI assistant does not support running commands on multiple terminals</source>
-        <translation type="unfinished">L'assistente IA non supporta l'esecuzione di comandi su più terminali</translation>
+        <translation type="unfinished">L&apos;assistente IA non supporta l&apos;esecuzione di comandi su più terminali</translation>
     </message>
     <message>
         <source>The matching terminal tab is already closed</source>
@@ -1647,7 +1671,7 @@ Confermare che la chiave è cambiata, sostituire il vecchio record in known_host
     </message>
     <message>
         <source>Inserting an unexecuted command into multiple terminals is not supported yet</source>
-        <translation type="unfinished">L'inserimento di un comando non eseguito in più terminali non è ancora supportato</translation>
+        <translation type="unfinished">L&apos;inserimento di un comando non eseguito in più terminali non è ancora supportato</translation>
     </message>
     <message>
         <source>The command was inserted into the matching terminal; press Enter to run it</source>
@@ -1655,7 +1679,7 @@ Confermare che la chiave è cambiata, sostituire il vecchio record in known_host
     </message>
     <message>
         <source>Failed to save host distribution information: %1</source>
-        <translation type="unfinished">Salvataggio delle informazioni sulla distribuzione dell'host non riuscito: %1</translation>
+        <translation type="unfinished">Salvataggio delle informazioni sulla distribuzione dell&apos;host non riuscito: %1</translation>
     </message>
     <message>
         <source>Reconnecting to %1 automatically (attempt %2/%3)</source>
@@ -1679,19 +1703,19 @@ Confermare che la chiave è cambiata, sostituire il vecchio record in known_host
     </message>
     <message>
         <source>Search terminal output</source>
-        <translation type="unfinished">Cerca nell'output del terminale</translation>
+        <translation type="unfinished">Cerca nell&apos;output del terminale</translation>
     </message>
     <message>
         <source>Find text:</source>
         <translation type="unfinished">Cerca testo:</translation>
     </message>
     <message>
-        <source>'%1' was not found in the terminal output</source>
-        <translation type="unfinished">'%1' non trovato nell'output del terminale</translation>
+        <source>&apos;%1&apos; was not found in the terminal output</source>
+        <translation type="unfinished">&apos;%1&apos; non trovato nell&apos;output del terminale</translation>
     </message>
     <message>
         <source>Export terminal output</source>
-        <translation type="unfinished">Esporta l'output del terminale</translation>
+        <translation type="unfinished">Esporta l&apos;output del terminale</translation>
     </message>
     <message>
         <source>Text files (*.txt);;All files (*)</source>
@@ -1718,12 +1742,12 @@ Confermare che la chiave è cambiata, sostituire il vecchio record in known_host
         <translation type="unfinished">Lo spazio di lavoro contiene connessioni temporanee</translation>
     </message>
     <message>
-        <source>Tab '%1' is not a persistent host opened from the host tree. Save this connection to the host tree first, then save the workspace.</source>
-        <translation type="unfinished">La scheda '%1' non è un host persistente aperto dall'albero degli host. Salva prima questa connessione nell'albero degli host, poi lo spazio di lavoro.</translation>
+        <source>Tab &apos;%1&apos; is not a persistent host opened from the host tree. Save this connection to the host tree first, then save the workspace.</source>
+        <translation type="unfinished">La scheda &apos;%1&apos; non è un host persistente aperto dall&apos;albero degli host. Salva prima questa connessione nell&apos;albero degli host, poi lo spazio di lavoro.</translation>
     </message>
     <message>
-        <source>Failed to check the host record for tab '%1': %2</source>
-        <translation type="unfinished">Controllo del record host per la scheda '%1' non riuscito: %2</translation>
+        <source>Failed to check the host record for tab &apos;%1&apos;: %2</source>
+        <translation type="unfinished">Controllo del record host per la scheda &apos;%1&apos; non riuscito: %2</translation>
     </message>
     <message>
         <source>No tabs to save</source>
@@ -1750,12 +1774,12 @@ Confermare che la chiave è cambiata, sostituire il vecchio record in known_host
         <translation type="unfinished">Sovrascrivi lo spazio di lavoro esistente</translation>
     </message>
     <message>
-        <source>A workspace named '%1' already exists. Overwrite it with the current set of tabs?</source>
-        <translation type="unfinished">Esiste già uno spazio di lavoro chiamato '%1'. Sovrascriverlo con il set di schede corrente?</translation>
+        <source>A workspace named &apos;%1&apos; already exists. Overwrite it with the current set of tabs?</source>
+        <translation type="unfinished">Esiste già uno spazio di lavoro chiamato &apos;%1&apos;. Sovrascriverlo con il set di schede corrente?</translation>
     </message>
     <message>
-        <source>Workspace '%1' saved (%2 tabs)</source>
-        <translation type="unfinished">Spazio di lavoro '%1' salvato (%2 schede)</translation>
+        <source>Workspace &apos;%1&apos; saved (%2 tabs)</source>
+        <translation type="unfinished">Spazio di lavoro &apos;%1&apos; salvato (%2 schede)</translation>
     </message>
     <message>
         <source>Failed to read workspace</source>
@@ -1790,8 +1814,8 @@ Confermare che la chiave è cambiata, sostituire il vecchio record in known_host
         <translation type="unfinished">Il layout dello spazio di lavoro è danneggiato</translation>
     </message>
     <message>
-        <source>The version, tab list, or count of workspace '%1' is invalid; the current session was not modified.</source>
-        <translation type="unfinished">La versione, l'elenco schede o il numero dello spazio di lavoro '%1' non è valido; la sessione corrente non è stata modificata.</translation>
+        <source>The version, tab list, or count of workspace &apos;%1&apos; is invalid; the current session was not modified.</source>
+        <translation type="unfinished">La versione, l&apos;elenco schede o il numero dello spazio di lavoro &apos;%1&apos; non è valido; la sessione corrente non è stata modificata.</translation>
     </message>
     <message>
         <source>The tag entry is not an object</source>
@@ -1810,20 +1834,20 @@ Confermare che la chiave è cambiata, sostituire il vecchio record in known_host
         <translation type="unfinished">Impossibile risolvere la catena di host: %1</translation>
     </message>
     <message>
-        <source>Workspace '%1' could not be fully restored: %2. The current session was not modified.</source>
-        <translation type="unfinished">Impossibile ripristinare completamente lo spazio di lavoro '%1': %2. La sessione corrente non è stata modificata.</translation>
+        <source>Workspace &apos;%1&apos; could not be fully restored: %2. The current session was not modified.</source>
+        <translation type="unfinished">Impossibile ripristinare completamente lo spazio di lavoro &apos;%1&apos;: %2. La sessione corrente non è stata modificata.</translation>
     </message>
     <message>
         <source>Replace the current workspace</source>
         <translation type="unfinished">Sostituisci lo spazio di lavoro corrente</translation>
     </message>
     <message>
-        <source>Opening '%1' closes the current %2 tabs and their connections, then restores %3 tabs. Continue?</source>
-        <translation type="unfinished">L'apertura di '%1' chiude le %2 schede correnti e le loro connessioni, poi ripristina %3 schede. Continuare?</translation>
+        <source>Opening &apos;%1&apos; closes the current %2 tabs and their connections, then restores %3 tabs. Continue?</source>
+        <translation type="unfinished">L&apos;apertura di &apos;%1&apos; chiude le %2 schede correnti e le loro connessioni, poi ripristina %3 schede. Continuare?</translation>
     </message>
     <message>
-        <source>Workspace '%1' restored</source>
-        <translation type="unfinished">Spazio di lavoro '%1' ripristinato</translation>
+        <source>Workspace &apos;%1&apos; restored</source>
+        <translation type="unfinished">Spazio di lavoro &apos;%1&apos; ripristinato</translation>
     </message>
     <message>
         <source>There are no workspaces to delete.</source>
@@ -1839,7 +1863,7 @@ Confermare che la chiave è cambiata, sostituire il vecchio record in known_host
     </message>
     <message>
         <source>Confirm workspace deletion</source>
-        <translation type="unfinished">Conferma l'eliminazione dello spazio di lavoro</translation>
+        <translation type="unfinished">Conferma l&apos;eliminazione dello spazio di lavoro</translation>
     </message>
     <message>
         <source>Only the saved layout is deleted; the current terminals are not closed. This action cannot be undone.</source>
@@ -1906,11 +1930,11 @@ Confermare che la chiave è cambiata, sostituire il vecchio record in known_host
     </message>
     <message>
         <source>Start all forwarding rules for the current host</source>
-        <translation type="unfinished">Avvia tutte le regole di inoltro per l'host corrente</translation>
+        <translation type="unfinished">Avvia tutte le regole di inoltro per l&apos;host corrente</translation>
     </message>
     <message>
         <source>Stop all forwarding rules for the current host</source>
-        <translation type="unfinished">Interrompi tutte le regole di inoltro per l'host corrente</translation>
+        <translation type="unfinished">Interrompi tutte le regole di inoltro per l&apos;host corrente</translation>
     </message>
     <message>
         <source>New rule</source>
@@ -1974,7 +1998,7 @@ Confermare che la chiave è cambiata, sostituire il vecchio record in known_host
     </message>
     <message>
         <source>Confirm exposing the listen port</source>
-        <translation type="unfinished">Conferma l'esposizione della porta di ascolto</translation>
+        <translation type="unfinished">Conferma l&apos;esposizione della porta di ascolto</translation>
     </message>
     <message>
         <source>The rule listens on all network interfaces, so other devices may reach this port. Confirm your firewall is configured and continue saving?</source>
@@ -1990,7 +2014,7 @@ Confermare che la chiave è cambiata, sostituire il vecchio record in known_host
     </message>
     <message>
         <source>Confirm rule deletion</source>
-        <translation type="unfinished">Conferma l'eliminazione della regola</translation>
+        <translation type="unfinished">Conferma l&apos;eliminazione della regola</translation>
     </message>
     <message>
         <source>This cannot be undone; running listeners stop immediately.</source>
@@ -2006,15 +2030,15 @@ Confermare che la chiave è cambiata, sostituire il vecchio record in known_host
     </message>
     <message>
         <source>The host is not connected yet</source>
-        <translation type="unfinished">L'host non è ancora connesso</translation>
+        <translation type="unfinished">L&apos;host non è ancora connesso</translation>
     </message>
     <message>
-        <source>Connect to '%1' from the host tree first, then start this rule.</source>
-        <translation type="unfinished">Connettiti prima a '%1' dall'albero degli host, poi avvia questa regola.</translation>
+        <source>Connect to &apos;%1&apos; from the host tree first, then start this rule.</source>
+        <translation type="unfinished">Connettiti prima a &apos;%1&apos; dall&apos;albero degli host, poi avvia questa regola.</translation>
     </message>
     <message>
         <source>Failed to start forwarding</source>
-        <translation type="unfinished">Avvio dell'inoltro non riuscito</translation>
+        <translation type="unfinished">Avvio dell&apos;inoltro non riuscito</translation>
     </message>
     <message>
         <source>The selected rule is not running</source>
@@ -2034,19 +2058,19 @@ Confermare che la chiave è cambiata, sostituire il vecchio record in known_host
     </message>
     <message>
         <source>The current host has no port forwarding rules to start yet.</source>
-        <translation type="unfinished">L'host corrente non ha ancora regole di inoltro porte da avviare.</translation>
+        <translation type="unfinished">L&apos;host corrente non ha ancora regole di inoltro porte da avviare.</translation>
     </message>
     <message>
-        <source>Connect to '%1' from the host tree first, then start all forwarding rules.</source>
-        <translation type="unfinished">Connettiti prima a '%1' dall'albero degli host, poi avvia tutte le regole di inoltro.</translation>
+        <source>Connect to &apos;%1&apos; from the host tree first, then start all forwarding rules.</source>
+        <translation type="unfinished">Connettiti prima a &apos;%1&apos; dall&apos;albero degli host, poi avvia tutte le regole di inoltro.</translation>
     </message>
     <message>
         <source>Confirm starting all forwarding</source>
-        <translation type="unfinished">Conferma l'avvio di tutti gli inoltri</translation>
+        <translation type="unfinished">Conferma l&apos;avvio di tutti gli inoltri</translation>
     </message>
     <message>
-        <source>This will start all %2 forwarding rules under host '%1'; rules already running are left unchanged. Continue?</source>
-        <translation type="unfinished">Verranno avviate tutte le %2 regole di inoltro dell'host '%1'; le regole già in esecuzione restano invariate. Continuare?</translation>
+        <source>This will start all %2 forwarding rules under host &apos;%1&apos;; rules already running are left unchanged. Continue?</source>
+        <translation type="unfinished">Verranno avviate tutte le %2 regole di inoltro dell&apos;host &apos;%1&apos;; le regole già in esecuzione restano invariate. Continuare?</translation>
     </message>
     <message>
         <source>%1: %2</source>
@@ -2059,36 +2083,36 @@ Confermare che la chiave è cambiata, sostituire il vecchio record in known_host
     <message>
         <source>%1 rules could not be submitted to start:
 %2</source>
-        <translation type="unfinished">%1 regole non sono state inviate per l'avvio:
+        <translation type="unfinished">%1 regole non sono state inviate per l&apos;avvio:
 %2</translation>
     </message>
     <message>
         <source>Submitted %1 port forwarding start tasks for the current host</source>
-        <translation type="unfinished">Inviate %1 attività di avvio inoltro porte per l'host corrente</translation>
+        <translation type="unfinished">Inviate %1 attività di avvio inoltro porte per l&apos;host corrente</translation>
     </message>
     <message>
         <source>The current host has no running port forwarding rules</source>
-        <translation type="unfinished">L'host corrente non ha regole di inoltro porte in esecuzione</translation>
+        <translation type="unfinished">L&apos;host corrente non ha regole di inoltro porte in esecuzione</translation>
     </message>
     <message>
         <source>Confirm stopping all forwarding</source>
-        <translation type="unfinished">Conferma l'interruzione di tutti gli inoltri</translation>
+        <translation type="unfinished">Conferma l&apos;interruzione di tutti gli inoltri</translation>
     </message>
     <message>
-        <source>This will stop %2 active forwarding rules under host '%1' and close the related connections. Continue?</source>
-        <translation type="unfinished">Verranno interrotte %2 regole di inoltro attive dell'host '%1' e chiuse le connessioni correlate. Continuare?</translation>
+        <source>This will stop %2 active forwarding rules under host &apos;%1&apos; and close the related connections. Continue?</source>
+        <translation type="unfinished">Verranno interrotte %2 regole di inoltro attive dell&apos;host &apos;%1&apos; e chiuse le connessioni correlate. Continuare?</translation>
     </message>
     <message>
         <source>Submitted %1 port forwarding stop tasks for the current host</source>
-        <translation type="unfinished">Inviate %1 attività di interruzione inoltro porte per l'host corrente</translation>
+        <translation type="unfinished">Inviate %1 attività di interruzione inoltro porte per l&apos;host corrente</translation>
     </message>
     <message>
         <source>The host SSH session is unavailable</source>
-        <translation type="unfinished">La sessione SSH dell'host non è disponibile</translation>
+        <translation type="unfinished">La sessione SSH dell&apos;host non è disponibile</translation>
     </message>
     <message>
         <source>Starting port forwarding: %1</source>
-        <translation type="unfinished">Avvio dell'inoltro porte: %1</translation>
+        <translation type="unfinished">Avvio dell&apos;inoltro porte: %1</translation>
     </message>
     <message>
         <source>Port forwarding failed: %1</source>
@@ -2103,8 +2127,8 @@ Confermare che la chiave è cambiata, sostituire il vecchio record in known_host
         <translation type="unfinished">Lettura delle regole di inoltro automatico non riuscita: %1</translation>
     </message>
     <message>
-        <source>Failed to auto-start '%1': %2</source>
-        <translation type="unfinished">Avvio automatico di '%1' non riuscito: %2</translation>
+        <source>Failed to auto-start &apos;%1&apos;: %2</source>
+        <translation type="unfinished">Avvio automatico di &apos;%1&apos; non riuscito: %2</translation>
     </message>
     <message>
         <source>Starting</source>
@@ -2192,8 +2216,8 @@ Confermare che la chiave è cambiata, sostituire il vecchio record in known_host
         <translation type="unfinished">Destinazione:</translation>
     </message>
     <message>
-        <source>Security note: setting the listen address to 0.0.0.0 or :: exposes the port to the local network and the internet; reachability still depends on the system firewall and the SSH server's GatewayPorts setting.</source>
-        <translation type="unfinished">Nota di sicurezza: impostare l'indirizzo di ascolto su 0.0.0.0 o :: espone la porta alla rete locale e a Internet; la raggiungibilità dipende ancora dal firewall di sistema e dall'impostazione GatewayPorts del server SSH.</translation>
+        <source>Security note: setting the listen address to 0.0.0.0 or :: exposes the port to the local network and the internet; reachability still depends on the system firewall and the SSH server&apos;s GatewayPorts setting.</source>
+        <translation type="unfinished">Nota di sicurezza: impostare l&apos;indirizzo di ascolto su 0.0.0.0 o :: espone la porta alla rete locale e a Internet; la raggiungibilità dipende ancora dal firewall di sistema e dall&apos;impostazione GatewayPorts del server SSH.</translation>
     </message>
     <message>
         <source>The rule is incomplete</source>
@@ -2222,16 +2246,16 @@ Confermare che la chiave è cambiata, sostituire il vecchio record in known_host
 <context>
     <name>PortForwardWorker</name>
     <message>
-        <source>The SSH session is not ready; cannot start forwarding '%1'</source>
-        <translation type="unfinished">La sessione SSH non è pronta; impossibile avviare l'inoltro '%1'</translation>
+        <source>The SSH session is not ready; cannot start forwarding &apos;%1&apos;</source>
+        <translation type="unfinished">La sessione SSH non è pronta; impossibile avviare l&apos;inoltro &apos;%1&apos;</translation>
     </message>
     <message>
-        <source>Failed to start remote forwarding '%1': %2</source>
-        <translation type="unfinished">Avvio dell'inoltro remoto '%1' non riuscito: %2</translation>
+        <source>Failed to start remote forwarding &apos;%1&apos;: %2</source>
+        <translation type="unfinished">Avvio dell&apos;inoltro remoto &apos;%1&apos; non riuscito: %2</translation>
     </message>
     <message>
-        <source>The listen address '%1' is not a bindable local IP address</source>
-        <translation type="unfinished">L'indirizzo di ascolto '%1' non è un indirizzo IP locale associabile</translation>
+        <source>The listen address &apos;%1&apos; is not a bindable local IP address</source>
+        <translation type="unfinished">L&apos;indirizzo di ascolto &apos;%1&apos; non è un indirizzo IP locale associabile</translation>
     </message>
     <message>
         <source>Failed to listen on %1:%2: %3</source>
@@ -2243,11 +2267,11 @@ Confermare che la chiave è cambiata, sostituire il vecchio record in known_host
     </message>
     <message>
         <source>Remote forwarding could not connect to the local target %1:%2: %3</source>
-        <translation type="unfinished">L'inoltro remoto non è riuscito a connettersi alla destinazione locale %1:%2: %3</translation>
+        <translation type="unfinished">L&apos;inoltro remoto non è riuscito a connettersi alla destinazione locale %1:%2: %3</translation>
     </message>
     <message>
         <source>SOCKS5 handshake exceeded the 64 KiB safety limit</source>
-        <translation type="unfinished">L'handshake SOCKS5 ha superato il limite di sicurezza di 64 KiB</translation>
+        <translation type="unfinished">L&apos;handshake SOCKS5 ha superato il limite di sicurezza di 64 KiB</translation>
     </message>
     <message>
         <source>Could not connect to target %1:%2 over SSH: %3</source>
@@ -2262,7 +2286,7 @@ Confermare che la chiave è cambiata, sostituire il vecchio record in known_host
     <name>ProductivityModel</name>
     <message>
         <source>Productivity is not connected to the app database yet</source>
-        <translation type="unfinished">La produttività non è ancora connessa al database dell'app</translation>
+        <translation type="unfinished">La produttività non è ancora connessa al database dell&apos;app</translation>
     </message>
     <message>
         <source>Failed to save snippet: %1</source>
@@ -2329,11 +2353,11 @@ Confermare che la chiave è cambiata, sostituire il vecchio record in known_host
     </message>
     <message>
         <source>Run on the selected host</source>
-        <translation type="unfinished">Esegui sull'host selezionato</translation>
+        <translation type="unfinished">Esegui sull&apos;host selezionato</translation>
     </message>
     <message>
         <source>Re-run the command on the host selected in the history filter</source>
-        <translation type="unfinished">Riesegui il comando sull'host selezionato nel filtro cronologia</translation>
+        <translation type="unfinished">Riesegui il comando sull&apos;host selezionato nel filtro cronologia</translation>
     </message>
     <message>
         <source>Command history</source>
@@ -2353,7 +2377,7 @@ Confermare che la chiave è cambiata, sostituire il vecchio record in known_host
     </message>
     <message>
         <source>Turn on live raw input broadcast</source>
-        <translation type="unfinished">Attiva la trasmissione in tempo reale dell'input grezzo</translation>
+        <translation type="unfinished">Attiva la trasmissione in tempo reale dell&apos;input grezzo</translation>
     </message>
     <message>
         <source>Send a command once to the selected targets</source>
@@ -2377,7 +2401,7 @@ Confermare che la chiave è cambiata, sostituire il vecchio record in known_host
     </message>
     <message>
         <source>Broadcast send requires a non-empty command and at least one explicit target</source>
-        <translation type="unfinished">L'invio della trasmissione richiede un comando non vuoto e almeno una destinazione esplicita</translation>
+        <translation type="unfinished">L&apos;invio della trasmissione richiede un comando non vuoto e almeno una destinazione esplicita</translation>
     </message>
     <message>
         <source>Name</source>
@@ -2417,7 +2441,7 @@ Confermare che la chiave è cambiata, sostituire il vecchio record in known_host
     </message>
     <message>
         <source>The selected snippet no longer exists; refresh the list</source>
-        <translation type="unfinished">Lo snippet selezionato non esiste più; aggiorna l'elenco</translation>
+        <translation type="unfinished">Lo snippet selezionato non esiste più; aggiorna l&apos;elenco</translation>
     </message>
     <message>
         <source>Edit snippet</source>
@@ -2484,7 +2508,7 @@ Confermare che la chiave è cambiata, sostituire il vecchio record in known_host
     </message>
     <message>
         <source>UI preview initialization failed</source>
-        <translation type="unfinished">Inizializzazione dell'anteprima dell'interfaccia non riuscita</translation>
+        <translation type="unfinished">Inizializzazione dell&apos;anteprima dell&apos;interfaccia non riuscita</translation>
     </message>
     <message>
         <source>Could not create the isolated host page preview data: %1</source>
@@ -2548,11 +2572,11 @@ Confermare che la chiave è cambiata, sostituire il vecchio record in known_host
     </message>
     <message>
         <source>Search terminal output</source>
-        <translation type="unfinished">Cerca nell'output del terminale</translation>
+        <translation type="unfinished">Cerca nell&apos;output del terminale</translation>
     </message>
     <message>
         <source>Export terminal output</source>
-        <translation type="unfinished">Esporta l'output del terminale</translation>
+        <translation type="unfinished">Esporta l&apos;output del terminale</translation>
     </message>
     <message>
         <source>Open the command palette</source>
@@ -2563,8 +2587,8 @@ Confermare che la chiave è cambiata, sostituire il vecchio record in known_host
         <translation type="unfinished">Apri le impostazioni</translation>
     </message>
     <message>
-        <source>Shortcut %1 is assigned to both '%2' and '%3'</source>
-        <translation type="unfinished">La scorciatoia %1 è assegnata sia a '%2' che a '%3'</translation>
+        <source>Shortcut %1 is assigned to both &apos;%2&apos; and &apos;%3&apos;</source>
+        <translation type="unfinished">La scorciatoia %1 è assegnata sia a &apos;%2&apos; che a &apos;%3&apos;</translation>
     </message>
     <message>
         <source>Default</source>
@@ -2622,15 +2646,15 @@ Anche il fallback SFTP con chiave remota non è riuscito: %2</translation>
     </message>
     <message>
         <source>The outer server could not run the inner OpenSSH: %1</source>
-        <translation type="unfinished">Il server esterno non è riuscito a eseguire l'OpenSSH interno: %1</translation>
+        <translation type="unfinished">Il server esterno non è riuscito a eseguire l&apos;OpenSSH interno: %1</translation>
     </message>
     <message>
         <source>Could not bind the remote OpenSSH SFTP data channel: %1</source>
-        <translation type="unfinished">Impossibile associare il canale dati SFTP dell'OpenSSH remoto: %1</translation>
+        <translation type="unfinished">Impossibile associare il canale dati SFTP dell&apos;OpenSSH remoto: %1</translation>
     </message>
     <message>
         <source>The outer OpenSSH could not establish the inner SFTP: %1</source>
-        <translation type="unfinished">L'OpenSSH esterno non è riuscito a stabilire l'SFTP interno: %1</translation>
+        <translation type="unfinished">L&apos;OpenSSH esterno non è riuscito a stabilire l&apos;SFTP interno: %1</translation>
     </message>
     <message>
         <source>Could not create a libssh session.</source>
@@ -2658,7 +2682,7 @@ Anche il fallback SFTP con chiave remota non è riuscito: %2</translation>
     </message>
     <message>
         <source>Could not read the fingerprint</source>
-        <translation type="unfinished">Impossibile leggere l'impronta</translation>
+        <translation type="unfinished">Impossibile leggere l&apos;impronta</translation>
     </message>
     <message>
         <source>The server host key does not match the known_hosts record; the new fingerprint must be verified first.</source>
@@ -2698,7 +2722,7 @@ Anche il fallback SFTP con chiave remota non è riuscito: %2</translation>
     </message>
     <message>
         <source>Could not seek to local resume offset %1: %2</source>
-        <translation type="unfinished">Impossibile posizionarsi all'offset di ripresa locale %1: %2</translation>
+        <translation type="unfinished">Impossibile posizionarsi all&apos;offset di ripresa locale %1: %2</translation>
     </message>
     <message>
         <source>Upload of %1 failed: %2</source>
@@ -2882,11 +2906,11 @@ Anche il fallback SFTP con chiave remota non è riuscito: %2</translation>
     </message>
     <message>
         <source>Content hash matches</source>
-        <translation type="unfinished">L'hash del contenuto corrisponde</translation>
+        <translation type="unfinished">L&apos;hash del contenuto corrisponde</translation>
     </message>
     <message>
         <source>Identical to the last sync record</source>
-        <translation type="unfinished">Identico all'ultimo record di sincronizzazione</translation>
+        <translation type="unfinished">Identico all&apos;ultimo record di sincronizzazione</translation>
     </message>
     <message>
         <source>The fragment was verified by content hash</source>
@@ -2921,7 +2945,7 @@ Anche il fallback SFTP con chiave remota non è riuscito: %2</translation>
         <translation type="unfinished">Impossibile determinare la posizione del tuo file known_hosts.</translation>
     </message>
     <message>
-        <source>Could not export the server's new host key: %1</source>
+        <source>Could not export the server&apos;s new host key: %1</source>
         <translation type="unfinished">Impossibile esportare la nuova chiave host del server: %1</translation>
     </message>
     <message>
@@ -2958,7 +2982,7 @@ Anche il fallback SFTP con chiave remota non è riuscito: %2</translation>
     </message>
     <message>
         <source>The app did not initialize the credential vault service.</source>
-        <translation type="unfinished">L'app non ha inizializzato il servizio cassaforte credenziali.</translation>
+        <translation type="unfinished">L&apos;app non ha inizializzato il servizio cassaforte credenziali.</translation>
     </message>
     <message>
         <source>The vault data is corrupt</source>
@@ -2977,7 +3001,7 @@ Per non sovrascrivere credenziali esistenti, Shellium non crea automaticamente u
         <translation type="unfinished">Impossibile attivare la protezione con password principale</translation>
     </message>
     <message>
-        <source>The vault's current state does not allow enabling master password protection again.</source>
+        <source>The vault&apos;s current state does not allow enabling master password protection again.</source>
         <translation type="unfinished">Lo stato corrente della cassaforte non consente di riattivare la protezione con password principale.</translation>
     </message>
     <message>
@@ -3113,7 +3137,7 @@ Per non sovrascrivere credenziali esistenti, Shellium non crea automaticamente u
     </message>
     <message>
         <source>Cancel the current transfer or the selected waiting task</source>
-        <translation type="unfinished">Annulla il trasferimento corrente o l'attività in attesa selezionata</translation>
+        <translation type="unfinished">Annulla il trasferimento corrente o l&apos;attività in attesa selezionata</translation>
     </message>
     <message>
         <source>Resumable transfer</source>
@@ -3122,12 +3146,12 @@ Per non sovrascrivere credenziali esistenti, Shellium non crea automaticamente u
     <message>
         <source>On: files whose content is truly identical are skipped, and partial fragments left by an interruption continue after verification;
 Off: everything is re-uploaded in full regardless of whether content matches.</source>
-        <translation type="unfinished">Attivo: i file con contenuto realmente identico vengono saltati, e i frammenti parziali lasciati da un'interruzione proseguono dopo la verifica;
+        <translation type="unfinished">Attivo: i file con contenuto realmente identico vengono saltati, e i frammenti parziali lasciati da un&apos;interruzione proseguono dopo la verifica;
 Disattivo: tutto viene ricaricato per intero, che il contenuto corrisponda o meno.</translation>
     </message>
     <message>
-        <source>Transfers run strictly in order; select a waiting item and click 'Deselect' to remove it directly.</source>
-        <translation type="unfinished">I trasferimenti vengono eseguiti rigorosamente in ordine; seleziona un elemento in attesa e fai clic su 'Deseleziona' per rimuoverlo direttamente.</translation>
+        <source>Transfers run strictly in order; select a waiting item and click &apos;Deselect&apos; to remove it directly.</source>
+        <translation type="unfinished">I trasferimenti vengono eseguiti rigorosamente in ordine; seleziona un elemento in attesa e fai clic su &apos;Deseleziona&apos; per rimuoverlo direttamente.</translation>
     </message>
     <message>
         <source>Open directory</source>
@@ -3185,7 +3209,7 @@ Verify the fingerprint through a trusted channel. Trust it and write it to known
 Impronta SHA-256:
 %2
 
-Verifica l'impronta tramite un canale attendibile. Considerarla attendibile e scriverla in known_hosts?</translation>
+Verifica l&apos;impronta tramite un canale attendibile. Considerarla attendibile e scriverla in known_hosts?</translation>
     </message>
     <message>
         <source>The server host key has changed</source>
@@ -3247,7 +3271,7 @@ Confermare che la chiave è cambiata e sostituire il vecchio record in known_hos
 Replace: deletes the entire remote directory and uploads everything again so the result exactly matches local; extra files on the remote are permanently deleted.</source>
         <translation type="unfinished">Unisci aggiornamento: confronta il contenuto file per file e ricarica solo i file effettivamente modificati; i file aggiuntivi sul remoto vengono conservati.
 
-Sostituisci: elimina l'intera directory remota e ricarica tutto in modo che il risultato corrisponda esattamente al locale; i file aggiuntivi sul remoto vengono eliminati definitivamente.</translation>
+Sostituisci: elimina l&apos;intera directory remota e ricarica tutto in modo che il risultato corrisponda esattamente al locale; i file aggiuntivi sul remoto vengono eliminati definitivamente.</translation>
     </message>
     <message>
         <source>Merge update</source>
@@ -3268,7 +3292,7 @@ Sostituisci: elimina l'intera directory remota e ricarica tutto in modo che il r
     <message>
         <source>This file is not a supported text file or safe raster image; binary content is not shown.
 MIME: %1</source>
-        <translation type="unfinished">Questo file non è un file di testo supportato né un'immagine raster sicura; il contenuto binario non viene mostrato.
+        <translation type="unfinished">Questo file non è un file di testo supportato né un&apos;immagine raster sicura; il contenuto binario non viene mostrato.
 MIME: %1</translation>
     </message>
     <message>
@@ -3357,7 +3381,7 @@ MIME: %1</translation>
     </message>
     <message>
         <source>The dropped item does not exist, cannot be read, or is a symlink that is not followed.</source>
-        <translation type="unfinished">L'elemento rilasciato non esiste, non può essere letto o è un collegamento simbolico non seguito.</translation>
+        <translation type="unfinished">L&apos;elemento rilasciato non esiste, non può essere letto o è un collegamento simbolico non seguito.</translation>
     </message>
     <message>
         <source>Upload %1 → %2</source>
@@ -3479,15 +3503,15 @@ Se una directory con lo stesso nome esiste già sul remoto, il passaggio success
     </message>
     <message>
         <source>Cannot preview</source>
-        <translation type="unfinished">Impossibile visualizzare l'anteprima</translation>
+        <translation type="unfinished">Impossibile visualizzare l&apos;anteprima</translation>
     </message>
     <message>
         <source>Select a regular remote file; directories and symlinks are not opened in the safe preview.</source>
-        <translation type="unfinished">Seleziona un file remoto normale; le directory e i collegamenti simbolici non vengono aperti nell'anteprima sicura.</translation>
+        <translation type="unfinished">Seleziona un file remoto normale; le directory e i collegamenti simbolici non vengono aperti nell&apos;anteprima sicura.</translation>
     </message>
     <message>
         <source>Safely reading the preview of %1…</source>
-        <translation type="unfinished">Lettura sicura dell'anteprima di %1…</translation>
+        <translation type="unfinished">Lettura sicura dell&apos;anteprima di %1…</translation>
     </message>
     <message>
         <source>Select a file or directory to change permissions for.</source>
@@ -3511,7 +3535,7 @@ Se una directory con lo stesso nome esiste già sul remoto, il passaggio success
     </message>
     <message>
         <source>The permission value is outside the range allowed by POSIX.</source>
-        <translation type="unfinished">Il valore dei permessi è fuori dall'intervallo consentito da POSIX.</translation>
+        <translation type="unfinished">Il valore dei permessi è fuori dall&apos;intervallo consentito da POSIX.</translation>
     </message>
     <message>
         <source>Changing permissions of %1…</source>
@@ -3564,8 +3588,8 @@ Questa azione non può essere annullata.</translation>
     <message>
         <source>
 
-⚠ This server was inferred by parsing terminal commands and may not be the one you expect. Run 'hostname' in the terminal to verify before continuing.</source>
-        <translation type="unfinished">⚠ Questo server è stato ipotizzato analizzando comandi del terminale e potrebbe non essere quello che ti aspetti. Esegui 'hostname' nel terminale per verificarlo prima di continuare.</translation>
+⚠ This server was inferred by parsing terminal commands and may not be the one you expect. Run &apos;hostname&apos; in the terminal to verify before continuing.</source>
+        <translation type="unfinished">⚠ Questo server è stato ipotizzato analizzando comandi del terminale e potrebbe non essere quello che ti aspetti. Esegui &apos;hostname&apos; nel terminale per verificarlo prima di continuare.</translation>
     </message>
     <message>
         <source>Confirm delete</source>
@@ -3585,7 +3609,7 @@ Questa azione non può essere annullata.</translation>
     </message>
     <message>
         <source>The jump host connection dropped temporarily; retrying (attempt %1)…</source>
-        <translation type="unfinished">La connessione all'host di salto è caduta temporaneamente; nuovo tentativo (tentativo %1)…</translation>
+        <translation type="unfinished">La connessione all&apos;host di salto è caduta temporaneamente; nuovo tentativo (tentativo %1)…</translation>
     </message>
     <message>
         <source>%1; returned to home directory</source>
@@ -3593,7 +3617,7 @@ Questa azione non può essere annullata.</translation>
     </message>
     <message>
         <source>Inner SSH authentication is not finished; re-enter the password directly in the terminal</source>
-        <translation type="unfinished">L'autenticazione SSH interna non è terminata; reinserisci la password direttamente nel terminale</translation>
+        <translation type="unfinished">L&apos;autenticazione SSH interna non è terminata; reinserisci la password direttamente nel terminale</translation>
     </message>
     <message>
         <source>Enter inner server credentials</source>
@@ -3610,7 +3634,7 @@ Questa azione non può essere annullata.</translation>
     <message>
         <source>The SFTP service of server %1 offers only hmac-sha1.
 
-This algorithm is obsolete; upgrading the server's SSH configuration is recommended. Enable it for this connection only and retry?
+This algorithm is obsolete; upgrading the server&apos;s SSH configuration is recommended. Enable it for this connection only and retry?
 
 %2</source>
         <translation type="unfinished">Il servizio SFTP del server %1 offre solo hmac-sha1.
@@ -3668,7 +3692,7 @@ Questo algoritmo è obsoleto; si consiglia di aggiornare la configurazione SSH d
     </message>
     <message>
         <source>Interface language</source>
-        <translation type="unfinished">Lingua dell'interfaccia</translation>
+        <translation type="unfinished">Lingua dell&apos;interfaccia</translation>
     </message>
     <message>
         <source>Display language</source>
@@ -3676,7 +3700,7 @@ Questo algoritmo è obsoleto; si consiglia di aggiornare la configurazione SSH d
     </message>
     <message>
         <source>The whole interface switches immediately. Terminal output that has already scrolled by keeps its original language.</source>
-        <translation type="unfinished">L'intera interfaccia cambia immediatamente. L'output del terminale già scorso mantiene la sua lingua originale.</translation>
+        <translation type="unfinished">L&apos;intera interfaccia cambia immediatamente. L&apos;output del terminale già scorso mantiene la sua lingua originale.</translation>
     </message>
     <message>
         <source>Follow System</source>
@@ -3692,15 +3716,15 @@ Questo algoritmo è obsoleto; si consiglia di aggiornare la configurazione SSH d
     </message>
     <message>
         <source>App theme</source>
-        <translation type="unfinished">Tema dell'app</translation>
+        <translation type="unfinished">Tema dell&apos;app</translation>
     </message>
     <message>
         <source>Interface appearance</source>
-        <translation type="unfinished">Aspetto dell'interfaccia</translation>
+        <translation type="unfinished">Aspetto dell&apos;interfaccia</translation>
     </message>
     <message>
-        <source>'Follow system' syncs automatically when the operating system switches between light and dark appearance.</source>
-        <translation type="unfinished">'Segui il sistema' si sincronizza automaticamente quando il sistema operativo passa tra aspetto chiaro e scuro.</translation>
+        <source>&apos;Follow system&apos; syncs automatically when the operating system switches between light and dark appearance.</source>
+        <translation type="unfinished">&apos;Segui il sistema&apos; si sincronizza automaticamente quando il sistema operativo passa tra aspetto chiaro e scuro.</translation>
     </message>
     <message>
         <source>Terminal color scheme</source>
@@ -3712,7 +3736,7 @@ Questo algoritmo è obsoleto; si consiglia di aggiornare la configurazione SSH d
     </message>
     <message>
         <source>Follow app theme</source>
-        <translation type="unfinished">Segui il tema dell'app</translation>
+        <translation type="unfinished">Segui il tema dell&apos;app</translation>
     </message>
     <message>
         <source>No matching color schemes.</source>
@@ -3729,6 +3753,14 @@ Questo algoritmo è obsoleto; si consiglia di aggiornare la configurazione SSH d
     <message>
         <source>Font</source>
         <translation type="unfinished">Carattere</translation>
+    </message>
+    <message>
+        <source>Confirm before hiding the sidebar</source>
+        <translation>Conferma prima di nascondere la barra laterale</translation>
+    </message>
+    <message>
+        <source>Ask before hiding the sidebar when you double-click its divider.</source>
+        <translation>Chiedi prima di nascondere la barra laterale quando fai doppio clic sul separatore.</translation>
     </message>
     <message>
         <source>Monospace font</source>
@@ -3799,8 +3831,8 @@ Questo algoritmo è obsoleto; si consiglia di aggiornare la configurazione SSH d
         <translation type="unfinished">Suggerimenti automatici della riga di comando</translation>
     </message>
     <message>
-        <source>After you type at least two characters, suggestions are shown automatically from the current host's command history; off by default.</source>
-        <translation type="unfinished">Dopo aver digitato almeno due caratteri, vengono mostrati automaticamente suggerimenti dalla cronologia comandi dell'host corrente; disattivato per impostazione predefinita.</translation>
+        <source>After you type at least two characters, suggestions are shown automatically from the current host&apos;s command history; off by default.</source>
+        <translation type="unfinished">Dopo aver digitato almeno due caratteri, vengono mostrati automaticamente suggerimenti dalla cronologia comandi dell&apos;host corrente; disattivato per impostazione predefinita.</translation>
     </message>
     <message>
         <source>Multi-line paste confirmation</source>
@@ -3828,11 +3860,11 @@ Questo algoritmo è obsoleto; si consiglia di aggiornare la configurazione SSH d
     </message>
     <message>
         <source>Both enabling and disabling require a password; once enabled you can unlock and view plaintext on the host editor page.</source>
-        <translation type="unfinished">Sia l'attivazione che la disattivazione richiedono una password; una volta attivata, puoi sbloccare e vedere il testo in chiaro nella pagina dell'editor host.</translation>
+        <translation type="unfinished">Sia l&apos;attivazione che la disattivazione richiedono una password; una volta attivata, puoi sbloccare e vedere il testo in chiaro nella pagina dell&apos;editor host.</translation>
     </message>
     <message>
         <source>When disabling, the current master password is verified first, then credentials are migrated to local encryption and the master password configuration is cleared. Host passwords are still used automatically for connections, but their plaintext cannot be viewed in the UI and they no longer have master password protection.</source>
-        <translation type="unfinished">Alla disattivazione, viene prima verificata la password principale corrente, poi le credenziali vengono migrate alla cifratura locale e la configurazione della password principale viene cancellata. Le password degli host continuano a essere usate automaticamente per le connessioni, ma il loro testo in chiaro non può essere visualizzato nell'interfaccia e non hanno più la protezione con password principale.</translation>
+        <translation type="unfinished">Alla disattivazione, viene prima verificata la password principale corrente, poi le credenziali vengono migrate alla cifratura locale e la configurazione della password principale viene cancellata. Le password degli host continuano a essere usate automaticamente per le connessioni, ma il loro testo in chiaro non può essere visualizzato nell&apos;interfaccia e non hanno più la protezione con password principale.</translation>
     </message>
     <message>
         <source>Automatic reconnect</source>
@@ -3860,7 +3892,7 @@ Questo algoritmo è obsoleto; si consiglia di aggiornare la configurazione SSH d
     </message>
     <message>
         <source>A normal exit, switching connections yourself, a first-time authentication failure, or a host key rejection never trigger an automatic reconnect.</source>
-        <translation type="unfinished">Un'uscita normale, un cambio di connessione effettuato da te, un primo errore di autenticazione o un rifiuto della chiave host non attivano mai una riconnessione automatica.</translation>
+        <translation type="unfinished">Un&apos;uscita normale, un cambio di connessione effettuato da te, un primo errore di autenticazione o un rifiuto della chiave host non attivano mai una riconnessione automatica.</translation>
     </message>
     <message>
         <source>Global shortcuts</source>
@@ -3872,7 +3904,7 @@ Questo algoritmo è obsoleto; si consiglia di aggiornare la configurazione SSH d
     </message>
     <message>
         <source>LLM connection</source>
-        <translation type="unfinished">Connessione all'LLM</translation>
+        <translation type="unfinished">Connessione all&apos;LLM</translation>
     </message>
     <message>
         <source>Service URL</source>
@@ -3896,11 +3928,11 @@ Questo algoritmo è obsoleto; si consiglia di aggiornare la configurazione SSH d
     </message>
     <message>
         <source>Fetch the model list from the server</source>
-        <translation type="unfinished">Recupera l'elenco dei modelli dal server</translation>
+        <translation type="unfinished">Recupera l&apos;elenco dei modelli dal server</translation>
     </message>
     <message>
         <source>Refresh model list</source>
-        <translation type="unfinished">Aggiorna l'elenco dei modelli</translation>
+        <translation type="unfinished">Aggiorna l&apos;elenco dei modelli</translation>
     </message>
     <message>
         <source>Model name</source>
@@ -3908,7 +3940,7 @@ Questo algoritmo è obsoleto; si consiglia di aggiornare la configurazione SSH d
     </message>
     <message>
         <source>You can type it manually, or click the refresh button on the right to fetch the server model list and pick from the dropdown.</source>
-        <translation type="unfinished">Puoi digitarlo manualmente, oppure fare clic sul pulsante di aggiornamento a destra per recuperare l'elenco dei modelli del server e sceglierlo dal menu a discesa.</translation>
+        <translation type="unfinished">Puoi digitarlo manualmente, oppure fare clic sul pulsante di aggiornamento a destra per recuperare l&apos;elenco dei modelli del server e sceglierlo dal menu a discesa.</translation>
     </message>
     <message>
         <source>Enable thinking</source>
@@ -3927,12 +3959,12 @@ Questo algoritmo è obsoleto; si consiglia di aggiornare la configurazione SSH d
         <translation type="unfinished">Salva</translation>
     </message>
     <message>
-        <source>Unlike other settings, changes to the address and key are not saved character by character; click 'Save', so that every keystroke does not trigger an encrypted write.</source>
-        <translation type="unfinished">A differenza di altre impostazioni, le modifiche all'indirizzo e alla chiave non vengono salvate carattere per carattere; fai clic su 'Salva', in modo che ogni pressione di tasto non attivi una scrittura cifrata.</translation>
+        <source>Unlike other settings, changes to the address and key are not saved character by character; click &apos;Save&apos;, so that every keystroke does not trigger an encrypted write.</source>
+        <translation type="unfinished">A differenza di altre impostazioni, le modifiche all&apos;indirizzo e alla chiave non vengono salvate carattere per carattere; fai clic su &apos;Salva&apos;, in modo che ogni pressione di tasto non attivi una scrittura cifrata.</translation>
     </message>
     <message>
         <source>The AI assistant configuration service is unavailable</source>
-        <translation type="unfinished">Il servizio di configurazione dell'assistente IA non è disponibile</translation>
+        <translation type="unfinished">Il servizio di configurazione dell&apos;assistente IA non è disponibile</translation>
     </message>
     <message>
         <source>Testing connection…</source>
@@ -3940,7 +3972,7 @@ Questo algoritmo è obsoleto; si consiglia di aggiornare la configurazione SSH d
     </message>
     <message>
         <source>Fetching model list…</source>
-        <translation type="unfinished">Recupero dell'elenco dei modelli…</translation>
+        <translation type="unfinished">Recupero dell&apos;elenco dei modelli…</translation>
     </message>
     <message>
         <source>Saved</source>
@@ -4072,7 +4104,7 @@ Le modifiche non salvate sono state annullate.</translation>
     </message>
     <message>
         <source>Security note: Shellium never overwrites an existing key; the private key is saved atomically with permissions readable and writable only by the current user, and the passphrase is not written to the database. Back up your private key yourself.</source>
-        <translation type="unfinished">Nota di sicurezza: Shellium non sovrascrive mai una chiave esistente; la chiave privata viene salvata in modo atomico con permessi di lettura e scrittura riservati all'utente corrente, e la passphrase non viene scritta nel database. Fai tu stesso un backup della tua chiave privata.</translation>
+        <translation type="unfinished">Nota di sicurezza: Shellium non sovrascrive mai una chiave esistente; la chiave privata viene salvata in modo atomico con permessi di lettura e scrittura riservati all&apos;utente corrente, e la passphrase non viene scritta nel database. Fai tu stesso un backup della tua chiave privata.</translation>
     </message>
     <message>
         <source>Generate key pair</source>
@@ -4128,7 +4160,7 @@ Le modifiche non salvate sono state annullate.</translation>
     </message>
     <message>
         <source>The current libssh build does not support generating the planned SSH key algorithm.</source>
-        <translation type="unfinished">La build corrente di libssh non supporta la generazione dell'algoritmo di chiave SSH previsto.</translation>
+        <translation type="unfinished">La build corrente di libssh non supporta la generazione dell&apos;algoritmo di chiave SSH previsto.</translation>
     </message>
     <message>
         <source>Failed to generate key</source>
@@ -4171,8 +4203,8 @@ Chiave pubblica: %3</translation>
         <translation type="unfinished">Il formato della chiave privata non è supportato, il file è danneggiato o la passphrase è errata.</translation>
     </message>
     <message>
-        <source>Verification passed: %1%2. You can select this file in the 'Private key' field of the host editor.</source>
-        <translation type="unfinished">Verifica superata: %1%2. Puoi selezionare questo file nel campo 'Chiave privata' dell'editor host.</translation>
+        <source>Verification passed: %1%2. You can select this file in the &apos;Private key&apos; field of the host editor.</source>
+        <translation type="unfinished">Verifica superata: %1%2. Puoi selezionare questo file nel campo &apos;Chiave privata&apos; dell&apos;editor host.</translation>
     </message>
     <message>
         <source>, passphrase-protected</source>
@@ -4203,11 +4235,11 @@ Chiave pubblica: %3</translation>
     </message>
     <message>
         <source>The user did not confirm the server host key change; the connection was terminated.</source>
-        <translation type="unfinished">L'utente non ha confermato la modifica della chiave host del server; la connessione è stata terminata.</translation>
+        <translation type="unfinished">L&apos;utente non ha confermato la modifica della chiave host del server; la connessione è stata terminata.</translation>
     </message>
     <message>
         <source>The user rejected the unknown server host key.</source>
-        <translation type="unfinished">L'utente ha rifiutato la chiave host sconosciuta del server.</translation>
+        <translation type="unfinished">L&apos;utente ha rifiutato la chiave host sconosciuta del server.</translation>
     </message>
     <message>
         <source>Failed to replace the old host key in known_hosts: %1</source>
@@ -4219,7 +4251,7 @@ Chiave pubblica: %3</translation>
     </message>
     <message>
         <source>The user cancelled authentication for %1.</source>
-        <translation type="unfinished">L'utente ha annullato l'autenticazione per %1.</translation>
+        <translation type="unfinished">L&apos;utente ha annullato l&apos;autenticazione per %1.</translation>
     </message>
     <message>
         <source>Could not create the SSH shell channel: %1</source>
@@ -4247,7 +4279,7 @@ Chiave pubblica: %3</translation>
     </message>
     <message>
         <source>SSH authentication failed: %1. Check the password, private key, or SSH agent.</source>
-        <translation type="unfinished">Autenticazione SSH non riuscita: %1. Controlla la password, la chiave privata o l'agente SSH.</translation>
+        <translation type="unfinished">Autenticazione SSH non riuscita: %1. Controlla la password, la chiave privata o l&apos;agente SSH.</translation>
     </message>
     <message>
         <source>The authentication state machine entered an undefined state.</source>
@@ -4307,7 +4339,7 @@ Chiave pubblica: %3</translation>
     </message>
     <message>
         <source>The remote relay command exited immediately after starting</source>
-        <translation type="unfinished">Il comando relay remoto è uscito subito dopo l'avvio</translation>
+        <translation type="unfinished">Il comando relay remoto è uscito subito dopo l&apos;avvio</translation>
     </message>
     <message>
         <source>The relay state machine entered an undefined state</source>
@@ -4319,11 +4351,11 @@ Chiave pubblica: %3</translation>
     </message>
     <message>
         <source>The SSH session has not finished authenticating</source>
-        <translation type="unfinished">La sessione SSH non ha completato l'autenticazione</translation>
+        <translation type="unfinished">La sessione SSH non ha completato l&apos;autenticazione</translation>
     </message>
     <message>
         <source>The remote listening rule, address, and port must be valid</source>
-        <translation type="unfinished">La regola, l'indirizzo e la porta di ascolto remoto devono essere validi</translation>
+        <translation type="unfinished">La regola, l&apos;indirizzo e la porta di ascolto remoto devono essere validi</translation>
     </message>
     <message>
         <source>This remote forwarding rule is already started or starting</source>
@@ -4335,7 +4367,7 @@ Chiave pubblica: %3</translation>
     </message>
     <message>
         <source>The server refused remote listening on %1:%2: %3</source>
-        <translation type="unfinished">Il server ha rifiutato l'ascolto remoto su %1:%2: %3</translation>
+        <translation type="unfinished">Il server ha rifiutato l&apos;ascolto remoto su %1:%2: %3</translation>
     </message>
     <message>
         <source>Failed to cancel remote listener %1:%2: %3</source>
@@ -4358,7 +4390,7 @@ Chiave pubblica: %3</translation>
     </message>
     <message>
         <source>Timed out waiting for the server to set up remote listening</source>
-        <translation type="unfinished">Timeout nell'attesa che il server configurasse l'ascolto remoto</translation>
+        <translation type="unfinished">Timeout nell&apos;attesa che il server configurasse l&apos;ascolto remoto</translation>
     </message>
     <message>
         <source>The connection plan is empty or the first hop is invalid</source>
@@ -4459,7 +4491,7 @@ Chiave pubblica: %3</translation>
         <translation type="unfinished">Avvio del terminale locale…</translation>
     </message>
     <message>
-        <source>Starting local terminal…<byte value="xd" />
+        <source>Starting local terminal…<byte value="xd"/>
 </source>
         <translation type="unfinished">Avvio del terminale locale…</translation>
     </message>
@@ -4489,21 +4521,21 @@ Chiave pubblica: %3</translation>
     </message>
     <message>
         <source>Shell integration for %1 is not enabled; nested detection is degraded: %2</source>
-        <translation type="unfinished">L'integrazione della shell per %1 non è attiva; il rilevamento annidato è degradato: %2</translation>
+        <translation type="unfinished">L&apos;integrazione della shell per %1 non è attiva; il rilevamento annidato è degradato: %2</translation>
     </message>
     <message>
-        <source>Permission denied, please try again.<byte value="xd" />
-%1's password: </source>
+        <source>Permission denied, please try again.<byte value="xd"/>
+%1&apos;s password: </source>
         <translation type="unfinished">Autorizzazione negata, riprova.
 Password di %1:</translation>
     </message>
     <message>
-        <source>%1's password: </source>
+        <source>%1&apos;s password: </source>
         <translation type="unfinished">Password di %1:</translation>
     </message>
     <message>
-        <source><byte value="xd" />
-Could not establish the nested connection to %1: %2<byte value="xd" />
+        <source><byte value="xd"/>
+Could not establish the nested connection to %1: %2<byte value="xd"/>
 </source>
         <translation type="unfinished">Impossibile stabilire la connessione annidata a %1: %2</translation>
     </message>
@@ -4513,7 +4545,7 @@ Could not establish the nested connection to %1: %2<byte value="xd" />
     </message>
     <message>
         <source>This server has TCP forwarding disabled</source>
-        <translation type="unfinished">Questo server ha l'inoltro TCP disattivato</translation>
+        <translation type="unfinished">Questo server ha l&apos;inoltro TCP disattivato</translation>
     </message>
     <message>
         <source>The nested connection was not taken over: %1</source>
@@ -4530,7 +4562,7 @@ Could not establish the nested connection to %1: %2<byte value="xd" />
     <message>
         <source>Server %1 offers only hmac-sha1, which the default security policy cannot use to complete the connection.
 
-hmac-sha1 is obsolete; upgrading the server's SSH configuration is recommended. Enable this algorithm for this connection only and retry?
+hmac-sha1 is obsolete; upgrading the server&apos;s SSH configuration is recommended. Enable this algorithm for this connection only and retry?
 
 Details: %2</source>
         <translation type="unfinished">Il server %1 offre solo hmac-sha1, che i criteri di sicurezza predefiniti non possono usare per completare la connessione.
@@ -4571,7 +4603,7 @@ Verify the fingerprint through a trusted channel. Trust it and write it to known
 Impronta SHA-256:
 %2
 
-Verifica l'impronta tramite un canale attendibile. Considerarla attendibile e scriverla in known_hosts?</translation>
+Verifica l&apos;impronta tramite un canale attendibile. Considerarla attendibile e scriverla in known_hosts?</translation>
     </message>
     <message>
         <source>The server host key has changed</source>
@@ -4591,7 +4623,7 @@ Confirm the key has changed and replace the old record in known_hosts?</source>
 Nuova impronta SHA-256:
 %2
 
-Potrebbe essere una reinstallazione del server o una rotazione della chiave, oppure un attacco man-in-the-middle. Verifica prima la nuova impronta con l'amministratore del server tramite un canale attendibile.
+Potrebbe essere una reinstallazione del server o una rotazione della chiave, oppure un attacco man-in-the-middle. Verifica prima la nuova impronta con l&apos;amministratore del server tramite un canale attendibile.
 
 Confermare che la chiave è cambiata e sostituire il vecchio record in known_hosts?</translation>
     </message>
@@ -4612,14 +4644,14 @@ Confermare che la chiave è cambiata e sostituire il vecchio record in known_hos
         <translation type="unfinished">Premi r per riconnetterti a %1, x per chiudere questa scheda</translation>
     </message>
     <message>
-        <source><byte value="xd" />
-No server to reconnect to; press x to close this tab<byte value="xd" />
+        <source><byte value="xd"/>
+No server to reconnect to; press x to close this tab<byte value="xd"/>
 </source>
         <translation type="unfinished">Nessun server a cui riconnettersi; premi x per chiudere questa scheda</translation>
     </message>
     <message>
-        <source><byte value="xd" />
-Reconnecting manually…<byte value="xd" />
+        <source><byte value="xd"/>
+Reconnecting manually…<byte value="xd"/>
 </source>
         <translation type="unfinished">Riconnessione manuale…</translation>
     </message>
@@ -4672,9 +4704,9 @@ Reconnecting manually…<byte value="xd" />
         <translation type="unfinished">Questo ssh non è stato preso in carico (%1); è stato lasciato al remoto di eseguirlo da solo</translation>
     </message>
     <message>
-        <source>Shellium could not take over this connection (%1); handing it to the remote ssh to run directly.<byte value="xd" />
+        <source>Shellium could not take over this connection (%1); handing it to the remote ssh to run directly.<byte value="xd"/>
 </source>
-        <translation type="unfinished">Shellium non è riuscito a prendere in carico questa connessione (%1); viene passata all'ssh remoto per l'esecuzione diretta.</translation>
+        <translation type="unfinished">Shellium non è riuscito a prendere in carico questa connessione (%1); viene passata all&apos;ssh remoto per l&apos;esecuzione diretta.</translation>
     </message>
     <message>
         <source>%1, fell back to %2</source>
@@ -4685,35 +4717,35 @@ Reconnecting manually…<byte value="xd" />
     <name>TerminalSettingsService</name>
     <message>
         <source>The settings service has no app database available</source>
-        <translation type="unfinished">Il servizio impostazioni non ha alcun database dell'app disponibile</translation>
+        <translation type="unfinished">Il servizio impostazioni non ha alcun database dell&apos;app disponibile</translation>
     </message>
     <message>
-        <source>The value '%2' of setting %1 is not an integer; the default has been restored</source>
-        <translation type="unfinished">Il valore '%2' dell'impostazione %1 non è un intero; il valore predefinito è stato ripristinato</translation>
+        <source>The value &apos;%2&apos; of setting %1 is not an integer; the default has been restored</source>
+        <translation type="unfinished">Il valore &apos;%2&apos; dell&apos;impostazione %1 non è un intero; il valore predefinito è stato ripristinato</translation>
     </message>
     <message>
-        <source>The value '%2' of setting %1 is not a boolean; the default has been restored</source>
-        <translation type="unfinished">Il valore '%2' dell'impostazione %1 non è un booleano; il valore predefinito è stato ripristinato</translation>
+        <source>The value &apos;%2&apos; of setting %1 is not a boolean; the default has been restored</source>
+        <translation type="unfinished">Il valore &apos;%2&apos; dell&apos;impostazione %1 non è un booleano; il valore predefinito è stato ripristinato</translation>
     </message>
     <message>
-        <source>Unknown theme '%1'; reverted to follow system</source>
-        <translation type="unfinished">Tema sconosciuto '%1'; ripristinato a segui il sistema</translation>
+        <source>Unknown theme &apos;%1&apos;; reverted to follow system</source>
+        <translation type="unfinished">Tema sconosciuto &apos;%1&apos;; ripristinato a segui il sistema</translation>
     </message>
     <message>
-        <source>Unknown terminal color scheme '%1'; reverted to the default scheme</source>
-        <translation type="unfinished">Combinazione di colori del terminale sconosciuta '%1'; ripristinata alla combinazione predefinita</translation>
+        <source>Unknown terminal color scheme &apos;%1&apos;; reverted to the default scheme</source>
+        <translation type="unfinished">Combinazione di colori del terminale sconosciuta &apos;%1&apos;; ripristinata alla combinazione predefinita</translation>
     </message>
     <message>
-        <source>Letter spacing '%1' is invalid; the default has been restored</source>
-        <translation type="unfinished">La spaziatura dei caratteri '%1' non è valida; il valore predefinito è stato ripristinato</translation>
+        <source>Letter spacing &apos;%1&apos; is invalid; the default has been restored</source>
+        <translation type="unfinished">La spaziatura dei caratteri &apos;%1&apos; non è valida; il valore predefinito è stato ripristinato</translation>
     </message>
     <message>
-        <source>Unknown cursor shape '%1'; reverted to block cursor</source>
-        <translation type="unfinished">Forma del cursore sconosciuta '%1'; ripristinata al cursore a blocco</translation>
+        <source>Unknown cursor shape &apos;%1&apos;; reverted to block cursor</source>
+        <translation type="unfinished">Forma del cursore sconosciuta &apos;%1&apos;; ripristinata al cursore a blocco</translation>
     </message>
     <message>
-        <source>The shortcut '%2' for action '%1' is invalid; the default has been restored</source>
-        <translation type="unfinished">La scorciatoia '%2' per l'azione '%1' non è valida; il valore predefinito è stato ripristinato</translation>
+        <source>The shortcut &apos;%2&apos; for action &apos;%1&apos; is invalid; the default has been restored</source>
+        <translation type="unfinished">La scorciatoia &apos;%2&apos; per l&apos;azione &apos;%1&apos; non è valida; il valore predefinito è stato ripristinato</translation>
     </message>
     <message>
         <source>; all shortcuts have been restored to their defaults</source>
@@ -4728,7 +4760,7 @@ Reconnecting manually…<byte value="xd" />
     </message>
     <message>
         <source>The content has %1 lines and may run multiple commands immediately after being sent.</source>
-        <translation type="unfinished">Il contenuto ha %1 righe e può eseguire più comandi subito dopo l'invio.</translation>
+        <translation type="unfinished">Il contenuto ha %1 righe e può eseguire più comandi subito dopo l&apos;invio.</translation>
     </message>
     <message>
         <source>Removed %1 invisible characters that could inject terminal control sequences.</source>
@@ -4740,7 +4772,7 @@ Reconnecting manually…<byte value="xd" />
     </message>
     <message>
         <source>Confirm terminal paste</source>
-        <translation type="unfinished">Conferma l'incolla nel terminale</translation>
+        <translation type="unfinished">Conferma l&apos;incolla nel terminale</translation>
     </message>
     <message>
         <source>Paste</source>
@@ -4796,7 +4828,7 @@ Reconnecting manually…<byte value="xd" />
     </message>
     <message>
         <source>Broadcast input to every terminal in this workspace</source>
-        <translation type="unfinished">Trasmetti l'input a tutti i terminali di questo spazio di lavoro</translation>
+        <translation type="unfinished">Trasmetti l&apos;input a tutti i terminali di questo spazio di lavoro</translation>
     </message>
     <message>
         <source>Toggle between tiled split view and one-terminal-at-a-time view</source>
@@ -4907,11 +4939,11 @@ Reconnecting manually…<byte value="xd" />
     </message>
     <message>
         <source>Resetting permanently deletes all saved SSH passwords and private key passphrases and removes their association with hosts. Host addresses, accounts, ports, private key file paths, groups, and host chains are kept. This action cannot be undone.</source>
-        <translation type="unfinished">La reimpostazione elimina definitivamente tutte le password SSH e le passphrase delle chiavi private salvate e ne rimuove l'associazione con gli host. Gli indirizzi degli host, gli account, le porte, i percorsi dei file di chiave privata, i gruppi e le catene di host vengono conservati. Questa azione non può essere annullata.</translation>
+        <translation type="unfinished">La reimpostazione elimina definitivamente tutte le password SSH e le passphrase delle chiavi private salvate e ne rimuove l&apos;associazione con gli host. Gli indirizzi degli host, gli account, le porte, i percorsi dei file di chiave privata, i gruppi e le catene di host vengono conservati. Questa azione non può essere annullata.</translation>
     </message>
     <message>
-        <source>Type '%1' to confirm:</source>
-        <translation type="unfinished">Digita '%1' per confermare:</translation>
+        <source>Type &apos;%1&apos; to confirm:</source>
+        <translation type="unfinished">Digita &apos;%1&apos; per confermare:</translation>
     </message>
     <message>
         <source>Permanently delete and reset</source>
@@ -4974,7 +5006,7 @@ Reconnecting manually…<byte value="xd" />
     </message>
     <message>
         <source>Broadcast input to all terminals</source>
-        <translation type="unfinished">Trasmetti l'input a tutti i terminali</translation>
+        <translation type="unfinished">Trasmetti l&apos;input a tutti i terminali</translation>
     </message>
 </context>
 </TS>

@@ -408,8 +408,8 @@ Run it in the current terminal?</source>
         <translation>编辑主机链</translation>
     </message>
     <message>
-        <source>The hosts you add connect in the following order, finally reaching &lt;span style="font-family: monospace; font-weight: 600;"&gt;%1&lt;/span&gt;.</source>
-        <translation>添加的主机将按下列顺序建立连接，最后进入 &lt;span style="font-family: monospace; font-weight: 600;"&gt;%1&lt;/span&gt;。</translation>
+        <source>The hosts you add connect in the following order, finally reaching &lt;span style=&quot;font-family: monospace; font-weight: 600;&quot;&gt;%1&lt;/span&gt;.</source>
+        <translation>添加的主机将按下列顺序建立连接，最后进入 &lt;span style=&quot;font-family: monospace; font-weight: 600;&quot;&gt;%1&lt;/span&gt;。</translation>
     </message>
     <message>
         <source>Add host</source>
@@ -526,7 +526,7 @@ Run it in the current terminal?</source>
         <source>Import Hosts…</source>
         <translation>导入主机…</translation>
     </message>
-<message>
+    <message>
         <source>Import from Excel…</source>
         <translation>从 Excel 导入…</translation>
     </message>
@@ -627,11 +627,11 @@ Run it in the current terminal?</source>
         <translation>更新节点</translation>
     </message>
     <message>
-        <source>Deleting group '%1' also deletes all of its subgroups and hosts, and cannot be undone. Continue?</source>
+        <source>Deleting group &apos;%1&apos; also deletes all of its subgroups and hosts, and cannot be undone. Continue?</source>
         <translation>删除分组“%1”会同时删除其全部子分组和主机，且无法撤销。确定继续吗？</translation>
     </message>
     <message>
-        <source>Delete host '%1'? This action cannot be undone.</source>
+        <source>Delete host &apos;%1&apos;? This action cannot be undone.</source>
         <translation>确定删除主机“%1”吗？此操作无法撤销。</translation>
     </message>
     <message>
@@ -690,35 +690,35 @@ Run it in the current terminal?</source>
         <source>Successfully imported %1 records.</source>
         <translation>已成功导入 %1 条记录。</translation>
     </message>
-<message>
+    <message>
         <source>The Excel file has no usable host records.</source>
         <translation>Excel 文件中没有可用的主机记录。</translation>
     </message>
-<message>
+    <message>
         <source>The host database or credential vault is unavailable.</source>
         <translation>主机数据库或凭据保险库不可用。</translation>
     </message>
-<message>
+    <message>
         <source>Excel import failed</source>
         <translation>Excel 导入失败</translation>
     </message>
-<message>
+    <message>
         <source>%1 host records will be imported into the current folder. Passwords will be encrypted automatically.</source>
         <translation>将导入 %1 台主机到当前目录。密码将自动加密保存。</translation>
     </message>
-<message>
+    <message>
         <source>Confirm Excel import</source>
         <translation>确认 Excel 导入</translation>
     </message>
-<message>
+    <message>
         <source>Import hosts from Excel</source>
         <translation>从 Excel 导入主机</translation>
     </message>
-<message>
+    <message>
         <source>Excel import complete</source>
         <translation>Excel 导入完成</translation>
     </message>
-<message>
+    <message>
         <source>Successfully imported %1 hosts.</source>
         <translation>已成功导入 %1 台主机。</translation>
     </message>
@@ -967,7 +967,7 @@ System: %2</source>
         <translation>需要主密码保护</translation>
     </message>
     <message>
-        <source>Viewing host passwords requires master password protection. Go to 'Settings → Connections &amp; Security → Credential Vault' and turn on 'Protect credentials with a master password'.</source>
+        <source>Viewing host passwords requires master password protection. Go to &apos;Settings → Connections &amp; Security → Credential Vault&apos; and turn on &apos;Protect credentials with a master password&apos;.</source>
         <translation>查看主机密码需要先启用主密码保护。请前往“设置 → 连接与安全 → 凭据保险箱”，开启“使用主密码保护凭据”。</translation>
     </message>
     <message>
@@ -1099,7 +1099,7 @@ System: %2</source>
         <translation>无法测试连接</translation>
     </message>
     <message>
-        <source>Could not read the saved credentials for '%1'.</source>
+        <source>Could not read the saved credentials for &apos;%1&apos;.</source>
         <translation>无法读取“%1”的已保存凭据。</translation>
     </message>
     <message>
@@ -1111,7 +1111,7 @@ System: %2</source>
         <translation>已成功连接 %1。</translation>
     </message>
     <message>
-        <source>The server only supports legacy hmac-sha1. If you have accepted the risk, turn on 'Legacy compatibility' and retry.
+        <source>The server only supports legacy hmac-sha1. If you have accepted the risk, turn on &apos;Legacy compatibility&apos; and retry.
 
 %1</source>
         <translation>服务器只支持旧版 hmac-sha1。若已确认风险，请开启“旧版兼容”后重试。
@@ -1123,7 +1123,7 @@ System: %2</source>
         <translation>SSH 认证失败，请检查密码或私钥口令后重试。</translation>
     </message>
     <message>
-        <source>The server requires a password or private key passphrase. Fill in 'Password' and retry.</source>
+        <source>The server requires a password or private key passphrase. Fill in &apos;Password&apos; and retry.</source>
         <translation>服务器需要密码或私钥口令，请填写“密码”后重试。</translation>
     </message>
     <message>
@@ -1526,6 +1526,30 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation>凭据保险库因闲置已自动锁定</translation>
     </message>
     <message>
+        <source>Hide the sidebar?</source>
+        <translation>隐藏侧边栏？</translation>
+    </message>
+    <message>
+        <source>Double-clicking this divider hides the sidebar. Hide it now?</source>
+        <translation>双击此分隔条会隐藏侧边栏。现在隐藏吗？</translation>
+    </message>
+    <message>
+        <source>Do not show this again</source>
+        <translation>下次不再提示</translation>
+    </message>
+    <message>
+        <source>Hide sidebar</source>
+        <translation>隐藏侧边栏</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation type="unfinished">取消</translation>
+    </message>
+    <message>
+        <source>Failed to save sidebar prompt preference: %1</source>
+        <translation>保存侧边栏提示偏好失败：%1</translation>
+    </message>
+    <message>
         <source>Could not switch to the selected language; check that the language pack is complete</source>
         <translation>无法切换到所选语言，请检查语言包是否完整</translation>
     </message>
@@ -1686,7 +1710,7 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation>查找文本：</translation>
     </message>
     <message>
-        <source>'%1' was not found in the terminal output</source>
+        <source>&apos;%1&apos; was not found in the terminal output</source>
         <translation>终端输出中未找到“%1”</translation>
     </message>
     <message>
@@ -1718,11 +1742,11 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation>工作区包含临时连接</translation>
     </message>
     <message>
-        <source>Tab '%1' is not a persistent host opened from the host tree. Save this connection to the host tree first, then save the workspace.</source>
+        <source>Tab &apos;%1&apos; is not a persistent host opened from the host tree. Save this connection to the host tree first, then save the workspace.</source>
         <translation>标签“%1”不是从主机树打开的持久化主机。请先把该连接保存到主机树，再保存工作区。</translation>
     </message>
     <message>
-        <source>Failed to check the host record for tab '%1': %2</source>
+        <source>Failed to check the host record for tab &apos;%1&apos;: %2</source>
         <translation>检查标签“%1”的主机记录失败：%2</translation>
     </message>
     <message>
@@ -1750,11 +1774,11 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation>覆盖已有工作区</translation>
     </message>
     <message>
-        <source>A workspace named '%1' already exists. Overwrite it with the current set of tabs?</source>
+        <source>A workspace named &apos;%1&apos; already exists. Overwrite it with the current set of tabs?</source>
         <translation>已存在名为“%1”的工作区，是否用当前标签组合覆盖？</translation>
     </message>
     <message>
-        <source>Workspace '%1' saved (%2 tabs)</source>
+        <source>Workspace &apos;%1&apos; saved (%2 tabs)</source>
         <translation>工作区“%1”已保存（%2 个标签）</translation>
     </message>
     <message>
@@ -1790,7 +1814,7 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation>工作区布局损坏</translation>
     </message>
     <message>
-        <source>The version, tab list, or count of workspace '%1' is invalid; the current session was not modified.</source>
+        <source>The version, tab list, or count of workspace &apos;%1&apos; is invalid; the current session was not modified.</source>
         <translation>工作区“%1”的版本、标签列表或数量无效，当前会话未被修改。</translation>
     </message>
     <message>
@@ -1810,7 +1834,7 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation>主机链无法解析：%1</translation>
     </message>
     <message>
-        <source>Workspace '%1' could not be fully restored: %2. The current session was not modified.</source>
+        <source>Workspace &apos;%1&apos; could not be fully restored: %2. The current session was not modified.</source>
         <translation>工作区“%1”无法完整恢复：%2。当前会话未被修改。</translation>
     </message>
     <message>
@@ -1818,11 +1842,11 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation>替换当前工作区</translation>
     </message>
     <message>
-        <source>Opening '%1' closes the current %2 tabs and their connections, then restores %3 tabs. Continue?</source>
+        <source>Opening &apos;%1&apos; closes the current %2 tabs and their connections, then restores %3 tabs. Continue?</source>
         <translation>打开“%1”会关闭当前 %2 个标签及其连接，然后恢复 %3 个标签。是否继续？</translation>
     </message>
     <message>
-        <source>Workspace '%1' restored</source>
+        <source>Workspace &apos;%1&apos; restored</source>
         <translation>工作区“%1”已恢复</translation>
     </message>
     <message>
@@ -2009,7 +2033,7 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation>主机尚未连接</translation>
     </message>
     <message>
-        <source>Connect to '%1' from the host tree first, then start this rule.</source>
+        <source>Connect to &apos;%1&apos; from the host tree first, then start this rule.</source>
         <translation>请先从主机树连接“%1”，再启动这条规则。</translation>
     </message>
     <message>
@@ -2037,7 +2061,7 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation>当前主机还没有可启动的端口转发规则。</translation>
     </message>
     <message>
-        <source>Connect to '%1' from the host tree first, then start all forwarding rules.</source>
+        <source>Connect to &apos;%1&apos; from the host tree first, then start all forwarding rules.</source>
         <translation>请先从主机树连接“%1”，再启动全部转发规则。</translation>
     </message>
     <message>
@@ -2045,7 +2069,7 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation>确认启动全部转发</translation>
     </message>
     <message>
-        <source>This will start all %2 forwarding rules under host '%1'; rules already running are left unchanged. Continue?</source>
+        <source>This will start all %2 forwarding rules under host &apos;%1&apos;; rules already running are left unchanged. Continue?</source>
         <translation>将启动主机“%1”下的全部 %2 条转发规则；已在运行的规则会保持不变。是否继续？</translation>
     </message>
     <message>
@@ -2075,7 +2099,7 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation>确认停止全部转发</translation>
     </message>
     <message>
-        <source>This will stop %2 active forwarding rules under host '%1' and close the related connections. Continue?</source>
+        <source>This will stop %2 active forwarding rules under host &apos;%1&apos; and close the related connections. Continue?</source>
         <translation>将停止主机“%1”下的 %2 条活动转发规则，并关闭相关连接。是否继续？</translation>
     </message>
     <message>
@@ -2103,7 +2127,7 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation>读取自动转发规则失败：%1</translation>
     </message>
     <message>
-        <source>Failed to auto-start '%1': %2</source>
+        <source>Failed to auto-start &apos;%1&apos;: %2</source>
         <translation>自动启动“%1”失败：%2</translation>
     </message>
     <message>
@@ -2192,7 +2216,7 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation>目标：</translation>
     </message>
     <message>
-        <source>Security note: setting the listen address to 0.0.0.0 or :: exposes the port to the local network and the internet; reachability still depends on the system firewall and the SSH server's GatewayPorts setting.</source>
+        <source>Security note: setting the listen address to 0.0.0.0 or :: exposes the port to the local network and the internet; reachability still depends on the system firewall and the SSH server&apos;s GatewayPorts setting.</source>
         <translation>安全提示：把监听地址设为 0.0.0.0 或 :: 会向局域网/公网暴露端口；是否可达仍受系统防火墙和 SSH 服务端 GatewayPorts 限制。</translation>
     </message>
     <message>
@@ -2222,15 +2246,15 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
 <context>
     <name>PortForwardWorker</name>
     <message>
-        <source>The SSH session is not ready; cannot start forwarding '%1'</source>
+        <source>The SSH session is not ready; cannot start forwarding &apos;%1&apos;</source>
         <translation>SSH 会话尚未就绪，无法启动转发“%1”</translation>
     </message>
     <message>
-        <source>Failed to start remote forwarding '%1': %2</source>
+        <source>Failed to start remote forwarding &apos;%1&apos;: %2</source>
         <translation>启动远程转发“%1”失败：%2</translation>
     </message>
     <message>
-        <source>The listen address '%1' is not a bindable local IP address</source>
+        <source>The listen address &apos;%1&apos; is not a bindable local IP address</source>
         <translation>监听地址“%1”不是可绑定的本机 IP 地址</translation>
     </message>
     <message>
@@ -2563,7 +2587,7 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation>打开设置</translation>
     </message>
     <message>
-        <source>Shortcut %1 is assigned to both '%2' and '%3'</source>
+        <source>Shortcut %1 is assigned to both &apos;%2&apos; and &apos;%3&apos;</source>
         <translation>快捷键 %1 同时分配给“%2”和“%3”</translation>
     </message>
     <message>
@@ -2921,7 +2945,7 @@ The remote-key SFTP fallback also failed: %2</source>
         <translation>无法确定用户 known_hosts 文件位置。</translation>
     </message>
     <message>
-        <source>Could not export the server's new host key: %1</source>
+        <source>Could not export the server&apos;s new host key: %1</source>
         <translation>无法导出服务器的新主机密钥：%1</translation>
     </message>
     <message>
@@ -2977,7 +3001,7 @@ To avoid overwriting existing credentials, Shellium does not create a new vault 
         <translation>无法启用主密码保护</translation>
     </message>
     <message>
-        <source>The vault's current state does not allow enabling master password protection again.</source>
+        <source>The vault&apos;s current state does not allow enabling master password protection again.</source>
         <translation>保险箱当前状态不允许重复启用主密码保护。</translation>
     </message>
     <message>
@@ -3126,7 +3150,7 @@ Off: everything is re-uploaded in full regardless of whether content matches.</s
 关闭时：无论内容是否相同，一律完整重传。</translation>
     </message>
     <message>
-        <source>Transfers run strictly in order; select a waiting item and click 'Deselect' to remove it directly.</source>
+        <source>Transfers run strictly in order; select a waiting item and click &apos;Deselect&apos; to remove it directly.</source>
         <translation>传输严格按顺序执行；选择等待项后点击“取消选中”可直接移除。</translation>
     </message>
     <message>
@@ -3564,7 +3588,7 @@ This action cannot be undone.</source>
     <message>
         <source>
 
-⚠ This server was inferred by parsing terminal commands and may not be the one you expect. Run 'hostname' in the terminal to verify before continuing.</source>
+⚠ This server was inferred by parsing terminal commands and may not be the one you expect. Run &apos;hostname&apos; in the terminal to verify before continuing.</source>
         <translation>
 
 ⚠ 该服务器是由解析终端命令推测得出的，可能并非你以为的那一台。请先在终端执行 hostname 核对后再继续。</translation>
@@ -3612,7 +3636,7 @@ This action cannot be undone.</source>
     <message>
         <source>The SFTP service of server %1 offers only hmac-sha1.
 
-This algorithm is obsolete; upgrading the server's SSH configuration is recommended. Enable it for this connection only and retry?
+This algorithm is obsolete; upgrading the server&apos;s SSH configuration is recommended. Enable it for this connection only and retry?
 
 %2</source>
         <translation>服务器 %1 的 SFTP 服务仅提供 hmac-sha1。
@@ -3701,7 +3725,7 @@ This algorithm is obsolete; upgrading the server's SSH configuration is recommen
         <translation>界面外观</translation>
     </message>
     <message>
-        <source>'Follow system' syncs automatically when the operating system switches between light and dark appearance.</source>
+        <source>&apos;Follow system&apos; syncs automatically when the operating system switches between light and dark appearance.</source>
         <translation>“跟随系统”会在操作系统切换深浅外观时自动同步。</translation>
     </message>
     <message>
@@ -3731,6 +3755,14 @@ This algorithm is obsolete; upgrading the server's SSH configuration is recommen
     <message>
         <source>Font</source>
         <translation>字体</translation>
+    </message>
+    <message>
+        <source>Confirm before hiding the sidebar</source>
+        <translation>隐藏侧边栏前确认</translation>
+    </message>
+    <message>
+        <source>Ask before hiding the sidebar when you double-click its divider.</source>
+        <translation>双击侧边栏分隔条时，隐藏前先询问。</translation>
     </message>
     <message>
         <source>Monospace font</source>
@@ -3801,7 +3833,7 @@ This algorithm is obsolete; upgrading the server's SSH configuration is recommen
         <translation>命令行自动提示</translation>
     </message>
     <message>
-        <source>After you type at least two characters, suggestions are shown automatically from the current host's command history; off by default.</source>
+        <source>After you type at least two characters, suggestions are shown automatically from the current host&apos;s command history; off by default.</source>
         <translation>输入至少两个字符后，根据当前主机的命令历史自动显示候选；默认关闭。</translation>
     </message>
     <message>
@@ -3929,7 +3961,7 @@ This algorithm is obsolete; upgrading the server's SSH configuration is recommen
         <translation>保存</translation>
     </message>
     <message>
-        <source>Unlike other settings, changes to the address and key are not saved character by character; click 'Save', so that every keystroke does not trigger an encrypted write.</source>
+        <source>Unlike other settings, changes to the address and key are not saved character by character; click &apos;Save&apos;, so that every keystroke does not trigger an encrypted write.</source>
         <translation>地址和密钥的改动不会像其他设置项那样逐字符自动保存，需要点击“保存”，避免每敲一个字符都触发一次加密写入。</translation>
     </message>
     <message>
@@ -4173,7 +4205,7 @@ Public key: %3</source>
         <translation>私钥格式不支持、文件损坏或口令错误。</translation>
     </message>
     <message>
-        <source>Verification passed: %1%2. You can select this file in the 'Private key' field of the host editor.</source>
+        <source>Verification passed: %1%2. You can select this file in the &apos;Private key&apos; field of the host editor.</source>
         <translation>校验通过：%1%2。可在主机编辑器的“私钥”字段选择此文件。</translation>
     </message>
     <message>
@@ -4461,7 +4493,7 @@ Public key: %3</source>
         <translation>正在启动本地终端…</translation>
     </message>
     <message>
-        <source>Starting local terminal…<byte value="xd" />
+        <source>Starting local terminal…<byte value="xd"/>
 </source>
         <translation>正在启动本地终端…
 </translation>
@@ -4495,18 +4527,18 @@ Public key: %3</source>
         <translation>%1 的 Shell 集成未启用，嵌套识别已降级：%2</translation>
     </message>
     <message>
-        <source>Permission denied, please try again.<byte value="xd" />
-%1's password: </source>
+        <source>Permission denied, please try again.<byte value="xd"/>
+%1&apos;s password: </source>
         <translation>Permission denied, please try again.
 %1’s password: </translation>
     </message>
     <message>
-        <source>%1's password: </source>
-        <translation>%1's password: </translation>
+        <source>%1&apos;s password: </source>
+        <translation>%1&apos;s password: </translation>
     </message>
     <message>
-        <source><byte value="xd" />
-Could not establish the nested connection to %1: %2<byte value="xd" />
+        <source><byte value="xd"/>
+Could not establish the nested connection to %1: %2<byte value="xd"/>
 </source>
         <translation>
 无法建立到 %1 的嵌套连接：%2
@@ -4535,7 +4567,7 @@ Could not establish the nested connection to %1: %2<byte value="xd" />
     <message>
         <source>Server %1 offers only hmac-sha1, which the default security policy cannot use to complete the connection.
 
-hmac-sha1 is obsolete; upgrading the server's SSH configuration is recommended. Enable this algorithm for this connection only and retry?
+hmac-sha1 is obsolete; upgrading the server&apos;s SSH configuration is recommended. Enable this algorithm for this connection only and retry?
 
 Details: %2</source>
         <translation>服务器 %1 仅提供 hmac-sha1，默认安全策略无法完成连接。
@@ -4617,16 +4649,16 @@ Confirm the key has changed and replace the old record in known_hosts?</source>
         <translation>按 r 重新连接 %1，按 x 关闭该标签页</translation>
     </message>
     <message>
-        <source><byte value="xd" />
-No server to reconnect to; press x to close this tab<byte value="xd" />
+        <source><byte value="xd"/>
+No server to reconnect to; press x to close this tab<byte value="xd"/>
 </source>
         <translation>
 没有可重连的服务器，请按 x 关闭该标签页
 </translation>
     </message>
     <message>
-        <source><byte value="xd" />
-Reconnecting manually…<byte value="xd" />
+        <source><byte value="xd"/>
+Reconnecting manually…<byte value="xd"/>
 </source>
         <translation>
 正在手动重连…
@@ -4681,7 +4713,7 @@ Reconnecting manually…<byte value="xd" />
         <translation>未接管本次 ssh（%1），已交由远端自行执行</translation>
     </message>
     <message>
-        <source>Shellium could not take over this connection (%1); handing it to the remote ssh to run directly.<byte value="xd" />
+        <source>Shellium could not take over this connection (%1); handing it to the remote ssh to run directly.<byte value="xd"/>
 </source>
         <translation>Shellium 未能接管本次连接（%1），正在交由远端 ssh 直接执行。
 </translation>
@@ -4698,31 +4730,31 @@ Reconnecting manually…<byte value="xd" />
         <translation>设置服务没有可用的应用数据库</translation>
     </message>
     <message>
-        <source>The value '%2' of setting %1 is not an integer; the default has been restored</source>
+        <source>The value &apos;%2&apos; of setting %1 is not an integer; the default has been restored</source>
         <translation>设置项 %1 的值“%2”不是整数，已恢复默认值</translation>
     </message>
     <message>
-        <source>The value '%2' of setting %1 is not a boolean; the default has been restored</source>
+        <source>The value &apos;%2&apos; of setting %1 is not a boolean; the default has been restored</source>
         <translation>设置项 %1 的值“%2”不是布尔值，已恢复默认值</translation>
     </message>
     <message>
-        <source>Unknown theme '%1'; reverted to follow system</source>
+        <source>Unknown theme &apos;%1&apos;; reverted to follow system</source>
         <translation>未知主题“%1”，已恢复为跟随系统</translation>
     </message>
     <message>
-        <source>Unknown terminal color scheme '%1'; reverted to the default scheme</source>
+        <source>Unknown terminal color scheme &apos;%1&apos;; reverted to the default scheme</source>
         <translation>未知终端配色“%1”，已恢复默认配色</translation>
     </message>
     <message>
-        <source>Letter spacing '%1' is invalid; the default has been restored</source>
+        <source>Letter spacing &apos;%1&apos; is invalid; the default has been restored</source>
         <translation>字符间距“%1”无效，已恢复默认值</translation>
     </message>
     <message>
-        <source>Unknown cursor shape '%1'; reverted to block cursor</source>
+        <source>Unknown cursor shape &apos;%1&apos;; reverted to block cursor</source>
         <translation>未知光标形态“%1”，已恢复为块状光标</translation>
     </message>
     <message>
-        <source>The shortcut '%2' for action '%1' is invalid; the default has been restored</source>
+        <source>The shortcut &apos;%2&apos; for action &apos;%1&apos; is invalid; the default has been restored</source>
         <translation>动作“%1”的快捷键“%2”无效，已恢复默认值</translation>
     </message>
     <message>
@@ -4920,7 +4952,7 @@ Reconnecting manually…<byte value="xd" />
         <translation>重置会永久删除全部已保存的 SSH 密码和私钥口令，并解除它们与主机的关联。主机地址、账号、端口、私钥文件路径、分组和主机链会保留。此操作无法撤销。</translation>
     </message>
     <message>
-        <source>Type '%1' to confirm:</source>
+        <source>Type &apos;%1&apos; to confirm:</source>
         <translation>请输入“%1”确认：</translation>
     </message>
     <message>

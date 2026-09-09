@@ -33,6 +33,7 @@ class QStackedWidget;
 class QTabWidget;
 class QTimer;
 class QToolButton;
+class QVariantAnimation;
 class QWidget;
 class SessionTabBar;
 class SessionTabDropOverlay;
@@ -241,6 +242,10 @@ private:
     /**
      * @brief 显示或隐藏左侧单一内容侧栏。
      * @param visible true 表示显示当前侧栏页面，false 表示仅保留窄图标导航轨。
+     *
+     * 通过动画修改 QSplitter 两个子区域的实际尺寸。动画期间不立即隐藏侧栏面板，避免
+     * QWidget 的显隐变化让布局瞬间跳变；内容保持展开宽度，在裁剪容器内向左滑出或
+     * 向右滑入。收起完成后才隐藏，反向请求从当前宽度继续，无返回值或 IO 错误。
      */
     void setSidebarVisible(bool visible);
 
@@ -430,6 +435,17 @@ private:
      * 也在磁盘上留下大量无意义事务。定时器只在拖动停下后写一次最终宽度。
      */
     QTimer *m_sidebarWidthPersistTimer = nullptr;
+    /**
+     * @brief 当前侧栏展开/收起动画；为空表示没有进行中的尺寸过渡。
+     *
+     * 使用单独的 QVariantAnimation 而不是阻塞式循环，是为了让终端、网络连接和窗口重绘在
+     * 动画期间继续处理；新的显隐请求会停止旧动画并从当前实际宽度继续，避免反向操作跳变。
+     */
+    QVariantAnimation *m_sidebarAnimation = nullptr;
+    /** @brief 最近一次有效的展开宽度，收起后用于恢复用户拖动过的宽度。 */
+    int m_sidebarExpandedWidth = 0;
+    /** @brief 当前显隐动画的目标状态，区别于收起动画结束前面板仍暂时可见的物理状态。 */
+    bool m_sidebarTargetVisible = true;
     /** @brief 承载主机、效率工具、端口转发、AI 和工作空间五个互斥页面。 */
     QStackedWidget *m_sidebarStack = nullptr;
     /** @brief 当前侧栏页面标题。 */

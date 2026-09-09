@@ -408,8 +408,8 @@ Run it in the current terminal?</source>
         <translation type="unfinished">ホストチェーンを編集</translation>
     </message>
     <message>
-        <source>The hosts you add connect in the following order, finally reaching &lt;span style="font-family: monospace; font-weight: 600;"&gt;%1&lt;/span&gt;.</source>
-        <translation type="unfinished">追加したホストは次の順序で接続し、最終的に &lt;span style="font-family: monospace; font-weight: 600;"&gt;%1&lt;/span&gt; に到達します。</translation>
+        <source>The hosts you add connect in the following order, finally reaching &lt;span style=&quot;font-family: monospace; font-weight: 600;&quot;&gt;%1&lt;/span&gt;.</source>
+        <translation type="unfinished">追加したホストは次の順序で接続し、最終的に &lt;span style=&quot;font-family: monospace; font-weight: 600;&quot;&gt;%1&lt;/span&gt; に到達します。</translation>
     </message>
     <message>
         <source>Add host</source>
@@ -526,7 +526,7 @@ Run it in the current terminal?</source>
         <source>Import Hosts…</source>
         <translation type="unfinished">ホストをインポート…</translation>
     </message>
-<message>
+    <message>
         <source>Import from Excel…</source>
         <translation>Excel からインポート…</translation>
     </message>
@@ -627,11 +627,11 @@ Run it in the current terminal?</source>
         <translation type="unfinished">ノードを更新</translation>
     </message>
     <message>
-        <source>Deleting group '%1' also deletes all of its subgroups and hosts, and cannot be undone. Continue?</source>
+        <source>Deleting group &apos;%1&apos; also deletes all of its subgroups and hosts, and cannot be undone. Continue?</source>
         <translation type="unfinished">グループ「%1」を削除すると、そのすべてのサブグループとホストも削除され、元に戻せません。続行しますか?</translation>
     </message>
     <message>
-        <source>Delete host '%1'? This action cannot be undone.</source>
+        <source>Delete host &apos;%1&apos;? This action cannot be undone.</source>
         <translation type="unfinished">ホスト「%1」を削除しますか? この操作は元に戻せません。</translation>
     </message>
     <message>
@@ -690,35 +690,35 @@ Run it in the current terminal?</source>
         <source>Successfully imported %1 records.</source>
         <translation type="unfinished">%1 件のレコードを正常にインポートしました。</translation>
     </message>
-<message>
+    <message>
         <source>The Excel file has no usable host records.</source>
         <translation>Excel ファイルにインポート可能なホストレコードがありません。</translation>
     </message>
-<message>
+    <message>
         <source>The host database or credential vault is unavailable.</source>
         <translation>ホストデータベースまたは資格情報保管庫を利用できません。</translation>
     </message>
-<message>
+    <message>
         <source>Excel import failed</source>
         <translation>Excel のインポートに失敗しました</translation>
     </message>
-<message>
+    <message>
         <source>%1 host records will be imported into the current folder. Passwords will be encrypted automatically.</source>
         <translation>%1 件のホストレコードを現在のフォルダーにインポートします。パスワードは自動的に暗号化されます。</translation>
     </message>
-<message>
+    <message>
         <source>Confirm Excel import</source>
         <translation>Excel のインポートを確認</translation>
     </message>
-<message>
+    <message>
         <source>Import hosts from Excel</source>
         <translation>Excel からホストをインポート</translation>
     </message>
-<message>
+    <message>
         <source>Excel import complete</source>
         <translation>Excel のインポートが完了しました</translation>
     </message>
-<message>
+    <message>
         <source>Successfully imported %1 hosts.</source>
         <translation>%1 台のホストを正常にインポートしました。</translation>
     </message>
@@ -967,7 +967,7 @@ System: %2</source>
         <translation type="unfinished">マスターパスワード保護が必要です</translation>
     </message>
     <message>
-        <source>Viewing host passwords requires master password protection. Go to 'Settings → Connections &amp; Security → Credential Vault' and turn on 'Protect credentials with a master password'.</source>
+        <source>Viewing host passwords requires master password protection. Go to &apos;Settings → Connections &amp; Security → Credential Vault&apos; and turn on &apos;Protect credentials with a master password&apos;.</source>
         <translation type="unfinished">ホストパスワードの表示にはマスターパスワード保護が必要です。「設定 → 接続とセキュリティ → 認証情報保管庫」で「認証情報をマスターパスワードで保護」を有効にしてください。</translation>
     </message>
     <message>
@@ -1099,7 +1099,7 @@ System: %2</source>
         <translation type="unfinished">接続をテストできませんでした</translation>
     </message>
     <message>
-        <source>Could not read the saved credentials for '%1'.</source>
+        <source>Could not read the saved credentials for &apos;%1&apos;.</source>
         <translation type="unfinished">「%1」の保存された認証情報を読み取れませんでした。</translation>
     </message>
     <message>
@@ -1111,7 +1111,7 @@ System: %2</source>
         <translation type="unfinished">%1 への接続に成功しました。</translation>
     </message>
     <message>
-        <source>The server only supports legacy hmac-sha1. If you have accepted the risk, turn on 'Legacy compatibility' and retry.
+        <source>The server only supports legacy hmac-sha1. If you have accepted the risk, turn on &apos;Legacy compatibility&apos; and retry.
 
 %1</source>
         <translation type="unfinished">サーバーは旧式の hmac-sha1 のみに対応しています。リスクを承知の場合は「旧バージョンとの互換性」を有効にしてもう一度試してください。
@@ -1123,7 +1123,7 @@ System: %2</source>
         <translation type="unfinished">SSH 認証に失敗しました。パスワードまたは秘密鍵のパスフレーズを確認してもう一度試してください。</translation>
     </message>
     <message>
-        <source>The server requires a password or private key passphrase. Fill in 'Password' and retry.</source>
+        <source>The server requires a password or private key passphrase. Fill in &apos;Password&apos; and retry.</source>
         <translation type="unfinished">サーバーはパスワードまたは秘密鍵のパスフレーズを要求しています。「パスワード」を入力してもう一度試してください。</translation>
     </message>
     <message>
@@ -1526,6 +1526,30 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">認証情報保管庫は非アクティブのため自動的にロックされました</translation>
     </message>
     <message>
+        <source>Hide the sidebar?</source>
+        <translation>サイドバーを非表示にしますか？</translation>
+    </message>
+    <message>
+        <source>Double-clicking this divider hides the sidebar. Hide it now?</source>
+        <translation>この仕切りをダブルクリックするとサイドバーが非表示になります。今すぐ非表示にしますか？</translation>
+    </message>
+    <message>
+        <source>Do not show this again</source>
+        <translation>次回から表示しない</translation>
+    </message>
+    <message>
+        <source>Hide sidebar</source>
+        <translation>サイドバーを非表示</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation type="unfinished">キャンセル</translation>
+    </message>
+    <message>
+        <source>Failed to save sidebar prompt preference: %1</source>
+        <translation>サイドバーの確認設定を保存できませんでした: %1</translation>
+    </message>
+    <message>
         <source>Press + in the title bar to open a new terminal tab, or connect to a server from the host list on the left.</source>
         <translation type="unfinished">タイトルバーの + を押して新しいターミナルタブを開くか、左のホスト一覧からサーバーに接続してください。</translation>
     </message>
@@ -1686,7 +1710,7 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">検索テキスト:</translation>
     </message>
     <message>
-        <source>'%1' was not found in the terminal output</source>
+        <source>&apos;%1&apos; was not found in the terminal output</source>
         <translation type="unfinished">ターミナル出力に「%1」が見つかりません</translation>
     </message>
     <message>
@@ -1718,11 +1742,11 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">ワークスペースに一時的な接続が含まれています</translation>
     </message>
     <message>
-        <source>Tab '%1' is not a persistent host opened from the host tree. Save this connection to the host tree first, then save the workspace.</source>
+        <source>Tab &apos;%1&apos; is not a persistent host opened from the host tree. Save this connection to the host tree first, then save the workspace.</source>
         <translation type="unfinished">タブ「%1」はホストツリーから開いた永続ホストではありません。先にこの接続をホストツリーに保存し、その後ワークスペースを保存してください。</translation>
     </message>
     <message>
-        <source>Failed to check the host record for tab '%1': %2</source>
+        <source>Failed to check the host record for tab &apos;%1&apos;: %2</source>
         <translation type="unfinished">タブ「%1」のホストレコードを検証できませんでした: %2</translation>
     </message>
     <message>
@@ -1750,11 +1774,11 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">既存のワークスペースを上書き</translation>
     </message>
     <message>
-        <source>A workspace named '%1' already exists. Overwrite it with the current set of tabs?</source>
+        <source>A workspace named &apos;%1&apos; already exists. Overwrite it with the current set of tabs?</source>
         <translation type="unfinished">名前「%1」のワークスペースはすでに存在します。現在のタブセットで上書きしますか?</translation>
     </message>
     <message>
-        <source>Workspace '%1' saved (%2 tabs)</source>
+        <source>Workspace &apos;%1&apos; saved (%2 tabs)</source>
         <translation type="unfinished">ワークスペース「%1」を保存しました（タブ %2 個）</translation>
     </message>
     <message>
@@ -1790,7 +1814,7 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">ワークスペースのレイアウトが破損しています</translation>
     </message>
     <message>
-        <source>The version, tab list, or count of workspace '%1' is invalid; the current session was not modified.</source>
+        <source>The version, tab list, or count of workspace &apos;%1&apos; is invalid; the current session was not modified.</source>
         <translation type="unfinished">ワークスペース「%1」のバージョン、タブ一覧、または個数が無効です。現在のセッションは変更されていません。</translation>
     </message>
     <message>
@@ -1810,7 +1834,7 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">ホストチェーンを解決できませんでした: %1</translation>
     </message>
     <message>
-        <source>Workspace '%1' could not be fully restored: %2. The current session was not modified.</source>
+        <source>Workspace &apos;%1&apos; could not be fully restored: %2. The current session was not modified.</source>
         <translation type="unfinished">ワークスペース「%1」を完全に復元できませんでした: %2。現在のセッションは変更されていません。</translation>
     </message>
     <message>
@@ -1818,11 +1842,11 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">現在のワークスペースを置き換え</translation>
     </message>
     <message>
-        <source>Opening '%1' closes the current %2 tabs and their connections, then restores %3 tabs. Continue?</source>
+        <source>Opening &apos;%1&apos; closes the current %2 tabs and their connections, then restores %3 tabs. Continue?</source>
         <translation type="unfinished">「%1」を開くと現在のタブ (%2) とその接続を閉じ、%3 個のタブを復元します。続行しますか?</translation>
     </message>
     <message>
-        <source>Workspace '%1' restored</source>
+        <source>Workspace &apos;%1&apos; restored</source>
         <translation type="unfinished">ワークスペース「%1」を復元しました</translation>
     </message>
     <message>
@@ -2009,7 +2033,7 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">ホストがまだ接続されていません</translation>
     </message>
     <message>
-        <source>Connect to '%1' from the host tree first, then start this rule.</source>
+        <source>Connect to &apos;%1&apos; from the host tree first, then start this rule.</source>
         <translation type="unfinished">先にホストツリーから「%1」に接続し、その後このルールを開始してください。</translation>
     </message>
     <message>
@@ -2037,7 +2061,7 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">現在のホストには開始できるポート転送ルールがまだありません。</translation>
     </message>
     <message>
-        <source>Connect to '%1' from the host tree first, then start all forwarding rules.</source>
+        <source>Connect to &apos;%1&apos; from the host tree first, then start all forwarding rules.</source>
         <translation type="unfinished">先にホストツリーから「%1」に接続し、その後すべての転送ルールを開始してください。</translation>
     </message>
     <message>
@@ -2045,7 +2069,7 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">すべての転送の開始を確認</translation>
     </message>
     <message>
-        <source>This will start all %2 forwarding rules under host '%1'; rules already running are left unchanged. Continue?</source>
+        <source>This will start all %2 forwarding rules under host &apos;%1&apos;; rules already running are left unchanged. Continue?</source>
         <translation type="unfinished">ホスト「%1」のすべての転送ルール (%2 個) を開始します。すでに実行中のルールは変更されません。続行しますか?</translation>
     </message>
     <message>
@@ -2075,7 +2099,7 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">すべての転送の停止を確認</translation>
     </message>
     <message>
-        <source>This will stop %2 active forwarding rules under host '%1' and close the related connections. Continue?</source>
+        <source>This will stop %2 active forwarding rules under host &apos;%1&apos; and close the related connections. Continue?</source>
         <translation type="unfinished">ホスト「%1」の実行中の転送ルール (%2 個) を停止し、関連する接続を閉じます。続行しますか?</translation>
     </message>
     <message>
@@ -2103,7 +2127,7 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">自動転送ルールを読み取れませんでした: %1</translation>
     </message>
     <message>
-        <source>Failed to auto-start '%1': %2</source>
+        <source>Failed to auto-start &apos;%1&apos;: %2</source>
         <translation type="unfinished">「%1」を自動的に開始できませんでした: %2</translation>
     </message>
     <message>
@@ -2192,7 +2216,7 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">ターゲット:</translation>
     </message>
     <message>
-        <source>Security note: setting the listen address to 0.0.0.0 or :: exposes the port to the local network and the internet; reachability still depends on the system firewall and the SSH server's GatewayPorts setting.</source>
+        <source>Security note: setting the listen address to 0.0.0.0 or :: exposes the port to the local network and the internet; reachability still depends on the system firewall and the SSH server&apos;s GatewayPorts setting.</source>
         <translation type="unfinished">セキュリティに関する注意: リッスンアドレスを 0.0.0.0 または :: に設定すると、ポートがローカルネットワークとインターネットに開かれます。到達可能性は依然としてシステムのファイアウォールと SSH サーバーの GatewayPorts 設定に依存します。</translation>
     </message>
     <message>
@@ -2222,15 +2246,15 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
 <context>
     <name>PortForwardWorker</name>
     <message>
-        <source>The SSH session is not ready; cannot start forwarding '%1'</source>
+        <source>The SSH session is not ready; cannot start forwarding &apos;%1&apos;</source>
         <translation type="unfinished">SSH セッションの準備ができていません。転送「%1」を開始できません</translation>
     </message>
     <message>
-        <source>Failed to start remote forwarding '%1': %2</source>
+        <source>Failed to start remote forwarding &apos;%1&apos;: %2</source>
         <translation type="unfinished">リモート転送「%1」を開始できませんでした: %2</translation>
     </message>
     <message>
-        <source>The listen address '%1' is not a bindable local IP address</source>
+        <source>The listen address &apos;%1&apos; is not a bindable local IP address</source>
         <translation type="unfinished">リッスンアドレス「%1」はバインド可能なローカル IP アドレスではありません</translation>
     </message>
     <message>
@@ -2563,7 +2587,7 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">設定を開く</translation>
     </message>
     <message>
-        <source>Shortcut %1 is assigned to both '%2' and '%3'</source>
+        <source>Shortcut %1 is assigned to both &apos;%2&apos; and &apos;%3&apos;</source>
         <translation type="unfinished">ショートカット %1 が「%2」と「%3」の両方に割り当てられています</translation>
     </message>
     <message>
@@ -2921,7 +2945,7 @@ The remote-key SFTP fallback also failed: %2</source>
         <translation type="unfinished">known_hosts ファイルの場所を特定できませんでした。</translation>
     </message>
     <message>
-        <source>Could not export the server's new host key: %1</source>
+        <source>Could not export the server&apos;s new host key: %1</source>
         <translation type="unfinished">サーバーの新しいホスト鍵をエクスポートできませんでした: %1</translation>
     </message>
     <message>
@@ -2977,7 +3001,7 @@ To avoid overwriting existing credentials, Shellium does not create a new vault 
         <translation type="unfinished">マスターパスワード保護を有効にできませんでした</translation>
     </message>
     <message>
-        <source>The vault's current state does not allow enabling master password protection again.</source>
+        <source>The vault&apos;s current state does not allow enabling master password protection again.</source>
         <translation type="unfinished">現在の保管庫の状態ではマスターパスワード保護を再度有効にできません。</translation>
     </message>
     <message>
@@ -3126,7 +3150,7 @@ Off: everything is re-uploaded in full regardless of whether content matches.</s
 無効: 内容が一致するかどうかにかかわらず、すべてを完全にアップロードします。</translation>
     </message>
     <message>
-        <source>Transfers run strictly in order; select a waiting item and click 'Deselect' to remove it directly.</source>
+        <source>Transfers run strictly in order; select a waiting item and click &apos;Deselect&apos; to remove it directly.</source>
         <translation type="unfinished">転送は厳密に順番どおりに実行されます。保留中の項目を選択して「選択解除」を押すと直接削除できます。</translation>
     </message>
     <message>
@@ -3564,7 +3588,7 @@ This action cannot be undone.</source>
     <message>
         <source>
 
-⚠ This server was inferred by parsing terminal commands and may not be the one you expect. Run 'hostname' in the terminal to verify before continuing.</source>
+⚠ This server was inferred by parsing terminal commands and may not be the one you expect. Run &apos;hostname&apos; in the terminal to verify before continuing.</source>
         <translation type="unfinished">⚠ このサーバーはターミナルコマンドを解析して推測で特定されたもので、想定と異なる可能性があります。続行する前にターミナルで「hostname」を実行して確認してください。</translation>
     </message>
     <message>
@@ -3610,7 +3634,7 @@ This action cannot be undone.</source>
     <message>
         <source>The SFTP service of server %1 offers only hmac-sha1.
 
-This algorithm is obsolete; upgrading the server's SSH configuration is recommended. Enable it for this connection only and retry?
+This algorithm is obsolete; upgrading the server&apos;s SSH configuration is recommended. Enable it for this connection only and retry?
 
 %2</source>
         <translation type="unfinished">サーバー %1 の SFTP サービスは hmac-sha1 のみを提示しています。
@@ -3699,7 +3723,7 @@ This algorithm is obsolete; upgrading the server's SSH configuration is recommen
         <translation type="unfinished">インターフェースの外観</translation>
     </message>
     <message>
-        <source>'Follow system' syncs automatically when the operating system switches between light and dark appearance.</source>
+        <source>&apos;Follow system&apos; syncs automatically when the operating system switches between light and dark appearance.</source>
         <translation type="unfinished">「システムに従う」は、OS がライト外観とダーク外観を切り替えると自動的に同期します。</translation>
     </message>
     <message>
@@ -3729,6 +3753,14 @@ This algorithm is obsolete; upgrading the server's SSH configuration is recommen
     <message>
         <source>Font</source>
         <translation type="unfinished">フォント</translation>
+    </message>
+    <message>
+        <source>Confirm before hiding the sidebar</source>
+        <translation>サイドバーを非表示にする前に確認</translation>
+    </message>
+    <message>
+        <source>Ask before hiding the sidebar when you double-click its divider.</source>
+        <translation>仕切りをダブルクリックしてサイドバーを非表示にする前に確認する</translation>
     </message>
     <message>
         <source>Monospace font</source>
@@ -3799,7 +3831,7 @@ This algorithm is obsolete; upgrading the server's SSH configuration is recommen
         <translation type="unfinished">コマンドラインの自動サジェスト</translation>
     </message>
     <message>
-        <source>After you type at least two characters, suggestions are shown automatically from the current host's command history; off by default.</source>
+        <source>After you type at least two characters, suggestions are shown automatically from the current host&apos;s command history; off by default.</source>
         <translation type="unfinished">2 文字以上入力すると、現在のホストのコマンド履歴からサジェストが自動的に表示されます。既定では無効です。</translation>
     </message>
     <message>
@@ -3927,7 +3959,7 @@ This algorithm is obsolete; upgrading the server's SSH configuration is recommen
         <translation type="unfinished">保存</translation>
     </message>
     <message>
-        <source>Unlike other settings, changes to the address and key are not saved character by character; click 'Save', so that every keystroke does not trigger an encrypted write.</source>
+        <source>Unlike other settings, changes to the address and key are not saved character by character; click &apos;Save&apos;, so that every keystroke does not trigger an encrypted write.</source>
         <translation type="unfinished">他の設定と異なり、アドレスと鍵の変更は 1 文字ずつ保存されません。「保存」を押すことで、キー入力ごとに暗号化書き込みがトリガーされないようにします。</translation>
     </message>
     <message>
@@ -4171,7 +4203,7 @@ Public key: %3</source>
         <translation type="unfinished">秘密鍵の形式がサポートされていないか、ファイルが破損しているか、パスフレーズが正しくありません。</translation>
     </message>
     <message>
-        <source>Verification passed: %1%2. You can select this file in the 'Private key' field of the host editor.</source>
+        <source>Verification passed: %1%2. You can select this file in the &apos;Private key&apos; field of the host editor.</source>
         <translation type="unfinished">検証に合格しました: %1%2。ホストエディターの「秘密鍵」フィールドでこのファイルを選択できます。</translation>
     </message>
     <message>
@@ -4459,7 +4491,7 @@ Public key: %3</source>
         <translation type="unfinished">ローカルターミナルを起動中…</translation>
     </message>
     <message>
-        <source>Starting local terminal…<byte value="xd" />
+        <source>Starting local terminal…<byte value="xd"/>
 </source>
         <translation type="unfinished">ローカルターミナルを起動中…</translation>
     </message>
@@ -4492,18 +4524,18 @@ Public key: %3</source>
         <translation type="unfinished">%1 のシェル統合が有効になっていません。ネスト識別が低下しています: %2</translation>
     </message>
     <message>
-        <source>Permission denied, please try again.<byte value="xd" />
-%1's password: </source>
+        <source>Permission denied, please try again.<byte value="xd"/>
+%1&apos;s password: </source>
         <translation type="unfinished">アクセスが拒否されました。もう一度試してください。
 %1 のパスワード:</translation>
     </message>
     <message>
-        <source>%1's password: </source>
+        <source>%1&apos;s password: </source>
         <translation type="unfinished">%1 のパスワード:</translation>
     </message>
     <message>
-        <source><byte value="xd" />
-Could not establish the nested connection to %1: %2<byte value="xd" />
+        <source><byte value="xd"/>
+Could not establish the nested connection to %1: %2<byte value="xd"/>
 </source>
         <translation type="unfinished">%1 へのネスト接続を確立できませんでした: %2</translation>
     </message>
@@ -4530,7 +4562,7 @@ Could not establish the nested connection to %1: %2<byte value="xd" />
     <message>
         <source>Server %1 offers only hmac-sha1, which the default security policy cannot use to complete the connection.
 
-hmac-sha1 is obsolete; upgrading the server's SSH configuration is recommended. Enable this algorithm for this connection only and retry?
+hmac-sha1 is obsolete; upgrading the server&apos;s SSH configuration is recommended. Enable this algorithm for this connection only and retry?
 
 Details: %2</source>
         <translation type="unfinished">サーバー %1 は hmac-sha1 のみを提示しており、既定のセキュリティポリシーではこれを使って接続を完了できません。
@@ -4612,14 +4644,14 @@ Confirm the key has changed and replace the old record in known_hosts?</source>
         <translation type="unfinished">r を押して %1 に再接続、x を押してこのタブを閉じる</translation>
     </message>
     <message>
-        <source><byte value="xd" />
-No server to reconnect to; press x to close this tab<byte value="xd" />
+        <source><byte value="xd"/>
+No server to reconnect to; press x to close this tab<byte value="xd"/>
 </source>
         <translation type="unfinished">再接続するサーバーがありません。x を押してこのタブを閉じてください</translation>
     </message>
     <message>
-        <source><byte value="xd" />
-Reconnecting manually…<byte value="xd" />
+        <source><byte value="xd"/>
+Reconnecting manually…<byte value="xd"/>
 </source>
         <translation type="unfinished">手動で再接続中…</translation>
     </message>
@@ -4672,7 +4704,7 @@ Reconnecting manually…<byte value="xd" />
         <translation type="unfinished">この ssh は傍受されませんでした (%1)。リモート側が自身で実行するよう任されました</translation>
     </message>
     <message>
-        <source>Shellium could not take over this connection (%1); handing it to the remote ssh to run directly.<byte value="xd" />
+        <source>Shellium could not take over this connection (%1); handing it to the remote ssh to run directly.<byte value="xd"/>
 </source>
         <translation type="unfinished">Shellium はこの接続を傍受できませんでした (%1)。直接実行するためリモートの ssh に引き渡されました。</translation>
     </message>
@@ -4688,31 +4720,31 @@ Reconnecting manually…<byte value="xd" />
         <translation type="unfinished">設定サービスに利用可能なアプリケーションデータベースがありません</translation>
     </message>
     <message>
-        <source>The value '%2' of setting %1 is not an integer; the default has been restored</source>
+        <source>The value &apos;%2&apos; of setting %1 is not an integer; the default has been restored</source>
         <translation type="unfinished">設定 %1 の値「%2」は整数ではありません。既定値に戻しました</translation>
     </message>
     <message>
-        <source>The value '%2' of setting %1 is not a boolean; the default has been restored</source>
+        <source>The value &apos;%2&apos; of setting %1 is not a boolean; the default has been restored</source>
         <translation type="unfinished">設定 %1 の値「%2」はブール値ではありません。既定値に戻しました</translation>
     </message>
     <message>
-        <source>Unknown theme '%1'; reverted to follow system</source>
+        <source>Unknown theme &apos;%1&apos;; reverted to follow system</source>
         <translation type="unfinished">不明なテーマ「%1」。「システムに従う」に戻します</translation>
     </message>
     <message>
-        <source>Unknown terminal color scheme '%1'; reverted to the default scheme</source>
+        <source>Unknown terminal color scheme &apos;%1&apos;; reverted to the default scheme</source>
         <translation type="unfinished">不明なターミナルの配色「%1」。既定の配色に戻します</translation>
     </message>
     <message>
-        <source>Letter spacing '%1' is invalid; the default has been restored</source>
+        <source>Letter spacing &apos;%1&apos; is invalid; the default has been restored</source>
         <translation type="unfinished">字間「%1」が無効です。既定値に戻しました</translation>
     </message>
     <message>
-        <source>Unknown cursor shape '%1'; reverted to block cursor</source>
+        <source>Unknown cursor shape &apos;%1&apos;; reverted to block cursor</source>
         <translation type="unfinished">不明なカーソル形状「%1」。ブロックカーソルに戻します</translation>
     </message>
     <message>
-        <source>The shortcut '%2' for action '%1' is invalid; the default has been restored</source>
+        <source>The shortcut &apos;%2&apos; for action &apos;%1&apos; is invalid; the default has been restored</source>
         <translation type="unfinished">アクション「%1」のショートカット「%2」が無効です。既定値に戻しました</translation>
     </message>
     <message>
@@ -4910,7 +4942,7 @@ Reconnecting manually…<byte value="xd" />
         <translation type="unfinished">リセットすると、保存されたすべての SSH パスワードと秘密鍵のパスフレーズが完全に削除され、ホストとの関連付けが解除されます。ホストのアドレス、アカウント、ポート、秘密鍵ファイルのパス、グループ、ホストチェーンは保持されます。この操作は元に戻せません。</translation>
     </message>
     <message>
-        <source>Type '%1' to confirm:</source>
+        <source>Type &apos;%1&apos; to confirm:</source>
         <translation type="unfinished">確認のため「%1」と入力してください:</translation>
     </message>
     <message>

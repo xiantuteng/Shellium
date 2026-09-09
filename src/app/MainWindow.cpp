@@ -29,6 +29,7 @@
 #include <QAction>
 #include <QApplication>
 #include <QButtonGroup>
+#include <QCheckBox>
 #include <QDateTime>
 #include <QDialog>
 #include <QDir>
@@ -51,6 +52,7 @@
 #include <QPaintEvent>
 #include <QPainter>
 #include <QPointer>
+#include <QPushButton>
 #include <QResizeEvent>
 #include <QSaveFile>
 #include <QSet>
@@ -58,6 +60,7 @@
 #include <QSignalBlocker>
 #include <QSizePolicy>
 #include <QSplitter>
+#include <QSplitterHandle>
 #include <QStackedWidget>
 #include <QStyle>
 #include <QTabBar>
@@ -65,6 +68,7 @@
 #include <QTimer>
 #include <QToolButton>
 #include <QVBoxLayout>
+#include <QVariantAnimation>
 #include <QWindow>
 #include <QUuid>
 
@@ -73,6 +77,55 @@
 #include <utility>
 
 namespace {
+
+/**
+ * @brief 侧栏裁剪容器，隔离内容的最小尺寸与分隔器的动画宽度。
+ *
+ * 内容不放入本容器的布局，因此子控件的 minimumSizeHint 不会阻止容器缩到零；过渡期间
+ * 内容保持展开宽度并向左平移，父控件自动裁剪越界区域，避免表单被挤压或末段突然消失。
+ */
+class SidebarViewport final : public QWidget {
+public:
+    /** @brief 创建裁剪容器；parent 为分隔器，内容由 Qt 父子关系自动释放，无外部资源。 */
+    explicit SidebarViewport(QWidget *parent) : QWidget(parent), m_content(new QWidget(this))
+    {
+        m_content->setObjectName(QStringLiteral("SidebarSlidingContent"));
+    }
+
+    /** @brief 返回承载侧栏布局的子控件；所有权始终归裁剪容器。 */
+    QWidget *content() const { return m_content; }
+
+    /**
+     * @brief 设置动画期间固定的内容宽度；width 为零时恢复随容器正常布局。
+     * 负值按零处理；无 IO 或失败分支，几何变化仅在 GUI 线程执行。
+     */
+    void setSlidingWidth(int width)
+    {
+        m_slidingWidth = qMax(0, width);
+        alignContent();
+    }
+
+protected:
+    /** @brief 容器随分隔器改变尺寸后重新对齐内容；event 原样传递基类。 */
+    void resizeEvent(QResizeEvent *event) override
+    {
+        QWidget::resizeEvent(event);
+        alignContent();
+    }
+
+private:
+    /** @brief 将内容右边缘对齐裁剪区域右边缘，收起向左滑出、展开向右滑回。 */
+    void alignContent()
+    {
+        const int contentWidth = m_slidingWidth > 0 ? m_slidingWidth : width();
+        m_content->setGeometry(width() - contentWidth, 0, contentWidth, height());
+    }
+
+    /** @brief 实际表单内容，保持自身布局和输入状态，动画不需要复制或重建控件。 */
+    QWidget *m_content;
+    /** @brief 动画期间的内容宽度；零表示普通拖动、窗口缩放时跟随容器宽度。 */
+    int m_slidingWidth = 0;
+};
 
 /** @brief 一体化标题栏的固定逻辑高度，同时作为 macOS 交通灯垂直对齐的唯一基准。 */
 constexpr int kWindowChromeHeight = 52;
@@ -167,6 +220,9 @@ constexpr auto kSidebarWidthSettingKey = "layout/sidebar_width";
 
 /** @brief 拖动停止后延迟落库的毫秒数，用于合并一次拖动中的大量 splitterMoved。 */
 constexpr int kSidebarWidthPersistDelayMs = 300;
+
+/** @brief 侧边栏显隐动画时长；取短过渡以保持操作即时感，同时让宽度变化可被感知。 */
+constexpr int kSidebarAnimationDurationMs = 220;
 
 /**
  * @brief 从标题区事件源启动操作系统级窗口移动。
@@ -516,10 +572,10 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     m_sidebarSplitter->setHandleWidth(6);
     m_sidebarSplitter->setOpaqueResize(true);
 
-    m_sidebarPanel = new QWidget(m_sidebarSplitter);
+    m_sidebarPanel = new SidebarViewport(m_sidebarSplitter);
     m_sidebarPanel->setObjectName(QStringLiteral("SidebarPanel"));
     m_sidebarPanel->setMinimumWidth(kSidebarMinimumWidth);
-    auto *sidebarLayout = new QVBoxLayout(m_sidebarPanel);
+    auto *sidebarLayout = new QVBoxLayout(static_cast<SidebarViewport *>(m_sidebarPanel)->content());
     // 四个侧栏页面共享同一容器和同一条标题栏；AI 助手页只在标题栏下方额外插入一条自己的
     // 目标与会话动作行，不再重复渲染页面标题本身。
     sidebarLayout->setContentsMargins(10, 10, 10, 8);
@@ -607,6 +663,11 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     m_sidebarSplitter->addWidget(m_workspaceStack);
     m_sidebarSplitter->setStretchFactor(0, 0);
     m_sidebarSplitter->setStretchFactor(1, 1);
+    // QSplitterHandle 本身没有“双击”信号；安装事件过滤器既能保留原生拖动行为，又能在
+    // 双击时区分“调整宽度”和“请求隐藏”两种操作。此时 handle(1) 已由两个子控件创建完成。
+    if (QSplitterHandle *handle = m_sidebarSplitter->handle(1); handle != nullptr) {
+        handle->installEventFilter(this);
+    }
     // 在恢复宽度之前读取密度，确保启动时选用对应模式的宽度及最小尺寸。
     m_compactSidebar = m_settingsService->currentSettings().compactSidebar;
     applySidebarDensity();
@@ -1382,6 +1443,49 @@ MainWindow::~MainWindow()
 
 bool MainWindow::eventFilter(QObject *watched, QEvent *event)
 {
+    // 分隔条的双击只在左键、侧栏没有处于过渡动画时处理；其余鼠标事件继续交给 QSplitter，
+    // 这样单击/拖动仍完全保持 Qt 原生的调整宽度行为，不会被提示逻辑截断。
+    if (m_sidebarSplitter != nullptr
+        && watched == m_sidebarSplitter->handle(1)
+        && event->type() == QEvent::MouseButtonDblClick) {
+        auto *mouseEvent = static_cast<QMouseEvent *>(event);
+        if (mouseEvent->button() == Qt::LeftButton && m_sidebarAnimation == nullptr) {
+            if (m_settingsService->currentSettings().sidebarDoubleClickPrompt) {
+                QMessageBox messageBox(QMessageBox::Information,
+                                       tr("Hide the sidebar?"),
+                                       tr("Double-clicking this divider hides the sidebar. Hide it now?"),
+                                       QMessageBox::NoButton,
+                                       this);
+                auto *doNotShowAgain = new QCheckBox(tr("Do not show this again"), &messageBox);
+                messageBox.setCheckBox(doNotShowAgain);
+                QPushButton *hideButton = messageBox.addButton(tr("Hide sidebar"),
+                                                                QMessageBox::AcceptRole);
+                messageBox.addButton(tr("Cancel"), QMessageBox::RejectRole);
+                messageBox.exec();
+                if (messageBox.clickedButton() != hideButton) {
+                    mouseEvent->accept();
+                    return true;
+                }
+
+                if (doNotShowAgain->isChecked()) {
+                    TerminalSettings settings = m_settingsService->currentSettings();
+                    settings.sidebarDoubleClickPrompt = false;
+                    QString error;
+                    if (!m_settingsService->save(settings, &error)) {
+                        // 隐藏动作本身仍按用户点击执行，但保存失败必须明确提示，否则用户下次
+                        // 仍会看到提示却无法理解“不再提示”为什么没有生效。
+                        showTransientMessage(tr("Failed to save sidebar prompt preference: %1")
+                                                 .arg(error),
+                                             10000);
+                    }
+                }
+            }
+            mouseEvent->accept();
+            setSidebarVisible(false);
+            return true;
+        }
+    }
+
 #ifndef Q_OS_MACOS
     // 应用级过滤器能在事件送达菜单、标签、分隔器或终端等任意子控件前检查窗口边缘，
     // 因而无需在每个控件里重复实现无边框缩放。只处理当前主窗口的控件，弹窗和菜单窗口
@@ -1628,7 +1732,9 @@ void MainWindow::setWorkspaceTabText(const int index, const QString &title)
 void MainWindow::applySidebarDensity()
 {
     // 导航轨和内容栏同步收紧；使用实际控件尺寸，不改变终端字号或用户内容。
-    m_sidebarPanel->setMinimumWidth(m_compactSidebar ? 220 : kSidebarMinimumWidth);
+    // 主题刷新也会调用此方法；过渡期间不得重新施加最小宽度，否则动画又会卡在半途。
+    m_sidebarPanel->setMinimumWidth(m_sidebarAnimation != nullptr ? 0
+                                    : (m_compactSidebar ? 220 : kSidebarMinimumWidth));
     m_navigationRail->setFixedWidth(m_compactSidebar ? 56 : 72);
     m_navigationRail->layout()->setContentsMargins(m_compactSidebar ? 6 : 10, 12, m_compactSidebar ? 6 : 10, 12);
     m_navigationRail->layout()->setSpacing(m_compactSidebar ? 4 : 8);
@@ -1636,9 +1742,10 @@ void MainWindow::applySidebarDensity()
         button->setFixedSize(m_compactSidebar ? QSize(36, 36) : QSize(44, 44));
         button->setIconSize(m_compactSidebar ? QSize(17, 17) : QSize(21, 21));
     }
-    m_sidebarPanel->layout()->setContentsMargins(m_compactSidebar ? 6 : 10, m_compactSidebar ? 6 : 10,
+    auto *contentLayout = static_cast<SidebarViewport *>(m_sidebarPanel)->content()->layout();
+    contentLayout->setContentsMargins(m_compactSidebar ? 6 : 10, m_compactSidebar ? 6 : 10,
                                                 m_compactSidebar ? 6 : 10, 8);
-    m_sidebarPanel->layout()->setSpacing(m_compactSidebar ? 4 : 8);
+    contentLayout->setSpacing(m_compactSidebar ? 4 : 8);
     m_hostManager->setCompactMode(m_compactSidebar);
 }
 
@@ -1662,6 +1769,8 @@ void MainWindow::restoreSidebarWidth()
         ? qMax(1, m_sidebarSplitter->width() - m_sidebarSplitter->handleWidth() - sidebarWidth)
         : 1000;
     m_sidebarSplitter->setSizes({sidebarWidth, workspaceWidth});
+    // 记录经过边界校验的实际展开宽度，收起动画完成后仍能恢复用户最后一次拖动结果。
+    m_sidebarExpandedWidth = sidebarWidth;
 }
 
 void MainWindow::persistSidebarWidth()
@@ -1693,9 +1802,108 @@ void MainWindow::persistSidebarWidth()
 
 void MainWindow::setSidebarVisible(const bool visible)
 {
-    if (m_sidebarPanel != nullptr) {
-        m_sidebarPanel->setVisible(visible);
+    if (m_sidebarPanel == nullptr || m_sidebarSplitter == nullptr) {
+        return;
     }
+
+    // 同一目标状态的重复请求不应重启动画；这在导航按钮和菜单同时同步时很常见。
+    if (m_sidebarTargetVisible == visible) {
+        if (m_sidebarAnimation != nullptr) {
+            return;
+        }
+        if (m_sidebarPanel->isVisible() != visible) {
+            m_sidebarPanel->setVisible(visible);
+        }
+        return;
+    }
+
+    const bool reversing = m_sidebarAnimation != nullptr;
+    if (reversing) {
+        // 反向操作从动画当前实际宽度继续，而不是从旧起点重新开始；先同步一次目标宽度，
+        // 也让收起中途再次点击“显示”时保留当前可见区域，不产生突然的宽度跳跃。
+        m_sidebarAnimation->stop();
+        m_sidebarAnimation->deleteLater();
+        m_sidebarAnimation = nullptr;
+    }
+
+    const int minimumWidth = m_compactSidebar ? 220 : kSidebarMinimumWidth;
+    const QList<int> currentSizes = m_sidebarSplitter->sizes();
+    const int currentWidth = currentSizes.isEmpty() ? 0 : currentSizes.constFirst();
+    if (!reversing && !m_sidebarPanel->isHidden() && currentWidth >= minimumWidth) {
+        m_sidebarExpandedWidth = currentWidth;
+    }
+    if (m_sidebarExpandedWidth < minimumWidth) {
+        // 构造初期或首次展开时可能还没有一次有效的 splitterMoved；恢复逻辑已经根据密度
+        // 设置过合法宽度，因此这里仅作最终安全兜底，避免动画目标为零导致无法展开。
+        m_sidebarExpandedWidth = m_compactSidebar ? 260 : kSidebarDefaultWidth;
+    }
+
+    m_sidebarTargetVisible = visible;
+    const int startWidth = m_sidebarPanel->isHidden() ? 0
+        : qBound(0, currentWidth, qMax(0, m_sidebarSplitter->width()));
+    const int targetWidth = visible ? m_sidebarExpandedWidth : 0;
+
+    if (!visible && !reversing && currentWidth >= minimumWidth) {
+        // 收起后侧栏会暂时变为零宽，宽度防抖定时器到期时会因面板不可见而跳过写库；在
+        // 动画开始前主动写入一次，保证“刚拖动完就双击隐藏”仍然保留用户最后选择的宽度。
+        if (m_sidebarWidthPersistTimer != nullptr) {
+            m_sidebarWidthPersistTimer->stop();
+        }
+        persistSidebarWidth();
+    }
+
+    // 收起和展开都暂时允许第一个分区折叠到零；动画完成后恢复最小宽度与不可折叠约束，
+    // 防止用户拖动把手时把侧栏停在不可用的窄条上。
+    m_sidebarPanel->setMinimumWidth(0);
+    static_cast<SidebarViewport *>(m_sidebarPanel)->setSlidingWidth(m_sidebarExpandedWidth);
+    m_sidebarSplitter->setCollapsible(0, true);
+    if (visible) {
+        m_sidebarPanel->setVisible(true);
+        // 中途反向时保留当前位置；只有完全收起后的首次展开才从零宽开始。
+        m_sidebarSplitter->setSizes({startWidth, qMax(0, m_sidebarSplitter->width()
+                                                   - m_sidebarSplitter->handleWidth() - startWidth)});
+    }
+
+    auto *animation = new QVariantAnimation(this);
+    m_sidebarAnimation = animation;
+    animation->setDuration(kSidebarAnimationDurationMs);
+    animation->setStartValue(0.0);
+    animation->setEndValue(1.0);
+    animation->setEasingCurve(QEasingCurve::InOutCubic);
+    connect(animation, &QVariantAnimation::valueChanged, this,
+            [this, animation, startWidth, targetWidth](const QVariant &value) {
+                if (m_sidebarAnimation != animation || m_sidebarSplitter == nullptr) {
+                    return;
+                }
+                const qreal progress = value.toReal();
+                const int width = qRound(startWidth + (targetWidth - startWidth) * progress);
+                const int availableWidth = qMax(0, m_sidebarSplitter->width()
+                                                   - m_sidebarSplitter->handleWidth());
+                const int boundedWidth = qBound(0, width, availableWidth);
+                m_sidebarSplitter->setSizes({boundedWidth, qMax(0, availableWidth - boundedWidth)});
+            });
+    connect(animation, &QVariantAnimation::finished, this,
+            [this, animation, visible, targetWidth, minimumWidth]() {
+                if (m_sidebarAnimation != animation || m_sidebarSplitter == nullptr) {
+                    return;
+                }
+                m_sidebarAnimation = nullptr;
+                animation->deleteLater();
+                if (!visible) {
+                    m_sidebarPanel->setVisible(false);
+                }
+                m_sidebarPanel->setMinimumWidth(minimumWidth);
+                static_cast<SidebarViewport *>(m_sidebarPanel)->setSlidingWidth(0);
+                m_sidebarSplitter->setCollapsible(0, false);
+                if (visible) {
+                    const int availableWidth = qMax(0, m_sidebarSplitter->width()
+                                                       - m_sidebarSplitter->handleWidth());
+                    const int width = qBound(minimumWidth, targetWidth, availableWidth);
+                    m_sidebarSplitter->setSizes({width, qMax(0, availableWidth - width)});
+                    m_sidebarExpandedWidth = width;
+                }
+            });
+    animation->start();
 
     if (m_sidebarToggleAction != nullptr
         && m_sidebarToggleAction->isChecked() != visible) {

@@ -98,6 +98,7 @@ SettingsDialog::SettingsDialog(TerminalSettingsService *service,
     , m_languageSelector(new QComboBox(this))
     , m_themeSelector(new SegmentedControl(this))
     , m_sidebarDensitySelector(new SegmentedControl(this))
+    , m_sidebarDoubleClickPromptToggle(new ToggleSwitch(this))
     , m_fontCombo(new QComboBox(this))
     , m_fontSizeSpin(new QSpinBox(this))
     , m_lineHeightSpin(new QSpinBox(this))
@@ -221,10 +222,11 @@ SettingsDialog::SettingsDialog(TerminalSettingsService *service,
     });
     for (ToggleSwitch *toggle :
          {m_cursorBlinkToggle,
-          m_audibleBellToggle,
-          m_commandAutoCompletionToggle,
-          m_multiLinePasteConfirmationToggle,
-          m_automaticReconnectToggle}) {
+         m_audibleBellToggle,
+         m_commandAutoCompletionToggle,
+         m_multiLinePasteConfirmationToggle,
+         m_automaticReconnectToggle,
+         m_sidebarDoubleClickPromptToggle}) {
         connect(toggle, &ToggleSwitch::toggled, this, [this](bool) { persistChanges(); });
     }
     // 主密码保护不是普通布尔值：开关改变后立即进入专用验证/迁移流程；只有流程完成且设置
@@ -416,6 +418,13 @@ QWidget *SettingsDialog::buildAppearancePage()
     m_sidebarDensitySelector->addSegment([this] { return tr("Relaxed"); }, 0);
     m_sidebarDensitySelector->addSegment([this] { return tr("Compact"); }, 1);
     themeCard->addRow([this] { return tr("Sidebar density"); }, m_sidebarDensitySelector);
+
+    m_sidebarDoubleClickPromptToggle->setObjectName(QStringLiteral("sidebarDoubleClickPromptToggle"));
+    themeCard->addRow([this] { return tr("Confirm before hiding the sidebar"); },
+                      m_sidebarDoubleClickPromptToggle,
+                      [this] {
+                          return tr("Ask before hiding the sidebar when you double-click its divider.");
+                      });
 
     auto *schemeCard = new SettingsCard([this] { return tr("Terminal color scheme"); }, page);
     m_colorSchemeFilter = new QLineEdit(schemeCard);
@@ -876,6 +885,7 @@ TerminalSettings SettingsDialog::editedSettings() const
     }
     settings.themeMode = static_cast<ThemeMode>(m_themeSelector->currentData());
     settings.compactSidebar = m_sidebarDensitySelector->currentData() == 1;
+    settings.sidebarDoubleClickPrompt = m_sidebarDoubleClickPromptToggle->isChecked();
     settings.colorSchemeId = QStringLiteral("default");
     for (const QString &id : m_colorSchemeOrder) {
         ThemeSwatchButton *swatch = m_colorSchemeSwatches.value(id);
@@ -1006,6 +1016,7 @@ void SettingsDialog::populateControls(const TerminalSettings &settings)
     m_languageSelector->setCurrentIndex(languageIndex >= 0 ? languageIndex : 0);
     m_themeSelector->setCurrentData(static_cast<int>(normalized.themeMode));
     m_sidebarDensitySelector->setCurrentData(normalized.compactSidebar ? 1 : 0);
+    m_sidebarDoubleClickPromptToggle->setChecked(normalized.sidebarDoubleClickPrompt);
     for (auto iterator = m_colorSchemeSwatches.cbegin();
          iterator != m_colorSchemeSwatches.cend();
          ++iterator) {

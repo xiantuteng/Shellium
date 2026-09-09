@@ -408,8 +408,8 @@ O execuți în terminalul curent?</translation>
         <translation type="unfinished">Modifică lanțul de gazde</translation>
     </message>
     <message>
-        <source>The hosts you add connect in the following order, finally reaching &lt;span style="font-family: monospace; font-weight: 600;"&gt;%1&lt;/span&gt;.</source>
-        <translation type="unfinished">Gazdele adăugate se conectează în ordinea următoare, ajungând în final la &lt;span style="font-family: monospace; font-weight: 600;"&gt;%1&lt;/span&gt;.</translation>
+        <source>The hosts you add connect in the following order, finally reaching &lt;span style=&quot;font-family: monospace; font-weight: 600;&quot;&gt;%1&lt;/span&gt;.</source>
+        <translation type="unfinished">Gazdele adăugate se conectează în ordinea următoare, ajungând în final la &lt;span style=&quot;font-family: monospace; font-weight: 600;&quot;&gt;%1&lt;/span&gt;.</translation>
     </message>
     <message>
         <source>Add host</source>
@@ -526,7 +526,7 @@ O execuți în terminalul curent?</translation>
         <source>Import Hosts…</source>
         <translation type="unfinished">Importă gazde…</translation>
     </message>
-<message>
+    <message>
         <source>Import from Excel…</source>
         <translation>Importă din Excel…</translation>
     </message>
@@ -627,11 +627,11 @@ O execuți în terminalul curent?</translation>
         <translation type="unfinished">Actualizează nodul</translation>
     </message>
     <message>
-        <source>Deleting group '%1' also deletes all of its subgroups and hosts, and cannot be undone. Continue?</source>
+        <source>Deleting group &apos;%1&apos; also deletes all of its subgroups and hosts, and cannot be undone. Continue?</source>
         <translation type="unfinished">Ștergerea grupului „%1” va șterge și toate subgrupurile și gazdele sale și nu poate fi anulată. Continui?</translation>
     </message>
     <message>
-        <source>Delete host '%1'? This action cannot be undone.</source>
+        <source>Delete host &apos;%1&apos;? This action cannot be undone.</source>
         <translation type="unfinished">Ștergi gazda „%1”? Această acțiune nu poate fi anulată.</translation>
     </message>
     <message>
@@ -690,35 +690,35 @@ O execuți în terminalul curent?</translation>
         <source>Successfully imported %1 records.</source>
         <translation type="unfinished">%1 înregistrări importate cu succes.</translation>
     </message>
-<message>
+    <message>
         <source>The Excel file has no usable host records.</source>
         <translation>Fișierul Excel nu conține înregistrări de gazde utilizabile.</translation>
     </message>
-<message>
+    <message>
         <source>The host database or credential vault is unavailable.</source>
         <translation>Baza de date a gazdelor sau seiful de acreditări nu este disponibil.</translation>
     </message>
-<message>
+    <message>
         <source>Excel import failed</source>
         <translation>Importul Excel a eșuat</translation>
     </message>
-<message>
+    <message>
         <source>%1 host records will be imported into the current folder. Passwords will be encrypted automatically.</source>
         <translation>%1 înregistrări de gazde vor fi importate în folderul curent. Parolele vor fi criptate automat.</translation>
     </message>
-<message>
+    <message>
         <source>Confirm Excel import</source>
         <translation>Confirmă importul Excel</translation>
     </message>
-<message>
+    <message>
         <source>Import hosts from Excel</source>
         <translation>Importă gazde din Excel</translation>
     </message>
-<message>
+    <message>
         <source>Excel import complete</source>
         <translation>Import Excel finalizat</translation>
     </message>
-<message>
+    <message>
         <source>Successfully imported %1 hosts.</source>
         <translation>%1 gazde importate cu succes.</translation>
     </message>
@@ -967,7 +967,7 @@ Sistem: %2</translation>
         <translation type="unfinished">Este necesară protecția cu parolă principală</translation>
     </message>
     <message>
-        <source>Viewing host passwords requires master password protection. Go to 'Settings → Connections &amp; Security → Credential Vault' and turn on 'Protect credentials with a master password'.</source>
+        <source>Viewing host passwords requires master password protection. Go to &apos;Settings → Connections &amp; Security → Credential Vault&apos; and turn on &apos;Protect credentials with a master password&apos;.</source>
         <translation type="unfinished">Vizualizarea parolelor gazdelor necesită protecția cu parolă principală. Accesează „Setări → Conexiuni și securitate → Seiful de date de autentificare” și activează „Protejează datele de autentificare cu o parolă principală”.</translation>
     </message>
     <message>
@@ -1099,7 +1099,7 @@ Sistem: %2</translation>
         <translation type="unfinished">Nu s-a putut testa conexiunea</translation>
     </message>
     <message>
-        <source>Could not read the saved credentials for '%1'.</source>
+        <source>Could not read the saved credentials for &apos;%1&apos;.</source>
         <translation type="unfinished">Nu s-au putut citi datele de autentificare salvate pentru „%1”.</translation>
     </message>
     <message>
@@ -1111,7 +1111,7 @@ Sistem: %2</translation>
         <translation type="unfinished">Conectare reușită la %1.</translation>
     </message>
     <message>
-        <source>The server only supports legacy hmac-sha1. If you have accepted the risk, turn on 'Legacy compatibility' and retry.
+        <source>The server only supports legacy hmac-sha1. If you have accepted the risk, turn on &apos;Legacy compatibility&apos; and retry.
 
 %1</source>
         <translation type="unfinished">Serverul acceptă doar hmac-sha1, învechit. Dacă ai acceptat riscul, activează „Compatibilitate cu versiunile vechi” și încearcă din nou.
@@ -1123,7 +1123,7 @@ Sistem: %2</translation>
         <translation type="unfinished">Autentificare SSH eșuată. Verifică parola sau fraza de acces a cheii private și încearcă din nou.</translation>
     </message>
     <message>
-        <source>The server requires a password or private key passphrase. Fill in 'Password' and retry.</source>
+        <source>The server requires a password or private key passphrase. Fill in &apos;Password&apos; and retry.</source>
         <translation type="unfinished">Serverul cere o parolă sau o frază de acces a cheii private. Completează „Parolă” și încearcă din nou.</translation>
     </message>
     <message>
@@ -1526,6 +1526,30 @@ Confirmi că cheia s-a schimbat, înlocuiești vechea înregistrare din known_ho
         <translation type="unfinished">Seiful de date de autentificare a fost blocat automat din cauza inactivității</translation>
     </message>
     <message>
+        <source>Hide the sidebar?</source>
+        <translation>Ascundeți bara laterală?</translation>
+    </message>
+    <message>
+        <source>Double-clicking this divider hides the sidebar. Hide it now?</source>
+        <translation>Făcând dublu clic pe acest separator ascundeți bara laterală. O ascundeți acum?</translation>
+    </message>
+    <message>
+        <source>Do not show this again</source>
+        <translation>Nu mai afișa</translation>
+    </message>
+    <message>
+        <source>Hide sidebar</source>
+        <translation>Ascunde bara laterală</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation type="unfinished">Anulează</translation>
+    </message>
+    <message>
+        <source>Failed to save sidebar prompt preference: %1</source>
+        <translation>Preferința pentru solicitarea barei laterale nu a putut fi salvată: %1</translation>
+    </message>
+    <message>
         <source>Press + in the title bar to open a new terminal tab, or connect to a server from the host list on the left.</source>
         <translation type="unfinished">Apasă + în bara de titlu pentru a deschide o filă nouă de terminal sau conectează-te la un server din lista de gazde din stânga.</translation>
     </message>
@@ -1686,7 +1710,7 @@ Confirmi că cheia s-a schimbat, înlocuiești vechea înregistrare din known_ho
         <translation type="unfinished">Găsește textul:</translation>
     </message>
     <message>
-        <source>'%1' was not found in the terminal output</source>
+        <source>&apos;%1&apos; was not found in the terminal output</source>
         <translation type="unfinished">„%1” nu a fost găsit în ieșirea terminalului</translation>
     </message>
     <message>
@@ -1718,11 +1742,11 @@ Confirmi că cheia s-a schimbat, înlocuiești vechea înregistrare din known_ho
         <translation type="unfinished">Spațiul de lucru conține conexiuni temporare</translation>
     </message>
     <message>
-        <source>Tab '%1' is not a persistent host opened from the host tree. Save this connection to the host tree first, then save the workspace.</source>
+        <source>Tab &apos;%1&apos; is not a persistent host opened from the host tree. Save this connection to the host tree first, then save the workspace.</source>
         <translation type="unfinished">Fila „%1” nu este o gazdă permanentă deschisă din arborele de gazde. Salvează mai întâi această conexiune în arborele de gazde, apoi spațiul de lucru.</translation>
     </message>
     <message>
-        <source>Failed to check the host record for tab '%1': %2</source>
+        <source>Failed to check the host record for tab &apos;%1&apos;: %2</source>
         <translation type="unfinished">Nu s-a putut verifica înregistrarea gazdei pentru fila „%1”: %2</translation>
     </message>
     <message>
@@ -1750,11 +1774,11 @@ Confirmi că cheia s-a schimbat, înlocuiești vechea înregistrare din known_ho
         <translation type="unfinished">Suprascrie spațiul de lucru existent</translation>
     </message>
     <message>
-        <source>A workspace named '%1' already exists. Overwrite it with the current set of tabs?</source>
+        <source>A workspace named &apos;%1&apos; already exists. Overwrite it with the current set of tabs?</source>
         <translation type="unfinished">Un spațiu de lucru cu numele „%1” există deja. Îl suprascrii cu setul curent de file?</translation>
     </message>
     <message>
-        <source>Workspace '%1' saved (%2 tabs)</source>
+        <source>Workspace &apos;%1&apos; saved (%2 tabs)</source>
         <translation type="unfinished">Spațiul de lucru „%1” a fost salvat (%2 file)</translation>
     </message>
     <message>
@@ -1790,7 +1814,7 @@ Confirmi că cheia s-a schimbat, înlocuiești vechea înregistrare din known_ho
         <translation type="unfinished">Aspectul spațiului de lucru este corupt</translation>
     </message>
     <message>
-        <source>The version, tab list, or count of workspace '%1' is invalid; the current session was not modified.</source>
+        <source>The version, tab list, or count of workspace &apos;%1&apos; is invalid; the current session was not modified.</source>
         <translation type="unfinished">Versiunea, lista de file sau numărul spațiului de lucru „%1” nu sunt valide; sesiunea curentă nu a fost modificată.</translation>
     </message>
     <message>
@@ -1810,7 +1834,7 @@ Confirmi că cheia s-a schimbat, înlocuiești vechea înregistrare din known_ho
         <translation type="unfinished">Nu s-a putut rezolva lanțul de gazde: %1</translation>
     </message>
     <message>
-        <source>Workspace '%1' could not be fully restored: %2. The current session was not modified.</source>
+        <source>Workspace &apos;%1&apos; could not be fully restored: %2. The current session was not modified.</source>
         <translation type="unfinished">Nu s-a putut restaura complet spațiul de lucru „%1”: %2. Sesiunea curentă nu a fost modificată.</translation>
     </message>
     <message>
@@ -1818,11 +1842,11 @@ Confirmi că cheia s-a schimbat, înlocuiești vechea înregistrare din known_ho
         <translation type="unfinished">Înlocuiește spațiul de lucru curent</translation>
     </message>
     <message>
-        <source>Opening '%1' closes the current %2 tabs and their connections, then restores %3 tabs. Continue?</source>
+        <source>Opening &apos;%1&apos; closes the current %2 tabs and their connections, then restores %3 tabs. Continue?</source>
         <translation type="unfinished">Deschiderea „%1” va închide filele curente (%2) și conexiunile lor, apoi va restaura %3 file. Continui?</translation>
     </message>
     <message>
-        <source>Workspace '%1' restored</source>
+        <source>Workspace &apos;%1&apos; restored</source>
         <translation type="unfinished">Spațiul de lucru „%1” a fost restaurat</translation>
     </message>
     <message>
@@ -2009,7 +2033,7 @@ Confirmi că cheia s-a schimbat, înlocuiești vechea înregistrare din known_ho
         <translation type="unfinished">Gazda nu este încă conectată</translation>
     </message>
     <message>
-        <source>Connect to '%1' from the host tree first, then start this rule.</source>
+        <source>Connect to &apos;%1&apos; from the host tree first, then start this rule.</source>
         <translation type="unfinished">Conectează-te mai întâi la „%1” din arborele de gazde, apoi pornește această regulă.</translation>
     </message>
     <message>
@@ -2037,7 +2061,7 @@ Confirmi că cheia s-a schimbat, înlocuiești vechea înregistrare din known_ho
         <translation type="unfinished">Gazda curentă nu are încă reguli de redirecționare a porturilor de pornit.</translation>
     </message>
     <message>
-        <source>Connect to '%1' from the host tree first, then start all forwarding rules.</source>
+        <source>Connect to &apos;%1&apos; from the host tree first, then start all forwarding rules.</source>
         <translation type="unfinished">Conectează-te mai întâi la „%1” din arborele de gazde, apoi pornește toate regulile de redirecționare.</translation>
     </message>
     <message>
@@ -2045,7 +2069,7 @@ Confirmi că cheia s-a schimbat, înlocuiești vechea înregistrare din known_ho
         <translation type="unfinished">Confirmă pornirea tuturor redirecționărilor</translation>
     </message>
     <message>
-        <source>This will start all %2 forwarding rules under host '%1'; rules already running are left unchanged. Continue?</source>
+        <source>This will start all %2 forwarding rules under host &apos;%1&apos;; rules already running are left unchanged. Continue?</source>
         <translation type="unfinished">Se vor porni toate cele %2 reguli de redirecționare pentru gazda „%1”; regulile deja active rămân neschimbate. Continui?</translation>
     </message>
     <message>
@@ -2075,7 +2099,7 @@ Confirmi că cheia s-a schimbat, înlocuiești vechea înregistrare din known_ho
         <translation type="unfinished">Confirmă oprirea tuturor redirecționărilor</translation>
     </message>
     <message>
-        <source>This will stop %2 active forwarding rules under host '%1' and close the related connections. Continue?</source>
+        <source>This will stop %2 active forwarding rules under host &apos;%1&apos; and close the related connections. Continue?</source>
         <translation type="unfinished">Se vor opri cele %2 reguli active de redirecționare pentru gazda „%1” și se vor închide conexiunile asociate. Continui?</translation>
     </message>
     <message>
@@ -2103,7 +2127,7 @@ Confirmi că cheia s-a schimbat, înlocuiești vechea înregistrare din known_ho
         <translation type="unfinished">Nu s-au putut citi regulile de redirecționare automată: %1</translation>
     </message>
     <message>
-        <source>Failed to auto-start '%1': %2</source>
+        <source>Failed to auto-start &apos;%1&apos;: %2</source>
         <translation type="unfinished">Nu s-a putut porni automat „%1”: %2</translation>
     </message>
     <message>
@@ -2192,7 +2216,7 @@ Confirmi că cheia s-a schimbat, înlocuiești vechea înregistrare din known_ho
         <translation type="unfinished">Țintă:</translation>
     </message>
     <message>
-        <source>Security note: setting the listen address to 0.0.0.0 or :: exposes the port to the local network and the internet; reachability still depends on the system firewall and the SSH server's GatewayPorts setting.</source>
+        <source>Security note: setting the listen address to 0.0.0.0 or :: exposes the port to the local network and the internet; reachability still depends on the system firewall and the SSH server&apos;s GatewayPorts setting.</source>
         <translation type="unfinished">Notă de securitate: setarea adresei de ascultare la 0.0.0.0 sau :: deschide portul rețelei locale și internetului; accesibilitatea depinde totuși de firewallul sistemului și de setarea GatewayPorts de pe serverul SSH.</translation>
     </message>
     <message>
@@ -2222,15 +2246,15 @@ Confirmi că cheia s-a schimbat, înlocuiești vechea înregistrare din known_ho
 <context>
     <name>PortForwardWorker</name>
     <message>
-        <source>The SSH session is not ready; cannot start forwarding '%1'</source>
+        <source>The SSH session is not ready; cannot start forwarding &apos;%1&apos;</source>
         <translation type="unfinished">Sesiunea SSH nu este pregătită; nu se poate porni redirecționarea „%1”</translation>
     </message>
     <message>
-        <source>Failed to start remote forwarding '%1': %2</source>
+        <source>Failed to start remote forwarding &apos;%1&apos;: %2</source>
         <translation type="unfinished">Nu s-a putut porni redirecționarea la distanță „%1”: %2</translation>
     </message>
     <message>
-        <source>The listen address '%1' is not a bindable local IP address</source>
+        <source>The listen address &apos;%1&apos; is not a bindable local IP address</source>
         <translation type="unfinished">Adresa de ascultare „%1” nu este o adresă IP locală pe care se poate lega</translation>
     </message>
     <message>
@@ -2563,7 +2587,7 @@ Confirmi că cheia s-a schimbat, înlocuiești vechea înregistrare din known_ho
         <translation type="unfinished">Deschide setările</translation>
     </message>
     <message>
-        <source>Shortcut %1 is assigned to both '%2' and '%3'</source>
+        <source>Shortcut %1 is assigned to both &apos;%2&apos; and &apos;%3&apos;</source>
         <translation type="unfinished">Comanda rapidă %1 este atribuită atât lui „%2”, cât și lui „%3”</translation>
     </message>
     <message>
@@ -2921,7 +2945,7 @@ Rezerva SFTP prin cheia la distanță a eșuat și ea: %2</translation>
         <translation type="unfinished">Nu s-a putut determina locația fișierului tău known_hosts.</translation>
     </message>
     <message>
-        <source>Could not export the server's new host key: %1</source>
+        <source>Could not export the server&apos;s new host key: %1</source>
         <translation type="unfinished">Nu s-a putut exporta noua cheie a gazdei serverului: %1</translation>
     </message>
     <message>
@@ -2977,7 +3001,7 @@ Pentru a nu suprascrie datele de autentificare existente, Shellium nu creează a
         <translation type="unfinished">Nu s-a putut activa protecția cu parolă principală</translation>
     </message>
     <message>
-        <source>The vault's current state does not allow enabling master password protection again.</source>
+        <source>The vault&apos;s current state does not allow enabling master password protection again.</source>
         <translation type="unfinished">Starea curentă a seifului nu permite reactivarea protecției cu parolă principală.</translation>
     </message>
     <message>
@@ -3126,7 +3150,7 @@ Off: everything is re-uploaded in full regardless of whether content matches.</s
 Dezactivat: totul se încarcă complet, indiferent dacă conținutul corespunde.</translation>
     </message>
     <message>
-        <source>Transfers run strictly in order; select a waiting item and click 'Deselect' to remove it directly.</source>
+        <source>Transfers run strictly in order; select a waiting item and click &apos;Deselect&apos; to remove it directly.</source>
         <translation type="unfinished">Transferurile se execută strict în ordine; selectează un element în așteptare și apasă „Deselectează” pentru a-l elimina direct.</translation>
     </message>
     <message>
@@ -3564,7 +3588,7 @@ Această acțiune nu poate fi anulată.</translation>
     <message>
         <source>
 
-⚠ This server was inferred by parsing terminal commands and may not be the one you expect. Run 'hostname' in the terminal to verify before continuing.</source>
+⚠ This server was inferred by parsing terminal commands and may not be the one you expect. Run &apos;hostname&apos; in the terminal to verify before continuing.</source>
         <translation type="unfinished">⚠ Acest server a fost identificat prin presupunere, analizând comenzile din terminal, și poate să nu fie cel la care te aștepți. Execută „hostname” în terminal pentru a verifica înainte de a continua.</translation>
     </message>
     <message>
@@ -3610,7 +3634,7 @@ Această acțiune nu poate fi anulată.</translation>
     <message>
         <source>The SFTP service of server %1 offers only hmac-sha1.
 
-This algorithm is obsolete; upgrading the server's SSH configuration is recommended. Enable it for this connection only and retry?
+This algorithm is obsolete; upgrading the server&apos;s SSH configuration is recommended. Enable it for this connection only and retry?
 
 %2</source>
         <translation type="unfinished">Serviciul SFTP al serverului %1 oferă doar hmac-sha1.
@@ -3699,7 +3723,7 @@ Acest algoritm este învechit; se recomandă actualizarea configurației SSH a s
         <translation type="unfinished">Aspectul interfeței</translation>
     </message>
     <message>
-        <source>'Follow system' syncs automatically when the operating system switches between light and dark appearance.</source>
+        <source>&apos;Follow system&apos; syncs automatically when the operating system switches between light and dark appearance.</source>
         <translation type="unfinished">„Urmează sistemul” se sincronizează automat când sistemul de operare comută între aspectul luminos și cel întunecat.</translation>
     </message>
     <message>
@@ -3729,6 +3753,14 @@ Acest algoritm este învechit; se recomandă actualizarea configurației SSH a s
     <message>
         <source>Font</source>
         <translation type="unfinished">Font</translation>
+    </message>
+    <message>
+        <source>Confirm before hiding the sidebar</source>
+        <translation>Confirmă înainte de a ascunde bara laterală</translation>
+    </message>
+    <message>
+        <source>Ask before hiding the sidebar when you double-click its divider.</source>
+        <translation>Întreabă înainte de a ascunde bara laterală la dublu clic pe separator.</translation>
     </message>
     <message>
         <source>Monospace font</source>
@@ -3799,7 +3831,7 @@ Acest algoritm este învechit; se recomandă actualizarea configurației SSH a s
         <translation type="unfinished">Sugestii automate în linia de comandă</translation>
     </message>
     <message>
-        <source>After you type at least two characters, suggestions are shown automatically from the current host's command history; off by default.</source>
+        <source>After you type at least two characters, suggestions are shown automatically from the current host&apos;s command history; off by default.</source>
         <translation type="unfinished">După introducerea a cel puțin două caractere, sugestiile sunt afișate automat din istoricul comenzilor gazdei curente; dezactivat implicit.</translation>
     </message>
     <message>
@@ -3927,7 +3959,7 @@ Acest algoritm este învechit; se recomandă actualizarea configurației SSH a s
         <translation type="unfinished">Salvează</translation>
     </message>
     <message>
-        <source>Unlike other settings, changes to the address and key are not saved character by character; click 'Save', so that every keystroke does not trigger an encrypted write.</source>
+        <source>Unlike other settings, changes to the address and key are not saved character by character; click &apos;Save&apos;, so that every keystroke does not trigger an encrypted write.</source>
         <translation type="unfinished">Spre deosebire de alte setări, modificările adresei și cheii nu se salvează caracter cu caracter; apasă „Salvează” pentru ca fiecare apăsare de tastă să nu declanșeze o scriere criptată.</translation>
     </message>
     <message>
@@ -4171,7 +4203,7 @@ Cheie publică: %3</translation>
         <translation type="unfinished">Formatul cheii private nu este acceptat, fișierul este corupt sau fraza de acces este incorectă.</translation>
     </message>
     <message>
-        <source>Verification passed: %1%2. You can select this file in the 'Private key' field of the host editor.</source>
+        <source>Verification passed: %1%2. You can select this file in the &apos;Private key&apos; field of the host editor.</source>
         <translation type="unfinished">Verificare trecută: %1%2. Poți selecta acest fișier în câmpul „Cheie privată” al editorului de gazde.</translation>
     </message>
     <message>
@@ -4459,7 +4491,7 @@ Cheie publică: %3</translation>
         <translation type="unfinished">Se pornește terminalul local…</translation>
     </message>
     <message>
-        <source>Starting local terminal…<byte value="xd" />
+        <source>Starting local terminal…<byte value="xd"/>
 </source>
         <translation type="unfinished">Se pornește terminalul local…</translation>
     </message>
@@ -4492,18 +4524,18 @@ Cheie publică: %3</translation>
         <translation type="unfinished">Integrarea shell pentru %1 nu este activată; identificarea imbricată este degradată: %2</translation>
     </message>
     <message>
-        <source>Permission denied, please try again.<byte value="xd" />
-%1's password: </source>
+        <source>Permission denied, please try again.<byte value="xd"/>
+%1&apos;s password: </source>
         <translation type="unfinished">Acces refuzat, încearcă din nou.
 Parola pentru %1:</translation>
     </message>
     <message>
-        <source>%1's password: </source>
+        <source>%1&apos;s password: </source>
         <translation type="unfinished">Parola pentru %1:</translation>
     </message>
     <message>
-        <source><byte value="xd" />
-Could not establish the nested connection to %1: %2<byte value="xd" />
+        <source><byte value="xd"/>
+Could not establish the nested connection to %1: %2<byte value="xd"/>
 </source>
         <translation type="unfinished">Nu s-a putut stabili conexiunea imbricată la %1: %2</translation>
     </message>
@@ -4530,7 +4562,7 @@ Could not establish the nested connection to %1: %2<byte value="xd" />
     <message>
         <source>Server %1 offers only hmac-sha1, which the default security policy cannot use to complete the connection.
 
-hmac-sha1 is obsolete; upgrading the server's SSH configuration is recommended. Enable this algorithm for this connection only and retry?
+hmac-sha1 is obsolete; upgrading the server&apos;s SSH configuration is recommended. Enable this algorithm for this connection only and retry?
 
 Details: %2</source>
         <translation type="unfinished">Serverul %1 oferă doar hmac-sha1, pe care politica de securitate implicită nu îl poate folosi pentru a finaliza conexiunea.
@@ -4612,14 +4644,14 @@ Confirmi că cheia s-a schimbat și înlocuiești vechea înregistrare din known
         <translation type="unfinished">Apasă r pentru a te reconecta la %1, x pentru a închide această filă</translation>
     </message>
     <message>
-        <source><byte value="xd" />
-No server to reconnect to; press x to close this tab<byte value="xd" />
+        <source><byte value="xd"/>
+No server to reconnect to; press x to close this tab<byte value="xd"/>
 </source>
         <translation type="unfinished">Niciun server de reconectat; apasă x pentru a închide această filă</translation>
     </message>
     <message>
-        <source><byte value="xd" />
-Reconnecting manually…<byte value="xd" />
+        <source><byte value="xd"/>
+Reconnecting manually…<byte value="xd"/>
 </source>
         <translation type="unfinished">Reconectare manuală…</translation>
     </message>
@@ -4672,7 +4704,7 @@ Reconnecting manually…<byte value="xd" />
         <translation type="unfinished">Acest ssh nu a fost interceptat (%1); a fost lăsat părții la distanță să îl execute singură</translation>
     </message>
     <message>
-        <source>Shellium could not take over this connection (%1); handing it to the remote ssh to run directly.<byte value="xd" />
+        <source>Shellium could not take over this connection (%1); handing it to the remote ssh to run directly.<byte value="xd"/>
 </source>
         <translation type="unfinished">Shellium nu a putut intercepta această conexiune (%1); a fost predată către ssh-ul la distanță pentru execuție directă.</translation>
     </message>
@@ -4688,31 +4720,31 @@ Reconnecting manually…<byte value="xd" />
         <translation type="unfinished">Serviciul de setări nu are o bază de date a aplicației disponibilă</translation>
     </message>
     <message>
-        <source>The value '%2' of setting %1 is not an integer; the default has been restored</source>
+        <source>The value &apos;%2&apos; of setting %1 is not an integer; the default has been restored</source>
         <translation type="unfinished">Valoarea „%2” a setării %1 nu este un număr întreg; s-a restaurat valoarea implicită</translation>
     </message>
     <message>
-        <source>The value '%2' of setting %1 is not a boolean; the default has been restored</source>
+        <source>The value &apos;%2&apos; of setting %1 is not a boolean; the default has been restored</source>
         <translation type="unfinished">Valoarea „%2” a setării %1 nu este o valoare logică; s-a restaurat valoarea implicită</translation>
     </message>
     <message>
-        <source>Unknown theme '%1'; reverted to follow system</source>
+        <source>Unknown theme &apos;%1&apos;; reverted to follow system</source>
         <translation type="unfinished">Temă necunoscută „%1”; se revine la „Urmează sistemul”</translation>
     </message>
     <message>
-        <source>Unknown terminal color scheme '%1'; reverted to the default scheme</source>
+        <source>Unknown terminal color scheme &apos;%1&apos;; reverted to the default scheme</source>
         <translation type="unfinished">Schemă de culori a terminalului necunoscută „%1”; se revine la schema implicită</translation>
     </message>
     <message>
-        <source>Letter spacing '%1' is invalid; the default has been restored</source>
+        <source>Letter spacing &apos;%1&apos; is invalid; the default has been restored</source>
         <translation type="unfinished">Spațierea dintre litere „%1” nu este validă; s-a restaurat valoarea implicită</translation>
     </message>
     <message>
-        <source>Unknown cursor shape '%1'; reverted to block cursor</source>
+        <source>Unknown cursor shape &apos;%1&apos;; reverted to block cursor</source>
         <translation type="unfinished">Formă de cursor necunoscută „%1”; se revine la cursorul bloc</translation>
     </message>
     <message>
-        <source>The shortcut '%2' for action '%1' is invalid; the default has been restored</source>
+        <source>The shortcut &apos;%2&apos; for action &apos;%1&apos; is invalid; the default has been restored</source>
         <translation type="unfinished">Comanda rapidă „%2” pentru acțiunea „%1” nu este validă; s-a restaurat valoarea implicită</translation>
     </message>
     <message>
@@ -4910,7 +4942,7 @@ Reconnecting manually…<byte value="xd" />
         <translation type="unfinished">Resetarea șterge definitiv toate parolele SSH și frazele de acces ale cheilor private stocate și le desface legătura cu gazdele. Adresele gazdelor, conturile, porturile, căile fișierelor de chei private, grupurile și lanțurile de gazde se păstrează. Această acțiune nu poate fi anulată.</translation>
     </message>
     <message>
-        <source>Type '%1' to confirm:</source>
+        <source>Type &apos;%1&apos; to confirm:</source>
         <translation type="unfinished">Introdu „%1” pentru a confirma:</translation>
     </message>
     <message>

@@ -142,6 +142,8 @@ private:
     SegmentedControl *m_themeSelector = nullptr;
     /** @brief 侧边栏密度分段控件；0 为宽松、1 为紧凑，修改后由设置服务持久化并广播。 */
     SegmentedControl *m_sidebarDensitySelector = nullptr;
+    /** @brief 双击侧边栏分隔条时是否先显示隐藏确认提示；关闭后仍可在此处重新打开。 */
+    ToggleSwitch *m_sidebarDoubleClickPromptToggle = nullptr;
     /** @brief 终端配色色板卡，按配色预设 id 索引。 */
     QHash<QString, ThemeSwatchButton *> m_colorSchemeSwatches;
     /** @brief 配色 id 的展示顺序，过滤后重排网格时据此保持稳定次序。 */

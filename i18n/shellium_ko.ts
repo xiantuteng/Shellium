@@ -408,8 +408,8 @@ Run it in the current terminal?</source>
         <translation type="unfinished">호스트 체인 편집</translation>
     </message>
     <message>
-        <source>The hosts you add connect in the following order, finally reaching &lt;span style="font-family: monospace; font-weight: 600;"&gt;%1&lt;/span&gt;.</source>
-        <translation type="unfinished">추가된 호스트는 다음 순서로 연결되어 최종적으로 &lt;span style="font-family: monospace; font-weight: 600;"&gt;%1&lt;/span&gt;에 도달합니다.</translation>
+        <source>The hosts you add connect in the following order, finally reaching &lt;span style=&quot;font-family: monospace; font-weight: 600;&quot;&gt;%1&lt;/span&gt;.</source>
+        <translation type="unfinished">추가된 호스트는 다음 순서로 연결되어 최종적으로 &lt;span style=&quot;font-family: monospace; font-weight: 600;&quot;&gt;%1&lt;/span&gt;에 도달합니다.</translation>
     </message>
     <message>
         <source>Add host</source>
@@ -526,7 +526,7 @@ Run it in the current terminal?</source>
         <source>Import Hosts…</source>
         <translation type="unfinished">호스트 가져오기…</translation>
     </message>
-<message>
+    <message>
         <source>Import from Excel…</source>
         <translation>Excel에서 가져오기…</translation>
     </message>
@@ -627,11 +627,11 @@ Run it in the current terminal?</source>
         <translation type="unfinished">노드 업데이트</translation>
     </message>
     <message>
-        <source>Deleting group '%1' also deletes all of its subgroups and hosts, and cannot be undone. Continue?</source>
+        <source>Deleting group &apos;%1&apos; also deletes all of its subgroups and hosts, and cannot be undone. Continue?</source>
         <translation type="unfinished">그룹 「%1」을(를) 삭제하면 모든 하위 그룹과 호스트도 삭제되며 되돌릴 수 없습니다. 계속하시겠습니까?</translation>
     </message>
     <message>
-        <source>Delete host '%1'? This action cannot be undone.</source>
+        <source>Delete host &apos;%1&apos;? This action cannot be undone.</source>
         <translation type="unfinished">호스트 「%1」을(를) 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.</translation>
     </message>
     <message>
@@ -690,35 +690,35 @@ Run it in the current terminal?</source>
         <source>Successfully imported %1 records.</source>
         <translation type="unfinished">%1개의 레코드를 성공적으로 가져왔습니다.</translation>
     </message>
-<message>
+    <message>
         <source>The Excel file has no usable host records.</source>
         <translation>Excel 파일에 가져올 수 있는 호스트 레코드가 없습니다.</translation>
     </message>
-<message>
+    <message>
         <source>The host database or credential vault is unavailable.</source>
         <translation>호스트 데이터베이스 또는 자격 증명 보관함을 사용할 수 없습니다.</translation>
     </message>
-<message>
+    <message>
         <source>Excel import failed</source>
         <translation>Excel 가져오기 실패</translation>
     </message>
-<message>
+    <message>
         <source>%1 host records will be imported into the current folder. Passwords will be encrypted automatically.</source>
         <translation>현재 폴더로 %1개의 호스트 레코드를 가져옵니다. 비밀번호는 자동으로 암호화됩니다.</translation>
     </message>
-<message>
+    <message>
         <source>Confirm Excel import</source>
         <translation>Excel 가져오기 확인</translation>
     </message>
-<message>
+    <message>
         <source>Import hosts from Excel</source>
         <translation>Excel에서 호스트 가져오기</translation>
     </message>
-<message>
+    <message>
         <source>Excel import complete</source>
         <translation>Excel 가져오기 완료</translation>
     </message>
-<message>
+    <message>
         <source>Successfully imported %1 hosts.</source>
         <translation>호스트 %1개를 성공적으로 가져왔습니다.</translation>
     </message>
@@ -967,7 +967,7 @@ System: %2</source>
         <translation type="unfinished">마스터 비밀번호 보호가 필요합니다</translation>
     </message>
     <message>
-        <source>Viewing host passwords requires master password protection. Go to 'Settings → Connections &amp; Security → Credential Vault' and turn on 'Protect credentials with a master password'.</source>
+        <source>Viewing host passwords requires master password protection. Go to &apos;Settings → Connections &amp; Security → Credential Vault&apos; and turn on &apos;Protect credentials with a master password&apos;.</source>
         <translation type="unfinished">호스트 비밀번호를 보려면 마스터 비밀번호 보호가 필요합니다. 「설정 → 연결 및 보안 → 자격 증명 보관소」로 이동하여 「자격 증명을 마스터 비밀번호로 보호」를 활성화하세요.</translation>
     </message>
     <message>
@@ -1099,7 +1099,7 @@ System: %2</source>
         <translation type="unfinished">연결을 테스트할 수 없습니다</translation>
     </message>
     <message>
-        <source>Could not read the saved credentials for '%1'.</source>
+        <source>Could not read the saved credentials for &apos;%1&apos;.</source>
         <translation type="unfinished">「%1」의 저장된 자격 증명을 읽을 수 없습니다.</translation>
     </message>
     <message>
@@ -1111,7 +1111,7 @@ System: %2</source>
         <translation type="unfinished">%1에 연결되었습니다.</translation>
     </message>
     <message>
-        <source>The server only supports legacy hmac-sha1. If you have accepted the risk, turn on 'Legacy compatibility' and retry.
+        <source>The server only supports legacy hmac-sha1. If you have accepted the risk, turn on &apos;Legacy compatibility&apos; and retry.
 
 %1</source>
         <translation type="unfinished">서버가 오래된 hmac-sha1만 지원합니다. 위험을 감수하려면 「구버전 호환성」을 활성화하고 다시 시도하세요.
@@ -1123,7 +1123,7 @@ System: %2</source>
         <translation type="unfinished">SSH 인증에 실패했습니다. 비밀번호 또는 개인 키 암호를 확인하고 다시 시도하세요.</translation>
     </message>
     <message>
-        <source>The server requires a password or private key passphrase. Fill in 'Password' and retry.</source>
+        <source>The server requires a password or private key passphrase. Fill in &apos;Password&apos; and retry.</source>
         <translation type="unfinished">서버가 비밀번호 또는 개인 키 암호를 요구합니다. 「비밀번호」를 입력하고 다시 시도하세요.</translation>
     </message>
     <message>
@@ -1526,6 +1526,30 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">자격 증명 보관소가 비활성 상태로 인해 자동으로 잠겼습니다</translation>
     </message>
     <message>
+        <source>Hide the sidebar?</source>
+        <translation>사이드바를 숨길까요?</translation>
+    </message>
+    <message>
+        <source>Double-clicking this divider hides the sidebar. Hide it now?</source>
+        <translation>이 구분선을 두 번 클릭하면 사이드바가 숨겨집니다. 지금 숨길까요?</translation>
+    </message>
+    <message>
+        <source>Do not show this again</source>
+        <translation>다시 표시하지 않음</translation>
+    </message>
+    <message>
+        <source>Hide sidebar</source>
+        <translation>사이드바 숨기기</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation type="unfinished">취소</translation>
+    </message>
+    <message>
+        <source>Failed to save sidebar prompt preference: %1</source>
+        <translation>사이드바 확인 설정을 저장하지 못했습니다: %1</translation>
+    </message>
+    <message>
         <source>Press + in the title bar to open a new terminal tab, or connect to a server from the host list on the left.</source>
         <translation type="unfinished">제목 표시줄의 +를 눌러 새 터미널 탭을 열거나 왼쪽 호스트 목록에서 서버에 연결하세요.</translation>
     </message>
@@ -1623,7 +1647,7 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     </message>
     <message>
         <source>The group “%1” has no hosts to connect</source>
-        <translation type="unfinished">"%1" 그룹에 연결할 호스트가 없습니다</translation>
+        <translation type="unfinished">&quot;%1&quot; 그룹에 연결할 호스트가 없습니다</translation>
     </message>
     <message>
         <source>Connected, but writing the connection history failed: %1</source>
@@ -1686,7 +1710,7 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">텍스트 찾기:</translation>
     </message>
     <message>
-        <source>'%1' was not found in the terminal output</source>
+        <source>&apos;%1&apos; was not found in the terminal output</source>
         <translation type="unfinished">터미널 출력에서 「%1」을(를) 찾을 수 없습니다</translation>
     </message>
     <message>
@@ -1718,11 +1742,11 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">작업 공간에 임시 연결이 포함되어 있습니다</translation>
     </message>
     <message>
-        <source>Tab '%1' is not a persistent host opened from the host tree. Save this connection to the host tree first, then save the workspace.</source>
+        <source>Tab &apos;%1&apos; is not a persistent host opened from the host tree. Save this connection to the host tree first, then save the workspace.</source>
         <translation type="unfinished">탭 「%1」은(는) 호스트 트리에서 연 영구 호스트가 아닙니다. 먼저 이 연결을 호스트 트리에 저장한 다음 작업 공간을 저장하세요.</translation>
     </message>
     <message>
-        <source>Failed to check the host record for tab '%1': %2</source>
+        <source>Failed to check the host record for tab &apos;%1&apos;: %2</source>
         <translation type="unfinished">탭 「%1」의 호스트 레코드를 확인할 수 없습니다: %2</translation>
     </message>
     <message>
@@ -1750,11 +1774,11 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">기존 작업 공간 덮어쓰기</translation>
     </message>
     <message>
-        <source>A workspace named '%1' already exists. Overwrite it with the current set of tabs?</source>
+        <source>A workspace named &apos;%1&apos; already exists. Overwrite it with the current set of tabs?</source>
         <translation type="unfinished">이름이 「%1」인 작업 공간이 이미 있습니다. 현재 탭 세트로 덮어쓰시겠습니까?</translation>
     </message>
     <message>
-        <source>Workspace '%1' saved (%2 tabs)</source>
+        <source>Workspace &apos;%1&apos; saved (%2 tabs)</source>
         <translation type="unfinished">작업 공간 「%1」을(를) 저장했습니다(탭 %2개)</translation>
     </message>
     <message>
@@ -1790,7 +1814,7 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">작업 공간 레이아웃이 손상되었습니다</translation>
     </message>
     <message>
-        <source>The version, tab list, or count of workspace '%1' is invalid; the current session was not modified.</source>
+        <source>The version, tab list, or count of workspace &apos;%1&apos; is invalid; the current session was not modified.</source>
         <translation type="unfinished">작업 공간 「%1」의 버전, 탭 목록 또는 개수가 유효하지 않습니다. 현재 세션은 변경되지 않았습니다.</translation>
     </message>
     <message>
@@ -1810,7 +1834,7 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">호스트 체인을 확인할 수 없습니다: %1</translation>
     </message>
     <message>
-        <source>Workspace '%1' could not be fully restored: %2. The current session was not modified.</source>
+        <source>Workspace &apos;%1&apos; could not be fully restored: %2. The current session was not modified.</source>
         <translation type="unfinished">작업 공간 「%1」을(를) 완전히 복원할 수 없습니다: %2. 현재 세션은 변경되지 않았습니다.</translation>
     </message>
     <message>
@@ -1818,11 +1842,11 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">현재 작업 공간 교체</translation>
     </message>
     <message>
-        <source>Opening '%1' closes the current %2 tabs and their connections, then restores %3 tabs. Continue?</source>
+        <source>Opening &apos;%1&apos; closes the current %2 tabs and their connections, then restores %3 tabs. Continue?</source>
         <translation type="unfinished">「%1」을(를) 열면 현재 탭(%2)과 해당 연결을 닫은 다음 탭 %3개를 복원합니다. 계속하시겠습니까?</translation>
     </message>
     <message>
-        <source>Workspace '%1' restored</source>
+        <source>Workspace &apos;%1&apos; restored</source>
         <translation type="unfinished">작업 공간 「%1」을(를) 복원했습니다</translation>
     </message>
     <message>
@@ -2009,7 +2033,7 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">호스트가 아직 연결되지 않았습니다</translation>
     </message>
     <message>
-        <source>Connect to '%1' from the host tree first, then start this rule.</source>
+        <source>Connect to &apos;%1&apos; from the host tree first, then start this rule.</source>
         <translation type="unfinished">먼저 호스트 트리에서 「%1」에 연결한 다음 이 규칙을 시작하세요.</translation>
     </message>
     <message>
@@ -2037,7 +2061,7 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">현재 호스트에는 아직 시작할 포트 포워딩 규칙이 없습니다.</translation>
     </message>
     <message>
-        <source>Connect to '%1' from the host tree first, then start all forwarding rules.</source>
+        <source>Connect to &apos;%1&apos; from the host tree first, then start all forwarding rules.</source>
         <translation type="unfinished">먼저 호스트 트리에서 「%1」에 연결한 다음 모든 포워딩 규칙을 시작하세요.</translation>
     </message>
     <message>
@@ -2045,7 +2069,7 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">모든 포워딩 시작 확인</translation>
     </message>
     <message>
-        <source>This will start all %2 forwarding rules under host '%1'; rules already running are left unchanged. Continue?</source>
+        <source>This will start all %2 forwarding rules under host &apos;%1&apos;; rules already running are left unchanged. Continue?</source>
         <translation type="unfinished">호스트 「%1」의 모든 포워딩 규칙(%2개)을 시작합니다. 이미 실행 중인 규칙은 변경되지 않습니다. 계속하시겠습니까?</translation>
     </message>
     <message>
@@ -2075,7 +2099,7 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">모든 포워딩 중지 확인</translation>
     </message>
     <message>
-        <source>This will stop %2 active forwarding rules under host '%1' and close the related connections. Continue?</source>
+        <source>This will stop %2 active forwarding rules under host &apos;%1&apos; and close the related connections. Continue?</source>
         <translation type="unfinished">호스트 「%1」의 실행 중인 포워딩 규칙(%2개)을 중지하고 관련 연결을 닫습니다. 계속하시겠습니까?</translation>
     </message>
     <message>
@@ -2103,7 +2127,7 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">자동 포워딩 규칙을 읽을 수 없습니다: %1</translation>
     </message>
     <message>
-        <source>Failed to auto-start '%1': %2</source>
+        <source>Failed to auto-start &apos;%1&apos;: %2</source>
         <translation type="unfinished">「%1」을(를) 자동으로 시작할 수 없습니다: %2</translation>
     </message>
     <message>
@@ -2192,7 +2216,7 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">대상:</translation>
     </message>
     <message>
-        <source>Security note: setting the listen address to 0.0.0.0 or :: exposes the port to the local network and the internet; reachability still depends on the system firewall and the SSH server's GatewayPorts setting.</source>
+        <source>Security note: setting the listen address to 0.0.0.0 or :: exposes the port to the local network and the internet; reachability still depends on the system firewall and the SSH server&apos;s GatewayPorts setting.</source>
         <translation type="unfinished">보안 참고: 수신 주소를 0.0.0.0 또는 ::로 설정하면 포트가 로컬 네트워크와 인터넷에 열립니다. 도달 가능 여부는 여전히 시스템 방화벽과 SSH 서버의 GatewayPorts 설정에 따라 달라집니다.</translation>
     </message>
     <message>
@@ -2222,15 +2246,15 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
 <context>
     <name>PortForwardWorker</name>
     <message>
-        <source>The SSH session is not ready; cannot start forwarding '%1'</source>
+        <source>The SSH session is not ready; cannot start forwarding &apos;%1&apos;</source>
         <translation type="unfinished">SSH 세션이 준비되지 않았습니다. 포워딩 「%1」을(를) 시작할 수 없습니다</translation>
     </message>
     <message>
-        <source>Failed to start remote forwarding '%1': %2</source>
+        <source>Failed to start remote forwarding &apos;%1&apos;: %2</source>
         <translation type="unfinished">원격 포워딩 「%1」을(를) 시작할 수 없습니다: %2</translation>
     </message>
     <message>
-        <source>The listen address '%1' is not a bindable local IP address</source>
+        <source>The listen address &apos;%1&apos; is not a bindable local IP address</source>
         <translation type="unfinished">수신 주소 「%1」은(는) 바인딩 가능한 로컬 IP 주소가 아닙니다</translation>
     </message>
     <message>
@@ -2563,7 +2587,7 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">설정 열기</translation>
     </message>
     <message>
-        <source>Shortcut %1 is assigned to both '%2' and '%3'</source>
+        <source>Shortcut %1 is assigned to both &apos;%2&apos; and &apos;%3&apos;</source>
         <translation type="unfinished">단축키 %1이(가) 「%2」와(과) 「%3」 모두에 할당되어 있습니다</translation>
     </message>
     <message>
@@ -2921,7 +2945,7 @@ The remote-key SFTP fallback also failed: %2</source>
         <translation type="unfinished">known_hosts 파일의 위치를 확인할 수 없습니다.</translation>
     </message>
     <message>
-        <source>Could not export the server's new host key: %1</source>
+        <source>Could not export the server&apos;s new host key: %1</source>
         <translation type="unfinished">서버의 새 호스트 키를 내보낼 수 없습니다: %1</translation>
     </message>
     <message>
@@ -2977,7 +3001,7 @@ To avoid overwriting existing credentials, Shellium does not create a new vault 
         <translation type="unfinished">마스터 비밀번호 보호를 활성화할 수 없습니다</translation>
     </message>
     <message>
-        <source>The vault's current state does not allow enabling master password protection again.</source>
+        <source>The vault&apos;s current state does not allow enabling master password protection again.</source>
         <translation type="unfinished">현재 보관소 상태에서는 마스터 비밀번호 보호를 다시 활성화할 수 없습니다.</translation>
     </message>
     <message>
@@ -3126,7 +3150,7 @@ Off: everything is re-uploaded in full regardless of whether content matches.</s
 비활성화: 내용 일치 여부와 관계없이 모든 것을 완전히 업로드합니다.</translation>
     </message>
     <message>
-        <source>Transfers run strictly in order; select a waiting item and click 'Deselect' to remove it directly.</source>
+        <source>Transfers run strictly in order; select a waiting item and click &apos;Deselect&apos; to remove it directly.</source>
         <translation type="unfinished">전송은 엄격하게 순서대로 실행됩니다. 대기 중인 항목을 선택하고 「선택 해제」를 눌러 바로 삭제하세요.</translation>
     </message>
     <message>
@@ -3564,7 +3588,7 @@ This action cannot be undone.</source>
     <message>
         <source>
 
-⚠ This server was inferred by parsing terminal commands and may not be the one you expect. Run 'hostname' in the terminal to verify before continuing.</source>
+⚠ This server was inferred by parsing terminal commands and may not be the one you expect. Run &apos;hostname&apos; in the terminal to verify before continuing.</source>
         <translation type="unfinished">⚠ 이 서버는 터미널 명령을 분석하여 추정으로 식별되었으며 예상과 다를 수 있습니다. 계속하기 전에 터미널에서 「hostname」을 실행하여 확인하세요.</translation>
     </message>
     <message>
@@ -3610,7 +3634,7 @@ This action cannot be undone.</source>
     <message>
         <source>The SFTP service of server %1 offers only hmac-sha1.
 
-This algorithm is obsolete; upgrading the server's SSH configuration is recommended. Enable it for this connection only and retry?
+This algorithm is obsolete; upgrading the server&apos;s SSH configuration is recommended. Enable it for this connection only and retry?
 
 %2</source>
         <translation type="unfinished">서버 %1의 SFTP 서비스가 hmac-sha1만 제공합니다.
@@ -3699,7 +3723,7 @@ This algorithm is obsolete; upgrading the server's SSH configuration is recommen
         <translation type="unfinished">인터페이스 모양</translation>
     </message>
     <message>
-        <source>'Follow system' syncs automatically when the operating system switches between light and dark appearance.</source>
+        <source>&apos;Follow system&apos; syncs automatically when the operating system switches between light and dark appearance.</source>
         <translation type="unfinished">「시스템 따르기」는 운영 체제가 라이트 모양과 다크 모양을 전환할 때 자동으로 동기화됩니다.</translation>
     </message>
     <message>
@@ -3729,6 +3753,14 @@ This algorithm is obsolete; upgrading the server's SSH configuration is recommen
     <message>
         <source>Font</source>
         <translation type="unfinished">글꼴</translation>
+    </message>
+    <message>
+        <source>Confirm before hiding the sidebar</source>
+        <translation>사이드바를 숨기기 전에 확인</translation>
+    </message>
+    <message>
+        <source>Ask before hiding the sidebar when you double-click its divider.</source>
+        <translation>구분선을 두 번 클릭해 사이드바를 숨길 때 확인하기</translation>
     </message>
     <message>
         <source>Monospace font</source>
@@ -3799,7 +3831,7 @@ This algorithm is obsolete; upgrading the server's SSH configuration is recommen
         <translation type="unfinished">명령줄 자동 제안</translation>
     </message>
     <message>
-        <source>After you type at least two characters, suggestions are shown automatically from the current host's command history; off by default.</source>
+        <source>After you type at least two characters, suggestions are shown automatically from the current host&apos;s command history; off by default.</source>
         <translation type="unfinished">두 자 이상 입력하면 현재 호스트의 명령 기록에서 제안이 자동으로 표시됩니다. 기본적으로 비활성화되어 있습니다.</translation>
     </message>
     <message>
@@ -3927,7 +3959,7 @@ This algorithm is obsolete; upgrading the server's SSH configuration is recommen
         <translation type="unfinished">저장</translation>
     </message>
     <message>
-        <source>Unlike other settings, changes to the address and key are not saved character by character; click 'Save', so that every keystroke does not trigger an encrypted write.</source>
+        <source>Unlike other settings, changes to the address and key are not saved character by character; click &apos;Save&apos;, so that every keystroke does not trigger an encrypted write.</source>
         <translation type="unfinished">다른 설정과 달리 주소와 키 변경은 한 글자씩 저장되지 않습니다. 「저장」을 눌러 키 입력마다 암호화 쓰기가 트리거되지 않도록 하세요.</translation>
     </message>
     <message>
@@ -4171,7 +4203,7 @@ Public key: %3</source>
         <translation type="unfinished">개인 키 형식이 지원되지 않거나, 파일이 손상되었거나, 암호가 올바르지 않습니다.</translation>
     </message>
     <message>
-        <source>Verification passed: %1%2. You can select this file in the 'Private key' field of the host editor.</source>
+        <source>Verification passed: %1%2. You can select this file in the &apos;Private key&apos; field of the host editor.</source>
         <translation type="unfinished">검증 통과: %1%2. 호스트 편집기의 「개인 키」 필드에서 이 파일을 선택할 수 있습니다.</translation>
     </message>
     <message>
@@ -4459,7 +4491,7 @@ Public key: %3</source>
         <translation type="unfinished">로컬 터미널을 시작하는 중…</translation>
     </message>
     <message>
-        <source>Starting local terminal…<byte value="xd" />
+        <source>Starting local terminal…<byte value="xd"/>
 </source>
         <translation type="unfinished">로컬 터미널을 시작하는 중…</translation>
     </message>
@@ -4492,18 +4524,18 @@ Public key: %3</source>
         <translation type="unfinished">%1의 셸 통합이 활성화되지 않았습니다. 중첩 식별이 저하되었습니다: %2</translation>
     </message>
     <message>
-        <source>Permission denied, please try again.<byte value="xd" />
-%1's password: </source>
+        <source>Permission denied, please try again.<byte value="xd"/>
+%1&apos;s password: </source>
         <translation type="unfinished">접근이 거부되었습니다. 다시 시도하세요.
 %1의 비밀번호:</translation>
     </message>
     <message>
-        <source>%1's password: </source>
+        <source>%1&apos;s password: </source>
         <translation type="unfinished">%1의 비밀번호:</translation>
     </message>
     <message>
-        <source><byte value="xd" />
-Could not establish the nested connection to %1: %2<byte value="xd" />
+        <source><byte value="xd"/>
+Could not establish the nested connection to %1: %2<byte value="xd"/>
 </source>
         <translation type="unfinished">%1에 대한 중첩 연결을 설정할 수 없습니다: %2</translation>
     </message>
@@ -4530,7 +4562,7 @@ Could not establish the nested connection to %1: %2<byte value="xd" />
     <message>
         <source>Server %1 offers only hmac-sha1, which the default security policy cannot use to complete the connection.
 
-hmac-sha1 is obsolete; upgrading the server's SSH configuration is recommended. Enable this algorithm for this connection only and retry?
+hmac-sha1 is obsolete; upgrading the server&apos;s SSH configuration is recommended. Enable this algorithm for this connection only and retry?
 
 Details: %2</source>
         <translation type="unfinished">서버 %1이(가) hmac-sha1만 제공하며, 기본 보안 정책으로는 이를 사용하여 연결을 완료할 수 없습니다.
@@ -4612,14 +4644,14 @@ Confirm the key has changed and replace the old record in known_hosts?</source>
         <translation type="unfinished">r을 눌러 %1에 재연결, x를 눌러 이 탭 닫기</translation>
     </message>
     <message>
-        <source><byte value="xd" />
-No server to reconnect to; press x to close this tab<byte value="xd" />
+        <source><byte value="xd"/>
+No server to reconnect to; press x to close this tab<byte value="xd"/>
 </source>
         <translation type="unfinished">재연결할 서버가 없습니다. x를 눌러 이 탭을 닫으세요</translation>
     </message>
     <message>
-        <source><byte value="xd" />
-Reconnecting manually…<byte value="xd" />
+        <source><byte value="xd"/>
+Reconnecting manually…<byte value="xd"/>
 </source>
         <translation type="unfinished">수동으로 재연결하는 중…</translation>
     </message>
@@ -4672,7 +4704,7 @@ Reconnecting manually…<byte value="xd" />
         <translation type="unfinished">이 ssh는 가로채지지 않았습니다(%1). 원격 측이 직접 실행하도록 맡겨졌습니다</translation>
     </message>
     <message>
-        <source>Shellium could not take over this connection (%1); handing it to the remote ssh to run directly.<byte value="xd" />
+        <source>Shellium could not take over this connection (%1); handing it to the remote ssh to run directly.<byte value="xd"/>
 </source>
         <translation type="unfinished">Shellium이 이 연결을 가로챌 수 없었습니다(%1). 직접 실행하도록 원격 ssh에 전달되었습니다.</translation>
     </message>
@@ -4688,31 +4720,31 @@ Reconnecting manually…<byte value="xd" />
         <translation type="unfinished">설정 서비스에 사용 가능한 애플리케이션 데이터베이스가 없습니다</translation>
     </message>
     <message>
-        <source>The value '%2' of setting %1 is not an integer; the default has been restored</source>
+        <source>The value &apos;%2&apos; of setting %1 is not an integer; the default has been restored</source>
         <translation type="unfinished">설정 %1의 값 「%2」은(는) 정수가 아닙니다. 기본값으로 복원했습니다</translation>
     </message>
     <message>
-        <source>The value '%2' of setting %1 is not a boolean; the default has been restored</source>
+        <source>The value &apos;%2&apos; of setting %1 is not a boolean; the default has been restored</source>
         <translation type="unfinished">설정 %1의 값 「%2」은(는) 부울 값이 아닙니다. 기본값으로 복원했습니다</translation>
     </message>
     <message>
-        <source>Unknown theme '%1'; reverted to follow system</source>
+        <source>Unknown theme &apos;%1&apos;; reverted to follow system</source>
         <translation type="unfinished">알 수 없는 테마 「%1」. 「시스템 따르기」로 되돌립니다</translation>
     </message>
     <message>
-        <source>Unknown terminal color scheme '%1'; reverted to the default scheme</source>
+        <source>Unknown terminal color scheme &apos;%1&apos;; reverted to the default scheme</source>
         <translation type="unfinished">알 수 없는 터미널 색 구성표 「%1」. 기본 구성표로 되돌립니다</translation>
     </message>
     <message>
-        <source>Letter spacing '%1' is invalid; the default has been restored</source>
+        <source>Letter spacing &apos;%1&apos; is invalid; the default has been restored</source>
         <translation type="unfinished">자간 「%1」이(가) 유효하지 않습니다. 기본값으로 복원했습니다</translation>
     </message>
     <message>
-        <source>Unknown cursor shape '%1'; reverted to block cursor</source>
+        <source>Unknown cursor shape &apos;%1&apos;; reverted to block cursor</source>
         <translation type="unfinished">알 수 없는 커서 모양 「%1」. 블록 커서로 되돌립니다</translation>
     </message>
     <message>
-        <source>The shortcut '%2' for action '%1' is invalid; the default has been restored</source>
+        <source>The shortcut &apos;%2&apos; for action &apos;%1&apos; is invalid; the default has been restored</source>
         <translation type="unfinished">작업 「%1」의 단축키 「%2」이(가) 유효하지 않습니다. 기본값으로 복원했습니다</translation>
     </message>
     <message>
@@ -4910,7 +4942,7 @@ Reconnecting manually…<byte value="xd" />
         <translation type="unfinished">재설정하면 저장된 모든 SSH 비밀번호와 개인 키 암호가 영구적으로 삭제되고 호스트와의 연결이 해제됩니다. 호스트 주소, 계정, 포트, 개인 키 파일 경로, 그룹, 호스트 체인은 유지됩니다. 이 작업은 되돌릴 수 없습니다.</translation>
     </message>
     <message>
-        <source>Type '%1' to confirm:</source>
+        <source>Type &apos;%1&apos; to confirm:</source>
         <translation type="unfinished">확인을 위해 「%1」을(를) 입력하세요:</translation>
     </message>
     <message>
