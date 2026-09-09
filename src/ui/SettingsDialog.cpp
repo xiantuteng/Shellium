@@ -97,6 +97,7 @@ SettingsDialog::SettingsDialog(TerminalSettingsService *service,
     , m_pages(new QStackedWidget(this))
     , m_languageSelector(new QComboBox(this))
     , m_themeSelector(new SegmentedControl(this))
+    , m_sidebarDensitySelector(new SegmentedControl(this))
     , m_fontCombo(new QComboBox(this))
     , m_fontSizeSpin(new QSpinBox(this))
     , m_lineHeightSpin(new QSpinBox(this))
@@ -193,6 +194,8 @@ SettingsDialog::SettingsDialog(TerminalSettingsService *service,
 
     connect(m_languageSelector, &QComboBox::currentIndexChanged,
             this, [this](int) { persistChanges(); });
+    connect(m_sidebarDensitySelector, &SegmentedControl::currentDataChanged,
+            this, [this](int) { persistChanges(); });
     connect(m_themeSelector, &SegmentedControl::currentDataChanged,
             this, [this](int) { persistChanges(); });
     connect(m_cursorShapeSelector, &SegmentedControl::currentDataChanged,
@@ -235,6 +238,13 @@ SettingsDialog::SettingsDialog(TerminalSettingsService *service,
                 this, [this](const QKeySequence &) { persistChanges(); });
     }
 
+    // 菜单及其他设置窗口共享服务；外部广播只刷新快照，populateControls 的保护位阻止回写。
+    connect(m_service, &TerminalSettingsService::settingsChanged, this,
+            [this](const TerminalSettings &settings) {
+                m_persistedSettings = settings;
+                populateControls(settings);
+                updatePreviewCard(settings);
+            });
     populateControls(m_persistedSettings);
     updatePreviewCard(m_persistedSettings);
 }
@@ -396,6 +406,12 @@ QWidget *SettingsDialog::buildAppearancePage()
                       [this] { return tr("'Follow system' syncs automatically when the operating "
                                          "system switches between light and dark appearance."); });
     layout->addWidget(themeCard);
+
+    // 分段文案使用延迟翻译回调，沿用 SettingsWidgets 的热切换机制，无需重新打开设置。
+    m_sidebarDensitySelector->setObjectName(QStringLiteral("sidebarDensitySelector"));
+    m_sidebarDensitySelector->addSegment([this] { return tr("Relaxed"); }, 0);
+    m_sidebarDensitySelector->addSegment([this] { return tr("Compact"); }, 1);
+    themeCard->addRow([this] { return tr("Sidebar density"); }, m_sidebarDensitySelector);
 
     auto *schemeCard = new SettingsCard([this] { return tr("Terminal color scheme"); }, page);
     m_colorSchemeFilter = new QLineEdit(schemeCard);
@@ -855,6 +871,7 @@ TerminalSettings SettingsDialog::editedSettings() const
         settings.language = languageCode;
     }
     settings.themeMode = static_cast<ThemeMode>(m_themeSelector->currentData());
+    settings.compactSidebar = m_sidebarDensitySelector->currentData() == 1;
     settings.colorSchemeId = QStringLiteral("default");
     for (const QString &id : m_colorSchemeOrder) {
         ThemeSwatchButton *swatch = m_colorSchemeSwatches.value(id);
@@ -984,6 +1001,7 @@ void SettingsDialog::populateControls(const TerminalSettings &settings)
     const int languageIndex = m_languageSelector->findData(normalized.language);
     m_languageSelector->setCurrentIndex(languageIndex >= 0 ? languageIndex : 0);
     m_themeSelector->setCurrentData(static_cast<int>(normalized.themeMode));
+    m_sidebarDensitySelector->setCurrentData(normalized.compactSidebar ? 1 : 0);
     for (auto iterator = m_colorSchemeSwatches.cbegin();
          iterator != m_colorSchemeSwatches.cend();
          ++iterator) {

@@ -99,6 +99,9 @@ struct TerminalSettings {
     /** @brief 主题选择，默认深色，与大多数终端模拟器的开箱体验一致。 */
     ThemeMode themeMode = ThemeMode::Dark;
 
+    /** @brief 侧边栏紧凑模式；默认宽松，与视图菜单共享设置及即时变更广播。 */
+    bool compactSidebar = false;
+
     /**
      * @brief 终端配色预设 id，默认 "default" 表示跟随 ThemeMode 的内置浅色/深色配色。
      *

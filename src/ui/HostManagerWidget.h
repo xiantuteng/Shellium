@@ -49,6 +49,12 @@ public:
     void refresh();
 
     /**
+     * @brief 即时切换主机树的行高、图标及缩进，保持节点交互状态。
+     * @param compact true 使用紧凑布局，false 恢复默认宽松布局；无返回值或 IO 错误。
+     */
+    void setCompactMode(bool compact);
+
+    /**
      * @brief 返回数据库中的可连接主机总数，不包含仅用于组织的分组。
      * @return 最近一次 refresh() 成功统计出的主机数量；数据库读取失败时保留上次有效值。
      */

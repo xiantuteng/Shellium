@@ -1766,6 +1766,22 @@ Puede ser una reinstalación del servidor o una rotación de clave, o un ataque 
         <source>The selected target is closed or not connected yet</source>
         <translation type="unfinished">El destino seleccionado está cerrado o aún no conectado</translation>
     </message>
+    <message>
+        <source>Sidebar density</source>
+        <translation>Densidad de la barra lateral</translation>
+    </message>
+    <message>
+        <source>Compact</source>
+        <translation>Compacta</translation>
+    </message>
+    <message>
+        <source>Relaxed</source>
+        <translation>Espaciosa</translation>
+    </message>
+    <message>
+        <source>Failed to save sidebar density: %1</source>
+        <translation>No se pudo guardar la densidad de la barra lateral: %1</translation>
+    </message>
 </context>
 <context>
     <name>PortForwardManagerWidget</name>
@@ -3872,6 +3888,18 @@ Los cambios sin guardar se han revertido.</translation>
     <message>
         <source>%1 (not installed)</source>
         <translation type="unfinished">%1 (no instalado)</translation>
+    </message>
+    <message>
+        <source>Sidebar density</source>
+        <translation>Densidad de la barra lateral</translation>
+    </message>
+    <message>
+        <source>Relaxed</source>
+        <translation>Espaciosa</translation>
+    </message>
+    <message>
+        <source>Compact</source>
+        <translation>Compacta</translation>
     </message>
 </context>
 <context>

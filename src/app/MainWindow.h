@@ -265,6 +265,12 @@ private:
      */
     void restoreSidebarWidth();
 
+    /** @brief 应用当前侧栏密度的几何尺寸；仅更新 UI，无 IO 或返回值。 */
+    void applySidebarDensity();
+
+    /** @brief 当前侧栏是否紧凑；缺省为宽松，使用独立设置键持久化。 */
+    bool m_compactSidebar = false;
+
     /**
      * @brief 把分隔器当前的侧栏宽度写入数据库设置。
      *

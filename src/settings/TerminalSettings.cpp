@@ -17,6 +17,8 @@ namespace {
 
 /** @brief 设置表中键名前缀，集中定义可避免保存和加载使用不同拼写。 */
 const QString kLanguageKey = QStringLiteral("appearance/language");
+/** @brief 沿用视图菜单已有的密度键，升级后无需迁移用户选择。 */
+const QString kCompactSidebarKey = QStringLiteral("layout/sidebar_compact");
 const QString kThemeKey = QStringLiteral("appearance/theme");
 const QString kColorSchemeKey = QStringLiteral("appearance/color_scheme");
 const QString kFontFamilyKey = QStringLiteral("terminal/font_family");
@@ -916,6 +918,7 @@ bool TerminalSettings::operator==(const TerminalSettings &other) const
 {
     return language == other.language
         && themeMode == other.themeMode
+        && compactSidebar == other.compactSidebar
         && colorSchemeId == other.colorSchemeId
         && fontFamily == other.fontFamily
         && fontPointSize == other.fontPointSize
@@ -1074,6 +1077,8 @@ bool TerminalSettingsService::load(QString *errorMessage)
             warnings.append(tr("Unknown cursor shape '%1'; reverted to block cursor").arg(*raw));
         }
     }
+    // 统一布尔解析同时兼容旧菜单写入的 0/1，并沿用读取失败与非法值处理。
+    assignBoolean(kCompactSidebarKey, &loaded.compactSidebar);
     assignBoolean(kCursorBlinkKey, &loaded.cursorBlink);
     assignInteger(kScrollbackKey, &loaded.scrollbackLines);
     assignBoolean(kAudibleBellKey, &loaded.audibleBell);
@@ -1171,6 +1176,7 @@ bool TerminalSettingsService::save(const TerminalSettings &settings, QString *er
             };
             if (!write(kLanguageKey, normalizedSettings.language)
                 || !write(kThemeKey, serializeTheme(normalizedSettings.themeMode))
+                || !write(kCompactSidebarKey, serializeBool(normalizedSettings.compactSidebar))
                 || !write(kColorSchemeKey, normalizedSettings.colorSchemeId)
                 || !write(kFontFamilyKey, normalizedSettings.fontFamily)
                 || !write(kFontSizeKey, QString::number(normalizedSettings.fontPointSize))

@@ -1766,6 +1766,22 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <source>The selected target is closed or not connected yet</source>
         <translation type="unfinished">선택한 대상이 닫혔거나 아직 연결되지 않았습니다</translation>
     </message>
+    <message>
+        <source>Sidebar density</source>
+        <translation>사이드바 표시 밀도</translation>
+    </message>
+    <message>
+        <source>Compact</source>
+        <translation>좁게</translation>
+    </message>
+    <message>
+        <source>Relaxed</source>
+        <translation>넓게</translation>
+    </message>
+    <message>
+        <source>Failed to save sidebar density: %1</source>
+        <translation>사이드바 표시 밀도를 저장하지 못했습니다: %1</translation>
+    </message>
 </context>
 <context>
     <name>PortForwardManagerWidget</name>
@@ -3872,6 +3888,18 @@ Unsaved changes have been reverted.</source>
     <message>
         <source>%1 (not installed)</source>
         <translation type="unfinished">%1(설치되지 않음)</translation>
+    </message>
+    <message>
+        <source>Sidebar density</source>
+        <translation>사이드바 표시 밀도</translation>
+    </message>
+    <message>
+        <source>Relaxed</source>
+        <translation>넓게</translation>
+    </message>
+    <message>
+        <source>Compact</source>
+        <translation>좁게</translation>
     </message>
 </context>
 <context>

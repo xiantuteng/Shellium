@@ -140,6 +140,8 @@ private:
     /** @brief 界面语言下拉；currentData 存语言码（"system" 或 QLocale 名称）。 */
     QComboBox *m_languageSelector = nullptr;
     SegmentedControl *m_themeSelector = nullptr;
+    /** @brief 侧边栏密度分段控件；0 为宽松、1 为紧凑，修改后由设置服务持久化并广播。 */
+    SegmentedControl *m_sidebarDensitySelector = nullptr;
     /** @brief 终端配色色板卡，按配色预设 id 索引。 */
     QHash<QString, ThemeSwatchButton *> m_colorSchemeSwatches;
     /** @brief 配色 id 的展示顺序，过滤后重排网格时据此保持稳定次序。 */

@@ -1766,6 +1766,22 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <source>The selected target is closed or not connected yet</source>
         <translation type="unfinished">الهدف المختار مغلق أو غير متصل بعد</translation>
     </message>
+    <message>
+        <source>Sidebar density</source>
+        <translation>كثافة الشريط الجانبي</translation>
+    </message>
+    <message>
+        <source>Compact</source>
+        <translation>متقارب</translation>
+    </message>
+    <message>
+        <source>Relaxed</source>
+        <translation>متباعد</translation>
+    </message>
+    <message>
+        <source>Failed to save sidebar density: %1</source>
+        <translation>تعذر حفظ كثافة الشريط الجانبي: %1</translation>
+    </message>
 </context>
 <context>
     <name>PortForwardManagerWidget</name>
@@ -3872,6 +3888,18 @@ Unsaved changes have been reverted.</source>
     <message>
         <source>%1 (not installed)</source>
         <translation type="unfinished">%1 (غير مثبَّت)</translation>
+    </message>
+    <message>
+        <source>Sidebar density</source>
+        <translation>كثافة الشريط الجانبي</translation>
+    </message>
+    <message>
+        <source>Relaxed</source>
+        <translation>متباعد</translation>
+    </message>
+    <message>
+        <source>Compact</source>
+        <translation>متقارب</translation>
     </message>
 </context>
 <context>

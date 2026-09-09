@@ -1766,6 +1766,22 @@ Confirmi că cheia s-a schimbat, înlocuiești vechea înregistrare din known_ho
         <source>The selected target is closed or not connected yet</source>
         <translation type="unfinished">Ținta selectată este închisă sau nu este încă conectată</translation>
     </message>
+    <message>
+        <source>Sidebar density</source>
+        <translation>Densitatea barei laterale</translation>
+    </message>
+    <message>
+        <source>Compact</source>
+        <translation>Compactă</translation>
+    </message>
+    <message>
+        <source>Relaxed</source>
+        <translation>Aerisită</translation>
+    </message>
+    <message>
+        <source>Failed to save sidebar density: %1</source>
+        <translation>Nu s-a putut salva densitatea barei laterale: %1</translation>
+    </message>
 </context>
 <context>
     <name>PortForwardManagerWidget</name>
@@ -3872,6 +3888,18 @@ Modificările nesalvate au fost anulate.</translation>
     <message>
         <source>%1 (not installed)</source>
         <translation type="unfinished">%1 (neinstalat)</translation>
+    </message>
+    <message>
+        <source>Sidebar density</source>
+        <translation>Densitatea barei laterale</translation>
+    </message>
+    <message>
+        <source>Relaxed</source>
+        <translation>Aerisită</translation>
+    </message>
+    <message>
+        <source>Compact</source>
+        <translation>Compactă</translation>
     </message>
 </context>
 <context>

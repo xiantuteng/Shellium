@@ -1766,6 +1766,22 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <source>The selected target is closed or not connected yet</source>
         <translation>选中的执行目标已关闭或尚未连接</translation>
     </message>
+    <message>
+        <source>Sidebar density</source>
+        <translation>侧边栏密度</translation>
+    </message>
+    <message>
+        <source>Compact</source>
+        <translation>紧凑</translation>
+    </message>
+    <message>
+        <source>Relaxed</source>
+        <translation>宽松</translation>
+    </message>
+    <message>
+        <source>Failed to save sidebar density: %1</source>
+        <translation>保存侧边栏密度失败：%1</translation>
+    </message>
 </context>
 <context>
     <name>PortForwardManagerWidget</name>
@@ -3874,6 +3890,18 @@ Unsaved changes have been reverted.</source>
     <message>
         <source>%1 (not installed)</source>
         <translation>%1（本机未安装）</translation>
+    </message>
+    <message>
+        <source>Sidebar density</source>
+        <translation>侧边栏密度</translation>
+    </message>
+    <message>
+        <source>Relaxed</source>
+        <translation>宽松</translation>
+    </message>
+    <message>
+        <source>Compact</source>
+        <translation>紧凑</translation>
     </message>
 </context>
 <context>

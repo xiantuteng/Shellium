@@ -1766,6 +1766,22 @@ Confirmar que a chave mudou, substituir o registro antigo em known_hosts e conti
         <source>The selected target is closed or not connected yet</source>
         <translation type="unfinished">O destino selecionado está fechado ou ainda não conectado</translation>
     </message>
+    <message>
+        <source>Sidebar density</source>
+        <translation>Densidade da barra lateral</translation>
+    </message>
+    <message>
+        <source>Compact</source>
+        <translation>Compacta</translation>
+    </message>
+    <message>
+        <source>Relaxed</source>
+        <translation>Espaçosa</translation>
+    </message>
+    <message>
+        <source>Failed to save sidebar density: %1</source>
+        <translation>Falha ao salvar a densidade da barra lateral: %1</translation>
+    </message>
 </context>
 <context>
     <name>PortForwardManagerWidget</name>
@@ -3872,6 +3888,18 @@ As alterações não salvas foram revertidas.</translation>
     <message>
         <source>%1 (not installed)</source>
         <translation type="unfinished">%1 (não instalado)</translation>
+    </message>
+    <message>
+        <source>Sidebar density</source>
+        <translation>Densidade da barra lateral</translation>
+    </message>
+    <message>
+        <source>Relaxed</source>
+        <translation>Espaçosa</translation>
+    </message>
+    <message>
+        <source>Compact</source>
+        <translation>Compacta</translation>
     </message>
 </context>
 <context>

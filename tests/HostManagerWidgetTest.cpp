@@ -121,6 +121,9 @@ private slots:
     /** @brief 子主机悬停或选中时不得改变左侧中性连线，只允许右侧圆角卡片变化。 */
     void childHostInteractionDoesNotAlterGuideLines();
 
+    /** @brief 密度切换缩小实际行高、缩进及图标，同时保留选中项和折叠状态。 */
+    void compactModeShrinksTreeAndPreservesState();
+
     /** @brief 多层展开时祖先连线连续，末尾节点以直角收尾，隐藏兄弟不延长连线。 */
     void nestedGuideLinesConnectAndStopAtLastSibling();
 
@@ -1715,6 +1718,43 @@ int inkWidth(const QImage &image, const QRect &area, const QColor &background)
 }
 
 } // namespace
+
+void HostManagerWidgetTest::compactModeShrinksTreeAndPreservesState()
+{
+    QString error;
+    QVERIFY2(seedGroupWithChildAndTopLevelHost(m_database.get(), &error), qPrintable(error));
+    HostManagerWidget widget(m_database.get(), m_vault.get());
+    widget.resize(400, 480);
+    widget.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&widget));
+    auto *tree = widget.findChild<QTreeWidget *>(QStringLiteral("HostTree"));
+    auto *folder = findItem(widget, QStringLiteral("上饶E呼即办"));
+    auto *host = findItem(widget, QStringLiteral("中间件"));
+    QVERIFY(tree && folder && host);
+    folder->setExpanded(true);
+    tree->setCurrentItem(host);
+    const QRect relaxedFolder = tree->visualItemRect(folder);
+    const QRect relaxedHost = tree->visualItemRect(host);
+    const QSize relaxedIcon = tree->iconSize();
+    widget.setCompactMode(true);
+    QCOMPARE(tree->visualItemRect(folder).height(), 28);
+    QCOMPARE(tree->visualItemRect(host).height(), 40);
+    QCOMPARE(tree->indentation(), 24);
+    QVERIFY(tree->iconSize().width() < relaxedIcon.width());
+    QCOMPARE(tree->currentItem(), host);
+    QVERIFY(folder->isExpanded());
+    // 切换后仍可通过箭头点击折叠，验证紧凑布局的绘制与点击坐标保持一致。
+    const QRect compactFolder = tree->visualItemRect(folder);
+    QTest::mouseClick(tree->viewport(), Qt::LeftButton, Qt::NoModifier,
+                      QPoint(compactFolder.left() + 9, compactFolder.center().y()));
+    QVERIFY(!folder->isExpanded());
+    widget.setCompactMode(false);
+    QVERIFY(!folder->isExpanded());
+    folder->setExpanded(true);
+    QCOMPARE(tree->visualItemRect(folder), relaxedFolder);
+    QCOMPARE(tree->visualItemRect(host), relaxedHost);
+    QCOMPARE(tree->iconSize(), relaxedIcon);
+}
 
 void HostManagerWidgetTest::childHostInteractionDoesNotAlterGuideLines()
 {

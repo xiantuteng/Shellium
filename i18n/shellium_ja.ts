@@ -1766,6 +1766,22 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <source>The selected target is closed or not connected yet</source>
         <translation type="unfinished">選択したターゲットは閉じられているか、まだ接続されていません</translation>
     </message>
+    <message>
+        <source>Sidebar density</source>
+        <translation>サイドバーの表示密度</translation>
+    </message>
+    <message>
+        <source>Compact</source>
+        <translation>コンパクト</translation>
+    </message>
+    <message>
+        <source>Relaxed</source>
+        <translation>ゆったり</translation>
+    </message>
+    <message>
+        <source>Failed to save sidebar density: %1</source>
+        <translation>サイドバーの表示密度を保存できませんでした：%1</translation>
+    </message>
 </context>
 <context>
     <name>PortForwardManagerWidget</name>
@@ -3872,6 +3888,18 @@ Unsaved changes have been reverted.</source>
     <message>
         <source>%1 (not installed)</source>
         <translation type="unfinished">%1（未インストール）</translation>
+    </message>
+    <message>
+        <source>Sidebar density</source>
+        <translation>サイドバーの表示密度</translation>
+    </message>
+    <message>
+        <source>Relaxed</source>
+        <translation>ゆったり</translation>
+    </message>
+    <message>
+        <source>Compact</source>
+        <translation>コンパクト</translation>
     </message>
 </context>
 <context>

@@ -493,10 +493,10 @@ public:
         initStyleOption(&opt, index);
         // 参考设计把层级开关放在每个分组最左侧。固定位置比跟随名称更稳定，也让不同长度
         // 的分组名共享一条箭头纵列；纵向以整行为准居中，避免受字体基线影响。
-        return QRect(opt.rect.left() + kToggleArrowLeft,
-                     opt.rect.center().y() - (kToggleArrowSize / 2),
-                     kToggleArrowSize,
-                     kToggleArrowSize);
+        return QRect(opt.rect.left() + metric(kToggleArrowLeft, 6),
+                     opt.rect.center().y() - (metric(kToggleArrowSize, 6) / 2),
+                     metric(kToggleArrowSize, 6),
+                     metric(kToggleArrowSize, 6));
     }
 
     /**
@@ -520,7 +520,7 @@ public:
         initStyleOption(&opt, index);
         QRect hitRect(opt.rect.left(),
                       opt.rect.top(),
-                      std::min(kToggleHitAreaWidth, opt.rect.width()),
+                      std::min(metric(kToggleHitAreaWidth, 20), opt.rect.width()),
                       opt.rect.height());
         // 合并实际箭头矩形可防止未来微调箭头位置后出现“图形有一部分点不中”；最后裁回
         // 当前行，避免树很窄时热区越界并抢占滚动条或相邻节点的事件。
@@ -565,10 +565,10 @@ protected:
 
         // 主机图标先放进独立圆角容器：未选中时是白色/深色表面卡片，选中时改为品牌绿色。
         // 这样图标不会漂浮在两行文字旁边，当前连接目标也能通过颜色块被快速定位。
-        const QRect iconBox(option.rect.left() + kHostIconBoxLeft,
-                            option.rect.center().y() - (kHostIconBoxSize / 2),
-                            kHostIconBoxSize,
-                            kHostIconBoxSize);
+        const QRect iconBox(option.rect.left() + metric(kHostIconBoxLeft, 7),
+                            option.rect.center().y() - (metric(kHostIconBoxSize, 24) / 2),
+                            metric(kHostIconBoxSize, 24),
+                            metric(kHostIconBoxSize, 24));
         QColor configuredSurface;
         if (widget != nullptr) {
             configuredSurface = QColor(widget->property("hostIconSurfaceColor").toString());
@@ -586,10 +586,10 @@ protected:
         painter->setBrush(iconBoxFill);
         painter->drawRoundedRect(iconBox.adjusted(0, 0, -1, -1), 8, 8);
 
-        const QRect hostSymbolRect = iconBox.adjusted(kHostIconContentInset,
-                                                      kHostIconContentInset,
-                                                      -kHostIconContentInset,
-                                                      -kHostIconContentInset);
+        const QRect hostSymbolRect = iconBox.adjusted(metric(kHostIconContentInset, 4),
+                                                      metric(kHostIconContentInset, 4),
+                                                      -metric(kHostIconContentInset, 4),
+                                                      -metric(kHostIconContentInset, 4));
         // 选中态也必须保留发行版图标。此前高亮时会统一替换成服务器轮廓，导致用户刚想
         // 确认“这台是什么系统”时最关键的视觉线索反而消失；图标自身带有不透明圆底，能
         // 在绿色选中底纹上保持辨识度，无需再强制换色。
@@ -605,7 +605,7 @@ protected:
         // 浅色底纹上已经足够醒目，也让选中前后文字颜色保持一致、不"跳色"。
         const QColor baseColor = background.palette.color(QPalette::Text);
 
-        const int textLeft = option.rect.left() + kHostTextLeft;
+        const int textLeft = option.rect.left() + metric(kHostTextLeft, 39);
         const QRect fullTextRect(textLeft,
                                  option.rect.top(),
                                  std::max(0, option.rect.right() - textLeft - 7),
@@ -682,14 +682,14 @@ protected:
     {
         QSize hint = QStyledItemDelegate::sizeHint(option, index);
         if (index.data(HostKindRole).toInt() == kSectionHeaderKindValue) {
-            hint.setHeight(kSectionHeaderRowHeight);
+            hint.setHeight(metric(kSectionHeaderRowHeight, 32));
             return hint;
         }
         if (index.data(HostDetailRole).toString().isEmpty()) {
-            hint.setHeight(kFolderRowHeight);
+            hint.setHeight(metric(kFolderRowHeight, 28));
             return hint;
         }
-        hint.setHeight(kHostRowHeight);
+        hint.setHeight(metric(kHostRowHeight, 40));
         return hint;
     }
 
@@ -713,6 +713,17 @@ protected:
     }
 
 private:
+    /**
+     * @brief 从所属主机树读取密度，统一绘制尺寸与点击热区的选择。
+     * @param relaxed 宽松模式的逻辑像素值。
+     * @param compact 紧凑模式的逻辑像素值。
+     * @return 当前模式对应尺寸；父对象未设置属性时按宽松处理，无持久化副作用。
+     */
+    [[nodiscard]] int metric(int relaxed, int compact) const
+    {
+        return parent()->property("compactMode").toBool() ? compact : relaxed;
+    }
+
     /** @brief 画分组：左侧箭头、文件夹和名称依次排列；空分组不追加冗余数量文字。 */
     void paintFolder(QPainter *painter,
                      const QStyleOptionViewItem &option,
@@ -734,10 +745,10 @@ private:
         paintInteractionBackground(painter, option.rect, selected, hovered, widget);
 
         const bool emptyFolder = index.model() == nullptr || index.model()->rowCount(index) == 0;
-        const QRect iconRect(option.rect.left() + kFolderIconLeft,
-                             option.rect.center().y() - 9,
-                             18,
-                             18);
+        const QRect iconRect(option.rect.left() + metric(kFolderIconLeft, 23),
+                             option.rect.center().y() - metric(9, 8),
+                             metric(18, 16),
+                             metric(18, 16));
         qvariant_cast<QIcon>(index.data(Qt::DecorationRole))
             .paint(painter,
                    iconRect,
@@ -757,10 +768,10 @@ private:
         painter->setFont(nameFont);
         painter->setPen(baseColor);
         const QFontMetrics metrics(nameFont);
-        const QRect textRect(option.rect.left() + kFolderTextLeft,
+        const QRect textRect(option.rect.left() + metric(kFolderTextLeft, 43),
                              option.rect.top(),
                              std::max(0,
-                                      option.rect.width() - kFolderTextLeft - 8),
+                                      option.rect.width() - metric(kFolderTextLeft, 43) - 8),
                              option.rect.height());
         painter->drawText(textRect,
                           Qt::AlignLeft | Qt::AlignVCenter,
@@ -3134,6 +3145,16 @@ void HostRecordDialog::editHostChain()
 }
 
 } // namespace
+
+void HostManagerWidget::setCompactMode(const bool compact)
+{
+    // 只调整视图，不重建树或访问数据库，保留选中项、搜索结果及展开状态。
+    m_tree->setProperty("compactMode", compact);
+    m_tree->setIndentation(compact ? 24 : 32);
+    m_tree->setIconSize(compact ? QSize(16, 16) : QSize(18, 18));
+    m_tree->doItemsLayout();
+    m_tree->viewport()->update();
+}
 
 HostManagerWidget::HostManagerWidget(ApplicationDatabase *database,
                                      CredentialVault *credentialVault,

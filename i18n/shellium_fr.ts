@@ -1766,6 +1766,22 @@ Confirmer que la clé a changé, remplacer l'ancien enregistrement dans known_ho
         <source>The selected target is closed or not connected yet</source>
         <translation type="unfinished">La cible sélectionnée est fermée ou pas encore connectée</translation>
     </message>
+    <message>
+        <source>Sidebar density</source>
+        <translation>Densité de la barre latérale</translation>
+    </message>
+    <message>
+        <source>Compact</source>
+        <translation>Compacte</translation>
+    </message>
+    <message>
+        <source>Relaxed</source>
+        <translation>Aérée</translation>
+    </message>
+    <message>
+        <source>Failed to save sidebar density: %1</source>
+        <translation>Échec de l’enregistrement de la densité de la barre latérale : %1</translation>
+    </message>
 </context>
 <context>
     <name>PortForwardManagerWidget</name>
@@ -3872,6 +3888,18 @@ Les modifications non enregistrées ont été annulées.</translation>
     <message>
         <source>%1 (not installed)</source>
         <translation type="unfinished">%1 (non installé)</translation>
+    </message>
+    <message>
+        <source>Sidebar density</source>
+        <translation>Densité de la barre latérale</translation>
+    </message>
+    <message>
+        <source>Relaxed</source>
+        <translation>Aérée</translation>
+    </message>
+    <message>
+        <source>Compact</source>
+        <translation>Compacte</translation>
     </message>
 </context>
 <context>

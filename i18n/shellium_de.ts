@@ -1766,6 +1766,22 @@ Bestätigen Sie, dass sich der Schlüssel geändert hat, ersetzen Sie den alten 
         <source>The selected target is closed or not connected yet</source>
         <translation type="unfinished">Das ausgewählte Ziel ist geschlossen oder noch nicht verbunden</translation>
     </message>
+    <message>
+        <source>Sidebar density</source>
+        <translation>Seitenleistendichte</translation>
+    </message>
+    <message>
+        <source>Compact</source>
+        <translation>Kompakt</translation>
+    </message>
+    <message>
+        <source>Relaxed</source>
+        <translation>Locker</translation>
+    </message>
+    <message>
+        <source>Failed to save sidebar density: %1</source>
+        <translation>Dichte der Seitenleiste konnte nicht gespeichert werden: %1</translation>
+    </message>
 </context>
 <context>
     <name>PortForwardManagerWidget</name>
@@ -3872,6 +3888,18 @@ Nicht gespeicherte Änderungen wurden zurückgesetzt.</translation>
     <message>
         <source>%1 (not installed)</source>
         <translation type="unfinished">%1 (nicht installiert)</translation>
+    </message>
+    <message>
+        <source>Sidebar density</source>
+        <translation>Seitenleistendichte</translation>
+    </message>
+    <message>
+        <source>Relaxed</source>
+        <translation>Locker</translation>
+    </message>
+    <message>
+        <source>Compact</source>
+        <translation>Kompakt</translation>
     </message>
 </context>
 <context>

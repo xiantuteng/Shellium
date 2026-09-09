@@ -112,6 +112,8 @@ private slots:
     void reconnectToggleGatesDependentRows();
     /** @brief 语言下拉必须列出候选语言，并把选择即时写入设置服务、重开时回显。 */
     void languageSelectorPersistsAndRoundTrips();
+    /** @brief 密度即时入库、服务重载及外部修改回显，默认值仍为宽松。 */
+    void sidebarDensityPersistsAndSynchronizes();
     /** @brief 设置窗口打开时切换语言，卡片标题/行文案/分段控件必须就地热切换。 */
     void settingsContentRetranslatesLiveWithoutReopen();
     void colorSchemeSwatchesAreExclusiveAndPersist();
@@ -462,6 +464,35 @@ void SettingsUiTest::reconnectToggleGatesDependentRows()
     QVERIFY(stepperButton(attemptsSpin, QStringLiteral("increase"))->isEnabled());
 }
 
+void SettingsUiTest::sidebarDensityPersistsAndSynchronizes()
+{
+    auto service = makeService();
+    SettingsDialog dialog(service.get());
+    auto *selector = dialog.findChild<SegmentedControl *>(QStringLiteral("sidebarDensitySelector"));
+    QVERIFY(selector != nullptr);
+    QCOMPARE(selector->currentData(), 0);
+    QSignalSpy changes(service.get(), &TerminalSettingsService::settingsChanged);
+    selector->setCurrentData(1);
+    QVERIFY(service->currentSettings().compactSidebar);
+    QCOMPARE(changes.count(), 1);
+    QCOMPARE(m_database->intSetting(QStringLiteral("layout/sidebar_compact")).value_or(-1), 1);
+
+    // 新服务从数据库重载，覆盖旧视图菜单的 0/1 存储兼容性及重新打开设置的回显。
+    TerminalSettingsService reloaded(m_database.get());
+    QString error;
+    QVERIFY2(reloaded.load(&error), qPrintable(error));
+    QVERIFY(reloaded.currentSettings().compactSidebar);
+    SettingsDialog reopened(&reloaded);
+    QCOMPARE(reopened.findChild<SegmentedControl *>(QStringLiteral("sidebarDensitySelector"))->currentData(), 1);
+
+    // 模拟菜单通过同一服务修改；控件应同步且不再次触发保存。
+    TerminalSettings relaxed = service->currentSettings();
+    relaxed.compactSidebar = false;
+    QVERIFY2(service->save(relaxed, &error), qPrintable(error));
+    QCOMPARE(selector->currentData(), 0);
+    QCOMPARE(changes.count(), 2);
+}
+
 void SettingsUiTest::languageSelectorPersistsAndRoundTrips()
 {
     auto service = makeService();
@@ -527,6 +558,15 @@ void SettingsUiTest::settingsContentRetranslatesLiveWithoutReopen()
             followSystemInChinese || button->text() == QString::fromUtf8("跟随系统");
     }
     QVERIFY2(followSystemInChinese, "分段控件文案未热切换");
+    // 密度分段也必须在原控件上重译，并保留当前数值选择。
+    auto *densitySelector = dialog.findChild<SegmentedControl *>(QStringLiteral("sidebarDensitySelector"));
+    QVERIFY(densitySelector != nullptr);
+    QStringList densityLabels;
+    for (const auto *button : densitySelector->findChildren<QAbstractButton *>()) {
+        densityLabels.append(button->text());
+    }
+    QVERIFY(densityLabels.contains(QStringLiteral("紧凑")));
+    QVERIFY(densityLabels.contains(QStringLiteral("宽松")));
 
     // QSpinBox 后缀是一次性 setSuffix，必须显式登记进热切换闭包。
     auto *scrollbackSpin = dialog.findChild<QSpinBox *>(QStringLiteral("scrollbackSpin"));
@@ -663,6 +703,8 @@ void SettingsUiTest::restoreDefaultsPersistsImmediately()
     auto service = makeService();
     TerminalSettings customized = service->currentSettings();
     customized.fontPointSize = 23;
+    // 密度也应参与整份默认快照恢复，不能遗留菜单单独保存的紧凑值。
+    customized.compactSidebar = true;
     customized.audibleBell = !TerminalSettings{}.normalized().audibleBell;
     QString error;
     QVERIFY2(service->save(customized, &error), qPrintable(error));
@@ -675,6 +717,7 @@ void SettingsUiTest::restoreDefaultsPersistsImmediately()
 
     const TerminalSettings defaults = TerminalSettings{}.normalized();
     QCOMPARE(service->currentSettings().fontPointSize, defaults.fontPointSize);
+    QVERIFY(!service->currentSettings().compactSidebar);
     QCOMPARE(service->currentSettings().audibleBell, defaults.audibleBell);
     QCOMPARE(m_database->setting(QStringLiteral("terminal/font_size")).value_or(QString()),
              QString::number(defaults.fontPointSize));

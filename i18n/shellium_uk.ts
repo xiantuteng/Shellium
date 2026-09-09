@@ -1766,6 +1766,22 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <source>The selected target is closed or not connected yet</source>
         <translation type="unfinished">Вибрана ціль закрита або ще не підключена</translation>
     </message>
+    <message>
+        <source>Sidebar density</source>
+        <translation>Щільність бічної панелі</translation>
+    </message>
+    <message>
+        <source>Compact</source>
+        <translation>Компактна</translation>
+    </message>
+    <message>
+        <source>Relaxed</source>
+        <translation>Вільна</translation>
+    </message>
+    <message>
+        <source>Failed to save sidebar density: %1</source>
+        <translation>Не вдалося зберегти щільність бічної панелі: %1</translation>
+    </message>
 </context>
 <context>
     <name>PortForwardManagerWidget</name>
@@ -3872,6 +3888,18 @@ Unsaved changes have been reverted.</source>
     <message>
         <source>%1 (not installed)</source>
         <translation type="unfinished">%1 (не встановлено)</translation>
+    </message>
+    <message>
+        <source>Sidebar density</source>
+        <translation>Щільність бічної панелі</translation>
+    </message>
+    <message>
+        <source>Relaxed</source>
+        <translation>Вільна</translation>
+    </message>
+    <message>
+        <source>Compact</source>
+        <translation>Компактна</translation>
     </message>
 </context>
 <context>
