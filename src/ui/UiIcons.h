@@ -32,6 +32,21 @@
 namespace UiIcons {
 
 /**
+ * @brief 返回终端会话右上角按钮的统一样式，供文件管理和工作空间动作共用。
+ * @return 无边框、5px 圆角及半透明悬停/选中背景的 QSS；不包含图标语义或主题前景色。
+ *
+ * 共用一处定义可避免文件夹按钮出现独立的悬停边框、选中色或内边距，保持同排控件一致。
+ */
+inline QString sessionActionStyleSheet()
+{
+    return QStringLiteral(
+        "QToolButton { border: none; border-radius: 5px; padding: 3px; }"
+        "QToolButton:hover { background: rgba(230,230,230,0.12); }"
+        "QToolButton:checked { background: rgba(230,230,230,0.22); }"
+        "QToolButton:checked:hover { background: rgba(230,230,230,0.30); }");
+}
+
+/**
  * @brief Shellium 自绘线性图标的语义类型。
  *
  * 标题栏和导航轨属于品牌视觉，不应依赖操作系统可能缺失、风格也不统一的旧式标准图标。

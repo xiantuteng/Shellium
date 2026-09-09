@@ -7,11 +7,49 @@
 #include <QBoxLayout>
 #include <QMessageBox>
 #include <QSplitter>
+#include <QResizeEvent>
+#include <QVariantAnimation>
+
+namespace {
+/** @brief 右侧滑入面板的裁剪区域；内容宽度固定，左边缘随分隔条移动，关闭时向右滑出。 */
+class FileSlideViewport final : public QWidget {
+public:
+    /** @brief parent 为分隔器；内容由调用方在构造完成后指定，均由 Qt 管理生命周期。 */
+    explicit FileSlideViewport(QWidget *parent) : QWidget(parent) {}
+    /** @brief 指定内容及动画宽度；width 为零时恢复正常跟随尺寸，无 IO 或异常。 */
+    void configure(QWidget *content, int width)
+    {
+        m_content = content;
+        m_slideWidth = qMax(0, width);
+        alignContent();
+    }
+protected:
+    /** @brief 每帧窗口缩放时更新内容尺寸；event 原样交基类，不将内容最小宽度传播到外层。 */
+    void resizeEvent(QResizeEvent *event) override
+    {
+        QWidget::resizeEvent(event);
+        alignContent();
+    }
+private:
+    /** @brief 内容靠裁剪区左边放置，越过窗口右边的部分由父控件裁掉。 */
+    void alignContent()
+    {
+        if (m_content != nullptr) {
+            m_content->setGeometry(0, 0, m_slideWidth > 0 ? m_slideWidth : width(), height());
+        }
+    }
+    /** @brief 文件管理器子控件；构造初期允许为空。 */
+    QWidget *m_content = nullptr;
+    /** @brief 正数为过渡期间的固定宽度，零为正常自适应布局。 */
+    int m_slideWidth = 0;
+};
+}
 
 TerminalWorkspace::TerminalWorkspace(QWidget *parent)
     : QWidget(parent)
     , m_pageSplitter(new QSplitter(Qt::Horizontal, this))
-    , m_fileManager(new RemoteFileManagerWidget(m_pageSplitter))
+    , m_fileViewport(new FileSlideViewport(m_pageSplitter))
+    , m_fileManager(new RemoteFileManagerWidget(m_fileViewport))
     , m_pane(new TerminalPane(m_pageSplitter))
 {
     auto *pageLayout = new QHBoxLayout(this);
@@ -24,6 +62,9 @@ TerminalWorkspace::TerminalWorkspace(QWidget *parent)
     m_pageSplitter->insertWidget(0, m_pane);
     m_pane->setMinimumWidth(360);
     m_fileManager->setMinimumWidth(420);
+    m_fileViewport->setMinimumWidth(420);
+    m_fileViewport->setObjectName(QStringLiteral("RemoteFileViewport"));
+    static_cast<FileSlideViewport *>(m_fileViewport)->configure(m_fileManager, 0);
     m_pageSplitter->setChildrenCollapsible(false);
     m_pageSplitter->setStretchFactor(0, 3);
     m_pageSplitter->setStretchFactor(1, 1);
@@ -48,7 +89,13 @@ TerminalWorkspace::TerminalWorkspace(QWidget *parent)
     connect(m_fileManager,
             &RemoteFileManagerWidget::fullScreenChanged,
             this,
-            [this](const bool fullScreen) { m_pane->setVisible(!fullScreen); });
+            [this](const bool fullScreen) {
+                // 全屏必须先完成当前过渡，否则旧动画会继续抢占全屏布局的宽度。
+                if (m_fileAnimation != nullptr) {
+                    m_fileAnimation->setCurrentTime(m_fileAnimation->duration());
+                }
+                m_pane->setVisible(!fullScreen);
+            });
     // 面板自带的关闭按钮与终端顶部的文件管理按钮必须落到同一条路径上：只有经过
     // setFileManagerVisible，才会顺带退出全屏并把终端按钮的选中态改回未展开。
     connect(m_fileManager,
@@ -125,9 +172,60 @@ void TerminalWorkspace::setFileManagerVisible(const bool visible)
         // 标签页里两块内容会同时消失，只剩一片空白且没有任何可点的恢复入口。
         m_fileManager->exitFullScreen();
     }
-    // QWidget::setVisible 在标签页本身不可见时仍会正确维护显隐意图；切回标签页后 Qt 会
-    // 根据该 hidden 状态恢复布局，因此每个标签可以拥有不同的文件管理显示设置。
-    m_fileManager->setVisible(visible);
+    const bool reversing = m_fileAnimation != nullptr;
+    if (visible == m_fileTargetVisible && isVisible() && m_fileManagerAllowed) {
+        return;
+    }
+    if (reversing) {
+        m_fileAnimation->stop();
+        m_fileAnimation->deleteLater();
+        m_fileAnimation = nullptr;
+    }
+    const int startWidth = m_fileViewport->isHidden() ? 0 : m_fileViewport->width();
+    if (!reversing && m_fileTargetVisible && startWidth >= 420) {
+        m_fileExpandedWidth = startWidth;
+    }
+    m_fileTargetVisible = visible;
+    // 后台标签或禁用分屏布局直接到达终态；无需为不可见控件播放动画或阻碍网格缩小。
+    if (!isVisible() || !m_fileManagerAllowed) {
+        m_fileViewport->setVisible(visible);
+        m_fileManager->setVisible(visible);
+        m_fileViewport->setMinimumWidth(420);
+        static_cast<FileSlideViewport *>(m_fileViewport)->configure(m_fileManager, 0);
+        m_pageSplitter->setCollapsible(1, false);
+        m_pane->setFileManagerVisible(visible);
+        return;
+    }
+    m_fileViewport->setMinimumWidth(0);
+    m_pageSplitter->setCollapsible(1, true);
+    static_cast<FileSlideViewport *>(m_fileViewport)->configure(m_fileManager, m_fileExpandedWidth);
+    m_fileManager->show();
+    m_fileViewport->show();
+    const int available = qMax(0, m_pageSplitter->width() - m_pageSplitter->handleWidth());
+    m_pageSplitter->setSizes({qMax(0, available - startWidth), startWidth});
+    auto *animation = new QVariantAnimation(this);
+    animation->setObjectName(QStringLiteral("RemoteFileSlideAnimation"));
+    m_fileAnimation = animation;
+    animation->setDuration(220);
+    animation->setEasingCurve(QEasingCurve::InOutCubic);
+    animation->setStartValue(startWidth);
+    animation->setEndValue(visible ? m_fileExpandedWidth : 0);
+    connect(animation, &QVariantAnimation::valueChanged, this, [this](const QVariant &value) {
+        // 每帧读取可用空间以适应同时缩放窗口；终端进程、SFTP 请求始终继续工作。
+        const int available = qMax(0, m_pageSplitter->width() - m_pageSplitter->handleWidth());
+        const int width = qMin(value.toInt(), qMax(0, available - m_pane->minimumWidth()));
+        m_pageSplitter->setSizes({available - width, width});
+    });
+    connect(animation, &QVariantAnimation::finished, this, [this, animation, visible] {
+        m_fileAnimation = nullptr;
+        animation->deleteLater();
+        m_fileViewport->setVisible(visible);
+        m_fileManager->setVisible(visible);
+        m_fileViewport->setMinimumWidth(420);
+        m_pageSplitter->setCollapsible(1, false);
+        static_cast<FileSlideViewport *>(m_fileViewport)->configure(m_fileManager, 0);
+    });
+    animation->start();
     // 顶部按钮既可能由用户点击，也可能由工作区恢复或快捷键间接改变。所有入口最终都在
     // 这里汇合并回写按钮，才能保证视觉状态与实际分隔器状态始终一致。
     m_pane->setFileManagerVisible(visible);
@@ -135,9 +233,8 @@ void TerminalWorkspace::setFileManagerVisible(const bool visible)
 
 bool TerminalWorkspace::isFileManagerVisible() const
 {
-    // 不能使用 isVisible()：非当前标签的所有子控件都会临时返回 false。isHidden() 只反映
-    // 用户是否显式隐藏了该控件，适合在标签切换和工作区恢复时同步顶部会话按钮状态。
-    return !m_fileManager->isHidden();
+    // 动画收起时控件暂时仍可见；读取目标状态，保证连续点击和后台标签的按钮意图准确。
+    return m_fileTargetVisible;
 }
 
 void TerminalWorkspace::setFileManagerAllowed(const bool allowed)
@@ -145,12 +242,12 @@ void TerminalWorkspace::setFileManagerAllowed(const bool allowed)
     if (m_fileManagerAllowed == allowed) {
         return;
     }
+    m_fileManagerAllowed = allowed;
     if (!allowed) {
         // 先通过统一显隐入口退出文件管理全屏并恢复终端，再禁用按钮；反过来操作可能让
         // checked 状态被冻结在 true，切回允许布局后出现按钮与页面不一致。
         setFileManagerVisible(false);
     }
-    m_fileManagerAllowed = allowed;
     m_pane->setFileManagerEnabled(allowed);
     // 分屏（!allowed）时放宽终端面板的最小宽度：否则多块并列会让递归分屏树的最小总宽
     // 超过工作空间可用宽度，QSplitter 只能向右溢出，把最靠右那块（连同右上角按钮）挤出

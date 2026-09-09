@@ -72,7 +72,10 @@ TerminalPane::TerminalPane(QWidget *parent)
     // 连接既浪费空间也浪费一条链路。
     m_fileManagerButton->setChecked(false);
     m_fileManagerButton->setAutoRaise(true);
-    m_fileManagerButton->setIconSize(QSize(18, 18));
+    // 与同排广播、布局和关闭按钮共用图标尺寸、鼠标反馈及背景，文件夹仅保留语义差异。
+    m_fileManagerButton->setIconSize(QSize(16, 16));
+    m_fileManagerButton->setCursor(Qt::PointingHandCursor);
+    m_fileManagerButton->setStyleSheet(UiIcons::sessionActionStyleSheet());
     m_fileManagerButton->setToolTip(tr("Show the remote file manager for the current session (Ctrl+Shift+F)"));
     m_fileManagerButton->setAccessibleName(tr("Remote file manager"));
     updateFileManagerButtonIcon();
@@ -799,21 +802,15 @@ void TerminalPane::applyTerminalSettings(const TerminalSettings &settings)
         ? palette.background.lighter(145)
         : palette.background.darker(108);
     // 样式施加在整个容器而不是单个服务器标签上，保证尺寸文字和文件按钮属于同一条视觉
-    // 状态栏。按钮悬停仍保留边框反馈，避免纯图标控件看起来不可点击。
-    //
+    // 状态栏。按钮反馈由共用的 sessionActionStyleSheet 负责，避免父级样式覆盖同排规则。
     m_headerBar->setStyleSheet(
         QStringLiteral(
             "QWidget#terminalSessionStatusBar { background: %1; color: %2; }"
             "QLabel#terminalSessionServer { color: %2; font-weight: 600; }"
             "QLabel#terminalSessionTransientStatus { color: %2; }"
-            "QLabel#terminalSessionMeta { color: %2; }"
-            "QToolButton#terminalFileManagerToggle { border: 1px solid transparent; "
-            "border-radius: 5px; padding: 3px; }"
-            "QToolButton#terminalFileManagerToggle:hover { border-color: %2; }"
-            "QToolButton#terminalFileManagerToggle:checked { background: %3; }")
+            "QLabel#terminalSessionMeta { color: %2; }")
             .arg(headerBackground.name(),
-                 palette.foreground.name(),
-                 palette.selection.name()));
+                 palette.foreground.name()));
 
     // 自绘图标的线条色不受样式表 color 影响，必须随主题显式重绘，否则深色配色下会残留
     // 上一套主题的浅色线条。
@@ -909,10 +906,10 @@ void TerminalPane::updateFileManagerButtonIcon()
 {
     m_fileManagerButton->setIcon(
         UiIcons::symbol(this,
-                        m_fileManagerButton->isChecked() ? UiIcons::Symbol::Folder
-                                                          : UiIcons::Symbol::FolderHidden,
-                        m_headerIconColor,
-                        QSize(18, 18)));
+                        // 保留文件夹语义，复用细线、圆角端点及圆角连接的描边样式。
+                        // 显隐由按钮选中态表达，两个状态都保持文件夹轮廓。
+                        UiIcons::Symbol::Folder,
+                        m_headerIconColor));
 }
 
 void TerminalPane::beginManualRecovery(const ConnectionTarget &target,

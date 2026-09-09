@@ -68,6 +68,8 @@ private slots:
     void sidebarWidthIsRestoredOnNextLaunch();
     /** @brief 侧边栏显隐使用连续尺寸动画，且收起后再次展开能恢复用户宽度。 */
     void sidebarToggleAnimatesAndRestoresWidth();
+    /** @brief 文件管理从右侧连续滑入滑出，末段不受内部最小宽度约束，反向操作保留宽度。 */
+    void remoteFilesSlideContinuously();
     /** @brief 关闭确认提示后，双击分隔条直接收起侧边栏而不弹出模态框。 */
     void sidebarDividerDoubleClickHidesWithoutPromptWhenDisabled();
     /** @brief 菜单切换即时缩小侧栏并持久化，重启恢复紧凑模式且可切回宽松。 */
@@ -380,6 +382,12 @@ void MainWindowShellTest::workspaceLayoutControlsRemoteFileAvailability()
     auto *firstFileToggle = first->activePane()->findChild<QToolButton *>(
         QStringLiteral("terminalFileManagerToggle"));
     QVERIFY(firstFileToggle != nullptr);
+    // 文件夹与广播按钮位于同一会话标题栏；尺寸、悬停/选中背景和指针应使用同一套规则。
+    auto *broadcastToggle = first->findChild<QToolButton *>(QStringLiteral("workspaceBroadcastToggle"));
+    QVERIFY(broadcastToggle != nullptr);
+    QCOMPARE(firstFileToggle->iconSize(), broadcastToggle->iconSize());
+    QCOMPARE(firstFileToggle->styleSheet(), broadcastToggle->styleSheet());
+    QCOMPARE(firstFileToggle->cursor().shape(), broadcastToggle->cursor().shape());
     QVERIFY2(first->activePane()->findChild<QLabel *>(QStringLiteral("terminalSessionMeta")) == nullptr,
              "终端会话状态栏不再显示 UTF-8·列×行 字样");
 
@@ -932,6 +940,35 @@ void MainWindowShellTest::sidebarWidthIsRestoredOnNextLaunch()
     auto *restoredSplitter = restarted.findChild<QSplitter *>(QStringLiteral("SidebarSplitter"));
     QVERIFY(restoredSplitter != nullptr);
     QCOMPARE(restoredSplitter->sizes().constFirst(), draggedWidth);
+}
+
+void MainWindowShellTest::remoteFilesSlideContinuously()
+{
+    TerminalWorkspace workspace;
+    workspace.resize(1200, 700);
+    workspace.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&workspace));
+    workspace.setFileManagerVisible(true);
+    auto *viewport = workspace.findChild<QWidget *>(QStringLiteral("RemoteFileViewport"));
+    auto *animation = workspace.findChild<QVariantAnimation *>(QStringLiteral("RemoteFileSlideAnimation"));
+    QVERIFY(viewport && animation);
+    // 主动定位动画时刻，避免依赖机器帧率；开头只应露出窄条而不是直接跳到最小宽度。
+    animation->setCurrentTime(55);
+    QVERIFY(viewport->width() > 0 && viewport->width() < 100);
+    animation->setCurrentTime(220);
+    const int expanded = viewport->width();
+    workspace.setFileManagerVisible(false);
+    const auto animations = workspace.findChildren<QVariantAnimation *>(QStringLiteral("RemoteFileSlideAnimation"));
+    animation = animations.last();
+    animation->setCurrentTime(165);
+    QVERIFY(viewport->width() > 0 && viewport->width() < 100);
+    const int intermediate = viewport->width();
+    workspace.setFileManagerVisible(true);
+    QCOMPARE(viewport->width(), intermediate);
+    QTRY_COMPARE(viewport->width(), expanded);
+    workspace.setFileManagerVisible(false);
+    QTRY_VERIFY(viewport->isHidden());
+    QVERIFY(!workspace.isFileManagerVisible());
 }
 
 void MainWindowShellTest::sidebarToggleAnimatesAndRestoresWidth()

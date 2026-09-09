@@ -3,6 +3,7 @@
 #include <QWidget>
 
 class QSplitter;
+class QVariantAnimation;
 class RemoteFileManagerWidget;
 class TerminalPane;
 
@@ -100,6 +101,14 @@ private:
     void handleFilesDropped(const QStringList &localPaths);
 
     QSplitter *m_pageSplitter = nullptr;
+    /** @brief 文件管理裁剪容器，隔离内部表单最小宽度，保证动画可连续缩到零。 */
+    QWidget *m_fileViewport = nullptr;
+    /** @brief GUI 线程中的非阻塞宽度动画；重复请求可从当前位置反向继续。 */
+    QVariantAnimation *m_fileAnimation = nullptr;
+    /** @brief 显隐目标状态，切换标签或动画未结束时仍能准确同步按钮。 */
+    bool m_fileTargetVisible = false;
+    /** @brief 最近的正常展开宽度；动画中间帧不得覆盖用户拖动的尺寸。 */
+    int m_fileExpandedWidth = 460;
     RemoteFileManagerWidget *m_fileManager = nullptr;
     TerminalPane *m_pane = nullptr;
 

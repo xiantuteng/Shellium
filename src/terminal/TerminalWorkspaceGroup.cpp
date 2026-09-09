@@ -506,11 +506,7 @@ void TerminalWorkspaceGroup::installMemberControls(TerminalWorkspace *workspace)
         iconColor = QColor(QStringLiteral("#e6e6e6"));
     }
     // 无外边框：悬停只轻微提亮底色，选中（广播开启）填一块浅色圆角底，和参考图一致。
-    const QString buttonStyle = QStringLiteral(
-        "QToolButton { border: none; border-radius: 5px; padding: 3px; }"
-        "QToolButton:hover { background: rgba(230,230,230,0.12); }"
-        "QToolButton:checked { background: rgba(230,230,230,0.22); }"
-        "QToolButton:checked:hover { background: rgba(230,230,230,0.30); }");
+    const QString buttonStyle = UiIcons::sessionActionStyleSheet();
     const auto makeButton = [&](const UiIcons::Symbol symbol,
                                 const QString &objectName,
                                 const QString &tooltip,
