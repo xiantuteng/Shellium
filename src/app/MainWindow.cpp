@@ -1177,6 +1177,7 @@ MainWindow::MainWindow(ApplicationDatabase *database,
                     group->beginExternalDropHint();
                     return;
                 }
+                m_tabDropOverlay->resetEdge();
                 m_tabDropOverlay->setGeometry(m_workspaceStack->rect());
                 m_tabDropOverlay->show();
                 m_tabDropOverlay->raise();
@@ -1191,6 +1192,10 @@ MainWindow::MainWindow(ApplicationDatabase *database,
                 if (auto *group =
                         qobject_cast<TerminalWorkspaceGroup *>(m_tabs->currentWidget())) {
                     group->updateExternalDropHint(globalPosition);
+                } else if (m_tabDropOverlay != nullptr && m_tabDropOverlay->isVisible()) {
+                    // 单终端目标页：本层自行按象限预告新会话落在左/右/上/下半区。
+                    m_tabDropOverlay->updateForLocalPos(
+                        m_tabDropOverlay->mapFromGlobal(globalPosition));
                 }
             });
     connect(m_titleTabBar,
@@ -3375,6 +3380,31 @@ void MainWindow::mergeTerminalTabs(const int sourceIndex,
     auto *group = new TerminalWorkspaceGroup(m_tabs);
     group->addTerminal(targetWorkspace, targetTitle);
     group->addTerminal(sourceWorkspace, sourceTitle);
+    // 若拖到目标终端的某个半区上松手，就按该方向决定新会话与原会话是水平还是垂直排列；
+    // 否则维持默认的左右等分。方向命中由落点提示层记录，读取后即复位。
+    const SessionTabDropOverlay::DropEdge dropEdge = m_tabDropOverlay != nullptr
+        ? m_tabDropOverlay->consumeEdge()
+        : SessionTabDropOverlay::DropEdge::None;
+    if (!droppedOnTargetTab && dropEdge != SessionTabDropOverlay::DropEdge::None) {
+        TerminalWorkspaceGroup::DockEdge edge = TerminalWorkspaceGroup::DockEdge::Right;
+        switch (dropEdge) {
+        case SessionTabDropOverlay::DropEdge::Left:
+            edge = TerminalWorkspaceGroup::DockEdge::Left;
+            break;
+        case SessionTabDropOverlay::DropEdge::Right:
+            edge = TerminalWorkspaceGroup::DockEdge::Right;
+            break;
+        case SessionTabDropOverlay::DropEdge::Top:
+            edge = TerminalWorkspaceGroup::DockEdge::Top;
+            break;
+        case SessionTabDropOverlay::DropEdge::Bottom:
+            edge = TerminalWorkspaceGroup::DockEdge::Bottom;
+            break;
+        case SessionTabDropOverlay::DropEdge::None:
+            break;
+        }
+        group->dockTerminal(sourceWorkspace, targetWorkspace, edge);
+    }
     group->setActiveTerminal(sourceWorkspace);
     const QString groupTitle = tr("Workspace %1").arg(
         findChildren<TerminalWorkspaceGroup *>().size());

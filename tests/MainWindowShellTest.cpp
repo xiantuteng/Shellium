@@ -81,6 +81,7 @@ private slots:
     /** @brief 把终端拖入此前选中的标签后必须原位合并为可重命名的工作空间标签；
      *         拖出标签栏期间必须亮出跟随光标的浮动快照与中央落点提示层。 */
     void draggingTerminalIntoSelectedTabCreatesWorkspace();
+    void droppingTerminalOnLowerHalfStacksWorkspaceVertically();
 
     /** @brief 分屏模式必须禁用远程文件管理，切换模式则恢复单终端完整能力。 */
     void workspaceLayoutControlsRemoteFileAvailability();
@@ -369,6 +370,65 @@ void MainWindowShellTest::draggingTerminalIntoSelectedTabCreatesWorkspace()
     QCOMPARE(workspaceMergeSpy.count(), 1);
     QTRY_COMPARE(tabs->count(), 1);
     QCOMPARE(group->terminals().size(), 4);
+}
+
+void MainWindowShellTest::droppingTerminalOnLowerHalfStacksWorkspaceVertically()
+{
+    MainWindow window(m_database, m_vault);
+    window.resize(1200, 800);
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+    auto *tabs = window.findChild<QTabWidget *>(QStringLiteral("TerminalPages"));
+    auto *tabBar = window.findChild<SessionTabBar *>(QStringLiteral("SessionTitleTabs"));
+    auto *newTabButton = window.findChild<QToolButton *>(QStringLiteral("TitleNewTabButton"));
+    QVERIFY(tabs != nullptr && tabBar != nullptr && newTabButton != nullptr);
+    QTest::mouseClick(newTabButton, Qt::LeftButton);
+    QTest::mouseClick(newTabButton, Qt::LeftButton);
+    QCOMPARE(tabs->count(), 2);
+
+    QTest::mouseClick(tabBar, Qt::LeftButton, Qt::NoModifier, tabBar->tabRect(0).center());
+    QCOMPARE(tabs->currentIndex(), 0);
+    auto *targetWorkspace = qobject_cast<TerminalWorkspace *>(tabs->widget(0));
+    QVERIFY(targetWorkspace != nullptr && targetWorkspace->activePane() != nullptr);
+    auto *overlay = window.findChild<SessionTabDropOverlay *>(
+        QStringLiteral("SessionTabDropOverlay"));
+    QVERIFY(overlay != nullptr);
+
+    // 落点选在目标终端面板的下四分之一处：既落在真正的 TerminalPane 内（合并判定通过），
+    // 又稳定命中中央落点提示层的“下半区”，因此新会话应叠在原会话下方（垂直排列）。
+    const QRect paneRect = targetWorkspace->activePane()->rect();
+    const QPoint paneLowerPoint(paneRect.center().x(),
+                                paneRect.top() + paneRect.height() * 7 / 8);
+    const QPoint sourceCenter = tabBar->tabRect(1).center();
+    const QPoint lowerDropPoint = tabBar->mapFromGlobal(
+        targetWorkspace->activePane()->mapToGlobal(paneLowerPoint));
+
+    QTest::mousePress(tabBar, Qt::LeftButton, Qt::NoModifier, sourceCenter);
+    QTest::mouseMove(tabBar, QPoint(sourceCenter.x(), tabBar->height() + 12), 40);
+    QTest::mouseMove(tabBar, lowerDropPoint, 80);
+    QTRY_VERIFY2(!overlay->isHidden(), "拖出标签栏后中央落点提示层必须可见");
+
+    QTest::mouseRelease(tabBar, Qt::LeftButton, Qt::NoModifier, lowerDropPoint);
+    QTRY_COMPARE(tabs->count(), 1);
+    auto *group = qobject_cast<TerminalWorkspaceGroup *>(tabs->widget(0));
+    QVERIFY(group != nullptr);
+    QCOMPARE(group->terminals().size(), 2);
+
+    // terminals() 按加入顺序返回 [目标, 源]；下半区落点应让“源”整体位于“目标”下方，
+    // 而不是默认的左右等分。
+    TerminalWorkspace *upper = group->terminals().at(0);
+    TerminalWorkspace *lower = group->terminals().at(1);
+    QVERIFY(upper->activePane() != nullptr && lower->activePane() != nullptr);
+    const QRect upperGlobal(upper->activePane()->mapToGlobal(QPoint(0, 0)),
+                            upper->activePane()->size());
+    const QRect lowerGlobal(lower->activePane()->mapToGlobal(QPoint(0, 0)),
+                            lower->activePane()->size());
+    QVERIFY2(lowerGlobal.top() >= upperGlobal.bottom() - 4,
+             "下半区落点必须把新会话垂直叠在原会话下方");
+    QVERIFY2(std::abs(lowerGlobal.left() - upperGlobal.left()) < 4
+                 && std::abs(lowerGlobal.right() - upperGlobal.right()) < 4,
+             "垂直排列时两个终端应等宽对齐，而不是左右分栏");
 }
 
 void MainWindowShellTest::workspaceLayoutControlsRemoteFileAvailability()
