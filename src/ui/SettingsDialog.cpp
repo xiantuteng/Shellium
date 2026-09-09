@@ -373,6 +373,10 @@ QWidget *SettingsDialog::buildAppearancePage()
     layout->setSpacing(16);
 
     m_languageSelector->setObjectName(QStringLiteral("languageSelector"));
+    // 语言下拉的列表是独立的顶层弹出窗口；仅靠 QSS 的 border-radius 会让内部列表圆角化，
+    // 但 Qt 默认的弹出容器仍会绘制一圈直角 StyledPanel 边框。复用统一的弹出层处理，关闭
+    // 外层容器装饰并保留内部列表的圆角边框，从而避免四角出现截图中的黑色直角框。
+    UiIcons::modernizePopup(m_languageSelector);
     if (m_languageSelector->count() == 0) {
         for (const LanguageOption &option : LocalizationService::availableLanguages()) {
             m_languageSelector->addItem(option.nativeName, option.code);

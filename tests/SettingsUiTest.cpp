@@ -11,6 +11,7 @@
 
 #include <QLabel>
 
+#include <QAbstractItemView>
 #include <QAbstractSpinBox>
 #include <QAbstractButton>
 #include <QApplication>
@@ -18,6 +19,7 @@
 #include <QDoubleSpinBox>
 #include <QFontDatabase>
 #include <QFontInfo>
+#include <QFrame>
 #include <QGridLayout>
 #include <QLineEdit>
 #include <QSet>
@@ -503,8 +505,27 @@ void SettingsUiTest::languageSelectorPersistsAndRoundTrips()
         auto *selector = dialog.findChild<QComboBox *>(QStringLiteral("languageSelector"));
         QVERIFY(selector != nullptr);
         QVERIFY(selector->count() >= 2);
-        // 首项固定是“跟随系统”。
-        QCOMPARE(selector->itemData(0).toString(), QStringLiteral("system"));
+        // 语言顺序是面向用户的稳定约定：系统跟随固定置顶，中文和英文紧随其后，日语固定置底。
+        // 这里直接检查控件数据而不是显示文字，避免当前测试语言或翻译状态影响顺序断言。
+        const QStringList expectedLeadingAndTrailingCodes = {
+            QStringLiteral("system"), QStringLiteral("zh_CN"), QStringLiteral("zh_TW"),
+            QStringLiteral("en"),
+        };
+        QCOMPARE(selector->count(), LocalizationService::availableLanguages().size());
+        for (qsizetype index = 0; index < expectedLeadingAndTrailingCodes.size(); ++index) {
+            QCOMPARE(selector->itemData(static_cast<int>(index)).toString(),
+                     expectedLeadingAndTrailingCodes.at(index));
+        }
+        QCOMPARE(selector->itemData(selector->count() - 1).toString(), QStringLiteral("ja"));
+
+        // modernizePopup() 应在构造阶段移除 Qt 弹出容器的 StyledPanel；否则即使内部列表有
+        // 圆角，容器仍会在外侧画出一圈直角边框。保留该断言可防止语言下拉遗漏统一处理。
+        QAbstractItemView *popupView = selector->view();
+        QVERIFY(popupView != nullptr);
+        auto *popupFrame = qobject_cast<QFrame *>(popupView->window());
+        QVERIFY(popupFrame != nullptr);
+        QCOMPARE(popupFrame->frameShape(), QFrame::NoFrame);
+        QVERIFY(popupFrame->testAttribute(Qt::WA_TranslucentBackground));
 
         const int englishIndex = selector->findData(QStringLiteral("en"));
         QVERIFY(englishIndex >= 0);

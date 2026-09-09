@@ -52,20 +52,20 @@ QVector<LanguageOption> LocalizationService::availableLanguages()
     // 顺序即设置下拉的展示顺序；nativeName 用该语言自身写法，"system" 例外跟随当前界面语言。
     return {
         {QStringLiteral("system"), tr("Follow System")},
+        {QStringLiteral("zh_CN"), QStringLiteral("简体中文")},
+        {QStringLiteral("zh_TW"), QStringLiteral("繁體中文")},
         {QStringLiteral("en"), QStringLiteral("English")},
         {QStringLiteral("fr"), QStringLiteral("Français")},
         {QStringLiteral("de"), QStringLiteral("Deutsch")},
         {QStringLiteral("it"), QStringLiteral("Italiano")},
-        {QStringLiteral("ja"), QStringLiteral("日本語")},
         {QStringLiteral("ko"), QStringLiteral("한국어")},
         {QStringLiteral("pt_BR"), QStringLiteral("Português (BR)")},
         {QStringLiteral("ro"), QStringLiteral("Română")},
         {QStringLiteral("ru"), QStringLiteral("Русский")},
-        {QStringLiteral("zh_CN"), QStringLiteral("简体中文")},
         {QStringLiteral("es"), QStringLiteral("Español")},
-        {QStringLiteral("zh_TW"), QStringLiteral("繁體中文")},
         {QStringLiteral("uk"), QStringLiteral("Українська")},
         {QStringLiteral("ar"), QStringLiteral("العربية")},
+        {QStringLiteral("ja"), QStringLiteral("日本語")},
     };
 }
 
