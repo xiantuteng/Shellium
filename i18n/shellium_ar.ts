@@ -343,6 +343,65 @@ Run it in the current terminal?</source>
     </message>
 </context>
 <context>
+    <name>ExcelImportDialog</name>
+    <message>
+        <source>Import Hosts from Excel</source>
+        <translation>استيراد المضيفين من Excel</translation>
+    </message>
+    <message>
+        <source>Choose an .xlsx file with the columns name, host, username and password.</source>
+        <translation>اختر ملف ‎.xlsx‎ يحتوي على الأعمدة name وhost وusername وpassword.</translation>
+    </message>
+    <message>
+        <source>Select an Excel file…</source>
+        <translation>اختيار ملف Excel…</translation>
+    </message>
+    <message>
+        <source>Browse…</source>
+        <translation type="unfinished">استعراض…</translation>
+    </message>
+    <message>
+        <source>Download template</source>
+        <translation>تنزيل القالب</translation>
+    </message>
+    <message>
+        <source>Download an Excel template with English column names</source>
+        <translation>تنزيل قالب Excel بأسماء أعمدة باللغة الإنجليزية</translation>
+    </message>
+    <message>
+        <source>Import</source>
+        <translation>استيراد</translation>
+    </message>
+    <message>
+        <source>Select Excel host file</source>
+        <translation>اختيار ملف مضيفي Excel</translation>
+    </message>
+    <message>
+        <source>Excel workbook (*.xlsx);;All files (*)</source>
+        <translation>مصنف Excel ‏(*.xlsx)؛؛كل الملفات (*)</translation>
+    </message>
+    <message>
+        <source>Download Excel template</source>
+        <translation>تنزيل قالب Excel</translation>
+    </message>
+    <message>
+        <source>Excel workbook (*.xlsx)</source>
+        <translation>مصنف Excel ‏(*.xlsx)</translation>
+    </message>
+    <message>
+        <source>Template download failed</source>
+        <translation>فشل تنزيل القالب</translation>
+    </message>
+    <message>
+        <source>Template downloaded</source>
+        <translation>تم تنزيل القالب</translation>
+    </message>
+    <message>
+        <source>The Excel template was saved to %1.</source>
+        <translation>تم حفظ قالب Excel في %1.</translation>
+    </message>
+</context>
+<context>
     <name>HostChainDialog</name>
     <message>
         <source>Edit host chain</source>
@@ -466,6 +525,10 @@ Run it in the current terminal?</source>
     <message>
         <source>Import Hosts…</source>
         <translation type="unfinished">استيراد المضيفين…</translation>
+    </message>
+<message>
+        <source>Import from Excel…</source>
+        <translation>استيراد من Excel…</translation>
     </message>
     <message>
         <source>Export Hosts…</source>
@@ -626,6 +689,38 @@ Run it in the current terminal?</source>
     <message>
         <source>Successfully imported %1 records.</source>
         <translation type="unfinished">تم استيراد %1 سجل بنجاح.</translation>
+    </message>
+<message>
+        <source>The Excel file has no usable host records.</source>
+        <translation>لا يحتوي ملف Excel على سجلات مضيفين قابلة للاستخدام.</translation>
+    </message>
+<message>
+        <source>The host database or credential vault is unavailable.</source>
+        <translation>قاعدة بيانات المضيفين أو خزنة بيانات الاعتماد غير متاحة.</translation>
+    </message>
+<message>
+        <source>Excel import failed</source>
+        <translation>فشل استيراد Excel</translation>
+    </message>
+<message>
+        <source>%1 host records will be imported into the current folder. Passwords will be encrypted automatically.</source>
+        <translation>سيتم استيراد %1 من سجلات المضيفين إلى المجلد الحالي. ستُشفّر كلمات المرور تلقائياً.</translation>
+    </message>
+<message>
+        <source>Confirm Excel import</source>
+        <translation>تأكيد استيراد Excel</translation>
+    </message>
+<message>
+        <source>Import hosts from Excel</source>
+        <translation>استيراد المضيفين من Excel</translation>
+    </message>
+<message>
+        <source>Excel import complete</source>
+        <translation>اكتمل استيراد Excel</translation>
+    </message>
+<message>
+        <source>Successfully imported %1 hosts.</source>
+        <translation>تم استيراد %1 من المضيفين بنجاح.</translation>
     </message>
     <message>
         <source>Read export data</source>

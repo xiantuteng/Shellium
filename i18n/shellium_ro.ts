@@ -343,6 +343,65 @@ O execuți în terminalul curent?</translation>
     </message>
 </context>
 <context>
+    <name>ExcelImportDialog</name>
+    <message>
+        <source>Import Hosts from Excel</source>
+        <translation>Importă gazde din Excel</translation>
+    </message>
+    <message>
+        <source>Choose an .xlsx file with the columns name, host, username and password.</source>
+        <translation>Alegeți un fișier .xlsx cu coloanele name, host, username și password.</translation>
+    </message>
+    <message>
+        <source>Select an Excel file…</source>
+        <translation>Selectați un fișier Excel…</translation>
+    </message>
+    <message>
+        <source>Browse…</source>
+        <translation type="unfinished">Răsfoiește…</translation>
+    </message>
+    <message>
+        <source>Download template</source>
+        <translation>Descarcă șablonul</translation>
+    </message>
+    <message>
+        <source>Download an Excel template with English column names</source>
+        <translation>Descarcă un șablon Excel cu nume de coloane în engleză</translation>
+    </message>
+    <message>
+        <source>Import</source>
+        <translation>Importă</translation>
+    </message>
+    <message>
+        <source>Select Excel host file</source>
+        <translation>Selectează fișierul Excel cu gazde</translation>
+    </message>
+    <message>
+        <source>Excel workbook (*.xlsx);;All files (*)</source>
+        <translation>Registru Excel (*.xlsx);;Toate fișierele (*)</translation>
+    </message>
+    <message>
+        <source>Download Excel template</source>
+        <translation>Descarcă șablonul Excel</translation>
+    </message>
+    <message>
+        <source>Excel workbook (*.xlsx)</source>
+        <translation>Registru Excel (*.xlsx)</translation>
+    </message>
+    <message>
+        <source>Template download failed</source>
+        <translation>Descărcarea șablonului a eșuat</translation>
+    </message>
+    <message>
+        <source>Template downloaded</source>
+        <translation>Șablon descărcat</translation>
+    </message>
+    <message>
+        <source>The Excel template was saved to %1.</source>
+        <translation>Șablonul Excel a fost salvat la %1.</translation>
+    </message>
+</context>
+<context>
     <name>HostChainDialog</name>
     <message>
         <source>Edit host chain</source>
@@ -466,6 +525,10 @@ O execuți în terminalul curent?</translation>
     <message>
         <source>Import Hosts…</source>
         <translation type="unfinished">Importă gazde…</translation>
+    </message>
+<message>
+        <source>Import from Excel…</source>
+        <translation>Importă din Excel…</translation>
     </message>
     <message>
         <source>Export Hosts…</source>
@@ -626,6 +689,38 @@ O execuți în terminalul curent?</translation>
     <message>
         <source>Successfully imported %1 records.</source>
         <translation type="unfinished">%1 înregistrări importate cu succes.</translation>
+    </message>
+<message>
+        <source>The Excel file has no usable host records.</source>
+        <translation>Fișierul Excel nu conține înregistrări de gazde utilizabile.</translation>
+    </message>
+<message>
+        <source>The host database or credential vault is unavailable.</source>
+        <translation>Baza de date a gazdelor sau seiful de acreditări nu este disponibil.</translation>
+    </message>
+<message>
+        <source>Excel import failed</source>
+        <translation>Importul Excel a eșuat</translation>
+    </message>
+<message>
+        <source>%1 host records will be imported into the current folder. Passwords will be encrypted automatically.</source>
+        <translation>%1 înregistrări de gazde vor fi importate în folderul curent. Parolele vor fi criptate automat.</translation>
+    </message>
+<message>
+        <source>Confirm Excel import</source>
+        <translation>Confirmă importul Excel</translation>
+    </message>
+<message>
+        <source>Import hosts from Excel</source>
+        <translation>Importă gazde din Excel</translation>
+    </message>
+<message>
+        <source>Excel import complete</source>
+        <translation>Import Excel finalizat</translation>
+    </message>
+<message>
+        <source>Successfully imported %1 hosts.</source>
+        <translation>%1 gazde importate cu succes.</translation>
     </message>
     <message>
         <source>Read export data</source>

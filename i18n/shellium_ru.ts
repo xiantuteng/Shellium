@@ -343,6 +343,65 @@ Run it in the current terminal?</source>
     </message>
 </context>
 <context>
+    <name>ExcelImportDialog</name>
+    <message>
+        <source>Import Hosts from Excel</source>
+        <translation>Импорт хостов из Excel</translation>
+    </message>
+    <message>
+        <source>Choose an .xlsx file with the columns name, host, username and password.</source>
+        <translation>Выберите файл .xlsx со столбцами name, host, username и password.</translation>
+    </message>
+    <message>
+        <source>Select an Excel file…</source>
+        <translation>Выберите файл Excel…</translation>
+    </message>
+    <message>
+        <source>Browse…</source>
+        <translation type="unfinished">Обзор…</translation>
+    </message>
+    <message>
+        <source>Download template</source>
+        <translation>Скачать шаблон</translation>
+    </message>
+    <message>
+        <source>Download an Excel template with English column names</source>
+        <translation>Скачать шаблон Excel с английскими именами столбцов</translation>
+    </message>
+    <message>
+        <source>Import</source>
+        <translation>Импортировать</translation>
+    </message>
+    <message>
+        <source>Select Excel host file</source>
+        <translation>Выберите файл хостов Excel</translation>
+    </message>
+    <message>
+        <source>Excel workbook (*.xlsx);;All files (*)</source>
+        <translation>Книга Excel (*.xlsx);;Все файлы (*)</translation>
+    </message>
+    <message>
+        <source>Download Excel template</source>
+        <translation>Скачать шаблон Excel</translation>
+    </message>
+    <message>
+        <source>Excel workbook (*.xlsx)</source>
+        <translation>Книга Excel (*.xlsx)</translation>
+    </message>
+    <message>
+        <source>Template download failed</source>
+        <translation>Не удалось скачать шаблон</translation>
+    </message>
+    <message>
+        <source>Template downloaded</source>
+        <translation>Шаблон скачан</translation>
+    </message>
+    <message>
+        <source>The Excel template was saved to %1.</source>
+        <translation>Шаблон Excel сохранён в %1.</translation>
+    </message>
+</context>
+<context>
     <name>HostChainDialog</name>
     <message>
         <source>Edit host chain</source>
@@ -466,6 +525,10 @@ Run it in the current terminal?</source>
     <message>
         <source>Import Hosts…</source>
         <translation type="unfinished">Импорт хостов…</translation>
+    </message>
+<message>
+        <source>Import from Excel…</source>
+        <translation>Импорт из Excel…</translation>
     </message>
     <message>
         <source>Export Hosts…</source>
@@ -626,6 +689,38 @@ Run it in the current terminal?</source>
     <message>
         <source>Successfully imported %1 records.</source>
         <translation type="unfinished">Успешно импортировано записей: %1.</translation>
+    </message>
+<message>
+        <source>The Excel file has no usable host records.</source>
+        <translation>В файле Excel нет пригодных записей хостов.</translation>
+    </message>
+<message>
+        <source>The host database or credential vault is unavailable.</source>
+        <translation>База хостов или хранилище учётных данных недоступно.</translation>
+    </message>
+<message>
+        <source>Excel import failed</source>
+        <translation>Ошибка импорта Excel</translation>
+    </message>
+<message>
+        <source>%1 host records will be imported into the current folder. Passwords will be encrypted automatically.</source>
+        <translation>В текущую папку будет импортировано записей хостов: %1. Пароли будут зашифрованы автоматически.</translation>
+    </message>
+<message>
+        <source>Confirm Excel import</source>
+        <translation>Подтвердите импорт Excel</translation>
+    </message>
+<message>
+        <source>Import hosts from Excel</source>
+        <translation>Импорт хостов из Excel</translation>
+    </message>
+<message>
+        <source>Excel import complete</source>
+        <translation>Импорт Excel завершён</translation>
+    </message>
+<message>
+        <source>Successfully imported %1 hosts.</source>
+        <translation>Успешно импортировано хостов: %1.</translation>
     </message>
     <message>
         <source>Read export data</source>

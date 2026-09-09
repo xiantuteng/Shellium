@@ -63,6 +63,18 @@ shellium_resolve_dependency(libsodium libsodium 1.0.18
 shellium_resolve_dependency(spdlog spdlog 1.12
     spdlog::spdlog spdlog::spdlog_header_only)
 
+# Excel .xlsx 本质上是 ZIP 容器。复用 minizip 处理 ZIP 的目录、Deflate 解压和写入，避免
+# 在业务代码里重复实现压缩格式；ExcelHostCodec 只在此基础上解析与生成功能所需的 XML。
+# 通过与其他三方库相同的 Config/pkg-config 双路径解析，macOS、Linux 和 vcpkg Windows 环境
+# 都可以使用同一个稳定的 ShelliumDependencies::minizip 目标。
+shellium_resolve_dependency(minizip minizip 1.2.8
+    minizip::minizip MINIZIP::MINIZIP unofficial::minizip minizip)
+# 某些 Linux/Windows 构建会把 minizip 编译为静态库，此时其 pkg-config 的私有依赖 zlib
+# 不一定会自动传递给最终可执行文件；显式挂接可以避免“动态库环境能过、静态发布包链接失败”。
+find_package(ZLIB REQUIRED)
+set_property(TARGET ShelliumDependencies::minizip APPEND PROPERTY
+    INTERFACE_LINK_LIBRARIES ZLIB::ZLIB)
+
 # 原生 socket 平台层是 SSH/SFTP/转发共同依赖的基础设施。独立静态库让正式程序和各测试
 # 目标复用完全相同的实现，防止只给 GUI 目标补了 Windows 源码而测试目标仍然链接失败。
 add_library(ShelliumPlatform STATIC
@@ -134,6 +146,8 @@ set(SHELLIUM_APP_SOURCES
     src/core/ActivityLog.h
     src/core/ConnectionTarget.cpp
     src/core/ConnectionTarget.h
+    src/core/ExcelHostCodec.cpp
+    src/core/ExcelHostCodec.h
     src/i18n/LocalizationService.cpp
     src/i18n/LocalizationService.h
     src/i18n/Retranslate.h
@@ -315,6 +329,7 @@ target_link_libraries(Shellium PRIVATE
     ShelliumDependencies::libssh
     ShelliumDependencies::libvterm
     ShelliumDependencies::libsodium
+    ShelliumDependencies::minizip
     ShelliumDependencies::spdlog
 )
 
@@ -708,6 +723,7 @@ if(BUILD_TESTING)
         ShelliumDependencies::libssh
         ShelliumDependencies::libvterm
         ShelliumDependencies::libsodium
+        ShelliumDependencies::minizip
         ShelliumDependencies::spdlog
     )
     if(UNIX AND NOT APPLE)
@@ -806,6 +822,8 @@ if(BUILD_TESTING)
     # 目标也必须链接相关实现；界面用例本身不会点击测试按钮，不会产生任何网络访问。
     qt_add_executable(ShelliumHostManagerTests
         tests/HostManagerWidgetTest.cpp
+        src/core/ExcelHostCodec.cpp
+        src/core/ExcelHostCodec.h
         src/core/ConnectionConfigCodec.cpp
         src/core/ConnectionConfigCodec.h
         src/core/ConnectionTarget.cpp
@@ -867,7 +885,8 @@ if(BUILD_TESTING)
     target_include_directories(ShelliumHostManagerTests PRIVATE src)
     target_link_libraries(ShelliumHostManagerTests PRIVATE
         Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Sql Qt6::Svg Qt6::Test
-        ShelliumDependencies::libssh ShelliumDependencies::libsodium)
+        ShelliumDependencies::libssh ShelliumDependencies::libsodium
+        ShelliumDependencies::minizip)
     add_test(NAME ShelliumHostManagerTests COMMAND ShelliumHostManagerTests)
 
     # 设置界面改版后的控件接线回归：步进器、滑动开关、配色色板与分类导航都是自绘控件，

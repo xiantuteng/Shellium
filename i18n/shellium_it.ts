@@ -343,6 +343,65 @@ Eseguirlo nel terminale corrente?</translation>
     </message>
 </context>
 <context>
+    <name>ExcelImportDialog</name>
+    <message>
+        <source>Import Hosts from Excel</source>
+        <translation>Importa host da Excel</translation>
+    </message>
+    <message>
+        <source>Choose an .xlsx file with the columns name, host, username and password.</source>
+        <translation>Scegli un file .xlsx con le colonne name, host, username e password.</translation>
+    </message>
+    <message>
+        <source>Select an Excel file…</source>
+        <translation>Seleziona un file Excel…</translation>
+    </message>
+    <message>
+        <source>Browse…</source>
+        <translation type="unfinished">Sfoglia…</translation>
+    </message>
+    <message>
+        <source>Download template</source>
+        <translation>Scarica modello</translation>
+    </message>
+    <message>
+        <source>Download an Excel template with English column names</source>
+        <translation>Scarica un modello Excel con nomi delle colonne in inglese</translation>
+    </message>
+    <message>
+        <source>Import</source>
+        <translation>Importa</translation>
+    </message>
+    <message>
+        <source>Select Excel host file</source>
+        <translation>Seleziona il file host Excel</translation>
+    </message>
+    <message>
+        <source>Excel workbook (*.xlsx);;All files (*)</source>
+        <translation>Cartella di lavoro Excel (*.xlsx);;Tutti i file (*)</translation>
+    </message>
+    <message>
+        <source>Download Excel template</source>
+        <translation>Scarica modello Excel</translation>
+    </message>
+    <message>
+        <source>Excel workbook (*.xlsx)</source>
+        <translation>Cartella di lavoro Excel (*.xlsx)</translation>
+    </message>
+    <message>
+        <source>Template download failed</source>
+        <translation>Download del modello non riuscito</translation>
+    </message>
+    <message>
+        <source>Template downloaded</source>
+        <translation>Modello scaricato</translation>
+    </message>
+    <message>
+        <source>The Excel template was saved to %1.</source>
+        <translation>Il modello Excel è stato salvato in %1.</translation>
+    </message>
+</context>
+<context>
     <name>HostChainDialog</name>
     <message>
         <source>Edit host chain</source>
@@ -466,6 +525,10 @@ Eseguirlo nel terminale corrente?</translation>
     <message>
         <source>Import Hosts…</source>
         <translation type="unfinished">Importa host…</translation>
+    </message>
+<message>
+        <source>Import from Excel…</source>
+        <translation>Importa da Excel…</translation>
     </message>
     <message>
         <source>Export Hosts…</source>
@@ -626,6 +689,38 @@ Eseguirlo nel terminale corrente?</translation>
     <message>
         <source>Successfully imported %1 records.</source>
         <translation type="unfinished">%1 record importati correttamente.</translation>
+    </message>
+<message>
+        <source>The Excel file has no usable host records.</source>
+        <translation>Il file Excel non contiene record host utilizzabili.</translation>
+    </message>
+<message>
+        <source>The host database or credential vault is unavailable.</source>
+        <translation>Il database host o il deposito credenziali non è disponibile.</translation>
+    </message>
+<message>
+        <source>Excel import failed</source>
+        <translation>Importazione Excel non riuscita</translation>
+    </message>
+<message>
+        <source>%1 host records will be imported into the current folder. Passwords will be encrypted automatically.</source>
+        <translation>%1 record host verranno importati nella cartella corrente. Le password saranno crittografate automaticamente.</translation>
+    </message>
+<message>
+        <source>Confirm Excel import</source>
+        <translation>Conferma importazione Excel</translation>
+    </message>
+<message>
+        <source>Import hosts from Excel</source>
+        <translation>Importa host da Excel</translation>
+    </message>
+<message>
+        <source>Excel import complete</source>
+        <translation>Importazione Excel completata</translation>
+    </message>
+<message>
+        <source>Successfully imported %1 hosts.</source>
+        <translation>%1 host importati correttamente.</translation>
     </message>
     <message>
         <source>Read export data</source>

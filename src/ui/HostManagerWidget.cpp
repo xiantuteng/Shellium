@@ -1,6 +1,7 @@
 #include "ui/HostManagerWidget.h"
 
 #include "core/ConnectionConfigCodec.h"
+#include "core/ExcelHostCodec.h"
 #include "i18n/Retranslate.h"
 #include "security/Vault.h"
 #include "ssh/SshSessionStack.h"
@@ -17,6 +18,7 @@
 #include <QDateTime>
 #include <QDebug>
 #include <QDialog>
+#include <QDialogButtonBox>
 #include <QDragMoveEvent>
 #include <QDropEvent>
 #include <QFileDialog>
@@ -41,6 +43,7 @@
 #include <QPainter>
 #include <QPolygonF>
 #include <QPushButton>
+#include <QDir>
 #include <QSet>
 #include <QSaveFile>
 #include <QScrollBar>
@@ -1154,6 +1157,104 @@ private:
     QList<QLayoutItem *> m_items;
     int m_hSpace;
     int m_vSpace;
+};
+
+/**
+ * @brief Excel 主机导入对话框。
+ *
+ * 对话框只负责选择文件和下载空模板，不在控件层解析 Excel 或写数据库。这样“选择文件”、
+ * “下载模板”和“导入”三个动作的职责清晰，且导入入口可以在不打开原生文件对话框的测试
+ * 中复用实际的持久化方法。类没有 Q_OBJECT，因此显式声明翻译函数上下文，确保 lupdate 和
+ * 运行时翻译都能把一次性对话框归到稳定的 ExcelImportDialog 上下文。
+ */
+class ExcelImportDialog final : public QDialog {
+    Q_DECLARE_TR_FUNCTIONS(ExcelImportDialog)
+
+public:
+    /**
+     * @brief 创建 Excel 导入窗口。
+     * @param parent Qt 父窗口，决定模态窗口归属和生命周期。
+     */
+    explicit ExcelImportDialog(QWidget *parent = nullptr)
+        : QDialog(parent)
+        , m_pathEdit(new QLineEdit(this))
+    {
+        setWindowTitle(tr("Import Hosts from Excel"));
+        setModal(true);
+        resize(560, 170);
+
+        auto *layout = new QVBoxLayout(this);
+        layout->setContentsMargins(24, 22, 24, 20);
+        layout->setSpacing(14);
+
+        auto *description = new QLabel(
+            tr("Choose an .xlsx file with the columns name, host, username and password."), this);
+        description->setWordWrap(true);
+        layout->addWidget(description);
+
+        auto *fileLayout = new QHBoxLayout;
+        fileLayout->setSpacing(8);
+        m_pathEdit->setObjectName(QStringLiteral("ExcelImportPathEdit"));
+        m_pathEdit->setPlaceholderText(tr("Select an Excel file…"));
+        auto *browseButton = new QPushButton(tr("Browse…"), this);
+        browseButton->setObjectName(QStringLiteral("ExcelBrowseButton"));
+        fileLayout->addWidget(m_pathEdit, 1);
+        fileLayout->addWidget(browseButton);
+        layout->addLayout(fileLayout);
+
+        auto *templateButton = new QPushButton(tr("Download template"), this);
+        templateButton->setObjectName(QStringLiteral("ExcelTemplateButton"));
+        templateButton->setToolTip(tr("Download an Excel template with English column names"));
+        layout->addWidget(templateButton, 0, Qt::AlignLeft);
+
+        auto *buttons = new QDialogButtonBox(QDialogButtonBox::Cancel, this);
+        auto *importButton = buttons->addButton(tr("Import"), QDialogButtonBox::AcceptRole);
+        importButton->setObjectName(QStringLiteral("ExcelImportButton"));
+        importButton->setEnabled(false);
+        layout->addWidget(buttons);
+
+        connect(m_pathEdit, &QLineEdit::textChanged, this, [importButton](const QString &text) {
+            // 只要用户选择过非空路径就允许提交；真正的文件存在性、扩展名和工作簿内容
+            // 仍由 ExcelHostCodec 校验，避免把界面校验与格式解析逻辑复制两份。
+            importButton->setEnabled(!text.trimmed().isEmpty());
+        });
+        connect(browseButton, &QPushButton::clicked, this, [this] {
+            const QString path = QFileDialog::getOpenFileName(
+                this,
+                tr("Select Excel host file"),
+                QDir::homePath(),
+                tr("Excel workbook (*.xlsx);;All files (*)"));
+            if (!path.isEmpty()) {
+                m_pathEdit->setText(path);
+            }
+        });
+        connect(templateButton, &QPushButton::clicked, this, [this] {
+            const QString path = QFileDialog::getSaveFileName(
+                this,
+                tr("Download Excel template"),
+                QDir::home().filePath(QStringLiteral("shellium-hosts-template.xlsx")),
+                tr("Excel workbook (*.xlsx)"));
+            if (path.isEmpty()) {
+                return;
+            }
+            QString error;
+            if (!ExcelHostCodec::writeTemplate(path, &error)) {
+                QMessageBox::critical(this, tr("Template download failed"), error);
+                return;
+            }
+            QMessageBox::information(this,
+                                     tr("Template downloaded"),
+                                     tr("The Excel template was saved to %1.").arg(path));
+        });
+        connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
+        connect(importButton, &QPushButton::clicked, this, &QDialog::accept);
+    }
+
+    /** @brief 返回用户选择的 Excel 文件路径；未选择时返回空字符串。 */
+    [[nodiscard]] QString filePath() const { return m_pathEdit->text().trimmed(); }
+
+private:
+    QLineEdit *m_pathEdit = nullptr; ///< 选择的 Excel 路径；只在对话框存活期间保存。
 };
 
 /**
@@ -3488,12 +3589,21 @@ void HostManagerWidget::populateContextMenu(QMenu *menu, QTreeWidgetItem *item)
                         UiIcons::Symbol::Upload,
                         this->palette().color(QPalette::WindowText)),
         tr("Import Hosts…"));
+    QAction *excelImportAction = menu->addAction(
+        UiIcons::symbol(this,
+                        UiIcons::Symbol::Upload,
+                        this->palette().color(QPalette::WindowText)),
+        tr("Import from Excel…"));
     QAction *exportAction = menu->addAction(
         UiIcons::symbol(this,
                         UiIcons::Symbol::Download,
                         this->palette().color(QPalette::WindowText)),
         tr("Export Hosts…"));
     connect(importAction, &QAction::triggered, this, &HostManagerWidget::importHosts);
+    connect(excelImportAction,
+            &QAction::triggered,
+            this,
+            &HostManagerWidget::importHostsFromExcel);
     connect(exportAction, &QAction::triggered, this, &HostManagerWidget::exportHosts);
     menu->addSeparator();
     QAction *refreshAction = menu->addAction(
@@ -4236,6 +4346,112 @@ void HostManagerWidget::importHosts()
     QMessageBox::information(this,
                              tr("Import complete"),
                              tr("Successfully imported %1 records.").arg(importedRecords.size()));
+}
+
+bool HostManagerWidget::persistExcelRows(const QList<ExcelHostCodec::HostRow> &rows,
+                                         const QString &parentId,
+                                         QString *errorMessage)
+{
+    if (rows.isEmpty()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = tr("The Excel file has no usable host records.");
+        }
+        return false;
+    }
+    if (m_database == nullptr || m_credentialVault == nullptr) {
+        if (errorMessage != nullptr) {
+            *errorMessage = tr("The host database or credential vault is unavailable.");
+        }
+        return false;
+    }
+
+    // 整批导入必须共享一个外层事务。CredentialVault 的保存接口会自动参与已有事务，因而
+    // 某一行的主机或凭据失败时，前面已经写入的记录也会一起回滚，不会留下“导入了一半”的
+    // 目录状态；这对包含密码的批量操作尤其重要，因为孤立密文无法由用户自行发现。
+    return m_database->runInTransaction(
+        [this, &rows, &parentId](QString *innerError) {
+            for (const ExcelHostCodec::HostRow &row : rows) {
+                HostRecord record;
+                record.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+                record.parentId = parentId;
+                record.kind = HostNodeKind::Host;
+                record.name = row.name;
+                record.host = row.host;
+                record.username = row.username;
+                // Excel 模型没有单独的端口字段，导入后沿用 Shellium 的标准 SSH 端口。
+                // 用户仍可在主机编辑器中按需修改端口；把端口明确写成 22 也能避免空字段
+                // 被父分组意外继承，保证“Excel 中一行主机”的结果独立可预期。
+                record.port = quint16{22};
+
+                if (!row.password.isEmpty()) {
+                    ConnectionTarget target = record.toConnectionTarget();
+                    target.password = row.password;
+                    if (!m_credentialVault->saveConnectionPassword(
+                            record,
+                            target,
+                            tr("Login credentials for %1").arg(record.name),
+                            innerError)) {
+                        return false;
+                    }
+                } else if (!m_database->saveHost(record, innerError)) {
+                    return false;
+                }
+            }
+            return true;
+        },
+        errorMessage);
+}
+
+void HostManagerWidget::importHostsFromExcel()
+{
+    ExcelImportDialog dialog(this);
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+
+    QList<ExcelHostCodec::HostRow> rows;
+    QString error;
+    if (!ExcelHostCodec::readWorkbook(dialog.filePath(), &rows, &error)) {
+        QMessageBox::critical(this, tr("Excel import failed"), error);
+        return;
+    }
+
+    const QString confirmation =
+        tr("%1 host records will be imported into the current folder. Passwords will be encrypted automatically.")
+            .arg(rows.size());
+    if (QMessageBox::question(this,
+                              tr("Confirm Excel import"),
+                              confirmation,
+                              QMessageBox::Yes | QMessageBox::Cancel,
+                              QMessageBox::Cancel)
+        != QMessageBox::Yes) {
+        return;
+    }
+
+    bool containsPassword = false;
+    for (const ExcelHostCodec::HostRow &row : rows) {
+        if (!row.password.isEmpty()) {
+            containsPassword = true;
+            break;
+        }
+    }
+    // 主密码保险箱只需要在整批写入前解锁一次；不能在循环中逐行弹窗，否则用户会把批量
+    // 导入误认为多次失败重试，也无法保证用户取消时数据库仍保持完全不变。把解锁放在确认
+    // 之后还可以避免用户仅查看导入摘要后取消时改变保险库会话状态。
+    if (containsPassword
+        && m_credentialVault->passwordProtectionEnabled()
+        && !VaultDialog::ensureUnlocked(m_credentialVault, this)) {
+        return;
+    }
+
+    if (!persistExcelRows(rows, selectedParentGroupId(), &error)) {
+        showDatabaseError(tr("Import hosts from Excel"), error);
+        return;
+    }
+    refresh();
+    QMessageBox::information(this,
+                             tr("Excel import complete"),
+                             tr("Successfully imported %1 hosts.").arg(rows.size()));
 }
 
 void HostManagerWidget::exportHosts()

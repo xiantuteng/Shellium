@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/ExcelHostCodec.h"
 #include "core/HostRecord.h"
 
 #include <QHash>
@@ -216,8 +217,28 @@ private:
     /** @brief 从 OpenSSH config 或 Shellium JSON 导入主机，并以单个事务写入数据库。 */
     void importHosts();
 
+    /**
+     * @brief 通过 Excel 文件批量导入主机，并把结果写入当前选中的目录。
+     *
+     * Excel 导入只产生 Host 类型记录，不创建分组；文件中的 name、host、username、password
+     * 分别映射到主机名称、地址、账号和密码。密码字段非空时会交给 CredentialVault 加密
+     * 保存，绝不会随 HostRecord 明文写入数据库。
+     */
+    void importHostsFromExcel();
+
     /** @brief 把全部主机和分组导出为不含凭据的 Shellium JSON。 */
     void exportHosts();
+
+    /**
+     * @brief 将已解析的 Excel 行写入指定目录，供界面入口和自动化测试共用。
+     * @param rows ExcelHostCodec 已校验的主机行；其中 password 只在本次调用期间使用。
+     * @param parentId 目标父分组 id；空字符串表示根层级。
+     * @param errorMessage 任一主机、凭据或事务操作失败时接收错误详情；可为空。
+     * @return 所有记录及其密码全部原子保存成功返回 true；失败时整体回滚。
+     */
+    bool persistExcelRows(const QList<ExcelHostCodec::HostRow> &rows,
+                          const QString &parentId,
+                          QString *errorMessage);
 
     /** @brief 处理树双击，只允许可连接的 Host 节点发出请求；双击总是新开标签页。 */
     void activateTreeItem(QTreeWidgetItem *item);

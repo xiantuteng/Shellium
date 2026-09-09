@@ -343,6 +343,65 @@ Run it in the current terminal?</source>
     </message>
 </context>
 <context>
+    <name>ExcelImportDialog</name>
+    <message>
+        <source>Import Hosts from Excel</source>
+        <translation>Excel からホストをインポート</translation>
+    </message>
+    <message>
+        <source>Choose an .xlsx file with the columns name, host, username and password.</source>
+        <translation>name、host、username、password 列を含む .xlsx ファイルを選択してください。</translation>
+    </message>
+    <message>
+        <source>Select an Excel file…</source>
+        <translation>Excel ファイルを選択…</translation>
+    </message>
+    <message>
+        <source>Browse…</source>
+        <translation type="unfinished">参照…</translation>
+    </message>
+    <message>
+        <source>Download template</source>
+        <translation>テンプレートをダウンロード</translation>
+    </message>
+    <message>
+        <source>Download an Excel template with English column names</source>
+        <translation>英語の列名を使用した Excel テンプレートをダウンロード</translation>
+    </message>
+    <message>
+        <source>Import</source>
+        <translation>インポート</translation>
+    </message>
+    <message>
+        <source>Select Excel host file</source>
+        <translation>Excel ホストファイルを選択</translation>
+    </message>
+    <message>
+        <source>Excel workbook (*.xlsx);;All files (*)</source>
+        <translation>Excel ブック (*.xlsx);;すべてのファイル (*)</translation>
+    </message>
+    <message>
+        <source>Download Excel template</source>
+        <translation>Excel テンプレートをダウンロード</translation>
+    </message>
+    <message>
+        <source>Excel workbook (*.xlsx)</source>
+        <translation>Excel ブック (*.xlsx)</translation>
+    </message>
+    <message>
+        <source>Template download failed</source>
+        <translation>テンプレートのダウンロードに失敗しました</translation>
+    </message>
+    <message>
+        <source>Template downloaded</source>
+        <translation>テンプレートをダウンロードしました</translation>
+    </message>
+    <message>
+        <source>The Excel template was saved to %1.</source>
+        <translation>Excel テンプレートを %1 に保存しました。</translation>
+    </message>
+</context>
+<context>
     <name>HostChainDialog</name>
     <message>
         <source>Edit host chain</source>
@@ -466,6 +525,10 @@ Run it in the current terminal?</source>
     <message>
         <source>Import Hosts…</source>
         <translation type="unfinished">ホストをインポート…</translation>
+    </message>
+<message>
+        <source>Import from Excel…</source>
+        <translation>Excel からインポート…</translation>
     </message>
     <message>
         <source>Export Hosts…</source>
@@ -626,6 +689,38 @@ Run it in the current terminal?</source>
     <message>
         <source>Successfully imported %1 records.</source>
         <translation type="unfinished">%1 件のレコードを正常にインポートしました。</translation>
+    </message>
+<message>
+        <source>The Excel file has no usable host records.</source>
+        <translation>Excel ファイルにインポート可能なホストレコードがありません。</translation>
+    </message>
+<message>
+        <source>The host database or credential vault is unavailable.</source>
+        <translation>ホストデータベースまたは資格情報保管庫を利用できません。</translation>
+    </message>
+<message>
+        <source>Excel import failed</source>
+        <translation>Excel のインポートに失敗しました</translation>
+    </message>
+<message>
+        <source>%1 host records will be imported into the current folder. Passwords will be encrypted automatically.</source>
+        <translation>%1 件のホストレコードを現在のフォルダーにインポートします。パスワードは自動的に暗号化されます。</translation>
+    </message>
+<message>
+        <source>Confirm Excel import</source>
+        <translation>Excel のインポートを確認</translation>
+    </message>
+<message>
+        <source>Import hosts from Excel</source>
+        <translation>Excel からホストをインポート</translation>
+    </message>
+<message>
+        <source>Excel import complete</source>
+        <translation>Excel のインポートが完了しました</translation>
+    </message>
+<message>
+        <source>Successfully imported %1 hosts.</source>
+        <translation>%1 台のホストを正常にインポートしました。</translation>
     </message>
     <message>
         <source>Read export data</source>

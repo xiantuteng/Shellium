@@ -1,4 +1,5 @@
 #include "core/HostRecord.h"
+#include "core/ExcelHostCodec.h"
 #include "security/Vault.h"
 #include "storage/ApplicationDatabase.h"
 #include "ssh/SshSessionStack.h"
@@ -14,6 +15,8 @@
 #include <QDialog>
 #include <QDragEnterEvent>
 #include <QDragMoveEvent>
+#include <QFile>
+#include <QFileInfo>
 #include <QFileIconProvider>
 #include <QFrame>
 #include <QImage>
@@ -29,10 +32,13 @@
 #include <QSignalSpy>
 #include <QSpinBox>
 #include <QTest>
+#include <QTemporaryDir>
 #include <QTimer>
 #include <QToolButton>
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
+
+#include <minizip/zip.h>
 
 #include <algorithm>
 #include <memory>
@@ -60,6 +66,12 @@ private slots:
 
     /** @brief 主机右键菜单必须提供复制，并把新建主机排在新建分组之前。 */
     void hostContextMenuProvidesCopyAndRequestedCreationOrder();
+
+    /** @brief Excel 模板必须是可读取的 xlsx，并使用约定的四个英文列名。 */
+    void excelTemplateAndWorkbookUseEnglishHeaders();
+
+    /** @brief Excel 行写入当前目录，非空密码必须进入加密凭据而不是主机明文字段。 */
+    void excelImportPersistsHostsAndEncryptsPasswords();
 
     /**
      * @brief “在工作空间中连接”只应出现在分组右键菜单里、紧跟在“新建分组”之后，
@@ -198,6 +210,59 @@ private:
     std::unique_ptr<CredentialVault> m_vault;
 };
 
+namespace {
+
+/**
+ * @brief 为 Excel 解析回归测试生成一个最小但真实的 xlsx 文件。
+ * @param filePath 测试文件路径。
+ * @return ZIP 条目全部写入成功时返回 true。
+ *
+ * 生产代码只负责读取工作簿，测试不能把 CSV 或 XML 裸文件当作 xlsx；这里直接使用
+ * minizip 生成标准 ZIP 容器，确保共享字符串/内联字符串之外的 ZIP 边界也被覆盖。
+ */
+bool writeExcelFixture(const QString &filePath)
+{
+    const QByteArray path = QFile::encodeName(filePath);
+    zipFile archive = zipOpen64(path.constData(), APPEND_STATUS_CREATE);
+    if (archive == nullptr) {
+        return false;
+    }
+    const auto addEntry = [archive](const char *entryName, const QByteArray &content) {
+        zip_fileinfo info{};
+        if (zipOpenNewFileInZip64(archive,
+                                  entryName,
+                                  &info,
+                                  nullptr,
+                                  0,
+                                  nullptr,
+                                  0,
+                                  nullptr,
+                                  Z_DEFLATED,
+                                  Z_DEFAULT_COMPRESSION,
+                                  1)
+            != ZIP_OK) {
+            return false;
+        }
+        const bool written = zipWriteInFileInZip(archive, content.constData(), content.size())
+            == ZIP_OK;
+        const bool closed = zipCloseFileInZip(archive) == ZIP_OK;
+        return written && closed;
+    };
+    const QByteArray types = R"xml(<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>)xml";
+    const QByteArray rels = R"xml(<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>)xml";
+    const QByteArray workbook = R"xml(<?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Hosts" sheetId="1" r:id="rId1"/></sheets></workbook>)xml";
+    const QByteArray workbookRels = R"xml(<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>)xml";
+    const QByteArray worksheet = R"xml(<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>name</t></is></c><c r="B1" t="inlineStr"><is><t>host</t></is></c><c r="C1" t="inlineStr"><is><t>username</t></is></c><c r="D1" t="inlineStr"><is><t>password</t></is></c></row><row r="2"><c r="A2" t="inlineStr"><is><t>Test host</t></is></c><c r="B2" t="inlineStr"><is><t>192.0.2.10</t></is></c><c r="C2" t="inlineStr"><is><t>alice</t></is></c><c r="D2" t="inlineStr"><is><t> secret </t></is></c></row><row r="3"><c r="A3" t="inlineStr"><is><t>No password</t></is></c><c r="B3" t="inlineStr"><is><t>192.0.2.11</t></is></c><c r="C3" t="inlineStr"><is><t>bob</t></is></c></row></sheetData></worksheet>)xml";
+    const bool success = addEntry("[Content_Types].xml", types)
+        && addEntry("_rels/.rels", rels)
+        && addEntry("xl/workbook.xml", workbook)
+        && addEntry("xl/_rels/workbook.xml.rels", workbookRels)
+        && addEntry("xl/worksheets/sheet1.xml", worksheet);
+    return success && zipClose(archive, nullptr) == ZIP_OK;
+}
+
+} // namespace
+
 void HostManagerWidgetTest::init()
 {
     // 内存数据库保证每个用例都从空库开始，也不会触碰用户真实数据文件。
@@ -315,6 +380,82 @@ void HostManagerWidgetTest::headerExposesOnlyThreePrimaryActions()
     QVERIFY(widget.findChild<QListWidget *>() == nullptr);
 }
 
+void HostManagerWidgetTest::excelTemplateAndWorkbookUseEnglishHeaders()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+
+    const QString templatePath = temporaryDirectory.filePath(QStringLiteral("template.xlsx"));
+    QString error;
+    QVERIFY2(ExcelHostCodec::writeTemplate(templatePath, &error), qPrintable(error));
+    QVERIFY(QFileInfo::exists(templatePath));
+    QVERIFY(QFileInfo(templatePath).size() > 0);
+    QList<ExcelHostCodec::HostRow> templateRows;
+    QVERIFY(!ExcelHostCodec::readWorkbook(templatePath, &templateRows, &error));
+    // 模板只有英文表头、没有示例数据；读取时应先通过表头校验，再明确报告“没有记录”，
+    // 而不是把模板误判成 ZIP/XML 格式错误。
+    QCOMPARE(error, QStringLiteral("Excel 文件中没有可导入的主机记录"));
+
+    const QString fixturePath = temporaryDirectory.filePath(QStringLiteral("hosts.xlsx"));
+    QVERIFY(writeExcelFixture(fixturePath));
+    QList<ExcelHostCodec::HostRow> rows;
+    QVERIFY2(ExcelHostCodec::readWorkbook(fixturePath, &rows, &error), qPrintable(error));
+    QCOMPARE(rows.size(), 2);
+    QCOMPARE(rows.at(0).name, QStringLiteral("Test host"));
+    QCOMPARE(rows.at(0).host, QStringLiteral("192.0.2.10"));
+    QCOMPARE(rows.at(0).username, QStringLiteral("alice"));
+    QCOMPARE(rows.at(0).password, QStringLiteral(" secret "));
+    QCOMPARE(rows.at(1).password, QString());
+}
+
+void HostManagerWidgetTest::excelImportPersistsHostsAndEncryptsPasswords()
+{
+    HostRecord group;
+    group.id = QStringLiteral("excel-target-group");
+    group.kind = HostNodeKind::Folder;
+    group.name = QStringLiteral("Excel target");
+    QString error;
+    QVERIFY2(m_database->saveHost(group, &error), qPrintable(error));
+
+    HostManagerWidget widget(m_database.get(), m_vault.get());
+    const QList<ExcelHostCodec::HostRow> rows{
+        {QStringLiteral("Imported with password"),
+         QStringLiteral("192.0.2.30"),
+         QStringLiteral("alice"),
+         QStringLiteral("password-from-excel")},
+        {QStringLiteral("Imported without password"),
+         QStringLiteral("192.0.2.31"),
+         QStringLiteral("bob"),
+         QString()},
+    };
+    QVERIFY2(widget.persistExcelRows(rows, group.id, &error), qPrintable(error));
+
+    bool loaded = false;
+    const QList<HostRecord> imported = m_database->listHostsInGroup(group.id, &loaded, &error);
+    QVERIFY2(loaded, qPrintable(error));
+    QCOMPARE(imported.size(), 2);
+
+    const auto passwordHost = std::find_if(imported.cbegin(), imported.cend(), [](const HostRecord &record) {
+        return record.name == QStringLiteral("Imported with password");
+    });
+    QVERIFY(passwordHost != imported.cend());
+    QVERIFY(!passwordHost->credentialId.isEmpty());
+    const std::optional<CredentialRecord> credential =
+        m_database->findCredential(passwordHost->credentialId, &error);
+    QVERIFY2(credential.has_value(), qPrintable(error));
+    QVERIFY(!credential->encryptedPayload.contains("password-from-excel"));
+
+    ConnectionTarget target = passwordHost->toConnectionTarget();
+    QVERIFY2(m_vault->applyHostCredential(*passwordHost, target, &error), qPrintable(error));
+    QCOMPARE(target.password, QStringLiteral("password-from-excel"));
+
+    const auto passwordlessHost = std::find_if(imported.cbegin(), imported.cend(), [](const HostRecord &record) {
+        return record.name == QStringLiteral("Imported without password");
+    });
+    QVERIFY(passwordlessHost != imported.cend());
+    QVERIFY(passwordlessHost->credentialId.isEmpty());
+}
+
 void HostManagerWidgetTest::hostContextMenuProvidesCopyAndRequestedCreationOrder()
 {
     HostRecord host;
@@ -346,6 +487,12 @@ void HostManagerWidgetTest::hostContextMenuProvidesCopyAndRequestedCreationOrder
     QVERIFY2(addGroupIndex >= 0, "主机右键菜单缺少新建分组动作");
     QVERIFY2(addHostIndex < addGroupIndex, "新建主机没有排在新建分组之前");
     QVERIFY2(actionTexts.contains(QStringLiteral("Copy")), "主机右键菜单缺少复制动作");
+
+    const qsizetype importIndex = actionTexts.indexOf(QStringLiteral("Import Hosts…"));
+    const qsizetype excelImportIndex = actionTexts.indexOf(QStringLiteral("Import from Excel…"));
+    QVERIFY2(importIndex >= 0, "主机右键菜单缺少普通导入动作");
+    QVERIFY2(excelImportIndex == importIndex + 1,
+             "从 Excel 导入必须紧跟在普通导入动作下面");
 
     // 主机不是分组，右键菜单不应提供“在工作空间中连接”——它没有可展开的子主机集合。
     QVERIFY2(!actionTexts.contains(QStringLiteral("Connect in Workspace")),

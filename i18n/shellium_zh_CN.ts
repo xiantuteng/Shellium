@@ -343,6 +343,65 @@ Run it in the current terminal?</source>
     </message>
 </context>
 <context>
+    <name>ExcelImportDialog</name>
+    <message>
+        <source>Import Hosts from Excel</source>
+        <translation>从 Excel 导入主机</translation>
+    </message>
+    <message>
+        <source>Choose an .xlsx file with the columns name, host, username and password.</source>
+        <translation>请选择包含 name、host、username 和 password 列的 .xlsx 文件。</translation>
+    </message>
+    <message>
+        <source>Select an Excel file…</source>
+        <translation>选择 Excel 文件…</translation>
+    </message>
+    <message>
+        <source>Browse…</source>
+        <translation type="unfinished">浏览…</translation>
+    </message>
+    <message>
+        <source>Download template</source>
+        <translation>下载模板</translation>
+    </message>
+    <message>
+        <source>Download an Excel template with English column names</source>
+        <translation>下载包含英文列名的 Excel 模板</translation>
+    </message>
+    <message>
+        <source>Import</source>
+        <translation>导入</translation>
+    </message>
+    <message>
+        <source>Select Excel host file</source>
+        <translation>选择 Excel 主机文件</translation>
+    </message>
+    <message>
+        <source>Excel workbook (*.xlsx);;All files (*)</source>
+        <translation>Excel 工作簿 (*.xlsx);;所有文件 (*)</translation>
+    </message>
+    <message>
+        <source>Download Excel template</source>
+        <translation>下载 Excel 模板</translation>
+    </message>
+    <message>
+        <source>Excel workbook (*.xlsx)</source>
+        <translation>Excel 工作簿 (*.xlsx)</translation>
+    </message>
+    <message>
+        <source>Template download failed</source>
+        <translation>模板下载失败</translation>
+    </message>
+    <message>
+        <source>Template downloaded</source>
+        <translation>模板已下载</translation>
+    </message>
+    <message>
+        <source>The Excel template was saved to %1.</source>
+        <translation>Excel 模板已保存到 %1。</translation>
+    </message>
+</context>
+<context>
     <name>HostChainDialog</name>
     <message>
         <source>Edit host chain</source>
@@ -466,6 +525,10 @@ Run it in the current terminal?</source>
     <message>
         <source>Import Hosts…</source>
         <translation>导入主机…</translation>
+    </message>
+<message>
+        <source>Import from Excel…</source>
+        <translation>从 Excel 导入…</translation>
     </message>
     <message>
         <source>Export Hosts…</source>
@@ -626,6 +689,38 @@ Run it in the current terminal?</source>
     <message>
         <source>Successfully imported %1 records.</source>
         <translation>已成功导入 %1 条记录。</translation>
+    </message>
+<message>
+        <source>The Excel file has no usable host records.</source>
+        <translation>Excel 文件中没有可用的主机记录。</translation>
+    </message>
+<message>
+        <source>The host database or credential vault is unavailable.</source>
+        <translation>主机数据库或凭据保险库不可用。</translation>
+    </message>
+<message>
+        <source>Excel import failed</source>
+        <translation>Excel 导入失败</translation>
+    </message>
+<message>
+        <source>%1 host records will be imported into the current folder. Passwords will be encrypted automatically.</source>
+        <translation>将导入 %1 台主机到当前目录。密码将自动加密保存。</translation>
+    </message>
+<message>
+        <source>Confirm Excel import</source>
+        <translation>确认 Excel 导入</translation>
+    </message>
+<message>
+        <source>Import hosts from Excel</source>
+        <translation>从 Excel 导入主机</translation>
+    </message>
+<message>
+        <source>Excel import complete</source>
+        <translation>Excel 导入完成</translation>
+    </message>
+<message>
+        <source>Successfully imported %1 hosts.</source>
+        <translation>已成功导入 %1 台主机。</translation>
     </message>
     <message>
         <source>Read export data</source>

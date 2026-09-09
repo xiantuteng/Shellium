@@ -343,6 +343,65 @@ Run it in the current terminal?</source>
     </message>
 </context>
 <context>
+    <name>ExcelImportDialog</name>
+    <message>
+        <source>Import Hosts from Excel</source>
+        <translation>Excel에서 호스트 가져오기</translation>
+    </message>
+    <message>
+        <source>Choose an .xlsx file with the columns name, host, username and password.</source>
+        <translation>name, host, username, password 열이 있는 .xlsx 파일을 선택하세요.</translation>
+    </message>
+    <message>
+        <source>Select an Excel file…</source>
+        <translation>Excel 파일 선택…</translation>
+    </message>
+    <message>
+        <source>Browse…</source>
+        <translation type="unfinished">찾아보기…</translation>
+    </message>
+    <message>
+        <source>Download template</source>
+        <translation>템플릿 다운로드</translation>
+    </message>
+    <message>
+        <source>Download an Excel template with English column names</source>
+        <translation>영어 열 이름이 포함된 Excel 템플릿 다운로드</translation>
+    </message>
+    <message>
+        <source>Import</source>
+        <translation>가져오기</translation>
+    </message>
+    <message>
+        <source>Select Excel host file</source>
+        <translation>Excel 호스트 파일 선택</translation>
+    </message>
+    <message>
+        <source>Excel workbook (*.xlsx);;All files (*)</source>
+        <translation>Excel 통합 문서 (*.xlsx);;모든 파일 (*)</translation>
+    </message>
+    <message>
+        <source>Download Excel template</source>
+        <translation>Excel 템플릿 다운로드</translation>
+    </message>
+    <message>
+        <source>Excel workbook (*.xlsx)</source>
+        <translation>Excel 통합 문서 (*.xlsx)</translation>
+    </message>
+    <message>
+        <source>Template download failed</source>
+        <translation>템플릿 다운로드 실패</translation>
+    </message>
+    <message>
+        <source>Template downloaded</source>
+        <translation>템플릿 다운로드 완료</translation>
+    </message>
+    <message>
+        <source>The Excel template was saved to %1.</source>
+        <translation>Excel 템플릿을 %1에 저장했습니다.</translation>
+    </message>
+</context>
+<context>
     <name>HostChainDialog</name>
     <message>
         <source>Edit host chain</source>
@@ -466,6 +525,10 @@ Run it in the current terminal?</source>
     <message>
         <source>Import Hosts…</source>
         <translation type="unfinished">호스트 가져오기…</translation>
+    </message>
+<message>
+        <source>Import from Excel…</source>
+        <translation>Excel에서 가져오기…</translation>
     </message>
     <message>
         <source>Export Hosts…</source>
@@ -626,6 +689,38 @@ Run it in the current terminal?</source>
     <message>
         <source>Successfully imported %1 records.</source>
         <translation type="unfinished">%1개의 레코드를 성공적으로 가져왔습니다.</translation>
+    </message>
+<message>
+        <source>The Excel file has no usable host records.</source>
+        <translation>Excel 파일에 가져올 수 있는 호스트 레코드가 없습니다.</translation>
+    </message>
+<message>
+        <source>The host database or credential vault is unavailable.</source>
+        <translation>호스트 데이터베이스 또는 자격 증명 보관함을 사용할 수 없습니다.</translation>
+    </message>
+<message>
+        <source>Excel import failed</source>
+        <translation>Excel 가져오기 실패</translation>
+    </message>
+<message>
+        <source>%1 host records will be imported into the current folder. Passwords will be encrypted automatically.</source>
+        <translation>현재 폴더로 %1개의 호스트 레코드를 가져옵니다. 비밀번호는 자동으로 암호화됩니다.</translation>
+    </message>
+<message>
+        <source>Confirm Excel import</source>
+        <translation>Excel 가져오기 확인</translation>
+    </message>
+<message>
+        <source>Import hosts from Excel</source>
+        <translation>Excel에서 호스트 가져오기</translation>
+    </message>
+<message>
+        <source>Excel import complete</source>
+        <translation>Excel 가져오기 완료</translation>
+    </message>
+<message>
+        <source>Successfully imported %1 hosts.</source>
+        <translation>호스트 %1개를 성공적으로 가져왔습니다.</translation>
     </message>
     <message>
         <source>Read export data</source>
