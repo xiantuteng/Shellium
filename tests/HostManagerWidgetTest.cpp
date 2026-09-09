@@ -121,6 +121,9 @@ private slots:
     /** @brief 子主机悬停或选中时不得改变左侧中性连线，只允许右侧圆角卡片变化。 */
     void childHostInteractionDoesNotAlterGuideLines();
 
+    /** @brief 多层展开时祖先连线连续，末尾节点以直角收尾，隐藏兄弟不延长连线。 */
+    void nestedGuideLinesConnectAndStopAtLastSibling();
+
     /** @brief 空分组保留为可用拖放目标，但右侧不得再绘制无信息价值的“0”徽章。 */
     void emptyGroupDoesNotPaintZeroCountBadge();
 
@@ -1752,7 +1755,7 @@ void HostManagerWidgetTest::childHostInteractionDoesNotAlterGuideLines()
         const int indentationWidth =
             std::max(0, currentChildRect.left() - groupRect.left() - 2);
         const int comparisonHeight = std::max(
-            0, std::min(currentChildRect.height(), currentSiblingRect.height()) - 4);
+            0, std::min(currentChildRect.height(), currentSiblingRect.height()) / 2 - 4);
         const QRect childIndentation((groupRect.left() + 1) * scale,
                                      (currentChildRect.top() + 2) * scale,
                                      indentationWidth * scale,
@@ -1769,7 +1772,7 @@ void HostManagerWidgetTest::childHostInteractionDoesNotAlterGuideLines()
                 const QColor siblingPixel = rendered.pixelColor(
                     siblingIndentation.left() + offsetX,
                     siblingIndentation.top() + offsetY);
-                // 同一分组下的对照主机处于无交互状态，使用它的缩进区作为平台相关基线，可
+                // 仅比较横线以上的共同线段，末尾兄弟横线以下应留白；以无交互兄弟作为基线，可
                 // 兼容系统行底色，同时拦截选中条、连接线变色和悬停填充。
                 if (std::abs(pixel.red() - siblingPixel.red()) > 8
                     || std::abs(pixel.green() - siblingPixel.green()) > 8
@@ -1814,6 +1817,57 @@ void HostManagerWidgetTest::childHostInteractionDoesNotAlterGuideLines()
     QTest::mouseMove(tree->viewport(), QPoint(2, tree->viewport()->height() - 2));
     QCoreApplication::processEvents();
     QCOMPARE(indentationDifferenceCount(tree->viewport()->grab().toImage()), 0);
+}
+
+void HostManagerWidgetTest::nestedGuideLinesConnectAndStopAtLastSibling()
+{
+    HostManagerWidget widget(m_database.get(), m_vault.get());
+    widget.resize(480, 640);
+    auto *tree = widget.findChild<QTreeWidget *>(QStringLiteral("HostTree"));
+    QVERIFY(tree != nullptr);
+    tree->clear();
+    // 直接构造三层分组，隔离数据库排序，让每个末尾节点及祖先关系完全确定。
+    auto *root = new QTreeWidgetItem(tree, {QStringLiteral("Root")});
+    auto *first = new QTreeWidgetItem(root, {QStringLiteral("First")});
+    auto *nested = new QTreeWidgetItem(first, {QStringLiteral("Nested")});
+    auto *leaf = new QTreeWidgetItem(nested, {QStringLiteral("Leaf")});
+    auto *last = new QTreeWidgetItem(root, {QStringLiteral("Last")});
+    auto *lastChild = new QTreeWidgetItem(last, {QStringLiteral("Last child")});
+    tree->expandAll();
+    widget.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&widget));
+    tree->clearSelection();
+    QTest::mouseMove(tree->viewport(), QPoint(2, tree->viewport()->height() - 2));
+
+    // 比较同一行的线条与邻近空白像素，兼容浅色/深色主题及高 DPI，不绑定具体颜色。
+    // 参数为视口逻辑坐标及空白采样偏移（横线需避开整段）；返回是否存在可见线条。
+    const auto hasLine = [&](int x, int y, int backgroundOffset = 4) {
+        const QImage image = tree->viewport()->grab().toImage();
+        const qreal scale = image.devicePixelRatio();
+        const QColor line = image.pixelColor(qRound(x * scale), qRound(y * scale));
+        const QColor blank = image.pixelColor(qRound((x - backgroundOffset) * scale), qRound(y * scale));
+        return std::abs(line.red() - blank.red()) > 8
+            || std::abs(line.green() - blank.green()) > 8
+            || std::abs(line.blue() - blank.blue()) > 8;
+    };
+    const int ancestorX = tree->visualItemRect(first).left() - 15;
+    const QRect leafRect = tree->visualItemRect(leaf);
+    // First 后面仍有 Last，因此祖先线必须穿过全部子孙行，包括行边界。
+    for (int y = tree->visualItemRect(first).top(); y < tree->visualItemRect(last).center().y(); ++y) {
+        QVERIFY2(hasLine(ancestorX, y), "祖先连线在展开的子孙行中断开");
+    }
+    QVERIFY(hasLine(leafRect.left() - 15, leafRect.top() + 2));
+    QVERIFY(hasLine(leafRect.left() - 8, leafRect.center().y(), 12));
+    QVERIFY2(!hasLine(leafRect.left() - 15, leafRect.bottom() - 2), "末尾叶节点竖线不应越过横线");
+    const QRect lastRect = tree->visualItemRect(last);
+    QVERIFY(!hasLine(ancestorX, lastRect.bottom() - 2));
+    QVERIFY(!hasLine(ancestorX, tree->visualItemRect(lastChild).center().y()));
+
+    // 搜索会隐藏节点；隐藏的后续兄弟不能让当前可见末尾继续拖出竖线。
+    last->setHidden(true);
+    QCoreApplication::processEvents();
+    QVERIFY(!hasLine(ancestorX, tree->visualItemRect(first).bottom() - 2));
+    QVERIFY(!hasLine(ancestorX, leafRect.center().y()));
 }
 
 void HostManagerWidgetTest::emptyGroupDoesNotPaintZeroCountBadge()

@@ -562,7 +562,6 @@ protected:
         QStyle *style = widget != nullptr ? widget->style() : QApplication::style();
         style->drawControl(QStyle::CE_ItemViewItem, &background, painter, widget);
         paintInteractionBackground(painter, option.rect, selected, hovered, widget);
-        paintGuideLine(painter, option, index);
 
         // 主机图标先放进独立圆角容器：未选中时是白色/深色表面卡片，选中时改为品牌绿色。
         // 这样图标不会漂浮在两行文字旁边，当前连接目标也能通过颜色块被快速定位。
@@ -733,7 +732,6 @@ private:
         QStyle *style = widget != nullptr ? widget->style() : QApplication::style();
         style->drawControl(QStyle::CE_ItemViewItem, &background, painter, widget);
         paintInteractionBackground(painter, option.rect, selected, hovered, widget);
-        paintGuideLine(painter, option, index);
 
         const bool emptyFolder = index.model() == nullptr || index.model()->rowCount(index) == 0;
         const QRect iconRect(option.rect.left() + kFolderIconLeft,
@@ -820,38 +818,6 @@ private:
         painter->restore();
     }
 
-    /**
-     * @brief 在子节点缩进区绘制中性的父子层级连线。
-     * @param painter 当前节点的绘制画笔，不得为空。
-     * @param option 当前节点几何与调色板信息。
-     * @param index 当前节点索引；顶层节点不会绘制连线。
-     *
-     * 连线表达分组归属，必须保留；但它始终使用同一低透明度中性色，不随 hover/selected
-     * 变色，也不参与背景填充。因此右侧圆角卡片仍然完整独立，左侧不会再出现矩形背景尾巴
-     * 或绿色选中强调条。
-     */
-    static void paintGuideLine(QPainter *painter,
-                               const QStyleOptionViewItem &option,
-                               const QModelIndex &index)
-    {
-        Q_ASSERT(painter != nullptr);
-        if (!index.parent().isValid()) {
-            return;
-        }
-
-        QColor lineColor = option.palette.color(QPalette::Text);
-        lineColor.setAlphaF(0.14F);
-        painter->save();
-        painter->setPen(QPen(lineColor, 1));
-        const int lineX = option.rect.left() - 15;
-        painter->drawLine(lineX, option.rect.top(), lineX, option.rect.bottom());
-        painter->drawLine(lineX,
-                          option.rect.center().y(),
-                          option.rect.left() - 3,
-                          option.rect.center().y());
-        painter->restore();
-    }
-
     /** @brief 画"未分组"一类分区标题：灰色小字 + 右侧一条延伸到行尾的分隔线。 */
     void paintSectionHeader(QPainter *painter,
                             const QStyleOptionViewItem &option,
@@ -928,22 +894,63 @@ public:
 
 protected:
     /**
-     * @brief 禁止 Qt 在子节点缩进区绘制平台分支背景或装饰。
-     * @param painter Qt 原本用于绘制分支区域的画笔；此处不使用。
-     * @param rect 当前分支缩进区域；保持透明，不做填充。
-     * @param index 对应节点索引；层级线改由 HostItemDelegate 稳定绘制。
+     * @brief 在分支区域统一绘制当前节点及各级祖先的中性连线。
+     * @param painter Qt 提供的有效画笔，退出时恢复原有状态。
+     * @param rect 当前行的分支区域，纵向范围包含整行，保证相邻行无断点。
+     * @param index 当前节点索引；无效索引或顶层节点无需连线。
      *
-     * 即使委托清除了 MouseOver/Selected，QTreeView 仍可能通过 drawBranches 单独给缩进区
-     * 绘制悬停或选中底色，形成圆角卡片左边的矩形尾巴。主机树已经自绘展开箭头和中性层级
-     * 连线，关闭平台层不会损失交互元素，只会避免系统样式重复绘制或填充缩进区。
+     * 必须在树的分支区域续画祖先线，委托只绘制当前内容行会漏掉展开子孙占据的区域。
+     * 不调用平台实现，避免悬停/选中底色填入缩进区；末尾兄弟在横线处收尾成直角。
      */
     void drawBranches(QPainter *painter,
                       const QRect &rect,
                       const QModelIndex &index) const override
     {
-        Q_UNUSED(painter)
-        Q_UNUSED(rect)
-        Q_UNUSED(index)
+        if (!index.isValid() || !index.parent().isValid()) {
+            return;
+        }
+
+        /**
+         * @brief 检查节点后面是否还有可见兄弟，决定该层竖线是否需要向下延伸。
+         * @param node 当前层级节点；由有效模型索引转换得到，不为空。
+         * @return 存在未隐藏的后续兄弟时返回 true；过滤掉的节点不参与连线。
+         */
+        const auto hasFollowingSibling = [](const QTreeWidgetItem *node) {
+            const QTreeWidgetItem *parent = node->parent();
+            if (parent == nullptr) {
+                return false;
+            }
+            for (int row = parent->indexOfChild(const_cast<QTreeWidgetItem *>(node)) + 1;
+                 row < parent->childCount(); ++row) {
+                if (!parent->child(row)->isHidden()) {
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        QColor lineColor = palette().color(QPalette::Text);
+        lineColor.setAlphaF(0.14F);
+        painter->save();
+        painter->setPen(QPen(lineColor, 1));
+        // 保持原有横线与卡片间距；逐级减去实际缩进量，避免把多层位置写死。
+        const int contentLeft = visualRect(index).left();
+        int lineX = contentLeft - 15;
+        const QTreeWidgetItem *node = itemFromIndex(index);
+        const int centerY = rect.center().y();
+        painter->drawLine(lineX, rect.top(), lineX,
+                          hasFollowingSibling(node) ? rect.bottom() : centerY);
+        painter->drawLine(lineX, centerY, contentLeft - 3, centerY);
+
+        // 仅仍有后续兄弟的祖先需要穿过当前行；末尾祖先及根层级不能拖出多余竖线。
+        for (node = node->parent(); node != nullptr && node->parent() != nullptr;
+             node = node->parent()) {
+            lineX -= indentation();
+            if (hasFollowingSibling(node)) {
+                painter->drawLine(lineX, rect.top(), lineX, rect.bottom());
+            }
+        }
+        painter->restore();
     }
 
     void dragMoveEvent(QDragMoveEvent *event) override
