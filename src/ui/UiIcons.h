@@ -769,7 +769,8 @@ inline void modernizePopup(QMenu *menu)
  * 原理与 modernizePopup(QMenu*) 相同：QComboBox 的下拉列表容器
  * （QComboBoxPrivateContainer）是一个独立的 QFrame 顶层窗口。样式表里的 border-radius
  * 只画在内部列表上，而容器自己的 StyledPanel 框架仍会在外面绘制一圈直角边框；仅设置
- * 透明背景只能消除四角底色，不能消除这道框线。因此这里同时关闭容器框架并启用透明背景，
+ * 透明背景只能消除四角底色，不能消除这道框线。原生窗口装饰及其矩形阴影也独立于 QFrame，
+ * 因此这里同时禁用系统外框、系统阴影和容器框架，并启用透明背景，
  * 最终只保留内部 QAbstractItemView 的圆角矩形。相关属性必须在该顶层窗口创建原生句柄之前
  * 设置；QComboBox::view() 会按需创建容器但不会显示它，所以在构造下拉框后立即调用即可。
  */
@@ -778,6 +779,11 @@ inline void modernizePopup(QComboBox *combo)
     Q_ASSERT(combo != nullptr);
     if (QAbstractItemView *view = combo->view()) {
         if (QWidget *container = view->window()) {
+            // NoFrame 只影响 QWidget 的绘制，无法去掉平台为 Qt::Popup 添加的原生装饰。
+            // 在原生句柄创建前设置无边框及无阴影标志，避免系统沿矩形窗口边界再画一层外框；
+            // 保留原有 Qt::Popup 类型，使点击外部关闭、键盘导航和焦点行为继续由 Qt 管理。
+            container->setWindowFlags(container->windowFlags() | Qt::FramelessWindowHint
+                                      | Qt::NoDropShadowWindowHint);
             container->setAttribute(Qt::WA_TranslucentBackground);
             if (auto *containerFrame = qobject_cast<QFrame *>(container)) {
                 // 下拉容器默认的 StyledPanel 正是截图中包住圆角列表的直角矩形。关闭框架只会

@@ -153,6 +153,9 @@ private slots:
     /** @brief 顶栏全屏按钮右侧必须有关闭按钮，点击只上报请求、不自行隐藏。 */
     void closeButtonSitsNextToFullScreenAndOnlyRequestsClose();
 
+    /** @brief 全屏与关闭按钮必须接入远程文件管理专用的加深悬停样式。 */
+    void topBarActionsUseRemoteFileHoverStyle();
+
     /**
      * @brief 一次真实上传成功结束后必须发出 transferResultAvailable(true, ...)。
      *
@@ -712,6 +715,22 @@ void RemoteFileManagerWidgetTest::closeButtonSitsNextToFullScreenAndOnlyRequests
     closeButton->click();
     QCOMPARE(closeSpy.count(), 1);
     QCOMPARE(widget.isHidden(), hiddenBeforeClick);
+}
+
+void RemoteFileManagerWidgetTest::topBarActionsUseRemoteFileHoverStyle()
+{
+    RemoteFileManagerWidget widget;
+    auto *fullScreenButton = widget.findChild<QToolButton *>(QStringLiteral("SftpFullScreenButton"));
+    auto *closeButton = widget.findChild<QToolButton *>(QStringLiteral("SftpCloseButton"));
+    QVERIFY(fullScreenButton != nullptr);
+    QVERIFY(closeButton != nullptr);
+
+    // 两个顶栏动作必须带同一个样式属性，生产 QSS 才能将它们同时切换到比顶栏底色
+    // 更深的悬停背景；若遗漏任意一个按钮，视觉反馈会再次出现左右不一致。
+    QVERIFY2(fullScreenButton->property("sftpFullScreenAction").toBool(),
+             "全屏按钮必须接入远程文件管理顶栏动作样式");
+    QVERIFY2(closeButton->property("sftpFullScreenAction").toBool(),
+             "关闭按钮必须接入远程文件管理顶栏动作样式");
 }
 
 namespace {

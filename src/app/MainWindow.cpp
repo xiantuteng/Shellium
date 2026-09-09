@@ -1973,6 +1973,11 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
                                            : QStringLiteral("#ffffff");
     const QString raisedBackground = dark ? QStringLiteral("#293147")
                                           : QStringLiteral("#f0f3f5");
+    // 远程文件管理顶栏底色接近白色，直接复用通用 RAISED 时全屏和关闭按钮的悬停反馈
+    // 对比度不足。这里使用比文件区默认悬停色更明确的中性灰，并让按钮与文件列表行
+    // 共用同一个颜色，保证用户在同一文件管理器内获得一致的悬停反馈。
+    const QString remoteFileHoverBackground = dark ? QStringLiteral("#30394f")
+                                                    : QStringLiteral("#e1e7eb");
     // 主机树位于接近白色的侧栏上，通用 RAISED 只比背景深几个灰阶，鼠标移入时几乎不可见。
     // 为高频主机选择单独提供更深的悬停色，避免加深全局按钮、标签页和其他列表的悬停状态。
     const QString hostTreeHoverBackground = dark ? QStringLiteral("#30394f")
@@ -2276,7 +2281,7 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
         QToolButton[sftpFullScreenAction="true"]:hover,
         QToolButton[sftpPaneAction="true"]:hover {
             color: @TEXT@;
-            background: @RAISED@;
+            background: @REMOTE_FILE_HOVER@;
         }
         QWidget#SftpLocalPane,
         QWidget#SftpRemotePane {
@@ -2339,7 +2344,7 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
         }
         QTreeView#LocalFileTree::item:hover,
         QTreeView#RemoteFileTree::item:hover {
-            background: @RAISED@;
+            background: @REMOTE_FILE_HOVER@;
         }
         QTreeView#LocalFileTree QHeaderView::section,
         QTreeView#RemoteFileTree QHeaderView::section {
@@ -2993,6 +2998,7 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
     styleSheet.replace(QStringLiteral("@SIDEBAR@"), sidebarBackground);
     styleSheet.replace(QStringLiteral("@SURFACE@"), surfaceBackground);
     styleSheet.replace(QStringLiteral("@RAISED@"), raisedBackground);
+    styleSheet.replace(QStringLiteral("@REMOTE_FILE_HOVER@"), remoteFileHoverBackground);
     styleSheet.replace(QStringLiteral("@HOST_TREE_HOVER@"), hostTreeHoverBackground);
     styleSheet.replace(QStringLiteral("@BORDER@"), borderColor);
     styleSheet.replace(QStringLiteral("@TEXT@"), textColor);

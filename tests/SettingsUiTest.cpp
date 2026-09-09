@@ -564,6 +564,25 @@ void SettingsUiTest::languageSelectorPersistsAndRoundTrips()
         QCOMPARE(popupFrame->frameShape(), QFrame::NoFrame);
         QVERIFY(popupFrame->testAttribute(Qt::WA_TranslucentBackground));
 
+        // 实际弹出会触发 Qt 对容器的样式刷新，单纯检查构造结果无法覆盖用户看到的外框。
+        // 连续两次刷新样式并展开，确保首次显示和主题切换后都不会恢复直角框架。
+        dialog.show();
+        for (const QString &surface : {QStringLiteral("white"), QStringLiteral("#20252b")}) {
+            dialog.setStyleSheet(QStringLiteral(
+                "QComboBox QAbstractItemView { background: %1; border: 1px solid gray; "
+                "border-radius: 10px; padding: 6px; }").arg(surface));
+            selector->showPopup();
+            QApplication::processEvents();
+            QVERIFY(popupFrame->isVisible());
+            // QFrame::NoFrame 只禁止 Qt 内容绘制；原生弹出窗口还需明确禁用系统窗口装饰，
+            // 否则 macOS 仍可能在圆角列表之外绘制黑色直角外框。
+            QVERIFY(popupFrame->windowFlags().testFlag(Qt::FramelessWindowHint));
+            QVERIFY(popupFrame->windowFlags().testFlag(Qt::NoDropShadowWindowHint));
+            QCOMPARE(popupFrame->windowType(), Qt::Popup);
+            QCOMPARE(popupFrame->frameShape(), QFrame::NoFrame);
+            selector->hidePopup();
+        }
+
         const int englishIndex = selector->findData(QStringLiteral("en"));
         QVERIFY(englishIndex >= 0);
         selector->setCurrentIndex(englishIndex);
