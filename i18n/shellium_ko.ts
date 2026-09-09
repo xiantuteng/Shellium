@@ -4389,11 +4389,6 @@ Public key: %3</source>
         <translation type="unfinished">%1에 연결하는 중…</translation>
     </message>
     <message>
-        <source>Connecting to %1…<byte value="xd" />
-</source>
-        <translation type="unfinished">%1에 연결하는 중…</translation>
-    </message>
-    <message>
         <source>Connected to %1</source>
         <translation type="unfinished">%1에 연결되었습니다</translation>
     </message>

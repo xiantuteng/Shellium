@@ -720,9 +720,9 @@ if(BUILD_TESTING)
         )
         target_link_libraries(ShelliumMainWindowShellTests PRIVATE "-framework AppKit")
     endif()
+    # 连接提示回归逐语言验证真实译文，因此测试资源必须与正式程序包含相同的语言集合。
     qt_add_translations(ShelliumMainWindowShellTests
-        TS_FILES
-            i18n/shellium_zh_CN.ts
+        TS_FILES ${SHELLIUM_TS_FILES}
         RESOURCE_PREFIX "/i18n"
         NO_GENERATE_PLURALS_TS_FILE
         LUPDATE_TARGET ShelliumMainWindowShellTests_lupdate

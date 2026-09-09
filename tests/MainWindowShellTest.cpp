@@ -53,6 +53,8 @@ class MainWindowShellTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    /** @brief 各语言的连接提示之后，下一段输出必须从行首开始。 */
+    void translatedConnectionNoticeReturnsToFirstColumn();
     void initTestCase();
     void startsWithBrandPlaceholderInsteadOfTerminal();
     void newTabButtonOpensDefaultTerminal();
@@ -65,6 +67,8 @@ private slots:
     void sidebarWidthIsRestoredOnNextLaunch();
     /** @brief 菜单切换即时缩小侧栏并持久化，重启恢复紧凑模式且可切回宽松。 */
     void sidebarDensityPersistsAndRestores();
+    /** @brief 导航轨中工作空间入口紧跟主机入口，页面索引与点击路由保持不变。 */
+    void workspacesNavigationButtonFollowsHosts();
     void duplicateMenuItemOpensASecondCopyOfTheTab();
 
     /** @brief 把终端拖入此前选中的标签后必须原位合并为可重命名的工作空间标签；
@@ -97,6 +101,37 @@ private:
     ApplicationDatabase *m_database = nullptr;
     CredentialVault *m_vault = nullptr;
 };
+
+/**
+ * @brief 通过真实连接入口和已编译译文复现换行丢失回车的问题。
+ * 无参数、无返回值；断言失败时报告语言和实际排版。只使用本机端口，且不等待认证。
+ */
+void MainWindowShellTest::translatedConnectionNoticeReturnsToFirstColumn()
+{
+    LocalizationService localization;
+    // 优先覆盖本次截图对应的简体中文，再遍历其他语言，避免其他译文先失败而掩盖复现。
+    QStringList languages = LocalizationService::supportedLanguages();
+    languages.removeAll(QStringLiteral("zh_CN"));
+    languages.prepend(QStringLiteral("zh_CN"));
+    for (const QString &language : languages) {
+        QVERIFY(localization.apply(language));
+        TerminalPane pane;
+        ConnectionTarget target;
+        // 本用例只检查同步输出的连接提示，不处理事件队列中的网络结果；面板析构会停止线程。
+        target.host = QStringLiteral("127.0.0.1");
+        target.port = 1;
+        target.username = QStringLiteral("test");
+        pane.connectToHost(target);
+        auto *view = pane.findChild<TerminalView *>();
+        QVERIFY(view != nullptr);
+        view->appendTerminalOutput(QByteArrayLiteral("NEXT"));
+        // terminalPlainText 会同步刷新文档，无需等待远端响应或定时器，避免网络状态干扰断言。
+        const QStringList lines = pane.terminalPlainText().split(QLatin1Char('\n'));
+        QVERIFY2(lines.size() >= 2, qPrintable(language));
+        QVERIFY2(lines.at(1).startsWith(QStringLiteral("NEXT")),
+                 qPrintable(language + QStringLiteral(": ") + lines.at(1)));
+    }
+}
 
 void MainWindowShellTest::initTestCase()
 {
@@ -812,6 +847,42 @@ void MainWindowShellTest::sidebarDensityPersistsAndRestores()
     relaxed->trigger();
     QCOMPARE(tree->indentation(), 32);
     QCOMPARE(m_database->intSetting(QStringLiteral("layout/sidebar_compact"), &error).value_or(-1), 0);
+}
+
+void MainWindowShellTest::workspacesNavigationButtonFollowsHosts()
+{
+    MainWindow window(m_database, m_vault);
+    window.resize(1200, 800);
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+    auto *rail = window.findChild<QWidget *>(QStringLiteral("NavigationRail"));
+    QVERIFY(rail != nullptr);
+    QToolButton *hostsButton = nullptr;
+    QToolButton *workspacesButton = nullptr;
+    QToolButton *productivityButton = nullptr;
+    for (QToolButton *button : rail->findChildren<QToolButton *>(QString(), Qt::FindDirectChildrenOnly)) {
+        if (!button->property("navButton").toBool()) {
+            continue;
+        }
+        if (button->accessibleName() == QStringLiteral("Hosts")) {
+            hostsButton = button;
+        } else if (button->accessibleName() == QStringLiteral("Workspaces")) {
+            workspacesButton = button;
+        } else if (button->accessibleName() == QStringLiteral("Productivity")) {
+            productivityButton = button;
+        }
+    }
+    QVERIFY(hostsButton != nullptr && workspacesButton != nullptr && productivityButton != nullptr);
+    QVERIFY2(workspacesButton->geometry().top() > hostsButton->geometry().top(),
+             "工作空间入口必须位于主机入口下方");
+    QVERIFY2(workspacesButton->geometry().bottom() < productivityButton->geometry().top(),
+             "工作空间入口必须位于效率工具入口之前");
+
+    // 视觉顺序变化不应改变稳定页面索引；点击后仍打开工作空间页并高亮对应按钮。
+    QTest::mouseClick(workspacesButton, Qt::LeftButton);
+    QVERIFY(workspacesButton->isChecked());
+    QVERIFY(!hostsButton->isChecked());
 }
 
 void MainWindowShellTest::sidebarWidthIsRestoredOnNextLaunch()

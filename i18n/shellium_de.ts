@@ -4389,11 +4389,6 @@ Privater Schlüssel: %2
         <translation type="unfinished">Verbinde mit %1 …</translation>
     </message>
     <message>
-        <source>Connecting to %1…<byte value="xd" />
-</source>
-        <translation type="unfinished">Verbinde mit %1 …</translation>
-    </message>
-    <message>
         <source>Connected to %1</source>
         <translation type="unfinished">Verbunden mit %1</translation>
     </message>

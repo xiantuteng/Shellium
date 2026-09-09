@@ -396,10 +396,10 @@ QFont scaledFont(QFont font, const double deltaPoints, const bool bold)
     return scaledFont(base, 0.5, false);
 }
 
-/** @brief 分组名称保留略放大的粗体，用字重与文件夹图标共同标识组织层级。 */
+/** @brief 分组名称使用略放大的常规字重，让目录标题与主机名称保持一致的阅读节奏。 */
 [[nodiscard]] QFont folderNameFont(const QFont &base)
 {
-    return scaledFont(base, 0.5, true);
+    return scaledFont(base, 0.5, false);
 }
 
 /** @brief 连接副标题使用系统等宽字体，便于快速比较相近的 IP、账号和端口。 */
@@ -762,8 +762,8 @@ private:
         }
 
         painter->save();
-        // 分组保留粗体作为组织层级标题；具体主机名称使用常规字重，避免连续地址列表形成
-        // 大片视觉重块。两者字号一致，因此层级变化不会造成文字基线跳动。
+        // 分组名称与主机名称统一使用常规字重；文件夹图标、缩进和展开箭头已经足够表达
+        // 层级关系，避免目录文字过重后挤压长名称的可读空间。
         const QFont nameFont = folderNameFont(background.font);
         painter->setFont(nameFont);
         painter->setPen(baseColor);
@@ -4446,10 +4446,10 @@ QTreeWidgetItem *HostManagerWidget::createTreeItem(const HostRecord &record) con
 {
     auto *item = new QTreeWidgetItem;
     item->setText(0, record.name);
-    // 字重同时写入模型，保证编辑态、辅助技术和不经过自绘委托的后备路径与最终视觉一致：
-    // 分组是组织标题所以加粗，具体主机使用常规字重，避免主机列表整体过重。
+    // 字重同时写入模型，保证编辑态、辅助技术和不经过自绘委托的后备路径与最终视觉一致。
+    // 目录与主机都使用常规字重，层级由图标、缩进和连线表达，避免文字粗细造成视觉跳变。
     QFont itemNameFont = m_tree->font();
-    itemNameFont.setWeight(record.kind == HostNodeKind::Folder ? QFont::Bold : QFont::Normal);
+    itemNameFont.setWeight(QFont::Normal);
     item->setFont(0, itemNameFont);
     const QIcon distributionIcon = HostDistributionIcon::iconFor(record.distributionId);
     item->setIcon(

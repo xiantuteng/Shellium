@@ -4389,11 +4389,6 @@ Clé publique : %3</translation>
         <translation type="unfinished">Connexion à %1…</translation>
     </message>
     <message>
-        <source>Connecting to %1…<byte value="xd" />
-</source>
-        <translation type="unfinished">Connexion à %1…</translation>
-    </message>
-    <message>
         <source>Connected to %1</source>
         <translation type="unfinished">Connecté à %1</translation>
     </message>

@@ -3,6 +3,7 @@
 #include <QColor>
 #include <QIcon>
 #include <QPainter>
+#include <QPainterPath>
 #include <QPixmap>
 #include <QRectF>
 #include <QSizeF>
@@ -60,6 +61,12 @@ enum class Family {
     EndeavourOS,
     ArtixLinux,
     Photon,
+    /** @brief OpenCloudOS 专用图标家族；该发行版的 ID 是 opencloudos。 */
+    OpenCloudOS,
+    /** @brief 银河麒麟专用图标家族；/etc/os-release 使用的 ID 是 kylin。 */
+    Kylin,
+    /** @brief 统信 UOS 专用图标家族；常见 ID 为 uos 或 uniontechos。 */
+    UOS,
     GenericLinux
 };
 
@@ -138,7 +145,7 @@ enum class Family {
     if (id == QStringLiteral("zorin")) {
         return Family::Zorin;
     }
-    if (id == QStringLiteral("deepin")) {
+    if (id == QStringLiteral("deepin") || id == QStringLiteral("deepin linux")) {
         return Family::Deepin;
     }
     if (id == QStringLiteral("solus")) {
@@ -155,6 +162,17 @@ enum class Family {
     }
     if (id == QStringLiteral("photon")) {
         return Family::Photon;
+    }
+    if (id == QStringLiteral("opencloudos") || id == QStringLiteral("opencloud")) {
+        return Family::OpenCloudOS;
+    }
+    if (id == QStringLiteral("kylin") || id == QStringLiteral("kylin linux")
+        || id == QStringLiteral("neokylin") || id == QStringLiteral("openkylin")) {
+        return Family::Kylin;
+    }
+    if (id == QStringLiteral("uos") || id == QStringLiteral("uniontechos")
+        || id == QStringLiteral("uniontech")) {
+        return Family::UOS;
     }
     return Family::GenericLinux;
 }
@@ -248,6 +266,12 @@ namespace detail {
         return detail::clampGlyphLightness(QColor(QStringLiteral("#10a0cc")));
     case Family::Photon:
         return detail::clampGlyphLightness(QColor(QStringLiteral("#004480")));
+    case Family::OpenCloudOS:
+        return QColor(QStringLiteral("#00a6e8"));
+    case Family::Kylin:
+        return QColor(QStringLiteral("#2176d2"));
+    case Family::UOS:
+        return QColor(QStringLiteral("#2f80ed"));
     case Family::GenericLinux:
         return QColor(QStringLiteral("#667085"));
     }
@@ -319,6 +343,15 @@ namespace detail {
         return QStringLiteral(":/resources/icons/distros/artixlinux.svg");
     case Family::Photon:
         return QStringLiteral(":/resources/icons/distros/photon.svg");
+    case Family::OpenCloudOS:
+        // OpenCloudOS 当前没有随项目分发的官方 SVG，使用专用云形轮廓而不是误用其它发行版。
+        return {};
+    case Family::Kylin:
+        // 麒麟图标使用专用的低多边形绘制，不回退到通用 Linux 企鹅。
+        return {};
+    case Family::UOS:
+        // UOS 图标使用专用的 U 形几何绘制，不回退到通用 Linux 企鹅。
+        return {};
     case Family::GenericLinux:
         return {};
     }
@@ -359,6 +392,11 @@ namespace detail {
         : id == QStringLiteral("void") ? QStringLiteral("Void Linux")
         : id == QStringLiteral("zorin") ? QStringLiteral("Zorin OS")
         : id == QStringLiteral("deepin") ? QStringLiteral("deepin")
+        : id == QStringLiteral("deepin linux") ? QStringLiteral("deepin")
+        : id == QStringLiteral("kylin") || id == QStringLiteral("neokylin")
+              || id == QStringLiteral("openkylin") ? QStringLiteral("Kylin Linux")
+        : id == QStringLiteral("uos") || id == QStringLiteral("uniontechos")
+              || id == QStringLiteral("uniontech") ? QStringLiteral("UnionTech UOS")
         : id == QStringLiteral("solus") ? QStringLiteral("Solus")
         : id == QStringLiteral("mx") ? QStringLiteral("MX Linux")
         : id == QStringLiteral("endeavouros") ? QStringLiteral("EndeavourOS")
@@ -386,6 +424,112 @@ inline void paintGenericLinuxGlyph(QPainter &painter, const QColor &color)
     painter.setBrush(Qt::white);
     painter.drawEllipse(QRectF(25.0, 23.0, 4.0, 4.0));
     painter.drawEllipse(QRectF(35.0, 23.0, 4.0, 4.0));
+}
+
+/**
+ * @brief 绘制 OpenCloudOS 的专用云形标识。
+ * @param painter 目标画布画笔；调用方已启用抗锯齿并设置透明画布。
+ * @param color OpenCloudOS 品牌青蓝色。
+ *
+ * OpenCloudOS 没有可随项目一起分发的官方矢量资源，因此单独绘制云形轮廓，避免把企鹅或
+ * 其它发行版标志误当作 OpenCloudOS。轮廓保持小尺寸下的清晰度，适合主机列表图标容器。
+ */
+inline void paintOpenCloudOSGlyph(QPainter &painter, const QColor &color)
+{
+    Q_UNUSED(color)
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    // 官方标识由青色与蓝色两条相互咬合的弧带组成；保留双色是为了避免它被误认为普通
+    // 云朵图标，也与 OpenCloudOS 的实际品牌识别保持一致。颜色固定而非跟随主题反相，
+    // 是因为发行版 Logo 本身就是主机系统信息的一部分。
+    painter.setBrush(Qt::NoBrush);
+    QPainterPath leftRibbon;
+    leftRibbon.moveTo(32.0, 10.0);
+    leftRibbon.cubicTo(19.0, 13.0, 11.0, 21.0, 10.0, 31.0);
+    leftRibbon.cubicTo(9.0, 41.0, 16.0, 50.0, 27.0, 53.0);
+    leftRibbon.cubicTo(25.0, 43.0, 28.0, 36.0, 35.0, 31.0);
+    leftRibbon.cubicTo(40.0, 27.0, 39.0, 18.0, 32.0, 10.0);
+    QPainterPath rightRibbon;
+    rightRibbon.moveTo(32.0, 10.0);
+    rightRibbon.cubicTo(45.0, 13.0, 53.0, 21.0, 54.0, 31.0);
+    rightRibbon.cubicTo(55.0, 41.0, 48.0, 50.0, 37.0, 53.0);
+    rightRibbon.cubicTo(39.0, 43.0, 36.0, 36.0, 29.0, 31.0);
+    rightRibbon.cubicTo(24.0, 27.0, 25.0, 18.0, 32.0, 10.0);
+    painter.setPen(QPen(QColor(QStringLiteral("#16c1df")), 5.0,
+                        Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+    painter.drawPath(leftRibbon);
+    painter.setPen(QPen(QColor(QStringLiteral("#2674d9")), 5.0,
+                        Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+    painter.drawPath(rightRibbon);
+}
+
+/**
+ * @brief 绘制银河麒麟的专用低多边形图标。
+ * @param painter 目标画布画笔；调用方已创建透明高分辨率画布。
+ * @param color 麒麟主色；作为基础色保留与其它发行版图标一致的调用约定。
+ *
+ * 麒麟官方标识是蓝色几何麒麟，项目没有可直接分发的矢量资源，因此用少量多边形复现其
+ * 可识别轮廓（角、头、躯干和尾部），并用相邻蓝色区块表达低多边形质感。这样 ID 为 kylin
+ * 的主机不会错误显示成企鹅或其它发行版 Logo，同时在 20px 左右的列表尺寸仍保持清晰。
+ */
+inline void paintKylinGlyph(QPainter &painter, const QColor &color)
+{
+    Q_UNUSED(color)
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    const QColor light(QStringLiteral("#4ca4eb"));
+    const QColor main(QStringLiteral("#2176d2"));
+    const QColor dark(QStringLiteral("#1855a5"));
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(main);
+    QPolygonF body;
+    body << QPointF(31.0, 12.0) << QPointF(43.0, 18.0) << QPointF(47.0, 31.0)
+         << QPointF(42.0, 43.0) << QPointF(31.0, 53.0) << QPointF(21.0, 43.0)
+         << QPointF(16.0, 30.0) << QPointF(20.0, 18.0);
+    painter.drawPolygon(body);
+    painter.setBrush(light);
+    painter.drawPolygon(QPolygonF{QPointF(31.0, 12.0), QPointF(43.0, 18.0),
+                                  QPointF(35.0, 30.0), QPointF(28.0, 24.0)});
+    painter.setBrush(dark);
+    painter.drawPolygon(QPolygonF{QPointF(28.0, 24.0), QPointF(35.0, 30.0),
+                                  QPointF(42.0, 43.0), QPointF(31.0, 53.0),
+                                  QPointF(31.0, 33.0)});
+    painter.setBrush(light);
+    painter.drawPolygon(QPolygonF{QPointF(20.0, 18.0), QPointF(28.0, 24.0),
+                                  QPointF(22.0, 38.0), QPointF(16.0, 30.0)});
+    // 角和尾部用独立几何块补出麒麟轮廓，避免缩小后只剩普通菱形。
+    painter.setBrush(dark);
+    painter.drawPolygon(QPolygonF{QPointF(25.0, 17.0), QPointF(28.0, 5.0),
+                                  QPointF(32.0, 14.0)});
+    painter.setBrush(light);
+    painter.drawPolygon(QPolygonF{QPointF(39.0, 42.0), QPointF(53.0, 48.0),
+                                  QPointF(43.0, 49.0)});
+}
+
+/**
+ * @brief 绘制统信 UOS 的专用几何图标。
+ * @param painter 目标画布画笔；调用方已创建透明高分辨率画布。
+ * @param color UOS 主色；参数保留以统一发行版绘制函数签名。
+ *
+ * 统信 UOS 没有随项目分发的独立 SVG，使用蓝色圆角 U 形轮廓表达其品牌字母标识。专用
+ * 绘制路径可与 Deepin、麒麟和未知 Linux 图标区分，避免同一台国产系统显示错误品牌。
+ */
+inline void paintUosGlyph(QPainter &painter, const QColor &color)
+{
+    Q_UNUSED(color)
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setPen(QPen(QColor(QStringLiteral("#2f80ed")), 7.0,
+                        Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+    painter.setBrush(Qt::NoBrush);
+    QPainterPath uShape;
+    uShape.moveTo(16.0, 16.0);
+    uShape.lineTo(16.0, 34.0);
+    uShape.cubicTo(16.0, 45.0, 22.0, 51.0, 32.0, 51.0);
+    uShape.cubicTo(42.0, 51.0, 48.0, 45.0, 48.0, 34.0);
+    uShape.lineTo(48.0, 16.0);
+    painter.drawPath(uShape);
+    painter.setPen(QPen(QColor(QStringLiteral("#53b7ff")), 3.0,
+                        Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+    painter.drawLine(QPointF(16.0, 16.0), QPointF(16.0, 11.0));
+    painter.drawLine(QPointF(48.0, 16.0), QPointF(48.0, 11.0));
 }
 
 /**
@@ -457,7 +601,16 @@ inline void paintDistributionGlyph(QPainter &painter,
 
     const QString resourcePath = svgResourcePathForFamily(family);
     if (resourcePath.isEmpty()) {
-        detail::paintGenericLinuxGlyph(painter, color);
+        // OpenCloudOS 使用自己的云形标识；只有其它未收录发行版才回退通用 Linux 企鹅。
+        if (family == Family::OpenCloudOS) {
+            detail::paintOpenCloudOSGlyph(painter, color);
+        } else if (family == Family::Kylin) {
+            detail::paintKylinGlyph(painter, color);
+        } else if (family == Family::UOS) {
+            detail::paintUosGlyph(painter, color);
+        } else {
+            detail::paintGenericLinuxGlyph(painter, color);
+        }
     } else {
         detail::paintDistributionGlyph(painter, resourcePath, canvasSize, color);
     }

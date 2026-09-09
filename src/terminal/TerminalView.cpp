@@ -57,6 +57,39 @@
 namespace {
 
 /**
+ * @brief 解析样本文字最终使用的字体族，供系统中文后备选择和行高度量共同使用。
+ * @param font 排版字体，允许 Qt 继续解析其系统后备字体。
+ * @param sample 用于触发相应文字脚本的样本。
+ * @return 实际字体族；无法生成字形时返回空字符串，不强行覆盖平台默认值。
+ */
+QString rawFontFamilyFor(const QFont &font, const QString &sample);
+
+/**
+ * @brief 为终端等宽字体追加系统界面的中文字体，避免等宽字体的隐式后备选到不同字形。
+ * @param font 用户选择的等宽字体；字号、字距等属性原样保留。
+ * @return 已补充系统中文后备族的字体；解析失败时保留原字体。
+ */
+QFont withSystemChineseFallback(QFont font)
+{
+    // 系统界面主字体未必含汉字，必须解析真实中文字形，不能只追加 GeneralFont 的族名。
+    const QString chineseFamily = rawFontFamilyFor(
+        QFontDatabase::systemFont(QFontDatabase::GeneralFont), QStringLiteral("中文"));
+    QStringList families = font.families();
+    // 无窗口平台可能返回尚未安装的通用族名；先固定原字体的实际拉丁后备，避免追加
+    // 中文字体后 Qt 直接用中文字体绘制 ASCII，改变字符宽度和终端列数。
+    const QString latinFamily = rawFontFamilyFor(font, QStringLiteral("ABC123"));
+    if (!latinFamily.isEmpty() && !families.contains(latinFamily)) {
+        families.append(latinFamily);
+    }
+    if (!chineseFamily.isEmpty() && !families.contains(chineseFamily)) {
+        // 等宽字体保持第一优先级以维持 ASCII 网格；缺失的汉字优先采用系统界面字体。
+        families.append(chineseFamily);
+        font.setFamilies(families);
+    }
+    return font;
+}
+
+/**
  * @brief 连续分隔条拖动停止后，等待多少毫秒再提交最终 PTY 尺寸。
  *
  * 80ms 足以合并常见 60/120Hz 鼠标拖动事件，同时结束拖动后的主观延迟仍低于一次普通
@@ -309,7 +342,8 @@ TerminalView::TerminalView(QWidget *parent)
     setStyleSheet(QStringLiteral(
         "QPlainTextEdit { background: #111318; color: #e6e6e6; border: 0; padding: 6px; }"));
 
-    QFont terminalFont = QFontDatabase::systemFont(QFontDatabase::FixedFont);
+    QFont terminalFont = withSystemChineseFallback(
+        QFontDatabase::systemFont(QFontDatabase::FixedFont));
     terminalFont.setPointSize(13);
     setFont(terminalFont);
 
@@ -484,9 +518,9 @@ void TerminalView::applySettings(const TerminalSettings &settings)
     const TerminalSettings normalized = settings.normalized();
     const TerminalPalette terminalPalette = normalized.effectivePalette();
 
-    QFont terminalFont = normalized.fontFamily.isEmpty()
+    QFont terminalFont = withSystemChineseFallback(normalized.fontFamily.isEmpty()
         ? QFontDatabase::systemFont(QFontDatabase::FixedFont)
-        : QFont(normalized.fontFamily);
+        : QFont(normalized.fontFamily));
     terminalFont.setPointSize(normalized.fontPointSize);
     terminalFont.setLetterSpacing(QFont::AbsoluteSpacing, normalized.letterSpacing);
     setFont(terminalFont);

@@ -345,10 +345,12 @@ void TerminalPane::connectToHosts(const QList<ConnectionTarget> &connectionPlan)
     // 会在认证成功后再次发出 targetsChanged 并开放该目标。
     emit targetsChanged(this);
     m_headerLabel->setText(tr("Connecting to %1…").arg(target.connectionSpecifier()));
-    // 终端里必须使用 CRLF。裸 LF 只把光标下移一行、不回到第 0 列，远端随后的第一行输出
-    // 会从本行末尾的列继续绘制，看起来就是"Last login 前面凭空多出一大段空格"。
+    // 终端控制字符由代码追加，不能放入译文：翻译工具可能丢失 CR，导致 LF 只下移
+    // 一行却不回到第 0 列，连接期间的光标和远端首行因此停在提示末尾的列。复用标题的
+    // 纯文本翻译，让所有语言都获得相同的 CRLF 语义。
     m_terminalView->appendTerminalOutput(
-        tr("Connecting to %1…\r\n").arg(target.connectionSpecifier()).toUtf8());
+        tr("Connecting to %1…").arg(target.connectionSpecifier()).toUtf8()
+        + QByteArrayLiteral("\r\n"));
 
     m_sessionStack = new SshSessionStack(connectionPlan, true, this);
     connect(m_sessionStack,

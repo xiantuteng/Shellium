@@ -130,8 +130,14 @@ private slots:
     /** @brief 空分组保留为可用拖放目标，但右侧不得再绘制无信息价值的“0”徽章。 */
     void emptyGroupDoesNotPaintZeroCountBadge();
 
-    /** @brief 具体主机名称使用常规字重，分组名称继续加粗以区分组织层级。 */
-    void hostNameUsesRegularWeightWhileGroupRemainsEmphasized();
+    /** @brief 主机与目录名称都使用常规字重，层级通过图标、缩进和连线表达。 */
+    void hostAndFolderNamesUseRegularWeight();
+
+    /** @brief OpenCloudOS 使用专用云形图标，不再错误显示通用 Linux 企鹅。 */
+    void openCloudOsUsesDedicatedDistributionIcon();
+
+    /** @brief 麒麟、统信 UOS 与深度系统的常见 os-release ID 都映射到各自图标。 */
+    void domesticLinuxDistributionsUseDedicatedIcons();
 
     /** @brief 标题数量必须统计全部嵌套主机，不能把分组或当前搜索结果计入。 */
     void hostCountTracksAllNestedHosts();
@@ -175,8 +181,8 @@ private slots:
     /** @brief 已识别发行版的主机必须换成对应发行版图标，并在悬停提示中给出具体版本。 */
     void detectedDistributionDrivesHostIconAndTooltip();
 
-    /** @brief 未收录的发行版仍应显示通用 Linux 图标，不得退回“尚未识别”的服务器轮廓。 */
-    void unlistedDistributionKeepsLinuxIconInsteadOfGenericHost();
+    /** @brief 国产发行版识别后使用专用图标，并在提示中保留规范化系统名称。 */
+    void domesticDistributionKeepsLinuxIconInsteadOfGenericHost();
 
     /** @brief 改掉地址、端口或账号后必须清空缓存的发行版，避免图标长期停留在旧系统。 */
     void editingConnectionTargetClearsCachedDistribution();
@@ -2033,7 +2039,7 @@ void HostManagerWidgetTest::comboPopupRemovesOuterSquareFrame()
     QCOMPARE(containerFrame->midLineWidth(), 0);
 }
 
-void HostManagerWidgetTest::hostNameUsesRegularWeightWhileGroupRemainsEmphasized()
+void HostManagerWidgetTest::hostAndFolderNamesUseRegularWeight()
 {
     // 两个节点刻意使用同一名称，避免文字内容干扰字体属性检查；产品层级只由节点类型决定。
     const QString sharedName = QStringLiteral("上饶E呼即办");
@@ -2074,12 +2080,52 @@ void HostManagerWidgetTest::hostNameUsesRegularWeightWhileGroupRemainsEmphasized
     QVERIFY(groupItem != nullptr);
     QVERIFY(hostItem != nullptr);
 
-    // 模型字体是委托 QStyleOptionViewItem::font 的来源，这里直接检查真实渲染输入：分组保留
-    // Bold，主机必须明确回到 Normal，不能只依赖平台默认值碰巧不加粗。
-    QCOMPARE(groupItem->font(0).weight(), QFont::Bold);
+    auto *newHostButton = widget.findChild<QPushButton *>(QStringLiteral("HostAddButton"));
+    QVERIFY(newHostButton != nullptr);
+    // 主操作仍保留绿色强调色，但按钮文案应使用常规字重，避免标题区视觉过重。
+    QVERIFY2(newHostButton->font().weight() <= QFont::Normal,
+             "新增主机按钮文字不应使用粗体");
+
+    // 模型字体是委托 QStyleOptionViewItem::font 的来源；目录与主机都必须明确回到 Normal，
+    // 不能只依赖平台默认值碰巧不加粗，否则换主题后会重新出现粗体。
+    QCOMPARE(groupItem->font(0).weight(), QFont::Normal);
     QCOMPARE(hostItem->font(0).weight(), QFont::Normal);
-    QVERIFY(groupItem->font(0).bold());
+    QVERIFY(!groupItem->font(0).bold());
     QVERIFY(!hostItem->font(0).bold());
+}
+
+void HostManagerWidgetTest::openCloudOsUsesDedicatedDistributionIcon()
+{
+    // 映射层先验证 ID 归类，再比较像素图，确保图标不是“名称看似支持、实际仍走企鹅兜底”。
+    QCOMPARE(HostDistributionIcon::familyForId(QStringLiteral("OpenCloudOS")),
+             HostDistributionIcon::Family::OpenCloudOS);
+    const QIcon openCloud = HostDistributionIcon::iconFor(QStringLiteral("opencloudos"));
+    const QIcon generic = HostDistributionIcon::iconFor(QStringLiteral("some-unknown-linux"));
+    QVERIFY(!openCloud.isNull());
+    QVERIFY(!generic.isNull());
+    QVERIFY(openCloud.pixmap(QSize(48, 48)).toImage()
+            != generic.pixmap(QSize(48, 48)).toImage());
+}
+
+void HostManagerWidgetTest::domesticLinuxDistributionsUseDedicatedIcons()
+{
+    const QList<QPair<QString, HostDistributionIcon::Family>> expected = {
+        {QStringLiteral("kylin"), HostDistributionIcon::Family::Kylin},
+        {QStringLiteral("uos"), HostDistributionIcon::Family::UOS},
+        {QStringLiteral("uniontechos"), HostDistributionIcon::Family::UOS},
+        {QStringLiteral("deepin"), HostDistributionIcon::Family::Deepin},
+        {QStringLiteral("deepin linux"), HostDistributionIcon::Family::Deepin}};
+    for (const auto &[id, family] : expected) {
+        QCOMPARE(HostDistributionIcon::familyForId(id), family);
+        QVERIFY2(!HostDistributionIcon::iconFor(id).isNull(), qPrintable(id));
+    }
+    // 三类国产系统都不能退回未知发行版的通用企鹅图标。
+    const QImage generic = HostDistributionIcon::iconFor(QStringLiteral("unknown-linux"))
+                               .pixmap(QSize(48, 48)).toImage();
+    for (const auto &[id, family] : expected) {
+        Q_UNUSED(family)
+        QVERIFY(HostDistributionIcon::iconFor(id).pixmap(QSize(48, 48)).toImage() != generic);
+    }
 }
 
 void HostManagerWidgetTest::hostCountTracksAllNestedHosts()
@@ -2822,14 +2868,14 @@ void HostManagerWidgetTest::detectedDistributionDrivesHostIconAndTooltip()
              "尚未识别的主机不应出现空的系统行");
 }
 
-void HostManagerWidgetTest::unlistedDistributionKeepsLinuxIconInsteadOfGenericHost()
+void HostManagerWidgetTest::domesticDistributionKeepsLinuxIconInsteadOfGenericHost()
 {
     HostRecord host;
     host.id = QStringLiteral("distribution-unlisted-host");
     host.kind = HostNodeKind::Host;
     host.name = QStringLiteral("私有发行版主机");
     host.host = QStringLiteral("192.0.2.23");
-    // 企业自建系统的 ID 不在映射表中，但它确实是一台已成功登录的 Linux。
+    // 麒麟 V10 使用 kylin ID；识别成功后应显示麒麟专用图标而不是通用企鹅。
     host.distributionId = QStringLiteral("kylin");
     host.distributionVersionId = QStringLiteral("V10");
     QString error;
@@ -2852,8 +2898,8 @@ void HostManagerWidgetTest::unlistedDistributionKeepsLinuxIconInsteadOfGenericHo
                         .pixmap(comparisonSize)
                         .toImage(),
              "未收录的发行版不应退回通用主机图标");
-    // 未知 ID 保留原文，诊断时仍能看出远端自报了什么系统。
-    QVERIFY2(item->toolTip(0).contains(QStringLiteral("kylin V10")),
+    // 展示名称使用人类可读的规范名称，同时保留版本号，便于诊断远端系统。
+    QVERIFY2(item->toolTip(0).contains(QStringLiteral("Kylin Linux V10")),
              qPrintable(item->toolTip(0)));
 }
 

@@ -4392,12 +4392,6 @@ Public key: %3</source>
         <translation>正在连接 %1…</translation>
     </message>
     <message>
-        <source>Connecting to %1…<byte value="xd" />
-</source>
-        <translation>正在连接 %1…
-</translation>
-    </message>
-    <message>
         <source>Connected to %1</source>
         <translation>已连接 %1</translation>
     </message>

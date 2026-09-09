@@ -485,6 +485,14 @@ MainWindow::MainWindow(ApplicationDatabase *database,
                     }
                 });
     }
+    // 页面索引仍按 QStackedWidget 的固定顺序保存，只有布局位置调整为“主机、工作空间、效率
+    // 工具、端口转发、AI 助手”。这样菜单、辅助功能和页面路由继续使用稳定索引，同时让高频
+    // 的工作空间入口紧跟主机入口，避免用户需要在导航轨底部寻找它。
+    if (m_navigationButtons.size() > WorkspacesPage) {
+        QToolButton *workspacesButton = m_navigationButtons.at(WorkspacesPage);
+        railLayout->removeWidget(workspacesButton);
+        railLayout->insertWidget(HostsPage + 1, workspacesButton, 0, Qt::AlignHCenter);
+    }
     m_navigationButtons.constFirst()->setChecked(true);
     connect(navigationGroup,
             &QButtonGroup::idClicked,
@@ -2454,6 +2462,8 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
             border-radius: 8px;
             padding: 3px 10px;
             font-size: 13px;
+            /* “新增主机”是高亮操作入口，但文字不使用粗体，避免按钮与目录标题形成重块。 */
+            font-weight: 400;
         }
         QPushButton[compactAction="true"] {
             /* Snippet 列表行内的"执行/复制"按钮：行高有限，需要比通用按钮更矮更窄，

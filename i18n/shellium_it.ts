@@ -4389,11 +4389,6 @@ Chiave pubblica: %3</translation>
         <translation type="unfinished">Connessione a %1…</translation>
     </message>
     <message>
-        <source>Connecting to %1…<byte value="xd" />
-</source>
-        <translation type="unfinished">Connessione a %1…</translation>
-    </message>
-    <message>
         <source>Connected to %1</source>
         <translation type="unfinished">Connesso a %1</translation>
     </message>

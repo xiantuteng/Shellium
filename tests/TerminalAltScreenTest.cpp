@@ -3,6 +3,10 @@
 #include <QClipboard>
 #include <QCompleter>
 #include <QFontMetrics>
+#include <QFontDatabase>
+#include <QGlyphRun>
+#include <QRawFont>
+#include <QTextLayout>
 #include <QImage>
 #include <QScrollBar>
 #include <QSignalSpy>
@@ -113,6 +117,8 @@ class TerminalAltScreenTest : public QObject
     Q_OBJECT
 
 private slots:
+    /** @brief 验证终端中文使用系统界面中文字形，同时保留等宽英文字体。 */
+    void chineseFontMatchesSystem();
     void reportedRowsMatchDisplayableRows();
     void cursorStaysVisibleAfterScrollbackThenFullScreenApplication();
     void cursorCellIsPaintedInsideFullScreenApplication();
@@ -148,6 +154,36 @@ private slots:
     /** @brief 自动提示必须默认关闭；开启后的弹层字体、行高和位置要符合终端视觉约束。 */
     void commandCompletionHonorsSwitchAndUsesCompactTerminalLayout();
 };
+
+/**
+ * @brief 比较实际排版得到的字体，避免只检查配置而漏掉 Qt 隐式选择其他中文字体的问题。
+ * 无参数、无返回值；字体不一致时由 QtTest 输出期望与实际字体族，便于定位平台差异。
+ */
+void TerminalAltScreenTest::chineseFontMatchesSystem()
+{
+    // 使用真实汉字解析系统界面的后备字体；系统主字体通常只包含拉丁字形。
+    const auto resolvedFamily = [](const QFont &font, const QString &text) {
+        // 参数分别为待测字体与样本文字；返回实际字形族，排版失败则返回空串使断言失败。
+        QTextLayout layout(text, font);
+        layout.beginLayout();
+        layout.createLine();
+        layout.endLayout();
+        const auto runs = layout.glyphRuns();
+        return runs.isEmpty() ? QString() : runs.first().rawFont().familyName();
+    };
+    const QString systemChinese = resolvedFamily(
+        QFontDatabase::systemFont(QFontDatabase::GeneralFont), QStringLiteral("中文连接"));
+    QVERIFY(!systemChinese.isEmpty());
+    TerminalView view;
+    TerminalSettings settings;
+    settings.fontFamily = QFontDatabase::systemFont(QFontDatabase::FixedFont).family();
+    view.applySettings(settings);
+    QCOMPARE(resolvedFamily(view.font(), QStringLiteral("中文连接")), systemChinese);
+    // 显式后备链是此修复的保证：即使当前机器恰好默认选对字体，也不能退回隐式匹配。
+    QVERIFY(view.font().families().contains(systemChinese));
+    QCOMPARE(resolvedFamily(view.font(), QStringLiteral("ABC123")),
+             resolvedFamily(QFont(settings.fontFamily), QStringLiteral("ABC123")));
+}
 
 void TerminalAltScreenTest::commandCompletionHonorsSwitchAndUsesCompactTerminalLayout()
 {
