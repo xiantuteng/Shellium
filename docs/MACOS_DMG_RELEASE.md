@@ -64,7 +64,7 @@ SHELLIUM_SIGNING_IDENTITY="Developer ID Application: 发布者名称 (TEAMID)" \
 成功后正式产物位于：
 
 ~~~text
-dist/Shellium-0.2.2-macos-arm64.dmg
+dist/Shellium-0.2.3-macos-arm64.dmg
 ~~~
 
 脚本只有在下列检查全部通过后才会报告完成：
