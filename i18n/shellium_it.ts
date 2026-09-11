@@ -4759,6 +4759,10 @@ Reconnecting manually…<byte value="xd"/>
         <translation type="unfinished">Carica nella directory remota corrente…</translation>
     </message>
     <message>
+        <source>Reset terminal</source>
+        <translation>Reimposta il terminale</translation>
+    </message>
+    <message>
         <source>The content has %1 lines and may run multiple commands immediately after being sent.</source>
         <translation type="unfinished">Il contenuto ha %1 righe e può eseguire più comandi subito dopo l&apos;invio.</translation>
     </message>

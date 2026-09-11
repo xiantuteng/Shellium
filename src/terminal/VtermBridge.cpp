@@ -142,8 +142,127 @@ void VtermBridge::feed(const QByteArray &bytes)
     if (bytes.isEmpty()) {
         return;
     }
-    vterm_input_write(m_vterm, bytes.constData(), static_cast<size_t>(bytes.size()));
+    const QByteArray safe = boundUnterminatedString(bytes);
+    vterm_input_write(m_vterm, safe.constData(), static_cast<size_t>(safe.size()));
     vterm_screen_flush_damage(m_screen);
+}
+
+QByteArray VtermBridge::boundUnterminatedString(const QByteArray &bytes)
+{
+    // 背景：`tail`/`cat` 一个 JAR 或可执行文件会把原始字节打进 PTY。ZIP 中央目录这类
+    // 段落里必然混着 ESC，一旦凑出 `ESC ]`（OSC）或 `ESC P`（DCS）而后续始终没有 ST/BEL
+    // 收尾，libvterm 会一直把字节往字符串缓冲里塞——之后 Shell 打印的提示符、用户敲的
+    // 命令统统被吞进这个未结束的字符串，屏幕就此定格发黑，退出会话也不恢复。真实终端里
+    // 得手动 `reset`。xterm/VTE/Termius 等不会黑屏，是因为它们一遇到字符串序列内部的
+    // C0 控制字符（除 ESC 和几个合法收尾符外）就中止该序列——二进制里满是 CR/LF/TAB，
+    // 残缺的 `ESC ]` 撑不过几个字节。libvterm 0.3.3 没有这条规则，会一直缓冲到显式收尾。
+    // 这里在字节进入 libvterm 之前补齐这个行为：
+    //   1) 字符串态里出现非法 C0 控制字符 → 注入 CAN(0x18) 强制中止（已验证 libvterm
+    //      收到 CAN 会退出字符串状态），随后该字节按普通输入处理；
+    //   2) 兜底：即使整段噪音恰好没有 C0，超过 kMaxStringPayload 字节仍未收尾也中止。
+    //
+    // 对正常输出零影响：普通文本走不到 InString 分支；合法的标题/超链接/DCS 载荷都是可打印
+    // 字节、且远不到长度阈值。状态跨 feed() 调用保留，网络分片不会漏判。
+    constexpr int kMaxStringPayload = 8192;
+
+    // 字符串序列里允许出现、不代表"损坏"的 C0：BEL/CAN/SUB/NUL 是收尾符（单独处理），
+    // ESC 可能是 ST 的前半（单独处理）。除此以外的 C0（0x01-0x06、0x08-0x1F 等）在合法
+    // OSC/DCS 载荷里不会出现，视为二进制噪音并中止。
+    const auto isCorruptingControl = [](unsigned char byte) {
+        return byte < 0x20 && byte != 0x07 && byte != 0x18 && byte != 0x1a
+            && byte != 0x00 && byte != 0x1b;
+    };
+
+    QByteArray output;
+    output.reserve(bytes.size() + 1);
+    for (const char rawByte : bytes) {
+        const auto byte = static_cast<unsigned char>(rawByte);
+
+        switch (m_stringScan) {
+        case StringScan::Normal:
+            output.append(rawByte);
+            if (byte == 0x1b) {
+                m_stringScan = StringScan::AfterEsc;
+            }
+            break;
+
+        case StringScan::AfterEsc:
+            output.append(rawByte);
+            // OSC `]` / DCS `P` / SOS `X` / PM `^` / APC `_` 都是不定长字符串序列。
+            if (byte == 0x5d || byte == 0x50 || byte == 0x58 || byte == 0x5e
+                || byte == 0x5f) {
+                m_stringScan = StringScan::InString;
+                m_stringScanLength = 0;
+            } else if (byte != 0x1b) {
+                m_stringScan = StringScan::Normal;
+            }
+            break;
+
+        case StringScan::InString:
+            // BEL / CAN / SUB / NUL 都会让 libvterm 结束当前字符串；ESC 可能是 ST 的前半，
+            // 无论后半是不是 `\`，字符串都到此为止。任一情况都回到常规扫描。
+            if (byte == 0x07 || byte == 0x18 || byte == 0x1a || byte == 0x00) {
+                output.append(rawByte);
+                m_stringScan = StringScan::Normal;
+                break;
+            }
+            if (byte == 0x1b) {
+                output.append(rawByte);
+                m_stringScan = StringScan::AfterEsc;
+                break;
+            }
+            if (isCorruptingControl(byte) || m_stringScanLength >= kMaxStringPayload) {
+                // 非法 C0 或超长仍未收尾：判定为二进制噪音凑出的残缺序列，强制中止。
+                output.append('\x18');
+                output.append(rawByte);
+                m_stringScan = StringScan::Normal;
+                // 记录下来，供 TerminalPane 在下一次 Shell 提示符出现时自动复位一次。
+                m_corruptionDetected = true;
+                break;
+            }
+            output.append(rawByte);
+            ++m_stringScanLength;
+            break;
+        }
+    }
+    return output;
+}
+
+void VtermBridge::resetTerminal()
+{
+    // CAN 取消残留的 CSI/OSC/DCS，ST 再结束字符串；直接软复位画笔无法退出解析器的
+    // 字符串状态，下一条提示仍可能被吞掉。先退出备用屏，避免归档全屏程序的临时画布。
+    const QByteArray cancelAndLeave = QByteArrayLiteral("\x18\x1b\\\x1b[?1049l");
+    vterm_input_write(m_vterm, cancelAndLeave.constData(),
+                      static_cast<size_t>(cancelAndLeave.size()));
+    int lastRow = lastVisibleScreenRow();
+    // 空终端没有需要归档的内容；跳过尾部空行，避免首次连接凭空多出一行并改变提示位置。
+    while (lastRow >= 0) {
+        const Line line = screenLine(lastRow);
+        if (std::any_of(line.cbegin(), line.cend(),
+                        [](const Cell &cell) { return !isBlankCell(cell); })) {
+            break;
+        }
+        --lastRow;
+    }
+    for (int row = 0; row <= lastRow; ++row) {
+        m_scrollback.append(screenLine(row));
+        ++m_scrollbackPushed;
+    }
+    // 归档同样遵守历史容量，防止反复恢复绕开正常滚动时的内存上限。
+    if (m_scrollback.size() > m_scrollbackLimit) {
+        m_scrollback.remove(0, m_scrollback.size() - m_scrollbackLimit);
+    }
+    m_oscBuffer.clear();
+    m_stringScan = StringScan::Normal;
+    m_stringScanLength = 0;
+    m_corruptionDetected = false;
+    // 硬复位同时恢复隐藏属性、颜色、光标、字符集和键盘模式；仅发 SGR 0 无法覆盖这些
+    // 状态。默认色及调色板属于当前主题配置，libvterm 复位继续使用这些配置。
+    vterm_screen_reset(m_screen, 1);
+    vterm_set_utf8(m_vterm, 1);
+    vterm_screen_flush_damage(m_screen);
+    invalidateDocument();
 }
 
 void VtermBridge::resize(const int rows, const int columns)

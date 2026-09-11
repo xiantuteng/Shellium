@@ -32,6 +32,24 @@ public:
     /** @brief 把远端或本地 PTY 原始输出送入终端状态机。 */
     void feed(const QByteArray &bytes);
 
+    /**
+     * @brief 结束异常控制序列并重置终端模式、画笔和当前屏幕，保留已有滚动历史。
+     *
+     * 无参数、无返回值；仅供用户主动恢复或会话边界调用，不得按网络分片自动调用，
+     * 否则会破坏正常跨包 UTF-8、颜色和全屏程序状态。当前可见主屏归档后再清屏，
+     * 便于断线后追查原始输出；已经写入历史的显式颜色不会被重写。
+     */
+    void resetTerminal();
+
+    /**
+     * @brief 自上次复位以来，是否曾强制中止过一段残缺的 OSC/DCS 字符串。
+     *
+     * 由 boundUnterminatedString() 在识别出二进制噪音时置位，resetTerminal() 清零。
+     * 调用方（TerminalPane）借此在下一次 Shell 提示符出现时——也就是造成污染的那条命令
+     * 已经退出——自动恢复一次，而不是对每条命令都盲目复位。
+     */
+    [[nodiscard]] bool hasPendingCorruption() const { return m_corruptionDetected; }
+
     /** @brief 改变终端字符尺寸并触发 libvterm 重排可重排内容。 */
     void resize(int rows, int columns);
 
@@ -220,6 +238,23 @@ private:
      * 顶着一块与主题不符的底色。
      */
     void refreshPenDefaultColors();
+
+    /**
+     * @brief 在字节进入 libvterm 之前，给"超长仍未收尾"的 OSC/DCS 字符串补一个 CAN。
+     *
+     * `tail` 一个二进制文件会把原始字节打进 PTY，凑出的残缺 `ESC ]` / `ESC P` 若始终没有
+     * ST/BEL 收尾，libvterm 会把随后的提示符与用户输入一并吞进未结束的字符串，屏幕定格。
+     * 扫描器状态跨 feed() 调用保留，只在明显超出正常字符串长度时才注入，正常输出零影响。
+     */
+    QByteArray boundUnterminatedString(const QByteArray &bytes);
+
+    /** @brief boundUnterminatedString() 的跨调用扫描状态。 */
+    enum class StringScan { Normal, AfterEsc, InString };
+    StringScan m_stringScan = StringScan::Normal;
+    int m_stringScanLength = 0;
+
+    /** @brief hasPendingCorruption() 的存储；resetTerminal() 清零。 */
+    bool m_corruptionDetected = false;
 
     /** @brief 与 VTermScreenCell 解耦的滚动历史单元格。 */
     struct Cell {

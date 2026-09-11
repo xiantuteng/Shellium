@@ -4769,6 +4769,10 @@ Reconnecting manually…<byte value="xd"/>
         <translation>上傳到當前遠端目錄…</translation>
     </message>
     <message>
+        <source>Reset terminal</source>
+        <translation>重置終端機</translation>
+    </message>
+    <message>
         <source>The content has %1 lines and may run multiple commands immediately after being sent.</source>
         <translation>內容包含 %1 行，傳送後可能立即執行多條命令。</translation>
     </message>

@@ -221,6 +221,8 @@ void TerminalPane::openLocalShell(const QString &shellPath)
     // 恢复流程，从而不会重复创建本地 Shell。
     const quint64 sessionGeneration = ++m_sessionGeneration;
     stopWorker();
+    // 新会话不得继承旧会话的隐藏文字、黑色画笔或未结束控制字符串。
+    m_terminalView->resetTerminal();
     m_ownedTargets.clear();
     m_inferredTargets.clear();
     refreshCommandCompletions();
@@ -337,6 +339,8 @@ void TerminalPane::connectToHosts(const QList<ConnectionTarget> &connectionPlan)
     // 过期事件，不能中断这次新连接。
     const quint64 sessionGeneration = ++m_sessionGeneration;
     stopWorker();
+    // 新会话不得继承旧会话的隐藏文字、黑色画笔或未结束控制字符串。
+    m_terminalView->resetTerminal();
 
     m_shellReady = false;
     m_ownedTargets.clear();
@@ -516,6 +520,8 @@ void TerminalPane::connectToHosts(const QList<ConnectionTarget> &connectionPlan)
         m_shellReady = false;
         m_remoteSessionEstablished = false;
         m_headerLabel->setText(tr("Connection failed"));
+        // 错误原因也必须在复位后输出，否则它会先被旧 OSC 吞掉，之后只剩重连提示。
+        m_terminalView->resetTerminal();
         m_terminalView->appendTerminalOutput((QStringLiteral("\r\n") + message
                                               + QStringLiteral("\r\n")).toUtf8());
         emit statusMessage(message);
@@ -574,6 +580,8 @@ void TerminalPane::connectToHosts(const QList<ConnectionTarget> &connectionPlan)
         } else {
             const QString message = tr("Connection cancelled: the server requires hmac-sha1, which is disabled. Upgrade the server configuration.");
             m_headerLabel->setText(tr("Connection failed"));
+            // 认证取消提示同样属于本地 UI，不能继承已失败连接的终端状态。
+            m_terminalView->resetTerminal();
             m_terminalView->appendTerminalOutput(
                 (QStringLiteral("\r\n") + message + QStringLiteral("\r\n")).toUtf8());
             emit statusMessage(message);
@@ -604,6 +612,8 @@ void TerminalPane::connectToHosts(const QList<ConnectionTarget> &connectionPlan)
                 ? tr("The SSH connection was interrupted by a network error")
                 : tr("The SSH connection has ended (exit status %1)").arg(exitStatus);
         m_headerLabel->setText(message);
+        // 先清理已经结束的远端状态，使退出原因和自动重连倒计时立即可见。
+        m_terminalView->resetTerminal();
         m_terminalView->appendTerminalOutput((QStringLiteral("\r\n") + message
                                               + QStringLiteral("\r\n")).toUtf8());
         emit statusMessage(message);
@@ -924,6 +934,8 @@ void TerminalPane::beginManualRecovery(const ConnectionTarget &target,
     m_remoteSessionEstablished = false;
     m_awaitingManualRecovery = true;
     m_manualRecoveryTarget = target;
+    // 断线恢复提示属于本地 UI，必须先摆脱远端二进制输出留下的显示和解析状态。
+    m_terminalView->resetTerminal();
 
     const QString hint = tr("Press r to reconnect to %1, press x to close this tab")
                              .arg(target.connectionSpecifier());
@@ -1254,6 +1266,15 @@ void TerminalPane::handleShellIntegrationEvent(const QByteArray &payload)
 {
     const ShellShim::Event event = ShellShim::parseEvent(payload);
     if (event.kind == ShellShim::Event::Kind::Cwd) {
+        // cwd 上报钩子挂在 PROMPT_COMMAND/precmd 上，每次远端 Shell 即将重画提示符前都会
+        // 触发一次——也就是上一条命令刚刚退出的那一刻。`tail`/`cat` 一个二进制文件把
+        // 解析器凑成的残缺 OSC/DCS 早已被 VtermBridge 强制中止，但画面此刻可能仍停留在
+        // 那一帧混乱状态；借着这个必然到来的“命令已结束”信号自动复位一次，用户不需要
+        // 知道有 Ctrl/Cmd+Shift+R 这回事。只在真的发生过强制中止时才复位，不会让每条
+        // 正常命令后的提示符都跟着闪一下。
+        if (m_terminalView->hasPendingCorruption()) {
+            m_terminalView->resetTerminal();
+        }
         const QString stableKey = activeTarget().stableKey();
         m_lastKnownCwd.insert(stableKey, event.workingDirectory);
         emit remoteWorkingDirectoryChanged(stableKey, event.workingDirectory);

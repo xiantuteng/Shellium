@@ -4759,6 +4759,10 @@ Reconnecting manually…<byte value="xd"/>
         <translation type="unfinished">現在のリモートディレクトリにアップロード…</translation>
     </message>
     <message>
+        <source>Reset terminal</source>
+        <translation>端末をリセット</translation>
+    </message>
+    <message>
         <source>The content has %1 lines and may run multiple commands immediately after being sent.</source>
         <translation type="unfinished">内容は %1 行あり、送信後すぐに複数のコマンドを実行する可能性があります。</translation>
     </message>

@@ -4759,6 +4759,10 @@ Reconnecting manually…<byte value="xd"/>
         <translation type="unfinished">Încarcă în directorul la distanță curent…</translation>
     </message>
     <message>
+        <source>Reset terminal</source>
+        <translation>Resetează terminalul</translation>
+    </message>
+    <message>
         <source>The content has %1 lines and may run multiple commands immediately after being sent.</source>
         <translation type="unfinished">Conținutul are %1 rânduri și poate executa mai multe comenzi imediat după trimitere.</translation>
     </message>

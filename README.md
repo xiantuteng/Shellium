@@ -111,3 +111,12 @@ ShelliumSshIntegrationTests 通过 SHELLIUM_IT_* 环境变量连接受控测试�
 - [功能规划与实现审计](docs/FEATURE_PLAN.md)
 - [工程约束与已知陷阱](docs/ENGINEERING_NOTES.md)
 - [发布验证清单](docs/RELEASE_CHECKLIST.md)
+
+### 终端显示恢复
+
+误用 `cat` / `tail` 输出 JAR、ZIP 等二进制文件时，控制字节可能改变文字颜色或隐藏属性，
+表现为黑块、选中才看得见文字，也可能出现 `�`。在终端内按 **Cmd+Shift+R（macOS）**
+或 **Ctrl+Shift+R（Windows/Linux）** 可本地重置终端模式和当前屏幕，不发送远程命令。
+已有主屏内容保留到滚动历史中，其原始颜色保持不变；恢复后可按回车重新显示 Shell 提示符。
+会话重连、切换本地 Shell 和进入断线恢复提示时也会自动重置，避免污染延续到下一会话。
+这不会修改远端 `stty` 设置；查看 JAR 内容请使用 `jar tf` 或 `unzip -l`。

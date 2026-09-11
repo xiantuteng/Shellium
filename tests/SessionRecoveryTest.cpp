@@ -4,6 +4,7 @@
 
 #include <QSignalSpy>
 #include <QTest>
+#include <QTextCursor>
 
 /**
  * @brief 覆盖 SSH 异常断线后的"手动恢复提示"这一终端本地状态。
@@ -16,6 +17,12 @@ class SessionRecoveryTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    /** @brief 二进制留下黑色隐藏画笔和未结束 OSC 后，断线提示仍必须可见。 */
+    void recoveryClearsPoisonedTerminalState();
+    /** @brief 分别覆盖纯颜色污染以及会吞掉文本的未结束控制字符串。 */
+    void recoveryClearsPoisonedTerminalState_data();
+    /** @brief `tail` 一类命令退出、Shell 即将重画提示符时，污染必须自动清除。 */
+    void promptAfterCorruptingCommandAutoResetsTerminal();
     void promptOffersManualChoiceInsteadOfLocalShell();
     void closeKeyRequestsTabClose();
     void otherKeysKeepThePrompt();
@@ -34,6 +41,68 @@ ConnectionTarget SessionRecoveryTest::sampleTarget()
     target.port = 22;
     target.username = QStringLiteral("root");
     return target;
+}
+
+void SessionRecoveryTest::recoveryClearsPoisonedTerminalState_data()
+{
+    QTest::addColumn<QByteArray>("suffix");
+    QTest::newRow("black-concealed") << QByteArray();
+    QTest::newRow("unfinished-osc") << QByteArrayLiteral("\x1b]0;unfinished");
+    QTest::newRow("unfinished-dcs") << QByteArrayLiteral("\x1bPunfinished");
+    QTest::newRow("unfinished-csi") << QByteArrayLiteral("\x1b[38;2;");
+}
+
+void SessionRecoveryTest::recoveryClearsPoisonedTerminalState()
+{
+    QFETCH(QByteArray, suffix);
+    TerminalPane pane;
+    auto *view = pane.findChild<TerminalView *>();
+    QVERIFY(view != nullptr);
+    // 用确定性的控制序列模拟二进制污染，避免依赖私有 JAR 或随机字节碰巧触发属性。
+    view->appendTerminalOutput(QByteArrayLiteral("\x1b[30;40;8mhidden") + suffix);
+    pane.beginManualRecovery(sampleTarget(), QStringLiteral("recovery-marker"));
+    const QString text = pane.terminalPlainText();
+    QVERIFY2(text.contains(QStringLiteral("recovery-marker")), "未结束 OSC 不得吞掉恢复提示");
+    // 仅断言文字存在不够：隐藏属性会让文档有文字、屏幕却是黑色。
+    const auto cursor = view->document()->find(QStringLiteral("recovery-marker"));
+    QVERIFY(!cursor.isNull());
+    QVERIFY(cursor.charFormat().foreground().color() != cursor.charFormat().background().color());
+}
+
+void SessionRecoveryTest::promptAfterCorruptingCommandAutoResetsTerminal()
+{
+    TerminalPane pane;
+    auto *view = pane.findChild<TerminalView *>();
+    QVERIFY(view != nullptr);
+
+    // 模拟 `tail hotline-operation-server.jar0`：残留一块隐藏黑底文字，随后是 ZIP 中央
+    // 目录里凑出的残缺 OSC，紧跟一个换行——这正是让 VtermBridge 识别为二进制噪音并强制
+    // 中止的路径，同时也是用户报告里"选中才看得见文字"的黑屏现场。
+    view->appendTerminalOutput(
+        QByteArrayLiteral("\x1b[30;40;8mhidden\x1b]org/bouncycastle/Utils.class\r\n"));
+    QVERIFY2(view->hasPendingCorruption(),
+             "未收尾字符串被强制中止后必须留下待处理标记");
+
+    // Shell 集成的 cwd 上报钩子挂在 PROMPT_COMMAND/precmd 上：`tail` 一退出、即将重画
+    // 提示符前就会发出这一条 OSC 6773，不需要用户知道有 Ctrl/Cmd+Shift+R 这回事。
+    view->appendTerminalOutput(QByteArrayLiteral("\x1b]6773;cwd;/root\x07"));
+
+    QVERIFY2(!view->hasPendingCorruption(), "命令退出后必须自动清除污染标记");
+    view->appendTerminalOutput(QByteArrayLiteral("[root@vm ~]# "));
+    QTest::qWait(50);
+    const auto cursor = view->document()->find(QStringLiteral("[root@vm ~]# "));
+    QVERIFY(!cursor.isNull());
+    QVERIFY2(cursor.charFormat().foreground().color() != cursor.charFormat().background().color(),
+             "自动复位必须真正清掉隐藏画笔，新提示符不能继承黑底黑字");
+
+    // 正常命令绝不能触发这条自动复位：没发生过污染时收到 cwd 上报只应更新工作目录。
+    TerminalPane cleanPane;
+    auto *cleanView = cleanPane.findChild<TerminalView *>();
+    QSignalSpy cwdSpy(&cleanPane, &TerminalPane::remoteWorkingDirectoryChanged);
+    cleanView->appendTerminalOutput(QByteArrayLiteral("ls\r\n"));
+    cleanView->appendTerminalOutput(QByteArrayLiteral("\x1b]6773;cwd;/root\x07"));
+    QCOMPARE(cwdSpy.count(), 1);
+    QVERIFY(!cleanView->hasPendingCorruption());
 }
 
 void SessionRecoveryTest::promptOffersManualChoiceInsteadOfLocalShell()

@@ -8,6 +8,7 @@
 #include <QRawFont>
 #include <QTextLayout>
 #include <QImage>
+#include <QMenu>
 #include <QScrollBar>
 #include <QSignalSpy>
 #include <QTextBlock>
@@ -117,6 +118,14 @@ class TerminalAltScreenTest : public QObject
     Q_OBJECT
 
 private slots:
+    /** @brief 本地恢复快捷键必须清除污染状态，且不向远端发送快捷键字节。 */
+    void resetShortcutRecoversBinaryOutput();
+    /** @brief 二进制输出凑出的未收尾 OSC/DCS 不能吞掉随后的提示符与输入。 */
+    void binaryUnterminatedStringDoesNotSwallowPrompt();
+    /** @brief 右键菜单必须给出可见的“重置终端”入口。 */
+    void contextMenuExposesResetTerminal();
+    /** @brief 验证恢复保留主题与历史，且正常跨包中文解码不会产生替换字符。 */
+    void resetPreservesThemeAndChunkedChinese();
     /** @brief 验证终端中文使用系统界面中文字形，同时保留等宽英文字体。 */
     void chineseFontMatchesSystem();
     void reportedRowsMatchDisplayableRows();
@@ -154,6 +163,114 @@ private slots:
     /** @brief 自动提示必须默认关闭；开启后的弹层字体、行高和位置要符合终端视觉约束。 */
     void commandCompletionHonorsSwitchAndUsesCompactTerminalLayout();
 };
+
+void TerminalAltScreenTest::resetPreservesThemeAndChunkedChinese()
+{
+    VtermBridge bridge;
+    const QColor foreground(QStringLiteral("#dcd7ba"));
+    const QColor background(QStringLiteral("#1f1f28"));
+    bridge.setDefaultColors(foreground, background);
+    bridge.feed(QByteArrayLiteral("history-marker\r\n\x1b[30;40;8mhidden"));
+    bridge.resetTerminal();
+    // 特意按单字节切分中文，验证网络分片本身不会像二进制非法字节那样生成 U+FFFD。
+    const QByteArray chinese = QStringLiteral("预警质检 timestamp=1788967107615").toUtf8();
+    for (const char byte : chinese) {
+        bridge.feed(QByteArray(1, byte));
+    }
+    QTextDocument document;
+    bridge.render(&document);
+    QVERIFY(document.toPlainText().contains(QStringLiteral("history-marker")));
+    QVERIFY(document.toPlainText().contains(QString::fromUtf8(chinese)));
+    QVERIFY(!document.toPlainText().contains(QChar::ReplacementCharacter));
+    const auto cursor = document.find(QStringLiteral("预警质检"));
+    QCOMPARE(cursor.charFormat().foreground().color(), foreground);
+    QCOMPARE(cursor.charFormat().background().color(), background);
+}
+
+void TerminalAltScreenTest::resetShortcutRecoversBinaryOutput()
+{
+    TerminalView view;
+    QSignalSpy inputSpy(&view, &TerminalView::inputBytes);
+    // 覆盖备用屏、隐藏光标、应用方向键、隐藏黑色画笔及未结束字符串的组合污染。
+    view.appendTerminalOutput(QByteArrayLiteral("\x1b[?1049h\x1b[?25l\x1b[?1h\x1b[30;40;8mhidden\x1b]0;unfinished"));
+    QTest::keyClick(&view, Qt::Key_R, Qt::ControlModifier | Qt::ShiftModifier);
+    QCOMPARE(inputSpy.count(), 0);
+    view.appendTerminalOutput(QByteArrayLiteral("recovered"));
+    QTest::qWait(50);
+    const auto cursor = view.document()->find(QStringLiteral("recovered"));
+    QVERIFY2(!cursor.isNull(), "本地恢复必须终止二进制遗留的字符串解析状态");
+    QVERIFY(cursor.charFormat().foreground().color() != cursor.charFormat().background().color());
+    QTest::keyClick(&view, Qt::Key_Up);
+    QCOMPARE(inputSpy.last().at(0).toByteArray(), QByteArrayLiteral("\x1b[A"));
+}
+
+void TerminalAltScreenTest::binaryUnterminatedStringDoesNotSwallowPrompt()
+{
+    VtermBridge bridge;
+    bridge.resize(6, 60);
+    bridge.setDefaultColors(QColor(QStringLiteral("#dcd7ba")),
+                            QColor(QStringLiteral("#1f1f28")));
+
+    // `tail hotline-operation-server.jar0`：ZIP 中央目录的可读字节里混进一个 ESC，凑出
+    // `ESC ]` 开头却永远等不到 ST/BEL。未加保护时 libvterm 会把随后的提示符一并吞进这个
+    // 未结束字符串，屏幕定格发黑。
+
+    // 现实场景：残缺 OSC 撑不过下一个换行——和 xterm/VTE/Termius 的行为一致。
+    bridge.feed(QByteArrayLiteral(
+        "\x1b]org/bouncycastle/pqc/jcajce/provider/mceliece/Utils.class\r\n"));
+    bridge.feed(QByteArrayLiteral("[root@vm ~]# whoami"));
+
+    QTextDocument document;
+    bridge.render(&document);
+    QVERIFY2(document.toPlainText().contains(QStringLiteral("[root@vm ~]# whoami")),
+             "字符串序列内部的换行必须立即中止残缺 OSC，不能吞掉提示符");
+
+    // 兜底：即使这段噪音恰好没有 C0，超长仍未收尾也要中止。
+    bridge.resetTerminal();
+    QByteArray blob = QByteArrayLiteral("\x1b]");
+    blob.append(20000, 'x');
+    bridge.feed(blob);
+    bridge.feed(QByteArrayLiteral("\r\n[root@vm ~]# id"));
+    QTextDocument overflowDocument;
+    bridge.render(&overflowDocument);
+    QVERIFY2(overflowDocument.toPlainText().contains(QStringLiteral("[root@vm ~]# id")),
+             "超长仍未收尾的字符串序列必须被兜底中止");
+
+    // 正常的短 OSC（设置窗口标题）绝不能被这条保护误伤。
+    VtermBridge titleBridge;
+    QSignalSpy titleSpy(&titleBridge, &VtermBridge::titleChanged);
+    titleBridge.feed(QByteArrayLiteral("\x1b]0;my-session\x07ready"));
+    QVERIFY(!titleSpy.isEmpty());
+    QCOMPARE(titleSpy.last().first().toString(), QStringLiteral("my-session"));
+    QTextDocument titleDocument;
+    titleBridge.render(&titleDocument);
+    QVERIFY(titleDocument.toPlainText().contains(QStringLiteral("ready")));
+}
+
+void TerminalAltScreenTest::contextMenuExposesResetTerminal()
+{
+    TerminalView view;
+    QSignalSpy inputSpy(&view, &TerminalView::inputBytes);
+    view.appendTerminalOutput(
+        QByteArrayLiteral("\x1b[?1049h\x1b[?25l\x1b[30;40;8mhidden\x1b]0;unfinished"));
+
+    std::unique_ptr<QMenu> menu(view.createTerminalContextMenu());
+    QAction *resetAction = nullptr;
+    for (QAction *action : menu->actions()) {
+        if (action->text() == QObject::tr("Reset terminal")) {
+            resetAction = action;
+            break;
+        }
+    }
+    QVERIFY2(resetAction != nullptr, "右键菜单必须提供“重置终端”动作");
+
+    resetAction->trigger();
+    view.appendTerminalOutput(QByteArrayLiteral("recovered"));
+    QTest::qWait(50);
+    const auto cursor = view.document()->find(QStringLiteral("recovered"));
+    QVERIFY2(!cursor.isNull(), "菜单项必须真正复位解析状态");
+    QCOMPARE(inputSpy.count(), 0);
+}
 
 /**
  * @brief 比较实际排版得到的字体，避免只检查配置而漏掉 Qt 隐式选择其他中文字体的问题。

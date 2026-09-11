@@ -4759,6 +4759,10 @@ Reconnecting manually…<byte value="xd"/>
         <translation type="unfinished">الرفع إلى الدليل البعيد الحالي…</translation>
     </message>
     <message>
+        <source>Reset terminal</source>
+        <translation>إعادة تعيين الطرفية</translation>
+    </message>
+    <message>
         <source>The content has %1 lines and may run multiple commands immediately after being sent.</source>
         <translation type="unfinished">يحتوي المحتوى على %1 سطر، وقد ينفّذ عدة أوامر فور إرساله.</translation>
     </message>

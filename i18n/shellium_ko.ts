@@ -4759,6 +4759,10 @@ Reconnecting manually…<byte value="xd"/>
         <translation type="unfinished">현재 원격 디렉터리에 업로드…</translation>
     </message>
     <message>
+        <source>Reset terminal</source>
+        <translation>터미널 초기화</translation>
+    </message>
+    <message>
         <source>The content has %1 lines and may run multiple commands immediately after being sent.</source>
         <translation type="unfinished">내용은 %1줄이며 보낸 직후 여러 명령을 실행할 수 있습니다.</translation>
     </message>

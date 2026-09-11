@@ -98,6 +98,22 @@ public:
     void appendTerminalOutput(const QByteArray &bytes);
 
     /**
+     * @brief 本地恢复终端显示和协议状态，保留历史，不发送远程命令或更改连接。
+     *
+     * 无参数、无返回值；当前屏幕归档后清空，后续输出按默认模式显示。
+     * 该操作不能修复远端 stty 设置，调用者应仅在会话切换或用户明确恢复时使用。
+     */
+    void resetTerminal();
+
+    /**
+     * @brief 自上次复位以来，是否有输出被识别为二进制噪音并被强制中止过。
+     *
+     * 委托给 VtermBridge::hasPendingCorruption()；TerminalPane 借此在下一次远端 Shell
+     * 提示符出现时自动调用一次 resetTerminal()，而不是对每条命令都盲目复位。
+     */
+    [[nodiscard]] bool hasPendingCorruption() const;
+
+    /**
      * @brief 进入本地行捕获：按键不再发往远端，也不回显。
      *
      * 用于 Shellium 自己接管认证时在终端里索要密码。必须走本地捕获而不是让远端回显：

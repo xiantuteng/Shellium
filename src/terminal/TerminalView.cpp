@@ -470,6 +470,13 @@ QMenu *TerminalView::createTerminalContextMenu()
     QAction *uploadAction = menu->addAction(tr("Upload to the current remote directory…"));
     connect(uploadAction, &QAction::triggered,
             this, &TerminalView::uploadToCurrentDirectoryRequested);
+
+    // 打进终端的二进制内容（`tail` 一个 JAR、`cat` 可执行文件）会让解析器卡在未闭合的
+    // 转义序列里，屏幕定格、后续提示符被吞。快捷键 Ctrl/Cmd+Shift+R 能恢复，但没有可见
+    // 入口用户无从得知，因此在右键菜单里给一条。
+    QAction *resetAction = menu->addAction(tr("Reset terminal"));
+    connect(resetAction, &QAction::triggered, this, &TerminalView::resetTerminal);
+
     return menu;
 }
 
@@ -1107,6 +1114,18 @@ TerminalView::PastePreparation TerminalView::prepareClipboardPaste(
     return result;
 }
 
+void TerminalView::resetTerminal()
+{
+    // 通过桥接层复位真实解析状态，不能仅清空 QTextDocument：下一帧会重新渲染污染画笔。
+    m_vtermBridge->resetTerminal();
+    scheduleRender();
+}
+
+bool TerminalView::hasPendingCorruption() const
+{
+    return m_vtermBridge->hasPendingCorruption();
+}
+
 void TerminalView::appendTerminalOutput(const QByteArray &bytes)
 {
     if (bytes.isEmpty()) {
@@ -1195,6 +1214,15 @@ void TerminalView::beginLocalLineCapture()
 
 void TerminalView::keyPressEvent(QKeyEvent *event)
 {
+    // macOS 的 Qt::ControlModifier 是 Command，因此本地恢复为 Cmd+Shift+R；其他平台为
+    // Ctrl+Shift+R。精确匹配避免拦截普通 Ctrl+R 历史搜索，并且不向服务器或广播发送字节。
+    if (event->key() == Qt::Key_R
+        && event->modifiers() == (Qt::ControlModifier | Qt::ShiftModifier)) {
+        resetTerminal();
+        event->accept();
+        return;
+    }
+
     // macOS 下 Command 映射为 Qt::ControlModifier（hasTerminalControlModifier 顶部注释），
     // 因此 Cmd+=/Cmd+-/Cmd+0 在这里表现为 ControlModifier 而非 MetaModifier。缩放不产生
     // 需要发给远端 PTY 的字节，必须在密码本地捕获分支之前拦截，否则会被当作普通字符。

@@ -4759,6 +4759,10 @@ Reconnecting manually…<byte value="xd"/>
         <translation type="unfinished">Subir al directorio remoto actual…</translation>
     </message>
     <message>
+        <source>Reset terminal</source>
+        <translation>Restablecer el terminal</translation>
+    </message>
+    <message>
         <source>The content has %1 lines and may run multiple commands immediately after being sent.</source>
         <translation type="unfinished">El contenido tiene %1 líneas y puede ejecutar varios comandos inmediatamente después de enviarse.</translation>
     </message>

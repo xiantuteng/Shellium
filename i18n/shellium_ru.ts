@@ -4759,6 +4759,10 @@ Reconnecting manually…<byte value="xd"/>
         <translation type="unfinished">Отправить в текущий удалённый каталог…</translation>
     </message>
     <message>
+        <source>Reset terminal</source>
+        <translation>Сбросить терминал</translation>
+    </message>
+    <message>
         <source>The content has %1 lines and may run multiple commands immediately after being sent.</source>
         <translation type="unfinished">В содержимом %1 строк, и оно может выполнить несколько команд сразу после отправки.</translation>
     </message>
