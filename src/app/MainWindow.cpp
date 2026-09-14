@@ -2009,14 +2009,13 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
     const QString prominentSelectionBackground = dark ? QStringLiteral("#2f6256")
                                                        : QStringLiteral("#b7e6d0");
 
+    // Qt 样式表不支持 CSS 的 cursor 属性，写入会在每个按钮初始化时反复报警。
+    // 手型统一由 main() 安装的 ButtonCursorPolicy 设置，主题只负责视觉外观。
     QString styleSheet = QStringLiteral(R"QSS(
         QWidget#ShelliumRoot,
         QWidget#WorkspaceBody {
             background: @WORKSPACE@;
             color: @TEXT@;
-        }
-        QAbstractButton:enabled {
-            cursor: pointing-hand;
         }
         QWidget#WindowChrome {
             background: #292d42;

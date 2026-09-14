@@ -14,6 +14,7 @@
 #include "ui/SettingsWidgets.h"
 #include "ui/SessionTabBar.h"
 #include "ui/SessionTabDropOverlay.h"
+#include "ui/ButtonCursorPolicy.h"
 
 #include <QAbstractButton>
 #include <QAbstractItemDelegate>
@@ -28,6 +29,7 @@
 #include <QMenu>
 #include <QMenuBar>
 #include <QSignalSpy>
+#include <QRegularExpression>
 #include <QStackedWidget>
 #include <QSplitter>
 #include <QSplitterHandle>
@@ -54,6 +56,8 @@ class MainWindowShellTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    /** @brief 真实窗口应用主题时不得输出未知样式属性警告，且所有按钮仍保持手型。 */
+    void themeStylesDoNotWarnAboutUnknownProperties();
     /** @brief 各语言的连接提示之后，下一段输出必须从行首开始。 */
     void translatedConnectionNoticeReturnsToFirstColumn();
     void initTestCase();
@@ -148,6 +152,36 @@ void MainWindowShellTest::initTestCase()
     QString error;
     QVERIFY2(m_database->initialize(&error), qPrintable(error));
     m_vault = new CredentialVault(*m_database);
+}
+
+/**
+ * @brief 通过浅色和深色窗口构造、显示路径验证 QSS 与全局按钮策略共同生效。
+ * 无参数、无返回值；未知属性警告或光标不符由 QtTest 报告为失败。
+ * 使用独立内存数据库，避免主题配置影响其他用例，更不会写入用户真实设置。
+ */
+void MainWindowShellTest::themeStylesDoNotWarnAboutUnknownProperties()
+{
+    // 将真实样式引擎的警告升级为测试失败，防止只测光标却遗漏 QSS 控制台刷屏。
+    QTest::failOnWarning(QRegularExpression(QStringLiteral("Unknown property .*")));
+    ButtonCursorPolicy policy(*qApp);
+    for (const QString &theme : {QStringLiteral("light"), QStringLiteral("dark")}) {
+        ApplicationDatabase database(ApplicationDatabase::inMemoryPath());
+        QString error;
+        QVERIFY2(database.initialize(&error), qPrintable(error));
+        QVERIFY2(database.setSetting(QStringLiteral("appearance/theme"), theme, &error),
+                 qPrintable(error));
+        CredentialVault vault(database);
+        MainWindow window(&database, &vault);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        const auto buttons = window.findChildren<QAbstractButton *>();
+        QVERIFY(!buttons.isEmpty());
+        for (QAbstractButton *button : buttons) {
+            // 隐藏页面中的按钮也主动初始化，覆盖尚未被用户切换到的页面。
+            button->ensurePolished();
+            QCOMPARE(button->cursor().shape(), Qt::PointingHandCursor);
+        }
+    }
 }
 
 void MainWindowShellTest::startsWithBrandPlaceholderInsteadOfTerminal()
