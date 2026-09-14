@@ -240,6 +240,9 @@ void LocalShellWorker::run()
     }
     std::wstring mutableCommand = commandLine.toStdWString();
     mutableCommand.push_back(L'\0');
+    // 为子进程显式指定主目录，避免继承应用包或构建目录；不改变应用的全局 cwd。
+    // 宽字符串存活至 CreateProcessW 返回；目录不可访问时沿用下方的启动错误处理。
+    const std::wstring homeDirectory = QDir::toNativeSeparators(QDir::homePath()).toStdWString();
     if (!CreateProcessW(nullptr,
                         mutableCommand.data(),
                         nullptr,
@@ -247,7 +250,7 @@ void LocalShellWorker::run()
                         FALSE,
                         EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT,
                         nullptr,
-                        nullptr,
+                        homeDirectory.c_str(),
                         &startupInfo.StartupInfo,
                         &processInfo)) {
         fail(tr("Could not start the Windows local shell"));
@@ -386,6 +389,11 @@ void LocalShellWorker::run()
         m_sizeDirty = false;
     }
 
+    // 在 fork 前完成 Qt 字符串转换，避免子进程触碰其他线程可能持有的内存分配锁。
+    const QByteArray encodedShell = QFile::encodeName(m_shellPath);
+    const QByteArray encodedHomeDirectory = QFile::encodeName(QDir::homePath());
+    const char *shellPath = encodedShell.constData();
+    const char *homeDirectory = encodedHomeDirectory.constData();
     int masterFd = -1;
     const pid_t childPid = forkpty(&masterFd, nullptr, nullptr, &initialSize);
     if (childPid < 0) {
@@ -394,14 +402,17 @@ void LocalShellWorker::run()
     }
 
     if (childPid == 0) {
-        // fork 后只执行异步信号安全的 exec。通过 env 程序设置终端变量，避免在 Qt 多线程进程的
-        // child 分支调用 setenv 等可能持有 libc 锁的函数。
-        const QByteArray encodedShell = QFile::encodeName(m_shellPath);
+        // 仅改变子进程目录，避免影响应用其他线程的相对路径 IO。chdir 是异步信号安全的；
+        // 主目录不可访问时以 126 退出，由现有 shellFinished 路径报告，不能静默用错误目录启动。
+        if (chdir(homeDirectory) != 0) {
+            _exit(126);
+        }
+        // fork 后仅使用异步信号安全调用。通过 env 设置终端变量，避免调用可能持锁的 setenv。
         execl("/usr/bin/env",
               "env",
               "TERM=xterm-256color",
               "COLORTERM=truecolor",
-              encodedShell.constData(),
+              shellPath,
               "-l",
               static_cast<char *>(nullptr));
         _exit(127);

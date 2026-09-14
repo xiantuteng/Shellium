@@ -196,6 +196,8 @@ private slots:
     void terminalResizeDebouncesPtyUpdates();
 
     /** @brief 平台默认 Shell 必须在真实 PTY/ConPTY 中接收命令、返回输出并正常退出。 */
+    /** @brief 验证本地子进程从用户主目录启动，并且不改变应用工作目录。 */
+    void localShellStartsInHomeDirectory();
     void localZshExecutesInteractiveCommand();
 
     /** @brief ETX 必须通过 PTY/ConPTY 终止本地 Shell 前台命令。 */
@@ -1411,6 +1413,36 @@ void SshCommandParserTest::terminalResizeDebouncesPtyUpdates()
     QVERIFY(finalSize.at(1).toInt() > 0);
     QCOMPARE(view.terminalPlainText(), originalText);
     QCOMPARE(view.terminalPlainText().count(QStringLiteral("[root@tidb01 ~]#")), 1);
+}
+
+/**
+ * @brief 用独立的测试 Shell 检查启动目录，避免用户配置中的 cd 掩盖真实初始目录。
+ * 此用例无参数和返回值；临时文件、进程启动或目录断言失败时由 Qt Test 报错。
+ */
+void SshCommandParserTest::localShellStartsInHomeDirectory()
+{
+#if defined(Q_OS_WIN)
+    QSKIP("此用例使用 POSIX 脚本检查 forkpty 子进程的初始目录");
+#else
+    // 不修改全局 cwd，避免影响并行线程；构建测试通常从项目目录运行。
+    const QString applicationDirectory = QDir::currentPath();
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+    QFile script(temporaryDirectory.filePath(QStringLiteral("check-home.sh")));
+    QVERIFY(script.open(QIODevice::WriteOnly));
+    // 脚本不加载交互配置，直接比较物理目录；退出码可避免终端回显造成假阳性。
+    const QByteArray scriptBytes = "#!/bin/sh\n# 检查初始目录是否为主目录，失败返回非零状态。\n"
+        "test \"$(pwd -P)\" = \"$(cd \"$HOME\" && pwd -P)\"\n";
+    QCOMPARE(script.write(scriptBytes), qint64(scriptBytes.size()));
+    script.close();
+    QVERIFY(script.setPermissions(QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner));
+    LocalShellWorker worker(script.fileName());
+    QSignalSpy finishedSpy(&worker, &LocalShellWorker::shellFinished);
+    worker.start();
+    QVERIFY2(finishedSpy.wait(5000), "检查启动目录的子进程未及时退出");
+    QCOMPARE(finishedSpy.first().first().toInt(), 0);
+    QCOMPARE(QDir::currentPath(), applicationDirectory);
+#endif
 }
 
 void SshCommandParserTest::localZshExecutesInteractiveCommand()

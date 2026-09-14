@@ -2015,6 +2015,9 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
             background: @WORKSPACE@;
             color: @TEXT@;
         }
+        QAbstractButton:enabled {
+            cursor: pointing-hand;
+        }
         QWidget#WindowChrome {
             background: #292d42;
             border: 0;
