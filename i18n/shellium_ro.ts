@@ -4493,7 +4493,8 @@ Cheie publică: %3</translation>
     <message>
         <source>Starting local terminal…<byte value="xd"/>
 </source>
-        <translation type="unfinished">Se pornește terminalul local…</translation>
+        <translation type="unfinished">Se pornește terminalul local…<byte value="xd"/>
+</translation>
     </message>
     <message>
         <source>Local terminal</source>
@@ -4526,7 +4527,7 @@ Cheie publică: %3</translation>
     <message>
         <source>Permission denied, please try again.<byte value="xd"/>
 %1&apos;s password: </source>
-        <translation type="unfinished">Acces refuzat, încearcă din nou.
+        <translation type="unfinished">Acces refuzat, încearcă din nou.<byte value="xd"/>
 Parola pentru %1:</translation>
     </message>
     <message>
@@ -4537,7 +4538,9 @@ Parola pentru %1:</translation>
         <source><byte value="xd"/>
 Could not establish the nested connection to %1: %2<byte value="xd"/>
 </source>
-        <translation type="unfinished">Nu s-a putut stabili conexiunea imbricată la %1: %2</translation>
+        <translation type="unfinished"><byte value="xd"/>
+Nu s-a putut stabili conexiunea imbricată la %1: %2<byte value="xd"/>
+</translation>
     </message>
     <message>
         <source>Nested connection failed: %1</source>
@@ -4647,13 +4650,17 @@ Confirmi că cheia s-a schimbat și înlocuiești vechea înregistrare din known
         <source><byte value="xd"/>
 No server to reconnect to; press x to close this tab<byte value="xd"/>
 </source>
-        <translation type="unfinished">Niciun server de reconectat; apasă x pentru a închide această filă</translation>
+        <translation type="unfinished"><byte value="xd"/>
+Niciun server de reconectat; apasă x pentru a închide această filă<byte value="xd"/>
+</translation>
     </message>
     <message>
         <source><byte value="xd"/>
 Reconnecting manually…<byte value="xd"/>
 </source>
-        <translation type="unfinished">Reconectare manuală…</translation>
+        <translation type="unfinished"><byte value="xd"/>
+Reconectare manuală…<byte value="xd"/>
+</translation>
     </message>
     <message>
         <source>Automatic reconnect reached its limit of %1 attempts</source>
@@ -4706,7 +4713,8 @@ Reconnecting manually…<byte value="xd"/>
     <message>
         <source>Shellium could not take over this connection (%1); handing it to the remote ssh to run directly.<byte value="xd"/>
 </source>
-        <translation type="unfinished">Shellium nu a putut intercepta această conexiune (%1); a fost predată către ssh-ul la distanță pentru execuție directă.</translation>
+        <translation type="unfinished">Shellium nu a putut intercepta această conexiune (%1); a fost predată către ssh-ul la distanță pentru execuție directă.<byte value="xd"/>
+</translation>
     </message>
     <message>
         <source>%1, fell back to %2</source>

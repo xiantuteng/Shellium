@@ -4493,7 +4493,8 @@ Public key: %3</source>
     <message>
         <source>Starting local terminal…<byte value="xd"/>
 </source>
-        <translation type="unfinished">جارٍ بدء الطرفية المحلية…</translation>
+        <translation type="unfinished">جارٍ بدء الطرفية المحلية…<byte value="xd"/>
+</translation>
     </message>
     <message>
         <source>Local terminal</source>
@@ -4526,7 +4527,7 @@ Public key: %3</source>
     <message>
         <source>Permission denied, please try again.<byte value="xd"/>
 %1&apos;s password: </source>
-        <translation type="unfinished">الوصول مرفوض، أعد المحاولة.
+        <translation type="unfinished">الوصول مرفوض، أعد المحاولة.<byte value="xd"/>
 كلمة مرور %1:</translation>
     </message>
     <message>
@@ -4537,7 +4538,9 @@ Public key: %3</source>
         <source><byte value="xd"/>
 Could not establish the nested connection to %1: %2<byte value="xd"/>
 </source>
-        <translation type="unfinished">تعذّر إنشاء الاتصال المتداخل بـ %1: %2</translation>
+        <translation type="unfinished"><byte value="xd"/>
+تعذّر إنشاء الاتصال المتداخل بـ %1: %2<byte value="xd"/>
+</translation>
     </message>
     <message>
         <source>Nested connection failed: %1</source>
@@ -4647,13 +4650,17 @@ Confirm the key has changed and replace the old record in known_hosts?</source>
         <source><byte value="xd"/>
 No server to reconnect to; press x to close this tab<byte value="xd"/>
 </source>
-        <translation type="unfinished">لا يوجد خادم لإعادة الاتصال به؛ اضغط x لإغلاق علامة التبويب هذه</translation>
+        <translation type="unfinished"><byte value="xd"/>
+لا يوجد خادم لإعادة الاتصال به؛ اضغط x لإغلاق علامة التبويب هذه<byte value="xd"/>
+</translation>
     </message>
     <message>
         <source><byte value="xd"/>
 Reconnecting manually…<byte value="xd"/>
 </source>
-        <translation type="unfinished">جارٍ إعادة الاتصال يدويًا…</translation>
+        <translation type="unfinished"><byte value="xd"/>
+جارٍ إعادة الاتصال يدويًا…<byte value="xd"/>
+</translation>
     </message>
     <message>
         <source>Automatic reconnect reached its limit of %1 attempts</source>
@@ -4706,7 +4713,8 @@ Reconnecting manually…<byte value="xd"/>
     <message>
         <source>Shellium could not take over this connection (%1); handing it to the remote ssh to run directly.<byte value="xd"/>
 </source>
-        <translation type="unfinished">تعذّر على Shellium اعتراض هذا الاتصال (%1)؛ سُلِّم إلى ssh البعيد للتنفيذ المباشر.</translation>
+        <translation type="unfinished">تعذّر على Shellium اعتراض هذا الاتصال (%1)؛ سُلِّم إلى ssh البعيد للتنفيذ المباشر.<byte value="xd"/>
+</translation>
     </message>
     <message>
         <source>%1, fell back to %2</source>

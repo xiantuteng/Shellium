@@ -4493,7 +4493,8 @@ Privater Schlüssel: %2
     <message>
         <source>Starting local terminal…<byte value="xd"/>
 </source>
-        <translation type="unfinished">Lokales Terminal wird gestartet …</translation>
+        <translation type="unfinished">Lokales Terminal wird gestartet …<byte value="xd"/>
+</translation>
     </message>
     <message>
         <source>Local terminal</source>
@@ -4526,7 +4527,7 @@ Privater Schlüssel: %2
     <message>
         <source>Permission denied, please try again.<byte value="xd"/>
 %1&apos;s password: </source>
-        <translation type="unfinished">Zugriff verweigert, bitte erneut versuchen.
+        <translation type="unfinished">Zugriff verweigert, bitte erneut versuchen.<byte value="xd"/>
 Passwort für %1:</translation>
     </message>
     <message>
@@ -4537,7 +4538,9 @@ Passwort für %1:</translation>
         <source><byte value="xd"/>
 Could not establish the nested connection to %1: %2<byte value="xd"/>
 </source>
-        <translation type="unfinished">Die verschachtelte Verbindung zu %1 konnte nicht hergestellt werden: %2</translation>
+        <translation type="unfinished"><byte value="xd"/>
+Die verschachtelte Verbindung zu %1 konnte nicht hergestellt werden: %2<byte value="xd"/>
+</translation>
     </message>
     <message>
         <source>Nested connection failed: %1</source>
@@ -4647,13 +4650,17 @@ Bestätigen Sie, dass sich der Schlüssel geändert hat, und ersetzen Sie den al
         <source><byte value="xd"/>
 No server to reconnect to; press x to close this tab<byte value="xd"/>
 </source>
-        <translation type="unfinished">Kein Server für eine Neuverbindung; drücken Sie x, um diesen Tab zu schließen</translation>
+        <translation type="unfinished"><byte value="xd"/>
+Kein Server für eine Neuverbindung; drücken Sie x, um diesen Tab zu schließen<byte value="xd"/>
+</translation>
     </message>
     <message>
         <source><byte value="xd"/>
 Reconnecting manually…<byte value="xd"/>
 </source>
-        <translation type="unfinished">Manuelle Neuverbindung …</translation>
+        <translation type="unfinished"><byte value="xd"/>
+Manuelle Neuverbindung …<byte value="xd"/>
+</translation>
     </message>
     <message>
         <source>Automatic reconnect reached its limit of %1 attempts</source>
@@ -4706,7 +4713,8 @@ Reconnecting manually…<byte value="xd"/>
     <message>
         <source>Shellium could not take over this connection (%1); handing it to the remote ssh to run directly.<byte value="xd"/>
 </source>
-        <translation type="unfinished">Shellium konnte diese Verbindung nicht übernehmen (%1); sie wird zur direkten Ausführung an das Remote-ssh übergeben.</translation>
+        <translation type="unfinished">Shellium konnte diese Verbindung nicht übernehmen (%1); sie wird zur direkten Ausführung an das Remote-ssh übergeben.<byte value="xd"/>
+</translation>
     </message>
     <message>
         <source>%1, fell back to %2</source>

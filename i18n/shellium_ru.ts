@@ -4493,7 +4493,8 @@ Public key: %3</source>
     <message>
         <source>Starting local terminal…<byte value="xd"/>
 </source>
-        <translation type="unfinished">Запуск локального терминала…</translation>
+        <translation type="unfinished">Запуск локального терминала…<byte value="xd"/>
+</translation>
     </message>
     <message>
         <source>Local terminal</source>
@@ -4526,7 +4527,7 @@ Public key: %3</source>
     <message>
         <source>Permission denied, please try again.<byte value="xd"/>
 %1&apos;s password: </source>
-        <translation type="unfinished">Доступ запрещён, повторите попытку.
+        <translation type="unfinished">Доступ запрещён, повторите попытку.<byte value="xd"/>
 Пароль для %1:</translation>
     </message>
     <message>
@@ -4537,7 +4538,9 @@ Public key: %3</source>
         <source><byte value="xd"/>
 Could not establish the nested connection to %1: %2<byte value="xd"/>
 </source>
-        <translation type="unfinished">Не удалось установить вложенное подключение к %1: %2</translation>
+        <translation type="unfinished"><byte value="xd"/>
+Не удалось установить вложенное подключение к %1: %2<byte value="xd"/>
+</translation>
     </message>
     <message>
         <source>Nested connection failed: %1</source>
@@ -4647,13 +4650,17 @@ Confirm the key has changed and replace the old record in known_hosts?</source>
         <source><byte value="xd"/>
 No server to reconnect to; press x to close this tab<byte value="xd"/>
 </source>
-        <translation type="unfinished">Нет сервера для переподключения; нажмите x, чтобы закрыть эту вкладку</translation>
+        <translation type="unfinished"><byte value="xd"/>
+Нет сервера для переподключения; нажмите x, чтобы закрыть эту вкладку<byte value="xd"/>
+</translation>
     </message>
     <message>
         <source><byte value="xd"/>
 Reconnecting manually…<byte value="xd"/>
 </source>
-        <translation type="unfinished">Ручное переподключение…</translation>
+        <translation type="unfinished"><byte value="xd"/>
+Ручное переподключение…<byte value="xd"/>
+</translation>
     </message>
     <message>
         <source>Automatic reconnect reached its limit of %1 attempts</source>
@@ -4706,7 +4713,8 @@ Reconnecting manually…<byte value="xd"/>
     <message>
         <source>Shellium could not take over this connection (%1); handing it to the remote ssh to run directly.<byte value="xd"/>
 </source>
-        <translation type="unfinished">Shellium не смог перехватить это подключение (%1); оно передано удалённому ssh для прямого выполнения.</translation>
+        <translation type="unfinished">Shellium не смог перехватить это подключение (%1); оно передано удалённому ssh для прямого выполнения.<byte value="xd"/>
+</translation>
     </message>
     <message>
         <source>%1, fell back to %2</source>

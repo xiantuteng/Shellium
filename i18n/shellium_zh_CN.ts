@@ -4495,7 +4495,7 @@ Public key: %3</source>
     <message>
         <source>Starting local terminal…<byte value="xd"/>
 </source>
-        <translation>正在启动本地终端…
+        <translation>正在启动本地终端…<byte value="xd"/>
 </translation>
     </message>
     <message>
@@ -4529,7 +4529,7 @@ Public key: %3</source>
     <message>
         <source>Permission denied, please try again.<byte value="xd"/>
 %1&apos;s password: </source>
-        <translation>Permission denied, please try again.
+        <translation>Permission denied, please try again.<byte value="xd"/>
 %1’s password: </translation>
     </message>
     <message>
@@ -4540,8 +4540,8 @@ Public key: %3</source>
         <source><byte value="xd"/>
 Could not establish the nested connection to %1: %2<byte value="xd"/>
 </source>
-        <translation>
-无法建立到 %1 的嵌套连接：%2
+        <translation><byte value="xd"/>
+无法建立到 %1 的嵌套连接：%2<byte value="xd"/>
 </translation>
     </message>
     <message>
@@ -4652,16 +4652,16 @@ Confirm the key has changed and replace the old record in known_hosts?</source>
         <source><byte value="xd"/>
 No server to reconnect to; press x to close this tab<byte value="xd"/>
 </source>
-        <translation>
-没有可重连的服务器，请按 x 关闭该标签页
+        <translation><byte value="xd"/>
+没有可重连的服务器，请按 x 关闭该标签页<byte value="xd"/>
 </translation>
     </message>
     <message>
         <source><byte value="xd"/>
 Reconnecting manually…<byte value="xd"/>
 </source>
-        <translation>
-正在手动重连…
+        <translation><byte value="xd"/>
+正在手动重连…<byte value="xd"/>
 </translation>
     </message>
     <message>
@@ -4715,7 +4715,7 @@ Reconnecting manually…<byte value="xd"/>
     <message>
         <source>Shellium could not take over this connection (%1); handing it to the remote ssh to run directly.<byte value="xd"/>
 </source>
-        <translation>Shellium 未能接管本次连接（%1），正在交由远端 ssh 直接执行。
+        <translation>Shellium 未能接管本次连接（%1），正在交由远端 ssh 直接执行。<byte value="xd"/>
 </translation>
     </message>
     <message>

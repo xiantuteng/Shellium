@@ -4493,7 +4493,8 @@ Public key: %3</source>
     <message>
         <source>Starting local terminal…<byte value="xd"/>
 </source>
-        <translation type="unfinished">로컬 터미널을 시작하는 중…</translation>
+        <translation type="unfinished">로컬 터미널을 시작하는 중…<byte value="xd"/>
+</translation>
     </message>
     <message>
         <source>Local terminal</source>
@@ -4526,7 +4527,7 @@ Public key: %3</source>
     <message>
         <source>Permission denied, please try again.<byte value="xd"/>
 %1&apos;s password: </source>
-        <translation type="unfinished">접근이 거부되었습니다. 다시 시도하세요.
+        <translation type="unfinished">접근이 거부되었습니다. 다시 시도하세요.<byte value="xd"/>
 %1의 비밀번호:</translation>
     </message>
     <message>
@@ -4537,7 +4538,9 @@ Public key: %3</source>
         <source><byte value="xd"/>
 Could not establish the nested connection to %1: %2<byte value="xd"/>
 </source>
-        <translation type="unfinished">%1에 대한 중첩 연결을 설정할 수 없습니다: %2</translation>
+        <translation type="unfinished"><byte value="xd"/>
+%1에 대한 중첩 연결을 설정할 수 없습니다: %2<byte value="xd"/>
+</translation>
     </message>
     <message>
         <source>Nested connection failed: %1</source>
@@ -4647,13 +4650,17 @@ Confirm the key has changed and replace the old record in known_hosts?</source>
         <source><byte value="xd"/>
 No server to reconnect to; press x to close this tab<byte value="xd"/>
 </source>
-        <translation type="unfinished">재연결할 서버가 없습니다. x를 눌러 이 탭을 닫으세요</translation>
+        <translation type="unfinished"><byte value="xd"/>
+재연결할 서버가 없습니다. x를 눌러 이 탭을 닫으세요<byte value="xd"/>
+</translation>
     </message>
     <message>
         <source><byte value="xd"/>
 Reconnecting manually…<byte value="xd"/>
 </source>
-        <translation type="unfinished">수동으로 재연결하는 중…</translation>
+        <translation type="unfinished"><byte value="xd"/>
+수동으로 재연결하는 중…<byte value="xd"/>
+</translation>
     </message>
     <message>
         <source>Automatic reconnect reached its limit of %1 attempts</source>
@@ -4706,7 +4713,8 @@ Reconnecting manually…<byte value="xd"/>
     <message>
         <source>Shellium could not take over this connection (%1); handing it to the remote ssh to run directly.<byte value="xd"/>
 </source>
-        <translation type="unfinished">Shellium이 이 연결을 가로챌 수 없었습니다(%1). 직접 실행하도록 원격 ssh에 전달되었습니다.</translation>
+        <translation type="unfinished">Shellium이 이 연결을 가로챌 수 없었습니다(%1). 직접 실행하도록 원격 ssh에 전달되었습니다.<byte value="xd"/>
+</translation>
     </message>
     <message>
         <source>%1, fell back to %2</source>

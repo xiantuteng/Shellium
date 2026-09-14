@@ -4493,7 +4493,8 @@ Chiave pubblica: %3</translation>
     <message>
         <source>Starting local terminal…<byte value="xd"/>
 </source>
-        <translation type="unfinished">Avvio del terminale locale…</translation>
+        <translation type="unfinished">Avvio del terminale locale…<byte value="xd"/>
+</translation>
     </message>
     <message>
         <source>Local terminal</source>
@@ -4526,7 +4527,7 @@ Chiave pubblica: %3</translation>
     <message>
         <source>Permission denied, please try again.<byte value="xd"/>
 %1&apos;s password: </source>
-        <translation type="unfinished">Autorizzazione negata, riprova.
+        <translation type="unfinished">Autorizzazione negata, riprova.<byte value="xd"/>
 Password di %1:</translation>
     </message>
     <message>
@@ -4537,7 +4538,9 @@ Password di %1:</translation>
         <source><byte value="xd"/>
 Could not establish the nested connection to %1: %2<byte value="xd"/>
 </source>
-        <translation type="unfinished">Impossibile stabilire la connessione annidata a %1: %2</translation>
+        <translation type="unfinished"><byte value="xd"/>
+Impossibile stabilire la connessione annidata a %1: %2<byte value="xd"/>
+</translation>
     </message>
     <message>
         <source>Nested connection failed: %1</source>
@@ -4647,13 +4650,17 @@ Confermare che la chiave è cambiata e sostituire il vecchio record in known_hos
         <source><byte value="xd"/>
 No server to reconnect to; press x to close this tab<byte value="xd"/>
 </source>
-        <translation type="unfinished">Nessun server a cui riconnettersi; premi x per chiudere questa scheda</translation>
+        <translation type="unfinished"><byte value="xd"/>
+Nessun server a cui riconnettersi; premi x per chiudere questa scheda<byte value="xd"/>
+</translation>
     </message>
     <message>
         <source><byte value="xd"/>
 Reconnecting manually…<byte value="xd"/>
 </source>
-        <translation type="unfinished">Riconnessione manuale…</translation>
+        <translation type="unfinished"><byte value="xd"/>
+Riconnessione manuale…<byte value="xd"/>
+</translation>
     </message>
     <message>
         <source>Automatic reconnect reached its limit of %1 attempts</source>
@@ -4706,7 +4713,8 @@ Reconnecting manually…<byte value="xd"/>
     <message>
         <source>Shellium could not take over this connection (%1); handing it to the remote ssh to run directly.<byte value="xd"/>
 </source>
-        <translation type="unfinished">Shellium non è riuscito a prendere in carico questa connessione (%1); viene passata all&apos;ssh remoto per l&apos;esecuzione diretta.</translation>
+        <translation type="unfinished">Shellium non è riuscito a prendere in carico questa connessione (%1); viene passata all&apos;ssh remoto per l&apos;esecuzione diretta.<byte value="xd"/>
+</translation>
     </message>
     <message>
         <source>%1, fell back to %2</source>

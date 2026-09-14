@@ -17,6 +17,8 @@ class LocalizationTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    /** @brief 验证所有语言的终端提示保留回车换行，防止下一行继承上一行的光标列。 */
+    void terminalMessagesPreserveCarriageReturns();
     void resolvesExplicitSupportedLanguage();
     void resolvesUnknownToSourceOrSystem();
     void applyLoadsCatalogAndEmitsSignal();
@@ -26,6 +28,44 @@ private slots:
     void applyRejectsUnsupportedLanguage();
     void settingsNormalizesLanguageTag();
 };
+
+/**
+ * @brief 检查实际编译的翻译资源是否保留终端协议需要的 CRLF。
+ *
+ * 此测试无参数、无返回值；资源加载失败或控制字符缺失时由 Qt Test 报告失败。
+ * LF 只下移光标，CR 才归零列位置，因此不能用普通界面文本的换行规则处理终端提示。
+ * 遍历全部语言与全部含 CRLF 的终端提示，同时检查顺序和数量，覆盖启动、认证和重连。
+ */
+void LocalizationTest::terminalMessagesPreserveCarriageReturns()
+{
+    // 使用与 TerminalPane 相同的上下文和源字符串，确保验证的是运行时真正读到的译文。
+    const QList<const char *> sources = {
+        "Starting local terminal…\r\n",
+        "Permission denied, please try again.\r\n%1's password: ",
+        "\r\nCould not establish the nested connection to %1: %2\r\n",
+        "\r\nNo server to reconnect to; press x to close this tab\r\n",
+        "\r\nReconnecting manually…\r\n",
+        "Shellium could not take over this connection (%1); handing it to the remote ssh to run directly.\r\n"
+    };
+    LocalizationService service;
+    for (const QString &language : LocalizationService::supportedLanguages()) {
+        QVERIFY(service.apply(language));
+        for (const char *source : sources) {
+            const QString translated = QCoreApplication::translate("TerminalPane", source);
+            // 仅提取控制字符，允许各语言自由调整文字，同时禁止遗漏 CR 或意外增加 LF。
+            QString controls;
+            for (const QChar character : translated) {
+                if (character == QLatin1Char('\r') || character == QLatin1Char('\n')) {
+                    controls += character;
+                }
+            }
+            const QString expected = QStringLiteral("\r\n").repeated(
+                QString::fromUtf8(source).count(QLatin1Char('\n')));
+            QVERIFY2(controls == expected, qPrintable(language + QStringLiteral(": ")
+                                                       + QString::fromUtf8(source)));
+        }
+    }
+}
 
 void LocalizationTest::resolvesExplicitSupportedLanguage()
 {

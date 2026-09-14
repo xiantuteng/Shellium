@@ -4493,7 +4493,8 @@ Public key: %3</source>
     <message>
         <source>Starting local terminal…<byte value="xd"/>
 </source>
-        <translation type="unfinished">ローカルターミナルを起動中…</translation>
+        <translation type="unfinished">ローカルターミナルを起動中…<byte value="xd"/>
+</translation>
     </message>
     <message>
         <source>Local terminal</source>
@@ -4526,7 +4527,7 @@ Public key: %3</source>
     <message>
         <source>Permission denied, please try again.<byte value="xd"/>
 %1&apos;s password: </source>
-        <translation type="unfinished">アクセスが拒否されました。もう一度試してください。
+        <translation type="unfinished">アクセスが拒否されました。もう一度試してください。<byte value="xd"/>
 %1 のパスワード:</translation>
     </message>
     <message>
@@ -4537,7 +4538,9 @@ Public key: %3</source>
         <source><byte value="xd"/>
 Could not establish the nested connection to %1: %2<byte value="xd"/>
 </source>
-        <translation type="unfinished">%1 へのネスト接続を確立できませんでした: %2</translation>
+        <translation type="unfinished"><byte value="xd"/>
+%1 へのネスト接続を確立できませんでした: %2<byte value="xd"/>
+</translation>
     </message>
     <message>
         <source>Nested connection failed: %1</source>
@@ -4647,13 +4650,17 @@ Confirm the key has changed and replace the old record in known_hosts?</source>
         <source><byte value="xd"/>
 No server to reconnect to; press x to close this tab<byte value="xd"/>
 </source>
-        <translation type="unfinished">再接続するサーバーがありません。x を押してこのタブを閉じてください</translation>
+        <translation type="unfinished"><byte value="xd"/>
+再接続するサーバーがありません。x を押してこのタブを閉じてください<byte value="xd"/>
+</translation>
     </message>
     <message>
         <source><byte value="xd"/>
 Reconnecting manually…<byte value="xd"/>
 </source>
-        <translation type="unfinished">手動で再接続中…</translation>
+        <translation type="unfinished"><byte value="xd"/>
+手動で再接続中…<byte value="xd"/>
+</translation>
     </message>
     <message>
         <source>Automatic reconnect reached its limit of %1 attempts</source>
@@ -4706,7 +4713,8 @@ Reconnecting manually…<byte value="xd"/>
     <message>
         <source>Shellium could not take over this connection (%1); handing it to the remote ssh to run directly.<byte value="xd"/>
 </source>
-        <translation type="unfinished">Shellium はこの接続を傍受できませんでした (%1)。直接実行するためリモートの ssh に引き渡されました。</translation>
+        <translation type="unfinished">Shellium はこの接続を傍受できませんでした (%1)。直接実行するためリモートの ssh に引き渡されました。<byte value="xd"/>
+</translation>
     </message>
     <message>
         <source>%1, fell back to %2</source>
