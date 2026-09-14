@@ -5,6 +5,7 @@
 #include "storage/ApplicationDatabase.h"
 #include "ui/VaultDialog.h"
 #include "ui/ButtonCursorPolicy.h"
+#include "ui/ScrollBarPolicy.h"
 
 #include <QApplication>
 #include <QCommandLineOption>
@@ -174,6 +175,8 @@ int main(int argc, char *argv[])
     QApplication application(argc, argv);
     // 在任何对话框创建前安装统一策略，覆盖启动保险库、主窗口及后续动态生成的图标按钮。
     new ButtonCursorPolicy(application);
+    // 启动时统一接管滚动条绘制，动态创建的对话框和终端同样遵循空闲隐藏规则。
+    new ScrollBarPolicy(application);
     QCoreApplication::setApplicationName(QStringLiteral("Shellium"));
     QCoreApplication::setApplicationVersion(QStringLiteral("0.2.3"));
     QCoreApplication::setOrganizationName(QStringLiteral("Shellium"));

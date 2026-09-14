@@ -456,6 +456,7 @@ private:
     /** @brief 距上一次真正渲染的时间；用于判断当前是"空闲后首帧"还是"持续输出中"。 */
     QElapsedTimer m_lastRenderElapsed;
 
+
     /** @brief 备用屏滚轮增量的累加值；触控板的小增量攒够一行才发一次方向键。 */
     int m_wheelAccumulator = 0;
 

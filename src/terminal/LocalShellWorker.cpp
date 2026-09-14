@@ -34,6 +34,32 @@
 namespace {
 
 /**
+ * @brief 已 emit 给 GUI 线程、但尚未被消费的字节数上限。
+ *
+ * 读取端必须有背压，否则 `cat` 一个大文件会这样把界面压死：PTY 读循环一路读到 EAGAIN，
+ * 每块都 emit 一个队列信号；而 GUI 线程那一侧要把字节喂进 libvterm、重排 QTextDocument，
+ * 实测吞吐只有约 8 MB/s（Release 构建，Debug 更低），比 `cat` 往 PTY 里灌的速度慢一到
+ * 两个数量级。差额全部堆在 GUI 线程的事件队列里——34MB 的 jar 实测让常驻内存冲到 234MB，
+ * 而且这段时间事件队列里排在后面的重绘、按键一次都轮不到，界面就是这样"卡住"的。
+ *
+ * 真实终端不会这样，因为它们读得没那么急：PTY 缓冲区填满后 `cat` 自己会阻塞在 write()
+ * 上。这里把那个行为补回来——在途字节超过上限就先不读 PTY，让内核缓冲区顶住。
+ *
+ * 1 MiB 约合 GUI 线程 0.1 秒的工作量：既足够让正常命令输出完全不受限流影响（普通命令
+ * 的输出远小于这个量），又把界面的最坏响应延迟压在一帧到几帧之内。
+ */
+constexpr qint64 kOutputBacklogHighWaterBytes = 1 << 20;
+
+/**
+ * @brief 背压生效期间两次重试之间的等待（毫秒）。
+ *
+ * 这段时间里不能去 poll POLLIN：数据就在那儿，poll 会立刻返回，循环退化成 100% CPU 的
+ * 空转。改为只等一小段时间再回来看 GUI 线程消费完没有，同时保持键盘写入通路畅通——用户
+ * 必须还能按下 Ctrl+C 打断 `cat`，这也是真实终端在输出缓冲区打满时的行为。
+ */
+constexpr int kOutputBacklogRetryMilliseconds = 5;
+
+/**
  * @brief 解析当前平台的默认交互式 Shell。
  * @param requestedPath 用户或测试显式指定的路径；非空时原样保留。
  * @return 可供当前平台启动的程序路径。
@@ -316,14 +342,19 @@ void LocalShellWorker::run()
             }
         }
 
+        // 与 POSIX 分支同一套背压：GUI 线程没消化完就先不读，让数据留在 ConPTY 管道里顶住
+        // 写入端。见 kOutputBacklogHighWaterBytes。
         DWORD available = 0;
-        if (PeekNamedPipe(applicationOutputRead, nullptr, 0, nullptr, &available, nullptr)
+        if (!outputBacklogFull()
+            && PeekNamedPipe(applicationOutputRead, nullptr, 0, nullptr, &available, nullptr)
             && available > 0) {
             DWORD bytesRead = 0;
             const DWORD requested = std::min<DWORD>(available,
                                                     static_cast<DWORD>(readBuffer.size()));
             if (ReadFile(applicationOutputRead, readBuffer.data(), requested, &bytesRead, nullptr)
                 && bytesRead > 0) {
+                m_outputInFlight.fetch_add(static_cast<qint64>(bytesRead),
+                                           std::memory_order_relaxed);
                 emit outputReady(QByteArray(readBuffer.constData(),
                                             static_cast<qsizetype>(bytesRead)));
             }
@@ -350,6 +381,9 @@ void LocalShellWorker::run()
                     || bytesRead == 0) {
                     break;
                 }
+                // 收尾排空不受背压限制：子进程已退出，剩下的就是最后那点输出，必须发完。
+                m_outputInFlight.fetch_add(static_cast<qint64>(bytesRead),
+                                           std::memory_order_relaxed);
                 emit outputReady(QByteArray(readBuffer.constData(),
                                             static_cast<qsizetype>(bytesRead)));
             }
@@ -468,8 +502,14 @@ void LocalShellWorker::run()
             break;
         }
 
-        struct pollfd descriptor {masterFd, POLLIN | POLLHUP | POLLERR, 0};
-        const int pollResult = poll(&descriptor, 1, 20);
+        // GUI 线程还没消化完上一批就别再读了：不注册 POLLIN，让数据留在内核 PTY 缓冲区里
+        // 顶住写入端。见 kOutputBacklogHighWaterBytes。
+        const bool backlogFull = outputBacklogFull();
+        struct pollfd descriptor {masterFd,
+                                  static_cast<short>(backlogFull ? 0 : (POLLIN | POLLHUP | POLLERR)),
+                                  0};
+        const int pollResult = poll(&descriptor, 1,
+                                    backlogFull ? kOutputBacklogRetryMilliseconds : 20);
         if (pollResult < 0 && errno != EINTR) {
             emit shellError(tr("Failed to poll the local PTY: %1")
                                 .arg(QString::fromLocal8Bit(std::strerror(errno))));
@@ -477,9 +517,12 @@ void LocalShellWorker::run()
             break;
         }
         if (pollResult > 0 && (descriptor.revents & POLLIN) != 0) {
-            while (true) {
+            // 读到 EAGAIN 或攒够一批就交还控制权。原本这里一路读到 EAGAIN，而 `cat` 灌得
+            // 比读得快，这个内循环能连续跑上几千轮、往 GUI 线程灌进整个文件。
+            while (!outputBacklogFull()) {
                 const ssize_t bytesRead = ::read(masterFd, readBuffer.data(), readBuffer.size());
                 if (bytesRead > 0) {
+                    m_outputInFlight.fetch_add(bytesRead, std::memory_order_relaxed);
                     emit outputReady(QByteArray(readBuffer.constData(), bytesRead));
                 } else if (bytesRead < 0 && errno == EINTR) {
                     continue;
@@ -502,11 +545,25 @@ void LocalShellWorker::run()
         }
     }
 
+    // 关闭期间必须继续排空 PTY，否则连 SIGKILL 都杀不掉子进程：输出缓冲区满而主端不再
+    // 读时，写终端的进程停在内核的 tty 输出等待里，信号要等它回到用户态才生效——而它回不
+    // 去。实测现象是 kill(pid, SIGKILL) 返回 0、kill(pid, 0) 仍然返回 0，waitpid 永远等不
+    // 到它退出，整个工作线程就此卡死，析构时报 "QThread: Destroyed while thread is still
+    // running"。用户关掉一个正在 `cat` 大文件的标签页就会撞上。
+    //
+    // 这里读到的字节直接丢弃：会话已经在关闭，没有任何地方还需要它们；也正因为丢弃，
+    // 不能计入 m_outputInFlight。
+    const auto drainPty = [masterFd, &readBuffer]() {
+        while (::read(masterFd, readBuffer.data(), readBuffer.size()) > 0) {
+        }
+    };
+
     // 用户关闭终端时先发送 SIGHUP，符合真实终端关闭语义；超时后才使用 SIGKILL，防止
     // 后台任务永久占用进程。所有 waitpid 调用都在本工作线程，避免跨线程竞争回收子进程。
     kill(childPid, SIGHUP);
     int status = 0;
     for (int attempt = 0; attempt < 50; ++attempt) {
+        drainPty();
         if (waitpid(childPid, &status, WNOHANG) == childPid) {
             close(masterFd);
             emit shellFinished(WIFEXITED(status) ? WEXITSTATUS(status)
@@ -516,7 +573,15 @@ void LocalShellWorker::run()
         QThread::msleep(20);
     }
     kill(childPid, SIGKILL);
-    waitpid(childPid, &status, 0);
+    // SIGKILL 之后同样要边排空边等，理由同上。轮询上限保证线程一定能结束：即使子进程真的
+    // 无法回收，也不能让 requestStop() 的调用方永远等在 wait() 上。
+    for (int attempt = 0; attempt < 250; ++attempt) {
+        drainPty();
+        if (waitpid(childPid, &status, WNOHANG) == childPid) {
+            break;
+        }
+        QThread::msleep(20);
+    }
     close(masterFd);
     emit shellFinished(ioFailed ? 1 : 137);
 #endif
@@ -526,4 +591,17 @@ bool LocalShellWorker::shouldStop() const
 {
     QMutexLocker locker(&m_mutex);
     return m_stopRequested;
+}
+
+void LocalShellWorker::notifyOutputConsumed(const qint64 bytes)
+{
+    if (bytes <= 0) {
+        return;
+    }
+    m_outputInFlight.fetch_sub(bytes, std::memory_order_relaxed);
+}
+
+bool LocalShellWorker::outputBacklogFull() const
+{
+    return m_outputInFlight.load(std::memory_order_relaxed) >= kOutputBacklogHighWaterBytes;
 }

@@ -447,6 +447,12 @@ include(CTest)
 if(BUILD_TESTING)
     find_package(Qt6 6.8 REQUIRED COMPONENTS Test Sql)
     # 独立验证应用级光标策略，避免依赖数据库、SSH 或用户配置即可发现按钮交互回归。
+    # 独立验证全局滚动条策略，无需数据库、网络或真实终端会话。
+    qt_add_executable(ShelliumScrollBarTests tests/ScrollBarPolicyTest.cpp)
+    target_include_directories(ShelliumScrollBarTests PRIVATE src)
+    target_link_libraries(ShelliumScrollBarTests PRIVATE Qt6::Widgets Qt6::Test)
+    add_test(NAME ShelliumScrollBarTests COMMAND ShelliumScrollBarTests)
+
     qt_add_executable(ShelliumButtonCursorTests tests/ButtonCursorTest.cpp)
     target_include_directories(ShelliumButtonCursorTests PRIVATE src)
     target_link_libraries(ShelliumButtonCursorTests PRIVATE Qt6::Widgets Qt6::Test)
@@ -1055,6 +1061,21 @@ if(BUILD_TESTING)
     target_link_libraries(ShelliumTerminalAltScreenTests PRIVATE
         Qt6::Core Qt6::Gui Qt6::Sql Qt6::Widgets Qt6::Test ShelliumDependencies::libvterm)
     add_test(NAME ShelliumTerminalAltScreenTests COMMAND ShelliumTerminalAltScreenTests)
+
+    # `cat 二进制文件` 这类输出洪流的回归：libvterm 回流缩放的进程 abort、BEL 风暴限流、
+    # 以及 PTY 读取端的背压。背压那条要 fork 一个真实的本地 Shell，因此不能并进只依赖
+    # libvterm 的 AltScreen 目标；单独成目标同样是为了避开重复 main。
+    qt_add_executable(ShelliumTerminalFloodTests
+        tests/TerminalFloodTest.cpp
+        src/terminal/LocalShellWorker.cpp
+        src/terminal/LocalShellWorker.h
+        src/terminal/VtermBridge.cpp
+        src/terminal/VtermBridge.h
+    )
+    target_include_directories(ShelliumTerminalFloodTests PRIVATE src)
+    target_link_libraries(ShelliumTerminalFloodTests PRIVATE
+        Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test ShelliumDependencies::libvterm)
+    add_test(NAME ShelliumTerminalFloodTests COMMAND ShelliumTerminalFloodTests)
 
     # 针对真实服务器的连接路径回归。非阻塞握手状态机的价值就在于与真实 libssh 和真实
     # 服务器的时序交互，无法用桩替身覆盖；缺少 SHELLIUM_IT_* 环境变量时测试自行跳过。

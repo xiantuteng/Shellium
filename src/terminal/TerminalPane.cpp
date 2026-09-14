@@ -15,6 +15,7 @@
 #include <QLoggingCategory>
 #include <QLabel>
 #include <QMessageBox>
+#include <QScopeGuard>
 #include <QSignalBlocker>
 #include <QTimer>
 #include <QToolButton>
@@ -238,7 +239,12 @@ void TerminalPane::openLocalShell(const QString &shellPath)
     connect(m_localWorker,
             &LocalShellWorker::outputReady,
             this,
-            [this, sessionGeneration](const QByteArray &bytes) {
+            [this, sessionGeneration, worker = m_localWorker](const QByteArray &bytes) {
+                // 无论这批字节是渲染还是丢弃，都必须回执给读取线程解除背压，否则在途计数
+                // 只增不减，PTY 读取会永久停摆——注意这里不能用 m_localWorker：会话已经切换
+                // 时它指向的是新 worker，回执会记到错误的那一个头上。
+                const auto reportConsumed = qScopeGuard(
+                    [worker, size = bytes.size()]() { worker->notifyOutputConsumed(size); });
                 // 旧 PTY 在线程结束前可能仍有少量输出排队；会话代次不匹配时丢弃，避免
                 // 污染用户已经切换到的新 SSH 或本地终端画面。
                 if (sessionGeneration == m_sessionGeneration) {

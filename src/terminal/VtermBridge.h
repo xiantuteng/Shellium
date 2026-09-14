@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QColor>
+#include <QElapsedTimer>
 #include <QFont>
 #include <QObject>
 #include <QVector>
@@ -341,6 +342,17 @@ private:
     /** @brief 删除文档末尾的 count 段，用于替换上一次渲染留下的那一屏。 */
     static void removeTrailingBlocks(QTextDocument *document, int count);
 
+    /**
+     * @brief 当前状态下开启回流做这次缩放，会不会让 libvterm 找不到光标从而 abort。
+     * @param newRows 目标行数（已规范化为 >= 1）。
+     * @param newColumns 目标列数（已规范化为 >= 1）。
+     * @return 需要临时关闭回流时返回 true。
+     *
+     * 判据严格宽于上游的中止条件，宁可多关一次回流也不能漏判——漏判的后果是整个进程被
+     * abort 掉。详见实现处的注释。
+     */
+    [[nodiscard]] bool reflowWouldStrandCursor(int newRows, int newColumns) const;
+
     /** @brief libvterm 输出协议响应时调用。 */
     static void outputCallback(const char *bytes, size_t length, void *user);
     static int damageCallback(VTermRect rect, void *user);
@@ -372,6 +384,13 @@ private:
     QVector<Line> m_scrollback;
     int m_rows = 24;
     int m_columns = 80;
+    /**
+     * @brief 上一次真正发出 bell 信号的时刻，用于把密集的 BEL 合成一声。
+     *
+     * 未启动表示"还没响过"，第一声必须立即发出——限流只针对连续的铃声。
+     */
+    QElapsedTimer m_lastBellElapsed;
+
     int m_cursorRow = 0;
     int m_cursorColumn = 0;
     bool m_cursorVisible = true;

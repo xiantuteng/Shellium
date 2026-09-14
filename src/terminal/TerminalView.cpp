@@ -350,6 +350,7 @@ TerminalView::TerminalView(QWidget *parent)
     // 终端收到 DSR/DA 等查询后，libvterm 会生成必须回送给 PTY 的协议字节。
     connect(m_vtermBridge, &VtermBridge::protocolResponse,
             this, &TerminalView::inputBytes);
+    // bell 信号已经在 VtermBridge 里按抑制窗口合并过，这里收到几次就响几次。
     connect(m_vtermBridge, &VtermBridge::bell, this, [this]() {
         if (property("shelliumAudibleBell").toBool()) {
             QApplication::beep();

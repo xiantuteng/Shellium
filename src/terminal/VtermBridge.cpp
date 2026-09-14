@@ -265,6 +265,44 @@ void VtermBridge::resetTerminal()
     invalidateDocument();
 }
 
+bool VtermBridge::reflowWouldStrandCursor(const int newRows, const int newColumns) const
+{
+    // libvterm 0.3.3 的 screen_resize 在回流时自底向上重排逻辑行。某个逻辑行放不进新网格
+    // 时（源码里的 `new_row_start < 0`）它会就地 break，并只在这一个条件下补救光标：
+    //
+    //     if(old_row_start <= old_cursor.row && old_cursor.row < old_row_end)
+    //
+    // 末尾那个 `<` 是上游的 off-by-one：光标恰好停在这条逻辑行**最后一行**时两侧都不成立，
+    // new_cursor 保持 {-1,-1}，函数随即
+    //
+    //     fprintf(stderr, "screen_resize failed to update cursor position"); abort();
+    //
+    // ——不是断言、不受 NDEBUG 影响，整个进程当场死掉。`cat` 一个二进制文件正好制造这个
+    // 局面：文件里长段没有换行，屏幕被一条横跨整屏的逻辑行填满，光标就停在它的最后一行；
+    // 此后任何一次缩小网格（改窗口大小、缩放字号、甚至 noteRenderedCellHeight() 的首帧
+    // 行高纠正）都会触发。用户机器上已经留下两份栈完全一致的崩溃报告。
+    //
+    // 触发的必要条件是"光标所在行是续行"，因此这里用它作为判据——它严格宽于上游的中止
+    // 条件，不可能漏判（8000 例随机内容 + 随机缩放的 fuzz：258 次 abort 全部命中，0 漏）。
+    // 纯放大网格不可能触发：新列不小则每条逻辑行的回流高度只减不增，new_row_start 必然
+    // 非负，故再加一道方向限制，把误判压到最低。
+    // 误判的代价仅仅是这一次缩放不重排已换行的长行，不影响正确性。
+    if (newRows >= m_rows && newColumns >= m_columns) {
+        return false;
+    }
+    VTermState *state = vterm_obtain_state(m_vterm);
+    if (state == nullptr) {
+        return false;
+    }
+    VTermPos cursor {};
+    vterm_state_get_cursorpos(state, &cursor);
+    if (cursor.row < 0 || cursor.row >= m_rows) {
+        return false;
+    }
+    const VTermLineInfo *lineInfo = vterm_state_get_lineinfo(state, cursor.row);
+    return lineInfo != nullptr && lineInfo->continuation != 0;
+}
+
 void VtermBridge::resize(const int rows, const int columns)
 {
     const int normalizedRows = std::max(rows, 1);
@@ -272,9 +310,18 @@ void VtermBridge::resize(const int rows, const int columns)
     if (normalizedRows == m_rows && normalizedColumns == m_columns) {
         return;
     }
+    // 回流会让 libvterm 0.3.3 在这一局面下直接 abort，见 reflowWouldStrandCursor()。
+    // 只对这一次缩放关掉回流，随后立即恢复，正常缩放仍然重排长行。
+    const bool suspendReflow = reflowWouldStrandCursor(normalizedRows, normalizedColumns);
+    if (suspendReflow) {
+        vterm_screen_enable_reflow(m_screen, false);
+    }
     m_rows = normalizedRows;
     m_columns = normalizedColumns;
     vterm_set_size(m_vterm, m_rows, m_columns);
+    if (suspendReflow) {
+        vterm_screen_enable_reflow(m_screen, true);
+    }
     vterm_screen_flush_damage(m_screen);
     // 改变网格会让 libvterm 回流当前屏幕，已经写进文档的段与新的行列不再对应。
     invalidateDocument();
@@ -898,7 +945,25 @@ int VtermBridge::termPropertyCallback(const VTermProp property, VTermValue *valu
 
 int VtermBridge::bellCallback(void *user)
 {
-    emit static_cast<VtermBridge *>(user)->bell();
+    auto *bridge = static_cast<VtermBridge *>(user);
+    // BEL 只是一个普通字节（0x07），二进制文件里满地都是：用户 `cat` 的那个 34MB jar 就含
+    // 122873 个。一个字节一次 bell 意味着 GUI 线程要在解析循环里同步响十几万次铃——macOS
+    // 上每次 QApplication::beep() 都会把一声系统提示音压进音频队列，于是命令早已跑完，机器
+    // 还在"嘟嘟"响个不停；这段时间界面也完全没有机会重绘。
+    //
+    // 真实终端都有这条限流，xterm 的 bellSuppressTime 默认正是 200ms，这里取同一个值。
+    // 抑制窗口内的铃声直接丢弃而不是排队补响——补响只会把噪音推迟到命令结束之后。响铃的
+    // 语义是"提醒用户一次"，把连续的铃声合成一声不丢任何信息。
+    //
+    // 限流放在这里而不是放在某个消费方，是因为它是终端语义的一部分：可听响铃、将来可能
+    // 的视觉响铃都该看到同一串已经合并好的事件。
+    constexpr qint64 kBellSuppressMilliseconds = 200;
+    if (bridge->m_lastBellElapsed.isValid()
+        && bridge->m_lastBellElapsed.elapsed() < kBellSuppressMilliseconds) {
+        return 1;
+    }
+    bridge->m_lastBellElapsed.restart();
+    emit bridge->bell();
     return 1;
 }
 

@@ -4,6 +4,8 @@
 #include <QMutex>
 #include <QThread>
 
+#include <atomic>
+
 /**
  * @brief 在当前平台的原生伪终端中运行交互式本地 Shell。
  *
@@ -28,6 +30,15 @@ public:
     /** @brief 请求停止本地 Shell，并在宽限期后终止仍未退出的子进程树。 */
     void requestStop();
 
+    /**
+     * @brief GUI 线程消费完一批 outputReady 之后的回执，用于解除读取背压。
+     * @param bytes 本次消费掉的字节数，必须与收到的 QByteArray 长度一致。
+     *
+     * 由 GUI 线程调用，线程安全。漏调会让在途计数只增不减，读取端最终永久停摆，因此
+     * 消费方必须无条件回执——即使这批字节因为会话代次不符而被丢弃。
+     */
+    void notifyOutputConsumed(qint64 bytes);
+
 signals:
     /** @brief 本地 PTY 产生可供终端渲染的原始字节。 */
     void outputReady(const QByteArray &bytes);
@@ -49,7 +60,17 @@ private:
     /** @brief 在线程锁保护下读取停止状态。 */
     [[nodiscard]] bool shouldStop() const;
 
+    /** @brief 已发给 GUI 线程、但尚未收到消费回执的字节数是否已达上限。 */
+    [[nodiscard]] bool outputBacklogFull() const;
+
     QString m_shellPath;
+
+    /**
+     * @brief 已 emit 但 GUI 线程尚未消费的字节数。
+     *
+     * 这是本地终端的流控核心，详见 run() 中的注释。跨线程读写，必须用原子量。
+     */
+    std::atomic<qint64> m_outputInFlight {0};
     mutable QMutex m_mutex;
     QByteArray m_pendingInput;
     bool m_stopRequested = false;
