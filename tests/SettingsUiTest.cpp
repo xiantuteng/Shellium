@@ -477,24 +477,41 @@ void SettingsUiTest::sidebarDensityPersistsAndSynchronizes()
     QCOMPARE(selector->currentData(), 0);
     QSignalSpy changes(service.get(), &TerminalSettingsService::settingsChanged);
     selector->setCurrentData(1);
-    QVERIFY(service->currentSettings().compactSidebar);
+    QCOMPARE(service->currentSettings().sidebarDensity, SidebarDensity::Compact);
     QCOMPARE(changes.count(), 1);
-    QCOMPARE(m_database->intSetting(QStringLiteral("layout/sidebar_compact")).value_or(-1), 1);
+    QCOMPARE(m_database->setting(QStringLiteral("layout/sidebar_compact")).value_or(QString()),
+             QStringLiteral("compact"));
 
-    // 新服务从数据库重载，覆盖旧视图菜单的 0/1 存储兼容性及重新打开设置的回显。
+    // 精简是第三档，选择后同样要落库并广播。
+    selector->setCurrentData(2);
+    QCOMPARE(service->currentSettings().sidebarDensity, SidebarDensity::Minimal);
+    QCOMPARE(changes.count(), 2);
+    QCOMPARE(m_database->setting(QStringLiteral("layout/sidebar_compact")).value_or(QString()),
+             QStringLiteral("minimal"));
+
+    // 新服务从数据库重载，覆盖重新打开设置的回显。
     TerminalSettingsService reloaded(m_database.get());
     QString error;
     QVERIFY2(reloaded.load(&error), qPrintable(error));
-    QVERIFY(reloaded.currentSettings().compactSidebar);
+    QCOMPARE(reloaded.currentSettings().sidebarDensity, SidebarDensity::Minimal);
     SettingsDialog reopened(&reloaded);
-    QCOMPARE(reopened.findChild<SegmentedControl *>(QStringLiteral("sidebarDensitySelector"))->currentData(), 1);
+    QCOMPARE(reopened.findChild<SegmentedControl *>(QStringLiteral("sidebarDensitySelector"))->currentData(), 2);
 
     // 模拟菜单通过同一服务修改；控件应同步且不再次触发保存。
     TerminalSettings relaxed = service->currentSettings();
-    relaxed.compactSidebar = false;
+    relaxed.sidebarDensity = SidebarDensity::Relaxed;
     QVERIFY2(service->save(relaxed, &error), qPrintable(error));
     QCOMPARE(selector->currentData(), 0);
-    QCOMPARE(changes.count(), 2);
+    QCOMPARE(changes.count(), 3);
+
+    // 旧版本菜单只写过布尔值 "1"；精简模式上线后仍要能读出紧凑，不能因未知格式回退宽松。
+    QString legacyError;
+    QVERIFY2(m_database->setSetting(QStringLiteral("layout/sidebar_compact"), QStringLiteral("1"),
+                                    &legacyError),
+             qPrintable(legacyError));
+    TerminalSettingsService legacyReloaded(m_database.get());
+    QVERIFY2(legacyReloaded.load(&error), qPrintable(error));
+    QCOMPARE(legacyReloaded.currentSettings().sidebarDensity, SidebarDensity::Compact);
 }
 
 void SettingsUiTest::sidebarDoubleClickPromptPersistsAndSynchronizes()
@@ -781,7 +798,7 @@ void SettingsUiTest::restoreDefaultsPersistsImmediately()
     TerminalSettings customized = service->currentSettings();
     customized.fontPointSize = 23;
     // 密度也应参与整份默认快照恢复，不能遗留菜单单独保存的紧凑值。
-    customized.compactSidebar = true;
+    customized.sidebarDensity = SidebarDensity::Compact;
     customized.audibleBell = !TerminalSettings{}.normalized().audibleBell;
     QString error;
     QVERIFY2(service->save(customized, &error), qPrintable(error));
@@ -794,7 +811,7 @@ void SettingsUiTest::restoreDefaultsPersistsImmediately()
 
     const TerminalSettings defaults = TerminalSettings{}.normalized();
     QCOMPARE(service->currentSettings().fontPointSize, defaults.fontPointSize);
-    QVERIFY(!service->currentSettings().compactSidebar);
+    QCOMPARE(service->currentSettings().sidebarDensity, SidebarDensity::Relaxed);
     QCOMPARE(service->currentSettings().audibleBell, defaults.audibleBell);
     QCOMPARE(m_database->setting(QStringLiteral("terminal/font_size")).value_or(QString()),
              QString::number(defaults.fontPointSize));

@@ -1894,6 +1894,10 @@ Confirmar que a chave mudou, substituir o registro antigo em known_hosts e conti
         <translation>Compacta</translation>
     </message>
     <message>
+        <source>Minimal</source>
+        <translation>Mínima</translation>
+    </message>
+    <message>
         <source>Relaxed</source>
         <translation>Espaçosa</translation>
     </message>
@@ -4027,6 +4031,10 @@ As alterações não salvas foram revertidas.</translation>
     <message>
         <source>Compact</source>
         <translation>Compacta</translation>
+    </message>
+    <message>
+        <source>Minimal</source>
+        <translation>Mínima</translation>
     </message>
 </context>
 <context>

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "settings/TerminalSettings.h"
+
 #include <QMainWindow>
 #include <QHash>
 #include <QList>
@@ -273,8 +275,14 @@ private:
     /** @brief 应用当前侧栏密度的几何尺寸；仅更新 UI，无 IO 或返回值。 */
     void applySidebarDensity();
 
-    /** @brief 当前侧栏是否紧凑；缺省为宽松，使用独立设置键持久化。 */
-    bool m_compactSidebar = false;
+    /** @brief 当前侧栏密度；缺省为宽松，使用独立设置键持久化。 */
+    SidebarDensity m_sidebarDensity = SidebarDensity::Relaxed;
+
+    /** @brief 导航栏等紧凑相关布局把精简视同紧凑，只有主机树本身区分这两档。 */
+    [[nodiscard]] bool compactLayout() const
+    {
+        return m_sidebarDensity != SidebarDensity::Relaxed;
+    }
 
     /**
      * @brief 把分隔器当前的侧栏宽度写入数据库设置。

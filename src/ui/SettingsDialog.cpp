@@ -417,6 +417,7 @@ QWidget *SettingsDialog::buildAppearancePage()
     m_sidebarDensitySelector->setObjectName(QStringLiteral("sidebarDensitySelector"));
     m_sidebarDensitySelector->addSegment([this] { return tr("Relaxed"); }, 0);
     m_sidebarDensitySelector->addSegment([this] { return tr("Compact"); }, 1);
+    m_sidebarDensitySelector->addSegment([this] { return tr("Minimal"); }, 2);
     themeCard->addRow([this] { return tr("Sidebar density"); }, m_sidebarDensitySelector);
 
     m_sidebarDoubleClickPromptToggle->setObjectName(QStringLiteral("sidebarDoubleClickPromptToggle"));
@@ -884,7 +885,17 @@ TerminalSettings SettingsDialog::editedSettings() const
         settings.language = languageCode;
     }
     settings.themeMode = static_cast<ThemeMode>(m_themeSelector->currentData());
-    settings.compactSidebar = m_sidebarDensitySelector->currentData() == 1;
+    switch (m_sidebarDensitySelector->currentData()) {
+    case 1:
+        settings.sidebarDensity = SidebarDensity::Compact;
+        break;
+    case 2:
+        settings.sidebarDensity = SidebarDensity::Minimal;
+        break;
+    default:
+        settings.sidebarDensity = SidebarDensity::Relaxed;
+        break;
+    }
     settings.sidebarDoubleClickPrompt = m_sidebarDoubleClickPromptToggle->isChecked();
     settings.colorSchemeId = QStringLiteral("default");
     for (const QString &id : m_colorSchemeOrder) {
@@ -1015,7 +1026,7 @@ void SettingsDialog::populateControls(const TerminalSettings &settings)
     const int languageIndex = m_languageSelector->findData(normalized.language);
     m_languageSelector->setCurrentIndex(languageIndex >= 0 ? languageIndex : 0);
     m_themeSelector->setCurrentData(static_cast<int>(normalized.themeMode));
-    m_sidebarDensitySelector->setCurrentData(normalized.compactSidebar ? 1 : 0);
+    m_sidebarDensitySelector->setCurrentData(static_cast<int>(normalized.sidebarDensity));
     m_sidebarDoubleClickPromptToggle->setChecked(normalized.sidebarDoubleClickPrompt);
     for (auto iterator = m_colorSchemeSwatches.cbegin();
          iterator != m_colorSchemeSwatches.cend();

@@ -2,6 +2,7 @@
 
 #include "core/ExcelHostCodec.h"
 #include "core/HostRecord.h"
+#include "settings/TerminalSettings.h"
 
 #include <QHash>
 #include <QWidget>
@@ -51,9 +52,9 @@ public:
 
     /**
      * @brief 即时切换主机树的行高、图标及缩进，保持节点交互状态。
-     * @param compact true 使用紧凑布局，false 恢复默认宽松布局；无返回值或 IO 错误。
+     * @param density 目标密度；精简额外隐藏地址副标题并进一步收紧节点间距。无返回值或 IO 错误。
      */
-    void setCompactMode(bool compact);
+    void setSidebarDensity(SidebarDensity density);
 
     /**
      * @brief 返回数据库中的可连接主机总数，不包含仅用于组织的分组。

@@ -1894,6 +1894,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation>Компактная</translation>
     </message>
     <message>
+        <source>Minimal</source>
+        <translation>Минимальная</translation>
+    </message>
+    <message>
         <source>Relaxed</source>
         <translation>Свободная</translation>
     </message>
@@ -4027,6 +4031,10 @@ Unsaved changes have been reverted.</source>
     <message>
         <source>Compact</source>
         <translation>Компактная</translation>
+    </message>
+    <message>
+        <source>Minimal</source>
+        <translation>Минимальная</translation>
     </message>
 </context>
 <context>

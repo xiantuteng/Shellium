@@ -1894,6 +1894,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation>좁게</translation>
     </message>
     <message>
+        <source>Minimal</source>
+        <translation>간결하게</translation>
+    </message>
+    <message>
         <source>Relaxed</source>
         <translation>넓게</translation>
     </message>
@@ -4027,6 +4031,10 @@ Unsaved changes have been reverted.</source>
     <message>
         <source>Compact</source>
         <translation>좁게</translation>
+    </message>
+    <message>
+        <source>Minimal</source>
+        <translation>간결하게</translation>
     </message>
 </context>
 <context>

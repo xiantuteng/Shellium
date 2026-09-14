@@ -1894,6 +1894,10 @@ Puede ser una reinstalación del servidor o una rotación de clave, o un ataque 
         <translation>Compacta</translation>
     </message>
     <message>
+        <source>Minimal</source>
+        <translation>Mínima</translation>
+    </message>
+    <message>
         <source>Relaxed</source>
         <translation>Espaciosa</translation>
     </message>
@@ -4027,6 +4031,10 @@ Los cambios sin guardar se han revertido.</translation>
     <message>
         <source>Compact</source>
         <translation>Compacta</translation>
+    </message>
+    <message>
+        <source>Minimal</source>
+        <translation>Mínima</translation>
     </message>
 </context>
 <context>

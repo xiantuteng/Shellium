@@ -1894,6 +1894,10 @@ Confermare che la chiave è cambiata, sostituire il vecchio record in known_host
         <translation>Compatta</translation>
     </message>
     <message>
+        <source>Minimal</source>
+        <translation>Minima</translation>
+    </message>
+    <message>
         <source>Relaxed</source>
         <translation>Ampia</translation>
     </message>
@@ -4027,6 +4031,10 @@ Le modifiche non salvate sono state annullate.</translation>
     <message>
         <source>Compact</source>
         <translation>Compatta</translation>
+    </message>
+    <message>
+        <source>Minimal</source>
+        <translation>Minima</translation>
     </message>
 </context>
 <context>

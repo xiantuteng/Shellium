@@ -37,6 +37,18 @@ enum class ThemeMode {
 };
 
 /**
+ * @brief 侧边栏主机树的密度三态。
+ *
+ * 精简在紧凑的基础上进一步收紧节点间距，并且只显示主机名称、隐藏地址副标题；
+ * 导航栏等紧凑相关的其它布局把精简视同紧凑处理，只有主机树本身区分这两档。
+ */
+enum class SidebarDensity {
+    Relaxed,
+    Compact,
+    Minimal
+};
+
+/**
  * @brief 一套终端主题使用的关键颜色。
  *
  * 颜色集中为值对象是为了让终端、设置预览和应用级 QPalette 使用同一来源，避免多个控件
@@ -99,8 +111,8 @@ struct TerminalSettings {
     /** @brief 主题选择，默认深色，与大多数终端模拟器的开箱体验一致。 */
     ThemeMode themeMode = ThemeMode::Dark;
 
-    /** @brief 侧边栏紧凑模式；默认宽松，与视图菜单共享设置及即时变更广播。 */
-    bool compactSidebar = false;
+    /** @brief 侧边栏密度；默认宽松，与视图菜单共享设置及即时变更广播。 */
+    SidebarDensity sidebarDensity = SidebarDensity::Relaxed;
 
     /**
      * @brief 双击侧边栏分隔条时是否先显示隐藏确认提示；默认开启。

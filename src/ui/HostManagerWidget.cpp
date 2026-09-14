@@ -608,12 +608,16 @@ protected:
         // 浅色底纹上已经足够醒目，也让选中前后文字颜色保持一致、不"跳色"。
         const QColor baseColor = background.palette.color(QPalette::Text);
 
+        const bool minimalDensity = density() == SidebarDensity::Minimal;
         const int textLeft = option.rect.left() + metric(kHostTextLeft, 39);
         const QRect fullTextRect(textLeft,
                                  option.rect.top(),
                                  std::max(0, option.rect.right() - textLeft - 7),
                                  option.rect.height());
-        const int textBlockHeight = nameMetrics.height() + detailMetrics.height() + 1;
+        // 精简不画地址副标题，名称单独居中；否则按两行文字块整体居中排布。
+        const int textBlockHeight = minimalDensity
+            ? nameMetrics.height()
+            : nameMetrics.height() + detailMetrics.height() + 1;
         const int textBlockTop = fullTextRect.center().y() - (textBlockHeight / 2);
         const QStringList tags = index.data(HostTagsRole).toStringList();
         const QString visibleTag = tags.isEmpty() ? QString{} : tags.constFirst();
@@ -667,17 +671,19 @@ protected:
                                                     tagRect.width() - 8));
         }
 
-        QColor detailColor = baseColor;
-        detailColor.setAlphaF(0.58F);
-        const QRect detailRect(fullTextRect.left(),
-                               nameRect.bottom() + 1,
-                               fullTextRect.width(),
-                               detailMetrics.height());
-        painter->setFont(detailFont);
-        painter->setPen(detailColor);
-        painter->drawText(detailRect,
-                          Qt::AlignLeft | Qt::AlignVCenter,
-                          detailMetrics.elidedText(detail, Qt::ElideMiddle, detailRect.width()));
+        if (!minimalDensity) {
+            QColor detailColor = baseColor;
+            detailColor.setAlphaF(0.58F);
+            const QRect detailRect(fullTextRect.left(),
+                                   nameRect.bottom() + 1,
+                                   fullTextRect.width(),
+                                   detailMetrics.height());
+            painter->setFont(detailFont);
+            painter->setPen(detailColor);
+            painter->drawText(detailRect,
+                              Qt::AlignLeft | Qt::AlignVCenter,
+                              detailMetrics.elidedText(detail, Qt::ElideMiddle, detailRect.width()));
+        }
         painter->restore();
     }
 
@@ -685,14 +691,15 @@ protected:
     {
         QSize hint = QStyledItemDelegate::sizeHint(option, index);
         if (index.data(HostKindRole).toInt() == kSectionHeaderKindValue) {
-            hint.setHeight(metric(kSectionHeaderRowHeight, 32));
+            hint.setHeight(metric(kSectionHeaderRowHeight, 32, 26));
             return hint;
         }
         if (index.data(HostDetailRole).toString().isEmpty()) {
-            hint.setHeight(metric(kFolderRowHeight, 28));
+            hint.setHeight(metric(kFolderRowHeight, 28, 22));
             return hint;
         }
-        hint.setHeight(metric(kHostRowHeight, 40));
+        // 精简只画一行名称，行高不必再为地址副标题预留空间，比紧凑再收紧一档。
+        hint.setHeight(metric(kHostRowHeight, 40, 28));
         return hint;
     }
 
@@ -716,15 +723,41 @@ protected:
     }
 
 private:
+    /** @brief 从所属主机树读取当前密度；父对象未设置属性时按宽松处理，无持久化副作用。 */
+    [[nodiscard]] SidebarDensity density() const
+    {
+        return static_cast<SidebarDensity>(
+            parent()->property("sidebarDensity").toInt());
+    }
+
     /**
-     * @brief 从所属主机树读取密度，统一绘制尺寸与点击热区的选择。
+     * @brief 二档绘制尺寸：精简沿用紧凑取值，因为大多数几何（图标、箭头等）不需要比紧凑
+     * 更小；只有行高与文字排布这类真正体现“节点间距”的地方才用下面的三档重载。
      * @param relaxed 宽松模式的逻辑像素值。
-     * @param compact 紧凑模式的逻辑像素值。
-     * @return 当前模式对应尺寸；父对象未设置属性时按宽松处理，无持久化副作用。
+     * @param compact 紧凑及精简模式共用的逻辑像素值。
      */
     [[nodiscard]] int metric(int relaxed, int compact) const
     {
-        return parent()->property("compactMode").toBool() ? compact : relaxed;
+        return density() == SidebarDensity::Relaxed ? relaxed : compact;
+    }
+
+    /**
+     * @brief 三档绘制尺寸，精简单独给出比紧凑更小的取值。
+     * @param relaxed 宽松模式的逻辑像素值。
+     * @param compact 紧凑模式的逻辑像素值。
+     * @param minimal 精简模式的逻辑像素值。
+     */
+    [[nodiscard]] int metric(int relaxed, int compact, int minimal) const
+    {
+        switch (density()) {
+        case SidebarDensity::Minimal:
+            return minimal;
+        case SidebarDensity::Compact:
+            return compact;
+        case SidebarDensity::Relaxed:
+        default:
+            return relaxed;
+        }
     }
 
     /** @brief 画分组：左侧箭头、文件夹和名称依次排列；空分组不追加冗余数量文字。 */
@@ -3247,12 +3280,26 @@ void HostRecordDialog::editHostChain()
 
 } // namespace
 
-void HostManagerWidget::setCompactMode(const bool compact)
+void HostManagerWidget::setSidebarDensity(const SidebarDensity density)
 {
     // 只调整视图，不重建树或访问数据库，保留选中项、搜索结果及展开状态。
-    m_tree->setProperty("compactMode", compact);
-    m_tree->setIndentation(compact ? 24 : 32);
-    m_tree->setIconSize(compact ? QSize(16, 16) : QSize(18, 18));
+    m_tree->setProperty("sidebarDensity", static_cast<int>(density));
+    switch (density) {
+    case SidebarDensity::Minimal:
+        // 精简在紧凑缩进的基础上进一步收紧，配合委托里更矮的行高，让节点间距最小化。
+        m_tree->setIndentation(18);
+        m_tree->setIconSize(QSize(16, 16));
+        break;
+    case SidebarDensity::Compact:
+        m_tree->setIndentation(24);
+        m_tree->setIconSize(QSize(16, 16));
+        break;
+    case SidebarDensity::Relaxed:
+    default:
+        m_tree->setIndentation(32);
+        m_tree->setIconSize(QSize(18, 18));
+        break;
+    }
     m_tree->doItemsLayout();
     m_tree->viewport()->update();
 }

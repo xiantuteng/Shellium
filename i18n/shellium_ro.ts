@@ -1894,6 +1894,10 @@ Confirmi că cheia s-a schimbat, înlocuiești vechea înregistrare din known_ho
         <translation>Compactă</translation>
     </message>
     <message>
+        <source>Minimal</source>
+        <translation>Minimă</translation>
+    </message>
+    <message>
         <source>Relaxed</source>
         <translation>Aerisită</translation>
     </message>
@@ -4027,6 +4031,10 @@ Modificările nesalvate au fost anulate.</translation>
     <message>
         <source>Compact</source>
         <translation>Compactă</translation>
+    </message>
+    <message>
+        <source>Minimal</source>
+        <translation>Minimă</translation>
     </message>
 </context>
 <context>

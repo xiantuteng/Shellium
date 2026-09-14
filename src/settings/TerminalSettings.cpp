@@ -18,7 +18,7 @@ namespace {
 /** @brief 设置表中键名前缀，集中定义可避免保存和加载使用不同拼写。 */
 const QString kLanguageKey = QStringLiteral("appearance/language");
 /** @brief 沿用视图菜单已有的密度键，升级后无需迁移用户选择。 */
-const QString kCompactSidebarKey = QStringLiteral("layout/sidebar_compact");
+const QString kSidebarDensityKey = QStringLiteral("layout/sidebar_compact");
 /** @brief 双击侧边栏分隔条的确认提示开关；缺失时保持默认开启以保护既有操作习惯。 */
 const QString kSidebarDoubleClickPromptKey = QStringLiteral("layout/sidebar_double_click_prompt");
 const QString kThemeKey = QStringLiteral("appearance/theme");
@@ -162,6 +162,45 @@ std::optional<bool> parseBool(const QString &value)
 QString serializeBool(const bool value)
 {
     return value ? QStringLiteral("1") : QStringLiteral("0");
+}
+
+/** @brief 把侧边栏密度序列化为稳定字符串。 */
+QString serializeSidebarDensity(const SidebarDensity density)
+{
+    switch (density) {
+    case SidebarDensity::Compact:
+        return QStringLiteral("compact");
+    case SidebarDensity::Minimal:
+        return QStringLiteral("minimal");
+    case SidebarDensity::Relaxed:
+    default:
+        return QStringLiteral("relaxed");
+    }
+}
+
+/**
+ * @brief 解析侧边栏密度字符串；未知值返回空，调用方据此回退默认值并报告警告。
+ *
+ * 同时兼容精简模式上线前该键存的布尔值（true 对应紧凑、false 对应宽松），旧版本
+ * 写入的数据库无需迁移即可继续读出正确的密度。
+ */
+std::optional<SidebarDensity> parseSidebarDensity(const QString &value)
+{
+    const QString normalized = value.trimmed().toLower();
+    if (normalized == QLatin1String("relaxed")) {
+        return SidebarDensity::Relaxed;
+    }
+    if (normalized == QLatin1String("compact")) {
+        return SidebarDensity::Compact;
+    }
+    if (normalized == QLatin1String("minimal")) {
+        return SidebarDensity::Minimal;
+    }
+    const std::optional<bool> legacyBool = parseBool(value);
+    if (legacyBool.has_value()) {
+        return *legacyBool ? SidebarDensity::Compact : SidebarDensity::Relaxed;
+    }
+    return std::nullopt;
 }
 
 /**
@@ -920,7 +959,7 @@ bool TerminalSettings::operator==(const TerminalSettings &other) const
 {
     return language == other.language
         && themeMode == other.themeMode
-        && compactSidebar == other.compactSidebar
+        && sidebarDensity == other.sidebarDensity
         && sidebarDoubleClickPrompt == other.sidebarDoubleClickPrompt
         && colorSchemeId == other.colorSchemeId
         && fontFamily == other.fontFamily
@@ -1080,8 +1119,19 @@ bool TerminalSettingsService::load(QString *errorMessage)
             warnings.append(tr("Unknown cursor shape '%1'; reverted to block cursor").arg(*raw));
         }
     }
+    if (const std::optional<QString> raw = readValue(kSidebarDensityKey, &queryFailed);
+        raw.has_value() && !queryFailed) {
+        const std::optional<SidebarDensity> parsed = parseSidebarDensity(*raw);
+        if (parsed.has_value()) {
+            loaded.sidebarDensity = *parsed;
+        } else {
+            warnings.append(tr("Unknown sidebar density '%1'; reverted to relaxed").arg(*raw));
+        }
+    }
+    if (queryFailed) {
+        return false;
+    }
     // 统一布尔解析同时兼容旧菜单写入的 0/1，并沿用读取失败与非法值处理。
-    assignBoolean(kCompactSidebarKey, &loaded.compactSidebar);
     assignBoolean(kSidebarDoubleClickPromptKey, &loaded.sidebarDoubleClickPrompt);
     assignBoolean(kCursorBlinkKey, &loaded.cursorBlink);
     assignInteger(kScrollbackKey, &loaded.scrollbackLines);
@@ -1180,7 +1230,7 @@ bool TerminalSettingsService::save(const TerminalSettings &settings, QString *er
             };
             if (!write(kLanguageKey, normalizedSettings.language)
                 || !write(kThemeKey, serializeTheme(normalizedSettings.themeMode))
-                || !write(kCompactSidebarKey, serializeBool(normalizedSettings.compactSidebar))
+                || !write(kSidebarDensityKey, serializeSidebarDensity(normalizedSettings.sidebarDensity))
                 || !write(kSidebarDoubleClickPromptKey,
                           serializeBool(normalizedSettings.sidebarDoubleClickPrompt))
                 || !write(kColorSchemeKey, normalizedSettings.colorSchemeId)

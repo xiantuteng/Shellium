@@ -1894,6 +1894,10 @@ Confirmer que la clé a changé, remplacer l&apos;ancien enregistrement dans kno
         <translation>Compacte</translation>
     </message>
     <message>
+        <source>Minimal</source>
+        <translation>Minimale</translation>
+    </message>
+    <message>
         <source>Relaxed</source>
         <translation>Aérée</translation>
     </message>
@@ -4027,6 +4031,10 @@ Les modifications non enregistrées ont été annulées.</translation>
     <message>
         <source>Compact</source>
         <translation>Compacte</translation>
+    </message>
+    <message>
+        <source>Minimal</source>
+        <translation>Minimale</translation>
     </message>
 </context>
 <context>

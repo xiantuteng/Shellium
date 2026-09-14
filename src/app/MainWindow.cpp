@@ -669,7 +669,7 @@ MainWindow::MainWindow(ApplicationDatabase *database,
         handle->installEventFilter(this);
     }
     // 在恢复宽度之前读取密度，确保启动时选用对应模式的宽度及最小尺寸。
-    m_compactSidebar = m_settingsService->currentSettings().compactSidebar;
+    m_sidebarDensity = m_settingsService->currentSettings().sidebarDensity;
     applySidebarDensity();
     restoreSidebarWidth();
 
@@ -987,33 +987,50 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     auto *densityMenu = viewMenu->addMenu(QString());
     registerTranslatable(densityMenu, QT_TRANSLATE_NOOP("MainWindow", "Sidebar density"));
     auto *densityGroup = new QActionGroup(this);
-    for (const bool compact : {false, true}) {
+    const QList<SidebarDensity> densities = {
+        SidebarDensity::Relaxed,
+        SidebarDensity::Compact,
+        SidebarDensity::Minimal,
+    };
+    for (const SidebarDensity density : densities) {
         auto *action = densityMenu->addAction(QString());
-        action->setObjectName(compact ? QStringLiteral("CompactSidebarAction") : QStringLiteral("RelaxedSidebarAction"));
-        registerTranslatable(action, compact ? QT_TRANSLATE_NOOP("MainWindow", "Compact")
-                                            : QT_TRANSLATE_NOOP("MainWindow", "Relaxed"));
+        switch (density) {
+        case SidebarDensity::Compact:
+            action->setObjectName(QStringLiteral("CompactSidebarAction"));
+            registerTranslatable(action, QT_TRANSLATE_NOOP("MainWindow", "Compact"));
+            break;
+        case SidebarDensity::Minimal:
+            action->setObjectName(QStringLiteral("MinimalSidebarAction"));
+            registerTranslatable(action, QT_TRANSLATE_NOOP("MainWindow", "Minimal"));
+            break;
+        case SidebarDensity::Relaxed:
+        default:
+            action->setObjectName(QStringLiteral("RelaxedSidebarAction"));
+            registerTranslatable(action, QT_TRANSLATE_NOOP("MainWindow", "Relaxed"));
+            break;
+        }
         action->setCheckable(true);
         densityGroup->addAction(action);
-        action->setChecked(m_compactSidebar == compact);
-        connect(action, &QAction::triggered, this, [this, compact, densityGroup] {
-            if (m_compactSidebar == compact) {
+        action->setChecked(m_sidebarDensity == density);
+        connect(action, &QAction::triggered, this, [this, density, densityGroup, densities] {
+            if (m_sidebarDensity == density) {
                 return;
             }
             // 所有入口统一经过设置事务；成功后由 settingsChanged 更新视图和宽度。
             TerminalSettings settings = m_settingsService->currentSettings();
-            settings.compactSidebar = compact;
+            settings.sidebarDensity = density;
             QString error;
             if (!m_settingsService->save(settings, &error)) {
                 // 写入失败时恢复菜单勾选，避免显示尚未生效的选择。
-                densityGroup->actions().at(m_compactSidebar ? 1 : 0)->setChecked(true);
+                densityGroup->actions().at(densities.indexOf(m_sidebarDensity))->setChecked(true);
                 showTransientMessage(tr("Failed to save sidebar density: %1").arg(error), 10000);
             }
         });
     }
     // 设置页修改后同步菜单；仅设置勾选不会触发 triggered，因此不会递归保存。
     connect(m_settingsService, &TerminalSettingsService::settingsChanged, densityGroup,
-            [densityGroup](const TerminalSettings &settings) {
-                densityGroup->actions().at(settings.compactSidebar ? 1 : 0)->setChecked(true);
+            [densityGroup, densities](const TerminalSettings &settings) {
+                densityGroup->actions().at(densities.indexOf(settings.sidebarDensity))->setChecked(true);
             });
     viewMenu->addSeparator();
     QAction *showHostsAction = viewMenu->addAction(
@@ -1321,11 +1338,11 @@ MainWindow::MainWindow(ApplicationDatabase *database,
             &TerminalSettingsService::settingsChanged,
             this,
             [this, unlockVaultAction, lockVaultAction](const TerminalSettings &settings) {
-                if (m_compactSidebar != settings.compactSidebar) {
+                if (m_sidebarDensity != settings.sidebarDensity) {
                     // 旧拖动的防抖写入必须在换模式前结束，以免污染另一种模式的宽度记录。
                     m_sidebarWidthPersistTimer->stop();
                     persistSidebarWidth();
-                    m_compactSidebar = settings.compactSidebar;
+                    m_sidebarDensity = settings.sidebarDensity;
                     applySidebarDensity();
                     restoreSidebarWidth();
                 }
@@ -1739,29 +1756,29 @@ void MainWindow::applySidebarDensity()
     // 导航轨和内容栏同步收紧；使用实际控件尺寸，不改变终端字号或用户内容。
     // 主题刷新也会调用此方法；过渡期间不得重新施加最小宽度，否则动画又会卡在半途。
     m_sidebarPanel->setMinimumWidth(m_sidebarAnimation != nullptr ? 0
-                                    : (m_compactSidebar ? 220 : kSidebarMinimumWidth));
-    m_navigationRail->setFixedWidth(m_compactSidebar ? 56 : 72);
-    m_navigationRail->layout()->setContentsMargins(m_compactSidebar ? 6 : 10, 12, m_compactSidebar ? 6 : 10, 12);
-    m_navigationRail->layout()->setSpacing(m_compactSidebar ? 4 : 8);
+                                    : (compactLayout() ? 220 : kSidebarMinimumWidth));
+    m_navigationRail->setFixedWidth(compactLayout() ? 56 : 72);
+    m_navigationRail->layout()->setContentsMargins(compactLayout() ? 6 : 10, 12, compactLayout() ? 6 : 10, 12);
+    m_navigationRail->layout()->setSpacing(compactLayout() ? 4 : 8);
     for (auto *button : m_navigationRail->findChildren<QToolButton *>()) {
-        button->setFixedSize(m_compactSidebar ? QSize(36, 36) : QSize(44, 44));
-        button->setIconSize(m_compactSidebar ? QSize(17, 17) : QSize(21, 21));
+        button->setFixedSize(compactLayout() ? QSize(36, 36) : QSize(44, 44));
+        button->setIconSize(compactLayout() ? QSize(17, 17) : QSize(21, 21));
     }
     auto *contentLayout = static_cast<SidebarViewport *>(m_sidebarPanel)->content()->layout();
-    contentLayout->setContentsMargins(m_compactSidebar ? 6 : 10, m_compactSidebar ? 6 : 10,
-                                                m_compactSidebar ? 6 : 10, 8);
-    contentLayout->setSpacing(m_compactSidebar ? 4 : 8);
-    m_hostManager->setCompactMode(m_compactSidebar);
+    contentLayout->setContentsMargins(compactLayout() ? 6 : 10, compactLayout() ? 6 : 10,
+                                                compactLayout() ? 6 : 10, 8);
+    contentLayout->setSpacing(compactLayout() ? 4 : 8);
+    m_hostManager->setSidebarDensity(m_sidebarDensity);
 }
 
 void MainWindow::restoreSidebarWidth()
 {
-    int sidebarWidth = m_compactSidebar ? 260 : kSidebarDefaultWidth;
+    int sidebarWidth = compactLayout() ? 260 : kSidebarDefaultWidth;
     QString error;
     if (const std::optional<int> storedWidth =
-            m_database->intSetting((m_compactSidebar ? QStringLiteral("layout/sidebar_width_compact") : QString::fromLatin1(kSidebarWidthSettingKey)), &error);
+            m_database->intSetting((compactLayout() ? QStringLiteral("layout/sidebar_width_compact") : QString::fromLatin1(kSidebarWidthSettingKey)), &error);
         storedWidth.has_value()) {
-        sidebarWidth = qBound(m_compactSidebar ? 220 : kSidebarMinimumWidth, *storedWidth, kSidebarMaximumWidth);
+        sidebarWidth = qBound(compactLayout() ? 220 : kSidebarMinimumWidth, *storedWidth, kSidebarMaximumWidth);
     } else if (!error.isEmpty()) {
         // 读取失败与"用户从未拖动过"必须区分：前者说明磁盘上的值不可信，提示一次比静默
         // 套用默认宽度更诚实，用户至少知道这次布局没有按上次的来。
@@ -1791,14 +1808,14 @@ void MainWindow::persistSidebarWidth()
         return;
     }
     const int sidebarWidth = sizes.constFirst();
-    if (sidebarWidth < (m_compactSidebar ? 220 : kSidebarMinimumWidth)) {
+    if (sidebarWidth < (compactLayout() ? 220 : kSidebarMinimumWidth)) {
         // 收起动画或窗口过窄导致的临时挤压不代表用户意图，保存它会让下次启动的侧栏
         // 停在一个用户没选过的宽度上。
         return;
     }
 
     QString error;
-    if (!m_database->setIntSetting((m_compactSidebar ? QStringLiteral("layout/sidebar_width_compact") : QString::fromLatin1(kSidebarWidthSettingKey)),
+    if (!m_database->setIntSetting((compactLayout() ? QStringLiteral("layout/sidebar_width_compact") : QString::fromLatin1(kSidebarWidthSettingKey)),
                                    qMin(sidebarWidth, kSidebarMaximumWidth),
                                    &error)) {
         showTransientMessage(tr("Failed to save sidebar width: %1").arg(error), 10000);
@@ -1831,7 +1848,7 @@ void MainWindow::setSidebarVisible(const bool visible)
         m_sidebarAnimation = nullptr;
     }
 
-    const int minimumWidth = m_compactSidebar ? 220 : kSidebarMinimumWidth;
+    const int minimumWidth = compactLayout() ? 220 : kSidebarMinimumWidth;
     const QList<int> currentSizes = m_sidebarSplitter->sizes();
     const int currentWidth = currentSizes.isEmpty() ? 0 : currentSizes.constFirst();
     if (!reversing && !m_sidebarPanel->isHidden() && currentWidth >= minimumWidth) {
@@ -1840,7 +1857,7 @@ void MainWindow::setSidebarVisible(const bool visible)
     if (m_sidebarExpandedWidth < minimumWidth) {
         // 构造初期或首次展开时可能还没有一次有效的 splitterMoved；恢复逻辑已经根据密度
         // 设置过合法宽度，因此这里仅作最终安全兜底，避免动画目标为零导致无法展开。
-        m_sidebarExpandedWidth = m_compactSidebar ? 260 : kSidebarDefaultWidth;
+        m_sidebarExpandedWidth = compactLayout() ? 260 : kSidebarDefaultWidth;
     }
 
     m_sidebarTargetVisible = visible;
@@ -3117,7 +3134,7 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
                                         navigationSymbols.at(index),
                                         navigationIconColor));
         // 主题重绘也遵循当前密度，避免切换主题后图标恢复成宽松尺寸。
-        button->setIconSize(m_compactSidebar ? QSize(17, 17) : QSize(21, 21));
+        button->setIconSize(compactLayout() ? QSize(17, 17) : QSize(21, 21));
     }
     // 底部设置按钮创建较晚，主题更新后统一补齐启动密度及按钮尺寸。
     applySidebarDensity();

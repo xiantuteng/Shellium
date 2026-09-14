@@ -1894,6 +1894,10 @@ Bestätigen Sie, dass sich der Schlüssel geändert hat, ersetzen Sie den alten 
         <translation>Kompakt</translation>
     </message>
     <message>
+        <source>Minimal</source>
+        <translation>Minimal</translation>
+    </message>
+    <message>
         <source>Relaxed</source>
         <translation>Locker</translation>
     </message>
@@ -4027,6 +4031,10 @@ Nicht gespeicherte Änderungen wurden zurückgesetzt.</translation>
     <message>
         <source>Compact</source>
         <translation>Kompakt</translation>
+    </message>
+    <message>
+        <source>Minimal</source>
+        <translation>Minimal</translation>
     </message>
 </context>
 <context>

@@ -136,6 +136,9 @@ private slots:
     /** @brief 密度切换缩小实际行高、缩进及图标，同时保留选中项和折叠状态。 */
     void compactModeShrinksTreeAndPreservesState();
 
+    /** @brief 精简模式只画主机名称、不画地址副标题，且行高与缩进都比紧凑模式更紧。 */
+    void minimalModeHidesAddressAndShrinksFurtherThanCompact();
+
     /** @brief 多层展开时祖先连线连续，末尾节点以直角收尾，隐藏兄弟不延长连线。 */
     void nestedGuideLinesConnectAndStopAtLastSibling();
 
@@ -1870,6 +1873,30 @@ int inkWidth(const QImage &image, const QRect &area, const QColor &background)
     return rightmost < 0 ? 0 : rightmost - area.left() + 1;
 }
 
+/**
+ * @brief 统计某块区域里"有墨"的纵向跨度，用来区分一行文字和两行文字的绘制结果。
+ * @param background 该行的底色，与之明显不同的像素即视为文字笔画。
+ * @return 从最上一行墨迹到最下一行墨迹的像素跨度；整块空白返回 0。
+ */
+int textInkHeight(const QImage &image, const QRect &area, const QColor &background)
+{
+    int top = -1;
+    int bottom = -1;
+    for (int y = area.top(); y <= area.bottom() && y < image.height(); ++y) {
+        for (int x = area.left(); x <= area.right() && x < image.width(); ++x) {
+            const QColor pixel = image.pixelColor(x, y);
+            if (std::abs(pixel.red() - background.red()) > 24
+                || std::abs(pixel.green() - background.green()) > 24
+                || std::abs(pixel.blue() - background.blue()) > 24) {
+                top = top < 0 ? y : top;
+                bottom = y;
+                break;
+            }
+        }
+    }
+    return bottom < 0 ? 0 : bottom - top + 1;
+}
+
 } // namespace
 
 void HostManagerWidgetTest::compactModeShrinksTreeAndPreservesState()
@@ -1889,7 +1916,7 @@ void HostManagerWidgetTest::compactModeShrinksTreeAndPreservesState()
     const QRect relaxedFolder = tree->visualItemRect(folder);
     const QRect relaxedHost = tree->visualItemRect(host);
     const QSize relaxedIcon = tree->iconSize();
-    widget.setCompactMode(true);
+    widget.setSidebarDensity(SidebarDensity::Compact);
     QCOMPARE(tree->visualItemRect(folder).height(), 28);
     QCOMPARE(tree->visualItemRect(host).height(), 40);
     QCOMPARE(tree->indentation(), 24);
@@ -1901,12 +1928,59 @@ void HostManagerWidgetTest::compactModeShrinksTreeAndPreservesState()
     QTest::mouseClick(tree->viewport(), Qt::LeftButton, Qt::NoModifier,
                       QPoint(compactFolder.left() + 9, compactFolder.center().y()));
     QVERIFY(!folder->isExpanded());
-    widget.setCompactMode(false);
+    widget.setSidebarDensity(SidebarDensity::Relaxed);
     QVERIFY(!folder->isExpanded());
     folder->setExpanded(true);
     QCOMPARE(tree->visualItemRect(folder), relaxedFolder);
     QCOMPARE(tree->visualItemRect(host), relaxedHost);
     QCOMPARE(tree->iconSize(), relaxedIcon);
+}
+
+void HostManagerWidgetTest::minimalModeHidesAddressAndShrinksFurtherThanCompact()
+{
+    QString error;
+    QVERIFY2(seedGroupWithChildAndTopLevelHost(m_database.get(), &error), qPrintable(error));
+    HostManagerWidget widget(m_database.get(), m_vault.get());
+    widget.resize(400, 480);
+    widget.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&widget));
+    auto *tree = widget.findChild<QTreeWidget *>(QStringLiteral("HostTree"));
+    auto *folder = findItem(widget, QStringLiteral("上饶E呼即办"));
+    auto *host = findItem(widget, QStringLiteral("中间件"));
+    QVERIFY(tree && folder && host);
+    folder->setExpanded(true);
+
+    widget.setSidebarDensity(SidebarDensity::Compact);
+    const QRect compactHostRect = tree->visualItemRect(host);
+    const int compactFolderHeight = tree->visualItemRect(folder).height();
+    const int compactIndentation = tree->indentation();
+    QVERIFY(!compactHostRect.isEmpty());
+    const QImage compactImage = tree->viewport()->grab(compactHostRect).toImage();
+    // 名称从 metric(kHostTextLeft, 39) 起画；45px 起扫描能跳过左侧图标容器（最右到
+    // x=31），只统计名称/地址文字的墨迹。
+    const QColor background = compactImage.pixelColor(compactImage.width() - 1, 0);
+    const QRect compactTextArea(45, 0, compactImage.width() - 46, compactImage.height());
+    const int compactTextInkHeight = textInkHeight(compactImage, compactTextArea, background);
+
+    widget.setSidebarDensity(SidebarDensity::Minimal);
+    // 精简必须比紧凑更紧：行高和缩进都进一步收窄，而不是简单复用紧凑的取值。
+    QVERIFY(tree->visualItemRect(folder).height() < compactFolderHeight);
+    QVERIFY(tree->indentation() < compactIndentation);
+    const QRect minimalHostRect = tree->visualItemRect(host);
+    QVERIFY(!minimalHostRect.isEmpty());
+    QVERIFY(minimalHostRect.height() < compactHostRect.height());
+
+    const QImage minimalImage = tree->viewport()->grab(minimalHostRect).toImage();
+    const QRect minimalTextArea(45, 0, minimalImage.width() - 46, minimalImage.height());
+    const int minimalTextInkHeight = textInkHeight(minimalImage, minimalTextArea, background);
+    // 地址副标题（HostDetailRole）仍留在数据里供其它逻辑使用，精简只是不再绘制它；
+    // 用文字墨迹的纵向跨度代替逐像素快照——两行文字的墨迹跨度明显高于一行，且不受
+    // 具体字体渲染细节影响，比对图像相等更不容易在不同平台上误报。
+    QVERIFY2(minimalTextInkHeight > 0, "精简模式下应该仍然画出主机名称");
+    QVERIFY2(minimalTextInkHeight < compactTextInkHeight,
+             qPrintable(QStringLiteral("精简模式文字墨迹高度 %1 应明显小于紧凑模式的两行高度 %2")
+                            .arg(minimalTextInkHeight)
+                            .arg(compactTextInkHeight)));
 }
 
 void HostManagerWidgetTest::childHostInteractionDoesNotAlterGuideLines()

@@ -905,7 +905,8 @@ void MainWindowShellTest::emptyStateKeepsNewTabButtonNextToTheTitleIdentity()
 void MainWindowShellTest::sidebarDensityPersistsAndRestores()
 {
     QString error;
-    QVERIFY(m_database->setIntSetting(QStringLiteral("layout/sidebar_compact"), 0, &error));
+    QVERIFY(m_database->setSetting(QStringLiteral("layout/sidebar_compact"),
+                                   QStringLiteral("relaxed"), &error));
     QVERIFY(m_database->setIntSetting(QStringLiteral("layout/sidebar_width"), 360, &error));
     QVERIFY(m_database->setIntSetting(QStringLiteral("layout/sidebar_width_compact"), 260, &error));
     {
@@ -915,10 +916,11 @@ void MainWindowShellTest::sidebarDensityPersistsAndRestores()
         QVERIFY(QTest::qWaitForWindowExposed(&window));
         auto *compact = window.findChild<QAction *>(QStringLiteral("CompactSidebarAction"));
         auto *relaxed = window.findChild<QAction *>(QStringLiteral("RelaxedSidebarAction"));
+        auto *minimal = window.findChild<QAction *>(QStringLiteral("MinimalSidebarAction"));
         auto *panel = window.findChild<QWidget *>(QStringLiteral("SidebarPanel"));
         auto *rail = window.findChild<QWidget *>(QStringLiteral("NavigationRail"));
         auto *tree = window.findChild<QTreeWidget *>(QStringLiteral("HostTree"));
-        QVERIFY(compact && relaxed && panel && rail && tree);
+        QVERIFY(compact && relaxed && minimal && panel && rail && tree);
         QVERIFY(relaxed->isChecked());
         // 让设置页保持打开，检验菜单与设置使用同一个服务，两个方向都应即时同步。
         auto *service = window.findChild<TerminalSettingsService *>();
@@ -935,13 +937,23 @@ void MainWindowShellTest::sidebarDensityPersistsAndRestores()
         QVERIFY(panel->width() < relaxedWidth);
         QCOMPARE(rail->width(), 56);
         QCOMPARE(tree->indentation(), 24);
+
+        // 精简是第三档：导航栏尺寸和紧凑一样，但主机树缩进要比紧凑更紧。
+        minimal->trigger();
+        QCoreApplication::processEvents();
+        QVERIFY(minimal->isChecked());
+        QCOMPARE(selector->currentData(), 2);
+        QCOMPARE(rail->width(), 56);
+        QVERIFY(tree->indentation() < 24);
+
         // 来回切换应恢复用户此前实际宽度，不能把像素值当成比例反复缩放。
         selector->setCurrentData(0);
         QCoreApplication::processEvents();
         QVERIFY(relaxed->isChecked());
         QCOMPARE(panel->width(), relaxedWidth);
         compact->trigger();
-        QCOMPARE(m_database->intSetting(QStringLiteral("layout/sidebar_compact"), &error).value_or(-1), 1);
+        QCOMPARE(m_database->setting(QStringLiteral("layout/sidebar_compact")).value_or(QString()),
+                 QStringLiteral("compact"));
     }
     // 复用测试数据库模拟重启，检验真实设置读取，而不是只检查内存布尔变量。
     MainWindow restarted(m_database, m_vault);
@@ -953,7 +965,8 @@ void MainWindowShellTest::sidebarDensityPersistsAndRestores()
     QCOMPARE(tree->indentation(), 24);
     relaxed->trigger();
     QCOMPARE(tree->indentation(), 32);
-    QCOMPARE(m_database->intSetting(QStringLiteral("layout/sidebar_compact"), &error).value_or(-1), 0);
+    QCOMPARE(m_database->setting(QStringLiteral("layout/sidebar_compact")).value_or(QString()),
+             QStringLiteral("relaxed"));
 }
 
 void MainWindowShellTest::workspacesNavigationButtonFollowsHosts()
