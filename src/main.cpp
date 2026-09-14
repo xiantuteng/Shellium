@@ -4,6 +4,7 @@
 #include "settings/BundledFonts.h"
 #include "storage/ApplicationDatabase.h"
 #include "ui/VaultDialog.h"
+#include "ui/ButtonCursorPolicy.h"
 
 #include <QApplication>
 #include <QCommandLineOption>
@@ -171,6 +172,8 @@ bool seedHostUiPreview(ApplicationDatabase *database, QString *errorMessage)
 int main(int argc, char *argv[])
 {
     QApplication application(argc, argv);
+    // 在任何对话框创建前安装统一策略，覆盖启动保险库、主窗口及后续动态生成的图标按钮。
+    new ButtonCursorPolicy(application);
     QCoreApplication::setApplicationName(QStringLiteral("Shellium"));
     QCoreApplication::setApplicationVersion(QStringLiteral("0.2.3"));
     QCoreApplication::setOrganizationName(QStringLiteral("Shellium"));

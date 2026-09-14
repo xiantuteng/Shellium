@@ -446,6 +446,11 @@ endif()
 include(CTest)
 if(BUILD_TESTING)
     find_package(Qt6 6.8 REQUIRED COMPONENTS Test Sql)
+    # 独立验证应用级光标策略，避免依赖数据库、SSH 或用户配置即可发现按钮交互回归。
+    qt_add_executable(ShelliumButtonCursorTests tests/ButtonCursorTest.cpp)
+    target_include_directories(ShelliumButtonCursorTests PRIVATE src)
+    target_link_libraries(ShelliumButtonCursorTests PRIVATE Qt6::Widgets Qt6::Test)
+    add_test(NAME ShelliumButtonCursorTests COMMAND ShelliumButtonCursorTests)
 
     # 平台 socket 抽象单独测试，Windows 回环 TCP pair 与 POSIX socketpair 共用同一契约。
     # 该目标不引入 libssh，能把所有权或错误码映射故障定位到最小范围。
