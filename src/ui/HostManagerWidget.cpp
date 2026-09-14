@@ -3389,6 +3389,7 @@ HostManagerWidget::HostManagerWidget(ApplicationDatabase *database,
     m_tree->setProperty("hostIconSurfaceColor", QStringLiteral("#ffffff"));
     m_tree->setProperty("hostHoverBackgroundColor", QStringLiteral("#e1e7eb"));
     m_tree->setHeaderHidden(true);
+    m_tree->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
     // 展开箭头改由 HostItemDelegate 画在分组行左侧，Qt 自带的分支装饰列必须关掉，否则
     // 会出现两套箭头和不可控的平台间距。32px 层级缩进配合委托绘制的中性连线表达父子
     // 关系；连线不随悬停/选中变色，右侧圆角卡片也不会再带矩形背景“小尾巴”。
