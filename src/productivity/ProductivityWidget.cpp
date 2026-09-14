@@ -147,6 +147,7 @@ void ProductivityWidget::buildUi()
     m_snippetList->setDragDropMode(QAbstractItemView::InternalMove);
     m_snippetList->setDefaultDropAction(Qt::MoveAction);
     m_snippetList->setContextMenuPolicy(Qt::CustomContextMenu);
+    m_snippetList->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
     snippetPageLayout->addWidget(m_snippetList, 1);
     const int snippetTabIndex = m_tabs->addTab(snippetPage, tr("Command snippets"));
     i18n::onRetranslate(this, [this, snippetTabIndex, newSnippetButton, removeButton] {
@@ -251,6 +252,7 @@ void ProductivityWidget::buildUi()
     historyLayout->addWidget(m_historyPrefixEdit);
     m_historyList = new QListWidget(historyPage);
     m_historyList->setContextMenuPolicy(Qt::CustomContextMenu);
+    m_historyList->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
     historyLayout->addWidget(m_historyList, 1);
     auto *historyExecuteButton = new QPushButton(tr("Run on the selected host"), historyPage);
     historyExecuteButton->setObjectName(QStringLiteral("productivityHistoryExecute"));
@@ -335,6 +337,7 @@ void ProductivityWidget::buildUi()
         tr("After choosing targets you can turn on live keyboard broadcast; the source terminal is bound by the main window to the current tab."), broadcastPage));
     m_broadcastTargets = new QListWidget(broadcastPage);
     m_broadcastTargets->setObjectName(QStringLiteral("productivityBroadcastTargets"));
+    m_broadcastTargets->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
     broadcastLayout->addWidget(m_broadcastTargets, 1);
     m_broadcastEnabled = new QCheckBox(tr("Turn on live raw input broadcast"), broadcastPage);
     m_broadcastEnabled->setObjectName(QStringLiteral("productivityBroadcastEnabled"));

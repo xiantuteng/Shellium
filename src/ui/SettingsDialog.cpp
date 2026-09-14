@@ -256,6 +256,7 @@ void SettingsDialog::buildNavigation()
     m_navigationList->setObjectName(QStringLiteral("SettingsNav"));
     m_navigationList->setFrameShape(QFrame::NoFrame);
     m_navigationList->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_navigationList->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
     m_navigationList->setUniformItemSizes(true);
     for (int i = 0; i < 5; ++i) {
         m_navigationList->addItem(QString());

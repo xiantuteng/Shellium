@@ -385,6 +385,7 @@ TerminalView::TerminalView(QWidget *parent)
     // 陈旧方框样式。
     QAbstractItemView *completionPopup = m_commandCompleter->popup();
     completionPopup->setObjectName(QStringLiteral("CommandCompletionPopup"));
+    completionPopup->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
     if (auto *completionList = qobject_cast<QListView *>(completionPopup)) {
         // QCompleter 的默认弹层当前是 QListView。候选都使用同一种字体和单行文本，固定统一
         // 行尺寸可避免每次滚动都重新计算高度；spacing 归零则把空间留给文字而不是空白。

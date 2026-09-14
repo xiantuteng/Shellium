@@ -761,6 +761,7 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
             this, &RemoteFileManagerWidget::cycleLocalSort);
     m_localTree->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     m_localTree->setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
+    m_localTree->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
     localLayout->addWidget(m_localTree, 1);
 
     auto *remotePanel = new QWidget(contentSplitter);
@@ -849,6 +850,7 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     // 宽度不足时显示横向滚动条，而不是隐藏列；按像素滚动可停在任意列中间。
     m_fileTree->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     m_fileTree->setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
+    m_fileTree->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
     remoteLayout->addWidget(m_fileTree, 1);
 
     contentSplitter->addWidget(localPanel);
@@ -1007,6 +1009,7 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     m_transferQueueList->setMaximumHeight(116);
     m_transferQueueList->setAlternatingRowColors(false);
     m_transferQueueList->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_transferQueueList->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
     m_transferQueueList->setSelectionMode(QAbstractItemView::SingleSelection);
     m_transferQueueList->setContextMenuPolicy(Qt::CustomContextMenu);
     m_transferQueueList->setToolTip(

@@ -422,6 +422,7 @@ public:
         m_tree->setUniformRowHeights(true);
         m_tree->setSelectionMode(QAbstractItemView::SingleSelection);
         m_tree->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        m_tree->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
         m_tree->setProperty("hostIconSurfaceColor", QStringLiteral("#ffffff"));
         m_tree->setProperty("hostHoverBackgroundColor", QStringLiteral("#e1e7eb"));
         auto *treeDelegate = new PortForwardHostDelegate(m_tree);
@@ -1025,6 +1026,7 @@ PortForwardManagerWidget::PortForwardManagerWidget(ApplicationDatabase *database
     m_ruleList->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_ruleList->setContextMenuPolicy(Qt::CustomContextMenu);
     m_ruleList->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_ruleList->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
     auto *managementButtons = new QHBoxLayout;
     managementButtons->setObjectName(QStringLiteral("PortForwardManagementLayout"));
     managementButtons->setSpacing(6);

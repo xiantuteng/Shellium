@@ -1163,6 +1163,7 @@ WorkspaceSidebarWidget::WorkspaceSidebarWidget(QWidget *parent)
     m_terminalList->setUniformItemSizes(true);
     m_terminalList->setSelectionMode(QAbstractItemView::SingleSelection);
     m_terminalList->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_terminalList->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
     auto *delegate = new WorkspaceTerminalRowDelegate(m_terminalList);
     delegate->onCloseClicked = [this](const int row) {
         if (m_workspace != nullptr && row >= 0 && row < m_workspace->terminals().size()) {

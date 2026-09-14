@@ -4420,6 +4420,7 @@ void MainWindow::openCommandPalette()
     filterEdit->setPlaceholderText(tr("Type a command name to filter…"));
     auto *list = new QListWidget(&dialog);
     list->setSelectionMode(QAbstractItemView::SingleSelection);
+    list->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
     layout->addWidget(filterEdit);
     layout->addWidget(list, 1);
     layout->addWidget(new QLabel(tr("Enter to run, Esc to close; only currently available actions are shown here."), &dialog));
