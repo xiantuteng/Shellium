@@ -428,6 +428,83 @@ libvterm 把双宽字符（中日韩、全角标点、部分 emoji）的**右半
 （剪贴板、导出、日志、搜索比对）的路径都用格式判定，绝不无差别删除 U+4E2D。回归
 `TerminalAltScreenTest::partialSelectionDropsLineHeightAnchors`。
 
+### 15.7 输出洪流：`cat` 一个二进制文件会同时引爆五个问题
+
+`cat 某个.jar` 很容易被当成"用户瞎折腾"，但它会一次性暴露终端管线上五个互相独立的缺陷，
+其中两个会**直接 abort 掉整个进程**（用户机器上已留下崩溃报告）。全部回归在
+`ShelliumTerminalFloodTests`。
+
+#### （1）回流必须保持关闭
+
+`VtermBridge` 构造时显式 `vterm_screen_enable_reflow(m_screen, false)`——这也是 libvterm 的
+默认值。libvterm 0.3.3 的 `resize_buffer()` 自底向上重排逻辑行，某条行放不进新网格时只用
+
+```c
+if(old_row_start <= old_cursor.row && old_cursor.row < old_row_end)
+```
+
+补救光标（末尾的 `<` 是 off-by-one），补不到就 `fprintf` + `abort()`。
+
+**别再试"识别危险状态再临时关掉回流"。** 这条路已经走过并失败：判据只能预测上游那段有
+缺陷的代码会怎么走，而连续多轮缩放（真实的窗口拖拽就是这样）会积累出判据覆盖不到的状态。
+随机内容 + 连续多轮缩放的 fuzz：4000 例里 646 次 abort，判据漏掉 436 次；同一套 fuzz 在关闭
+回流下 20000 例零 abort。代价是缩放不再重排长行（变窄时尾部被截断），这正是不做回流的终端
+的一贯行为。上游修掉 off-by-one 之后才可以重新打开，届时请连同 fuzz 一起重跑。
+
+#### （2）每次 `vterm_set_size` 之前必须把光标夹回网格
+
+`VtermBridge::clampCursorIntoGrid()`。libvterm 0.3.3 的 `savecursor(state, 0)`（DECRC，
+`ESC 8`）直接 `state->pos = state->saved.pos`，**不做任何夹取**；而缩小网格的 `on_resize`
+只夹 `state->pos`，从不更新 `state->saved.pos`。于是
+
+> 大网格里 `ESC 7` → 网格缩小 → `ESC 8`
+
+就留下一个越界的光标行，下一次 `vterm_set_size` 在 `resize_buffer()` 里永远找不到它，
+`new_cursor` 保持 `{-1,-1}`，随即 abort。二进制文件里 `ESC 7`/`ESC 8` 不过是两个字节的巧合
+组合，而缩放随时会发生——改窗口、缩放字号，甚至 `noteRenderedCellHeight()` 的首帧行高纠正，
+**用户什么都不用做**。
+
+**这条路径与回流无关**（关掉回流照样复现），当初正是因为先入为主地以为"关掉回流就完了"
+而多花了一轮排查。libvterm 没有公开的光标写接口，因此用它自己的协议搬：CUP 在 `on_csi`
+收尾处一定会被夹进网格（origin 模式夹进滚动区，非 origin 夹进 `[0, rows-1]`）。
+
+#### （3）BEL 必须限流
+
+BEL 只是一个普通字节（0x07），二进制里满地都是——那个 34MB 的 jar 含 **122873 个**。一个
+字节一次 `QApplication::beep()` 意味着在 GUI 线程的解析循环里同步响十几万次，macOS 会把每
+一声都压进音频队列：命令早就跑完了，机器还在"嘟嘟"响。限流放在 `VtermBridge::bellCallback`
+（200ms 抑制窗口，与 xterm 的 `bellSuppressTime` 一致），**不是**放在某个消费方——可听响铃、
+将来可能的视觉响铃都该看到同一串已经合并好的事件。修复后同一个文件只放出 36~48 声。
+
+#### （4）PTY 读取端必须有背压
+
+GUI 线程那一侧要把字节喂进 libvterm、重排 QTextDocument，实测吞吐只有约 8 MB/s（Release，
+Debug 更低），比 `cat` 往 PTY 里灌的速度慢一到两个数量级。读到 EAGAIN 为止的读循环会把差额
+全部堆进 GUI 线程的事件队列：34MB 的文件实测让常驻内存冲到 234MB，而排在后面的重绘和按键
+一次都轮不到——**这就是用户看到的"界面卡住"**。
+
+`LocalShellWorker` 用 `m_outputInFlight` 做有界在途字节数（1 MiB），超限就不再 poll
+`POLLIN`，让内核缓冲区顶住、`cat` 自己阻塞在 `write()` 上——这正是真实终端的行为。实测
+128MiB 的输出在 GUI 线程完全不回执时只发出 1048779 字节就停住了。
+
+**消费方必须无条件调用 `notifyOutputConsumed()`**，包括因会话代次不符而丢弃的那批；漏调会
+让计数只增不减，读取端永久停摆。回执时**不能用 `m_localWorker`**：会话已切换时它指向的是
+新 worker，回执会记到错误的那一个头上。
+
+#### （5）关闭路径必须继续排空 PTY，否则 SIGKILL 也杀不掉子进程
+
+主端不再读时，写终端的进程停在内核的 tty 输出等待里，信号要等它回到用户态才生效——而它回
+不去。实测现象是 `kill(pid, SIGKILL)` 返回 0、`kill(pid, 0)` 仍返回 0，`waitpid` 永远等不到
+它退出，工作线程就此卡死，析构时报 `QThread: Destroyed while thread is still running`。
+**用户关掉一个正在 `cat` 大文件的标签页就会撞上。**
+
+`LocalShellWorker` 的 SIGHUP 宽限期与 SIGKILL 之后都边排空边等：排空到位 76ms，缺排空
+7066ms。
+
+> 写用例时注意：SIGKILL 之后那段轮询有上限，超时后 `close(masterFd)` 也会顺带把子进程放
+> 出来，所以**只断言"线程能结束"的用例抓不住这个缺陷**（已实测：去掉排空照样通过）。
+> 必须断言关闭耗时。
+
 ---
 
 ## 十六、Qt 拖拽：非 item-view 的 QAbstractScrollArea 要注册 viewport

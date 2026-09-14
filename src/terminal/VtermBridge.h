@@ -343,15 +343,12 @@ private:
     static void removeTrailingBlocks(QTextDocument *document, int count);
 
     /**
-     * @brief 当前状态下开启回流做这次缩放，会不会让 libvterm 找不到光标从而 abort。
-     * @param newRows 目标行数（已规范化为 >= 1）。
-     * @param newColumns 目标列数（已规范化为 >= 1）。
-     * @return 需要临时关闭回流时返回 true。
+     * @brief 把落在当前网格之外的光标夹回网格内。
      *
-     * 判据严格宽于上游的中止条件，宁可多关一次回流也不能漏判——漏判的后果是整个进程被
-     * abort 掉。详见实现处的注释。
+     * 必须在每次 vterm_set_size 之前调用：越界的光标会让 libvterm 0.3.3 直接 abort 掉
+     * 整个进程。越界只可能由 DECRC 造成，详见实现处的注释。
      */
-    [[nodiscard]] bool reflowWouldStrandCursor(int newRows, int newColumns) const;
+    void clampCursorIntoGrid();
 
     /** @brief libvterm 输出协议响应时调用。 */
     static void outputCallback(const char *bytes, size_t length, void *user);

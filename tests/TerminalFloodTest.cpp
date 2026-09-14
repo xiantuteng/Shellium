@@ -40,8 +40,10 @@ class TerminalFloodTest : public QObject
 private slots:
     /** @brief 屏幕被一条超长续行填满时缩小网格不得让进程 abort。 */
     void shrinkingGridWithScreenFillingLineSurvives();
-    /** @brief 放大网格仍然走正常回流路径，缩放本身必须真的生效。 */
+    /** @brief 缩放必须真的生效，不能因为规避崩溃而被跳过。 */
     void resizeStillAppliesNewGeometry();
+    /** @brief DECRC 灌回来的越界光标不得让下一次缩放 abort 掉进程。 */
+    void staleSavedCursorSurvivesResize();
     /** @brief 密集 BEL 必须被合成为稀疏的响铃事件。 */
     void denseBellsAreCoalesced();
     /** @brief 孤立的 BEL 不受限流影响，第一声必须立即发出。 */
@@ -67,11 +69,22 @@ void TerminalFloodTest::shrinkingGridWithScreenFillingLineSurvives()
     for (int rows = kRows - 1; rows >= 1; --rows) {
         bridge.resize(rows, kColumns);
     }
-    // 同时收缩列数：new_height = ceil(width / new_cols) 会随列数变小而变大，缩列同样
-    // 能把逻辑行顶出新网格。
+    // 同时收缩列数：libvterm 的 new_height = ceil(width / new_cols) 会随列数变小而变大，
+    // 缩列同样能把逻辑行顶出新网格。
     bridge.resize(kRows, kColumns);
     bridge.feed(screenFillingUnbrokenLine());
     bridge.resize(kRows, kColumns / 4);
+
+    // 真实的窗口拖拽是"缩放—继续输出—再缩放"的连续多轮，每一轮都带着上一轮留下的状态。
+    // 这一段才是关键：只做单次缩放的用例曾经放过了一个缺陷修复——当时的做法是"识别危险
+    // 状态再临时关掉回流"，单次缩放全部拦住，多轮缩放却在真实文件上照样 abort。
+    bridge.resize(kRows, kColumns);
+    for (int round = 0; round < 40; ++round) {
+        bridge.feed(screenFillingUnbrokenLine());
+        bridge.resize(kRows - round % 9, kColumns - (round % 5) * 20);
+        bridge.feed(QByteArray(600, 'q'));
+        bridge.resize(kRows - (round + 4) % 11, kColumns - ((round + 2) % 7) * 15);
+    }
 
     // 活到这里就说明没有 abort；再确认桥接层状态仍然可用。
     QTextDocument document;
@@ -97,6 +110,38 @@ void TerminalFloodTest::resizeStillAppliesNewGeometry()
     bridge.render(&document);
     QVERIFY2(bridge.renderedCursorPosition() >= 0,
              "缩放后光标没有落在文档里，说明网格与内容对不上");
+}
+
+void TerminalFloodTest::staleSavedCursorSurvivesResize()
+{
+    // 回归目标：libvterm 0.3.3 的 savecursor(state, 0)（DECRC，`ESC 8`）直接把
+    // state->saved.pos 灌给 state->pos，**不做任何网格夹取**；而缩小网格的 on_resize 只夹
+    // state->pos，从不更新 saved.pos。于是"大网格里 ESC 7 → 缩小 → ESC 8"就留下一个越界
+    // 的光标行，下一次 vterm_set_size 在 resize_buffer() 里永远找不到它，随即
+    // fprintf + abort() 打死整个进程。
+    //
+    // `cat` 一个二进制文件必然撞上：ESC 7 / ESC 8 只是两个字节的巧合组合，而缩放随时会
+    // 发生（改窗口、缩放字号，甚至首帧的行高纠正）。这条路径与回流无关——关掉回流照样
+    // 复现，所以它必须有自己的用例。
+    //
+    // 回归时同样表现为整个测试进程被 SIGABRT 打死。
+    VtermBridge bridge;
+    bridge.resize(19, 97);
+    bridge.feed(QByteArrayLiteral("\x1b[19;40H"));   // 光标到最后一行
+    bridge.feed(QByteArrayLiteral("\x1b" "7"));      // DECSC：保存第 18 行
+    bridge.resize(18, 97);                           // 缩小：state->pos 被夹到 17
+    bridge.feed(QByteArrayLiteral("\x1b" "8"));      // DECRC：把 18 灌回来，越界
+    bridge.resize(19, 97);                           // 没有修复时在这里 abort
+
+    // 再走一遍相反方向，确认修复不是只对某一个方向生效。
+    bridge.feed(QByteArrayLiteral("\x1b[19;90H\x1b" "7"));
+    bridge.resize(6, 40);
+    bridge.feed(QByteArrayLiteral("\x1b" "8"));
+    bridge.resize(24, 200);
+
+    QTextDocument document;
+    bridge.render(&document);
+    QVERIFY(document.blockCount() > 0);
 }
 
 void TerminalFloodTest::denseBellsAreCoalesced()

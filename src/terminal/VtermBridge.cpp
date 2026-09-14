@@ -93,7 +93,25 @@ VtermBridge::VtermBridge(QObject *parent)
     vterm_screen_set_unrecognised_fallbacks(m_screen, &fallbacks, this);
     vterm_screen_set_damage_merge(m_screen, VTERM_DAMAGE_SCROLL);
     vterm_screen_enable_altscreen(m_screen, 1);
-    vterm_screen_enable_reflow(m_screen, true);
+    // 回流（缩放时按新宽度重排已换行的长行）必须保持关闭——这也是 libvterm 的默认值。
+    //
+    // libvterm 0.3.3 的 screen.c 在回流路径上会 abort 掉整个进程：resize_buffer() 自底向上
+    // 重排逻辑行，某条行放不进新网格时它只用
+    //     if(old_row_start <= old_cursor.row && old_cursor.row < old_row_end)
+    // 补救光标（末尾的 `<` 是 off-by-one），补不到就
+    //     fprintf(stderr, "screen_resize failed to update cursor position"); abort();
+    // ——不是断言，Release 下照样死。`cat` 一个二进制文件正好制造触发条件：文件里长段没有
+    // 换行，屏幕被一条横跨整屏的逻辑行填满，此后任何一次缩小网格都可能触发，包括
+    // noteRenderedCellHeight() 的首帧行高纠正，也就是说用户什么都不用做。
+    //
+    // 曾尝试"识别危险状态再临时关掉回流"，这条路走不通，别再试：判据只能预测上游那段有
+    // 缺陷的代码会怎么走，而连续多轮缩放（真实的窗口拖拽就是这样）会积累出判据覆盖不到的
+    // 状态。随机内容 + 连续多轮缩放的 fuzz：4000 例里 646 次 abort，判据漏掉 436 次；同一套
+    // fuzz 在关闭回流下 20000 例零 abort。代价是缩放不再重排长行（变窄时尾部被截断），这
+    // 正是不做回流的终端的一贯行为，用整个进程的存活换它是划算的。
+    //
+    // libvterm 修掉这个 off-by-one 之后可以重新打开，届时请连同上面的 fuzz 一起重跑。
+    vterm_screen_enable_reflow(m_screen, false);
 
     VTermColor foreground;
     VTermColor background;
@@ -265,42 +283,43 @@ void VtermBridge::resetTerminal()
     invalidateDocument();
 }
 
-bool VtermBridge::reflowWouldStrandCursor(const int newRows, const int newColumns) const
+void VtermBridge::clampCursorIntoGrid()
 {
-    // libvterm 0.3.3 的 screen_resize 在回流时自底向上重排逻辑行。某个逻辑行放不进新网格
-    // 时（源码里的 `new_row_start < 0`）它会就地 break，并只在这一个条件下补救光标：
-    //
-    //     if(old_row_start <= old_cursor.row && old_cursor.row < old_row_end)
-    //
-    // 末尾那个 `<` 是上游的 off-by-one：光标恰好停在这条逻辑行**最后一行**时两侧都不成立，
-    // new_cursor 保持 {-1,-1}，函数随即
-    //
-    //     fprintf(stderr, "screen_resize failed to update cursor position"); abort();
-    //
-    // ——不是断言、不受 NDEBUG 影响，整个进程当场死掉。`cat` 一个二进制文件正好制造这个
-    // 局面：文件里长段没有换行，屏幕被一条横跨整屏的逻辑行填满，光标就停在它的最后一行；
-    // 此后任何一次缩小网格（改窗口大小、缩放字号、甚至 noteRenderedCellHeight() 的首帧
-    // 行高纠正）都会触发。用户机器上已经留下两份栈完全一致的崩溃报告。
-    //
-    // 触发的必要条件是"光标所在行是续行"，因此这里用它作为判据——它严格宽于上游的中止
-    // 条件，不可能漏判（8000 例随机内容 + 随机缩放的 fuzz：258 次 abort 全部命中，0 漏）。
-    // 纯放大网格不可能触发：新列不小则每条逻辑行的回流高度只减不增，new_row_start 必然
-    // 非负，故再加一道方向限制，把误判压到最低。
-    // 误判的代价仅仅是这一次缩放不重排已换行的长行，不影响正确性。
-    if (newRows >= m_rows && newColumns >= m_columns) {
-        return false;
-    }
     VTermState *state = vterm_obtain_state(m_vterm);
     if (state == nullptr) {
-        return false;
+        return;
     }
     VTermPos cursor {};
     vterm_state_get_cursorpos(state, &cursor);
-    if (cursor.row < 0 || cursor.row >= m_rows) {
-        return false;
+    if (cursor.row >= 0 && cursor.row < m_rows
+        && cursor.col >= 0 && cursor.col < m_columns) {
+        return;
     }
-    const VTermLineInfo *lineInfo = vterm_state_get_lineinfo(state, cursor.row);
-    return lineInfo != nullptr && lineInfo->continuation != 0;
+
+    // 走到这里说明 libvterm 的光标已经落在当前网格之外。唯一的来源是 DECRC（`ESC 8`）：
+    // state.c 的 savecursor(state, 0) 直接 `state->pos = state->saved.pos`，**不做任何夹
+    // 取**，而 on_resize 缩小网格时只夹 state->pos，从不更新 state->saved.pos。于是
+    //     大网格里 ESC 7 → 网格缩小 → ESC 8
+    // 就把一个越界的行号灌了回来。`cat` 一个二进制文件必然撞上：ESC 7 / ESC 8 不过是两个
+    // 字节的巧合组合，而缩放随时会发生（改窗口、缩放字号，甚至 TerminalView 首帧的行高
+    // 纠正）。
+    //
+    // 后果是下一次 vterm_set_size 直接 abort 掉整个进程：resize_buffer() 遍历旧网格找
+    // old_cursor 所在行，越界的行号永远找不到，new_cursor 保持 {-1,-1}，函数随即
+    //     fprintf(stderr, "screen_resize failed to update cursor position"); abort();
+    // 这条路径与回流无关（关掉回流照样复现），必须单独修。
+    //
+    // libvterm 没有公开的光标写接口，因此用它自己的协议把光标搬回来：CUP 在 on_csi 收尾
+    // 处一定会被夹进网格（origin 模式夹进滚动区，非 origin 夹进 [0, rows-1]），两种模式
+    // 都保证落回范围内。这正是 on_resize 对 state->pos 做的同一件事——光标此刻已经是非法
+    // 值，把它夹回最近的合法位置是修复而不是破坏。
+    const int row = std::clamp(cursor.row, 0, m_rows - 1);
+    const int column = std::clamp(cursor.col, 0, m_columns - 1);
+    const QByteArray reposition = QByteArrayLiteral("\x1b[")
+        + QByteArray::number(row + 1) + QByteArrayLiteral(";")
+        + QByteArray::number(column + 1) + QByteArrayLiteral("H");
+    vterm_input_write(m_vterm, reposition.constData(),
+                      static_cast<size_t>(reposition.size()));
 }
 
 void VtermBridge::resize(const int rows, const int columns)
@@ -310,18 +329,11 @@ void VtermBridge::resize(const int rows, const int columns)
     if (normalizedRows == m_rows && normalizedColumns == m_columns) {
         return;
     }
-    // 回流会让 libvterm 0.3.3 在这一局面下直接 abort，见 reflowWouldStrandCursor()。
-    // 只对这一次缩放关掉回流，随后立即恢复，正常缩放仍然重排长行。
-    const bool suspendReflow = reflowWouldStrandCursor(normalizedRows, normalizedColumns);
-    if (suspendReflow) {
-        vterm_screen_enable_reflow(m_screen, false);
-    }
+    // 必须在 vterm_set_size 之前：越界光标会让它 abort 掉整个进程。
+    clampCursorIntoGrid();
     m_rows = normalizedRows;
     m_columns = normalizedColumns;
     vterm_set_size(m_vterm, m_rows, m_columns);
-    if (suspendReflow) {
-        vterm_screen_enable_reflow(m_screen, true);
-    }
     vterm_screen_flush_damage(m_screen);
     // 改变网格会让 libvterm 回流当前屏幕，已经写进文档的段与新的行列不再对应。
     invalidateDocument();
