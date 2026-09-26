@@ -369,7 +369,10 @@ void TerminalPane::connectToHosts(const QList<ConnectionTarget> &connectionPlan)
     connect(m_sessionStack,
             &SshSessionStack::outputReady,
             this,
-            [this, sessionGeneration](const QByteArray &bytes) {
+            [this, sessionGeneration, stack = m_sessionStack](const QByteArray &bytes) {
+                // 与本地 PTY 相同：无论渲染还是因代次丢弃，都必须回执解除背压。
+                const auto reportConsumed = qScopeGuard(
+                    [stack, size = bytes.size()]() { stack->notifyOutputConsumed(size); });
                 if (sessionGeneration == m_sessionGeneration) {
                     m_terminalView->appendTerminalOutput(m_echoFilter.filter(bytes));
                 }

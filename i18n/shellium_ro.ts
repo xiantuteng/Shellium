@@ -3016,6 +3016,10 @@ Pentru a nu suprascrie datele de autentificare existente, Shellium nu creează a
         <source>The vault has no master password configuration to verify against.</source>
         <translation type="unfinished">Seiful nu conține nicio configurație de parolă principală de verificat.</translation>
     </message>
+    <message>
+        <source>Reset terminal</source>
+        <translation type="unfinished">Resetează terminalul</translation>
+    </message>
 </context>
 <context>
     <name>RemoteFileManagerWidget</name>
@@ -3811,6 +3815,10 @@ Acest algoritm este învechit; se recomandă actualizarea configurației SSH a s
         <translation type="unfinished">rânduri</translation>
     </message>
     <message>
+        <source> MB</source>
+        <translation> MB</translation>
+    </message>
+    <message>
         <source>Session</source>
         <translation type="unfinished">Sesiune</translation>
     </message>
@@ -3821,6 +3829,14 @@ Acest algoritm este învechit; se recomandă actualizarea configurației SSH a s
     <message>
         <source>Lowering this value immediately discards the oldest history beyond the limit; discarded content cannot be recovered.</source>
         <translation type="unfinished">Reducerea acestei valori elimină imediat cel mai vechi istoric peste limită; conținutul eliminat nu poate fi recuperat.</translation>
+    </message>
+    <message>
+        <source>Scrollback memory cap</source>
+        <translation>Limită de memorie pentru istoric</translation>
+    </message>
+    <message>
+        <source>Upper bound on the memory one session&apos;s scrollback may use. The oldest lines are discarded once either this or the line limit is reached; only very long lines or very large line limits come close to it.</source>
+        <translation>Memoria maximă pe care o poate ocupa istoricul de derulare al unei sesiuni. Cele mai vechi linii sunt eliminate imediat ce este atinsă această limită sau limita de linii; doar liniile foarte lungi sau limitele de linii foarte mari se apropie de ea.</translation>
     </message>
     <message>
         <source>Alert sound</source>
@@ -4758,6 +4774,10 @@ Reconectare manuală…<byte value="xd"/>
     <message>
         <source>Unknown cursor shape &apos;%1&apos;; reverted to block cursor</source>
         <translation type="unfinished">Formă de cursor necunoscută „%1”; se revine la cursorul bloc</translation>
+    </message>
+    <message>
+        <source>Unknown sidebar density &apos;%1&apos;; reverted to relaxed</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>The shortcut &apos;%2&apos; for action &apos;%1&apos; is invalid; the default has been restored</source>

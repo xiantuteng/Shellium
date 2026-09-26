@@ -7,9 +7,11 @@
 #include <QApplication>
 #include <QFocusEvent>
 #include <QGuiApplication>
+#include <QHideEvent>
 #include <QInputMethodEvent>
 #include <QKeyEvent>
 #include <QResizeEvent>
+#include <QShowEvent>
 #include <QLoggingCategory>
 #include <QRegularExpression>
 #include <QSet>
@@ -105,6 +107,32 @@ constexpr int kTerminalResizeDebounceMilliseconds = 80;
  * 画既保证了肉眼流畅度，也让事件循环在两帧之间有机会处理用户的按键与滚动。
  */
 constexpr int kRenderCoalesceMilliseconds = 16;
+
+/**
+ * @brief 出现可释放的排版缓存后，最迟多久清理一次（毫秒）。
+ *
+ * 计时器在第一次"变脏"时启动、期间不再续期，因此持续刷屏时也按这个节拍清理，而不是等到
+ * 输出停下——`tail -f` 可能永远不停。
+ */
+constexpr int kLayoutReleaseIntervalMilliseconds = 1000;
+
+/**
+ * @brief 单次清理最多重写的段数。
+ *
+ * 每段约 15 微秒，2000 段约 30 ms，一秒一次不会被察觉；剩余部分由下一次计时器接着做。
+ */
+constexpr int kLayoutReleaseBatchBlocks = 2000;
+
+/**
+ * @brief 视口首段上方、下方各保留多少屏不释放排版缓存；绘制时也按同一范围登记候选。
+ *
+ * 覆盖 QPlainTextEdit 自己会去排版的范围：它求光标、选区矩形时从视口首段出发逐段排版，
+ * 最远往上一屏、往下两屏多一点（见 QPlainTextEditControl::blockBoundingRect）。这些段
+ * 从不经过绘制，只能靠登记范围放宽来追踪；而它们离视口很近，释放了多半很快又要重新排版，
+ * 留着更划算。
+ */
+constexpr int kLayoutKeepPagesAbove = 2;
+constexpr int kLayoutKeepPagesBelow = 3;
 
 /**
  * @brief 命令提示弹层与当前终端行之间保留的逻辑像素间距。
@@ -312,6 +340,7 @@ TerminalView::TerminalView(QWidget *parent)
     , m_cursorBlinkTimer(new QTimer(this))
     , m_resizeDebounceTimer(new QTimer(this))
     , m_renderCoalesceTimer(new QTimer(this))
+    , m_layoutReleaseTimer(new QTimer(this))
 {
     // 主窗口会统一装饰表单中的 QPlainTextEdit。终端必须有稳定对象名供 QSS 排除通用表单
     // 背景，否则父级卡片色会覆盖本控件按终端主题设置的 QPalette::Base。
@@ -433,6 +462,9 @@ TerminalView::TerminalView(QWidget *parent)
 
     // 合帧定时器只在"欠一次渲染"时启动，且不会被后续输出续期：持续输出下它以固定帧率
     // 稳定出帧，而不是像防抖那样一直被推迟到输出停下来才画第一帧。
+    m_layoutReleaseTimer->setSingleShot(true);
+    m_layoutReleaseTimer->setInterval(kLayoutReleaseIntervalMilliseconds);
+    connect(m_layoutReleaseTimer, &QTimer::timeout, this, &TerminalView::releaseOffscreenLayouts);
     m_renderCoalesceTimer->setSingleShot(true);
     m_renderCoalesceTimer->setInterval(kRenderCoalesceMilliseconds);
     connect(m_renderCoalesceTimer, &QTimer::timeout, this, [this]() {
@@ -552,6 +584,8 @@ void TerminalView::applySettings(const TerminalSettings &settings)
     m_vtermBridge->setDefaultColors(terminalPalette.foreground, terminalPalette.background);
     m_vtermBridge->setAnsiPalette(terminalPalette.ansi);
     m_vtermBridge->setScrollbackLimit(normalized.scrollbackLines);
+    m_vtermBridge->setScrollbackByteLimit(
+        static_cast<qint64>(normalized.scrollbackMaxMegabytes) * 1024 * 1024);
     m_vtermBridge->setLineHeightPercent(normalized.lineHeightPercent);
     // 锚点字体依赖当前字体（要取它的 CJK 后备），必须在 setFont() 之后重新求一次。
     m_vtermBridge->setLineAnchors(buildLineAnchors());
@@ -650,6 +684,11 @@ void TerminalView::renderPreservingScroll()
 
 void TerminalView::scheduleRender()
 {
+    if (m_renderSuspended) {
+        // 看不见的标签不必同步文档：只记下欠一帧，切回前台或有人要读文档时再补。
+        m_renderOwed = true;
+        return;
+    }
     if (m_renderCoalesceTimer->isActive()) {
         return;
     }
@@ -671,7 +710,8 @@ void TerminalView::scheduleRender()
 
 void TerminalView::flushPendingRender()
 {
-    if (m_renderCoalesceTimer->isActive()) {
+    // 隐藏标签欠下的帧同样要补：导出、查找读的是文档，不能拿到切走之前的旧内容。
+    if (m_renderCoalesceTimer->isActive() || m_renderOwed) {
         renderPreservingScroll();
     }
 }
@@ -680,6 +720,7 @@ void TerminalView::renderPreservingScroll(const bool followBottom, const int pre
 {
     // 已经落到这里就不再欠一次渲染，否则合帧定时器还会多跑一轮空转。
     m_renderCoalesceTimer->stop();
+    m_renderOwed = false;
 
     // 增量同步不会动到滚动历史那些段，QTextCursor 会随文档编辑自行调整，选区天然保留。
     // 但整体重建（改字号、改配色、切备用屏）仍会清空文档，选区必须按偏移救回来——否则
@@ -690,6 +731,7 @@ void TerminalView::renderPreservingScroll(const bool followBottom, const int pre
     const int selectionPosition = previousCursor.position();
 
     const bool rebuilt = m_vtermBridge->render(document());
+    noteLayoutCandidates(rebuilt);
     // 首帧之后才量得到真实行高；量到变化就纠正一次网格。
     noteRenderedCellHeight();
 
@@ -1518,9 +1560,169 @@ void TerminalView::resizeEvent(QResizeEvent *event)
     m_resizeDebounceTimer->start();
 }
 
+void TerminalView::showEvent(QShowEvent *event)
+{
+    QPlainTextEdit::showEvent(event);
+    m_renderSuspended = false;
+    if (m_renderOwed) {
+        // 隐藏期间文档一直保留着，这里只做一次增量同步：补上后台期间新进的输出，滚动位置
+        // 与选区都不受影响。
+        scheduleRender();
+    }
+}
+
+void TerminalView::hideEvent(QHideEvent *event)
+{
+    QPlainTextEdit::hideEvent(event);
+    // 切到别的标签或最小化时暂停文档同步。PTY/SSH 输出仍照常送进 libvterm，会话状态与
+    // 滚动历史完全不受影响；省下的是后台标签持续刷屏时白白消耗的排版与内存。
+    m_renderSuspended = true;
+    if (m_renderCoalesceTimer->isActive()) {
+        m_renderCoalesceTimer->stop();
+        m_renderOwed = true;
+    }
+    // 看不见的标签没有需要保留排版的段，趁切走把排版缓存全部还掉。
+    if (!m_layoutReleaseTimer->isActive() && m_layoutCandidateFirst <= m_layoutCandidateLast) {
+        m_layoutReleaseTimer->start();
+    }
+}
+
+void TerminalView::noteLayoutCandidates(const bool rebuilt)
+{
+    const qint64 documentFirst = m_vtermBridge->documentFirstLineNumber();
+    if (rebuilt) {
+        // 整体重建之后每一段都是新建的，尚未排版；旧的候选区间已经随旧段一起释放。
+        m_layoutCandidateFirst = 0;
+        m_layoutCandidateLast = -1;
+    }
+    // 尾部那一屏是增量同步原地改写的，单段改写会让 Qt 立即重新排版（即使不在视口里），
+    // 这些段稍后滚进历史时就带着排版缓存。
+    const qint64 tailFirst = documentFirst + m_vtermBridge->documentScrollbackBlockCount();
+    const qint64 tailLast = documentFirst + document()->blockCount() - 1;
+    markLayoutCandidates(tailFirst, tailLast);
+}
+
+void TerminalView::markLayoutCandidates(const qint64 firstLine, const qint64 lastLine)
+{
+    if (firstLine > lastLine) {
+        return;
+    }
+    if (m_layoutCandidateFirst > m_layoutCandidateLast) {
+        m_layoutCandidateFirst = firstLine;
+        m_layoutCandidateLast = lastLine;
+    } else {
+        m_layoutCandidateFirst = std::min(m_layoutCandidateFirst, firstLine);
+        m_layoutCandidateLast = std::max(m_layoutCandidateLast, lastLine);
+    }
+    // 只在第一次变脏时启动、不续期：持续输出时也按固定节拍清理。
+    if (!m_layoutReleaseTimer->isActive()) {
+        m_layoutReleaseTimer->start();
+    }
+}
+
+void TerminalView::releaseOffscreenLayouts()
+{
+    if (m_layoutCandidateFirst > m_layoutCandidateLast) {
+        return;
+    }
+    // 删除重写会让指向这段文字的 QTextCursor 塌缩：有选区（含查找命中）或正按着鼠标拖选
+    // 时一律推迟，宁可多占一会儿内存也不能动用户的选区。
+    if (textCursor().hasSelection() || QApplication::mouseButtons() != Qt::NoButton) {
+        m_layoutReleaseTimer->start();
+        return;
+    }
+
+    // 删除重写会把落在区间里的文本光标挤到删除点，而 Qt 算光标矩形时会把它所在的段连同
+    // 沿途的段一起重新排版——释放一轮反而在别处留下一串新的排版缓存。终端不用这个光标
+    // （光标由 paintEvent 自绘），没有选区时把它停到文档末尾：那里属于尾部那一屏，永远
+    // 不会被重写。setTextCursor 会尝试让光标可见，滚动位置要原样放回。
+    const int page = std::max(1, viewport()->height() / std::max(1, fontMetrics().height()));
+    const qint64 documentFirst = m_vtermBridge->documentFirstLineNumber();
+    if (!textCursor().atEnd()) {
+        QScrollBar *bar = verticalScrollBar();
+        const int scrollValue = bar->value();
+        QTextCursor parked(document());
+        parked.movePosition(QTextCursor::End);
+        setTextCursor(parked);
+        bar->setValue(scrollValue);
+        // 让光标可见的那一下会临时滚到末尾，Qt 顺手排版了末尾附近几屏；它们不经过绘制，
+        // 必须在这里登记，否则用户停在历史上方时它们会一直带着缓存。
+        const qint64 lastLine = documentFirst + document()->blockCount() - 1;
+        markLayoutCandidates(lastLine - (kLayoutKeepPagesAbove + kLayoutKeepPagesBelow) * page,
+                             lastLine);
+    }
+
+    // 已经被上限淘汰出文档的行号没有对应的段，直接丢掉。
+    const qint64 candidateFirst = std::max(m_layoutCandidateFirst, documentFirst);
+    const qint64 candidateLast = m_layoutCandidateLast;
+    if (candidateFirst > candidateLast) {
+        m_layoutCandidateFirst = 0;
+        m_layoutCandidateLast = -1;
+        return;
+    }
+
+    // 视口附近的段正在显示或会被 Qt 顺手排版，重写只会让它们立刻重新排版；范围与绘制时
+    // 登记的一致，见 kLayoutKeepPagesAbove。隐藏的标签什么都不用留。
+    qint64 keepFirst = candidateLast + 1;
+    qint64 keepLast = candidateLast;
+    if (isVisible() && !m_renderSuspended) {
+        const qint64 firstVisible = documentFirst + firstVisibleBlock().blockNumber();
+        keepFirst = std::max(candidateFirst, firstVisible - kLayoutKeepPagesAbove * page);
+        keepLast = std::min(candidateLast, firstVisible + kLayoutKeepPagesBelow * page);
+    }
+    const bool keepsSome = keepFirst <= keepLast;
+
+    // 从 first 开始往后释放，受本轮预算限制；返回第一个尚未释放的行号。
+    int budget = kLayoutReleaseBatchBlocks;
+    const auto releaseFrom = [this, documentFirst, &budget](const qint64 first,
+                                                            const qint64 last) {
+        if (first > last || budget <= 0) {
+            return first;
+        }
+        const qint64 chunkLast = std::min(last, first + budget - 1);
+        budget -= static_cast<int>(chunkLast - first + 1);
+        m_vtermBridge->releaseBlockLayouts(document(),
+                                           static_cast<int>(first - documentFirst),
+                                           static_cast<int>(chunkLast - documentFirst));
+        return chunkLast + 1;
+    };
+
+    // 视口上方 [candidateFirst, aboveLast] 与下方 [belowFirst, candidateLast] 两段。
+    const qint64 aboveLast = keepsSome ? keepFirst - 1 : candidateLast;
+    const qint64 belowFirst = keepsSome ? keepLast + 1 : candidateLast + 1;
+    const qint64 aboveNext = releaseFrom(candidateFirst, aboveLast);
+    const qint64 belowNext = releaseFrom(belowFirst, candidateLast);
+    const bool aboveRemains = aboveNext <= aboveLast;
+    const bool belowRemains = belowNext <= candidateLast;
+
+    // 剩下的候选 = 上方没做完的 + 视口保留区 + 下方没做完的，取包络区间。
+    if (!aboveRemains && !keepsSome && !belowRemains) {
+        m_layoutCandidateFirst = 0;
+        m_layoutCandidateLast = -1;
+        return;
+    }
+    m_layoutCandidateFirst = aboveRemains ? aboveNext : (keepsSome ? keepFirst : belowNext);
+    m_layoutCandidateLast = belowRemains ? candidateLast : (keepsSome ? keepLast : aboveLast);
+    // 只剩视口保留区时不必再唤醒：它们滚出视口必然伴随重绘，重绘会重新启动计时器。
+    if (aboveRemains || belowRemains) {
+        m_layoutReleaseTimer->start();
+    }
+}
+
 void TerminalView::paintEvent(QPaintEvent *event)
 {
     QPlainTextEdit::paintEvent(event);
+
+    // 画出来的段都已经被 Qt 排过版（带着塑形缓存）；记下来，滚出视口后再释放。登记范围
+    // 比视口宽，理由见 kLayoutKeepPagesAbove。
+    const QTextBlock firstPainted = firstVisibleBlock();
+    if (firstPainted.isValid()) {
+        const int page = std::max(1, viewport()->height() / std::max(1, fontMetrics().height()));
+        const qint64 firstLine =
+            m_vtermBridge->documentFirstLineNumber() + firstPainted.blockNumber();
+        markLayoutCandidates(firstLine - kLayoutKeepPagesAbove * page,
+                             firstLine + kLayoutKeepPagesBelow * page);
+    }
 
     // Qt 的选区调色板会覆盖透明前景色，因此必须在基础文本与选区都画完以后遮住内部锚点。
     // 只在确有选区时创建额外绘制器，避免持续输出的普通场景为每一帧承担无意义开销。

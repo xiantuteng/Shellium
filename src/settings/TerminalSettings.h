@@ -151,6 +151,15 @@ struct TerminalSettings {
     /** @brief libvterm 保留的最大滚动历史行数，范围 100 到 1,000,000。 */
     int scrollbackLines = 10000;
 
+    /**
+     * @brief 单会话滚动历史的字节软上限（MiB），范围 1 到 512；默认 32。
+     *
+     * 与行数上限同时生效，取更严者。历史按紧凑格式存储，170 列的日志行约 0.6 KB，默认
+     * 10000 行约 6 MB，远在上限之内；它只在用户把行数调到几十万、或输出是数千列的超长行
+     * 时才起作用，防止单个标签吃掉数百 MB。
+     */
+    int scrollbackMaxMegabytes = 32;
+
     /** @brief 收到终端 BEL 字节时是否播放系统提示音。 */
     bool audibleBell = true;
 

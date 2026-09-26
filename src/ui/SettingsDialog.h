@@ -159,6 +159,8 @@ private:
     SegmentedControl *m_cursorShapeSelector = nullptr;
     ToggleSwitch *m_cursorBlinkToggle = nullptr;
     QSpinBox *m_scrollbackSpin = nullptr;
+    /** @brief 单会话滚动历史字节软上限（MiB）。 */
+    QSpinBox *m_scrollbackMaxMegabytesSpin = nullptr;
     ToggleSwitch *m_audibleBellToggle = nullptr;
     /** @brief 是否在普通命令输入达到最小前缀长度后自动展示历史命令候选。 */
     ToggleSwitch *m_commandAutoCompletionToggle = nullptr;

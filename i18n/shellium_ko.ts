@@ -3016,6 +3016,10 @@ To avoid overwriting existing credentials, Shellium does not create a new vault 
         <source>The vault has no master password configuration to verify against.</source>
         <translation type="unfinished">보관소에 대조할 마스터 비밀번호 구성이 없습니다.</translation>
     </message>
+    <message>
+        <source>Reset terminal</source>
+        <translation type="unfinished">터미널 초기화</translation>
+    </message>
 </context>
 <context>
     <name>RemoteFileManagerWidget</name>
@@ -3811,6 +3815,10 @@ This algorithm is obsolete; upgrading the server&apos;s SSH configuration is rec
         <translation type="unfinished">줄</translation>
     </message>
     <message>
+        <source> MB</source>
+        <translation> MB</translation>
+    </message>
+    <message>
         <source>Session</source>
         <translation type="unfinished">세션</translation>
     </message>
@@ -3821,6 +3829,14 @@ This algorithm is obsolete; upgrading the server&apos;s SSH configuration is rec
     <message>
         <source>Lowering this value immediately discards the oldest history beyond the limit; discarded content cannot be recovered.</source>
         <translation type="unfinished">이 값을 줄이면 한도를 초과한 가장 오래된 기록이 즉시 폐기됩니다. 폐기된 내용은 복원할 수 없습니다.</translation>
+    </message>
+    <message>
+        <source>Scrollback memory cap</source>
+        <translation>스크롤백 메모리 한도</translation>
+    </message>
+    <message>
+        <source>Upper bound on the memory one session&apos;s scrollback may use. The oldest lines are discarded once either this or the line limit is reached; only very long lines or very large line limits come close to it.</source>
+        <translation>한 세션의 스크롤백이 사용할 수 있는 최대 메모리입니다. 이 한도나 줄 수 한도 중 하나에 도달하면 가장 오래된 줄부터 삭제됩니다. 매우 긴 줄이나 매우 큰 줄 수 한도가 아니면 이 값에 가까워지지 않습니다.</translation>
     </message>
     <message>
         <source>Alert sound</source>
@@ -4758,6 +4774,10 @@ Reconnecting manually…<byte value="xd"/>
     <message>
         <source>Unknown cursor shape &apos;%1&apos;; reverted to block cursor</source>
         <translation type="unfinished">알 수 없는 커서 모양 「%1」. 블록 커서로 되돌립니다</translation>
+    </message>
+    <message>
+        <source>Unknown sidebar density &apos;%1&apos;; reverted to relaxed</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>The shortcut &apos;%2&apos; for action &apos;%1&apos; is invalid; the default has been restored</source>

@@ -6,6 +6,8 @@
 #include <QObject>
 #include <QVector>
 
+#include <cstddef>
+#include <deque>
 #include <vterm.h>
 
 class QTextBlock;
@@ -17,8 +19,8 @@ class QTextDocument;
  * @brief 封装 libvterm 的 VT220/xterm 状态机，并生成可由 Qt 绘制的终端文档。
  *
  * 所有 feed/resize/render 调用均发生在 GUI 线程；SSH 与本地 PTY 的输出通过 Qt 队列信号
- * 进入该线程，因此 libvterm 实例无需额外锁。桥接层维护 10000 行滚动历史，并正确处理
- * 光标移动、清屏、备用屏幕、256 色和 TrueColor。
+ * 进入该线程，因此 libvterm 实例无需额外锁。桥接层维护有界滚动历史（默认按行数与字节
+ * 双上限裁剪），并正确处理光标移动、清屏、备用屏幕、256 色和 TrueColor。
  */
 class VtermBridge final : public QObject {
     Q_OBJECT
@@ -72,8 +74,19 @@ public:
      */
     void setAnsiPalette(const QVector<QColor> &colors);
 
-    /** @brief 设置滚动历史上限，并立即丢弃超过新上限的最旧行。 */
+    /** @brief 设置滚动历史行数上限，并立即丢弃超过新上限的最旧行。 */
     void setScrollbackLimit(int lineCount);
+
+    /**
+     * @brief 设置滚动历史近似字节上限；0 表示仅按行数裁剪。
+     * @param maxBytes 历史 Cell 向量的软上限（含 QString 载荷估算）。
+     *
+     * 长日志行在行数远未触顶时就会把常驻内存顶爆；字节上限与行数上限取更严的一方。
+     */
+    void setScrollbackByteLimit(qint64 maxBytes);
+
+    /** @brief 当前滚动历史行数（不含当前屏）。 */
+    [[nodiscard]] int scrollbackLineCount() const { return static_cast<int>(m_scrollback.size()); }
 
     /** @brief 设置行高百分比；异常值会限制在 80% 到 250%。 */
     void setLineHeightPercent(int percent);
@@ -203,6 +216,31 @@ public:
      */
     void invalidateDocument();
 
+    /**
+     * @brief 原地重写文档中一段滚动历史的段，让 Qt 释放它们的排版缓存。
+     * @param document 最近一次 render() 同步过的文档。
+     * @param firstBlock 起始段号（含）。
+     * @param lastBlock 结束段号（含）；超出历史区间的部分自动忽略，尾部那一屏永远不动。
+     * @return 实际重写的段数；文档未同步、处于备用屏等无法安全重写时返回 0。
+     *
+     * 这是多标签内存的第二大来源。QPlainTextEdit 每排版一段，该段的 QTextEngine 就会
+     * 留下一块 HarfBuzz 塑形缓冲（hb_buffer，按行长约 3–6 KB），直到这一段被删除才释放；
+     * QTextLayout::clearLayout()、markContentsDirty() 等公开接口都不会释放它。`tail -f`
+     * 时每一行都会经过视口、都会被排版，10000 行历史就是约 60 MB。唯一的公开释放途径是
+     * 让段本身消失，于是这里删掉这些段再按同样内容写回：段数、行高、文字全部不变，
+     * QPlainTextDocumentLayout 对多段变更只清空不重排，新段直到再次进入视口才排版。
+     *
+     * 调用方负责保证没有选区、查找高亮等指向这段文字的 QTextCursor——删除重写会让它们
+     * 塌缩到删除点。
+     */
+    int releaseBlockLayouts(QTextDocument *document, int firstBlock, int lastBlock);
+
+    /** @brief 文档首段对应的全局历史行号；与段号相加即得到跨淘汰稳定的行标识。 */
+    [[nodiscard]] qint64 documentFirstLineNumber() const { return m_documentScrollbackFirst; }
+
+    /** @brief 文档中来自滚动历史的段数（尾部那一屏不计入）。 */
+    [[nodiscard]] int documentScrollbackBlockCount() const { return m_documentScrollbackCount; }
+
 signals:
     /** @brief libvterm 为设备状态查询、光标位置查询等生成的协议响应。 */
     void protocolResponse(const QByteArray &bytes);
@@ -274,6 +312,58 @@ private:
     using Line = QVector<Cell>;
 
     /**
+     * @brief 一段属性相同的相邻单元格在紧凑行里的样式描述。
+     *
+     * 颜色存 QRgb 而不是 QColor：QColor 占 16 字节且每格各存两份；终端颜色全部来自
+     * libvterm 解析好的 8 位 RGB，QRgb 足以无损往返。无效色（仅理论上可能出现）用标志位
+     * 记录，保证解包后与 convertCell() 的结果逐字段相等——增量渲染靠这个相等性判断
+     * "一行从屏幕滚进历史时内容没变"，一旦不等就会整段重写并抹掉用户的选区。
+     */
+    struct PackedRun {
+        QRgb foreground = 0;
+        QRgb background = 0;
+        quint16 column = 0; ///< 本段起始列；延续到下一段的起始列为止。
+        quint8 flags = 0;   ///< 见 PackedRunFlag。
+    };
+
+    /** @brief PackedRun::flags 的位定义。 */
+    enum PackedRunFlag : quint8 {
+        PackedBold = 1U << 0U,
+        PackedItalic = 1U << 1U,
+        PackedUnderline = 1U << 2U,
+        PackedStrike = 1U << 3U,
+        PackedReverse = 1U << 4U,
+        PackedConceal = 1U << 5U,
+        PackedForegroundInvalid = 1U << 6U,
+        PackedBackgroundInvalid = 1U << 7U,
+    };
+
+    /**
+     * @brief 滚动历史里一行的紧凑形态。
+     *
+     * 这是多标签内存占用的主因所在：逐格保存 Cell 时每格约 72 字节本体 + 一次 QString
+     * 堆分配（约 32 字节），一条 170 列的日志行约 20 KB，默认 10000 行历史单标签就是
+     * 约 200 MB。改存"整行文本 + 样式段"之后同一行约 0.5 KB，缩小约 40 倍。
+     *
+     * 只有写入文档（render）时才临时解包成 Line，解包结果与打包前逐字段相等。
+     */
+    struct PackedLine {
+        /** @brief 各格文本依次拼接；双宽右半格不占字符，空格子按 0 个字符计。 */
+        QString text;
+        /**
+         * @brief 每格一字节的布局描述：低 2 位是宽度，高 6 位是该格文本的 UTF-16 长度。
+         *
+         * 为空表示"每格恰好一个 UTF-16 字符且宽度为 1"——纯 ASCII 日志行都走这条捷径，
+         * 不额外花一字节每格。
+         */
+        QByteArray cellLayout;
+        /** @brief 按起始列升序排列的样式段；双宽右半格不参与分段。 */
+        QVector<PackedRun> runs;
+        /** @brief 行的格数（已裁掉行尾空白）。 */
+        int columns = 0;
+    };
+
+    /**
      * @brief 一行内容在文档中的最终形态。
      *
      * 增量同步靠"这一段和上次写进去的完全一样吗"来决定跳过还是重写，因此比较的必须是
@@ -306,6 +396,26 @@ private:
      * 属性，逐格插入等于把每行的 QTextCharFormat 构造和文档写入放大几十倍。
      */
     void writeRenderedLine(QTextCursor &cursor, const RenderedLine &line);
+
+    /**
+     * @brief 把一行紧凑历史直接写入光标所在段，结果与先解包再 writeRenderedLine 相同。
+     *
+     * 整体重建（缩放、换字号、退出 vim）要一次写入全部历史；跳过逐格解包能省下每格一次
+     * QString 分配。
+     */
+    void writePackedLine(QTextCursor &cursor, const PackedLine &packed) const;
+
+    /** @brief 给光标所在段设置统一的行高格式；每一段写入正文前都要先调用。 */
+    void writeBlockFormat(QTextCursor &cursor) const;
+
+    /** @brief 在段尾追加行高锚点，见 setLineAnchors()。 */
+    void writeLineAnchors(QTextCursor &cursor) const;
+
+    /** @brief 由紧凑样式段构造字符格式，与 charFormatForCell() 对同一样式的结果一致。 */
+    [[nodiscard]] static QTextCharFormat charFormatForRun(const PackedRun &run);
+
+    /** @brief 按样式段还原出一个只带样式、不带文本的单元格（宽度为默认的 1）。 */
+    [[nodiscard]] static Cell styledCell(const PackedRun &run);
 
     /**
      * @brief 为一段没有被重写的段落补记光标位置。
@@ -341,6 +451,25 @@ private:
 
     /** @brief 删除文档末尾的 count 段，用于替换上一次渲染留下的那一屏。 */
     static void removeTrailingBlocks(QTextDocument *document, int count);
+
+    /** @brief 估算一行紧凑历史实际占用的堆内存字节，用于字节上限裁剪。 */
+    [[nodiscard]] static qsizetype estimateLineBytes(const PackedLine &line);
+
+    /**
+     * @brief 去掉行尾空白格后打包成紧凑形态。
+     *
+     * 行尾空白本来就不会写进文档（见 buildRenderedLine），保留它们只会按全宽列数常驻。
+     */
+    [[nodiscard]] static PackedLine packLine(const Line &line);
+
+    /** @brief 把紧凑行还原成逐格形态；结果与打包前（裁掉行尾空白后）逐字段相等。 */
+    [[nodiscard]] static Line unpackLine(const PackedLine &packed);
+
+    /** @brief 按行数与字节双上限从头部淘汰最旧行。 */
+    void enforceScrollbackLimits();
+
+    /** @brief 追加一行滚动历史并立即执行上限裁剪。 */
+    void appendScrollbackLine(Line line);
 
     /**
      * @brief 把落在当前网格之外的光标夹回网格内。
@@ -378,7 +507,10 @@ private:
      * 才能解析；否则被拆开的命令行会被解析成半截主机名。
      */
     QByteArray m_oscBuffer;
-    QVector<Line> m_scrollback;
+    /** @brief 用 deque 保证头部淘汰为 O(1)；QVector::remove(0,…) 在洪流时是 O(n²)。 */
+    std::deque<PackedLine> m_scrollback;
+    /** @brief m_scrollback 的近似字节合计，与 estimateLineBytes 同步维护。 */
+    qint64 m_scrollbackApproxBytes = 0;
     int m_rows = 24;
     int m_columns = 80;
     /**
@@ -393,6 +525,8 @@ private:
     bool m_cursorVisible = true;
     bool m_alternateScreen = false;
     int m_scrollbackLimit = 10000;
+    /** @brief 滚动历史字节软上限；与 TerminalSettings 默认值一致为 32 MiB，0 表示禁用。 */
+    qint64 m_scrollbackByteLimit = 32 * 1024 * 1024;
     int m_lineHeightPercent = 100;
     /** @brief 统一行高的锚点；为空表示不追加（行高退回随内容变化）。 */
     QVector<QPair<QChar, QFont>> m_lineAnchors;

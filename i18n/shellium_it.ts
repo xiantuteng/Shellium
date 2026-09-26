@@ -3016,6 +3016,10 @@ Per non sovrascrivere credenziali esistenti, Shellium non crea automaticamente u
         <source>The vault has no master password configuration to verify against.</source>
         <translation type="unfinished">La cassaforte non ha alcuna configurazione di password principale con cui verificare.</translation>
     </message>
+    <message>
+        <source>Reset terminal</source>
+        <translation type="unfinished">Reimposta il terminale</translation>
+    </message>
 </context>
 <context>
     <name>RemoteFileManagerWidget</name>
@@ -3811,6 +3815,10 @@ Questo algoritmo è obsoleto; si consiglia di aggiornare la configurazione SSH d
         <translation type="unfinished">righe</translation>
     </message>
     <message>
+        <source> MB</source>
+        <translation> MB</translation>
+    </message>
+    <message>
         <source>Session</source>
         <translation type="unfinished">Sessione</translation>
     </message>
@@ -3821,6 +3829,14 @@ Questo algoritmo è obsoleto; si consiglia di aggiornare la configurazione SSH d
     <message>
         <source>Lowering this value immediately discards the oldest history beyond the limit; discarded content cannot be recovered.</source>
         <translation type="unfinished">La riduzione di questo valore scarta immediatamente la cronologia più vecchia oltre il limite; il contenuto scartato non può essere recuperato.</translation>
+    </message>
+    <message>
+        <source>Scrollback memory cap</source>
+        <translation>Limite di memoria della cronologia</translation>
+    </message>
+    <message>
+        <source>Upper bound on the memory one session&apos;s scrollback may use. The oldest lines are discarded once either this or the line limit is reached; only very long lines or very large line limits come close to it.</source>
+        <translation>Memoria massima che la cronologia di scorrimento di una sessione può occupare. Le righe più vecchie vengono scartate non appena si raggiunge questo limite o il limite di righe; solo righe molto lunghe o limiti di righe molto alti vi si avvicinano.</translation>
     </message>
     <message>
         <source>Alert sound</source>
@@ -4758,6 +4774,10 @@ Riconnessione manuale…<byte value="xd"/>
     <message>
         <source>Unknown cursor shape &apos;%1&apos;; reverted to block cursor</source>
         <translation type="unfinished">Forma del cursore sconosciuta &apos;%1&apos;; ripristinata al cursore a blocco</translation>
+    </message>
+    <message>
+        <source>Unknown sidebar density &apos;%1&apos;; reverted to relaxed</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>The shortcut &apos;%2&apos; for action &apos;%1&apos; is invalid; the default has been restored</source>

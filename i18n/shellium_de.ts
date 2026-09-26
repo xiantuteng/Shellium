@@ -3016,6 +3016,10 @@ Um vorhandene Anmeldedaten nicht zu überschreiben, erstellt Shellium nicht auto
         <source>The vault has no master password configuration to verify against.</source>
         <translation type="unfinished">Der Tresor hat keine Master-Passwort-Konfiguration zum Abgleich.</translation>
     </message>
+    <message>
+        <source>Reset terminal</source>
+        <translation type="unfinished">Terminal zurücksetzen</translation>
+    </message>
 </context>
 <context>
     <name>RemoteFileManagerWidget</name>
@@ -3811,6 +3815,10 @@ Dieser Algorithmus ist veraltet; es wird empfohlen, die SSH-Konfiguration des Se
         <translation type="unfinished">Zeilen</translation>
     </message>
     <message>
+        <source> MB</source>
+        <translation> MB</translation>
+    </message>
+    <message>
         <source>Session</source>
         <translation type="unfinished">Sitzung</translation>
     </message>
@@ -3821,6 +3829,14 @@ Dieser Algorithmus ist veraltet; es wird empfohlen, die SSH-Konfiguration des Se
     <message>
         <source>Lowering this value immediately discards the oldest history beyond the limit; discarded content cannot be recovered.</source>
         <translation type="unfinished">Das Verringern dieses Werts verwirft sofort den ältesten Verlauf über dem Limit; verworfener Inhalt kann nicht wiederhergestellt werden.</translation>
+    </message>
+    <message>
+        <source>Scrollback memory cap</source>
+        <translation>Speicherlimit für den Verlauf</translation>
+    </message>
+    <message>
+        <source>Upper bound on the memory one session&apos;s scrollback may use. The oldest lines are discarded once either this or the line limit is reached; only very long lines or very large line limits come close to it.</source>
+        <translation>Maximaler Speicher, den der Scrollverlauf einer Sitzung belegen darf. Die ältesten Zeilen werden verworfen, sobald dieses Limit oder das Zeilenlimit erreicht ist; nur sehr lange Zeilen oder sehr hohe Zeilenlimits kommen in seine Nähe.</translation>
     </message>
     <message>
         <source>Alert sound</source>
@@ -4758,6 +4774,10 @@ Manuelle Neuverbindung …<byte value="xd"/>
     <message>
         <source>Unknown cursor shape &apos;%1&apos;; reverted to block cursor</source>
         <translation type="unfinished">Unbekannte Cursor-Form &apos;%1&apos;; auf Block-Cursor zurückgesetzt</translation>
+    </message>
+    <message>
+        <source>Unknown sidebar density &apos;%1&apos;; reverted to relaxed</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>The shortcut &apos;%2&apos; for action &apos;%1&apos; is invalid; the default has been restored</source>

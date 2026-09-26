@@ -3016,6 +3016,10 @@ To avoid overwriting existing credentials, Shellium does not create a new vault 
         <source>The vault has no master password configuration to verify against.</source>
         <translation type="unfinished">В хранилище нет конфигурации мастер-пароля для сверки.</translation>
     </message>
+    <message>
+        <source>Reset terminal</source>
+        <translation type="unfinished">Сбросить терминал</translation>
+    </message>
 </context>
 <context>
     <name>RemoteFileManagerWidget</name>
@@ -3811,6 +3815,10 @@ This algorithm is obsolete; upgrading the server&apos;s SSH configuration is rec
         <translation type="unfinished">строк</translation>
     </message>
     <message>
+        <source> MB</source>
+        <translation> МБ</translation>
+    </message>
+    <message>
         <source>Session</source>
         <translation type="unfinished">Сеанс</translation>
     </message>
@@ -3821,6 +3829,14 @@ This algorithm is obsolete; upgrading the server&apos;s SSH configuration is rec
     <message>
         <source>Lowering this value immediately discards the oldest history beyond the limit; discarded content cannot be recovered.</source>
         <translation type="unfinished">Уменьшение этого значения немедленно отбрасывает самую старую историю сверх предела; отброшенное содержимое восстановить нельзя.</translation>
+    </message>
+    <message>
+        <source>Scrollback memory cap</source>
+        <translation>Лимит памяти истории прокрутки</translation>
+    </message>
+    <message>
+        <source>Upper bound on the memory one session&apos;s scrollback may use. The oldest lines are discarded once either this or the line limit is reached; only very long lines or very large line limits come close to it.</source>
+        <translation>Максимальный объём памяти, который может занимать история прокрутки одного сеанса. Самые старые строки удаляются, как только достигнут этот лимит или лимит строк; приблизиться к нему могут лишь очень длинные строки или очень большой лимит строк.</translation>
     </message>
     <message>
         <source>Alert sound</source>
@@ -4758,6 +4774,10 @@ Reconnecting manually…<byte value="xd"/>
     <message>
         <source>Unknown cursor shape &apos;%1&apos;; reverted to block cursor</source>
         <translation type="unfinished">Неизвестная форма курсора «%1»; возврат к прямоугольному курсору</translation>
+    </message>
+    <message>
+        <source>Unknown sidebar density &apos;%1&apos;; reverted to relaxed</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>The shortcut &apos;%2&apos; for action &apos;%1&apos; is invalid; the default has been restored</source>

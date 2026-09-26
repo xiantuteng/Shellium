@@ -3016,6 +3016,10 @@ To avoid overwriting existing credentials, Shellium does not create a new vault 
         <source>The vault has no master password configuration to verify against.</source>
         <translation type="unfinished">لا تحتوي الخزنة على إعداد كلمة مرور رئيسية للمطابقة.</translation>
     </message>
+    <message>
+        <source>Reset terminal</source>
+        <translation type="unfinished">إعادة تعيين الطرفية</translation>
+    </message>
 </context>
 <context>
     <name>RemoteFileManagerWidget</name>
@@ -3811,6 +3815,10 @@ This algorithm is obsolete; upgrading the server&apos;s SSH configuration is rec
         <translation type="unfinished">سطر</translation>
     </message>
     <message>
+        <source> MB</source>
+        <translation> م.ب</translation>
+    </message>
+    <message>
         <source>Session</source>
         <translation type="unfinished">الجلسة</translation>
     </message>
@@ -3821,6 +3829,14 @@ This algorithm is obsolete; upgrading the server&apos;s SSH configuration is rec
     <message>
         <source>Lowering this value immediately discards the oldest history beyond the limit; discarded content cannot be recovered.</source>
         <translation type="unfinished">تقليل هذه القيمة يتجاهل فورًا أقدم سجل يتجاوز الحد؛ ولا يمكن استرجاع المحتوى المتجاهَل.</translation>
+    </message>
+    <message>
+        <source>Scrollback memory cap</source>
+        <translation>حد ذاكرة سجل التمرير</translation>
+    </message>
+    <message>
+        <source>Upper bound on the memory one session&apos;s scrollback may use. The oldest lines are discarded once either this or the line limit is reached; only very long lines or very large line limits come close to it.</source>
+        <translation>الحد الأقصى للذاكرة التي يمكن أن يشغلها سجل التمرير لجلسة واحدة. تُحذف الأسطر الأقدم فور بلوغ هذا الحد أو حد عدد الأسطر؛ ولا يقترب منه إلا الأسطر الطويلة جدًا أو حدود الأسطر الكبيرة جدًا.</translation>
     </message>
     <message>
         <source>Alert sound</source>
@@ -4758,6 +4774,10 @@ Reconnecting manually…<byte value="xd"/>
     <message>
         <source>Unknown cursor shape &apos;%1&apos;; reverted to block cursor</source>
         <translation type="unfinished">شكل مؤشر غير معروف «%1»؛ يُرجَع إلى المؤشر المربع</translation>
+    </message>
+    <message>
+        <source>Unknown sidebar density &apos;%1&apos;; reverted to relaxed</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>The shortcut &apos;%2&apos; for action &apos;%1&apos; is invalid; the default has been restored</source>

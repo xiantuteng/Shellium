@@ -13,6 +13,7 @@
 #include <QThread>
 #include <QWaitCondition>
 
+#include <atomic>
 #include <memory>
 #include <vector>
 
@@ -78,6 +79,15 @@ public:
 
     /** @brief 请求停止网络循环并逐层关闭会话。 */
     void requestStop();
+
+    /**
+     * @brief GUI 线程消费完一批 outputReady 之后的回执，用于解除读取背压。
+     * @param bytes 本次消费掉的字节数，必须与收到的 QByteArray 长度一致。
+     *
+     * 与 LocalShellWorker 同契约：即使因会话代次不符而丢弃字节，也必须回执，否则在途
+     * 计数只增不减，工作线程会永久停读。
+     */
+    void notifyOutputConsumed(qint64 bytes);
 
     /**
      * @brief 回复未知主机指纹确认请求。
@@ -434,6 +444,9 @@ private:
     /** @brief 判断停止标志；内部统一加锁以避免数据竞争。 */
     [[nodiscard]] bool shouldStop() const;
 
+    /** @brief 已发给 GUI 线程、但尚未收到消费回执的字节数是否已达上限。 */
+    [[nodiscard]] bool outputBacklogFull() const;
+
     /** @brief 启动时从本机到最终目标的有序计划；运行期间保持不变，供重连语义与边界判断。 */
     QList<ConnectionTarget> m_connectionPlan;
     /** @brief 是否在每层认证完成后安装 Shell 集成；连接测试会显式关闭以保持只读。 */
@@ -474,6 +487,13 @@ private:
     QByteArray m_pendingInput;
     bool m_stopRequested = false;
     HostKeyDecision m_hostKeyDecision = HostKeyDecision::None;
+
+    /**
+     * @brief 已 emit 但 GUI 线程尚未消费的字节数。
+     *
+     * 与 LocalShellWorker 同模型：洪流时限制事件队列膨胀，让 SSH 通道读侧自然背压到远端。
+     */
+    std::atomic<qint64> m_outputInFlight {0};
 
     /** @brief GUI 提交但工作线程尚未消费的层凭据。 */
     QString m_pendingCredential;

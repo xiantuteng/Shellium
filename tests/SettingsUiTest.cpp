@@ -124,6 +124,8 @@ private slots:
     void navigationSelectsMatchingPage();
     /** @brief 设置页不再显示保存/取消，修改必须即时入库且关闭窗口不得回滚。 */
     void changesPersistImmediatelyAndCloseDoesNotRollback();
+    /** @brief 滚动历史内存上限必须能在界面上修改、立即落盘，并在重新加载后保持。 */
+    void scrollbackMemoryCapPersistsAndReloads();
     /** @brief 恢复默认必须和普通单项修改一样自动持久化。 */
     void restoreDefaultsPersistsImmediately();
     void connectionDialogToggleRoundTripsLegacyHmac();
@@ -790,6 +792,39 @@ void SettingsUiTest::changesPersistImmediatelyAndCloseDoesNotRollback()
     QCOMPARE(service->currentSettings().fontPointSize, before.fontPointSize + 1);
     QCOMPARE(m_database->setting(QStringLiteral("terminal/font_size")).value_or(QString()),
              QString::number(before.fontPointSize + 1));
+}
+
+void SettingsUiTest::scrollbackMemoryCapPersistsAndReloads()
+{
+    // 紧凑历史格式下 10000 行只占几 MB，默认值不必再为省内存而牺牲可回溯的历史；这里同时
+    // 锁住两个默认值，防止有人再用"砍历史"换内存。
+    const TerminalSettings defaults = TerminalSettings{}.normalized();
+    QCOMPARE(defaults.scrollbackLines, 10000);
+    QCOMPARE(defaults.scrollbackMaxMegabytes, 32);
+
+    auto service = makeService();
+    SettingsDialog dialog(service.get());
+    auto *capSpin = dialog.findChild<QSpinBox *>(QStringLiteral("scrollbackMaxMegabytesSpin"));
+    QVERIFY(capSpin != nullptr);
+    QCOMPARE(capSpin->value(), 32);
+
+    capSpin->setValue(48);
+    QCOMPARE(service->currentSettings().scrollbackMaxMegabytes, 48);
+    QCOMPARE(m_database->setting(QStringLiteral("terminal/scrollback_max_megabytes"))
+                 .value_or(QString()),
+             QStringLiteral("48"));
+
+    TerminalSettingsService reloaded(m_database.get());
+    QString error;
+    QVERIFY2(reloaded.load(&error), qPrintable(error));
+    QCOMPARE(reloaded.currentSettings().scrollbackMaxMegabytes, 48);
+
+    // 越界值按 [1, 512] 夹取，不能把 0 当成"无上限"写进去。
+    TerminalSettings outOfRange = reloaded.currentSettings();
+    outOfRange.scrollbackMaxMegabytes = 0;
+    QCOMPARE(outOfRange.normalized().scrollbackMaxMegabytes, 1);
+    outOfRange.scrollbackMaxMegabytes = 100000;
+    QCOMPARE(outOfRange.normalized().scrollbackMaxMegabytes, 512);
 }
 
 void SettingsUiTest::restoreDefaultsPersistsImmediately()

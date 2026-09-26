@@ -3016,6 +3016,10 @@ To avoid overwriting existing credentials, Shellium does not create a new vault 
         <source>The vault has no master password configuration to verify against.</source>
         <translation>保險箱沒有可供驗證的主密碼配置。</translation>
     </message>
+    <message>
+        <source>Reset terminal</source>
+        <translation type="unfinished">重置終端機</translation>
+    </message>
 </context>
 <context>
     <name>RemoteFileManagerWidget</name>
@@ -3813,6 +3817,10 @@ This algorithm is obsolete; upgrading the server&apos;s SSH configuration is rec
         <translation> 行</translation>
     </message>
     <message>
+        <source> MB</source>
+        <translation> MB</translation>
+    </message>
+    <message>
         <source>Session</source>
         <translation>會話</translation>
     </message>
@@ -3823,6 +3831,14 @@ This algorithm is obsolete; upgrading the server&apos;s SSH configuration is rec
     <message>
         <source>Lowering this value immediately discards the oldest history beyond the limit; discarded content cannot be recovered.</source>
         <translation>減小該值會立即丟棄超過上限的最舊歷史；已經丟棄的內容無法恢復。</translation>
+    </message>
+    <message>
+        <source>Scrollback memory cap</source>
+        <translation>捲動歷史記憶體上限</translation>
+    </message>
+    <message>
+        <source>Upper bound on the memory one session&apos;s scrollback may use. The oldest lines are discarded once either this or the line limit is reached; only very long lines or very large line limits come close to it.</source>
+        <translation>單一工作階段的捲動歷史最多可佔用的記憶體。達到此上限或行數上限中的任一個時，最舊的行會被捨棄；只有極長的行或極大的行數上限才會接近它。</translation>
     </message>
     <message>
         <source>Alert sound</source>
@@ -4760,6 +4776,10 @@ Reconnecting manually…<byte value="xd"/>
     <message>
         <source>Unknown cursor shape &apos;%1&apos;; reverted to block cursor</source>
         <translation>未知游標形態“%1”，已恢復為塊狀游標</translation>
+    </message>
+    <message>
+        <source>Unknown sidebar density &apos;%1&apos;; reverted to relaxed</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>The shortcut &apos;%2&apos; for action &apos;%1&apos; is invalid; the default has been restored</source>

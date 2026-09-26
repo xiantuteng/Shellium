@@ -106,6 +106,7 @@ SettingsDialog::SettingsDialog(TerminalSettingsService *service,
     , m_cursorShapeSelector(new SegmentedControl(this))
     , m_cursorBlinkToggle(new ToggleSwitch(this))
     , m_scrollbackSpin(new QSpinBox(this))
+    , m_scrollbackMaxMegabytesSpin(new QSpinBox(this))
     , m_audibleBellToggle(new ToggleSwitch(this))
     , m_commandAutoCompletionToggle(new ToggleSwitch(this))
     , m_multiLinePasteConfirmationToggle(new ToggleSwitch(this))
@@ -208,6 +209,8 @@ SettingsDialog::SettingsDialog(TerminalSettingsService *service,
     connect(m_letterSpacingSpin, &QDoubleSpinBox::valueChanged,
             this, [this](double) { persistChanges(); });
     connect(m_scrollbackSpin, &QSpinBox::valueChanged, this, [this](int) { persistChanges(); });
+    connect(m_scrollbackMaxMegabytesSpin, &QSpinBox::valueChanged,
+            this, [this](int) { persistChanges(); });
     connect(m_reconnectMaxAttemptsSpin, &QSpinBox::valueChanged,
             this, [this](int) { persistChanges(); });
     connect(m_reconnectBaseDelaySpin, &QSpinBox::valueChanged,
@@ -570,12 +573,17 @@ QWidget *SettingsDialog::buildTerminalPage()
     m_scrollbackSpin->setRange(100, 1000000);
     m_scrollbackSpin->setSingleStep(1000);
     m_scrollbackSpin->setMinimumWidth(120);
+    m_scrollbackMaxMegabytesSpin->setObjectName(QStringLiteral("scrollbackMaxMegabytesSpin"));
+    m_scrollbackMaxMegabytesSpin->setRange(1, 512);
+    m_scrollbackMaxMegabytesSpin->setSingleStep(1);
+    m_scrollbackMaxMegabytesSpin->setMinimumWidth(120);
 
     // QSpinBox 的后缀是一次性 setSuffix，语言切换时不会自己更新；显式登记进热切换闭包，
     // 否则切到别的语言后数值旁仍残留上一次语言的“行 / px”。
     i18n::onRetranslate(this, [this] {
         m_letterSpacingSpin->setSuffix(tr(" px"));
         m_scrollbackSpin->setSuffix(tr(" lines"));
+        m_scrollbackMaxMegabytesSpin->setSuffix(tr(" MB"));
     });
     m_audibleBellToggle->setObjectName(QStringLiteral("audibleBellToggle"));
     m_commandAutoCompletionToggle->setObjectName(
@@ -587,6 +595,9 @@ QWidget *SettingsDialog::buildTerminalPage()
     sessionCard->addRow([this] { return tr("Scrollback"); },
                         new SettingsStepper(m_scrollbackSpin, sessionCard),
                         [this] { return tr("Lowering this value immediately discards the oldest history beyond the limit; discarded content cannot be recovered."); });
+    sessionCard->addRow([this] { return tr("Scrollback memory cap"); },
+                        new SettingsStepper(m_scrollbackMaxMegabytesSpin, sessionCard),
+                        [this] { return tr("Upper bound on the memory one session's scrollback may use. The oldest lines are discarded once either this or the line limit is reached; only very long lines or very large line limits come close to it."); });
     sessionCard->addRow([this] { return tr("Alert sound"); },
                         m_audibleBellToggle,
                         [this] { return tr("Play the system alert sound when a terminal BEL byte is received."); });
@@ -914,6 +925,7 @@ TerminalSettings SettingsDialog::editedSettings() const
         static_cast<TerminalCursorShape>(m_cursorShapeSelector->currentData());
     settings.cursorBlink = m_cursorBlinkToggle->isChecked();
     settings.scrollbackLines = m_scrollbackSpin->value();
+    settings.scrollbackMaxMegabytes = m_scrollbackMaxMegabytesSpin->value();
     settings.audibleBell = m_audibleBellToggle->isChecked();
     settings.commandAutoCompletion = m_commandAutoCompletionToggle->isChecked();
     settings.multiLinePasteConfirmation = m_multiLinePasteConfirmationToggle->isChecked();
@@ -1056,6 +1068,7 @@ void SettingsDialog::populateControls(const TerminalSettings &settings)
     m_cursorShapeSelector->setCurrentData(static_cast<int>(normalized.cursorShape));
     m_cursorBlinkToggle->setChecked(normalized.cursorBlink);
     m_scrollbackSpin->setValue(normalized.scrollbackLines);
+    m_scrollbackMaxMegabytesSpin->setValue(normalized.scrollbackMaxMegabytes);
     m_audibleBellToggle->setChecked(normalized.audibleBell);
     m_commandAutoCompletionToggle->setChecked(normalized.commandAutoCompletion);
     m_multiLinePasteConfirmationToggle->setChecked(normalized.multiLinePasteConfirmation);

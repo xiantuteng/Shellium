@@ -30,6 +30,7 @@ const QString kLetterSpacingKey = QStringLiteral("terminal/letter_spacing");
 const QString kCursorShapeKey = QStringLiteral("terminal/cursor_shape");
 const QString kCursorBlinkKey = QStringLiteral("terminal/cursor_blink");
 const QString kScrollbackKey = QStringLiteral("terminal/scrollback_lines");
+const QString kScrollbackMaxMegabytesKey = QStringLiteral("terminal/scrollback_max_megabytes");
 const QString kAudibleBellKey = QStringLiteral("terminal/audible_bell");
 /** @brief 命令行历史自动提示开关；缺失该键时由结构默认值保持关闭。 */
 const QString kCommandAutoCompletionKey = QStringLiteral("terminal/command_auto_completion");
@@ -335,6 +336,7 @@ TerminalSettings TerminalSettings::normalized() const
     result.lineHeightPercent = std::clamp(result.lineHeightPercent, 80, 250);
     result.letterSpacing = std::clamp(result.letterSpacing, -2.0, 10.0);
     result.scrollbackLines = std::clamp(result.scrollbackLines, 100, 1000000);
+    result.scrollbackMaxMegabytes = std::clamp(result.scrollbackMaxMegabytes, 1, 512);
     result.reconnectMaxAttempts = std::clamp(result.reconnectMaxAttempts, 0, 10);
     result.reconnectBaseDelaySeconds = std::clamp(result.reconnectBaseDelaySeconds, 1, 60);
 
@@ -969,6 +971,7 @@ bool TerminalSettings::operator==(const TerminalSettings &other) const
         && cursorShape == other.cursorShape
         && cursorBlink == other.cursorBlink
         && scrollbackLines == other.scrollbackLines
+        && scrollbackMaxMegabytes == other.scrollbackMaxMegabytes
         && audibleBell == other.audibleBell
         && commandAutoCompletion == other.commandAutoCompletion
         && multiLinePasteConfirmation == other.multiLinePasteConfirmation
@@ -1135,6 +1138,7 @@ bool TerminalSettingsService::load(QString *errorMessage)
     assignBoolean(kSidebarDoubleClickPromptKey, &loaded.sidebarDoubleClickPrompt);
     assignBoolean(kCursorBlinkKey, &loaded.cursorBlink);
     assignInteger(kScrollbackKey, &loaded.scrollbackLines);
+    assignInteger(kScrollbackMaxMegabytesKey, &loaded.scrollbackMaxMegabytes);
     assignBoolean(kAudibleBellKey, &loaded.audibleBell);
     assignBoolean(kCommandAutoCompletionKey, &loaded.commandAutoCompletion);
     assignBoolean(kMultiLinePasteConfirmationKey, &loaded.multiLinePasteConfirmation);
@@ -1243,6 +1247,8 @@ bool TerminalSettingsService::save(const TerminalSettings &settings, QString *er
                           serializeCursorShape(normalizedSettings.cursorShape))
                 || !write(kCursorBlinkKey, serializeBool(normalizedSettings.cursorBlink))
                 || !write(kScrollbackKey, QString::number(normalizedSettings.scrollbackLines))
+                || !write(kScrollbackMaxMegabytesKey,
+                          QString::number(normalizedSettings.scrollbackMaxMegabytes))
                 || !write(kAudibleBellKey, serializeBool(normalizedSettings.audibleBell))
                 || !write(kCommandAutoCompletionKey,
                           serializeBool(normalizedSettings.commandAutoCompletion))

@@ -3016,6 +3016,10 @@ Para não sobrescrever credenciais existentes, o Shellium não cria automaticame
         <source>The vault has no master password configuration to verify against.</source>
         <translation type="unfinished">O cofre não tem nenhuma configuração de senha mestra para verificar.</translation>
     </message>
+    <message>
+        <source>Reset terminal</source>
+        <translation type="unfinished">Redefinir o terminal</translation>
+    </message>
 </context>
 <context>
     <name>RemoteFileManagerWidget</name>
@@ -3811,6 +3815,10 @@ Este algoritmo está obsoleto; recomenda-se atualizar a configuração SSH do se
         <translation type="unfinished">linhas</translation>
     </message>
     <message>
+        <source> MB</source>
+        <translation> MB</translation>
+    </message>
+    <message>
         <source>Session</source>
         <translation type="unfinished">Sessão</translation>
     </message>
@@ -3821,6 +3829,14 @@ Este algoritmo está obsoleto; recomenda-se atualizar a configuração SSH do se
     <message>
         <source>Lowering this value immediately discards the oldest history beyond the limit; discarded content cannot be recovered.</source>
         <translation type="unfinished">Reduzir este valor descarta imediatamente o histórico mais antigo além do limite; o conteúdo descartado não pode ser recuperado.</translation>
+    </message>
+    <message>
+        <source>Scrollback memory cap</source>
+        <translation>Limite de memória do histórico</translation>
+    </message>
+    <message>
+        <source>Upper bound on the memory one session&apos;s scrollback may use. The oldest lines are discarded once either this or the line limit is reached; only very long lines or very large line limits come close to it.</source>
+        <translation>Memória máxima que o histórico de rolagem de uma sessão pode ocupar. As linhas mais antigas são descartadas assim que este limite ou o limite de linhas é atingido; apenas linhas muito longas ou limites de linhas muito altos chegam perto dele.</translation>
     </message>
     <message>
         <source>Alert sound</source>
@@ -4758,6 +4774,10 @@ Reconectando manualmente…<byte value="xd"/>
     <message>
         <source>Unknown cursor shape &apos;%1&apos;; reverted to block cursor</source>
         <translation type="unfinished">Forma de cursor desconhecida &apos;%1&apos;; voltou ao cursor de bloco</translation>
+    </message>
+    <message>
+        <source>Unknown sidebar density &apos;%1&apos;; reverted to relaxed</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>The shortcut &apos;%2&apos; for action &apos;%1&apos; is invalid; the default has been restored</source>

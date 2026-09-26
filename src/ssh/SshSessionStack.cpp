@@ -18,6 +18,17 @@ namespace {
 /** @brief 与 TerminalView 共用的认证诊断通道；见该文件中的说明。 */
 Q_LOGGING_CATEGORY(authLog, "shellium.auth", QtWarningMsg)
 
+/**
+ * @brief 已 emit 给 GUI 线程、但尚未被消费的字节数上限。
+ *
+ * 与 LocalShellWorker 对齐：无背压时 `tail -f` / `cat` 大文件会把 Qt 队列撑到数百 MB。
+ * 1 MiB 约合 GUI 0.1 秒工作量，正常交互不受影响。
+ */
+constexpr qint64 kOutputBacklogHighWaterBytes = 1 << 20;
+
+/** @brief 背压生效期间两次重试之间的等待（毫秒）。 */
+constexpr int kOutputBacklogRetryMilliseconds = 5;
+
 } // namespace
 
 SshSessionStack::SshSessionStack(const ConnectionTarget &rootTarget, QObject *parent)
@@ -443,23 +454,27 @@ bool SshSessionStack::pumpLoop()
         }
 
         bool receivedData = false;
-        for (const bool stderrStream : {false, true}) {
-            while (true) {
-                const int bytesRead = top.readFromShell(
-                    readBuffer.data(), static_cast<int>(readBuffer.size()), stderrStream);
-                if (bytesRead > 0) {
-                    receivedData = true;
-                    // 只要还在出字节，远端就仍在跑登录脚本或上一条命令，注入必须继续等。
-                    m_shellOutputClock.start();
-                    emit outputReady(QByteArray(readBuffer.constData(), bytesRead));
-                } else {
-                    break;
+        // GUI 线程还没消化完上一批就别再读了：差额会全部堆在事件队列里。
+        if (!outputBacklogFull()) {
+            for (const bool stderrStream : {false, true}) {
+                while (!outputBacklogFull()) {
+                    const int bytesRead = top.readFromShell(
+                        readBuffer.data(), static_cast<int>(readBuffer.size()), stderrStream);
+                    if (bytesRead > 0) {
+                        receivedData = true;
+                        // 只要还在出字节，远端就仍在跑登录脚本或上一条命令，注入必须继续等。
+                        m_shellOutputClock.start();
+                        m_outputInFlight.fetch_add(bytesRead, std::memory_order_relaxed);
+                        emit outputReady(QByteArray(readBuffer.constData(), bytesRead));
+                    } else {
+                        break;
+                    }
                 }
             }
         }
         if (!receivedData) {
-            // 10ms 轮询在交互延迟和空闲 CPU 占用之间取得平衡，且停止请求能很快生效。
-            QThread::msleep(10);
+            // 背压中缩短休眠，以便 GUI 回执后尽快恢复读取；空闲时仍用 10ms 平衡 CPU。
+            QThread::msleep(outputBacklogFull() ? kOutputBacklogRetryMilliseconds : 10);
         }
     }
     return false;
@@ -1101,4 +1116,17 @@ bool SshSessionStack::shouldStop() const
 {
     QMutexLocker locker(&m_mutex);
     return m_stopRequested;
+}
+
+void SshSessionStack::notifyOutputConsumed(const qint64 bytes)
+{
+    if (bytes <= 0) {
+        return;
+    }
+    m_outputInFlight.fetch_sub(bytes, std::memory_order_relaxed);
+}
+
+bool SshSessionStack::outputBacklogFull() const
+{
+    return m_outputInFlight.load(std::memory_order_relaxed) >= kOutputBacklogHighWaterBytes;
 }

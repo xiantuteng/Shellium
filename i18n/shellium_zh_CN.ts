@@ -3016,6 +3016,10 @@ To avoid overwriting existing credentials, Shellium does not create a new vault 
         <source>The vault has no master password configuration to verify against.</source>
         <translation>保险箱没有可供验证的主密码配置。</translation>
     </message>
+    <message>
+        <source>Reset terminal</source>
+        <translation type="unfinished">重置终端</translation>
+    </message>
 </context>
 <context>
     <name>RemoteFileManagerWidget</name>
@@ -3813,6 +3817,10 @@ This algorithm is obsolete; upgrading the server&apos;s SSH configuration is rec
         <translation> 行</translation>
     </message>
     <message>
+        <source> MB</source>
+        <translation> MB</translation>
+    </message>
+    <message>
         <source>Session</source>
         <translation>会话</translation>
     </message>
@@ -3823,6 +3831,14 @@ This algorithm is obsolete; upgrading the server&apos;s SSH configuration is rec
     <message>
         <source>Lowering this value immediately discards the oldest history beyond the limit; discarded content cannot be recovered.</source>
         <translation>减小该值会立即丢弃超过上限的最旧历史；已经丢弃的内容无法恢复。</translation>
+    </message>
+    <message>
+        <source>Scrollback memory cap</source>
+        <translation>滚动历史内存上限</translation>
+    </message>
+    <message>
+        <source>Upper bound on the memory one session&apos;s scrollback may use. The oldest lines are discarded once either this or the line limit is reached; only very long lines or very large line limits come close to it.</source>
+        <translation>单个会话的滚动历史最多可占用的内存。达到此上限或行数上限中的任意一个时，最旧的行会被丢弃；只有极长的行或极大的行数上限才会接近它。</translation>
     </message>
     <message>
         <source>Alert sound</source>
@@ -4760,6 +4776,10 @@ Reconnecting manually…<byte value="xd"/>
     <message>
         <source>Unknown cursor shape &apos;%1&apos;; reverted to block cursor</source>
         <translation>未知光标形态“%1”，已恢复为块状光标</translation>
+    </message>
+    <message>
+        <source>Unknown sidebar density &apos;%1&apos;; reverted to relaxed</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>The shortcut &apos;%2&apos; for action &apos;%1&apos; is invalid; the default has been restored</source>

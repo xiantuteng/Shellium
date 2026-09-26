@@ -264,12 +264,7 @@ void VtermBridge::resetTerminal()
         --lastRow;
     }
     for (int row = 0; row <= lastRow; ++row) {
-        m_scrollback.append(screenLine(row));
-        ++m_scrollbackPushed;
-    }
-    // 归档同样遵守历史容量，防止反复恢复绕开正常滚动时的内存上限。
-    if (m_scrollback.size() > m_scrollbackLimit) {
-        m_scrollback.remove(0, m_scrollback.size() - m_scrollbackLimit);
+        appendScrollbackLine(screenLine(row));
     }
     m_oscBuffer.clear();
     m_stringScan = StringScan::Normal;
@@ -431,11 +426,154 @@ void VtermBridge::refreshPenDefaultColors()
 void VtermBridge::setScrollbackLimit(const int lineCount)
 {
     m_scrollbackLimit = std::clamp(lineCount, 100, 1000000);
-    if (m_scrollback.size() > m_scrollbackLimit) {
-        // 从头部批量删除比逐行 removeFirst 更高效；设置调小时可能一次裁掉数万行。
-        // 这里不必标记文档失效：增量同步靠全局行号识别被淘汰的段，会自行从头部删除。
-        m_scrollback.remove(0, m_scrollback.size() - m_scrollbackLimit);
+    // 这里不必标记文档失效：增量同步靠全局行号识别被淘汰的段，会自行从头部删除。
+    enforceScrollbackLimits();
+}
+
+void VtermBridge::setScrollbackByteLimit(const qint64 maxBytes)
+{
+    m_scrollbackByteLimit = maxBytes <= 0 ? 0 : maxBytes;
+    enforceScrollbackLimits();
+}
+
+qsizetype VtermBridge::estimateLineBytes(const PackedLine &line)
+{
+    // 每个非空的 Qt 容器各有一次堆分配（约 16 字节头 + 载荷），再加 deque 里的行本体。
+    constexpr qsizetype kAllocationHeader = 16;
+    qsizetype bytes = static_cast<qsizetype>(sizeof(PackedLine));
+    if (!line.text.isEmpty()) {
+        bytes += kAllocationHeader + line.text.capacity() * static_cast<qsizetype>(sizeof(QChar));
     }
+    if (!line.cellLayout.isEmpty()) {
+        bytes += kAllocationHeader + line.cellLayout.capacity();
+    }
+    if (!line.runs.isEmpty()) {
+        bytes += kAllocationHeader
+            + line.runs.capacity() * static_cast<qsizetype>(sizeof(PackedRun));
+    }
+    return bytes;
+}
+
+VtermBridge::PackedLine VtermBridge::packLine(const Line &line)
+{
+    // 行尾空白不会写进文档（buildRenderedLine 按最后一个非空白格截断），打包时直接丢掉。
+    // 双宽右半格（width 0）必须跟左半格一起保留，遇到它就停。
+    qsizetype columns = line.size();
+    while (columns > 0) {
+        const Cell &last = line.at(columns - 1);
+        if (last.width == 0 || !isBlankCell(last)) {
+            break;
+        }
+        --columns;
+    }
+
+    PackedLine packed;
+    packed.columns = static_cast<int>(columns);
+    bool simple = true;
+    for (qsizetype column = 0; column < columns; ++column) {
+        const Cell &cell = line.at(column);
+        if (cell.width != 1 || cell.text.size() != 1) {
+            simple = false;
+            break;
+        }
+    }
+
+    packed.text.reserve(columns);
+    if (!simple) {
+        packed.cellLayout.resize(columns);
+    }
+    const Cell *runStyle = nullptr;
+    for (qsizetype column = 0; column < columns; ++column) {
+        const Cell &cell = line.at(column);
+        if (!simple) {
+            // VTERM_MAX_CHARS_PER_CELL 个 UCS-4 码位最多 12 个 UTF-16 单元，6 位足够。
+            const auto textLength = static_cast<quint8>(std::min<qsizetype>(cell.text.size(), 63));
+            const auto width = static_cast<quint8>(std::clamp(cell.width, 0, 3));
+            packed.cellLayout[column] = static_cast<char>((textLength << 2U) | width);
+        }
+        // 双宽右半格的样式由 convertCell() 固定为默认值，解包时同样按默认值还原；让它参与
+        // 分段只会把一段中文切成一格一段。
+        if (cell.width == 0) {
+            continue;
+        }
+        packed.text.append(cell.text.left(63));
+        if (runStyle == nullptr || !hasSameStyle(*runStyle, cell)) {
+            runStyle = &cell;
+            PackedRun run;
+            run.column = static_cast<quint16>(std::min<qsizetype>(column, 0xffff));
+            run.foreground = cell.foreground.rgb();
+            run.background = cell.background.rgb();
+            run.flags = static_cast<quint8>(
+                (cell.bold ? PackedBold : 0U) | (cell.italic ? PackedItalic : 0U)
+                | (cell.underline ? PackedUnderline : 0U) | (cell.strike ? PackedStrike : 0U)
+                | (cell.reverse ? PackedReverse : 0U) | (cell.conceal ? PackedConceal : 0U)
+                | (cell.foreground.isValid() ? 0U : PackedForegroundInvalid)
+                | (cell.background.isValid() ? 0U : PackedBackgroundInvalid));
+            packed.runs.append(run);
+        }
+    }
+    packed.text.squeeze();
+    packed.runs.squeeze();
+    return packed;
+}
+
+VtermBridge::Line VtermBridge::unpackLine(const PackedLine &packed)
+{
+    Line line;
+    line.reserve(packed.columns);
+    const bool simple = packed.cellLayout.isEmpty();
+    qsizetype textPosition = 0;
+    qsizetype runIndex = -1;
+    Cell styled;
+    for (int column = 0; column < packed.columns; ++column) {
+        int width = 1;
+        qsizetype textLength = 1;
+        if (!simple) {
+            const auto layout = static_cast<quint8>(packed.cellLayout.at(column));
+            width = layout & 0x3U;
+            textLength = layout >> 2U;
+        }
+        if (width == 0) {
+            // 与 convertCell() 对双宽右半格的输出完全一致：只有宽度为 0，其余全是默认值。
+            Cell continuation;
+            continuation.width = 0;
+            line.append(continuation);
+            continue;
+        }
+        while (runIndex + 1 < packed.runs.size() && packed.runs.at(runIndex + 1).column <= column) {
+            ++runIndex;
+            styled = styledCell(packed.runs.at(runIndex));
+        }
+        Cell cell = styled;
+        cell.width = width;
+        cell.text = textLength > 0 ? packed.text.mid(textPosition, textLength) : QString();
+        textPosition += textLength;
+        line.append(std::move(cell));
+    }
+    return line;
+}
+
+void VtermBridge::enforceScrollbackLimits()
+{
+    while (!m_scrollback.empty()
+           && (static_cast<int>(m_scrollback.size()) > m_scrollbackLimit
+               || (m_scrollbackByteLimit > 0
+                   && m_scrollbackApproxBytes > m_scrollbackByteLimit))) {
+        m_scrollbackApproxBytes -= estimateLineBytes(m_scrollback.front());
+        m_scrollback.pop_front();
+    }
+    if (m_scrollbackApproxBytes < 0 || m_scrollback.empty()) {
+        m_scrollbackApproxBytes = 0;
+    }
+}
+
+void VtermBridge::appendScrollbackLine(Line line)
+{
+    PackedLine packed = packLine(line);
+    m_scrollbackApproxBytes += estimateLineBytes(packed);
+    m_scrollback.push_back(std::move(packed));
+    ++m_scrollbackPushed;
+    enforceScrollbackLimits();
 }
 
 void VtermBridge::setLineHeightPercent(const int percent)
@@ -480,6 +618,48 @@ bool VtermBridge::isLineAnchorFormat(const QTextCharFormat &format)
 void VtermBridge::invalidateDocument()
 {
     m_documentDirty = true;
+}
+
+int VtermBridge::releaseBlockLayouts(QTextDocument *document, const int firstBlock,
+                                     const int lastBlock)
+{
+    if (document == nullptr || document != m_documentTarget || m_documentDirty
+        || m_alternateScreen) {
+        return 0;
+    }
+    // 文档可能落后于历史（欠着一帧没渲染）：文档头部那几段对应的行也许已经被上限淘汰，
+    // 手里没有原始内容就不能重写，跳过它们。
+    const qint64 retainedFirst = m_scrollbackPushed - static_cast<qint64>(m_scrollback.size());
+    const int evictedBlocks = static_cast<int>(
+        std::clamp<qint64>(retainedFirst - m_documentScrollbackFirst, 0, m_documentScrollbackCount));
+    const int first = std::max({firstBlock, evictedBlocks, 0});
+    const int last = std::min(lastBlock, m_documentScrollbackCount - 1);
+    if (first > last) {
+        return 0;
+    }
+
+    // 从前一段的段分隔符开始删，这样起始段自身的 QTextBlockData（连同它的排版缓存）也会
+    // 被释放；首段前面没有分隔符，只能保留它的块数据、重写正文。
+    const QTextBlock firstTextBlock = document->findBlockByNumber(first);
+    const QTextBlock lastTextBlock = document->findBlockByNumber(last);
+    if (!firstTextBlock.isValid() || !lastTextBlock.isValid()) {
+        return 0;
+    }
+    QTextCursor cursor(document);
+    cursor.beginEditBlock();
+    cursor.setPosition(first > 0 ? firstTextBlock.position() - 1 : firstTextBlock.position());
+    cursor.setPosition(lastTextBlock.position() + lastTextBlock.length() - 1,
+                       QTextCursor::KeepAnchor);
+    cursor.removeSelectedText();
+    for (int block = first; block <= last; ++block) {
+        if (block > 0) {
+            cursor.insertBlock();
+        }
+        const qint64 line = m_documentScrollbackFirst + block;
+        writePackedLine(cursor, m_scrollback[static_cast<size_t>(line - retainedFirst)]);
+    }
+    cursor.endEditBlock();
+    return last - first + 1;
 }
 
 void VtermBridge::sendKey(const VTermKey key, const VTermModifier modifiers)
@@ -624,11 +804,119 @@ bool VtermBridge::isSameRenderedLine(const RenderedLine &left, const RenderedLin
     return true;
 }
 
-void VtermBridge::writeRenderedLine(QTextCursor &cursor, const RenderedLine &line)
+void VtermBridge::writeBlockFormat(QTextCursor &cursor) const
 {
     QTextBlockFormat blockFormat;
     blockFormat.setLineHeight(m_lineHeightPercent, QTextBlockFormat::ProportionalHeight);
     cursor.setBlockFormat(blockFormat);
+}
+
+void VtermBridge::writeLineAnchors(QTextCursor &cursor) const
+{
+    // 行高锚点必须落在每一段上，空行也不例外：只要漏掉一段，那一段就会矮几像素，整块
+    // 网格的行距立刻不再均匀，最后一行也就重新开始漂移。零宽字符不占列宽，不会影响
+    // 双宽字符的列对齐；导出与复制路径会把它剔除。
+    for (const auto &anchor : m_lineAnchors) {
+        QTextCharFormat anchorFormat;
+        anchorFormat.setFont(anchor.second);
+        // 专用属性让视图能区分“内部锚点中”与用户真实输入的“中”。仅依靠透明前景色不够：
+        // Qt 绘制选区时会用 HighlightedText 覆盖前景色，正是原问题中锚点显形的原因。
+        anchorFormat.setProperty(kLineHeightAnchorProperty, true);
+        anchorFormat.setForeground(QColor(Qt::transparent));
+        cursor.insertText(QString(anchor.first), anchorFormat);
+    }
+}
+
+void VtermBridge::writePackedLine(QTextCursor &cursor, const PackedLine &packed) const
+{
+    writeBlockFormat(cursor);
+
+    // 与 writeRenderedLine(buildRenderedLine(unpackLine(packed), -1)) 写出完全相同的内容，
+    // 只是不再为每一格构造 Cell 和 QString：整体重建时要写上万行，逐格解包会把重建耗时
+    // 拉长一半以上。
+    const bool simple = packed.cellLayout.isEmpty();
+    const auto cellWidth = [&packed, simple](const int column) {
+        return simple ? 1 : static_cast<int>(static_cast<quint8>(packed.cellLayout.at(column)) & 0x3U);
+    };
+    const auto cellTextLength = [&packed, simple](const int column) -> qsizetype {
+        return simple ? 1 : static_cast<quint8>(packed.cellLayout.at(column)) >> 2U;
+    };
+    const auto isBlankText = [](const QStringView text) {
+        return std::all_of(text.cbegin(), text.cend(), [](const QChar c) { return c.isSpace(); });
+    };
+
+    // 与 buildRenderedLine 同一判据：最后一个非空白格之后的内容不写入。
+    int lastColumn = -1;
+    qsizetype textPosition = 0;
+    for (int column = 0; column < packed.columns; ++column) {
+        const qsizetype length = cellWidth(column) == 0 ? 0 : cellTextLength(column);
+        if (!isBlankText(QStringView(packed.text).mid(textPosition, length))) {
+            lastColumn = column;
+        }
+        textPosition += length;
+    }
+
+    QString run;
+    run.reserve(lastColumn + 1);
+    qsizetype runIndex = -1;
+    qsizetype flushedRunIndex = -1;
+    const auto flushRun = [this, &cursor, &run, &packed, &flushedRunIndex]() {
+        if (run.isEmpty() || flushedRunIndex < 0) {
+            return;
+        }
+        cursor.insertText(run, charFormatForRun(packed.runs.at(flushedRunIndex)));
+        run.clear();
+    };
+
+    textPosition = 0;
+    for (int column = 0; column <= lastColumn; ++column) {
+        if (cellWidth(column) == 0) {
+            continue;
+        }
+        while (runIndex + 1 < packed.runs.size() && packed.runs.at(runIndex + 1).column <= column) {
+            ++runIndex;
+        }
+        if (runIndex != flushedRunIndex) {
+            flushRun();
+            flushedRunIndex = runIndex;
+        }
+        const qsizetype length = cellTextLength(column);
+        if (length == 0) {
+            run.append(QLatin1Char(' '));
+        } else {
+            run.append(QStringView(packed.text).mid(textPosition, length));
+        }
+        textPosition += length;
+    }
+    flushRun();
+
+    writeLineAnchors(cursor);
+}
+
+VtermBridge::Cell VtermBridge::styledCell(const PackedRun &run)
+{
+    Cell styled;
+    styled.foreground = (run.flags & PackedForegroundInvalid) != 0
+        ? QColor() : QColor::fromRgb(run.foreground);
+    styled.background = (run.flags & PackedBackgroundInvalid) != 0
+        ? QColor() : QColor::fromRgb(run.background);
+    styled.bold = (run.flags & PackedBold) != 0;
+    styled.italic = (run.flags & PackedItalic) != 0;
+    styled.underline = (run.flags & PackedUnderline) != 0;
+    styled.strike = (run.flags & PackedStrike) != 0;
+    styled.reverse = (run.flags & PackedReverse) != 0;
+    styled.conceal = (run.flags & PackedConceal) != 0;
+    return styled;
+}
+
+QTextCharFormat VtermBridge::charFormatForRun(const PackedRun &run)
+{
+    return charFormatForCell(styledCell(run));
+}
+
+void VtermBridge::writeRenderedLine(QTextCursor &cursor, const RenderedLine &line)
+{
+    writeBlockFormat(cursor);
 
     // 相邻同属性单元格合并成一次 insertText：终端一行通常只有一两种属性，逐格插入会把
     // QTextCharFormat 构造和文档写入放大到列数倍，正是全量渲染慢的主要常数因子。
@@ -663,19 +951,7 @@ void VtermBridge::writeRenderedLine(QTextCursor &cursor, const RenderedLine &lin
         run.append(cell.text.isEmpty() ? QStringLiteral(" ") : cell.text);
     }
     flushRun();
-
-    // 行高锚点必须落在每一段上，空行也不例外：只要漏掉一段，那一段就会矮几像素，整块
-    // 网格的行距立刻不再均匀，最后一行也就重新开始漂移。零宽字符不占列宽，不会影响
-    // 双宽字符的列对齐；导出与复制路径会把它剔除。
-    for (const auto &anchor : m_lineAnchors) {
-        QTextCharFormat anchorFormat;
-        anchorFormat.setFont(anchor.second);
-        // 专用属性让视图能区分“内部锚点中”与用户真实输入的“中”。仅依靠透明前景色不够：
-        // Qt 绘制选区时会用 HighlightedText 覆盖前景色，正是原问题中锚点显形的原因。
-        anchorFormat.setProperty(kLineHeightAnchorProperty, true);
-        anchorFormat.setForeground(QColor(Qt::transparent));
-        cursor.insertText(QString(anchor.first), anchorFormat);
-    }
+    writeLineAnchors(cursor);
 }
 
 void VtermBridge::locateCursorInBlock(const QTextBlock &block, const RenderedLine &line)
@@ -733,7 +1009,7 @@ void VtermBridge::rebuildDocument(QTextDocument *document)
         if (index > 0) {
             cursor.insertBlock();
         }
-        writeRenderedLine(cursor, buildRenderedLine(m_scrollback.at(index), -1));
+        writePackedLine(cursor, m_scrollback[static_cast<size_t>(index)]);
     }
 
     const int lastScreenRow = lastVisibleScreenRow();
@@ -790,7 +1066,7 @@ bool VtermBridge::render(QTextDocument *document)
     QVector<RenderedLine> desiredTail;
     desiredTail.reserve(static_cast<qsizetype>(appendCount) + m_rows);
     for (qint64 index = scrollbackBlocks - appendCount; index < scrollbackBlocks; ++index) {
-        desiredTail.append(buildRenderedLine(m_scrollback.at(static_cast<qsizetype>(index)), -1));
+        desiredTail.append(buildRenderedLine(unpackLine(m_scrollback[static_cast<size_t>(index)]), -1));
     }
     const int lastScreenRow = lastVisibleScreenRow();
     for (int row = 0; row <= lastScreenRow; ++row) {
@@ -998,14 +1274,9 @@ int VtermBridge::pushScrollbackCallback(const int columns,
     for (int column = 0; column < columns; ++column) {
         line.append(bridge->convertCell(cells[column]));
     }
-    bridge->m_scrollback.append(std::move(line));
     // 只增不减的全局行号是增量同步的坐标系：文档里存的是哪几行、该从头部删几段、该从
-    // 尾部补几段，全部由它推算。
-    ++bridge->m_scrollbackPushed;
-    if (bridge->m_scrollback.size() > bridge->m_scrollbackLimit) {
-        bridge->m_scrollback.remove(0,
-            bridge->m_scrollback.size() - bridge->m_scrollbackLimit);
-    }
+    // 尾部补几段，全部由它推算（在 appendScrollbackLine 内递增）。
+    bridge->appendScrollbackLine(std::move(line));
     return 1;
 }
 
@@ -1014,7 +1285,7 @@ int VtermBridge::popScrollbackCallback(const int columns,
                                        void *user)
 {
     auto *bridge = static_cast<VtermBridge *>(user);
-    if (bridge->m_scrollback.isEmpty()) {
+    if (bridge->m_scrollback.empty()) {
         return 0;
     }
     // libvterm 在扩容回流时需要原生单元格；当前历史保存为 Qt 值对象，无法无损恢复所有属性。
@@ -1028,6 +1299,7 @@ int VtermBridge::clearScrollbackCallback(void *user)
 {
     auto *bridge = static_cast<VtermBridge *>(user);
     bridge->m_scrollback.clear();
+    bridge->m_scrollbackApproxBytes = 0;
     // 历史被整体丢弃，文档里现存的段无一对应得上，只能整体重建。
     bridge->invalidateDocument();
     return 1;

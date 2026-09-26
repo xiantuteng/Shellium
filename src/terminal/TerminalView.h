@@ -274,6 +274,17 @@ protected:
     /** @brief 记录视图像素变化，并在拖动稳定后统一提交终端字符尺寸。 */
     void resizeEvent(QResizeEvent *event) override;
 
+    /** @brief 标签切回前台时补上隐藏期间欠下的一次增量同步。 */
+    void showEvent(QShowEvent *event) override;
+
+    /**
+     * @brief 标签隐藏时暂停文档同步，并安排释放排版缓存。
+     *
+     * PTY/SSH 输出仍会 feed 进 libvterm，会话状态与滚动历史完全不受影响；文档也原样保留，
+     * 切回时不需要整体重建，滚动位置和选区都还在。
+     */
+    void hideEvent(QHideEvent *event) override;
+
     /**
      * @brief 阻止 Qt 把 Tab 当成控件焦点导航键。
      * @param next true 表示向前切换焦点，false 表示向后切换。
@@ -384,6 +395,27 @@ private:
     void scheduleRender();
 
     /**
+     * @brief 每次渲染后登记可能带着排版缓存的段。
+     * @param rebuilt 本次是否整体重建；重建后旧段连同缓存都已释放，候选区间清零。
+     */
+    void noteLayoutCandidates(bool rebuilt);
+
+    /**
+     * @brief 把一段全局行号并入"可能带着排版缓存"的候选区间，并确保清理计时器在跑。
+     *
+     * 用全局行号而不是段号：历史被上限淘汰时文档头部的段会被删掉，段号随之整体前移，
+     * 全局行号则保持不变。
+     */
+    void markLayoutCandidates(qint64 firstLine, qint64 lastLine);
+
+    /**
+     * @brief 释放视口之外那些段的排版缓存，见 VtermBridge::releaseBlockLayouts()。
+     *
+     * 分批进行，每批至多 kLayoutReleaseBatchBlocks 段；有选区或正在拖选时整轮推迟。
+     */
+    void releaseOffscreenLayouts();
+
+    /**
      * @brief 若还欠着一帧渲染则立即补上。
      *
      * 任何要读取 QTextDocument 内容的调用（查找、导出全文）都必须先调用它，否则读到的是
@@ -452,6 +484,28 @@ private:
      * 输出时必须以固定帧率持续出帧，防抖则会一直推迟到输出停止才画出第一帧。
      */
     QTimer *m_renderCoalesceTimer = nullptr;
+
+    /**
+     * @brief 当前是否因隐藏而推迟文档同步。
+     *
+     * feed() 仍照常进入 libvterm；仅跳过 QTextDocument 更新，直至重新显示。
+     */
+    bool m_renderSuspended = false;
+
+    /** @brief 隐藏期间是否欠着一次渲染；切回前台或 flushPendingRender() 时补上。 */
+    bool m_renderOwed = false;
+
+    /** @brief 定期释放视口外排版缓存的计时器，见 releaseOffscreenLayouts()。 */
+    QTimer *m_layoutReleaseTimer = nullptr;
+
+    /**
+     * @brief 可能带着排版缓存的段的全局行号区间（闭区间）；first > last 表示为空。
+     *
+     * 只增不减地并入被绘制过、被原地改写过的段，释放后收缩。它让每轮清理只碰真正排过版
+     * 的段，而不是把整份历史重写一遍。
+     */
+    qint64 m_layoutCandidateFirst = 0;
+    qint64 m_layoutCandidateLast = -1;
 
     /** @brief 距上一次真正渲染的时间；用于判断当前是"空闲后首帧"还是"持续输出中"。 */
     QElapsedTimer m_lastRenderElapsed;

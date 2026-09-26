@@ -3016,6 +3016,10 @@ Pour éviter d&apos;écraser des identifiants existants, Shellium ne crée pas a
         <source>The vault has no master password configuration to verify against.</source>
         <translation type="unfinished">Le coffre-fort n&apos;a aucune configuration de mot de passe maître à vérifier.</translation>
     </message>
+    <message>
+        <source>Reset terminal</source>
+        <translation type="unfinished">Réinitialiser le terminal</translation>
+    </message>
 </context>
 <context>
     <name>RemoteFileManagerWidget</name>
@@ -3811,6 +3815,10 @@ Cet algorithme est obsolète ; il est recommandé de mettre à jour la configura
         <translation type="unfinished">lignes</translation>
     </message>
     <message>
+        <source> MB</source>
+        <translation> Mo</translation>
+    </message>
+    <message>
         <source>Session</source>
         <translation type="unfinished">Session</translation>
     </message>
@@ -3821,6 +3829,14 @@ Cet algorithme est obsolète ; il est recommandé de mettre à jour la configura
     <message>
         <source>Lowering this value immediately discards the oldest history beyond the limit; discarded content cannot be recovered.</source>
         <translation type="unfinished">Réduire cette valeur supprime immédiatement l&apos;historique le plus ancien au-delà de la limite ; le contenu supprimé ne peut pas être récupéré.</translation>
+    </message>
+    <message>
+        <source>Scrollback memory cap</source>
+        <translation>Limite mémoire de l&apos;historique</translation>
+    </message>
+    <message>
+        <source>Upper bound on the memory one session&apos;s scrollback may use. The oldest lines are discarded once either this or the line limit is reached; only very long lines or very large line limits come close to it.</source>
+        <translation>Mémoire maximale que peut occuper l&apos;historique de défilement d&apos;une session. Les lignes les plus anciennes sont supprimées dès que cette limite ou la limite de lignes est atteinte ; seules des lignes très longues ou une limite de lignes très élevée s&apos;en approchent.</translation>
     </message>
     <message>
         <source>Alert sound</source>
@@ -4758,6 +4774,10 @@ Reconnexion manuelle…<byte value="xd"/>
     <message>
         <source>Unknown cursor shape &apos;%1&apos;; reverted to block cursor</source>
         <translation type="unfinished">Forme de curseur inconnue &apos;%1&apos; ; rétablie sur le curseur bloc</translation>
+    </message>
+    <message>
+        <source>Unknown sidebar density &apos;%1&apos;; reverted to relaxed</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>The shortcut &apos;%2&apos; for action &apos;%1&apos; is invalid; the default has been restored</source>

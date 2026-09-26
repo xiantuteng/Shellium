@@ -1077,6 +1077,27 @@ if(BUILD_TESTING)
         Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test ShelliumDependencies::libvterm)
     add_test(NAME ShelliumTerminalFloodTests COMMAND ShelliumTerminalFloodTests)
 
+    # 多标签内存占用的回归：紧凑滚动历史、排版缓存释放、后台标签暂停同步，以及这些优化
+    # 不得改变渲染结果、选区与历史。需要真实 TerminalView，因此与 AltScreen 目标同一组源文件。
+    qt_add_executable(ShelliumTerminalMemoryTests
+        tests/TerminalMemoryTest.cpp
+        src/core/ConnectionTarget.cpp
+        src/core/ConnectionTarget.h
+        src/core/HostRecord.h
+        src/settings/TerminalSettings.cpp
+        src/settings/TerminalSettings.h
+        src/storage/ApplicationDatabase.cpp
+        src/storage/ApplicationDatabase.h
+        src/terminal/TerminalView.cpp
+        src/terminal/TerminalView.h
+        src/terminal/VtermBridge.cpp
+        src/terminal/VtermBridge.h
+    )
+    target_include_directories(ShelliumTerminalMemoryTests PRIVATE src)
+    target_link_libraries(ShelliumTerminalMemoryTests PRIVATE
+        Qt6::Core Qt6::Gui Qt6::Sql Qt6::Widgets Qt6::Test ShelliumDependencies::libvterm)
+    add_test(NAME ShelliumTerminalMemoryTests COMMAND ShelliumTerminalMemoryTests)
+
     # 针对真实服务器的连接路径回归。非阻塞握手状态机的价值就在于与真实 libssh 和真实
     # 服务器的时序交互，无法用桩替身覆盖；缺少 SHELLIUM_IT_* 环境变量时测试自行跳过。
     qt_add_executable(ShelliumSshIntegrationTests
