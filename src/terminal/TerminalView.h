@@ -408,6 +408,9 @@ private:
      */
     void markLayoutCandidates(qint64 firstLine, qint64 lastLine);
 
+    /** @brief 把视口首段附近（上两屏、下三屏）登记为候选；绘制和滚动时都要调用。 */
+    void markViewportLayoutCandidates();
+
     /**
      * @brief 释放视口之外那些段的排版缓存，见 VtermBridge::releaseBlockLayouts()。
      *

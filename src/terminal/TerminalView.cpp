@@ -465,6 +465,11 @@ TerminalView::TerminalView(QWidget *parent)
     m_layoutReleaseTimer->setSingleShot(true);
     m_layoutReleaseTimer->setInterval(kLayoutReleaseIntervalMilliseconds);
     connect(m_layoutReleaseTimer, &QTimer::timeout, this, &TerminalView::releaseOffscreenLayouts);
+    // 滚动本身就会让 Qt 排版新的视口首段及其附近几屏，不论窗口此刻是否真的画得出来（被
+    // 其他窗口挡住、处于后台时 repaint 不会发生）。只靠 paintEvent 登记会漏掉这些段。
+    connect(verticalScrollBar(), &QScrollBar::valueChanged, this, [this]() {
+        markViewportLayoutCandidates();
+    });
     m_renderCoalesceTimer->setSingleShot(true);
     m_renderCoalesceTimer->setInterval(kRenderCoalesceMilliseconds);
     connect(m_renderCoalesceTimer, &QTimer::timeout, this, [this]() {
@@ -1602,6 +1607,18 @@ void TerminalView::noteLayoutCandidates(const bool rebuilt)
     markLayoutCandidates(tailFirst, tailLast);
 }
 
+void TerminalView::markViewportLayoutCandidates()
+{
+    const QTextBlock firstBlock = firstVisibleBlock();
+    if (!firstBlock.isValid()) {
+        return;
+    }
+    const int page = std::max(1, viewport()->height() / std::max(1, fontMetrics().height()));
+    const qint64 firstLine = m_vtermBridge->documentFirstLineNumber() + firstBlock.blockNumber();
+    markLayoutCandidates(firstLine - kLayoutKeepPagesAbove * page,
+                         firstLine + kLayoutKeepPagesBelow * page);
+}
+
 void TerminalView::markLayoutCandidates(const qint64 firstLine, const qint64 lastLine)
 {
     if (firstLine > lastLine) {
@@ -1715,14 +1732,7 @@ void TerminalView::paintEvent(QPaintEvent *event)
 
     // 画出来的段都已经被 Qt 排过版（带着塑形缓存）；记下来，滚出视口后再释放。登记范围
     // 比视口宽，理由见 kLayoutKeepPagesAbove。
-    const QTextBlock firstPainted = firstVisibleBlock();
-    if (firstPainted.isValid()) {
-        const int page = std::max(1, viewport()->height() / std::max(1, fontMetrics().height()));
-        const qint64 firstLine =
-            m_vtermBridge->documentFirstLineNumber() + firstPainted.blockNumber();
-        markLayoutCandidates(firstLine - kLayoutKeepPagesAbove * page,
-                             firstLine + kLayoutKeepPagesBelow * page);
-    }
+    markViewportLayoutCandidates();
 
     // Qt 的选区调色板会覆盖透明前景色，因此必须在基础文本与选区都画完以后遮住内部锚点。
     // 只在确有选区时创建额外绘制器，避免持续输出的普通场景为每一帧承担无意义开销。

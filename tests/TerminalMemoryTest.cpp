@@ -342,6 +342,12 @@ void TerminalMemoryTest::offscreenLayoutsAreReleased()
     QVERIFY(middleBlock > view.terminalRows() * 6);
     QCOMPARE(view.document()->toPlainText(), textBefore);
 
+    // 窗口被别的窗口挡住、或者在后台时，滚动不会真的重绘，但 Qt 照样为新的视口首段排了
+    // 版。这里连续两次 setValue、中间不给事件循环机会，模拟"滚过去却没画出来"。
+    bar->setValue(bar->maximum() / 3);
+    bar->setValue(bar->maximum());
+    QTRY_COMPARE_WITH_TIMEOUT(laidOutBlocksAwayFromViewport(view), 0, 6000);
+
     // 清理必须收敛：空闲的标签不能每秒重写一轮文档、白白耗 CPU。候选区间是保守估计，
     // 可能还有几批"登记过但其实没排版"的段在按节拍处理，先等这些批次做完，之后文档
     // 一次都不应再被改动。
