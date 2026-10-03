@@ -178,7 +178,7 @@ int main(int argc, char *argv[])
     // 启动时统一接管滚动条绘制，动态创建的对话框和终端同样遵循空闲隐藏规则。
     new ScrollBarPolicy(application);
     QCoreApplication::setApplicationName(QStringLiteral("Shellium"));
-    QCoreApplication::setApplicationVersion(QStringLiteral("0.2.4"));
+    QCoreApplication::setApplicationVersion(QStringLiteral("0.2.5"));
     QCoreApplication::setOrganizationName(QStringLiteral("Shellium"));
 
     // Qt 资源中的 PNG 使用与 macOS Bundle 相同的圆角方形设计，并保留透明外围安全区；它会
