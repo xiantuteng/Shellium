@@ -4791,6 +4791,14 @@ Reconectando manualmente…<byte value="xd"/>
 <context>
     <name>TerminalView</name>
     <message>
+        <source>Copy</source>
+        <translation type="unfinished">Copiar</translation>
+    </message>
+    <message>
+        <source>Select All</source>
+        <translation type="unfinished">Seleccionar todo</translation>
+    </message>
+    <message>
         <source>Upload to the current remote directory…</source>
         <translation type="unfinished">Subir al directorio remoto actual…</translation>
     </message>

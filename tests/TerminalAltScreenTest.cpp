@@ -8,6 +8,8 @@
 #include <QRawFont>
 #include <QTextLayout>
 #include <QImage>
+#include <QLineEdit>
+#include <QVBoxLayout>
 #include <QMenu>
 #include <QScrollBar>
 #include <QSignalSpy>
@@ -21,6 +23,7 @@
 #include "settings/TerminalSettings.h"
 #include "terminal/TerminalView.h"
 #include "terminal/VtermBridge.h"
+#include "ui/ScrollBarPolicy.h"
 
 namespace {
 
@@ -111,6 +114,59 @@ bool showAndSettle(TerminalView &view)
     return true;
 }
 
+/** @brief 激活视图所在窗口并把键盘焦点交给终端；闪烁与实心光标只在有焦点时出现。 */
+bool focusTerminal(TerminalView &view)
+{
+    view.activateWindow();
+    if (!QTest::qWaitForWindowActive(view.window())) {
+        return false;
+    }
+    view.setFocus(Qt::OtherFocusReason);
+    return QTest::qWaitFor([&view]() { return view.hasFocus(); }, 1000);
+}
+
+/** @brief 两种颜色是否足够接近；Retina 缩放与描边边缘会让像素与理论色差几个单位。 */
+bool colorsClose(const QColor &left, const QColor &right, const int tolerance = 24)
+{
+    return std::abs(left.red() - right.red()) <= tolerance
+        && std::abs(left.green() - right.green()) <= tolerance
+        && std::abs(left.blue() - right.blue()) <= tolerance;
+}
+
+/**
+ * @brief 统计画面中光标色像素的外接矩形与个数，用于区分实心块和空心块。
+ * @param image viewport 截图；光标色须与终端前景、背景都不同。
+ */
+struct CursorPixels {
+    QRect bounds;
+    int count = 0;
+};
+
+CursorPixels findCursorPixels(const QImage &image, const QColor &cursorColor)
+{
+    CursorPixels result;
+    for (int y = 0; y < image.height(); ++y) {
+        for (int x = 0; x < image.width(); ++x) {
+            if (colorsClose(image.pixelColor(x, y), cursorColor, 8)) {
+                result.bounds = result.bounds.united(QRect(x, y, 1, 1));
+                ++result.count;
+            }
+        }
+    }
+    return result;
+}
+
+/** @brief 按 objectName 在终端右键菜单里找动作；找不到返回 nullptr。 */
+QAction *findMenuAction(QMenu &menu, const QString &objectName)
+{
+    for (QAction *action : menu.actions()) {
+        if (action->objectName() == objectName) {
+            return action;
+        }
+    }
+    return nullptr;
+}
+
 } // namespace
 
 class TerminalAltScreenTest : public QObject
@@ -162,6 +218,14 @@ private slots:
     void themeAnsiPaletteReplacesVgaDefaults();
     /** @brief 自动提示必须默认关闭；开启后的弹层字体、行高和位置要符合终端视觉约束。 */
     void commandCompletionHonorsSwitchAndUsesCompactTerminalLayout();
+    /** @brief 失去焦点后光标改画为不闪烁的空心块，重新获得焦点后恢复实心块。 */
+    void unfocusedCursorIsHollowBlock();
+    /** @brief 右键菜单在"复制"之后提供"粘贴"，与快捷键走同一条清理与括号粘贴路径。 */
+    void contextMenuPasteMatchesShortcutPaste();
+    /** @brief 本地密码捕获期间，菜单粘贴只进入待提交行，绝不发往远端。 */
+    void contextMenuPasteDuringLocalCaptureStaysLocal();
+    /** @brief 终端滚动条空闲时不绘制，手动滚动时以与终端背景有对比的圆角滑块显示。 */
+    void scrollBarHiddenUntilManualScrollAndContrastsWithTheme();
 };
 
 void TerminalAltScreenTest::resetPreservesThemeAndChunkedChinese()
@@ -548,6 +612,8 @@ void TerminalAltScreenTest::cursorBlinkRepaintsCursorPixels()
 {
     TerminalView view;
     QVERIFY(showAndSettle(view));
+    // 闪烁只在有焦点时进行，失焦光标是静止的空心块。
+    QVERIFY(focusTerminal(view));
     view.appendTerminalOutput(QByteArrayLiteral("[root@server ~]# "));
     QTest::qWait(300);
 
@@ -1363,6 +1429,177 @@ void TerminalAltScreenTest::gridFillsViewportWithoutWastedRows()
                                          ? QStringLiteral("少报，底部会空出一条")
                                          : QStringLiteral("多报，最后一行会被挤出视口"))));
     }
+}
+
+void TerminalAltScreenTest::unfocusedCursorIsHollowBlock()
+{
+    // 光标色必须与前景、背景都不同，否则按颜色找不出光标像素。
+    const TerminalPalette palette = TerminalSettings{}.normalized().effectivePalette();
+    QVERIFY(!colorsClose(palette.cursor, palette.background, 8));
+    QVERIFY(!colorsClose(palette.cursor, palette.foreground, 8));
+
+    QWidget window;
+    auto *layout = new QVBoxLayout(&window);
+    auto *view = new TerminalView;
+    auto *otherInput = new QLineEdit;
+    layout->addWidget(view);
+    layout->addWidget(otherInput);
+    window.resize(640, 440);
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+    QVERIFY(focusTerminal(*view));
+    view->appendTerminalOutput(QByteArrayLiteral("$ "));
+    QTest::qWait(300);
+
+    // 有焦点时：默认块状光标在可见相位是一整格实心色块。
+    CursorPixels focused;
+    QVERIFY(QTest::qWaitFor([&]() {
+        focused = findCursorPixels(view->viewport()->grab().toImage(), palette.cursor);
+        return focused.count > 0;
+    }, 2000));
+    QVERIFY2(focused.bounds.width() >= 4 && focused.bounds.height() >= 8, "块状光标应占满一格");
+    QVERIFY2(focused.count * 10 >= focused.bounds.width() * focused.bounds.height() * 9,
+             "有焦点时块状光标必须是实心的");
+
+    otherInput->setFocus(Qt::OtherFocusReason);
+    QTRY_VERIFY(!view->hasFocus());
+    QTest::qWait(50);
+
+    // 失焦后：同一格只剩一圈描边，内部露出背景；而且不再闪烁，连续采样画面不变。
+    const QImage unfocusedImage = view->viewport()->grab().toImage();
+    const CursorPixels hollow = findCursorPixels(unfocusedImage, palette.cursor);
+    QVERIFY2(hollow.count > 0, "失焦后光标不能消失");
+    QVERIFY2(qAbs(hollow.bounds.width() - focused.bounds.width()) <= 2
+                 && qAbs(hollow.bounds.height() - focused.bounds.height()) <= 2,
+             "空心块必须与实心块覆盖同一格");
+    QVERIFY2(hollow.count * 2 < focused.count, "失焦后光标必须是空心的，而不是实心块");
+    QVERIFY(colorsClose(unfocusedImage.pixelColor(hollow.bounds.center()), palette.background));
+    for (int sample = 0; sample < 3; ++sample) {
+        QTest::qWait(400);
+        QCOMPARE(view->viewport()->grab().toImage(), unfocusedImage);
+    }
+
+    // 重新获得焦点立刻恢复实心块，不必等下一次闪烁。
+    view->setFocus(Qt::OtherFocusReason);
+    QTRY_VERIFY(view->hasFocus());
+    QTest::qWait(50);
+    const CursorPixels refocused =
+        findCursorPixels(view->viewport()->grab().toImage(), palette.cursor);
+    QVERIFY2(refocused.count * 10 >= focused.count * 9, "重新获得焦点后应恢复实心光标");
+}
+
+void TerminalAltScreenTest::contextMenuPasteMatchesShortcutPaste()
+{
+    TerminalView view;
+    QVERIFY(showAndSettle(view));
+
+    QGuiApplication::clipboard()->clear();
+    {
+        std::unique_ptr<QMenu> menu(view.createTerminalContextMenu());
+        QAction *paste = findMenuAction(*menu, QStringLiteral("terminal-paste"));
+        QVERIFY2(paste != nullptr, "右键菜单必须提供“粘贴”动作");
+        QVERIFY2(!paste->isEnabled(), "剪贴板没有文本时“粘贴”应置灰");
+        // 系统菜单惯例是"复制 / 粘贴"相邻。
+        const QList<QAction *> actions = menu->actions();
+        const qsizetype pasteIndex = actions.indexOf(paste);
+        QVERIFY(pasteIndex > 0);
+        QCOMPARE(actions.at(pasteIndex - 1)->objectName(), QStringLiteral("edit-copy"));
+    }
+
+    // 菜单粘贴必须与快捷键一样清理控制字符并在远端开启括号粘贴时加上标记。这里的 ESC
+    // 会被清理掉，而移除控制字符必须先经用户确认——弹框会阻塞，所以先验证纯文本路径。
+    QGuiApplication::clipboard()->setText(QStringLiteral("echo menu"));
+    view.appendTerminalOutput(QByteArrayLiteral("\x1b[?2004h"));
+    QSignalSpy inputSpy(&view, &TerminalView::inputBytes);
+    std::unique_ptr<QMenu> menu(view.createTerminalContextMenu());
+    QAction *paste = findMenuAction(*menu, QStringLiteral("terminal-paste"));
+    QVERIFY(paste != nullptr);
+    QVERIFY(paste->isEnabled());
+    paste->trigger();
+    QCOMPARE(inputSpy.count(), 3);
+    QCOMPARE(inputSpy.at(0).at(0).toByteArray(), QByteArrayLiteral("\x1b[200~"));
+    QCOMPARE(inputSpy.at(1).at(0).toByteArray(), QByteArrayLiteral("echo menu"));
+    QCOMPARE(inputSpy.at(2).at(0).toByteArray(), QByteArrayLiteral("\x1b[201~"));
+
+    // 菜单粘贴的内容同样计入当前命令行：随后按回车，嵌套 SSH 识别与历史拿到的是完整命令。
+    QSignalSpy submitSpy(&view, &TerminalView::commandSubmitted);
+    QTest::keyClick(&view, Qt::Key_Return);
+    QCOMPARE(submitSpy.count(), 1);
+    QCOMPARE(submitSpy.at(0).at(0).toString(), QStringLiteral("echo menu"));
+}
+
+void TerminalAltScreenTest::contextMenuPasteDuringLocalCaptureStaysLocal()
+{
+    TerminalView view;
+    QVERIFY(showAndSettle(view));
+    view.beginLocalLineCapture();
+
+    QGuiApplication::clipboard()->setText(QStringLiteral("s3cret\n"));
+    QSignalSpy inputSpy(&view, &TerminalView::inputBytes);
+    QSignalSpy lineSpy(&view, &TerminalView::localLineSubmitted);
+    std::unique_ptr<QMenu> menu(view.createTerminalContextMenu());
+    QAction *paste = findMenuAction(*menu, QStringLiteral("terminal-paste"));
+    QVERIFY(paste != nullptr);
+    paste->trigger();
+    // 尾随换行不能被当作提交。
+    QCOMPARE(lineSpy.count(), 0);
+    QTest::keyClick(&view, Qt::Key_Return);
+
+    QCOMPARE(inputSpy.count(), 0);
+    QCOMPARE(lineSpy.count(), 1);
+    QCOMPARE(lineSpy.at(0).at(0).toString(), QStringLiteral("s3cret"));
+    QCOMPARE(lineSpy.at(0).at(1).toBool(), false);
+}
+
+void TerminalAltScreenTest::scrollBarHiddenUntilManualScrollAndContrastsWithTheme()
+{
+    // 应用里由 main() 安装；测试进程里只在本用例生效，结束即移除，不影响其他用例的截图。
+    std::unique_ptr<ScrollBarPolicy> policy(new ScrollBarPolicy(*qApp));
+    const TerminalPalette palette = TerminalSettings{}.normalized().effectivePalette();
+
+    TerminalView view;
+    QVERIFY(showAndSettle(view));
+    fillScrollback(view, 200);
+    QTest::qWait(300);
+    QScrollBar *bar = view.verticalScrollBar();
+    QVERIFY(bar->maximum() > bar->minimum());
+
+    // 统计滚动条区域内与终端背景明显不同的像素：空闲时一个都不能有。
+    const auto contrastingPixels = [&]() {
+        const QImage image = bar->grab().toImage();
+        int count = 0;
+        for (int y = 0; y < image.height(); ++y) {
+            for (int x = 0; x < image.width(); ++x) {
+                const QColor pixel = image.pixelColor(x, y);
+                if (pixel.alpha() > 0 && !colorsClose(pixel, palette.background, 40)) {
+                    ++count;
+                }
+            }
+        }
+        return count;
+    };
+    // 滚动条自身不画背景，截图里透出的是底层终端背景；先把那层背景合成进来再统计。
+    bar->setAttribute(Qt::WA_NoSystemBackground, false);
+    bar->setAutoFillBackground(true);
+    QPalette barPalette = bar->palette();
+    barPalette.setColor(QPalette::Window, palette.background);
+    bar->setPalette(barPalette);
+
+    // 自动贴底追加输出属于程序滚动，不能亮起滚动条。
+    view.appendTerminalOutput(QByteArrayLiteral("more output\r\n"));
+    QTest::qWait(100);
+    QVERIFY(!bar->property("shelliumScrollActive").toBool());
+    QCOMPARE(contrastingPixels(), 0);
+
+    QWheelEvent wheel(QPointF(20, 20), QPointF(20, 20), QPoint(), QPoint(0, 120),
+                      Qt::NoButton, Qt::NoModifier, Qt::NoScrollPhase, false);
+    QApplication::sendEvent(view.viewport(), &wheel);
+    QVERIFY(bar->property("shelliumScrollActive").toBool());
+    // 滑块必须在深色终端背景上看得见：浅色系统下默认的近黑色文字色几乎与背景融为一体。
+    QVERIFY2(contrastingPixels() > 20, "手动滚动时滑块必须与终端背景形成可见对比");
+
+    QTRY_VERIFY_WITH_TIMEOUT(!bar->property("shelliumScrollActive").toBool(), 1600);
+    QCOMPARE(contrastingPixels(), 0);
 }
 
 QTEST_MAIN(TerminalAltScreenTest)

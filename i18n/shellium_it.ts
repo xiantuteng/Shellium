@@ -4791,6 +4791,14 @@ Riconnessione manuale…<byte value="xd"/>
 <context>
     <name>TerminalView</name>
     <message>
+        <source>Copy</source>
+        <translation type="unfinished">Copia</translation>
+    </message>
+    <message>
+        <source>Select All</source>
+        <translation type="unfinished">Seleziona tutto</translation>
+    </message>
+    <message>
         <source>Upload to the current remote directory…</source>
         <translation type="unfinished">Carica nella directory remota corrente…</translation>
     </message>

@@ -4793,6 +4793,14 @@ Reconnecting manually…<byte value="xd"/>
 <context>
     <name>TerminalView</name>
     <message>
+        <source>Copy</source>
+        <translation type="unfinished">複製</translation>
+    </message>
+    <message>
+        <source>Select All</source>
+        <translation type="unfinished">全選</translation>
+    </message>
+    <message>
         <source>Upload to the current remote directory…</source>
         <translation>上傳到當前遠端目錄…</translation>
     </message>

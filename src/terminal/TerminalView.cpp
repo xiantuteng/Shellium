@@ -229,6 +229,54 @@ bool isClipboardPasteShortcut(const QKeyEvent *event)
 }
 
 /**
+ * @brief 右键菜单"复制"项旁显示的快捷键提示，与 isClipboardCopyShortcut 的平台规则一致。
+ *
+ * Windows/Linux 不能提示 Ctrl+C：那是 SIGINT。
+ */
+QString clipboardCopyShortcutText()
+{
+#if defined(Q_OS_MACOS)
+    return QKeySequence(QKeySequence::Copy).toString(QKeySequence::NativeText);
+#elif defined(Q_OS_WIN)
+    return QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_C).toString(QKeySequence::NativeText);
+#else
+    return QKeySequence(Qt::CTRL | Qt::Key_Insert).toString(QKeySequence::NativeText);
+#endif
+}
+
+/**
+ * @brief 右键菜单"全选"项旁显示的快捷键提示；没有可用快捷键时返回空串。
+ *
+ * 只有 macOS 的 Command+A 不属于终端控制键，会落到 QPlainTextEdit 的默认全选；其他平台的
+ * Ctrl+A 是 Shell 的行首跳转，不能提示成全选。
+ */
+QString selectAllShortcutText()
+{
+#if defined(Q_OS_MACOS)
+    return QKeySequence(QKeySequence::SelectAll).toString(QKeySequence::NativeText);
+#else
+    return QString();
+#endif
+}
+
+/**
+ * @brief 右键菜单"粘贴"项旁显示的快捷键提示，与 isClipboardPasteShortcut 的平台规则一致。
+ *
+ * 不能直接用 QKeySequence::Paste：它在 Windows/Linux 上是 Ctrl+V，而终端里 Ctrl+V 属于
+ * Shell，菜单若这样提示，用户照着按只会得到一次 quoted-insert。
+ */
+QString clipboardPasteShortcutText()
+{
+#if defined(Q_OS_MACOS)
+    return QKeySequence(QKeySequence::Paste).toString(QKeySequence::NativeText);
+#elif defined(Q_OS_WIN)
+    return QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_V).toString(QKeySequence::NativeText);
+#else
+    return QKeySequence(Qt::SHIFT | Qt::Key_Insert).toString(QKeySequence::NativeText);
+#endif
+}
+
+/**
  * @brief 把 Qt 修饰键映射为 libvterm 的修饰掩码。
  *
  * 只翻译 Shift/Control/Alt 三种终端协议认识的修饰。macOS 的 Command 不参与：它是应用级
@@ -501,9 +549,35 @@ void TerminalView::contextMenuEvent(QContextMenuEvent *event)
 
 QMenu *TerminalView::createTerminalContextMenu()
 {
-    // createStandardContextMenu() 返回由调用方负责销毁的菜单。继续使用 Qt 的标准
-    // 复制/全选动作，只在末尾追加 SFTP 入口，保证平台原生文本操作不因业务菜单被替换。
-    QMenu *menu = createStandardContextMenu();
+    // 不用 createStandardContextMenu()：它的"复制 / 全选"文案取自 Qt 自带的 qtbase 翻译，
+    // 而 Homebrew Qt 默认不装 qttranslations、打包后的 .app 也不带，且 Qt 本身不覆盖全部
+    // 14 种界面语言——结果是只有这两项永远停在英文。自建三项，文案全部走本程序的 .ts。
+    // objectName 沿用 Qt 标准动作的命名，便于测试与自动化按名定位。
+    // 快捷键只写进文字作提示而不 setShortcut：真正的按键由 keyPressEvent 按平台识别，
+    // 菜单动作再注册一份快捷键会与之冲突。
+    QMenu *menu = new QMenu(this);
+    const auto withShortcutHint = [](const QString &text, const QString &shortcut) {
+        return shortcut.isEmpty() ? text : text + QLatin1Char('\t') + shortcut;
+    };
+
+    QAction *copyAction = menu->addAction(withShortcutHint(tr("Copy"), clipboardCopyShortcutText()));
+    copyAction->setObjectName(QStringLiteral("edit-copy"));
+    copyAction->setEnabled(textCursor().hasSelection());
+    connect(copyAction, &QAction::triggered, this, &TerminalView::copy);
+
+    QAction *pasteAction = menu->addAction(
+        withShortcutHint(tr("Paste"), clipboardPasteShortcutText()));
+    pasteAction->setObjectName(QStringLiteral("terminal-paste"));
+    pasteAction->setEnabled(m_localCapture || !QGuiApplication::clipboard()->text().isEmpty());
+    connect(pasteAction, &QAction::triggered, this, &TerminalView::pasteFromClipboard);
+
+    menu->addSeparator();
+    QAction *selectAllAction = menu->addAction(
+        withShortcutHint(tr("Select All"), selectAllShortcutText()));
+    selectAllAction->setObjectName(QStringLiteral("select-all"));
+    selectAllAction->setEnabled(!document()->isEmpty());
+    connect(selectAllAction, &QAction::triggered, this, &TerminalView::selectAll);
+
     UiIcons::modernizePopup(menu);
     menu->addSeparator();
     QAction *uploadAction = menu->addAction(tr("Upload to the current remote directory…"));
@@ -614,7 +688,13 @@ void TerminalView::applySettings(const TerminalSettings &settings)
                            terminalPalette.foreground.name()));
 
     setProperty("shelliumAudibleBell", normalized.audibleBell);
-    if (normalized.cursorBlink) {
+    // 滚动条由全局 ScrollBarPolicy 统一绘制，默认取滚动条调色板的文字色；终端背景由主题
+    // 决定，与应用调色板无关，浅色系统下那份文字色是近黑色，压在深色终端上几乎看不见。
+    verticalScrollBar()->setProperty("shelliumScrollHandleColor", terminalPalette.foreground);
+    verticalScrollBar()->update();
+    m_cursorBlinkEnabled = normalized.cursorBlink;
+    // 失焦时光标画成不闪烁的空心块，只在拥有焦点时才启动闪烁。
+    if (m_cursorBlinkEnabled && hasFocus()) {
         m_cursorBlinkTimer->start();
     } else {
         m_cursorBlinkTimer->stop();
@@ -1118,6 +1198,53 @@ bool TerminalView::confirmPaste(const PastePreparation &prepared)
     return dialog.exec() == QDialog::Accepted;
 }
 
+void TerminalView::pasteFromClipboard()
+{
+    const QString clipboardText = QGuiApplication::clipboard()->text();
+    if (m_localCapture) {
+        // 菜单入口不经过 keyPressEvent，同样要把密码提示行拉回视口。
+        scrollToOutputTail();
+        // 剔除换行和其他控制字符：密码管理器常带尾随换行，而控制字符对密码没有意义。
+        // 刻意不把换行当作提交——尾随换行不该在用户还想继续输入时静默提交。
+        QString sanitized;
+        sanitized.reserve(clipboardText.size());
+        for (const QChar character : clipboardText) {
+            if (character >= QChar(0x20) && character != QChar(0x7f)) {
+                sanitized.append(character);
+            }
+        }
+        m_localLine.append(sanitized);
+        return;
+    }
+
+    const PastePreparation prepared = prepareClipboardPaste(clipboardText);
+    if (prepared.text.isEmpty()) {
+        // 剪贴板为空或仅含危险控制字符时不向 PTY 发送任何内容，避免一次“空粘贴”
+        // 被下游交互式程序误解为特殊输入。
+        return;
+    }
+    if (prepared.requiresConfirmation(m_multiLinePasteConfirmation) && !confirmPaste(prepared)) {
+        return;
+    }
+
+    // 多行能力仍然保留，但只有用户看见风险并明确确认后才会进入 PTY。命令缓冲只保留
+    // 最后一个尚未换行的片段；已经包含换行的部分已由 PTY 提交，不能再次上报。
+    const bool alternateScreen = m_vtermBridge->isAlternateScreen();
+    if (!alternateScreen) {
+        m_currentCommand.append(prepared.text.section(QLatin1Char('\n'), -1));
+    }
+
+    // 远端开启括号粘贴时，内容必须夹在 CSI 200~ / CSI 201~ 之间，否则 vim 会把粘贴
+    // 当成逐个按键：autoindent 给每一行再叠一层缩进，十行代码粘完成阶梯状。远端未
+    // 开启该模式时 libvterm 不会产生任何标记字节，行为与此前完全一致。
+    m_vtermBridge->beginPaste();
+    sendUserInput(prepared.text.toUtf8());
+    m_vtermBridge->endPaste();
+    if (!alternateScreen) {
+        updateCompletionPopup();
+    }
+}
+
 TerminalView::PastePreparation TerminalView::prepareClipboardPaste(
     const QString &clipboardText)
 {
@@ -1320,17 +1447,7 @@ void TerminalView::keyPressEvent(QKeyEvent *event)
             // 密码通常是从密码管理器粘贴进来的，必须在这里显式处理：macOS 上 Cmd+V 携带
             // Qt::ControlModifier，会被下面的"追加普通字符"分支排除，进而被整个吞掉；
             // 用户随后按回车就提交了空密码。现象是"粘贴密码永远连不上，手打就正常"。
-            QString pasted = QGuiApplication::clipboard()->text();
-            // 剔除换行和其他控制字符：密码管理器常带尾随换行，而控制字符对密码没有意义。
-            // 刻意不把换行当作提交——尾随换行不该在用户还想继续输入时静默提交。
-            QString sanitized;
-            sanitized.reserve(pasted.size());
-            for (const QChar character : std::as_const(pasted)) {
-                if (character >= QChar(0x20) && character != QChar(0x7f)) {
-                    sanitized.append(character);
-                }
-            }
-            m_localLine.append(sanitized);
+            pasteFromClipboard();
         } else if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) {
             const QString line = m_localLine;
             m_localLine.clear();
@@ -1398,36 +1515,7 @@ void TerminalView::keyPressEvent(QKeyEvent *event)
     }
 
     if (isClipboardPasteShortcut(event)) {
-        const PastePreparation prepared = prepareClipboardPaste(
-            QGuiApplication::clipboard()->text());
-        if (prepared.text.isEmpty()) {
-            // 剪贴板为空或仅含危险控制字符时不向 PTY 发送任何内容，避免一次“空粘贴”
-            // 被下游交互式程序误解为特殊输入。
-            event->accept();
-            return;
-        }
-
-        if (prepared.requiresConfirmation(m_multiLinePasteConfirmation) && !confirmPaste(prepared)) {
-            event->accept();
-            return;
-        }
-
-        // 多行能力仍然保留，但只有用户看见风险并明确确认后才会进入 PTY。命令缓冲只保留
-        // 最后一个尚未换行的片段；已经包含换行的部分已由 PTY 提交，不能再次上报。
-        encoded = prepared.text.toUtf8();
-        if (!alternateScreen) {
-            m_currentCommand.append(prepared.text.section(QLatin1Char('\n'), -1));
-        }
-
-        // 远端开启括号粘贴时，内容必须夹在 CSI 200~ / CSI 201~ 之间，否则 vim 会把粘贴
-        // 当成逐个按键：autoindent 给每一行再叠一层缩进，十行代码粘完成阶梯状。远端未
-        // 开启该模式时 libvterm 不会产生任何标记字节，行为与此前完全一致。
-        m_vtermBridge->beginPaste();
-        sendUserInput(encoded);
-        m_vtermBridge->endPaste();
-        if (!alternateScreen) {
-            updateCompletionPopup();
-        }
+        pasteFromClipboard();
         event->accept();
         return;
     } else if (isClipboardCopyShortcut(event)) {
@@ -1726,6 +1814,26 @@ void TerminalView::releaseOffscreenLayouts()
     }
 }
 
+void TerminalView::focusInEvent(QFocusEvent *event)
+{
+    QPlainTextEdit::focusInEvent(event);
+    // 重新获得焦点时从"可见"相位开始，用户切回来立刻就能看到实心光标在哪。
+    m_cursorPhaseVisible = true;
+    if (m_cursorBlinkEnabled) {
+        m_cursorBlinkTimer->start();
+    }
+    updateCursorArea();
+}
+
+void TerminalView::focusOutEvent(QFocusEvent *event)
+{
+    QPlainTextEdit::focusOutEvent(event);
+    m_cursorBlinkTimer->stop();
+    // 停在"隐藏"相位上的话，空心块就整个看不见了。
+    m_cursorPhaseVisible = true;
+    updateCursorArea();
+}
+
 void TerminalView::paintEvent(QPaintEvent *event)
 {
     QPlainTextEdit::paintEvent(event);
@@ -1753,6 +1861,15 @@ void TerminalView::paintEvent(QPaintEvent *event)
 
     // 光标最后绘制，避免它恰好停在行尾时被前面的锚点遮罩覆盖。
     QPainter painter(viewport());
+    if (!hasFocus()) {
+        // 失焦一律画空心块，与设置中的形态无关：多个分屏终端并排时，只有实心那个在接收
+        // 键盘输入。描边收进格内半像素，1px 线才不会跨到相邻格、被下一次局部重绘切掉一半。
+        // 格内字符保持原样可见，不需要像实心块那样反色重绘。
+        painter.setPen(QPen(m_cursorColor, 1.0));
+        painter.setBrush(Qt::NoBrush);
+        painter.drawRect(QRectF(cursorCellRect(cursorArea)).adjusted(0.5, 0.5, -0.5, -0.5));
+        return;
+    }
     const auto shape = static_cast<TerminalCursorShape>(m_cursorShape);
     if (shape == TerminalCursorShape::IBeam) {
         painter.setPen(QPen(m_cursorColor, 2.0));

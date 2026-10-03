@@ -4791,6 +4791,14 @@ Reconnecting manually…<byte value="xd"/>
 <context>
     <name>TerminalView</name>
     <message>
+        <source>Copy</source>
+        <translation type="unfinished">نسخ</translation>
+    </message>
+    <message>
+        <source>Select All</source>
+        <translation type="unfinished">تحديد الكل</translation>
+    </message>
+    <message>
         <source>Upload to the current remote directory…</source>
         <translation type="unfinished">الرفع إلى الدليل البعيد الحالي…</translation>
     </message>

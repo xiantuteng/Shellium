@@ -181,8 +181,12 @@ public:
     [[nodiscard]] QString terminalPlainText() const;
 
     /**
-     * @brief 创建包含 Qt 标准文本动作和 Shellium SFTP 入口的终端右键菜单。
+     * @brief 创建包含复制、粘贴、全选和 Shellium SFTP 入口的终端右键菜单。
      * @return 新创建的菜单；调用方拥有并负责销毁。
+     *
+     * 刻意不基于 createStandardContextMenu()：那份菜单的文案依赖 Qt 自带的 qtbase 翻译，
+     * 未随应用分发，切换界面语言后"复制 / 全选"仍是英文。粘贴与快捷键走同一条
+     * pasteFromClipboard() 路径；无选区时"复制"、剪贴板无文本时"粘贴"置灰。
      *
      * 把菜单构造从 contextMenuEvent 分离，既让键盘菜单、自动化测试和未来触控入口能够
      * 复用同一组动作，也避免测试依赖不同 QPA 插件对原生弹出菜单的实现差异。
@@ -300,8 +304,24 @@ protected:
      */
     void inputMethodEvent(QInputMethodEvent *event) override;
 
-    /** @brief 在基础文本绘制后叠加 IBeam 光标；块状与下划线由桥接层格式化。 */
+    /**
+     * @brief 在基础文本绘制后叠加光标。
+     *
+     * 有焦点时按设置绘制 IBeam、下划线或实心块；失去焦点时不论设置一律画成不闪烁的空心块，
+     * 让用户一眼分辨哪个终端正在接收键盘输入。
+     */
     void paintEvent(QPaintEvent *event) override;
+
+    /** @brief 获得焦点后恢复设置中的光标形态与闪烁，并立即重绘光标格。 */
+    void focusInEvent(QFocusEvent *event) override;
+
+    /**
+     * @brief 失去焦点后停止闪烁并把光标改画为空心块。
+     *
+     * 窗口切到后台、焦点移到侧栏或其他分屏终端都会走到这里；闪烁一并停下，空心块才不会
+     * 在两个相位之间时隐时现，后台标签也不再每 600ms 唤醒一次 GUI 线程。
+     */
+    void focusOutEvent(QFocusEvent *event) override;
 
     /**
      * @brief 备用屏下把滚轮转换为方向键发往远端，其余情况沿用文档滚动。
@@ -315,11 +335,10 @@ protected:
     QVariant inputMethodQuery(Qt::InputMethodQuery query) const override;
 
     /**
-     * @brief 在 Qt 标准文本菜单末尾增加“上传到当前远程目录”动作。
+     * @brief 弹出 createTerminalContextMenu() 构造的终端右键菜单。
      * @param event 携带菜单弹出位置的上下文菜单事件；Qt 保证非空。
      *
-     * 保留复制、全选等标准动作，避免为了一个业务入口破坏平台原生文本操作；实际文件
-     * 选择与连接校验由远程文件管理器完成。
+     * 上传动作只发出意图，实际文件选择与连接校验由远程文件管理器完成。
      */
     void contextMenuEvent(QContextMenuEvent *event) override;
 
@@ -361,6 +380,15 @@ private:
      * 这是本对话框最常见的操作，不该强迫用户离开键盘去点按钮。
      */
     [[nodiscard]] bool confirmPaste(const PastePreparation &prepared);
+
+    /**
+     * @brief 把系统剪贴板文本粘贴进终端；快捷键与右键菜单共用此入口。
+     *
+     * 本地行捕获期间只追加到待提交的密码行，既不回显也不发往远端；其余情况经过
+     * prepareClipboardPaste 清理与风险确认，并按远端模式包上括号粘贴标记后发给 PTY。
+     * 两个入口必须共用同一条路径，否则菜单粘贴会绕过控制字符清理或括号粘贴。
+     */
+    void pasteFromClipboard();
 
     /**
      * @brief 计算 libvterm 视觉光标对应的文档光标矩形，供 paintEvent 与补全弹层共用。
@@ -519,6 +547,8 @@ private:
 
     /** @brief 当前光标闪烁相位和形态，供 paintEvent 与 VtermBridge 同步使用。 */
     bool m_cursorPhaseVisible = true;
+    /** @brief 设置中是否开启光标闪烁；失焦时计时器会停，重新获得焦点时据此决定是否恢复。 */
+    bool m_cursorBlinkEnabled = true;
     int m_cursorShape = 0;
     QColor m_cursorColor;
 

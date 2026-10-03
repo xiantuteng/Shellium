@@ -60,6 +60,8 @@ private slots:
     void themeStylesDoNotWarnAboutUnknownProperties();
     /** @brief 各语言的连接提示之后，下一段输出必须从行首开始。 */
     void translatedConnectionNoticeReturnsToFirstColumn();
+    /** @brief 终端右键菜单的复制、粘贴、全选必须跟随界面语言，不能依赖未分发的 Qt 自带译文。 */
+    void terminalContextMenuFollowsInterfaceLanguage();
     void initTestCase();
     void startsWithBrandPlaceholderInsteadOfTerminal();
     void newTabButtonOpensDefaultTerminal();
@@ -143,6 +145,41 @@ void MainWindowShellTest::translatedConnectionNoticeReturnsToFirstColumn()
         QVERIFY2(lines.at(1).startsWith(QStringLiteral("NEXT")),
                  qPrintable(language + QStringLiteral(": ") + lines.at(1)));
     }
+}
+
+void MainWindowShellTest::terminalContextMenuFollowsInterfaceLanguage()
+{
+    // 菜单文字形如"复制\t⌘C"，只比较制表符前的标签。
+    const auto menuLabels = []() {
+        TerminalView view;
+        std::unique_ptr<QMenu> menu(view.createTerminalContextMenu());
+        QStringList labels;
+        for (const QString &name : {QStringLiteral("edit-copy"), QStringLiteral("terminal-paste"),
+                                    QStringLiteral("select-all")}) {
+            const QAction *action = menu->findChild<QAction *>(name);
+            labels.append(action == nullptr ? QString() : action->text().section(QLatin1Char('\t'), 0, 0));
+        }
+        return labels;
+    };
+
+    LocalizationService localization;
+    QVERIFY(localization.apply(QStringLiteral("en")));
+    const QStringList english = menuLabels();
+    QCOMPARE(english, (QStringList{QStringLiteral("Copy"), QStringLiteral("Paste"),
+                                   QStringLiteral("Select All")}));
+
+    for (const QString &language : LocalizationService::supportedLanguages()) {
+        if (language == LocalizationService::sourceLanguage()) {
+            continue;
+        }
+        QVERIFY(localization.apply(language));
+        const QStringList translated = menuLabels();
+        for (qsizetype index = 0; index < english.size(); ++index) {
+            QVERIFY2(!translated.at(index).isEmpty() && translated.at(index) != english.at(index),
+                     qPrintable(language + QStringLiteral(": ") + translated.join(QLatin1Char('|'))));
+        }
+    }
+    QVERIFY(localization.apply(QStringLiteral("en")));
 }
 
 void MainWindowShellTest::initTestCase()

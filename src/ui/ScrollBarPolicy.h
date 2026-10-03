@@ -13,6 +13,9 @@
 /**
  * @brief 全应用滚动条绘制策略：仅在手动滚动期间绘制圆角滑块。
  *
+ * 滑块默认取滚动条调色板的文字色；滚动条若设置了 QColor 类型的
+ * `shelliumScrollHandleColor` 属性，则改用该颜色（仍叠加统一的半透明度）。
+ *
  * 只接管绘制而不切换 ScrollBarPolicy 或控件尺寸，避免终端列数、表格宽度随显隐变化。
  * 所有操作均在 GUI 线程执行；每个滑块的计时器由滑块持有，销毁页面时自动取消回调。
  */
@@ -64,7 +67,12 @@ protected:
                     rect.setTop(rect.center().y() - 3);
                     rect.setHeight(6);
                 }
-                QColor color = bar->palette().color(QPalette::Text);
+                // 背景不跟随应用调色板的控件（终端按自己的主题配色）可通过属性指定滑块色，
+                // 否则浅色系统下的近黑色文字色会压在深色背景上，滚动时也看不见滑块。
+                const QColor handleColor =
+                    bar->property("shelliumScrollHandleColor").value<QColor>();
+                QColor color = handleColor.isValid() ? handleColor
+                                                     : bar->palette().color(QPalette::Text);
                 color.setAlpha(bar->isSliderDown() ? 180 : 110);
                 painter.setRenderHint(QPainter::Antialiasing);
                 painter.setPen(Qt::NoPen);

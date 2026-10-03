@@ -4791,6 +4791,14 @@ Manuelle Neuverbindung …<byte value="xd"/>
 <context>
     <name>TerminalView</name>
     <message>
+        <source>Copy</source>
+        <translation type="unfinished">Kopieren</translation>
+    </message>
+    <message>
+        <source>Select All</source>
+        <translation type="unfinished">Alles auswählen</translation>
+    </message>
+    <message>
         <source>Upload to the current remote directory…</source>
         <translation type="unfinished">In das aktuelle Remote-Verzeichnis hochladen …</translation>
     </message>

@@ -4791,6 +4791,14 @@ Reconectare manuală…<byte value="xd"/>
 <context>
     <name>TerminalView</name>
     <message>
+        <source>Copy</source>
+        <translation type="unfinished">Copiază</translation>
+    </message>
+    <message>
+        <source>Select All</source>
+        <translation type="unfinished">Selectează tot</translation>
+    </message>
+    <message>
         <source>Upload to the current remote directory…</source>
         <translation type="unfinished">Încarcă în directorul la distanță curent…</translation>
     </message>

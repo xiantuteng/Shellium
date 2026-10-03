@@ -4791,6 +4791,14 @@ Reconnecting manually…<byte value="xd"/>
 <context>
     <name>TerminalView</name>
     <message>
+        <source>Copy</source>
+        <translation type="unfinished">コピー</translation>
+    </message>
+    <message>
+        <source>Select All</source>
+        <translation type="unfinished">すべて選択</translation>
+    </message>
+    <message>
         <source>Upload to the current remote directory…</source>
         <translation type="unfinished">現在のリモートディレクトリにアップロード…</translation>
     </message>
