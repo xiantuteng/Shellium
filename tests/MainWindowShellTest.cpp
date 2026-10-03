@@ -13,6 +13,7 @@
 #include "ui/SettingsDialog.h"
 #include "ui/SettingsWidgets.h"
 #include "ui/SessionTabBar.h"
+#include "ui/SessionTabStrip.h"
 #include "ui/SessionTabDropOverlay.h"
 #include "ui/ButtonCursorPolicy.h"
 
@@ -66,6 +67,7 @@ private slots:
     void startsWithBrandPlaceholderInsteadOfTerminal();
     void newTabButtonOpensDefaultTerminal();
     void newTabButtonFollowsTheLastTab();
+    void newTabButtonDoesNotFlashTheTabBar();
     void manualRecoveryCloseKeyClosesTheTab();
     void destroyingWindowWithOpenTabsIsSafe();
     void emptyStateKeepsNewTabButtonNextToTheTitleIdentity();
@@ -313,6 +315,83 @@ void MainWindowShellTest::newTabButtonFollowsTheLastTab()
     QVERIFY2(controlsLeft - buttonRight < 80,
              "Windows/Linux 标签溢出时新建按钮必须紧靠右侧窗口按钮");
 #endif
+}
+
+namespace {
+
+/**
+ * 记录标题栏标签栏每一次绘制时是否处于溢出态：装不下自己的标签、首个标签被卷出视口
+ * 左缘，或滚动箭头亮起。标题行宽度充足时出现任何一种，都是用户看到的闪烁。
+ */
+class TabBarSqueezeProbe final : public QObject {
+public:
+    TabBarSqueezeProbe(QTabBar *bar, QWidget *scrollArrow)
+        : m_bar(bar)
+        , m_scrollArrow(scrollArrow)
+    {
+        m_bar->installEventFilter(this);
+    }
+
+    QStringList squeezedPaints;
+
+protected:
+    bool eventFilter(QObject *watched, QEvent *event) override
+    {
+        if (watched == m_bar && event->type() == QEvent::Paint
+            && (m_bar->width() < m_bar->sizeHint().width()
+                || (m_bar->count() > 0 && m_bar->mapToParent(m_bar->tabRect(0).topLeft()).x() < 0)
+                || m_scrollArrow->isVisible())) {
+            squeezedPaints << QStringLiteral("count=%1 width=%2 hint=%3 firstTabX=%4 arrow=%5")
+                                  .arg(QString::number(m_bar->count()),
+                                       QString::number(m_bar->width()),
+                                       QString::number(m_bar->sizeHint().width()),
+                                       QString::number(
+                                           m_bar->mapToParent(m_bar->tabRect(0).topLeft()).x()),
+                                       QString::number(m_scrollArrow->isVisible()));
+        }
+        return false;
+    }
+
+private:
+    QTabBar *m_bar = nullptr;
+    QWidget *m_scrollArrow = nullptr;
+};
+
+} // namespace
+
+void MainWindowShellTest::newTabButtonDoesNotFlashTheTabBar()
+{
+    MainWindow window(m_database, m_vault);
+    window.resize(1200, 800);
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+    auto *tabBar = window.findChild<SessionTabBar *>(QStringLiteral("SessionTitleTabs"));
+    auto *newTabButton = window.findChild<QToolButton *>(QStringLiteral("TitleNewTabButton"));
+    QVERIFY(tabBar != nullptr && newTabButton != nullptr);
+    QTest::mouseClick(newTabButton, Qt::LeftButton);
+    QTest::qWait(200);
+
+    QToolButton *scrollLeft = nullptr;
+    for (QToolButton *button : newTabButton->parentWidget()->findChildren<QToolButton *>()) {
+        if (button->property("chromeRole").toString() == QStringLiteral("scrollLeft")) {
+            scrollLeft = button;
+        }
+    }
+    QVERIFY(scrollLeft != nullptr);
+
+    // 标题行宽度绰绰有余，新增标签期间绘制出的任何一帧都不应处于溢出态：不能以旧宽度
+    // 画出被挤压、左移的标签，也不能亮出滚动箭头。终端启动会在点击处理中途触发一次
+    // 绘制，正是这一帧让用户看到闪烁。
+    TabBarSqueezeProbe probe(tabBar, scrollLeft);
+    QTest::mouseClick(newTabButton, Qt::LeftButton);
+    QTest::qWait(200);
+
+    QCOMPARE(tabBar->count(), 2);
+    QCOMPARE(tabBar->currentIndex(), 1);
+    QVERIFY2(probe.squeezedPaints.isEmpty(),
+             qPrintable(QStringLiteral("标签栏以旧宽度绘制：")
+                        + probe.squeezedPaints.join(QStringLiteral("; "))));
 }
 
 void MainWindowShellTest::draggingTerminalIntoSelectedTabCreatesWorkspace()
@@ -1210,21 +1289,21 @@ void MainWindowShellTest::duplicateMenuItemOpensASecondCopyOfTheTab()
     QTRY_VERIFY_WITH_TIMEOUT(source->activePane()->isConnected(), 8000);
     const QString sourceTitle = tabs->tabText(0);
 
-    // 空白处右键只应给出"新建"，不能提供无从下手的"复制标签"。
+    // 空白处右键只应给出"新建"，不能提供无从下手的"复制会话"。
     std::unique_ptr<QMenu> blankMenu(window.createSessionTabMenu(-1, &window));
     for (const QAction *action : blankMenu->actions()) {
-        QVERIFY2(action->text() != QStringLiteral("Copy tag"),
-                 "标题栏空白处的菜单不应包含复制标签");
+        QVERIFY2(action->text() != QStringLiteral("Duplicate session"),
+                 "标题栏空白处的菜单不应包含复制会话");
     }
 
     std::unique_ptr<QMenu> menu(window.createSessionTabMenu(0, &window));
     QAction *duplicateAction = nullptr;
     for (QAction *action : menu->actions()) {
-        if (action->text() == QStringLiteral("Copy tag")) {
+        if (action->text() == QStringLiteral("Duplicate session")) {
             duplicateAction = action;
         }
     }
-    QVERIFY2(duplicateAction != nullptr, "标签右键菜单缺少复制标签");
+    QVERIFY2(duplicateAction != nullptr, "标签右键菜单缺少复制会话");
     duplicateAction->trigger();
 
     QCOMPARE(tabs->count(), 2);

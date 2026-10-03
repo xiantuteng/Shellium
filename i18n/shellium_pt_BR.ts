@@ -1590,8 +1590,8 @@ Confirmar que a chave mudou, substituir o registro antigo em known_hosts e conti
         <translation type="unfinished">Nova aba do terminal</translation>
     </message>
     <message>
-        <source>Copy tag</source>
-        <translation type="unfinished">Copiar etiqueta</translation>
+        <source>Duplicate session</source>
+        <translation type="unfinished">Duplicar sessão</translation>
     </message>
     <message>
         <source>Rename</source>

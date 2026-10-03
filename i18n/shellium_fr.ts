@@ -1590,8 +1590,8 @@ Confirmer que la clé a changé, remplacer l&apos;ancien enregistrement dans kno
         <translation type="unfinished">Nouvel onglet de terminal</translation>
     </message>
     <message>
-        <source>Copy tag</source>
-        <translation type="unfinished">Copier l&apos;étiquette</translation>
+        <source>Duplicate session</source>
+        <translation type="unfinished">Dupliquer la session</translation>
     </message>
     <message>
         <source>Rename</source>

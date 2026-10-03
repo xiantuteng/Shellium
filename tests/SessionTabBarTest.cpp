@@ -1,4 +1,5 @@
 #include "ui/SessionTabBar.h"
+#include "ui/SessionTabStrip.h"
 
 #include <QAbstractButton>
 #include <QImage>
@@ -117,12 +118,12 @@ class SessionTabBarTest final : public QObject {
 
 private slots:
     /**
-     * @brief 标签溢出时应通过 scrollStateChanged 通知外部按钮，并真正滚动标签。
+     * @brief 标签溢出时应上报可滚动状态，箭头按固定像素滚动而不是整格跳。
      *
-     * 用例同时断言"状态被上报"和"滚动确实发生"：只断言信号会让一个空实现的 scrollTabsRight
-     * 也能通过，而滚动位移才是用户真正感知到的结果。
+     * 同时断言"状态被上报"和"位移确实发生且不是标签宽度的整数倍"：只断言信号会让一个
+     * 空实现也通过，只断言位移又区分不出像素滚动与旧的整格滚动。
      */
-    void reportsScrollStateAndScrollsTabs();
+    void arrowsScrollByPixelsAndReportState();
 
     /** @brief 未溢出时不得报告可滚动，否则标题栏会常驻两个无效箭头。 */
     void doesNotReportScrollableWhenTabsFit();
@@ -130,18 +131,28 @@ private slots:
     /**
      * @brief 晚于状态稳定才连接 scrollStateChanged 的监听者也必须学到当前真实状态。
      *
-     * 复现 MainWindow 的真实顺序：先在标签栏尚未参与真实布局（宽度还是构造期临时值）时
-     * 连续 addTab，再连接信号，最后单跳 resize 到最终宽度。如果最终宽度算出的溢出结论
-     * 与临时宽度算出的结论恰好相同，旧实现里 syncScrollButtons() 因"值未变化"不会重新
-     * 发出信号，新监听者就永远学不到当前真实状态——外部箭头会卡在错误的初始显隐上。
+     * 状态只在变化时发出；若监听者在状态稳定之后才连接，且之后再无变化，它就永远学不到
+     * 真实状态，外部箭头会卡在错误的初始显隐上。
      */
     void lateListenerLearnsCurrentScrollStateOnConnect();
 
-    /** @brief 溢出时滚轮应驱动标签左右滚动，且每格滚轮只滚动一步。 */
-    void wheelScrollsTabsWhenOverflowing();
+    /** @brief 触控板逐像素跟手，鼠标滚轮每格折算固定像素，且都收敛在合法范围内。 */
+    void wheelScrollsByPixelsWhenOverflowing();
 
-    /** @brief 未溢出时滚轮不应被标签栏吞掉。 */
+    /** @brief 未溢出时滚轮不应被视口吞掉。 */
     void wheelDoesNothingWhenTabsFit();
+
+    /** @brief 选中被卷出视口的标签时，必须把它完整滚进视野。 */
+    void selectingHiddenTabScrollsItIntoView();
+
+    /**
+     * @brief 监听者在处理状态信号时引发的嵌套重算不得嵌套发出信号。
+     *
+     * MainWindow 在信号里显示外部箭头，而显示子控件会同步激活父布局、改变视口宽度并
+     * 再次计算状态。嵌套发出会让箭头在 setVisible(true) 返回前就被 setVisible(false)，
+     * 留下"已隐藏却仍标记为可见"的矛盾状态。
+     */
+    void nestedStateChangeIsDeliveredAfterOuterSignal();
 
     /** @brief 精确悬停在关闭按钮上时，叉号线条颜色必须与仅悬停标签时不同。 */
     void closeButtonStrokeChangesColorOnPreciseHover();
@@ -162,163 +173,225 @@ private slots:
     void connectionStateDotReflectsPerTabStateAndClearsOnRemoval();
 };
 
-void SessionTabBarTest::reportsScrollStateAndScrollsTabs()
+namespace {
+
+/** @brief 向标签栏投递一条滚轮事件；视口通过事件过滤器接收标签栏上的滚轮。 */
+bool sendWheel(SessionTabBar *tabBar, const QPoint &pixelDelta, const QPoint &angleDelta)
 {
-    SessionTabBar tabBar;
-    // 单个标签最小宽度为 132，420 像素最多容纳 3 个；加入 12 个必然溢出。
-    tabBar.resize(420, 42);
-    tabBar.show();
-    QVERIFY(QTest::qWaitForWindowExposed(&tabBar));
+    const QPointF local(tabBar->width() / 2.0, tabBar->height() / 2.0);
+    QWheelEvent event(local,
+                      tabBar->mapToGlobal(local),
+                      pixelDelta,
+                      angleDelta,
+                      Qt::NoButton,
+                      Qt::NoModifier,
+                      Qt::NoScrollPhase,
+                      false);
+    event.setAccepted(false);
+    QCoreApplication::sendEvent(tabBar, &event);
+    return event.isAccepted();
+}
 
-    QSignalSpy scrollSpy(&tabBar, &SessionTabBar::scrollStateChanged);
-    for (int index = 0; index < 12; ++index) {
-        tabBar.addTab(QStringLiteral("终端 %1").arg(index + 1));
+/** @brief 创建一个装满标签、必然溢出的视口；单个标签至少 132 像素宽。 */
+void fillOverflowingStrip(SessionTabStrip &strip, const int tabCount = 12)
+{
+    strip.resize(420, 42);
+    for (int index = 0; index < tabCount; ++index) {
+        strip.tabBar()->addTab(QStringLiteral("终端 %1").arg(index + 1));
     }
-    tabBar.setCurrentIndex(0);
+    strip.tabBar()->setCurrentIndex(0);
+}
+
+} // namespace
+
+void SessionTabBarTest::arrowsScrollByPixelsAndReportState()
+{
+    SessionTabStrip strip;
+    QSignalSpy scrollSpy(&strip, &SessionTabStrip::scrollStateChanged);
+    fillOverflowingStrip(strip);
+    strip.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&strip));
     QCoreApplication::processEvents();
 
-    QVERIFY2(!scrollSpy.isEmpty(),
-             "标签溢出后必须上报可滚动状态，否则标题栏不会显示左右滚动按钮");
-    const QList<QVariant> lastState = scrollSpy.last();
-    QVERIFY2(lastState.at(0).toBool(), "溢出时 scrollable 必须为 true");
-    QVERIFY2(lastState.at(2).toBool(), "停在最左端时右侧必须仍可滚动");
+    QVERIFY2(!scrollSpy.isEmpty(), "标签溢出后必须上报可滚动状态");
+    QVERIFY2(scrollSpy.last().at(0).toBool(), "溢出时 scrollable 必须为 true");
+    QVERIFY2(!scrollSpy.last().at(1).toBool(), "停在最左端时左侧不应可滚动");
+    QVERIFY2(scrollSpy.last().at(2).toBool(), "停在最左端时右侧必须仍可滚动");
+    QCOMPARE(strip.scrollOffset(), 0);
 
-    // 位于最左端时不应报告可向左滚动，否则外部按钮会给出可点击却无效果的假反馈。
-    QVERIFY2(!lastState.at(1).toBool(), "停在最左端时左侧不应可滚动");
-
-    const int firstTabLeftBefore = tabBar.tabRect(0).left();
-    tabBar.scrollTabsRight();
-    QCoreApplication::processEvents();
-    const int firstTabLeftAfter = tabBar.tabRect(0).left();
-    QVERIFY2(firstTabLeftAfter < firstTabLeftBefore,
-             "scrollTabsRight 必须真正改变标签滚动偏移；内置滚动按钮对象名变更会导致此处失败");
-
-    // 向右滚动之后必须重新上报"左侧可滚动"，外部左箭头才会由禁用变为可用。
-    QCoreApplication::processEvents();
+    const int tabWidth = strip.tabBar()->tabRect(0).width();
+    strip.scrollTabsRight();
+    QTRY_VERIFY_WITH_TIMEOUT(strip.scrollOffset() > 0, 1000);
+    // 等平滑滚动走完，读到的才是一次点击的完整步长。
+    QTest::qWait(300);
+    const int step = strip.scrollOffset();
+    // 像素滚动的一步既不是 0 也不是一个标签的宽度：旧实现每次正好卷入一整个标签。
+    QVERIFY2(step > 0 && step % tabWidth != 0,
+             qPrintable(QStringLiteral("箭头一次滚动 %1 像素，仍是整格滚动（标签宽 %2）")
+                            .arg(QString::number(step), QString::number(tabWidth))));
+    // 视口移动的是整条标签栏，标签栏内部坐标保持不变。
+    QCOMPARE(strip.tabBar()->x(), -step);
+    QCOMPARE(strip.tabBar()->tabRect(0).left(), 0);
     QVERIFY2(scrollSpy.last().at(1).toBool(), "滚动后左侧应变为可滚动");
 
-    tabBar.scrollTabsLeft();
-    QCoreApplication::processEvents();
-    QCOMPARE(tabBar.tabRect(0).left(), firstTabLeftBefore);
+    // 连续点击在上一段的终点上累加，而不是从动画半途起算。
+    strip.scrollTabsRight();
+    strip.scrollTabsRight();
+    QTRY_COMPARE_WITH_TIMEOUT(strip.scrollOffset(), step * 3, 1000);
+
+    for (int click = 0; click < 3; ++click) {
+        strip.scrollTabsLeft();
+    }
+    QTRY_COMPARE_WITH_TIMEOUT(strip.scrollOffset(), 0, 1000);
+    QVERIFY2(!scrollSpy.last().at(1).toBool(), "回到最左端后左侧不应可滚动");
+
+    // 一直向右点会停在最右端，最后一个标签右缘恰好贴住视口右缘。
+    for (int click = 0; click < 40; ++click) {
+        strip.scrollTabsRight();
+    }
+    QTRY_COMPARE_WITH_TIMEOUT(strip.scrollOffset(), strip.maximumScrollOffset(), 2000);
+    const QRect lastTab = strip.tabBar()->tabRect(strip.tabBar()->count() - 1);
+    QCOMPARE(strip.tabBar()->mapToParent(lastTab.topRight()).x() + 1, strip.width());
+    QVERIFY2(!scrollSpy.last().at(2).toBool(), "到达最右端后右侧不应可滚动");
 }
 
 void SessionTabBarTest::doesNotReportScrollableWhenTabsFit()
 {
-    SessionTabBar tabBar;
-    tabBar.resize(900, 42);
-    tabBar.show();
-    QVERIFY(QTest::qWaitForWindowExposed(&tabBar));
+    SessionTabStrip strip;
+    strip.resize(900, 42);
+    strip.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&strip));
 
-    QSignalSpy scrollSpy(&tabBar, &SessionTabBar::scrollStateChanged);
-    tabBar.addTab(QStringLiteral("终端 1"));
-    tabBar.addTab(QStringLiteral("终端 2"));
+    QSignalSpy scrollSpy(&strip, &SessionTabStrip::scrollStateChanged);
+    strip.tabBar()->addTab(QStringLiteral("终端 1"));
+    strip.tabBar()->addTab(QStringLiteral("终端 2"));
     QCoreApplication::processEvents();
 
     for (const QList<QVariant> &state : std::as_const(scrollSpy)) {
         QVERIFY2(!state.at(0).toBool(), "标签未溢出时不得报告可滚动");
     }
+    QCOMPARE(strip.maximumScrollOffset(), 0);
 }
 
 void SessionTabBarTest::lateListenerLearnsCurrentScrollStateOnConnect()
 {
-    auto *parent = new QWidget();
-    auto *tabBar = new SessionTabBar(parent);
-    // 40 个标签在构造期的临时宽度（未参与任何布局，通常是 QWidget 的默认宽度）和后面
-    // 单跳 resize 到的 1200 像素下都必然溢出，因此两次判定结论都是 true，不会自然发生
-    // "值变化"来触发信号——这正是复现该缺陷所需要的条件。
-    for (int index = 0; index < 40; ++index) {
-        tabBar->addTab(QStringLiteral("终端 %1").arg(index + 1));
-    }
+    SessionTabStrip strip;
+    fillOverflowingStrip(strip, 40);
+    QCoreApplication::processEvents();
 
-    QSignalSpy lateSpy(tabBar, &SessionTabBar::scrollStateChanged);
+    QSignalSpy lateSpy(&strip, &SessionTabStrip::scrollStateChanged);
     QVERIFY2(!lateSpy.isEmpty(),
              "connect() 建立的同一时刻就应补发一次当前状态，哪怕状态早已稳定");
     QVERIFY2(lateSpy.last().at(0).toBool(),
-             "补发的状态必须反映真实的当前溢出结论（此时已有 40 个标签，理应可滚动）");
+             "补发的状态必须反映真实的当前溢出结论（40 个标签理应可滚动）");
 
-    // 单跳 resize（不 show()，避免窗口系统插入多次中间尺寸的 resizeEvent，令状态在中途
-    // 先翻转再翻回来，从而掩盖"从未变化"这种最危险的情形）。
-    tabBar->resize(1200, 42);
+    strip.resize(1200, 42);
     QCoreApplication::processEvents();
-
-    QVERIFY2(!lateSpy.isEmpty(),
-             "晚连接的监听者必须能学到当前真实的可滚动状态");
     QVERIFY2(lateSpy.last().at(0).toBool(),
              "40 个标签在 1200 像素宽度下依然溢出，晚连接的监听者不能收到 false");
-
-    delete parent;
 }
 
-void SessionTabBarTest::wheelScrollsTabsWhenOverflowing()
+void SessionTabBarTest::wheelScrollsByPixelsWhenOverflowing()
 {
-    SessionTabBar tabBar;
-    tabBar.resize(420, 42);
-    tabBar.show();
-    QVERIFY(QTest::qWaitForWindowExposed(&tabBar));
+    SessionTabStrip strip;
+    fillOverflowingStrip(strip);
+    strip.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&strip));
+    QCoreApplication::processEvents();
 
-    for (int index = 0; index < 12; ++index) {
-        tabBar.addTab(QStringLiteral("终端 %1").arg(index + 1));
+    // 触控板：向左轻扫 7 像素（pixelDelta 为负）就只滚 7 像素。
+    QVERIFY(sendWheel(strip.tabBar(), QPoint(-7, 0), QPoint(-14, 0)));
+    QCOMPARE(strip.scrollOffset(), 7);
+    QCOMPARE(strip.tabBar()->x(), -7);
+
+    // 普通鼠标滚轮只有 angleDelta：向下一格折算为固定像素，同样不是整格标签。
+    QVERIFY(sendWheel(strip.tabBar(), QPoint(), QPoint(0, -120)));
+    const int afterNotch = strip.scrollOffset();
+    QVERIFY(afterNotch > 7);
+    QVERIFY(afterNotch - 7 != strip.tabBar()->tabRect(0).width());
+
+    // 高精度滚轮的小增量不能被整除截断丢掉：四次 30 等于一整格。
+    for (int tick = 0; tick < 4; ++tick) {
+        QVERIFY(sendWheel(strip.tabBar(), QPoint(), QPoint(0, -30)));
     }
-    tabBar.setCurrentIndex(0);
-    QCoreApplication::processEvents();
+    QCOMPARE(strip.scrollOffset(), afterNotch + (afterNotch - 7));
 
-    const int firstTabLeftBefore = tabBar.tabRect(0).left();
+    // 向上 / 向左滚回去，并在左端收敛为 0。
+    QVERIFY(sendWheel(strip.tabBar(), QPoint(0, 5000), QPoint(0, 10000)));
+    QCOMPARE(strip.scrollOffset(), 0);
 
-    // 向下/向右滚滚轮（angleDelta 为负）应该让标签向右滚动。
-    QWheelEvent rightEvent(QPointF(tabBar.width() / 2.0, tabBar.height() / 2.0),
-                           tabBar.mapToGlobal(QPoint(tabBar.width() / 2, tabBar.height() / 2)),
-                           QPoint(0, 0),
-                           QPoint(0, -120),
-                           Qt::NoButton,
-                           Qt::NoModifier,
-                           Qt::NoScrollPhase,
-                           false);
-    QCoreApplication::sendEvent(&tabBar, &rightEvent);
-    QCoreApplication::processEvents();
-
-    const int firstTabLeftAfterScrollRight = tabBar.tabRect(0).left();
-    QVERIFY2(firstTabLeftAfterScrollRight < firstTabLeftBefore,
-             "向下/向右滚动滚轮时标签必须向右滚动（更早的标签被卷出可视区）");
-
-    // 向上/向左滚滚轮（angleDelta 为正）应该让标签向左滚回去。
-    QWheelEvent leftEvent(QPointF(tabBar.width() / 2.0, tabBar.height() / 2.0),
-                          tabBar.mapToGlobal(QPoint(tabBar.width() / 2, tabBar.height() / 2)),
-                          QPoint(0, 0),
-                          QPoint(0, 120),
-                          Qt::NoButton,
-                          Qt::NoModifier,
-                          Qt::NoScrollPhase,
-                          false);
-    QCoreApplication::sendEvent(&tabBar, &leftEvent);
-    QCoreApplication::processEvents();
-
-    QCOMPARE(tabBar.tabRect(0).left(), firstTabLeftBefore);
+    // 右端同样收敛。
+    QVERIFY(sendWheel(strip.tabBar(), QPoint(-50000, 0), QPoint(-100000, 0)));
+    QCOMPARE(strip.scrollOffset(), strip.maximumScrollOffset());
 }
 
 void SessionTabBarTest::wheelDoesNothingWhenTabsFit()
 {
-    SessionTabBar tabBar;
-    tabBar.resize(900, 42);
-    tabBar.show();
-    QVERIFY(QTest::qWaitForWindowExposed(&tabBar));
-
-    tabBar.addTab(QStringLiteral("终端 1"));
-    tabBar.addTab(QStringLiteral("终端 2"));
+    SessionTabStrip strip;
+    strip.resize(900, 42);
+    strip.tabBar()->addTab(QStringLiteral("终端 1"));
+    strip.tabBar()->addTab(QStringLiteral("终端 2"));
+    strip.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&strip));
     QCoreApplication::processEvents();
 
-    const int firstTabLeftBefore = tabBar.tabRect(0).left();
-    QWheelEvent event(QPointF(tabBar.width() / 2.0, tabBar.height() / 2.0),
-                      tabBar.mapToGlobal(QPoint(tabBar.width() / 2, tabBar.height() / 2)),
-                      QPoint(0, 0),
-                      QPoint(0, -120),
-                      Qt::NoButton,
-                      Qt::NoModifier,
-                      Qt::NoScrollPhase,
-                      false);
-    QCoreApplication::sendEvent(&tabBar, &event);
+    QVERIFY(!sendWheel(strip.tabBar(), QPoint(0, -40), QPoint(0, -120))
+            || strip.scrollOffset() == 0);
+    QCOMPARE(strip.scrollOffset(), 0);
+    QCOMPARE(strip.tabBar()->x(), 0);
+}
+
+void SessionTabBarTest::selectingHiddenTabScrollsItIntoView()
+{
+    SessionTabStrip strip;
+    fillOverflowingStrip(strip);
+    strip.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&strip));
     QCoreApplication::processEvents();
 
-    QCOMPARE(tabBar.tabRect(0).left(), firstTabLeftBefore);
+    const int last = strip.tabBar()->count() - 1;
+    strip.tabBar()->setCurrentIndex(last);
+    const QRect lastInStrip(strip.tabBar()->mapToParent(strip.tabBar()->tabRect(last).topLeft()),
+                            strip.tabBar()->tabRect(last).size());
+    QVERIFY2(strip.rect().contains(lastInStrip),
+             "选中最后一个标签后它必须完整位于视口内");
+
+    strip.tabBar()->setCurrentIndex(0);
+    QCOMPARE(strip.scrollOffset(), 0);
+}
+
+void SessionTabBarTest::nestedStateChangeIsDeliveredAfterOuterSignal()
+{
+    SessionTabStrip strip;
+    strip.resize(900, 42);
+    strip.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&strip));
+
+    // 第一次收到"可滚动"时立刻把视口加宽到不再溢出，模拟显示箭头引发的同步布局。
+    int depth = 0;
+    int maxDepth = 0;
+    QList<bool> received;
+    connect(&strip,
+            &SessionTabStrip::scrollStateChanged,
+            &strip,
+            [&](const bool scrollable, bool, bool) {
+                ++depth;
+                maxDepth = std::max(maxDepth, depth);
+                received.append(scrollable);
+                if (scrollable) {
+                    strip.resize(5000, 42);
+                }
+                --depth;
+            });
+    received.clear();
+    for (int index = 0; index < 12; ++index) {
+        strip.tabBar()->addTab(QStringLiteral("终端 %1").arg(index + 1));
+    }
+    QCoreApplication::processEvents();
+
+    QCOMPARE(maxDepth, 1);
+    QVERIFY(!received.isEmpty());
+    QCOMPARE(received.last(), false);
 }
 
 void SessionTabBarTest::closeButtonStrokeChangesColorOnPreciseHover()

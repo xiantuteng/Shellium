@@ -1586,8 +1586,8 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation>新建終端標籤</translation>
     </message>
     <message>
-        <source>Copy tag</source>
-        <translation>複製標籤</translation>
+        <source>Duplicate session</source>
+        <translation>複製會話</translation>
     </message>
     <message>
         <source>Rename</source>

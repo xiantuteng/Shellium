@@ -1590,8 +1590,8 @@ Confermare che la chiave è cambiata, sostituire il vecchio record in known_host
         <translation type="unfinished">Nuova scheda del terminale</translation>
     </message>
     <message>
-        <source>Copy tag</source>
-        <translation type="unfinished">Copia tag</translation>
+        <source>Duplicate session</source>
+        <translation type="unfinished">Duplica sessione</translation>
     </message>
     <message>
         <source>Rename</source>

@@ -1590,8 +1590,8 @@ Confirmi că cheia s-a schimbat, înlocuiești vechea înregistrare din known_ho
         <translation type="unfinished">Filă nouă de terminal</translation>
     </message>
     <message>
-        <source>Copy tag</source>
-        <translation type="unfinished">Copiază eticheta</translation>
+        <source>Duplicate session</source>
+        <translation type="unfinished">Duplică sesiunea</translation>
     </message>
     <message>
         <source>Rename</source>

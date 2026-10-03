@@ -1590,8 +1590,8 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">新しいターミナルタブ</translation>
     </message>
     <message>
-        <source>Copy tag</source>
-        <translation type="unfinished">タグをコピー</translation>
+        <source>Duplicate session</source>
+        <translation type="unfinished">セッションを複製</translation>
     </message>
     <message>
         <source>Rename</source>

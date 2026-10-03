@@ -1590,8 +1590,8 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">علامة تبويب طرفية جديدة</translation>
     </message>
     <message>
-        <source>Copy tag</source>
-        <translation type="unfinished">نسخ الوسم</translation>
+        <source>Duplicate session</source>
+        <translation type="unfinished">تكرار الجلسة</translation>
     </message>
     <message>
         <source>Rename</source>

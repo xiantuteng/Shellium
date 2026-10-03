@@ -7,20 +7,18 @@
 #include <QTabBar>
 
 class QAbstractButton;
-class QMetaMethod;
 class QMouseEvent;
 class QPainter;
 class QPaintEvent;
-class QResizeEvent;
 class QVariantAnimation;
-class QWheelEvent;
 class QWidget;
 
 /**
  * @brief 用于窗口标题区的胶囊式会话标签栏。
  *
  * Qt 原生 QTabBar 的外观更接近文档页签，并且关闭按钮会永久占用每个标签的空间。
- * 本控件保留 QTabBar 已验证的索引、拖动和滚动行为，只接管尺寸与绘制：当前标签使用
+ * 本控件保留 QTabBar 已验证的索引与拖动行为，只接管尺寸与绘制（滚动由外层
+ * SessionTabStrip 按像素完成）：当前标签使用
  * 高对比圆角底色，关闭按钮仅在悬停标签中出现，从而得到接近现代终端客户端的
  * 紧凑标题栏体验。控件不持有任何终端对象，标签生命周期仍由 MainWindow 统一管理。
  */
@@ -93,18 +91,6 @@ public:
                          const QColor &hoverColor,
                          const QColor &selectedColor);
 
-    /**
-     * @brief 向左滚动一格标签。
-     *
-     * QTabBar 的滚动偏移量是私有实现细节，无法直接读写。本方法转而驱动 QTabBar 自带的
-     * 内置滚动按钮，从而完整复用 Qt 已验证的滚动、边界和动画行为；内置按钮本身被移出
-     * 可视区域，由标题栏中左右分置的外部按钮代为呈现。
-     */
-    void scrollTabsLeft();
-
-    /** @brief 向右滚动一格标签；实现方式与 scrollTabsLeft 相同。 */
-    void scrollTabsRight();
-
 signals:
     /**
      * @brief 用户把一个终端标签拖放到此前选中的标签或页面/侧栏接收区。
@@ -133,56 +119,19 @@ signals:
     void externalDragFinished();
 
     /**
-     * @brief 标签是否溢出、以及两端是否还能继续滚动发生变化。
-     * @param scrollable 标签总宽度超过可视宽度，需要显示外部滚动按钮。
-     * @param canScrollLeft 左侧仍有被遮挡的标签。
-     * @param canScrollRight 右侧仍有被遮挡的标签。
+     * @brief 标签布局重新计算完成（增删标签、改标题等），建议宽度可能已变化。
      *
-     * 只在状态真正变化时发出。外部按钮必须使用 retainSizeWhenHidden，否则显隐会改变
-     * 标签栏可用宽度，反过来又改变溢出判定，形成与终端滚动条同类的抖动死循环。
+     * 在 QTabBar 的布局过程内部同步发出；接收方不得在回调中改变本控件尺寸，否则会重入
+     * 布局。SessionTabStrip 据此更新视口建议尺寸并推迟摆放标签栏。
      */
-    void scrollStateChanged(bool scrollable, bool canScrollLeft, bool canScrollRight);
+    void tabLayoutChanged();
 
 protected:
-    /** @brief 尺寸变化后重新同步滚动状态。 */
-    void resizeEvent(QResizeEvent *event) override;
-
-    /** @brief 标签增删后重新同步滚动状态。 */
+    /** @brief 布局完成后通知外层视口，见 tabLayoutChanged。 */
     void tabLayoutChange() override;
 
-    /**
-     * @brief 监视内置滚动按钮的可用性与显隐变化。
-     * @param watched 事件来源，只处理两个内置滚动按钮。
-     * @param event 当前事件。
-     * @return 始终交还给基类继续处理，本过滤器只做观察。
-     *
-     * QTabBar 完成一次滚动后只更新内置按钮的 enabled 状态并重绘，并不会调用
-     * tabLayoutChange()。仅依赖布局回调会让外部箭头停留在滚动前的可用状态——向右滚动
-     * 之后左箭头依旧是灰的，用户再也回不去。
-     */
-    bool eventFilter(QObject *watched, QEvent *event) override;
-
-    /**
-     * @brief 新监听者连接 scrollStateChanged 时补发一次当前状态。
-     * @param signal 本次被连接（或断开）的信号。
-     *
-     * syncScrollButtons() 只在状态真正变化时才发出信号：如果监听者是在状态已经稳定之后
-     * 才 connect() 上来的（例如外部按钮的连接语句写在初始 addTab 循环之后，而此时标签栏
-     * 尚未参与真实布局、宽度还是构造期的临时值), 且后续真实布局算出的溢出结论恰好与临时
-     * 值算出的结论相同，就再也不会有变化触发新的信号——新监听者会永远拿不到当前真实状态，
-     * 外部箭头因而卡在错误的初始显隐上。这里在连接建立后补发一次缓存值弥补这个空窗，对
-     * 已经连接的旧监听者只是重复一次相同数值，不会产生副作用。
-     */
-    void connectNotify(const QMetaMethod &signal) override;
-
-    /**
-     * @brief 标签溢出时，让横向/纵向滚轮驱动标签左右滚动。
-     * @param event 当前滚轮事件。
-     *
-     * QTabBar 默认不处理滚轮；只有 m_scrollable 为 true（确实有内容被遮挡）时才消费事件，
-     * 否则交还基类，避免在标签没有溢出时吞掉本该继续向上传递的滚轮事件。
-     */
-    void wheelEvent(QWheelEvent *event) override;
+    /** @brief 最小尺寸等于建议尺寸：标签永不被压缩，宽度不足时由外层视口滚动。 */
+    QSize minimumTabSizeHint(int index) const override;
 
     /** @brief 返回包含胶囊留白和按需关闭按钮空间的标签建议尺寸。 */
     QSize tabSizeHint(int index) const override;
@@ -324,9 +273,6 @@ private:
      */
     void resetPointerDragState();
 
-    /** @brief 把内置滚动按钮移出可视区域，并在状态变化时发出 scrollStateChanged。 */
-    void syncScrollButtons();
-
     /** @brief 创建跟随光标的浮动标签快照（无边框顶层控件），并发 externalDragStarted。 */
     void startExternalDragGhost();
 
@@ -335,20 +281,6 @@ private:
 
     /** @brief 销毁浮动标签快照并发 externalDragFinished；无快照时安全无操作。 */
     void endExternalDragGhost();
-
-    /**
-     * @brief QTabBar 自带的左右滚动按钮，由 Qt 在构造时创建并全权管理生命周期。
-     *
-     * 通过 Qt 固定的对象名查找；查不到时两者保持为空，外部滚动按钮相应保持隐藏，
-     * 标签栏退化为 Qt 默认行为而不会崩溃。
-     */
-    QAbstractButton *m_internalScrollLeft = nullptr;
-    QAbstractButton *m_internalScrollRight = nullptr;
-
-    /** @brief 最近一次发出的滚动状态，用于抑制重复信号并避免布局递归。 */
-    bool m_scrollable = false;
-    bool m_canScrollLeft = false;
-    bool m_canScrollRight = false;
 
     /** @brief 当前鼠标悬停标签；-1 表示鼠标不位于任何标签。 */
     int m_hoveredIndex = -1;
@@ -375,8 +307,6 @@ private:
      * 区内才需要额外的强反馈，否则用户区分不出"标签悬停"和"即将点击关闭"这两种状态。
      */
     QColor m_closeHoverColor = QColor(QStringLiteral("#ff6b6b"));
-    /** @brief 滚轮横向/纵向 delta 的累积值，凑够一格（120）才触发一次滚动，避免跳跃。 */
-    int m_wheelDeltaAccumulator = 0;
 
     /**
      * @brief 与当前标签顺序一一对应的稳定标识列表。

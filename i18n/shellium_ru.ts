@@ -1590,8 +1590,8 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">Новая вкладка терминала</translation>
     </message>
     <message>
-        <source>Copy tag</source>
-        <translation type="unfinished">Копировать метку</translation>
+        <source>Duplicate session</source>
+        <translation type="unfinished">Дублировать сеанс</translation>
     </message>
     <message>
         <source>Rename</source>

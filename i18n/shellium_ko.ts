@@ -1590,8 +1590,8 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">새 터미널 탭</translation>
     </message>
     <message>
-        <source>Copy tag</source>
-        <translation type="unfinished">태그 복사</translation>
+        <source>Duplicate session</source>
+        <translation type="unfinished">세션 복제</translation>
     </message>
     <message>
         <source>Rename</source>

@@ -18,6 +18,7 @@
 #include "ui/HostManagerWidget.h"
 #include "ui/MacWindowChrome.h"
 #include "ui/SessionTabBar.h"
+#include "ui/SessionTabStrip.h"
 #include "ui/SessionTabDropOverlay.h"
 #include "ui/SettingsDialog.h"
 #include "ui/SettingsWidgets.h"
@@ -843,19 +844,19 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     titleLayout->addWidget(scrollLeftButton);
     m_chromeButtons.append(scrollLeftButton);
 
-    m_titleTabBar = new SessionTabBar(m_titleChrome);
+    // 标签栏放在按像素滚动的视口中。视口只占标签自身需要的宽度，"+"因此紧贴最后一个
+    // 标签的右侧，而不是被推到窗口最右端；其 Maximum 策略允许在标签溢出时继续压缩，
+    // 此时"+"自然停在标题行末尾，不需要为"固定到最右边"再写一条特殊分支。
+    m_titleTabStrip = new SessionTabStrip(m_titleChrome);
+    m_titleTabStrip->setObjectName(QStringLiteral("SessionTitleTabStrip"));
+    m_titleTabBar = m_titleTabStrip->tabBar();
     m_titleTabBar->setObjectName(QStringLiteral("SessionTitleTabs"));
     m_titleTabBar->setContextMenuPolicy(Qt::CustomContextMenu);
-    // 标签栏只占标签自身需要的宽度，"+"因此紧贴最后一个标签的右侧，而不是被推到窗口
-    // 最右端。Maximum 策略允许在标签溢出时继续压缩标签栏，此时"+"自然停在标题行末尾，
-    // 不需要为"固定到最右边"再写一条特殊分支。
-    m_titleTabBar->setMinimumWidth(0);
-    m_titleTabBar->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
     for (int index = 0; index < m_tabs->count(); ++index) {
         m_titleTabBar->addTab(m_tabs->tabIcon(index), m_tabs->tabText(index));
     }
     m_titleTabBar->setCurrentIndex(m_tabs->currentIndex());
-    titleLayout->addWidget(m_titleTabBar);
+    titleLayout->addWidget(m_titleTabStrip);
 
     auto *scrollRightButton = new QToolButton(m_titleChrome);
     scrollRightButton->setProperty("chromeButton", true);
@@ -921,12 +922,18 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     connect(closeButton, &QToolButton::clicked, this, &QWidget::close);
 #endif
 
+    // 按住箭头时连续滚动：每次自动重复都在上一段平滑滚动的终点上继续累加像素。
+    for (QToolButton *arrow : {scrollLeftButton, scrollRightButton}) {
+        arrow->setAutoRepeat(true);
+        arrow->setAutoRepeatDelay(300);
+        arrow->setAutoRepeatInterval(50);
+    }
     connect(scrollLeftButton, &QToolButton::clicked,
-            m_titleTabBar, &SessionTabBar::scrollTabsLeft);
+            m_titleTabStrip, &SessionTabStrip::scrollTabsLeft);
     connect(scrollRightButton, &QToolButton::clicked,
-            m_titleTabBar, &SessionTabBar::scrollTabsRight);
-    connect(m_titleTabBar,
-            &SessionTabBar::scrollStateChanged,
+            m_titleTabStrip, &SessionTabStrip::scrollTabsRight);
+    connect(m_titleTabStrip,
+            &SessionTabStrip::scrollStateChanged,
             this,
             [scrollLeftButton, scrollRightButton](const bool scrollable,
                                                   const bool canScrollLeft,
@@ -3172,7 +3179,7 @@ QMenu *MainWindow::createSessionTabMenu(const int index, QWidget *parent)
         menu.addSeparator();
         QAction *duplicateAction = menu.addAction(
             UiIcons::symbol(this, UiIcons::Symbol::Copy, this->palette().color(QPalette::WindowText)),
-            tr("Copy tag"));
+            tr("Duplicate session"));
         // 工作空间已经包含多条独立连接，“复制”究竟复制全部连接还是仅当前成员存在歧义；
         // 在定义可预期语义前只允许复制单终端标签，避免菜单点击后无反馈。
         duplicateAction->setEnabled(
@@ -3963,11 +3970,10 @@ void MainWindow::updateWorkspacePlaceholder()
     m_workspaceStack->setCurrentWidget(hasSessions ? static_cast<QWidget *>(m_tabs)
                                                    : m_workspacePlaceholder);
 
-    // 空标签栏并不是零宽：QTabBar 的 minimumSizeHint 与滚动箭头的隐藏占位加在一起，会在
-    // 侧栏开关和"+"之间留下一大段无法解释的空白。没有会话时把这三个控件整体移出布局，
-    // "+"才会紧贴侧栏开关。
-    if (m_titleTabBar != nullptr) {
-        m_titleTabBar->setVisible(hasSessions);
+    // 滚动箭头隐藏时仍保留占位，会在侧栏开关和"+"之间留下一段无法解释的空白。没有会话
+    // 时把标签视口与两个箭头整体移出布局，"+"才会紧贴侧栏开关。
+    if (m_titleTabStrip != nullptr) {
+        m_titleTabStrip->setVisible(hasSessions);
     }
     for (QToolButton *arrow : {m_tabScrollLeftButton, m_tabScrollRightButton}) {
         if (arrow == nullptr) {
@@ -3992,6 +3998,13 @@ TerminalWorkspace *MainWindow::createWorkspaceTab(const QString &title)
         // 运行期间创建的新工作区必须在标题栏加入同索引标签；初始工作区创建得更早，会在
         // 会话栏构造时统一镜像，因此这里需要允许指针为空。
         m_titleTabBar->insertTab(index, terminalIcon, title);
+        // 标签栏按 Maximum 策略只占标签所需宽度，新增标签后要等下一轮布局才会变宽。在此
+        // 之前若有一次绘制（终端启动会触发），旧宽度装不下新标签，QTabBar 判定为溢出：
+        // 显示滚动箭头并把标签整体左移，随后布局到位又弹回，用户看到的就是一次闪烁。
+        // 立即激活标题行布局，让后续的 setCurrentIndex 与任何绘制都基于新宽度。
+        if (QLayout *titleLayout = m_titleChrome->layout()) {
+            titleLayout->activate();
+        }
     }
 
     TerminalPane *pane = workspace->activePane();

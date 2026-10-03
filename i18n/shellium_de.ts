@@ -1590,8 +1590,8 @@ Bestätigen Sie, dass sich der Schlüssel geändert hat, ersetzen Sie den alten 
         <translation type="unfinished">Neuer Terminal-Tab</translation>
     </message>
     <message>
-        <source>Copy tag</source>
-        <translation type="unfinished">Tag kopieren</translation>
+        <source>Duplicate session</source>
+        <translation type="unfinished">Sitzung duplizieren</translation>
     </message>
     <message>
         <source>Rename</source>

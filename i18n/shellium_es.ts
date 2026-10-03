@@ -1590,8 +1590,8 @@ Puede ser una reinstalación del servidor o una rotación de clave, o un ataque 
         <translation type="unfinished">Nueva pestaña de terminal</translation>
     </message>
     <message>
-        <source>Copy tag</source>
-        <translation type="unfinished">Copiar etiqueta</translation>
+        <source>Duplicate session</source>
+        <translation type="unfinished">Duplicar sesión</translation>
     </message>
     <message>
         <source>Rename</source>

@@ -38,6 +38,7 @@ class QToolButton;
 class QVariantAnimation;
 class QWidget;
 class SessionTabBar;
+class SessionTabStrip;
 class SessionTabDropOverlay;
 class TerminalPane;
 class TerminalSettingsService;
@@ -409,6 +410,8 @@ private:
     SessionTabDropOverlay *m_tabDropOverlay = nullptr;
     /** @brief 融入窗口标题栏的可交互会话标签，内容与 m_tabs 严格镜像。 */
     SessionTabBar *m_titleTabBar = nullptr;
+    /** @brief 承载 m_titleTabBar 的裁剪视口，负责按像素滚动标签。 */
+    SessionTabStrip *m_titleTabStrip = nullptr;
     /**
      * @brief 标签栏两侧的外部滚动箭头。
      *

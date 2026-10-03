@@ -215,6 +215,8 @@ set(SHELLIUM_APP_SOURCES
     src/ui/SettingsWidgets.h
     src/ui/SessionTabBar.cpp
     src/ui/SessionTabBar.h
+    src/ui/SessionTabStrip.cpp
+    src/ui/SessionTabStrip.h
     src/ui/SessionTabDropOverlay.cpp
     src/ui/SessionTabDropOverlay.h
     src/ui/SshKeyManagerDialog.cpp
@@ -814,6 +816,8 @@ if(BUILD_TESTING)
         tests/SessionTabBarTest.cpp
         src/ui/SessionTabBar.cpp
         src/ui/SessionTabBar.h
+        src/ui/SessionTabStrip.cpp
+        src/ui/SessionTabStrip.h
         src/ui/SessionTabDropOverlay.cpp
         src/ui/SessionTabDropOverlay.h
     )

@@ -8,16 +8,13 @@
 #include <QEvent>
 #include <QFontMetrics>
 #include <QLabel>
-#include <QMetaMethod>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPaintEvent>
 #include <QPixmap>
-#include <QResizeEvent>
 #include <QSignalBlocker>
 #include <QStyle>
 #include <QVariantAnimation>
-#include <QWheelEvent>
 #include <QWidget>
 #include <QWindow>
 
@@ -32,18 +29,6 @@ constexpr int kMinimumTabWidth = 132;
 constexpr int kMaximumTabWidth = 238;
 /** @brief 胶囊标签固定高度；标题区上下各保留 5 像素呼吸空间。 */
 constexpr int kTabHeight = 42;
-
-/**
- * @brief QTabBar 内置滚动按钮的固定对象名，自 Qt 4 起保持稳定。
- *
- * Qt 未公开滚动偏移量的读写接口，但为这两个按钮设置了稳定对象名；借助它们即可在不
- * 复制 QTabBar 私有布局逻辑的前提下把滚动动作交给外部按钮触发。
- */
-const char *const kInternalScrollLeftName = "ScrollLeftButton";
-const char *const kInternalScrollRightName = "ScrollRightButton";
-
-/** @brief 内置滚动按钮移出可视区域后的横坐标；子控件会被父控件裁剪而不可见。 */
-constexpr int kHiddenScrollButtonX = -400;
 
 /** @brief 标签让位动画的默认上限时长；接近 Qt 原生 250ms，但反馈稍显利落。 */
 constexpr int kMaximumTabMoveAnimationDuration = 220;
@@ -117,24 +102,15 @@ SessionTabBar::SessionTabBar(QWidget *parent)
     // 关闭按钮由本类按悬停状态绘制。若同时开启原生按钮，样式引擎会额外保留一份空位。
     setTabsClosable(false);
     setExpanding(false);
-    setUsesScrollButtons(true);
+    // 滚动由外层 SessionTabStrip 按像素移动整条标签栏完成；标签栏自身始终按全部标签的
+    // 宽度布局，因此关闭 QTabBar 的整格滚动按钮。
+    setUsesScrollButtons(false);
     setElideMode(Qt::ElideRight);
     setMouseTracking(true);
     setDrawBase(false);
     setIconSize(QSize(18, 18));
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     setFixedHeight(kTabHeight);
-
-    // 内置滚动按钮必须保留：它们持有 QTabBar 唯一可用的滚动入口。这里只把它们移出可视
-    // 区域，改由标题栏中左右分置的外部按钮转发点击。
-    m_internalScrollLeft = findChild<QAbstractButton *>(
-        QLatin1String(kInternalScrollLeftName));
-    m_internalScrollRight = findChild<QAbstractButton *>(
-        QLatin1String(kInternalScrollRightName));
-    if (m_internalScrollLeft != nullptr && m_internalScrollRight != nullptr) {
-        m_internalScrollLeft->installEventFilter(this);
-        m_internalScrollRight->installEventFilter(this);
-    }
 
     // QTabBar::moveTab() 会在内部列表完成重排后同步发出 tabMoved。使用直属连接可以保证
     // 基类 mouseMoveEvent 返回前稳定标识已经切换到新顺序，随后计算的动画起终点不会错配。
@@ -143,7 +119,6 @@ SessionTabBar::SessionTabBar(QWidget *parent)
             this,
             &SessionTabBar::handleTabMoved,
             Qt::DirectConnection);
-    syncScrollButtons();
 }
 
 void SessionTabBar::setTabConnectionState(const int index, const ConnectionState state)
@@ -181,102 +156,6 @@ SessionTabBar::TabKind SessionTabBar::tabKind(const int index) const
     return tabId == 0 ? TabKind::Terminal : m_tabKinds.value(tabId, TabKind::Terminal);
 }
 
-bool SessionTabBar::eventFilter(QObject *watched, QEvent *event)
-{
-    if ((watched == m_internalScrollLeft || watched == m_internalScrollRight)
-        && (event->type() == QEvent::EnabledChange
-            || event->type() == QEvent::Show
-            || event->type() == QEvent::Hide)) {
-        syncScrollButtons();
-    }
-    return QTabBar::eventFilter(watched, event);
-}
-
-void SessionTabBar::scrollTabsLeft()
-{
-    if (m_internalScrollLeft != nullptr && m_internalScrollLeft->isEnabled()) {
-        m_internalScrollLeft->click();
-    }
-}
-
-void SessionTabBar::scrollTabsRight()
-{
-    if (m_internalScrollRight != nullptr && m_internalScrollRight->isEnabled()) {
-        m_internalScrollRight->click();
-    }
-}
-
-void SessionTabBar::syncScrollButtons()
-{
-    if (m_internalScrollLeft == nullptr || m_internalScrollRight == nullptr) {
-        return;
-    }
-    // QTabBar 每次重新布局都会把两个按钮摆回右下角，因此每次布局后都要重新移开。
-    m_internalScrollLeft->move(kHiddenScrollButtonX, 0);
-    m_internalScrollRight->move(kHiddenScrollButtonX, 0);
-
-    // Qt 用可见性表达"标签是否溢出"，用可用性表达"该方向是否还有内容"。
-    const bool scrollable = !m_internalScrollLeft->isHidden();
-    const bool canScrollLeft = scrollable && m_internalScrollLeft->isEnabled();
-    const bool canScrollRight = scrollable && m_internalScrollRight->isEnabled();
-    if (scrollable == m_scrollable
-        && canScrollLeft == m_canScrollLeft
-        && canScrollRight == m_canScrollRight) {
-        // 布局在窗口缩放期间会被反复触发；只在状态真正变化时通知外部，避免无谓的重绘，
-        // 也避免外部按钮反复更新再反过来触发本控件重新布局。
-        return;
-    }
-    m_scrollable = scrollable;
-    m_canScrollLeft = canScrollLeft;
-    m_canScrollRight = canScrollRight;
-    emit scrollStateChanged(scrollable, canScrollLeft, canScrollRight);
-}
-
-void SessionTabBar::connectNotify(const QMetaMethod &signal)
-{
-    QTabBar::connectNotify(signal);
-    if (signal == QMetaMethod::fromSignal(&SessionTabBar::scrollStateChanged)) {
-        // 见头文件中的说明：状态可能早于本次连接就已经稳定，之后不会再有变化触发
-        // syncScrollButtons() 重新发出信号，新监听者会永远学不到当前真实状态。补发一次
-        // 缓存值即可，对已连接的旧监听者只是收到一次数值相同的重复信号。
-        emit scrollStateChanged(m_scrollable, m_canScrollLeft, m_canScrollRight);
-    }
-}
-
-void SessionTabBar::wheelEvent(QWheelEvent *event)
-{
-    if (!m_scrollable) {
-        // 没有溢出内容可滚时把事件交还基类/父级，避免吞掉本该继续传递的滚轮事件。
-        QTabBar::wheelEvent(event);
-        return;
-    }
-
-    // 触控板的横向滚动优先：angleDelta().x() 非零时说明用户在做水平手势，此时纵向分量
-    // 通常为 0 或噪声，不能相加，否则同一次手势会被同时按两个方向计入累加器。
-    const QPoint delta = event->angleDelta();
-    const int primaryDelta = delta.x() != 0 ? delta.x() : delta.y();
-    if (primaryDelta == 0) {
-        event->accept();
-        return;
-    }
-
-    // 累积到一整格（120，Qt 定义的标准滚轮单位）才触发一次滚动，效果等同于点击一次
-    // 外部箭头按钮；直接按 delta 数值滚动会在触控板惯性滚动时让标签"飞"过去。
-    m_wheelDeltaAccumulator += primaryDelta;
-    constexpr int kWheelStepThreshold = 120;
-    while (m_wheelDeltaAccumulator >= kWheelStepThreshold) {
-        // 向上滚 / 向左滚（正值）在人类直觉里是把内容往左带，即让更靠左的标签出现，
-        // 也就是向左滚动标签。
-        scrollTabsLeft();
-        m_wheelDeltaAccumulator -= kWheelStepThreshold;
-    }
-    while (m_wheelDeltaAccumulator <= -kWheelStepThreshold) {
-        scrollTabsRight();
-        m_wheelDeltaAccumulator += kWheelStepThreshold;
-    }
-    event->accept();
-}
-
 void SessionTabBar::setVisualColors(const QColor &textColor,
                                     const QColor &selectedTextColor,
                                     const QColor &hoverColor,
@@ -289,16 +168,18 @@ void SessionTabBar::setVisualColors(const QColor &textColor,
     update();
 }
 
-void SessionTabBar::resizeEvent(QResizeEvent *event)
-{
-    QTabBar::resizeEvent(event);
-    syncScrollButtons();
-}
-
 void SessionTabBar::tabLayoutChange()
 {
     QTabBar::tabLayoutChange();
-    syncScrollButtons();
+    emit tabLayoutChanged();
+}
+
+QSize SessionTabBar::minimumTabSizeHint(const int index) const
+{
+    // 关闭整格滚动后，QTabBar 在宽度不足时会把标签压缩到最小尺寸。标签栏的宽度由
+    // SessionTabStrip 按建议尺寸给足，这里再让最小尺寸等于建议尺寸，彻底杜绝任何过渡
+    // 时刻出现被挤压、省略的标签。
+    return tabSizeHint(index);
 }
 
 QSize SessionTabBar::tabSizeHint(const int index) const
