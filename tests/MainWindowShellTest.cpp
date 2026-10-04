@@ -5,6 +5,7 @@
 #include "security/Vault.h"
 #include "storage/ApplicationDatabase.h"
 #include "terminal/TerminalPane.h"
+#include "terminal/TerminalSearchBar.h"
 #include "terminal/TerminalView.h"
 #include "terminal/TerminalWorkspace.h"
 #include "terminal/TerminalWorkspaceGroup.h"
@@ -18,6 +19,10 @@
 #include "ui/ButtonCursorPolicy.h"
 
 #include <QAbstractButton>
+#include <QApplication>
+#include <QTextBlock>
+#include <QTextCursor>
+#include <QTextDocument>
 #include <QAbstractItemDelegate>
 #include <QAction>
 #include <QMouseEvent>
@@ -26,6 +31,8 @@
 #include <QCoreApplication>
 #include <QEvent>
 #include <QLabel>
+#include <QLineEdit>
+#include <QTimer>
 #include <QListWidget>
 #include <QMenu>
 #include <QMenuBar>
@@ -68,6 +75,10 @@ private slots:
     void newTabButtonOpensDefaultTerminal();
     void newTabButtonFollowsTheLastTab();
     void newTabButtonDoesNotFlashTheTabBar();
+    void terminalSearchBarIsEmbeddedAndNavigatesMatches();
+    void terminalSearchBarReportsNoResultsAndClosesWithEscape();
+    void terminalSearchBarPrefillsSingleLineSelection();
+    void searchActionOpensEmbeddedBarInsteadOfDialog();
     void manualRecoveryCloseKeyClosesTheTab();
     void destroyingWindowWithOpenTabsIsSafe();
     void emptyStateKeepsNewTabButtonNextToTheTitleIdentity();
@@ -392,6 +403,204 @@ void MainWindowShellTest::newTabButtonDoesNotFlashTheTabBar()
     QVERIFY2(probe.squeezedPaints.isEmpty(),
              qPrintable(QStringLiteral("标签栏以旧宽度绘制：")
                         + probe.squeezedPaints.join(QStringLiteral("; "))));
+}
+
+namespace {
+
+/** @brief 查找用例共用的终端内容：三处 alpha，最新的一处在最下面。 */
+const QByteArray kSearchFixture =
+    QByteArrayLiteral("alpha one\r\nbeta\r\nalpha two\r\nalpha three\r\n");
+
+/**
+ * @brief 当前命中所在行的文本；没有选中命中时返回空字符串。
+ *
+ * 段文本末尾带着看不见的行高锚点字符。夹具内容是纯 ASCII，截到第一个非 ASCII 字符
+ * 即可去掉锚点，不必依赖锚点的具体字符和个数（它们随本机字体而变）。
+ */
+QString currentMatchLine(const TerminalView *view)
+{
+    const QTextCursor cursor = view->textCursor();
+    if (!cursor.hasSelection()) {
+        return {};
+    }
+    QString line = cursor.block().text();
+    for (qsizetype index = 0; index < line.size(); ++index) {
+        if (line.at(index).unicode() > 0x7f) {
+            line.truncate(index);
+            break;
+        }
+    }
+    return line.trimmed();
+}
+
+/** @brief 查找栏计数文字的期望值，按当前已安装的译文生成，不受先前用例切换语言影响。 */
+QString expectedCount(const int current, const int total)
+{
+    return QCoreApplication::translate("TerminalSearchBar", "%1 of %2")
+        .arg(QString::number(current), QString::number(total));
+}
+
+} // namespace
+
+void MainWindowShellTest::terminalSearchBarIsEmbeddedAndNavigatesMatches()
+{
+    TerminalPane pane;
+    pane.resize(800, 500);
+    pane.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&pane));
+    auto *view = pane.findChild<TerminalView *>();
+    QVERIFY(view != nullptr);
+    view->appendTerminalOutput(kSearchFixture);
+
+    auto *bar = pane.findChild<TerminalSearchBar *>(QStringLiteral("terminalSearchBar"));
+    auto *input = pane.findChild<QLineEdit *>(QStringLiteral("terminalSearchInput"));
+    auto *result = pane.findChild<QLabel *>(QStringLiteral("terminalSearchResult"));
+    auto *previous = pane.findChild<QToolButton *>(QStringLiteral("terminalSearchPrevious"));
+    auto *next = pane.findChild<QToolButton *>(QStringLiteral("terminalSearchNext"));
+    QVERIFY(bar != nullptr && input != nullptr && result != nullptr
+            && previous != nullptr && next != nullptr);
+    QVERIFY2(bar->isHidden(), "查找栏默认不占用终端空间");
+
+    pane.showSearchBar();
+    QVERIFY(pane.isSearchBarVisible());
+    // 嵌在面板内、位于终端正文上方，而不是独立的弹出窗口。
+    QVERIFY(!bar->isWindow());
+    QCOMPARE(bar->parentWidget(), &pane);
+    QTRY_VERIFY(bar->geometry().bottom() < view->geometry().top());
+    QCOMPARE(pane.window()->focusWidget(), input);
+
+    // 边输入边查找，第一下落在最新（最下面）的输出上。
+    QTest::keyClicks(input, QStringLiteral("alpha"));
+    QCOMPARE(view->selectedTerminalText(), QStringLiteral("alpha"));
+    QCOMPARE(currentMatchLine(view), QStringLiteral("alpha three"));
+    QCOMPARE(result->text(), expectedCount(3, 3));
+    QVERIFY(previous->isEnabled() && next->isEnabled());
+
+    // Enter 向上找更早的输出，Shift+Enter 向下找更新的输出。
+    QTest::keyClick(input, Qt::Key_Return);
+    QCOMPARE(currentMatchLine(view), QStringLiteral("alpha two"));
+    QCOMPARE(result->text(), expectedCount(2, 3));
+    QTest::keyClick(input, Qt::Key_Return, Qt::ShiftModifier);
+    QCOMPARE(currentMatchLine(view), QStringLiteral("alpha three"));
+
+    // 下一个在最后一处之后环回到第一处，上一个从第一处环回到最后一处。
+    QTest::mouseClick(next, Qt::LeftButton);
+    QCOMPARE(currentMatchLine(view), QStringLiteral("alpha one"));
+    QCOMPARE(result->text(), expectedCount(1, 3));
+    QTest::mouseClick(previous, Qt::LeftButton);
+    QCOMPARE(currentMatchLine(view), QStringLiteral("alpha three"));
+    QCOMPARE(pane.window()->focusWidget(), input);
+
+    // 继续输入时只要当前命中仍匹配就原地不动，计数随之收窄。
+    QTest::mouseClick(previous, Qt::LeftButton);
+    QCOMPARE(currentMatchLine(view), QStringLiteral("alpha two"));
+    QTest::keyClicks(input, QStringLiteral(" t"));
+    QCOMPARE(currentMatchLine(view), QStringLiteral("alpha two"));
+    QCOMPARE(result->text(), expectedCount(1, 2));
+}
+
+void MainWindowShellTest::terminalSearchBarReportsNoResultsAndClosesWithEscape()
+{
+    TerminalPane pane;
+    pane.resize(800, 500);
+    pane.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&pane));
+    auto *view = pane.findChild<TerminalView *>();
+    view->appendTerminalOutput(kSearchFixture);
+    auto *input = pane.findChild<QLineEdit *>(QStringLiteral("terminalSearchInput"));
+    auto *result = pane.findChild<QLabel *>(QStringLiteral("terminalSearchResult"));
+    auto *previous = pane.findChild<QToolButton *>(QStringLiteral("terminalSearchPrevious"));
+    auto *next = pane.findChild<QToolButton *>(QStringLiteral("terminalSearchNext"));
+
+    pane.showSearchBar();
+    QTest::keyClicks(input, QStringLiteral("beta"));
+    QCOMPARE(currentMatchLine(view), QStringLiteral("beta"));
+
+    QTest::keyClicks(input, QStringLiteral("zzz"));
+    QCOMPARE(result->text(), QCoreApplication::translate("TerminalSearchBar", "No results"));
+    QVERIFY(!previous->isEnabled() && !next->isEnabled());
+    QVERIFY2(!view->textCursor().hasSelection(), "没有命中时不能残留上一次的选中");
+
+    // 清空输入框即清空结果，不显示"无结果"。
+    input->clear();
+    QVERIFY(result->text().isEmpty());
+
+    QTest::keyClicks(input, QStringLiteral("alpha"));
+    QVERIFY(view->textCursor().hasSelection());
+    QTest::keyClick(input, Qt::Key_Escape);
+    QVERIFY(!pane.isSearchBarVisible());
+    QVERIFY2(!view->textCursor().hasSelection(), "关闭查找栏必须清除命中选区");
+    QCOMPARE(pane.window()->focusWidget(), view);
+
+    // 再次打开保留上次的查找词并重新查找。
+    pane.showSearchBar();
+    QCOMPARE(input->text(), QStringLiteral("alpha"));
+    QCOMPARE(input->selectedText(), QStringLiteral("alpha"));
+    QCOMPARE(currentMatchLine(view), QStringLiteral("alpha three"));
+}
+
+void MainWindowShellTest::terminalSearchBarPrefillsSingleLineSelection()
+{
+    TerminalPane pane;
+    pane.resize(800, 500);
+    pane.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&pane));
+    auto *view = pane.findChild<TerminalView *>();
+    view->appendTerminalOutput(kSearchFixture);
+    auto *input = pane.findChild<QLineEdit *>(QStringLiteral("terminalSearchInput"));
+
+    const QString plain = view->document()->toPlainText();
+    QTextCursor selection(view->document());
+    selection.setPosition(plain.indexOf(QStringLiteral("beta")));
+    selection.setPosition(plain.indexOf(QStringLiteral("beta")) + 4, QTextCursor::KeepAnchor);
+    view->setTextCursor(selection);
+    pane.showSearchBar();
+    QCOMPARE(input->text(), QStringLiteral("beta"));
+    QCOMPARE(currentMatchLine(view), QStringLiteral("beta"));
+    pane.hideSearchBar();
+
+    // 跨行选区多半是想复制，不能覆盖上次的查找词。
+    selection.setPosition(plain.indexOf(QStringLiteral("alpha one")));
+    selection.setPosition(plain.indexOf(QStringLiteral("alpha two")), QTextCursor::KeepAnchor);
+    view->setTextCursor(selection);
+    pane.showSearchBar();
+    QCOMPARE(input->text(), QStringLiteral("beta"));
+}
+
+void MainWindowShellTest::searchActionOpensEmbeddedBarInsteadOfDialog()
+{
+    MainWindow window(m_database, m_vault);
+    window.resize(1200, 800);
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+    auto *tabs = window.findChild<QTabWidget *>(QStringLiteral("TerminalPages"));
+    auto *newTabButton = window.findChild<QToolButton *>(QStringLiteral("TitleNewTabButton"));
+    QTest::mouseClick(newTabButton, Qt::LeftButton);
+    auto *workspace = qobject_cast<TerminalWorkspace *>(tabs->widget(0));
+    QVERIFY(workspace != nullptr);
+    TerminalPane *pane = workspace->activePane();
+
+    QAction *searchAction = nullptr;
+    for (QAction *action : window.findChildren<QAction *>()) {
+        if (action->text() == QCoreApplication::translate("MainWindow", "Search Terminal Output")) {
+            searchAction = action;
+        }
+    }
+    QVERIFY(searchAction != nullptr);
+
+    // 若仍弹出模态框，trigger() 会阻塞在其事件循环里；定时关掉它并记录，用例才能失败
+    // 而不是挂起。
+    bool modalShown = false;
+    QTimer::singleShot(500, &window, [&modalShown]() {
+        if (QWidget *modal = QApplication::activeModalWidget()) {
+            modalShown = true;
+            modal->close();
+        }
+    });
+    searchAction->trigger();
+    QTest::qWait(600);
+    QVERIFY2(!modalShown, "查找不应再弹出模态输入框");
+    QVERIFY(pane->isSearchBarVisible());
 }
 
 void MainWindowShellTest::draggingTerminalIntoSelectedTabCreatesWorkspace()

@@ -1394,10 +1394,6 @@ Confirmi că cheia s-a schimbat, înlocuiești vechea înregistrare din known_ho
         <translation type="unfinished">Afișează sau ascunde zona managerului de fișiere la distanță din fila de terminal curentă</translation>
     </message>
     <message>
-        <source>Search Terminal Output…</source>
-        <translation type="unfinished">Caută în ieșirea terminalului…</translation>
-    </message>
-    <message>
         <source>Export Terminal Output…</source>
         <translation type="unfinished">Exportă ieșirea terminalului…</translation>
     </message>
@@ -1702,18 +1698,6 @@ Confirmi că cheia s-a schimbat, înlocuiești vechea înregistrare din known_ho
         <translation type="unfinished">Enter pentru a executa, Esc pentru a închide; aici sunt afișate doar acțiunile disponibile acum.</translation>
     </message>
     <message>
-        <source>Search terminal output</source>
-        <translation type="unfinished">Caută în ieșirea terminalului</translation>
-    </message>
-    <message>
-        <source>Find text:</source>
-        <translation type="unfinished">Găsește textul:</translation>
-    </message>
-    <message>
-        <source>&apos;%1&apos; was not found in the terminal output</source>
-        <translation type="unfinished">„%1” nu a fost găsit în ieșirea terminalului</translation>
-    </message>
-    <message>
         <source>Export terminal output</source>
         <translation type="unfinished">Exportă ieșirea terminalului</translation>
     </message>
@@ -1888,6 +1872,10 @@ Confirmi că cheia s-a schimbat, înlocuiești vechea înregistrare din known_ho
     <message>
         <source>Sidebar density</source>
         <translation>Densitatea barei laterale</translation>
+    </message>
+    <message>
+        <source>Search Terminal Output</source>
+        <translation>Caută în ieșirea terminalului</translation>
     </message>
     <message>
         <source>Compact</source>
@@ -4743,6 +4731,49 @@ Reconectare manuală…<byte value="xd"/>
     <message>
         <source>%1, fell back to %2</source>
         <translation type="unfinished">%1, s-a revenit la %2</translation>
+    </message>
+</context>
+<context>
+    <name>TerminalSearchBar</name>
+    <message>
+        <source>Find in terminal</source>
+        <translation>Caută în terminal</translation>
+    </message>
+    <message>
+        <source>Previous match (Enter)</source>
+        <translation>Potrivirea anterioară (Enter)</translation>
+    </message>
+    <message>
+        <source>Previous match</source>
+        <translation>Potrivirea anterioară</translation>
+    </message>
+    <message>
+        <source>Next match (Shift+Enter)</source>
+        <translation>Potrivirea următoare (Shift+Enter)</translation>
+    </message>
+    <message>
+        <source>Next match</source>
+        <translation>Potrivirea următoare</translation>
+    </message>
+    <message>
+        <source>Close search (Esc)</source>
+        <translation>Închide căutarea (Esc)</translation>
+    </message>
+    <message>
+        <source>Close search</source>
+        <translation>Închide căutarea</translation>
+    </message>
+    <message>
+        <source>No results</source>
+        <translation>Niciun rezultat</translation>
+    </message>
+    <message>
+        <source>%1 of %2+</source>
+        <translation>%1 din %2+</translation>
+    </message>
+    <message>
+        <source>%1 of %2</source>
+        <translation>%1 din %2</translation>
     </message>
 </context>
 <context>

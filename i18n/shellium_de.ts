@@ -1394,10 +1394,6 @@ Bestätigen Sie, dass sich der Schlüssel geändert hat, ersetzen Sie den alten 
         <translation type="unfinished">Den Remote-Dateimanager-Bereich innerhalb des aktuellen Terminal-Tabs anzeigen oder verbergen</translation>
     </message>
     <message>
-        <source>Search Terminal Output…</source>
-        <translation type="unfinished">Terminalausgabe durchsuchen …</translation>
-    </message>
-    <message>
         <source>Export Terminal Output…</source>
         <translation type="unfinished">Terminalausgabe exportieren …</translation>
     </message>
@@ -1702,18 +1698,6 @@ Bestätigen Sie, dass sich der Schlüssel geändert hat, ersetzen Sie den alten 
         <translation type="unfinished">Eingabe zum Ausführen, Esc zum Schließen; hier werden nur derzeit verfügbare Aktionen angezeigt.</translation>
     </message>
     <message>
-        <source>Search terminal output</source>
-        <translation type="unfinished">Terminalausgabe durchsuchen</translation>
-    </message>
-    <message>
-        <source>Find text:</source>
-        <translation type="unfinished">Text suchen:</translation>
-    </message>
-    <message>
-        <source>&apos;%1&apos; was not found in the terminal output</source>
-        <translation type="unfinished">&apos;%1&apos; wurde in der Terminalausgabe nicht gefunden</translation>
-    </message>
-    <message>
         <source>Export terminal output</source>
         <translation type="unfinished">Terminalausgabe exportieren</translation>
     </message>
@@ -1888,6 +1872,10 @@ Bestätigen Sie, dass sich der Schlüssel geändert hat, ersetzen Sie den alten 
     <message>
         <source>Sidebar density</source>
         <translation>Seitenleistendichte</translation>
+    </message>
+    <message>
+        <source>Search Terminal Output</source>
+        <translation>Terminalausgabe durchsuchen</translation>
     </message>
     <message>
         <source>Compact</source>
@@ -4743,6 +4731,49 @@ Manuelle Neuverbindung …<byte value="xd"/>
     <message>
         <source>%1, fell back to %2</source>
         <translation type="unfinished">%1, auf %2 zurückgefallen</translation>
+    </message>
+</context>
+<context>
+    <name>TerminalSearchBar</name>
+    <message>
+        <source>Find in terminal</source>
+        <translation>Im Terminal suchen</translation>
+    </message>
+    <message>
+        <source>Previous match (Enter)</source>
+        <translation>Vorheriger Treffer (Eingabe)</translation>
+    </message>
+    <message>
+        <source>Previous match</source>
+        <translation>Vorheriger Treffer</translation>
+    </message>
+    <message>
+        <source>Next match (Shift+Enter)</source>
+        <translation>Nächster Treffer (Umschalt+Eingabe)</translation>
+    </message>
+    <message>
+        <source>Next match</source>
+        <translation>Nächster Treffer</translation>
+    </message>
+    <message>
+        <source>Close search (Esc)</source>
+        <translation>Suche schließen (Esc)</translation>
+    </message>
+    <message>
+        <source>Close search</source>
+        <translation>Suche schließen</translation>
+    </message>
+    <message>
+        <source>No results</source>
+        <translation>Keine Ergebnisse</translation>
+    </message>
+    <message>
+        <source>%1 of %2+</source>
+        <translation>%1 von %2+</translation>
+    </message>
+    <message>
+        <source>%1 of %2</source>
+        <translation>%1 von %2</translation>
     </message>
 </context>
 <context>

@@ -14,6 +14,7 @@ class ApplicationDatabase;
 class QLabel;
 class LocalShellWorker;
 class SshSessionStack;
+class TerminalSearchBar;
 class TerminalView;
 class QTimer;
 class QToolButton;
@@ -140,8 +141,19 @@ public:
     /** @brief 把应用级终端设置应用到视图和面板标题栏。 */
     void applyTerminalSettings(const TerminalSettings &settings);
 
-    /** @brief 在终端输出中查找文本；到达边界时由视图自动环回。 */
-    bool findTerminalText(const QString &text, bool backward = false);
+    /**
+     * @brief 打开嵌在会话顶部的查找栏并聚焦输入框。
+     *
+     * 终端中选中了单行文本时用它作为查找内容，否则保留查找栏上次的内容。查找栏已打开时
+     * 再次调用只会重新聚焦并全选输入框，方便直接键入新内容。
+     */
+    void showSearchBar();
+
+    /** @brief 关闭查找栏、清除命中并把焦点还给终端；查找栏未打开时无操作。 */
+    void hideSearchBar();
+
+    /** @brief 查找栏当前是否显示。 */
+    [[nodiscard]] bool isSearchBarVisible() const;
 
     /** @brief 返回当前终端的纯文本输出，供主窗口原子导出。 */
     [[nodiscard]] QString terminalPlainText() const;
@@ -423,6 +435,9 @@ private:
 
     /** @brief 清空 m_statusMessageLabel/m_statusMessageIcon 的定时器；每次新消息到达都会重新启动。 */
     QTimer *m_statusMessageTimer = nullptr;
+
+    /** @brief 嵌在状态栏与终端正文之间的查找栏，默认隐藏。 */
+    TerminalSearchBar *m_searchBar = nullptr;
 
     /** @brief 当前标签专属的远程文件管理显隐按钮，位于状态栏最右侧。 */
     QToolButton *m_fileManagerButton = nullptr;

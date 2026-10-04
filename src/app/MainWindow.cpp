@@ -735,7 +735,7 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     toggleFilesAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+F")));
 
     auto *searchTerminalAction = new QAction(this);
-    registerTranslatable(searchTerminalAction, QT_TRANSLATE_NOOP("MainWindow", "Search Terminal Output…"));
+    registerTranslatable(searchTerminalAction, QT_TRANSLATE_NOOP("MainWindow", "Search Terminal Output"));
     auto *exportTerminalAction = new QAction(this);
     registerTranslatable(exportTerminalAction, QT_TRANSLATE_NOOP("MainWindow", "Export Terminal Output…"));
     auto *settingsAction = new QAction(this);
@@ -4522,23 +4522,8 @@ void MainWindow::searchCurrentTerminal()
 {
     TerminalWorkspace *workspace = activeWorkspace();
     TerminalPane *pane = workspace == nullptr ? nullptr : workspace->activePane();
-    if (pane == nullptr) {
-        return;
-    }
-
-    bool accepted = false;
-    const QString text = QInputDialog::getText(this,
-                                               tr("Search terminal output"),
-                                               tr("Find text:"),
-                                               QLineEdit::Normal,
-                                               m_lastTerminalSearch,
-                                               &accepted);
-    if (!accepted || text.isEmpty()) {
-        return;
-    }
-    m_lastTerminalSearch = text;
-    if (!pane->findTerminalText(text)) {
-        showTransientMessage(tr("'%1' was not found in the terminal output").arg(text), 5000);
+    if (pane != nullptr) {
+        pane->showSearchBar();
     }
 }
 

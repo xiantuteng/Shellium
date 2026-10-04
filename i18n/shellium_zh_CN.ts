@@ -1394,10 +1394,6 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation>显示或隐藏当前终端标签页内部的远程文件管理区域</translation>
     </message>
     <message>
-        <source>Search Terminal Output…</source>
-        <translation>搜索终端输出…</translation>
-    </message>
-    <message>
         <source>Export Terminal Output…</source>
         <translation>导出终端输出…</translation>
     </message>
@@ -1678,6 +1674,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation>按标题栏的 + 新建终端标签页，或从左侧主机列表连接服务器。</translation>
     </message>
     <message>
+        <source>Search Terminal Output</source>
+        <translation>搜索终端输出</translation>
+    </message>
+    <message>
         <source>Failed to save host distribution information: %1</source>
         <translation>保存主机发行版信息失败：%1</translation>
     </message>
@@ -1700,18 +1700,6 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>Enter to run, Esc to close; only currently available actions are shown here.</source>
         <translation>Enter 执行，Esc 关闭；这里只显示当前可用动作。</translation>
-    </message>
-    <message>
-        <source>Search terminal output</source>
-        <translation>搜索终端输出</translation>
-    </message>
-    <message>
-        <source>Find text:</source>
-        <translation>查找文本：</translation>
-    </message>
-    <message>
-        <source>&apos;%1&apos; was not found in the terminal output</source>
-        <translation>终端输出中未找到“%1”</translation>
     </message>
     <message>
         <source>Export terminal output</source>
@@ -4745,6 +4733,49 @@ Reconnecting manually…<byte value="xd"/>
     <message>
         <source>%1, fell back to %2</source>
         <translation>%1，已退回 %2</translation>
+    </message>
+</context>
+<context>
+    <name>TerminalSearchBar</name>
+    <message>
+        <source>Find in terminal</source>
+        <translation>在终端中查找</translation>
+    </message>
+    <message>
+        <source>Previous match (Enter)</source>
+        <translation>上一个匹配（Enter）</translation>
+    </message>
+    <message>
+        <source>Previous match</source>
+        <translation>上一个匹配</translation>
+    </message>
+    <message>
+        <source>Next match (Shift+Enter)</source>
+        <translation>下一个匹配（Shift+Enter）</translation>
+    </message>
+    <message>
+        <source>Next match</source>
+        <translation>下一个匹配</translation>
+    </message>
+    <message>
+        <source>Close search (Esc)</source>
+        <translation>关闭查找（Esc）</translation>
+    </message>
+    <message>
+        <source>Close search</source>
+        <translation>关闭查找</translation>
+    </message>
+    <message>
+        <source>No results</source>
+        <translation>无结果</translation>
+    </message>
+    <message>
+        <source>%1 of %2+</source>
+        <translation>第 %1 个，共 %2+ 个</translation>
+    </message>
+    <message>
+        <source>%1 of %2</source>
+        <translation>第 %1 个，共 %2 个</translation>
     </message>
 </context>
 <context>

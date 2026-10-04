@@ -1394,10 +1394,6 @@ Puede ser una reinstalación del servidor o una rotación de clave, o un ataque 
         <translation type="unfinished">Mostrar u ocultar la zona del gestor de archivos remoto dentro de la pestaña de terminal actual</translation>
     </message>
     <message>
-        <source>Search Terminal Output…</source>
-        <translation type="unfinished">Buscar en la salida del terminal…</translation>
-    </message>
-    <message>
         <source>Export Terminal Output…</source>
         <translation type="unfinished">Exportar la salida del terminal…</translation>
     </message>
@@ -1702,18 +1698,6 @@ Puede ser una reinstalación del servidor o una rotación de clave, o un ataque 
         <translation type="unfinished">Intro para ejecutar, Esc para cerrar; aquí solo se muestran las acciones disponibles actualmente.</translation>
     </message>
     <message>
-        <source>Search terminal output</source>
-        <translation type="unfinished">Buscar en la salida del terminal</translation>
-    </message>
-    <message>
-        <source>Find text:</source>
-        <translation type="unfinished">Buscar texto:</translation>
-    </message>
-    <message>
-        <source>&apos;%1&apos; was not found in the terminal output</source>
-        <translation type="unfinished">No se encontró &apos;%1&apos; en la salida del terminal</translation>
-    </message>
-    <message>
         <source>Export terminal output</source>
         <translation type="unfinished">Exportar la salida del terminal</translation>
     </message>
@@ -1888,6 +1872,10 @@ Puede ser una reinstalación del servidor o una rotación de clave, o un ataque 
     <message>
         <source>Sidebar density</source>
         <translation>Densidad de la barra lateral</translation>
+    </message>
+    <message>
+        <source>Search Terminal Output</source>
+        <translation>Buscar en la salida del terminal</translation>
     </message>
     <message>
         <source>Compact</source>
@@ -4743,6 +4731,49 @@ Reconectando manualmente…<byte value="xd"/>
     <message>
         <source>%1, fell back to %2</source>
         <translation type="unfinished">%1, se recurrió a %2</translation>
+    </message>
+</context>
+<context>
+    <name>TerminalSearchBar</name>
+    <message>
+        <source>Find in terminal</source>
+        <translation>Buscar en el terminal</translation>
+    </message>
+    <message>
+        <source>Previous match (Enter)</source>
+        <translation>Coincidencia anterior (Intro)</translation>
+    </message>
+    <message>
+        <source>Previous match</source>
+        <translation>Coincidencia anterior</translation>
+    </message>
+    <message>
+        <source>Next match (Shift+Enter)</source>
+        <translation>Coincidencia siguiente (Mayús+Intro)</translation>
+    </message>
+    <message>
+        <source>Next match</source>
+        <translation>Coincidencia siguiente</translation>
+    </message>
+    <message>
+        <source>Close search (Esc)</source>
+        <translation>Cerrar búsqueda (Esc)</translation>
+    </message>
+    <message>
+        <source>Close search</source>
+        <translation>Cerrar búsqueda</translation>
+    </message>
+    <message>
+        <source>No results</source>
+        <translation>Sin resultados</translation>
+    </message>
+    <message>
+        <source>%1 of %2+</source>
+        <translation>%1 de %2+</translation>
+    </message>
+    <message>
+        <source>%1 of %2</source>
+        <translation>%1 de %2</translation>
     </message>
 </context>
 <context>

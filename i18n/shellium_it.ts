@@ -1394,10 +1394,6 @@ Confermare che la chiave è cambiata, sostituire il vecchio record in known_host
         <translation type="unfinished">Mostra o nascondi l&apos;area del gestore file remoto all&apos;interno della scheda del terminale corrente</translation>
     </message>
     <message>
-        <source>Search Terminal Output…</source>
-        <translation type="unfinished">Cerca nell&apos;output del terminale…</translation>
-    </message>
-    <message>
         <source>Export Terminal Output…</source>
         <translation type="unfinished">Esporta l&apos;output del terminale…</translation>
     </message>
@@ -1702,18 +1698,6 @@ Confermare che la chiave è cambiata, sostituire il vecchio record in known_host
         <translation type="unfinished">Invio per eseguire, Esc per chiudere; qui sono mostrate solo le azioni attualmente disponibili.</translation>
     </message>
     <message>
-        <source>Search terminal output</source>
-        <translation type="unfinished">Cerca nell&apos;output del terminale</translation>
-    </message>
-    <message>
-        <source>Find text:</source>
-        <translation type="unfinished">Cerca testo:</translation>
-    </message>
-    <message>
-        <source>&apos;%1&apos; was not found in the terminal output</source>
-        <translation type="unfinished">&apos;%1&apos; non trovato nell&apos;output del terminale</translation>
-    </message>
-    <message>
         <source>Export terminal output</source>
         <translation type="unfinished">Esporta l&apos;output del terminale</translation>
     </message>
@@ -1888,6 +1872,10 @@ Confermare che la chiave è cambiata, sostituire il vecchio record in known_host
     <message>
         <source>Sidebar density</source>
         <translation>Densità della barra laterale</translation>
+    </message>
+    <message>
+        <source>Search Terminal Output</source>
+        <translation>Cerca nell&apos;output del terminale</translation>
     </message>
     <message>
         <source>Compact</source>
@@ -4743,6 +4731,49 @@ Riconnessione manuale…<byte value="xd"/>
     <message>
         <source>%1, fell back to %2</source>
         <translation type="unfinished">%1, ripiegato su %2</translation>
+    </message>
+</context>
+<context>
+    <name>TerminalSearchBar</name>
+    <message>
+        <source>Find in terminal</source>
+        <translation>Cerca nel terminale</translation>
+    </message>
+    <message>
+        <source>Previous match (Enter)</source>
+        <translation>Corrispondenza precedente (Invio)</translation>
+    </message>
+    <message>
+        <source>Previous match</source>
+        <translation>Corrispondenza precedente</translation>
+    </message>
+    <message>
+        <source>Next match (Shift+Enter)</source>
+        <translation>Corrispondenza successiva (Maiusc+Invio)</translation>
+    </message>
+    <message>
+        <source>Next match</source>
+        <translation>Corrispondenza successiva</translation>
+    </message>
+    <message>
+        <source>Close search (Esc)</source>
+        <translation>Chiudi ricerca (Esc)</translation>
+    </message>
+    <message>
+        <source>Close search</source>
+        <translation>Chiudi ricerca</translation>
+    </message>
+    <message>
+        <source>No results</source>
+        <translation>Nessun risultato</translation>
+    </message>
+    <message>
+        <source>%1 of %2+</source>
+        <translation>%1 di %2+</translation>
+    </message>
+    <message>
+        <source>%1 of %2</source>
+        <translation>%1 di %2</translation>
     </message>
 </context>
 <context>

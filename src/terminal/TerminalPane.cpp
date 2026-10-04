@@ -8,9 +8,11 @@
 #include "settings/TerminalSettings.h"
 #include "storage/ApplicationDatabase.h"
 #include "terminal/LocalShellWorker.h"
+#include "terminal/TerminalSearchBar.h"
 #include "terminal/TerminalView.h"
 #include "ui/UiIcons.h"
 
+#include <QApplication>
 #include <QHBoxLayout>
 #include <QLoggingCategory>
 #include <QLabel>
@@ -38,6 +40,7 @@ TerminalPane::TerminalPane(QWidget *parent)
     , m_statusMessageTimer(new QTimer(this))
     , m_fileManagerButton(new QToolButton(this))
     , m_headerExtras(new QWidget(this))
+    , m_searchBar(new TerminalSearchBar(this))
     , m_terminalView(new TerminalView(this))
 {
     auto *layout = new QVBoxLayout(this);
@@ -94,7 +97,18 @@ TerminalPane::TerminalPane(QWidget *parent)
     headerLayout->addWidget(m_fileManagerButton);
     headerLayout->addWidget(m_headerExtras, 0, Qt::AlignRight);
     layout->addWidget(m_headerBar);
+    // 查找栏嵌在状态栏与终端正文之间，而不是弹出模态框：查找时终端正文始终可见，命中
+    // 之间可以反复上下跳转。
+    layout->addWidget(m_searchBar);
     layout->addWidget(m_terminalView, 1);
+
+    connect(m_searchBar,
+            &TerminalSearchBar::searchRequested,
+            this,
+            [this](const QString &text, const TerminalSearchStep step) {
+                m_searchBar->setResult(m_terminalView->searchTerminalText(text, step));
+            });
+    connect(m_searchBar, &TerminalSearchBar::closeRequested, this, &TerminalPane::hideSearchBar);
 
     connect(m_fileManagerButton, &QToolButton::toggled, this, [this](const bool visible) {
         updateFileManagerButtonIcon();
@@ -835,6 +849,7 @@ void TerminalPane::applyTerminalSettings(const TerminalSettings &settings)
     // 上一套主题的浅色线条。
     m_headerIconColor = palette.foreground;
     updateFileManagerButtonIcon();
+    m_searchBar->setColors(headerBackground, palette.foreground, palette.background);
 }
 
 void TerminalPane::setFileManagerVisible(const bool visible)
@@ -1047,9 +1062,32 @@ bool TerminalPane::scheduleAutomaticReconnect(const ConnectionTarget &target,
     return true;
 }
 
-bool TerminalPane::findTerminalText(const QString &text, const bool backward)
+void TerminalPane::showSearchBar()
 {
-    return m_terminalView->findTerminalText(text, backward);
+    // 只有单行选区适合作为查找内容；跨行选区多半是想复制，不能拿来覆盖用户上次的查找词。
+    const QString selected = m_terminalView->selectedTerminalText();
+    const bool usableSelection = !selected.isEmpty()
+        && !selected.contains(QLatin1Char('\n'))
+        && !selected.contains(QChar::ParagraphSeparator);
+    m_searchBar->activate(usableSelection ? selected : QString());
+}
+
+void TerminalPane::hideSearchBar()
+{
+    if (m_searchBar->isHidden()) {
+        return;
+    }
+    const bool searchHadFocus = m_searchBar->isAncestorOf(QApplication::focusWidget());
+    m_searchBar->hide();
+    m_terminalView->clearTerminalSearch();
+    if (searchHadFocus) {
+        m_terminalView->setFocus(Qt::OtherFocusReason);
+    }
+}
+
+bool TerminalPane::isSearchBarVisible() const
+{
+    return !m_searchBar->isHidden();
 }
 
 QString TerminalPane::terminalPlainText() const

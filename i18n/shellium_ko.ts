@@ -1394,10 +1394,6 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">현재 터미널 탭 내에서 원격 파일 관리자 영역 표시 또는 숨기기</translation>
     </message>
     <message>
-        <source>Search Terminal Output…</source>
-        <translation type="unfinished">터미널 출력에서 검색…</translation>
-    </message>
-    <message>
         <source>Export Terminal Output…</source>
         <translation type="unfinished">터미널 출력 내보내기…</translation>
     </message>
@@ -1702,18 +1698,6 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">Enter로 실행, Esc로 닫기. 여기에는 현재 사용 가능한 작업만 표시됩니다.</translation>
     </message>
     <message>
-        <source>Search terminal output</source>
-        <translation type="unfinished">터미널 출력에서 검색</translation>
-    </message>
-    <message>
-        <source>Find text:</source>
-        <translation type="unfinished">텍스트 찾기:</translation>
-    </message>
-    <message>
-        <source>&apos;%1&apos; was not found in the terminal output</source>
-        <translation type="unfinished">터미널 출력에서 「%1」을(를) 찾을 수 없습니다</translation>
-    </message>
-    <message>
         <source>Export terminal output</source>
         <translation type="unfinished">터미널 출력 내보내기</translation>
     </message>
@@ -1888,6 +1872,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>Sidebar density</source>
         <translation>사이드바 표시 밀도</translation>
+    </message>
+    <message>
+        <source>Search Terminal Output</source>
+        <translation>터미널 출력에서 검색</translation>
     </message>
     <message>
         <source>Compact</source>
@@ -4743,6 +4731,49 @@ Reconnecting manually…<byte value="xd"/>
     <message>
         <source>%1, fell back to %2</source>
         <translation type="unfinished">%1, %2(으)로 대체되었습니다</translation>
+    </message>
+</context>
+<context>
+    <name>TerminalSearchBar</name>
+    <message>
+        <source>Find in terminal</source>
+        <translation>터미널에서 찾기</translation>
+    </message>
+    <message>
+        <source>Previous match (Enter)</source>
+        <translation>이전 일치 항목(Enter)</translation>
+    </message>
+    <message>
+        <source>Previous match</source>
+        <translation>이전 일치 항목</translation>
+    </message>
+    <message>
+        <source>Next match (Shift+Enter)</source>
+        <translation>다음 일치 항목(Shift+Enter)</translation>
+    </message>
+    <message>
+        <source>Next match</source>
+        <translation>다음 일치 항목</translation>
+    </message>
+    <message>
+        <source>Close search (Esc)</source>
+        <translation>검색 닫기(Esc)</translation>
+    </message>
+    <message>
+        <source>Close search</source>
+        <translation>검색 닫기</translation>
+    </message>
+    <message>
+        <source>No results</source>
+        <translation>결과 없음</translation>
+    </message>
+    <message>
+        <source>%1 of %2+</source>
+        <translation>%2+개 중 %1번째</translation>
+    </message>
+    <message>
+        <source>%1 of %2</source>
+        <translation>%2개 중 %1번째</translation>
     </message>
 </context>
 <context>

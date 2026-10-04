@@ -75,6 +75,8 @@ enum class Symbol {
     Bell,
     ChevronLeft,
     ChevronRight,
+    ChevronUp,
+    ChevronDown,
     Edit,
     Trash,
     Refresh,
@@ -265,6 +267,14 @@ enum class Symbol {
     case Symbol::ChevronRight:
         painter.drawLine(QPointF(9.5, 5.0), QPointF(15.5, 12.0));
         painter.drawLine(QPointF(15.5, 12.0), QPointF(9.5, 19.0));
+        break;
+    case Symbol::ChevronUp:
+        painter.drawLine(QPointF(5.0, 14.5), QPointF(12.0, 8.5));
+        painter.drawLine(QPointF(12.0, 8.5), QPointF(19.0, 14.5));
+        break;
+    case Symbol::ChevronDown:
+        painter.drawLine(QPointF(5.0, 9.5), QPointF(12.0, 15.5));
+        painter.drawLine(QPointF(12.0, 15.5), QPointF(19.0, 9.5));
         break;
     case Symbol::Search:
         painter.drawEllipse(QRectF(4.0, 4.0, 11.5, 11.5));

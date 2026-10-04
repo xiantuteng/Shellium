@@ -1394,10 +1394,6 @@ Confirmer que la clé a changé, remplacer l&apos;ancien enregistrement dans kno
         <translation type="unfinished">Afficher ou masquer la zone du gestionnaire de fichiers distant dans l&apos;onglet de terminal actuel</translation>
     </message>
     <message>
-        <source>Search Terminal Output…</source>
-        <translation type="unfinished">Rechercher dans la sortie du terminal…</translation>
-    </message>
-    <message>
         <source>Export Terminal Output…</source>
         <translation type="unfinished">Exporter la sortie du terminal…</translation>
     </message>
@@ -1702,18 +1698,6 @@ Confirmer que la clé a changé, remplacer l&apos;ancien enregistrement dans kno
         <translation type="unfinished">Entrée pour exécuter, Échap pour fermer ; seules les actions actuellement disponibles sont affichées ici.</translation>
     </message>
     <message>
-        <source>Search terminal output</source>
-        <translation type="unfinished">Rechercher dans la sortie du terminal</translation>
-    </message>
-    <message>
-        <source>Find text:</source>
-        <translation type="unfinished">Rechercher le texte :</translation>
-    </message>
-    <message>
-        <source>&apos;%1&apos; was not found in the terminal output</source>
-        <translation type="unfinished">&apos;%1&apos; est introuvable dans la sortie du terminal</translation>
-    </message>
-    <message>
         <source>Export terminal output</source>
         <translation type="unfinished">Exporter la sortie du terminal</translation>
     </message>
@@ -1888,6 +1872,10 @@ Confirmer que la clé a changé, remplacer l&apos;ancien enregistrement dans kno
     <message>
         <source>Sidebar density</source>
         <translation>Densité de la barre latérale</translation>
+    </message>
+    <message>
+        <source>Search Terminal Output</source>
+        <translation>Rechercher dans la sortie du terminal</translation>
     </message>
     <message>
         <source>Compact</source>
@@ -4743,6 +4731,49 @@ Reconnexion manuelle…<byte value="xd"/>
     <message>
         <source>%1, fell back to %2</source>
         <translation type="unfinished">%1, repli sur %2</translation>
+    </message>
+</context>
+<context>
+    <name>TerminalSearchBar</name>
+    <message>
+        <source>Find in terminal</source>
+        <translation>Rechercher dans le terminal</translation>
+    </message>
+    <message>
+        <source>Previous match (Enter)</source>
+        <translation>Résultat précédent (Entrée)</translation>
+    </message>
+    <message>
+        <source>Previous match</source>
+        <translation>Résultat précédent</translation>
+    </message>
+    <message>
+        <source>Next match (Shift+Enter)</source>
+        <translation>Résultat suivant (Maj+Entrée)</translation>
+    </message>
+    <message>
+        <source>Next match</source>
+        <translation>Résultat suivant</translation>
+    </message>
+    <message>
+        <source>Close search (Esc)</source>
+        <translation>Fermer la recherche (Échap)</translation>
+    </message>
+    <message>
+        <source>Close search</source>
+        <translation>Fermer la recherche</translation>
+    </message>
+    <message>
+        <source>No results</source>
+        <translation>Aucun résultat</translation>
+    </message>
+    <message>
+        <source>%1 of %2+</source>
+        <translation>%1 sur %2+</translation>
+    </message>
+    <message>
+        <source>%1 of %2</source>
+        <translation>%1 sur %2</translation>
     </message>
 </context>
 <context>

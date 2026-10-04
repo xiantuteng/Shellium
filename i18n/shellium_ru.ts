@@ -1394,10 +1394,6 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">Показать или скрыть область удалённого файлового менеджера внутри текущей вкладки терминала</translation>
     </message>
     <message>
-        <source>Search Terminal Output…</source>
-        <translation type="unfinished">Искать в выводе терминала…</translation>
-    </message>
-    <message>
         <source>Export Terminal Output…</source>
         <translation type="unfinished">Экспортировать вывод терминала…</translation>
     </message>
@@ -1702,18 +1698,6 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">Enter для выполнения, Esc для закрытия; здесь показаны только доступные сейчас действия.</translation>
     </message>
     <message>
-        <source>Search terminal output</source>
-        <translation type="unfinished">Искать в выводе терминала</translation>
-    </message>
-    <message>
-        <source>Find text:</source>
-        <translation type="unfinished">Найти текст:</translation>
-    </message>
-    <message>
-        <source>&apos;%1&apos; was not found in the terminal output</source>
-        <translation type="unfinished">«%1» не найдено в выводе терминала</translation>
-    </message>
-    <message>
         <source>Export terminal output</source>
         <translation type="unfinished">Экспортировать вывод терминала</translation>
     </message>
@@ -1888,6 +1872,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>Sidebar density</source>
         <translation>Плотность боковой панели</translation>
+    </message>
+    <message>
+        <source>Search Terminal Output</source>
+        <translation>Искать в выводе терминала</translation>
     </message>
     <message>
         <source>Compact</source>
@@ -4743,6 +4731,49 @@ Reconnecting manually…<byte value="xd"/>
     <message>
         <source>%1, fell back to %2</source>
         <translation type="unfinished">%1, выполнен откат к %2</translation>
+    </message>
+</context>
+<context>
+    <name>TerminalSearchBar</name>
+    <message>
+        <source>Find in terminal</source>
+        <translation>Найти в терминале</translation>
+    </message>
+    <message>
+        <source>Previous match (Enter)</source>
+        <translation>Предыдущее совпадение (Enter)</translation>
+    </message>
+    <message>
+        <source>Previous match</source>
+        <translation>Предыдущее совпадение</translation>
+    </message>
+    <message>
+        <source>Next match (Shift+Enter)</source>
+        <translation>Следующее совпадение (Shift+Enter)</translation>
+    </message>
+    <message>
+        <source>Next match</source>
+        <translation>Следующее совпадение</translation>
+    </message>
+    <message>
+        <source>Close search (Esc)</source>
+        <translation>Закрыть поиск (Esc)</translation>
+    </message>
+    <message>
+        <source>Close search</source>
+        <translation>Закрыть поиск</translation>
+    </message>
+    <message>
+        <source>No results</source>
+        <translation>Нет результатов</translation>
+    </message>
+    <message>
+        <source>%1 of %2+</source>
+        <translation>%1 из %2+</translation>
+    </message>
+    <message>
+        <source>%1 of %2</source>
+        <translation>%1 из %2</translation>
     </message>
 </context>
 <context>

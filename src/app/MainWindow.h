@@ -573,7 +573,4 @@ private:
     /** @brief 实时广播开关和当前明确选择的目标主机 id。 */
     bool m_broadcastEnabled = false;
     QStringList m_broadcastTargetIds;
-
-    /** @brief 最近一次终端搜索文本，重复打开查找框时作为默认值。 */
-    QString m_lastTerminalSearch;
 };

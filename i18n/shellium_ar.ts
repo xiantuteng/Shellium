@@ -1394,10 +1394,6 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">إظهار أو إخفاء منطقة مدير الملفات البعيد داخل علامة تبويب الطرفية الحالية</translation>
     </message>
     <message>
-        <source>Search Terminal Output…</source>
-        <translation type="unfinished">البحث في مخرجات الطرفية…</translation>
-    </message>
-    <message>
         <source>Export Terminal Output…</source>
         <translation type="unfinished">تصدير مخرجات الطرفية…</translation>
     </message>
@@ -1702,18 +1698,6 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">Enter للتنفيذ، Esc للإغلاق؛ تُعرض هنا الإجراءات المتاحة حاليًا فقط.</translation>
     </message>
     <message>
-        <source>Search terminal output</source>
-        <translation type="unfinished">البحث في مخرجات الطرفية</translation>
-    </message>
-    <message>
-        <source>Find text:</source>
-        <translation type="unfinished">البحث عن نص:</translation>
-    </message>
-    <message>
-        <source>&apos;%1&apos; was not found in the terminal output</source>
-        <translation type="unfinished">لم يُعثر على «%1» في مخرجات الطرفية</translation>
-    </message>
-    <message>
         <source>Export terminal output</source>
         <translation type="unfinished">تصدير مخرجات الطرفية</translation>
     </message>
@@ -1888,6 +1872,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>Sidebar density</source>
         <translation>كثافة الشريط الجانبي</translation>
+    </message>
+    <message>
+        <source>Search Terminal Output</source>
+        <translation>البحث في مخرجات الطرفية</translation>
     </message>
     <message>
         <source>Compact</source>
@@ -4743,6 +4731,49 @@ Reconnecting manually…<byte value="xd"/>
     <message>
         <source>%1, fell back to %2</source>
         <translation type="unfinished">%1، تم الرجوع إلى %2</translation>
+    </message>
+</context>
+<context>
+    <name>TerminalSearchBar</name>
+    <message>
+        <source>Find in terminal</source>
+        <translation>البحث في الطرفية</translation>
+    </message>
+    <message>
+        <source>Previous match (Enter)</source>
+        <translation>التطابق السابق (Enter)</translation>
+    </message>
+    <message>
+        <source>Previous match</source>
+        <translation>التطابق السابق</translation>
+    </message>
+    <message>
+        <source>Next match (Shift+Enter)</source>
+        <translation>التطابق التالي (Shift+Enter)</translation>
+    </message>
+    <message>
+        <source>Next match</source>
+        <translation>التطابق التالي</translation>
+    </message>
+    <message>
+        <source>Close search (Esc)</source>
+        <translation>إغلاق البحث (Esc)</translation>
+    </message>
+    <message>
+        <source>Close search</source>
+        <translation>إغلاق البحث</translation>
+    </message>
+    <message>
+        <source>No results</source>
+        <translation>لا توجد نتائج</translation>
+    </message>
+    <message>
+        <source>%1 of %2+</source>
+        <translation>%1 من %2+</translation>
+    </message>
+    <message>
+        <source>%1 of %2</source>
+        <translation>%1 من %2</translation>
     </message>
 </context>
 <context>

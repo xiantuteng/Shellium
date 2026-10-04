@@ -1,5 +1,7 @@
 #pragma once
 
+#include "terminal/TerminalSearch.h"
+
 #include <QColor>
 #include <QElapsedTimer>
 #include <QFont>
@@ -170,12 +172,22 @@ public:
     void resetZoom();
 
     /**
-     * @brief 在当前终端文档中查找文本并选中命中项。
-     * @param text 非空查找文本。
-     * @param backward true 表示向前查找，false 表示向后查找。
-     * @return 找到文本返回 true；到达边界后会从另一端再查一次。
+     * @brief 在当前终端文档中查找文本，选中命中项并滚动到它。
+     * @param text 查找文本；为空时清除当前命中并返回空结果。
+     * @param step Refine 用于输入框内容变化，Previous / Next 分别向上 / 向下移动一个命中。
+     * @return 当前命中序号与命中总数；到达边界后会从另一端环回。
      */
-    bool findTerminalText(const QString &text, bool backward = false);
+    TerminalSearchResult searchTerminalText(const QString &text, TerminalSearchStep step);
+
+    /**
+     * @brief 清除查找留下的选中命中，滚动位置保持不变。
+     *
+     * 选区会让离屏排版释放一直推迟（见 releaseOffscreenLayouts），关闭查找栏时必须清掉。
+     */
+    void clearTerminalSearch();
+
+    /** @brief 返回当前选中的终端文本，已剔除行高锚点；没有选区时返回空字符串。 */
+    [[nodiscard]] QString selectedTerminalText() const;
 
     /** @brief 返回可导出的纯文本终端内容，不包含光标或富文本样式。 */
     [[nodiscard]] QString terminalPlainText() const;

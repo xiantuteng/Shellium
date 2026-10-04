@@ -1394,10 +1394,6 @@ Confirmar que a chave mudou, substituir o registro antigo em known_hosts e conti
         <translation type="unfinished">Mostrar ou ocultar a área do gerenciador de arquivos remoto dentro da aba de terminal atual</translation>
     </message>
     <message>
-        <source>Search Terminal Output…</source>
-        <translation type="unfinished">Pesquisar na saída do terminal…</translation>
-    </message>
-    <message>
         <source>Export Terminal Output…</source>
         <translation type="unfinished">Exportar a saída do terminal…</translation>
     </message>
@@ -1702,18 +1698,6 @@ Confirmar que a chave mudou, substituir o registro antigo em known_hosts e conti
         <translation type="unfinished">Enter para executar, Esc para fechar; aqui só são mostradas as ações disponíveis no momento.</translation>
     </message>
     <message>
-        <source>Search terminal output</source>
-        <translation type="unfinished">Pesquisar na saída do terminal</translation>
-    </message>
-    <message>
-        <source>Find text:</source>
-        <translation type="unfinished">Localizar texto:</translation>
-    </message>
-    <message>
-        <source>&apos;%1&apos; was not found in the terminal output</source>
-        <translation type="unfinished">&apos;%1&apos; não foi encontrado na saída do terminal</translation>
-    </message>
-    <message>
         <source>Export terminal output</source>
         <translation type="unfinished">Exportar a saída do terminal</translation>
     </message>
@@ -1888,6 +1872,10 @@ Confirmar que a chave mudou, substituir o registro antigo em known_hosts e conti
     <message>
         <source>Sidebar density</source>
         <translation>Densidade da barra lateral</translation>
+    </message>
+    <message>
+        <source>Search Terminal Output</source>
+        <translation>Pesquisar na saída do terminal</translation>
     </message>
     <message>
         <source>Compact</source>
@@ -4743,6 +4731,49 @@ Reconectando manualmente…<byte value="xd"/>
     <message>
         <source>%1, fell back to %2</source>
         <translation type="unfinished">%1, recorreu a %2</translation>
+    </message>
+</context>
+<context>
+    <name>TerminalSearchBar</name>
+    <message>
+        <source>Find in terminal</source>
+        <translation>Localizar no terminal</translation>
+    </message>
+    <message>
+        <source>Previous match (Enter)</source>
+        <translation>Ocorrência anterior (Enter)</translation>
+    </message>
+    <message>
+        <source>Previous match</source>
+        <translation>Ocorrência anterior</translation>
+    </message>
+    <message>
+        <source>Next match (Shift+Enter)</source>
+        <translation>Próxima ocorrência (Shift+Enter)</translation>
+    </message>
+    <message>
+        <source>Next match</source>
+        <translation>Próxima ocorrência</translation>
+    </message>
+    <message>
+        <source>Close search (Esc)</source>
+        <translation>Fechar pesquisa (Esc)</translation>
+    </message>
+    <message>
+        <source>Close search</source>
+        <translation>Fechar pesquisa</translation>
+    </message>
+    <message>
+        <source>No results</source>
+        <translation>Nenhum resultado</translation>
+    </message>
+    <message>
+        <source>%1 of %2+</source>
+        <translation>%1 de %2+</translation>
+    </message>
+    <message>
+        <source>%1 of %2</source>
+        <translation>%1 de %2</translation>
     </message>
 </context>
 <context>

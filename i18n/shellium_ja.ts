@@ -1394,10 +1394,6 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">現在のターミナルタブ内でリモートファイルマネージャー領域を表示または非表示</translation>
     </message>
     <message>
-        <source>Search Terminal Output…</source>
-        <translation type="unfinished">ターミナル出力を検索…</translation>
-    </message>
-    <message>
         <source>Export Terminal Output…</source>
         <translation type="unfinished">ターミナル出力をエクスポート…</translation>
     </message>
@@ -1702,18 +1698,6 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">Enter で実行、Esc で閉じる。ここには現在利用可能な操作のみ表示されます。</translation>
     </message>
     <message>
-        <source>Search terminal output</source>
-        <translation type="unfinished">ターミナル出力を検索</translation>
-    </message>
-    <message>
-        <source>Find text:</source>
-        <translation type="unfinished">検索テキスト:</translation>
-    </message>
-    <message>
-        <source>&apos;%1&apos; was not found in the terminal output</source>
-        <translation type="unfinished">ターミナル出力に「%1」が見つかりません</translation>
-    </message>
-    <message>
         <source>Export terminal output</source>
         <translation type="unfinished">ターミナル出力をエクスポート</translation>
     </message>
@@ -1888,6 +1872,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>Sidebar density</source>
         <translation>サイドバーの表示密度</translation>
+    </message>
+    <message>
+        <source>Search Terminal Output</source>
+        <translation>ターミナル出力を検索</translation>
     </message>
     <message>
         <source>Compact</source>
@@ -4743,6 +4731,49 @@ Reconnecting manually…<byte value="xd"/>
     <message>
         <source>%1, fell back to %2</source>
         <translation type="unfinished">%1、%2 にフォールバックしました</translation>
+    </message>
+</context>
+<context>
+    <name>TerminalSearchBar</name>
+    <message>
+        <source>Find in terminal</source>
+        <translation>ターミナル内を検索</translation>
+    </message>
+    <message>
+        <source>Previous match (Enter)</source>
+        <translation>前の一致（Enter）</translation>
+    </message>
+    <message>
+        <source>Previous match</source>
+        <translation>前の一致</translation>
+    </message>
+    <message>
+        <source>Next match (Shift+Enter)</source>
+        <translation>次の一致（Shift+Enter）</translation>
+    </message>
+    <message>
+        <source>Next match</source>
+        <translation>次の一致</translation>
+    </message>
+    <message>
+        <source>Close search (Esc)</source>
+        <translation>検索を閉じる（Esc）</translation>
+    </message>
+    <message>
+        <source>Close search</source>
+        <translation>検索を閉じる</translation>
+    </message>
+    <message>
+        <source>No results</source>
+        <translation>結果なし</translation>
+    </message>
+    <message>
+        <source>%1 of %2+</source>
+        <translation>%1 / %2+ 件</translation>
+    </message>
+    <message>
+        <source>%1 of %2</source>
+        <translation>%1 / %2 件</translation>
     </message>
 </context>
 <context>

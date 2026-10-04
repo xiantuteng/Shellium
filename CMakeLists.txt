@@ -195,6 +195,9 @@ set(SHELLIUM_APP_SOURCES
     src/terminal/TerminalEchoFilter.cpp
     src/terminal/TerminalEchoFilter.h
     src/terminal/TerminalPane.cpp
+    src/terminal/TerminalSearchBar.cpp
+    src/terminal/TerminalSearchBar.h
+    src/terminal/TerminalSearch.h
     src/terminal/TerminalPane.h
     src/terminal/TerminalView.cpp
     src/terminal/TerminalView.h
@@ -617,6 +620,9 @@ if(BUILD_TESTING)
         src/terminal/TerminalEchoFilter.cpp
         src/terminal/TerminalEchoFilter.h
         src/terminal/TerminalPane.cpp
+        src/terminal/TerminalSearchBar.cpp
+        src/terminal/TerminalSearchBar.h
+        src/terminal/TerminalSearch.h
         src/terminal/TerminalPane.h
         src/terminal/TerminalView.cpp
         src/terminal/TerminalView.h
@@ -786,6 +792,9 @@ if(BUILD_TESTING)
         src/terminal/TerminalEchoFilter.cpp
         src/terminal/TerminalEchoFilter.h
         src/terminal/TerminalPane.cpp
+        src/terminal/TerminalSearchBar.cpp
+        src/terminal/TerminalSearchBar.h
+        src/terminal/TerminalSearch.h
         src/terminal/TerminalPane.h
         src/terminal/TerminalView.cpp
         src/terminal/TerminalView.h
@@ -1126,6 +1135,9 @@ if(BUILD_TESTING)
         src/terminal/TerminalEchoFilter.cpp
         src/terminal/TerminalEchoFilter.h
         src/terminal/TerminalPane.cpp
+        src/terminal/TerminalSearchBar.cpp
+        src/terminal/TerminalSearchBar.h
+        src/terminal/TerminalSearch.h
         src/terminal/TerminalPane.h
         src/terminal/TerminalView.cpp
         src/terminal/TerminalView.h
@@ -1180,6 +1192,9 @@ if(BUILD_TESTING)
         src/terminal/TerminalEchoFilter.cpp
         src/terminal/TerminalEchoFilter.h
         src/terminal/TerminalPane.cpp
+        src/terminal/TerminalSearchBar.cpp
+        src/terminal/TerminalSearchBar.h
+        src/terminal/TerminalSearch.h
         src/terminal/TerminalPane.h
         src/terminal/TerminalView.cpp
         src/terminal/TerminalView.h
@@ -1233,6 +1248,9 @@ if(BUILD_TESTING)
         src/terminal/TerminalEchoFilter.cpp
         src/terminal/TerminalEchoFilter.h
         src/terminal/TerminalPane.cpp
+        src/terminal/TerminalSearchBar.cpp
+        src/terminal/TerminalSearchBar.h
+        src/terminal/TerminalSearch.h
         src/terminal/TerminalPane.h
         src/terminal/TerminalView.cpp
         src/terminal/TerminalView.h

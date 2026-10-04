@@ -1394,10 +1394,6 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">Показати або сховати область віддаленого файлового менеджера всередині поточної вкладки термінала</translation>
     </message>
     <message>
-        <source>Search Terminal Output…</source>
-        <translation type="unfinished">Шукати у виводі термінала…</translation>
-    </message>
-    <message>
         <source>Export Terminal Output…</source>
         <translation type="unfinished">Експортувати вивід термінала…</translation>
     </message>
@@ -1702,18 +1698,6 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">Enter для виконання, Esc для закриття; тут показано лише доступні зараз дії.</translation>
     </message>
     <message>
-        <source>Search terminal output</source>
-        <translation type="unfinished">Шукати у виводі термінала</translation>
-    </message>
-    <message>
-        <source>Find text:</source>
-        <translation type="unfinished">Знайти текст:</translation>
-    </message>
-    <message>
-        <source>&apos;%1&apos; was not found in the terminal output</source>
-        <translation type="unfinished">«%1» не знайдено у виводі термінала</translation>
-    </message>
-    <message>
         <source>Export terminal output</source>
         <translation type="unfinished">Експортувати вивід термінала</translation>
     </message>
@@ -1888,6 +1872,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>Sidebar density</source>
         <translation>Щільність бічної панелі</translation>
+    </message>
+    <message>
+        <source>Search Terminal Output</source>
+        <translation>Шукати у виводі термінала</translation>
     </message>
     <message>
         <source>Compact</source>
@@ -4743,6 +4731,49 @@ Reconnecting manually…<byte value="xd"/>
     <message>
         <source>%1, fell back to %2</source>
         <translation type="unfinished">%1, виконано відкат до %2</translation>
+    </message>
+</context>
+<context>
+    <name>TerminalSearchBar</name>
+    <message>
+        <source>Find in terminal</source>
+        <translation>Знайти в терміналі</translation>
+    </message>
+    <message>
+        <source>Previous match (Enter)</source>
+        <translation>Попередній збіг (Enter)</translation>
+    </message>
+    <message>
+        <source>Previous match</source>
+        <translation>Попередній збіг</translation>
+    </message>
+    <message>
+        <source>Next match (Shift+Enter)</source>
+        <translation>Наступний збіг (Shift+Enter)</translation>
+    </message>
+    <message>
+        <source>Next match</source>
+        <translation>Наступний збіг</translation>
+    </message>
+    <message>
+        <source>Close search (Esc)</source>
+        <translation>Закрити пошук (Esc)</translation>
+    </message>
+    <message>
+        <source>Close search</source>
+        <translation>Закрити пошук</translation>
+    </message>
+    <message>
+        <source>No results</source>
+        <translation>Немає результатів</translation>
+    </message>
+    <message>
+        <source>%1 of %2+</source>
+        <translation>%1 з %2+</translation>
+    </message>
+    <message>
+        <source>%1 of %2</source>
+        <translation>%1 з %2</translation>
     </message>
 </context>
 <context>

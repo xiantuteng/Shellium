@@ -1394,10 +1394,6 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation>顯示或隱藏當前終端標籤頁內部的遠端檔案管理區域</translation>
     </message>
     <message>
-        <source>Search Terminal Output…</source>
-        <translation>搜尋終端輸出…</translation>
-    </message>
-    <message>
         <source>Export Terminal Output…</source>
         <translation>匯出終端輸出…</translation>
     </message>
@@ -1678,6 +1674,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation>按標題欄的 + 新建終端標籤頁，或從左側主機列表連線伺服器。</translation>
     </message>
     <message>
+        <source>Search Terminal Output</source>
+        <translation>搜尋終端輸出</translation>
+    </message>
+    <message>
         <source>Failed to save host distribution information: %1</source>
         <translation>儲存主機發行版資訊失敗：%1</translation>
     </message>
@@ -1700,18 +1700,6 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>Enter to run, Esc to close; only currently available actions are shown here.</source>
         <translation>Enter 執行，Esc 關閉；這裡只顯示當前可用動作。</translation>
-    </message>
-    <message>
-        <source>Search terminal output</source>
-        <translation>搜尋終端輸出</translation>
-    </message>
-    <message>
-        <source>Find text:</source>
-        <translation>查詢文本：</translation>
-    </message>
-    <message>
-        <source>&apos;%1&apos; was not found in the terminal output</source>
-        <translation>終端輸出中未找到“%1”</translation>
     </message>
     <message>
         <source>Export terminal output</source>
@@ -4745,6 +4733,49 @@ Reconnecting manually…<byte value="xd"/>
     <message>
         <source>%1, fell back to %2</source>
         <translation>%1，已退回 %2</translation>
+    </message>
+</context>
+<context>
+    <name>TerminalSearchBar</name>
+    <message>
+        <source>Find in terminal</source>
+        <translation>在終端中尋找</translation>
+    </message>
+    <message>
+        <source>Previous match (Enter)</source>
+        <translation>上一個符合項目（Enter）</translation>
+    </message>
+    <message>
+        <source>Previous match</source>
+        <translation>上一個符合項目</translation>
+    </message>
+    <message>
+        <source>Next match (Shift+Enter)</source>
+        <translation>下一個符合項目（Shift+Enter）</translation>
+    </message>
+    <message>
+        <source>Next match</source>
+        <translation>下一個符合項目</translation>
+    </message>
+    <message>
+        <source>Close search (Esc)</source>
+        <translation>關閉尋找（Esc）</translation>
+    </message>
+    <message>
+        <source>Close search</source>
+        <translation>關閉尋找</translation>
+    </message>
+    <message>
+        <source>No results</source>
+        <translation>無結果</translation>
+    </message>
+    <message>
+        <source>%1 of %2+</source>
+        <translation>第 %1 個，共 %2+ 個</translation>
+    </message>
+    <message>
+        <source>%1 of %2</source>
+        <translation>第 %1 個，共 %2 個</translation>
     </message>
 </context>
 <context>

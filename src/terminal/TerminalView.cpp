@@ -144,6 +144,14 @@ constexpr int kLayoutKeepPagesBelow = 3;
 constexpr int kCompletionPopupVerticalGap = 4;
 
 /**
+ * @brief 查找栏统计命中总数的上限。
+ *
+ * 十万行滚动历史里搜一个常见字符可能有几十万处命中；每敲一键都数完会让输入卡顿，而
+ * 用户只需要知道"很多"。超过上限后显示为"上限+"。
+ */
+constexpr int kMaximumCountedSearchMatches = 1000;
+
+/**
  * @brief 认证接线的按需诊断通道。
  *
  * 默认关闭。真实 macOS 键盘与输入法的行为无法用 QTest 合成按键覆盖，出问题时只能靠
@@ -1015,24 +1023,77 @@ void TerminalView::commitTerminalGeometry()
     renderPreservingScroll(followBottom, previousValue);
 }
 
-bool TerminalView::findTerminalText(const QString &text, const bool backward)
+TerminalSearchResult TerminalView::searchTerminalText(const QString &text,
+                                                      const TerminalSearchStep step)
 {
     if (text.isEmpty()) {
-        return false;
+        clearTerminalSearch();
+        return {};
     }
     // 查找必须看到最新内容：合帧可能还欠着一次渲染，刚刷出来的那一屏还不在文档里。
     flushPendingRender();
+
+    const bool backward = step != TerminalSearchStep::Next;
     const QTextDocument::FindFlags flags = backward ? QTextDocument::FindBackward
                                                      : QTextDocument::FindFlags{};
-    if (find(text, flags)) {
-        return true;
+    QTextCursor from = textCursor();
+    if (step == TerminalSearchStep::Refine) {
+        // 从当前命中的末尾往回找：继续输入时只要当前命中仍匹配就原地不动；还没有命中时
+        // 从文档末尾找起，第一下落在最新的输出上。
+        const int position = from.hasSelection() ? from.selectionEnd()
+                                                 : document()->characterCount() - 1;
+        from = QTextCursor(document());
+        from.setPosition(position);
     }
 
-    // 到达文档边界时环回，连续按快捷键可以遍历全部命中，而无需手工滚回开头。
-    QTextCursor cursor(document());
-    cursor.movePosition(backward ? QTextCursor::End : QTextCursor::Start);
-    setTextCursor(cursor);
-    return find(text, flags);
+    // 直接在文档上查找，不先移动视图光标：setTextCursor 会把视口滚到光标处，没找到时
+    // 用户正在看的位置就被白白挪走了。
+    QTextCursor hit = document()->find(text, from, flags);
+    if (hit.isNull()) {
+        // 到达文档边界时环回，连续按 Enter 可以遍历全部命中，而无需手工滚回另一端。
+        QTextCursor edge(document());
+        edge.movePosition(backward ? QTextCursor::End : QTextCursor::Start);
+        hit = document()->find(text, edge, flags);
+    }
+    if (hit.isNull()) {
+        clearTerminalSearch();
+        return {};
+    }
+    setTextCursor(hit);
+
+    TerminalSearchResult result;
+    const int hitStart = hit.selectionStart();
+    QTextCursor scan(document());
+    while (true) {
+        scan = document()->find(text, scan);
+        if (scan.isNull()) {
+            break;
+        }
+        ++result.total;
+        if (scan.selectionStart() == hitStart) {
+            result.current = result.total;
+        }
+        if (result.total >= kMaximumCountedSearchMatches) {
+            result.totalCapped = true;
+            break;
+        }
+    }
+    return result;
+}
+
+void TerminalView::clearTerminalSearch()
+{
+    if (!textCursor().hasSelection()) {
+        return;
+    }
+    // 与 releaseOffscreenLayouts 同理把光标停回文档末尾；setTextCursor 会尝试让光标可见，
+    // 滚动位置要原样放回，关闭查找栏不能把用户带离正在看的历史。
+    QScrollBar *bar = verticalScrollBar();
+    const int scrollValue = bar->value();
+    QTextCursor parked(document());
+    parked.movePosition(QTextCursor::End);
+    setTextCursor(parked);
+    bar->setValue(scrollValue);
 }
 
 QMimeData *TerminalView::createMimeDataFromSelection() const
@@ -1045,6 +1106,15 @@ QMimeData *TerminalView::createMimeDataFromSelection() const
     mime->setText(
         textWithoutLineAnchors(selection.selectionStart(), selection.selectionEnd()));
     return mime;
+}
+
+QString TerminalView::selectedTerminalText() const
+{
+    const QTextCursor selection = textCursor();
+    if (!selection.hasSelection()) {
+        return {};
+    }
+    return textWithoutLineAnchors(selection.selectionStart(), selection.selectionEnd());
 }
 
 QString TerminalView::terminalPlainText() const
