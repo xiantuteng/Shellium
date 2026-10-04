@@ -1406,6 +1406,10 @@ Confirmi că cheia s-a schimbat, înlocuiești vechea înregistrare din known_ho
         <translation type="unfinished">Paletă de comenzi…</translation>
     </message>
     <message>
+        <source>Show All Tabs…</source>
+        <translation>Afișați toate filele…</translation>
+    </message>
+    <message>
         <source>Quick Snippets…</source>
         <translation type="unfinished">Fragmente rapide…</translation>
     </message>
@@ -1684,6 +1688,10 @@ Confirmi că cheia s-a schimbat, înlocuiești vechea înregistrare din known_ho
     <message>
         <source>ssh, %1</source>
         <translation type="unfinished">ssh, %1</translation>
+    </message>
+    <message>
+        <source>Current</source>
+        <translation>Curentă</translation>
     </message>
     <message>
         <source>Open a terminal session first</source>
@@ -2988,6 +2996,22 @@ Pentru a nu suprascrie datele de autentificare existente, Shellium nu creează a
         <translation type="unfinished">Momentan nu este disponibilă nicio comandă.</translation>
     </message>
     <message>
+        <source>Tabs</source>
+        <translation>File</translation>
+    </message>
+    <message>
+        <source>Search tabs</source>
+        <translation>Căutați file</translation>
+    </message>
+    <message>
+        <source>Open tabs</source>
+        <translation>File deschise</translation>
+    </message>
+    <message>
+        <source>No open tabs.</source>
+        <translation>Nicio filă deschisă.</translation>
+    </message>
+    <message>
         <source>Snippets</source>
         <translation type="unfinished">Fragmente</translation>
     </message>
@@ -3014,6 +3038,10 @@ Pentru a nu suprascrie datele de autentificare existente, Shellium nu creează a
     <message>
         <source>No command history for this session yet.</source>
         <translation type="unfinished">Această sesiune nu are încă istoric de comenzi.</translation>
+    </message>
+    <message>
+        <source>%1 switch · Enter switch to selected · Esc close</source>
+        <translation>%1 comutare · Enter comută la selecție · Esc închide</translation>
     </message>
     <message>
         <source>%1 run · Enter run selected · Esc close</source>

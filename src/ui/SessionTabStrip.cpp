@@ -128,6 +128,14 @@ void SessionTabStrip::resizeEvent(QResizeEvent *event)
     ensureTabVisible(m_tabBar->currentIndex());
 }
 
+bool SessionTabStrip::event(QEvent *event)
+{
+    if (event->type() == QEvent::LayoutRequest) {
+        handleTabLayoutChanged();
+    }
+    return QWidget::event(event);
+}
+
 bool SessionTabStrip::eventFilter(QObject *watched, QEvent *event)
 {
     if (watched == m_tabBar && event->type() == QEvent::Wheel) {

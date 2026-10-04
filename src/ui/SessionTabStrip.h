@@ -72,6 +72,15 @@ protected:
     void resizeEvent(QResizeEvent *event) override;
 
     /**
+     * @brief 标签栏建议尺寸变化（LayoutRequest）时同步几何与滚动状态。
+     *
+     * 只靠 tabLayoutChanged 信号不够：主窗口删除、插入镜像标签时会用 QSignalBlocker 屏蔽
+     * 标签栏的 currentChanged，连带屏蔽了布局通知，视口便停在旧宽度，滚动箭头也不消失。
+     * 标签栏的 updateGeometry() 会向没有布局的父控件投递 LayoutRequest，它不受信号屏蔽影响。
+     */
+    bool event(QEvent *event) override;
+
+    /**
      * @brief 拦截标签栏上的滚轮事件，在溢出时转为像素滚动。
      * @param watched 事件来源，只处理内部标签栏。
      * @param event 当前事件。

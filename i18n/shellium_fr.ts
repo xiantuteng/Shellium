@@ -1406,6 +1406,10 @@ Confirmer que la clé a changé, remplacer l&apos;ancien enregistrement dans kno
         <translation type="unfinished">Palette de commandes…</translation>
     </message>
     <message>
+        <source>Show All Tabs…</source>
+        <translation>Afficher tous les onglets…</translation>
+    </message>
+    <message>
         <source>Quick Snippets…</source>
         <translation type="unfinished">Extraits rapides…</translation>
     </message>
@@ -1684,6 +1688,10 @@ Confirmer que la clé a changé, remplacer l&apos;ancien enregistrement dans kno
     <message>
         <source>ssh, %1</source>
         <translation type="unfinished">ssh, %1</translation>
+    </message>
+    <message>
+        <source>Current</source>
+        <translation>Actuel</translation>
     </message>
     <message>
         <source>Open a terminal session first</source>
@@ -2988,6 +2996,22 @@ Pour éviter d&apos;écraser des identifiants existants, Shellium ne crée pas a
         <translation type="unfinished">Aucune commande n’est disponible pour le moment.</translation>
     </message>
     <message>
+        <source>Tabs</source>
+        <translation>Onglets</translation>
+    </message>
+    <message>
+        <source>Search tabs</source>
+        <translation>Rechercher des onglets</translation>
+    </message>
+    <message>
+        <source>Open tabs</source>
+        <translation>Onglets ouverts</translation>
+    </message>
+    <message>
+        <source>No open tabs.</source>
+        <translation>Aucun onglet ouvert.</translation>
+    </message>
+    <message>
         <source>Snippets</source>
         <translation type="unfinished">Extraits</translation>
     </message>
@@ -3014,6 +3038,10 @@ Pour éviter d&apos;écraser des identifiants existants, Shellium ne crée pas a
     <message>
         <source>No command history for this session yet.</source>
         <translation type="unfinished">Aucun historique de commandes pour cette session.</translation>
+    </message>
+    <message>
+        <source>%1 switch · Enter switch to selected · Esc close</source>
+        <translation>%1 basculer · Entrée basculer vers la sélection · Échap fermer</translation>
     </message>
     <message>
         <source>%1 run · Enter run selected · Esc close</source>

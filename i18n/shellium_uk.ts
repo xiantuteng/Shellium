@@ -1406,6 +1406,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">Палітра команд…</translation>
     </message>
     <message>
+        <source>Show All Tabs…</source>
+        <translation>Показати всі вкладки…</translation>
+    </message>
+    <message>
         <source>Quick Snippets…</source>
         <translation type="unfinished">Швидкі фрагменти…</translation>
     </message>
@@ -1684,6 +1688,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>ssh, %1</source>
         <translation type="unfinished">ssh, %1</translation>
+    </message>
+    <message>
+        <source>Current</source>
+        <translation>Поточна</translation>
     </message>
     <message>
         <source>Open a terminal session first</source>
@@ -2988,6 +2996,22 @@ To avoid overwriting existing credentials, Shellium does not create a new vault 
         <translation type="unfinished">Зараз немає доступних команд.</translation>
     </message>
     <message>
+        <source>Tabs</source>
+        <translation>Вкладки</translation>
+    </message>
+    <message>
+        <source>Search tabs</source>
+        <translation>Пошук вкладок</translation>
+    </message>
+    <message>
+        <source>Open tabs</source>
+        <translation>Відкриті вкладки</translation>
+    </message>
+    <message>
+        <source>No open tabs.</source>
+        <translation>Немає відкритих вкладок.</translation>
+    </message>
+    <message>
         <source>Snippets</source>
         <translation type="unfinished">Фрагменти</translation>
     </message>
@@ -3014,6 +3038,10 @@ To avoid overwriting existing credentials, Shellium does not create a new vault 
     <message>
         <source>No command history for this session yet.</source>
         <translation type="unfinished">У цьому сеансі ще немає історії команд.</translation>
+    </message>
+    <message>
+        <source>%1 switch · Enter switch to selected · Esc close</source>
+        <translation>%1 перейти · Enter перейти до вибраної · Esc закрити</translation>
     </message>
     <message>
         <source>%1 run · Enter run selected · Esc close</source>

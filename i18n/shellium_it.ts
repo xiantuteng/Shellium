@@ -1406,6 +1406,10 @@ Confermare che la chiave è cambiata, sostituire il vecchio record in known_host
         <translation type="unfinished">Palette comandi…</translation>
     </message>
     <message>
+        <source>Show All Tabs…</source>
+        <translation>Mostra tutte le schede…</translation>
+    </message>
+    <message>
         <source>Quick Snippets…</source>
         <translation type="unfinished">Snippet rapidi…</translation>
     </message>
@@ -1684,6 +1688,10 @@ Confermare che la chiave è cambiata, sostituire il vecchio record in known_host
     <message>
         <source>ssh, %1</source>
         <translation type="unfinished">ssh, %1</translation>
+    </message>
+    <message>
+        <source>Current</source>
+        <translation>Attuale</translation>
     </message>
     <message>
         <source>Open a terminal session first</source>
@@ -2988,6 +2996,22 @@ Per non sovrascrivere credenziali esistenti, Shellium non crea automaticamente u
         <translation type="unfinished">Al momento non è disponibile alcun comando.</translation>
     </message>
     <message>
+        <source>Tabs</source>
+        <translation>Schede</translation>
+    </message>
+    <message>
+        <source>Search tabs</source>
+        <translation>Cerca schede</translation>
+    </message>
+    <message>
+        <source>Open tabs</source>
+        <translation>Schede aperte</translation>
+    </message>
+    <message>
+        <source>No open tabs.</source>
+        <translation>Nessuna scheda aperta.</translation>
+    </message>
+    <message>
         <source>Snippets</source>
         <translation type="unfinished">Snippet</translation>
     </message>
@@ -3014,6 +3038,10 @@ Per non sovrascrivere credenziali esistenti, Shellium non crea automaticamente u
     <message>
         <source>No command history for this session yet.</source>
         <translation type="unfinished">Nessuna cronologia comandi per questa sessione.</translation>
+    </message>
+    <message>
+        <source>%1 switch · Enter switch to selected · Esc close</source>
+        <translation>%1 passa · Invio passa alla selezione · Esc chiudi</translation>
     </message>
     <message>
         <source>%1 run · Enter run selected · Esc close</source>

@@ -552,15 +552,29 @@ MainWindow::MainWindow(ApplicationDatabase *database,
         railLayout->insertWidget(HostsPage + 1, workspacesButton, 0, Qt::AlignHCenter);
     }
     m_navigationButtons.constFirst()->setChecked(true);
+    // 点击时 toggled 先于 clicked 发出，切页后 m_activeSidebarPage 已是新页面；必须在按下
+    // 时记下"按下前是否已是当前页"，否则点击别的页面也会被当成"再次点击当前页"而收起。
+    connect(navigationGroup,
+            &QButtonGroup::idPressed,
+            this,
+            [this](const int pageIndex) {
+                m_navigationPressedActivePage = m_activeSidebarPage == pageIndex;
+            });
     connect(navigationGroup,
             &QButtonGroup::idClicked,
             this,
             [this](const int pageIndex) {
-                // 用户在侧栏已收起时再次点击当前导航项，checked 不会变化，toggled 因而不
-                // 会发出；点击信号负责这一条“用当前图标重新展开”的交互路径。
-                if (m_sidebarPanel == nullptr
-                    || !m_sidebarPanel->isVisible()
-                    || m_activeSidebarPage != pageIndex) {
+                // 再次点击当前导航项时 checked 不会变化，toggled 因而不会发出；点击信号负责
+                // 这条"同一图标开合侧栏"的路径：已展开就收起，已收起就展开。按动画目标而
+                // 不是 isVisible() 判断：收起动画进行中面板仍可见，此时再点应当重新展开。
+                const bool wasActivePage = m_navigationPressedActivePage;
+                m_navigationPressedActivePage = false;
+                if (m_sidebarPanel != nullptr
+                    && m_sidebarTargetVisible
+                    && wasActivePage
+                    && m_activeSidebarPage == pageIndex) {
+                    setSidebarVisible(false);
+                } else {
                     showSidebarPage(pageIndex);
                 }
             });
@@ -748,6 +762,9 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     auto *commandPaletteAction = new QAction(this);
     registerTranslatable(commandPaletteAction, QT_TRANSLATE_NOOP("MainWindow", "Command Palette…"));
     commandPaletteAction->setObjectName(QStringLiteral("CommandPaletteAction"));
+    auto *tabSwitcherAction = new QAction(this);
+    registerTranslatable(tabSwitcherAction, QT_TRANSLATE_NOOP("MainWindow", "Show All Tabs…"));
+    tabSwitcherAction->setObjectName(QStringLiteral("TabSwitcherAction"));
     auto *quickSnippetsAction = new QAction(this);
     registerTranslatable(quickSnippetsAction, QT_TRANSLATE_NOOP("MainWindow", "Quick Snippets…"));
     quickSnippetsAction->setObjectName(QStringLiteral("QuickSnippetsAction"));
@@ -785,6 +802,8 @@ MainWindow::MainWindow(ApplicationDatabase *database,
         UiIcons::symbol(this, UiIcons::Symbol::Settings, this->palette().color(QPalette::WindowText)));
     commandPaletteAction->setIcon(
         UiIcons::symbol(this, UiIcons::Symbol::Command, this->palette().color(QPalette::WindowText)));
+    tabSwitcherAction->setIcon(
+        UiIcons::symbol(this, UiIcons::Symbol::TabList, this->palette().color(QPalette::WindowText)));
     saveWorkspaceAction->setIcon(
         UiIcons::symbol(this, UiIcons::Symbol::Download, this->palette().color(QPalette::WindowText)));
     openWorkspaceAction->setIcon(
@@ -882,6 +901,19 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     titleLayout->addWidget(scrollRightButton);
     m_chromeButtons.append(scrollRightButton);
 
+    // 标签多到溢出时，只靠箭头逐段滚动很难找到目标标签；"+"左侧的列表按钮弹出与 Cmd+K
+    // 同款的浮层，列出全部标签。它只在溢出时出现，标签少时标题行保持原样。
+    m_tabSwitcherButton = new QToolButton(m_titleChrome);
+    m_tabSwitcherButton->setObjectName(QStringLiteral("TitleTabSwitcherButton"));
+    m_tabSwitcherButton->setProperty("chromeButton", true);
+    m_tabSwitcherButton->setProperty("chromeRole", QStringLiteral("tabSwitcher"));
+    m_tabSwitcherButton->setDefaultAction(tabSwitcherAction);
+    m_tabSwitcherButton->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    m_tabSwitcherButton->setFixedSize(38, 38);
+    m_tabSwitcherButton->hide();
+    titleLayout->addWidget(m_tabSwitcherButton);
+    m_chromeButtons.append(m_tabSwitcherButton);
+
     auto *newTabButton = new QToolButton(m_titleChrome);
     newTabButton->setObjectName(QStringLiteral("TitleNewTabButton"));
     newTabButton->setProperty("chromeButton", true);
@@ -946,11 +978,12 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     connect(m_titleTabStrip,
             &SessionTabStrip::scrollStateChanged,
             this,
-            [scrollLeftButton, scrollRightButton](const bool scrollable,
-                                                  const bool canScrollLeft,
-                                                  const bool canScrollRight) {
+            [this, scrollLeftButton, scrollRightButton](const bool scrollable,
+                                                        const bool canScrollLeft,
+                                                        const bool canScrollRight) {
                 scrollLeftButton->setVisible(scrollable);
                 scrollRightButton->setVisible(scrollable);
+                m_tabSwitcherButton->setVisible(scrollable);
                 scrollLeftButton->setEnabled(canScrollLeft);
                 scrollRightButton->setEnabled(canScrollRight);
             });
@@ -990,6 +1023,7 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     connectionMenu->addAction(newTabAction);
     connectionMenu->addAction(closeTabAction);
     connectionMenu->addAction(renameTabAction);
+    connectionMenu->addAction(tabSwitcherAction);
 
     QMenu *workspaceMenu = applicationMenuBar->addMenu(QString());
     registerTranslatable(workspaceMenu, QT_TRANSLATE_NOOP("MainWindow", "Workspace"));
@@ -1352,6 +1386,7 @@ MainWindow::MainWindow(ApplicationDatabase *database,
             this, &MainWindow::exportCurrentTerminal);
     connect(commandPaletteAction, &QAction::triggered,
             this, &MainWindow::openCommandPalette);
+    connect(tabSwitcherAction, &QAction::triggered, this, &MainWindow::openTabSwitcher);
     connect(quickSnippetsAction, &QAction::triggered,
             this, &MainWindow::openQuickSnippets);
     connect(quickHistoryAction, &QAction::triggered,
@@ -2036,6 +2071,10 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
     // 更明确的视觉反馈。单独提供高对比选中色，可以加深这三处而不让全局交互控件显得过重。
     const QString prominentSelectionBackground = dark ? QStringLiteral("#2f6256")
                                                        : QStringLiteral("#b7e6d0");
+    // 选中的导航按钮再次点击会收起侧栏，悬停时必须有反馈表明它仍可点；在选中色上加深
+    // 一档，而不是退回普通悬停色，否则鼠标移上去反倒像取消了选中。
+    const QString prominentSelectionHoverBackground = dark ? QStringLiteral("#397565")
+                                                            : QStringLiteral("#9fdcc0");
 
     // Qt 样式表不支持 CSS 的 cursor 属性，写入会在每个按钮初始化时反复报警。
     // 手型统一由 main() 安装的 ButtonCursorPolicy 设置，主题只负责视觉外观。
@@ -2144,6 +2183,9 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
         }
         QToolButton[navButton="true"]:checked {
             background: @PROMINENT_SELECTION@;
+        }
+        QToolButton[navButton="true"]:checked:hover {
+            background: @PROMINENT_SELECTION_HOVER@;
         }
         QToolButton[compactIconButton="true"] {
             color: @TEXT@;
@@ -3115,6 +3157,8 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
     styleSheet.replace(QStringLiteral("@DANGER_TINT@"), dangerTintColor);
     styleSheet.replace(QStringLiteral("@WARNING@"), warningColor);
     styleSheet.replace(QStringLiteral("@WARNING_TINT@"), warningTintColor);
+    styleSheet.replace(QStringLiteral("@PROMINENT_SELECTION_HOVER@"),
+                       prominentSelectionHoverBackground);
     styleSheet.replace(QStringLiteral("@PROMINENT_SELECTION@"),
                        prominentSelectionBackground);
     styleSheet.replace(QStringLiteral("@SELECTION@"), selectionBackground);
@@ -3179,6 +3223,8 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
             icon = UiIcons::symbol(this, UiIcons::Symbol::ChevronLeft, iconColor);
         } else if (role == QStringLiteral("scrollRight")) {
             icon = UiIcons::symbol(this, UiIcons::Symbol::ChevronRight, iconColor);
+        } else if (role == QStringLiteral("tabSwitcher")) {
+            icon = UiIcons::symbol(this, UiIcons::Symbol::TabList, iconColor);
         } else if (role == QStringLiteral("command")) {
             icon = UiIcons::symbol(this, UiIcons::Symbol::Command, iconColor);
         } else if (role == QStringLiteral("settings")) {
@@ -4056,6 +4102,12 @@ void MainWindow::updateWorkspacePlaceholder()
         policy.setRetainSizeWhenHidden(hasSessions);
         arrow->setSizePolicy(policy);
     }
+    // 隐藏的标签视口不再收到尺寸变化，溢出状态可能停在关闭前的"溢出"；没有会话时
+    // 列表按钮必须直接隐藏，有会话时与箭头保持一致。
+    if (m_tabSwitcherButton != nullptr) {
+        m_tabSwitcherButton->setVisible(hasSessions && m_tabScrollLeftButton != nullptr
+                                        && !m_tabScrollLeftButton->isHidden());
+    }
 }
 
 TerminalWorkspace *MainWindow::createWorkspaceTab(const QString &title)
@@ -4533,6 +4585,28 @@ void MainWindow::openCommandPalette()
                                            anchor);
 }
 
+void MainWindow::openTabSwitcher()
+{
+    QList<QuickCommandPopup::Entry> entries;
+    const int currentIndex = m_tabs->currentIndex();
+    for (int index = 0; index < m_tabs->count(); ++index) {
+        QuickCommandPopup::Entry entry{m_tabs->tabText(index), QString(), QString()};
+        entry.current = index == currentIndex;
+        if (entry.current) {
+            entry.shortcut = tr("Current");
+        }
+        entries.append(entry);
+    }
+
+    TerminalWorkspace *workspace = activeWorkspace();
+    QWidget *anchor = workspace == nullptr ? nullptr : workspace->activePane();
+    if (anchor == nullptr) {
+        anchor = m_tabs->isVisible() ? static_cast<QWidget *>(m_tabs) : centralWidget();
+    }
+    ensureQuickCommandPopup()->showEntries(QuickCommandPopup::Mode::Tabs, entries, QString(),
+                                           anchor);
+}
+
 QuickCommandPopup *MainWindow::ensureQuickCommandPopup()
 {
     if (m_quickCommandPopup != nullptr) {
@@ -4549,6 +4623,17 @@ QuickCommandPopup *MainWindow::ensureQuickCommandPopup()
             });
     connect(m_quickCommandPopup, &QuickCommandPopup::entryChosen,
             this, [this](const int entryIndex) {
+                if (m_quickCommandPopup->mode() == QuickCommandPopup::Mode::Tabs) {
+                    if (entryIndex >= 0 && entryIndex < m_tabs->count()) {
+                        m_tabs->setCurrentIndex(entryIndex);
+                        // 浮层关闭后焦点回到主窗口，必须交给新标签的终端，用户才能接着打字。
+                        if (TerminalWorkspace *workspace = activeWorkspace();
+                            workspace != nullptr && workspace->activePane() != nullptr) {
+                            workspace->activePane()->focusTerminal();
+                        }
+                    }
+                    return;
+                }
                 if (m_quickCommandPopup->mode() != QuickCommandPopup::Mode::Actions
                     || entryIndex < 0 || entryIndex >= m_commandPaletteActions.size()) {
                     return;

@@ -1406,6 +1406,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">명령 팔레트…</translation>
     </message>
     <message>
+        <source>Show All Tabs…</source>
+        <translation>모든 탭 표시…</translation>
+    </message>
+    <message>
         <source>Quick Snippets…</source>
         <translation type="unfinished">빠른 스니펫…</translation>
     </message>
@@ -1684,6 +1688,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>ssh, %1</source>
         <translation type="unfinished">ssh, %1</translation>
+    </message>
+    <message>
+        <source>Current</source>
+        <translation>현재</translation>
     </message>
     <message>
         <source>Open a terminal session first</source>
@@ -2988,6 +2996,22 @@ To avoid overwriting existing credentials, Shellium does not create a new vault 
         <translation type="unfinished">지금은 사용할 수 있는 명령이 없습니다.</translation>
     </message>
     <message>
+        <source>Tabs</source>
+        <translation>탭</translation>
+    </message>
+    <message>
+        <source>Search tabs</source>
+        <translation>탭 검색</translation>
+    </message>
+    <message>
+        <source>Open tabs</source>
+        <translation>열린 탭</translation>
+    </message>
+    <message>
+        <source>No open tabs.</source>
+        <translation>열린 탭이 없습니다.</translation>
+    </message>
+    <message>
         <source>Snippets</source>
         <translation type="unfinished">스니펫</translation>
     </message>
@@ -3014,6 +3038,10 @@ To avoid overwriting existing credentials, Shellium does not create a new vault 
     <message>
         <source>No command history for this session yet.</source>
         <translation type="unfinished">이 세션에는 아직 명령 기록이 없습니다.</translation>
+    </message>
+    <message>
+        <source>%1 switch · Enter switch to selected · Esc close</source>
+        <translation>%1 전환 · Enter 선택 항목으로 전환 · Esc 닫기</translation>
     </message>
     <message>
         <source>%1 run · Enter run selected · Esc close</source>

@@ -1406,6 +1406,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">コマンドパレット…</translation>
     </message>
     <message>
+        <source>Show All Tabs…</source>
+        <translation>すべてのタブを表示…</translation>
+    </message>
+    <message>
         <source>Quick Snippets…</source>
         <translation type="unfinished">クイックスニペット…</translation>
     </message>
@@ -1684,6 +1688,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>ssh, %1</source>
         <translation type="unfinished">ssh, %1</translation>
+    </message>
+    <message>
+        <source>Current</source>
+        <translation>現在</translation>
     </message>
     <message>
         <source>Open a terminal session first</source>
@@ -2988,6 +2996,22 @@ To avoid overwriting existing credentials, Shellium does not create a new vault 
         <translation type="unfinished">現在使用できるコマンドはありません。</translation>
     </message>
     <message>
+        <source>Tabs</source>
+        <translation>タブ</translation>
+    </message>
+    <message>
+        <source>Search tabs</source>
+        <translation>タブを検索</translation>
+    </message>
+    <message>
+        <source>Open tabs</source>
+        <translation>開いているタブ</translation>
+    </message>
+    <message>
+        <source>No open tabs.</source>
+        <translation>開いているタブはありません。</translation>
+    </message>
+    <message>
         <source>Snippets</source>
         <translation type="unfinished">スニペット</translation>
     </message>
@@ -3014,6 +3038,10 @@ To avoid overwriting existing credentials, Shellium does not create a new vault 
     <message>
         <source>No command history for this session yet.</source>
         <translation type="unfinished">このセッションにはまだコマンド履歴がありません。</translation>
+    </message>
+    <message>
+        <source>%1 switch · Enter switch to selected · Esc close</source>
+        <translation>%1 で切り替え · Enter で選択項目に切り替え · Esc で閉じる</translation>
     </message>
     <message>
         <source>%1 run · Enter run selected · Esc close</source>

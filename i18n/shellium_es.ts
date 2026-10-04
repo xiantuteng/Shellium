@@ -1406,6 +1406,10 @@ Puede ser una reinstalación del servidor o una rotación de clave, o un ataque 
         <translation type="unfinished">Paleta de comandos…</translation>
     </message>
     <message>
+        <source>Show All Tabs…</source>
+        <translation>Mostrar todas las pestañas…</translation>
+    </message>
+    <message>
         <source>Quick Snippets…</source>
         <translation type="unfinished">Fragmentos rápidos…</translation>
     </message>
@@ -1684,6 +1688,10 @@ Puede ser una reinstalación del servidor o una rotación de clave, o un ataque 
     <message>
         <source>ssh, %1</source>
         <translation type="unfinished">ssh, %1</translation>
+    </message>
+    <message>
+        <source>Current</source>
+        <translation>Actual</translation>
     </message>
     <message>
         <source>Open a terminal session first</source>
@@ -2988,6 +2996,22 @@ Para no sobrescribir credenciales existentes, Shellium no crea automáticamente 
         <translation type="unfinished">No hay comandos disponibles en este momento.</translation>
     </message>
     <message>
+        <source>Tabs</source>
+        <translation>Pestañas</translation>
+    </message>
+    <message>
+        <source>Search tabs</source>
+        <translation>Buscar pestañas</translation>
+    </message>
+    <message>
+        <source>Open tabs</source>
+        <translation>Pestañas abiertas</translation>
+    </message>
+    <message>
+        <source>No open tabs.</source>
+        <translation>No hay pestañas abiertas.</translation>
+    </message>
+    <message>
         <source>Snippets</source>
         <translation type="unfinished">Fragmentos</translation>
     </message>
@@ -3014,6 +3038,10 @@ Para no sobrescribir credenciales existentes, Shellium no crea automáticamente 
     <message>
         <source>No command history for this session yet.</source>
         <translation type="unfinished">Esta sesión aún no tiene historial de comandos.</translation>
+    </message>
+    <message>
+        <source>%1 switch · Enter switch to selected · Esc close</source>
+        <translation>%1 cambiar · Intro cambiar a la selección · Esc cerrar</translation>
     </message>
     <message>
         <source>%1 run · Enter run selected · Esc close</source>

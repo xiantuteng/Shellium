@@ -1406,6 +1406,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">Палитра команд…</translation>
     </message>
     <message>
+        <source>Show All Tabs…</source>
+        <translation>Показать все вкладки…</translation>
+    </message>
+    <message>
         <source>Quick Snippets…</source>
         <translation type="unfinished">Быстрые фрагменты…</translation>
     </message>
@@ -1684,6 +1688,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>ssh, %1</source>
         <translation type="unfinished">ssh, %1</translation>
+    </message>
+    <message>
+        <source>Current</source>
+        <translation>Текущая</translation>
     </message>
     <message>
         <source>Open a terminal session first</source>
@@ -2988,6 +2996,22 @@ To avoid overwriting existing credentials, Shellium does not create a new vault 
         <translation type="unfinished">Сейчас нет доступных команд.</translation>
     </message>
     <message>
+        <source>Tabs</source>
+        <translation>Вкладки</translation>
+    </message>
+    <message>
+        <source>Search tabs</source>
+        <translation>Поиск вкладок</translation>
+    </message>
+    <message>
+        <source>Open tabs</source>
+        <translation>Открытые вкладки</translation>
+    </message>
+    <message>
+        <source>No open tabs.</source>
+        <translation>Нет открытых вкладок.</translation>
+    </message>
+    <message>
         <source>Snippets</source>
         <translation type="unfinished">Фрагменты</translation>
     </message>
@@ -3014,6 +3038,10 @@ To avoid overwriting existing credentials, Shellium does not create a new vault 
     <message>
         <source>No command history for this session yet.</source>
         <translation type="unfinished">В этом сеансе пока нет истории команд.</translation>
+    </message>
+    <message>
+        <source>%1 switch · Enter switch to selected · Esc close</source>
+        <translation>%1 перейти · Enter перейти к выбранной · Esc закрыть</translation>
     </message>
     <message>
         <source>%1 run · Enter run selected · Esc close</source>

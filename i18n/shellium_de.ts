@@ -1406,6 +1406,10 @@ Bestätigen Sie, dass sich der Schlüssel geändert hat, ersetzen Sie den alten 
         <translation type="unfinished">Befehlspalette …</translation>
     </message>
     <message>
+        <source>Show All Tabs…</source>
+        <translation>Alle Tabs anzeigen…</translation>
+    </message>
+    <message>
         <source>Quick Snippets…</source>
         <translation type="unfinished">Schnell-Snippets …</translation>
     </message>
@@ -1684,6 +1688,10 @@ Bestätigen Sie, dass sich der Schlüssel geändert hat, ersetzen Sie den alten 
     <message>
         <source>ssh, %1</source>
         <translation type="unfinished">ssh, %1</translation>
+    </message>
+    <message>
+        <source>Current</source>
+        <translation>Aktuell</translation>
     </message>
     <message>
         <source>Open a terminal session first</source>
@@ -2988,6 +2996,22 @@ Um vorhandene Anmeldedaten nicht zu überschreiben, erstellt Shellium nicht auto
         <translation type="unfinished">Derzeit sind keine Befehle verfügbar.</translation>
     </message>
     <message>
+        <source>Tabs</source>
+        <translation>Tabs</translation>
+    </message>
+    <message>
+        <source>Search tabs</source>
+        <translation>Tabs durchsuchen</translation>
+    </message>
+    <message>
+        <source>Open tabs</source>
+        <translation>Geöffnete Tabs</translation>
+    </message>
+    <message>
+        <source>No open tabs.</source>
+        <translation>Keine geöffneten Tabs.</translation>
+    </message>
+    <message>
         <source>Snippets</source>
         <translation type="unfinished">Snippets</translation>
     </message>
@@ -3014,6 +3038,10 @@ Um vorhandene Anmeldedaten nicht zu überschreiben, erstellt Shellium nicht auto
     <message>
         <source>No command history for this session yet.</source>
         <translation type="unfinished">Für diese Sitzung gibt es noch keinen Befehlsverlauf.</translation>
+    </message>
+    <message>
+        <source>%1 switch · Enter switch to selected · Esc close</source>
+        <translation>%1 wechseln · Eingabe zur Auswahl wechseln · Esc schließen</translation>
     </message>
     <message>
         <source>%1 run · Enter run selected · Esc close</source>

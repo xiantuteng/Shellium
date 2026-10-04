@@ -1406,6 +1406,10 @@ Confirmar que a chave mudou, substituir o registro antigo em known_hosts e conti
         <translation type="unfinished">Paleta de comandos…</translation>
     </message>
     <message>
+        <source>Show All Tabs…</source>
+        <translation>Mostrar todas as abas…</translation>
+    </message>
+    <message>
         <source>Quick Snippets…</source>
         <translation type="unfinished">Snippets rápidos…</translation>
     </message>
@@ -1684,6 +1688,10 @@ Confirmar que a chave mudou, substituir o registro antigo em known_hosts e conti
     <message>
         <source>ssh, %1</source>
         <translation type="unfinished">ssh, %1</translation>
+    </message>
+    <message>
+        <source>Current</source>
+        <translation>Atual</translation>
     </message>
     <message>
         <source>Open a terminal session first</source>
@@ -2988,6 +2996,22 @@ Para não sobrescrever credenciais existentes, o Shellium não cria automaticame
         <translation type="unfinished">Nenhum comando está disponível no momento.</translation>
     </message>
     <message>
+        <source>Tabs</source>
+        <translation>Abas</translation>
+    </message>
+    <message>
+        <source>Search tabs</source>
+        <translation>Pesquisar abas</translation>
+    </message>
+    <message>
+        <source>Open tabs</source>
+        <translation>Abas abertas</translation>
+    </message>
+    <message>
+        <source>No open tabs.</source>
+        <translation>Nenhuma aba aberta.</translation>
+    </message>
+    <message>
         <source>Snippets</source>
         <translation type="unfinished">Snippets</translation>
     </message>
@@ -3014,6 +3038,10 @@ Para não sobrescrever credenciais existentes, o Shellium não cria automaticame
     <message>
         <source>No command history for this session yet.</source>
         <translation type="unfinished">Esta sessão ainda não tem histórico de comandos.</translation>
+    </message>
+    <message>
+        <source>%1 switch · Enter switch to selected · Esc close</source>
+        <translation>%1 alternar · Enter alternar para a seleção · Esc fechar</translation>
     </message>
     <message>
         <source>%1 run · Enter run selected · Esc close</source>

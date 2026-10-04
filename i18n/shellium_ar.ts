@@ -1406,6 +1406,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">لوحة الأوامر…</translation>
     </message>
     <message>
+        <source>Show All Tabs…</source>
+        <translation>عرض كل علامات التبويب…</translation>
+    </message>
+    <message>
         <source>Quick Snippets…</source>
         <translation type="unfinished">المقتطفات السريعة…</translation>
     </message>
@@ -1684,6 +1688,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>ssh, %1</source>
         <translation type="unfinished">ssh، %1</translation>
+    </message>
+    <message>
+        <source>Current</source>
+        <translation>الحالية</translation>
     </message>
     <message>
         <source>Open a terminal session first</source>
@@ -2988,6 +2996,22 @@ To avoid overwriting existing credentials, Shellium does not create a new vault 
         <translation type="unfinished">لا توجد أوامر متاحة حاليًا.</translation>
     </message>
     <message>
+        <source>Tabs</source>
+        <translation>علامات التبويب</translation>
+    </message>
+    <message>
+        <source>Search tabs</source>
+        <translation>البحث في علامات التبويب</translation>
+    </message>
+    <message>
+        <source>Open tabs</source>
+        <translation>علامات التبويب المفتوحة</translation>
+    </message>
+    <message>
+        <source>No open tabs.</source>
+        <translation>لا توجد علامات تبويب مفتوحة.</translation>
+    </message>
+    <message>
         <source>Snippets</source>
         <translation type="unfinished">المقتطفات</translation>
     </message>
@@ -3014,6 +3038,10 @@ To avoid overwriting existing credentials, Shellium does not create a new vault 
     <message>
         <source>No command history for this session yet.</source>
         <translation type="unfinished">لا يوجد سجل أوامر لهذه الجلسة بعد.</translation>
+    </message>
+    <message>
+        <source>%1 switch · Enter switch to selected · Esc close</source>
+        <translation>%1 للتبديل · Enter للتبديل إلى المحدد · Esc للإغلاق</translation>
     </message>
     <message>
         <source>%1 run · Enter run selected · Esc close</source>

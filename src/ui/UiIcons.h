@@ -109,7 +109,9 @@ enum class Symbol {
     /** @brief “最小上下文”一类安全/权限提示徽标。 */
     Shield,
     /** @brief 附加终端输出等回形针式“附件”动作。 */
-    Paperclip
+    Paperclip,
+    /** @brief 标题栏“全部标签”入口：窗口轮廓内一个向下箭头，表示展开标签列表。 */
+    TabList
 };
 
 /**
@@ -561,6 +563,12 @@ enum class Symbol {
             path.lineTo(6.5, 11.0);
             return path;
         }());
+        break;
+    case Symbol::TabList:
+        painter.drawRoundedRect(QRectF(3.0, 4.0, 18.0, 16.0), 3.0, 3.0);
+        painter.drawLine(QPointF(3.0, 8.5), QPointF(21.0, 8.5));
+        painter.drawLine(QPointF(8.5, 12.5), QPointF(12.0, 16.0));
+        painter.drawLine(QPointF(12.0, 16.0), QPointF(15.5, 12.5));
         break;
     }
     painter.end();

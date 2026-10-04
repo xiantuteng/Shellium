@@ -631,3 +631,18 @@ viewport()->setAcceptDrops(true);
 - 构建依赖 `brew install qttools`（lupdate/lrelease）+ `brew install opencc`（生成 `zh_TW`）。
 - `LocalizationService` 析构必须 `removeTranslator`；用到它的测试 main 必须建 `QApplication`
   而非 `QCoreApplication`。
+
+---
+
+## 十八、QSignalBlocker 会连带屏蔽布局通知
+
+主窗口增删镜像标签时用 `QSignalBlocker(m_titleTabBar)` 只为挡住中间态的 `currentChanged`，
+但它屏蔽的是**该对象的全部信号**，`SessionTabBar::tabLayoutChanged` 也一起丢了。外层
+`SessionTabStrip` 于是停在旧宽度：标签从溢出关到一个，滚动箭头和标签列表按钮仍挂在标题栏上，
+"+" 也不再紧贴最后一个标签。
+
+- 依赖"子控件尺寸变了"的父控件不要只靠自定义信号。`QTabBar` 增删标签会 `updateGeometry()`，
+  向没有布局的父控件投递 `QEvent::LayoutRequest`，它不受信号屏蔽影响——`SessionTabStrip::event`
+  正是据此兜底。
+- 新增 `QSignalBlocker` 前先确认被挡的对象还有没有别的监听者靠信号同步状态；能用一个布尔
+  守卫跳过特定槽，就别屏蔽整个对象。

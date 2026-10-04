@@ -22,6 +22,7 @@ constexpr int kDetailRole = Qt::UserRole + 1;   ///< 次要说明文字。
 constexpr int kDigitRole = Qt::UserRole + 2;    ///< 数字角标 1..9；0 表示该行没有数字键。
 constexpr int kIndexRole = Qt::UserRole + 3;    ///< 行在 showEntries() 入参中的下标。
 constexpr int kShortcutRole = Qt::UserRole + 4; ///< 行尾右对齐显示的快捷键文字。
+constexpr int kCurrentRole = Qt::UserRole + 5;  ///< 行是否为当前对象（如活动标签）。
 
 constexpr int kRowHeight = 36;
 constexpr int kSearchHeight = 36; ///< 搜索栏固定高度，与参考设计一致，避免随字体撑高。
@@ -36,6 +37,7 @@ const QColor kRowSelectedColor(QStringLiteral("#39415d"));
 const QColor kBadgeColor(QStringLiteral("#30384f"));
 const QColor kTextColor(QStringLiteral("#f0f3fa"));
 const QColor kMutedColor(QStringLiteral("#929bb3"));
+const QColor kCurrentColor(QStringLiteral("#2bd981")); ///< 当前对象标题，与应用强调色一致。
 
 /**
  * @brief 绘制"数字角标 + 标题 + 次要说明"的行。
@@ -111,7 +113,8 @@ public:
         const int titleWidth = detail.isEmpty()
             ? int(textRect.width())
             : std::min(titleMetrics.horizontalAdvance(title) + 4, int(textRect.width() * 0.45));
-        painter->setPen(kTextColor);
+        // 当前标签只靠初始选中不够：用户上下移动后选中框离开，仍要能一眼认出"我在哪"。
+        painter->setPen(index.data(kCurrentRole).toBool() ? kCurrentColor : kTextColor);
         painter->drawText(QRectF(textRect.left(), textRect.top(), titleWidth, textRect.height()),
                           Qt::AlignVCenter | Qt::AlignLeft,
                           titleMetrics.elidedText(title, Qt::ElideRight, titleWidth));
@@ -263,6 +266,11 @@ void QuickCommandPopup::showEntries(const Mode mode,
         m_searchEdit->setPlaceholderText(tr("Search commands"));
         m_sectionLabel->setText(tr("Available commands"));
         m_emptyLabel->setText(tr("No commands are available right now."));
+    } else if (mode == Mode::Tabs) {
+        m_chipLabel->setText(tr("Tabs"));
+        m_searchEdit->setPlaceholderText(tr("Search tabs"));
+        m_sectionLabel->setText(tr("Open tabs"));
+        m_emptyLabel->setText(tr("No open tabs."));
     } else if (mode == Mode::Snippets) {
         m_chipLabel->setText(tr("Snippets"));
         m_searchEdit->setPlaceholderText(tr("Search snippets"));
@@ -276,7 +284,9 @@ void QuickCommandPopup::showEntries(const Mode mode,
     }
     // 与角标同源："⌘1–9"（macOS）或 "Ctrl+1–9"。
     const QString digitKeys = digitShortcutText(1) + QStringLiteral("–9");
-    m_footerLabel->setText(tr("%1 run · Enter run selected · Esc close").arg(digitKeys));
+    m_footerLabel->setText(mode == Mode::Tabs
+                               ? tr("%1 switch · Enter switch to selected · Esc close").arg(digitKeys)
+                               : tr("%1 run · Enter run selected · Esc close").arg(digitKeys));
     m_shortcutLabel->setText(shortcutHint);
     m_shortcutLabel->setVisible(!shortcutHint.isEmpty());
 
@@ -287,6 +297,7 @@ void QuickCommandPopup::showEntries(const Mode mode,
         item->setData(kDetailRole, entry.detail);
         item->setData(kShortcutRole, entry.shortcut);
         item->setData(kIndexRole, int(m_list->count() - 1));
+        item->setData(kCurrentRole, entry.current);
         item->setToolTip(entry.command.isEmpty() ? entry.title : entry.command);
     }
     {
@@ -362,6 +373,23 @@ QString QuickCommandPopup::visibleTitleAt(const int position) const
     return {};
 }
 
+int QuickCommandPopup::currentVisiblePosition() const
+{
+    const QListWidgetItem *current = m_list->currentItem();
+    int visible = 0;
+    for (int row = 0; row < m_list->count(); ++row) {
+        const QListWidgetItem *item = m_list->item(row);
+        if (item->isHidden()) {
+            continue;
+        }
+        if (item == current) {
+            return visible;
+        }
+        ++visible;
+    }
+    return -1;
+}
+
 int QuickCommandPopup::visibleCount() const
 {
     int visible = 0;
@@ -431,6 +459,7 @@ void QuickCommandPopup::applyFilter()
     const QString keyword = m_searchEdit->text().trimmed();
     int visible = 0;
     QListWidgetItem *firstVisible = nullptr;
+    QListWidgetItem *currentEntry = nullptr;
     for (int row = 0; row < m_list->count(); ++row) {
         QListWidgetItem *item = m_list->item(row);
         const bool matches = keyword.isEmpty()
@@ -445,10 +474,20 @@ void QuickCommandPopup::applyFilter()
             if (firstVisible == nullptr) {
                 firstVisible = item;
             }
+            if (currentEntry == nullptr && item->data(kCurrentRole).toBool()) {
+                currentEntry = item;
+            }
             ++visible;
         }
     }
-    m_list->setCurrentItem(firstVisible);
+    // 未输入关键字时停在当前对象上（标签列表打开即指向活动标签）；一旦开始搜索，回车应
+    // 落在最匹配的第一行，而不是恰好也匹配的当前标签。
+    QListWidgetItem *selected = keyword.isEmpty() && currentEntry != nullptr ? currentEntry
+                                                                             : firstVisible;
+    m_list->setCurrentItem(selected);
+    if (selected != nullptr) {
+        m_list->scrollToItem(selected);
+    }
     m_list->setVisible(!m_entries.isEmpty());
     m_emptyLabel->setVisible(m_entries.isEmpty());
 }
@@ -481,7 +520,7 @@ void QuickCommandPopup::chooseItem(const QListWidgetItem *item)
     }
     const int entryIndex = item->data(kIndexRole).toInt();
     const QString command = item->data(kCommandRole).toString();
-    if (m_mode != Mode::Actions && command.isEmpty()) {
+    if (m_mode != Mode::Actions && m_mode != Mode::Tabs && command.isEmpty()) {
         return;
     }
     // 先隐藏再发信号：被触发的动作可能弹出模态对话框，Popup 必须先交出键盘与焦点。

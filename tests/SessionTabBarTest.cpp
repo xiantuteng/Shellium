@@ -5,6 +5,7 @@
 #include <QImage>
 #include <QMouseEvent>
 #include <QProxyStyle>
+#include <QHBoxLayout>
 #include <QSignalSpy>
 #include <QTest>
 #include <QWheelEvent>
@@ -127,6 +128,14 @@ private slots:
 
     /** @brief 未溢出时不得报告可滚动，否则标题栏会常驻两个无效箭头。 */
     void doesNotReportScrollableWhenTabsFit();
+
+    /**
+     * @brief 在屏蔽信号的情况下删到不再溢出，视口仍要收缩并报告不可滚动。
+     *
+     * 主窗口删除镜像标签时用 QSignalBlocker 屏蔽 currentChanged，tabLayoutChanged 也被一并
+     * 屏蔽；旧实现因此停在旧宽度，关掉标签后滚动箭头与标签列表按钮一直不消失。
+     */
+    void shrinksAfterTabsRemovedWithSignalsBlocked();
 
     /**
      * @brief 晚于状态稳定才连接 scrollStateChanged 的监听者也必须学到当前真实状态。
@@ -279,6 +288,34 @@ void SessionTabBarTest::doesNotReportScrollableWhenTabsFit()
         QVERIFY2(!state.at(0).toBool(), "标签未溢出时不得报告可滚动");
     }
     QCOMPARE(strip.maximumScrollOffset(), 0);
+}
+
+void SessionTabBarTest::shrinksAfterTabsRemovedWithSignalsBlocked()
+{
+    QWidget container;
+    auto *layout = new QHBoxLayout(&container);
+    layout->setContentsMargins(0, 0, 0, 0);
+    auto *strip = new SessionTabStrip(&container);
+    layout->addWidget(strip);
+    layout->addStretch(1);
+    for (int index = 0; index < 12; ++index) {
+        strip->tabBar()->addTab(QStringLiteral("终端 %1").arg(index + 1));
+    }
+    container.resize(420, 42);
+    container.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&container));
+    QSignalSpy scrollSpy(strip, &SessionTabStrip::scrollStateChanged);
+    QTRY_VERIFY(!scrollSpy.isEmpty() && scrollSpy.last().at(0).toBool());
+
+    while (strip->tabBar()->count() > 1) {
+        const QSignalBlocker blocker(strip->tabBar());
+        strip->tabBar()->removeTab(strip->tabBar()->count() - 1);
+    }
+    QTRY_VERIFY2(!scrollSpy.last().at(0).toBool(), "删到只剩一个标签后仍报告可滚动");
+    QTRY_VERIFY2(strip->width() <= strip->tabBar()->tabRect(0).width(),
+                 qPrintable(QStringLiteral("视口停在旧宽度 %1，没有收缩到唯一标签的宽度 %2")
+                                .arg(QString::number(strip->width()),
+                                     QString::number(strip->tabBar()->tabRect(0).width()))));
 }
 
 void SessionTabBarTest::lateListenerLearnsCurrentScrollStateOnConnect()

@@ -10,7 +10,8 @@ class QListWidget;
 class QListWidgetItem;
 
 /**
- * @brief 终端会话里按 Cmd+K / Cmd+J 弹出的快速命令面板，也承载 Cmd+Shift+P 命令面板。
+ * @brief 终端会话里按 Cmd+K / Cmd+J 弹出的快速命令面板，也承载 Cmd+Shift+P 命令面板与
+ *        标题栏的标签切换列表。
  *
  * 面板只负责展示与选择：上层把片段或历史整理成 Entry 列表交给 showEntries()，用户选中后
  * 通过 commandChosen 交回命令文本，由上层决定在哪个终端执行。面板不持有 TerminalPane，
@@ -31,6 +32,7 @@ public:
         Snippets, ///< 命令片段（Cmd+K）。
         History,  ///< 当前主机的命令历史（Cmd+J）。
         Actions,  ///< 应用动作的命令面板（Cmd+Shift+P）；条目没有命令文本，只发 entryChosen。
+        Tabs,     ///< 全部会话标签；条目没有命令文本，只发 entryChosen，初始选中当前标签。
     };
 
     /** @brief 列表中的一行。 */
@@ -39,6 +41,7 @@ public:
         QString detail;  ///< 次要说明；片段为命令预览，历史留空。
         QString command; ///< 选中后交给终端执行的完整命令；Actions 模式为空。
         QString shortcut = {}; ///< 行尾右对齐显示的快捷键，可为空。
+        bool current = false;  ///< 当前对象（如活动标签）：标题高亮，未搜索时初始选中该行。
     };
 
     /** @brief Cmd+数字可直接执行的最大行数（1..9）。 */
@@ -83,6 +86,9 @@ public:
 
     /** @brief 当前可见条目数量。 */
     [[nodiscard]] int visibleCount() const;
+
+    /** @brief 当前选中的可见位置（从 0 开始）；没有选中项时返回 -1。 */
+    [[nodiscard]] int currentVisiblePosition() const;
 
 signals:
     /**

@@ -99,6 +99,12 @@ private slots:
     void sidebarDensityPersistsAndRestores();
     /** @brief 导航轨中工作空间入口紧跟主机入口，页面索引与点击路由保持不变。 */
     void workspacesNavigationButtonFollowsHosts();
+    /** @brief 再次点击已选中的导航按钮收起侧栏，再点一次重新展开。 */
+    void clickingActiveNavigationButtonTogglesSidebar();
+    /** @brief 已选中的导航按钮在悬停时必须换一种背景色，提示它仍可点击。 */
+    void activeNavigationButtonChangesBackgroundOnHover();
+    /** @brief 标签溢出时"+"左侧出现标签列表按钮，弹层列出全部标签并支持 Cmd+数字切换。 */
+    void tabSwitcherAppearsOnOverflowAndSwitchesTabs();
 
     /**
      * @brief 效率工具页的"新建片段/删除"挂在共享标题行，与主机页动作条互斥显示：
@@ -1363,6 +1369,147 @@ void MainWindowShellTest::workspacesNavigationButtonFollowsHosts()
     QTest::mouseClick(workspacesButton, Qt::LeftButton);
     QVERIFY(workspacesButton->isChecked());
     QVERIFY(!hostsButton->isChecked());
+}
+
+namespace {
+
+/** @brief 按无障碍名称在导航轨中查找页面按钮。 */
+QToolButton *navigationButtonNamed(QWidget *rail, const QString &name)
+{
+    for (QToolButton *button :
+         rail->findChildren<QToolButton *>(QString(), Qt::FindDirectChildrenOnly)) {
+        if (button->property("navButton").toBool() && button->accessibleName() == name) {
+            return button;
+        }
+    }
+    return nullptr;
+}
+
+} // namespace
+
+void MainWindowShellTest::clickingActiveNavigationButtonTogglesSidebar()
+{
+    MainWindow window(m_database, m_vault);
+    window.resize(1200, 800);
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+    auto *rail = window.findChild<QWidget *>(QStringLiteral("NavigationRail"));
+    auto *panel = window.findChild<QWidget *>(QStringLiteral("SidebarPanel"));
+    QVERIFY(rail != nullptr && panel != nullptr);
+    QToolButton *hostsButton = navigationButtonNamed(rail, QStringLiteral("Hosts"));
+    QToolButton *productivityButton = navigationButtonNamed(rail, QStringLiteral("Productivity"));
+    QVERIFY(hostsButton != nullptr && productivityButton != nullptr);
+    QVERIFY(hostsButton->isChecked());
+    QTRY_VERIFY(panel->isVisible());
+
+    // 点击当前已选中的"主机"：侧栏收起，但按钮保持选中，表示再点可展开同一页。
+    QTest::mouseClick(hostsButton, Qt::LeftButton);
+    QTRY_VERIFY2_WITH_TIMEOUT(!panel->isVisible(), "再次点击已选中的导航按钮应收起侧栏", 2000);
+    QVERIFY(hostsButton->isChecked());
+
+    QTest::mouseClick(hostsButton, Qt::LeftButton);
+    QTRY_VERIFY2_WITH_TIMEOUT(panel->isVisible() && panel->width() > 100,
+                              "侧栏收起后再点同一按钮应重新展开", 2000);
+
+    // 点击另一个页面只切页，不能收起侧栏。
+    QTest::mouseClick(productivityButton, Qt::LeftButton);
+    QVERIFY(productivityButton->isChecked());
+    QTest::qWait(400);
+    QVERIFY2(panel->isVisible(), "切换到其他页面不应收起侧栏");
+}
+
+void MainWindowShellTest::activeNavigationButtonChangesBackgroundOnHover()
+{
+    MainWindow window(m_database, m_vault);
+    window.resize(1200, 800);
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+    auto *rail = window.findChild<QWidget *>(QStringLiteral("NavigationRail"));
+    QVERIFY(rail != nullptr);
+    QToolButton *hostsButton = navigationButtonNamed(rail, QStringLiteral("Hosts"));
+    QVERIFY(hostsButton != nullptr && hostsButton->isChecked());
+
+    // 取按钮左缘中部：位于圆角背景内，又避开中央的图标笔画。
+    const auto backgroundAt = [hostsButton]() {
+        return hostsButton->grab().toImage().pixelColor(
+            QPoint(3, hostsButton->height() / 2) * hostsButton->devicePixelRatioF());
+    };
+    hostsButton->setAttribute(Qt::WA_UnderMouse, false);
+    const QColor idle = backgroundAt();
+    hostsButton->setAttribute(Qt::WA_UnderMouse, true);
+    const QColor hovered = backgroundAt();
+    hostsButton->setAttribute(Qt::WA_UnderMouse, false);
+    QVERIFY2(idle != hovered,
+             qPrintable(QStringLiteral("选中的导航按钮悬停前后背景色相同：%1")
+                            .arg(idle.name())));
+}
+
+void MainWindowShellTest::tabSwitcherAppearsOnOverflowAndSwitchesTabs()
+{
+    MainWindow window(m_database, m_vault);
+    window.resize(900, 700);
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+    auto *tabs = window.findChild<QTabWidget *>(QStringLiteral("TerminalPages"));
+    auto *tabBar = window.findChild<SessionTabBar *>(QStringLiteral("SessionTitleTabs"));
+    auto *newTabButton = window.findChild<QToolButton *>(QStringLiteral("TitleNewTabButton"));
+    auto *switcherButton =
+        window.findChild<QToolButton *>(QStringLiteral("TitleTabSwitcherButton"));
+    QVERIFY(tabs != nullptr && tabBar != nullptr && newTabButton != nullptr
+            && switcherButton != nullptr);
+    QVERIFY2(switcherButton->isHidden(), "没有标签时不应显示标签列表按钮");
+
+    QTest::mouseClick(newTabButton, Qt::LeftButton);
+    QTest::qWait(100);
+    QVERIFY2(switcherButton->isHidden(), "标签未溢出时不应显示标签列表按钮");
+
+    for (int attempt = 0; attempt < 30 && switcherButton->isHidden(); ++attempt) {
+        QTest::mouseClick(newTabButton, Qt::LeftButton);
+        QTest::qWait(60);
+    }
+    QTRY_VERIFY2(switcherButton->isVisible(), "标签溢出后应显示标签列表按钮");
+    const int tabCount = tabs->count();
+    QVERIFY(tabCount > 2);
+    // 按钮紧贴在"+"左侧。
+    QVERIFY(switcherButton->geometry().right() < newTabButton->geometry().left());
+    QVERIFY(newTabButton->geometry().left() - switcherButton->geometry().right() <= 12);
+    QCOMPARE(tabs->currentIndex(), tabCount - 1);
+
+    QTest::mouseClick(switcherButton, Qt::LeftButton);
+    auto *popup = window.findChild<QuickCommandPopup *>(QStringLiteral("QuickCommandPopup"));
+    QVERIFY2(popup != nullptr && popup->isVisible(), "点击标签列表按钮应弹出浮层");
+    QCOMPARE(popup->mode(), QuickCommandPopup::Mode::Tabs);
+    QCOMPARE(popup->visibleCount(), tabCount);
+    QCOMPARE(popup->visibleTitleAt(0), tabs->tabText(0));
+    QCOMPARE(popup->currentVisiblePosition(), tabCount - 1);
+
+    // Cmd+1（其他平台 Ctrl+1）切到第一个标签，标题栏镜像同步。
+    auto *search = popup->findChild<QLineEdit *>(QStringLiteral("QuickCommandSearch"));
+    QVERIFY(search != nullptr);
+    QTest::keyClick(search, Qt::Key_1, Qt::ControlModifier);
+    QVERIFY(!popup->isVisible());
+    QCOMPARE(tabs->currentIndex(), 0);
+    QCOMPARE(tabBar->currentIndex(), 0);
+
+    // 再次打开时初始选中的是新的当前标签；方向键加回车也能切换。
+    QTest::mouseClick(switcherButton, Qt::LeftButton);
+    QVERIFY(popup->isVisible());
+    QCOMPARE(popup->currentVisiblePosition(), 0);
+    QTest::keyClick(search, Qt::Key_Down);
+    QTest::keyClick(search, Qt::Key_Down);
+    QTest::keyClick(search, Qt::Key_Return);
+    QVERIFY(!popup->isVisible());
+    QCOMPARE(tabs->currentIndex(), 2);
+
+    // 关到不再溢出，按钮随之隐藏。
+    while (tabs->count() > 1) {
+        emit tabBar->tabCloseRequested(tabs->count() - 1);
+        QTest::qWait(30);
+    }
+    QTRY_VERIFY2(switcherButton->isHidden(), "标签不再溢出后应隐藏标签列表按钮");
 }
 
 void MainWindowShellTest::quickSnippetAndHistoryShortcutsRunOnCurrentTerminal()

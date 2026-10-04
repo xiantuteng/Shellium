@@ -374,6 +374,14 @@ private:
     void openCommandPalette();
 
     /**
+     * @brief 在当前终端上方弹出全部会话标签的切换列表。
+     *
+     * 复用 QuickCommandPopup 的 Tabs 模式：列出全部标签并初始选中当前标签，Cmd+1..9
+     * 直接切到可见列表的第 1..9 项。标签溢出时标题栏"+"左侧的按钮触发它。
+     */
+    void openTabSwitcher();
+
+    /**
      * @brief 在当前终端上方弹出命令片段快速面板（默认 Cmd+K）。
      *
      * 按 1..9 直接在弹出时的那个终端执行对应片段；没有活动终端时只提示，不弹面板。
@@ -442,6 +450,13 @@ private:
      */
     QToolButton *m_tabScrollLeftButton = nullptr;
     QToolButton *m_tabScrollRightButton = nullptr;
+    /**
+     * @brief "+"左侧的标签切换列表按钮，只在标签溢出时显示。
+     *
+     * 它不保留隐藏占位：显示时视口变窄只会更溢出，隐藏时视口变宽只会更不溢出，显隐与
+     * 溢出判定之间没有反馈回路。
+     */
+    QToolButton *m_tabSwitcherButton = nullptr;
     /** @brief 与原生或无边框窗口标题区合并的 52 像素会话导航容器。 */
     QWidget *m_titleChrome = nullptr;
     /**
@@ -479,6 +494,8 @@ private:
     int m_sidebarExpandedWidth = 0;
     /** @brief 当前显隐动画的目标状态，区别于收起动画结束前面板仍暂时可见的物理状态。 */
     bool m_sidebarTargetVisible = true;
+    /** @brief 本次按下的导航按钮在按下前是否已是当前页；决定松开时是收起还是切页。 */
+    bool m_navigationPressedActivePage = false;
     /** @brief 承载主机、效率工具、端口转发、AI 和工作空间五个互斥页面。 */
     QStackedWidget *m_sidebarStack = nullptr;
     /** @brief 当前侧栏页面标题。 */
