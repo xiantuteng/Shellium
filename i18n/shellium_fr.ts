@@ -1686,18 +1686,6 @@ Confirmer que la clé a changé, remplacer l&apos;ancien enregistrement dans kno
         <translation type="unfinished">ssh, %1</translation>
     </message>
     <message>
-        <source>Command palette</source>
-        <translation type="unfinished">Palette de commandes</translation>
-    </message>
-    <message>
-        <source>Type a command name to filter…</source>
-        <translation type="unfinished">Saisissez un nom de commande pour filtrer…</translation>
-    </message>
-    <message>
-        <source>Enter to run, Esc to close; only currently available actions are shown here.</source>
-        <translation type="unfinished">Entrée pour exécuter, Échap pour fermer ; seules les actions actuellement disponibles sont affichées ici.</translation>
-    </message>
-    <message>
         <source>Open a terminal session first</source>
         <translation type="unfinished">Ouvrez d’abord une session de terminal</translation>
     </message>
@@ -2983,6 +2971,22 @@ Pour éviter d&apos;écraser des identifiants existants, Shellium ne crée pas a
 </context>
 <context>
     <name>QuickCommandPopup</name>
+    <message>
+        <source>Commands</source>
+        <translation type="unfinished">Commandes</translation>
+    </message>
+    <message>
+        <source>Search commands</source>
+        <translation type="unfinished">Rechercher des commandes</translation>
+    </message>
+    <message>
+        <source>Available commands</source>
+        <translation type="unfinished">Commandes disponibles</translation>
+    </message>
+    <message>
+        <source>No commands are available right now.</source>
+        <translation type="unfinished">Aucune commande n’est disponible pour le moment.</translation>
+    </message>
     <message>
         <source>Snippets</source>
         <translation type="unfinished">Extraits</translation>

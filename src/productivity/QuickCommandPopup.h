@@ -7,9 +7,10 @@
 class QLabel;
 class QLineEdit;
 class QListWidget;
+class QListWidgetItem;
 
 /**
- * @brief 终端会话里按 Cmd+K / Cmd+J 弹出的快速命令面板。
+ * @brief 终端会话里按 Cmd+K / Cmd+J 弹出的快速命令面板，也承载 Cmd+Shift+P 命令面板。
  *
  * 面板只负责展示与选择：上层把片段或历史整理成 Entry 列表交给 showEntries()，用户选中后
  * 通过 commandChosen 交回命令文本，由上层决定在哪个终端执行。面板不持有 TerminalPane，
@@ -29,13 +30,15 @@ public:
     enum class Mode {
         Snippets, ///< 命令片段（Cmd+K）。
         History,  ///< 当前主机的命令历史（Cmd+J）。
+        Actions,  ///< 应用动作的命令面板（Cmd+Shift+P）；条目没有命令文本，只发 entryChosen。
     };
 
     /** @brief 列表中的一行。 */
     struct Entry {
         QString title;   ///< 主标题；片段为名称，历史为命令本身。
         QString detail;  ///< 次要说明；片段为命令预览，历史留空。
-        QString command; ///< 选中后交给终端执行的完整命令。
+        QString command; ///< 选中后交给终端执行的完整命令；Actions 模式为空。
+        QString shortcut = {}; ///< 行尾右对齐显示的快捷键，可为空。
     };
 
     /** @brief Cmd+数字可直接执行的最大行数（1..9）。 */
@@ -75,6 +78,9 @@ public:
      */
     [[nodiscard]] QString visibleCommandAt(int position) const;
 
+    /** @brief 第 position 个可见条目的标题；越界返回空字符串。 */
+    [[nodiscard]] QString visibleTitleAt(int position) const;
+
     /** @brief 当前可见条目数量。 */
     [[nodiscard]] int visibleCount() const;
 
@@ -84,6 +90,13 @@ signals:
      * @param command 不带结尾换行的命令文本。
      */
     void commandChosen(const QString &command);
+
+    /**
+     * @brief 用户选中第 entryIndex 个条目（showEntries() 入参下标）；面板此时已经隐藏。
+     *
+     * 每次选中都会发出；命令非空时随后再发 commandChosen。Actions 模式只靠本信号定位动作。
+     */
+    void entryChosen(int entryIndex);
 
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
@@ -99,6 +112,9 @@ private:
 
     /** @brief 执行当前选中行。 */
     void chooseCurrent();
+
+    /** @brief 隐藏面板并为 item 发出 entryChosen / commandChosen；无效行忽略。 */
+    void chooseItem(const QListWidgetItem *item);
 
     /** @brief 选中项在可见行中上下移动 delta 步。 */
     void moveSelection(int delta);

@@ -134,6 +134,12 @@ private slots:
     /** @brief Esc 关闭不执行；方向键移动选中项、回车执行选中项。 */
     void quickCommandPopupKeyboardNavigation();
 
+    /**
+     * @brief 命令面板（Actions 模式）的条目没有命令文本：选中时只发 entryChosen 下标，
+     * 不得发 commandChosen（否则会把动作名当成 Shell 命令送进终端）；快捷键文字也参与搜索。
+     */
+    void quickCommandPopupActionsModeEmitsEntryIndex();
+
 private:
     /** @brief 在 Snippet 列表中按稳定 id 查找对应的行。 */
     static QListWidgetItem *findSnippetItem(const QListWidget *list, const QString &id);
@@ -914,6 +920,40 @@ void ProductivityTest::quickCommandPopupKeyboardNavigation()
     QTest::keyClick(search, Qt::Key_1, Qt::ControlModifier);
     QCOMPARE(chosenSpy.count(), 0);
     popup.hide();
+}
+
+void ProductivityTest::quickCommandPopupActionsModeEmitsEntryIndex()
+{
+    QuickCommandPopup popup;
+    QSignalSpy entrySpy(&popup, &QuickCommandPopup::entryChosen);
+    QSignalSpy commandSpy(&popup, &QuickCommandPopup::commandChosen);
+    auto *search = popup.findChild<QLineEdit *>(QStringLiteral("QuickCommandSearch"));
+    QVERIFY(search != nullptr);
+
+    const QList<QuickCommandPopup::Entry> actions{
+        {QStringLiteral("Search Terminal Output"), QString(), QString(), QStringLiteral("⌘F")},
+        {QStringLiteral("Export Terminal Output…"), QString(), QString(), QStringLiteral("⇧⌘E")},
+        {QStringLiteral("Open Workspace…"), QString(), QString()},
+    };
+    popup.showEntries(QuickCommandPopup::Mode::Actions, actions, QString(), nullptr);
+    QCOMPARE(popup.mode(), QuickCommandPopup::Mode::Actions);
+    QCOMPARE(popup.visibleCount(), 3);
+
+    QTest::keyClick(search, Qt::Key_3, Qt::ControlModifier);
+    QCOMPARE(entrySpy.count(), 1);
+    QCOMPARE(entrySpy.takeFirst().at(0).toInt(), 2);
+    QCOMPARE(commandSpy.count(), 0);
+    QVERIFY(!popup.isVisible());
+
+    // 按快捷键文字搜索，筛选后回车执行的仍是原列表下标。
+    popup.showEntries(QuickCommandPopup::Mode::Actions, actions, QString(), nullptr);
+    search->setText(QStringLiteral("⇧⌘E"));
+    QCOMPARE(popup.visibleCount(), 1);
+    QCOMPARE(popup.visibleTitleAt(0), QStringLiteral("Export Terminal Output…"));
+    QTest::keyClick(search, Qt::Key_Return);
+    QCOMPARE(entrySpy.count(), 1);
+    QCOMPARE(entrySpy.takeFirst().at(0).toInt(), 1);
+    QCOMPARE(commandSpy.count(), 0);
 }
 
 QTEST_MAIN(ProductivityTest)

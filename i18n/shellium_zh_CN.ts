@@ -1690,18 +1690,6 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">ssh, %1</translation>
     </message>
     <message>
-        <source>Command palette</source>
-        <translation>命令面板</translation>
-    </message>
-    <message>
-        <source>Type a command name to filter…</source>
-        <translation>输入命令名称筛选…</translation>
-    </message>
-    <message>
-        <source>Enter to run, Esc to close; only currently available actions are shown here.</source>
-        <translation>Enter 执行，Esc 关闭；这里只显示当前可用动作。</translation>
-    </message>
-    <message>
         <source>Open a terminal session first</source>
         <translation type="unfinished">请先打开一个终端会话</translation>
     </message>
@@ -2983,6 +2971,22 @@ To avoid overwriting existing credentials, Shellium does not create a new vault 
 </context>
 <context>
     <name>QuickCommandPopup</name>
+    <message>
+        <source>Commands</source>
+        <translation type="unfinished">命令</translation>
+    </message>
+    <message>
+        <source>Search commands</source>
+        <translation type="unfinished">搜索命令</translation>
+    </message>
+    <message>
+        <source>Available commands</source>
+        <translation type="unfinished">可用命令</translation>
+    </message>
+    <message>
+        <source>No commands are available right now.</source>
+        <translation type="unfinished">当前没有可用的命令。</translation>
+    </message>
     <message>
         <source>Snippets</source>
         <translation type="unfinished">片段</translation>

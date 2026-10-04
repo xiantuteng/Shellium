@@ -1686,18 +1686,6 @@ Puede ser una reinstalación del servidor o una rotación de clave, o un ataque 
         <translation type="unfinished">ssh, %1</translation>
     </message>
     <message>
-        <source>Command palette</source>
-        <translation type="unfinished">Paleta de comandos</translation>
-    </message>
-    <message>
-        <source>Type a command name to filter…</source>
-        <translation type="unfinished">Escribe un nombre de comando para filtrar…</translation>
-    </message>
-    <message>
-        <source>Enter to run, Esc to close; only currently available actions are shown here.</source>
-        <translation type="unfinished">Intro para ejecutar, Esc para cerrar; aquí solo se muestran las acciones disponibles actualmente.</translation>
-    </message>
-    <message>
         <source>Open a terminal session first</source>
         <translation type="unfinished">Abre primero una sesión de terminal</translation>
     </message>
@@ -2983,6 +2971,22 @@ Para no sobrescribir credenciales existentes, Shellium no crea automáticamente 
 </context>
 <context>
     <name>QuickCommandPopup</name>
+    <message>
+        <source>Commands</source>
+        <translation type="unfinished">Comandos</translation>
+    </message>
+    <message>
+        <source>Search commands</source>
+        <translation type="unfinished">Buscar comandos</translation>
+    </message>
+    <message>
+        <source>Available commands</source>
+        <translation type="unfinished">Comandos disponibles</translation>
+    </message>
+    <message>
+        <source>No commands are available right now.</source>
+        <translation type="unfinished">No hay comandos disponibles en este momento.</translation>
+    </message>
     <message>
         <source>Snippets</source>
         <translation type="unfinished">Fragmentos</translation>

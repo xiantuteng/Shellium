@@ -116,6 +116,14 @@ private slots:
     void quickSnippetAndHistoryShortcutsRunOnCurrentTerminal();
 
     /**
+     * @brief 命令面板改用与 Cmd+K 相同的浮层：快捷键打开、按名称筛选、回车触发对应动作。
+     *
+     * 断言动作真的被触发（终端查找条出现），而不只是面板关闭：面板下标与动作列表一旦
+     * 错位，关掉面板却触发了别的动作也会"看起来正常"。
+     */
+    void commandPaletteUsesQuickPopupAndTriggersAction();
+
+    /**
      * @brief 浅色主题下效率工具"片段/历史"标签的选中态必须一眼可辨。
      *
      * 通用 RAISED 选中底 (#f0f3f5) 与浅色侧栏 (#f5f7f8) 每通道只差几个灰阶，用户看不出
@@ -1429,6 +1437,45 @@ void MainWindowShellTest::quickSnippetAndHistoryShortcutsRunOnCurrentTerminal()
     QVERIFY(!popup->isVisible());
 
     m_database->removeSnippet(snippet.id);
+}
+
+void MainWindowShellTest::commandPaletteUsesQuickPopupAndTriggersAction()
+{
+    MainWindow window(m_database, m_vault);
+    window.resize(1200, 800);
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+    auto *tabs = window.findChild<QTabWidget *>(QStringLiteral("TerminalPages"));
+    auto *newTabButton = window.findChild<QToolButton *>(QStringLiteral("TitleNewTabButton"));
+    QVERIFY(tabs != nullptr && newTabButton != nullptr);
+    QTest::mouseClick(newTabButton, Qt::LeftButton);
+    auto *workspace = qobject_cast<TerminalWorkspace *>(tabs->widget(0));
+    QVERIFY(workspace != nullptr);
+    TerminalPane *pane = workspace->activePane();
+    QTRY_VERIFY_WITH_TIMEOUT(pane->isConnected(), 8000);
+    auto *view = pane->findChild<TerminalView *>();
+    QVERIFY(view != nullptr);
+    view->setFocus();
+    QVERIFY(QTest::qWaitForWindowActive(&window));
+
+    QTest::keySequence(view, TerminalSettings::defaultShortcuts().value(
+                                 QStringLiteral("command.palette")));
+    auto *popup = window.findChild<QuickCommandPopup *>(QStringLiteral("QuickCommandPopup"));
+    QVERIFY2(popup != nullptr && popup->isVisible(), "命令面板应以快速浮层弹出");
+    QCOMPARE(popup->mode(), QuickCommandPopup::Mode::Actions);
+    QVERIFY2(QApplication::activeModalWidget() == nullptr, "命令面板不应再是模态对话框");
+    QVERIFY(popup->visibleCount() > 3);
+
+    auto *search = popup->findChild<QLineEdit *>(QStringLiteral("QuickCommandSearch"));
+    QVERIFY(search != nullptr);
+    const QString searchText =
+        QCoreApplication::translate("MainWindow", "Search Terminal Output");
+    search->setText(searchText);
+    QCOMPARE(popup->visibleCount(), 1);
+    QCOMPARE(popup->visibleTitleAt(0), searchText);
+    QTest::keyClick(search, Qt::Key_Return);
+    QVERIFY(!popup->isVisible());
+    QTRY_VERIFY_WITH_TIMEOUT(pane->isSearchBarVisible(), 2000);
 }
 
 void MainWindowShellTest::productivityHeaderActionsShareSidebarTitleRow()

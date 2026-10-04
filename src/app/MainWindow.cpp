@@ -4487,20 +4487,8 @@ void MainWindow::applyConfiguredShortcuts()
 
 void MainWindow::openCommandPalette()
 {
-    QDialog dialog(this);
-    dialog.setWindowTitle(tr("Command palette"));
-    dialog.resize(560, 420);
-    auto *layout = new QVBoxLayout(&dialog);
-    auto *filterEdit = new QLineEdit(&dialog);
-    filterEdit->setPlaceholderText(tr("Type a command name to filter…"));
-    auto *list = new QListWidget(&dialog);
-    list->setSelectionMode(QAbstractItemView::SingleSelection);
-    list->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
-    layout->addWidget(filterEdit);
-    layout->addWidget(list, 1);
-    layout->addWidget(new QLabel(tr("Enter to run, Esc to close; only currently available actions are shown here."), &dialog));
-
-    QList<QAction *> candidates;
+    QList<QuickCommandPopup::Entry> entries;
+    QList<QPointer<QAction>> candidates;
     QSet<QAction *> seen;
     QSet<QString> seenText;
     for (QAction *action : findChildren<QAction *>()) {
@@ -4523,61 +4511,57 @@ void MainWindow::openCommandPalette()
         }
         seen.insert(action);
         seenText.insert(text);
-        const int actionIndex = candidates.size();
         candidates.append(action);
-        QString display = text;
-        if (!action->shortcut().isEmpty()) {
-            display += QStringLiteral("\t%1").arg(
-                action->shortcut().toString(QKeySequence::NativeText));
-        }
-        auto *item = new QListWidgetItem(display, list);
-        // 只存本次对话框局部数组下标，不把 QObject 指针塞入 QVariant；动作始终由主窗口
-        // 拥有，但下标形式仍能避免元类型注册和跨架构指针整数转换。
-        item->setData(Qt::UserRole, actionIndex);
-        item->setToolTip(action->toolTip());
+        // 名称与快捷键分成两个字段由面板委托分列绘制；旧实现用制表符拼成一个字符串，
+        // 名称长短不一时快捷键列错位，长名称还会被截断。
+        entries.append({text, QString(), QString(),
+                        action->shortcut().toString(QKeySequence::NativeText)});
     }
-    if (list->count() > 0) {
-        list->setCurrentRow(0);
-    }
+    m_commandPaletteActions = candidates;
 
-    int selectedActionIndex = -1;
-    const auto acceptCurrent = [&]() {
-        QListWidgetItem *item = list->currentItem();
-        if (item == nullptr || item->isHidden()) {
-            return;
-        }
-        selectedActionIndex = item->data(Qt::UserRole).toInt();
-        dialog.accept();
-    };
-    connect(filterEdit, &QLineEdit::textChanged, &dialog, [list](const QString &text) {
-        const QString keyword = text.trimmed();
-        int firstVisibleRow = -1;
-        for (int row = 0; row < list->count(); ++row) {
-            QListWidgetItem *item = list->item(row);
-            const bool matches = keyword.isEmpty()
-                || item->text().contains(keyword, Qt::CaseInsensitive);
-            item->setHidden(!matches);
-            if (matches && firstVisibleRow < 0) {
-                firstVisibleRow = row;
-            }
-        }
-        list->setCurrentRow(firstVisibleRow);
-    });
-    connect(filterEdit, &QLineEdit::returnPressed, &dialog, acceptCurrent);
-    connect(list, &QListWidget::itemActivated, &dialog,
-            [&acceptCurrent](QListWidgetItem *) { acceptCurrent(); });
-    filterEdit->setFocus();
-
-    if (dialog.exec() == QDialog::Accepted && selectedActionIndex >= 0
-        && selectedActionIndex < candidates.size()) {
-        // 对话框已经关闭后再触发，避免目标动作弹出的模态窗口与命令面板争夺父窗口和焦点。
-        QPointer<QAction> selectedAction = candidates.at(selectedActionIndex);
-        QTimer::singleShot(0, this, [selectedAction]() {
-            if (selectedAction != nullptr && selectedAction->isEnabled()) {
-                selectedAction->trigger();
-            }
-        });
+    TerminalWorkspace *workspace = activeWorkspace();
+    QWidget *anchor = workspace == nullptr ? nullptr : workspace->activePane();
+    if (anchor == nullptr) {
+        anchor = m_tabs != nullptr && m_tabs->isVisible() ? static_cast<QWidget *>(m_tabs)
+                                                          : centralWidget();
     }
+    const QAction *paletteAction = m_configurableActions.value(QStringLiteral("command.palette"));
+    const QString hint = paletteAction == nullptr
+        ? QString()
+        : paletteAction->shortcut().toString(QKeySequence::NativeText);
+    ensureQuickCommandPopup()->showEntries(QuickCommandPopup::Mode::Actions, entries, hint,
+                                           anchor);
+}
+
+QuickCommandPopup *MainWindow::ensureQuickCommandPopup()
+{
+    if (m_quickCommandPopup != nullptr) {
+        return m_quickCommandPopup;
+    }
+    m_quickCommandPopup = new QuickCommandPopup(this);
+    connect(m_quickCommandPopup, &QuickCommandPopup::commandChosen,
+            this, [this](const QString &command) {
+                // 执行到弹出时记下的终端，而不是"此刻的活动终端"：面板打开期间标签不会
+                // 切换，但这样即使将来允许切换，命令也不会落到用户没看着的会话里。
+                if (m_quickCommandPane != nullptr) {
+                    m_quickCommandPane->executeCommand(command);
+                }
+            });
+    connect(m_quickCommandPopup, &QuickCommandPopup::entryChosen,
+            this, [this](const int entryIndex) {
+                if (m_quickCommandPopup->mode() != QuickCommandPopup::Mode::Actions
+                    || entryIndex < 0 || entryIndex >= m_commandPaletteActions.size()) {
+                    return;
+                }
+                // 面板已隐藏后再排队触发，避免目标动作弹出的模态窗口与 Popup 争夺焦点。
+                QPointer<QAction> action = m_commandPaletteActions.at(entryIndex);
+                QTimer::singleShot(0, this, [action]() {
+                    if (action != nullptr && action->isEnabled()) {
+                        action->trigger();
+                    }
+                });
+            });
+    return m_quickCommandPopup;
 }
 
 void MainWindow::openQuickSnippets()
@@ -4635,17 +4619,7 @@ void MainWindow::openQuickCommandPopup(const bool snippets)
         }
     }
 
-    if (m_quickCommandPopup == nullptr) {
-        m_quickCommandPopup = new QuickCommandPopup(this);
-        connect(m_quickCommandPopup, &QuickCommandPopup::commandChosen,
-                this, [this](const QString &command) {
-                    // 执行到弹出时记下的终端，而不是"此刻的活动终端"：面板打开期间标签不会
-                    // 切换，但这样即使将来允许切换，命令也不会落到用户没看着的会话里。
-                    if (m_quickCommandPane != nullptr) {
-                        m_quickCommandPane->executeCommand(command);
-                    }
-                });
-    }
+    ensureQuickCommandPopup();
     m_quickCommandPane = pane;
     const QString actionId = snippets ? QStringLiteral("snippets.quick")
                                       : QStringLiteral("history.quick");

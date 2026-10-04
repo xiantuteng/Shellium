@@ -20,6 +20,8 @@ namespace {
 constexpr int kCommandRole = Qt::UserRole;      ///< 行对应的完整命令。
 constexpr int kDetailRole = Qt::UserRole + 1;   ///< 次要说明文字。
 constexpr int kDigitRole = Qt::UserRole + 2;    ///< 数字角标 1..9；0 表示该行没有数字键。
+constexpr int kIndexRole = Qt::UserRole + 3;    ///< 行在 showEntries() 入参中的下标。
+constexpr int kShortcutRole = Qt::UserRole + 4; ///< 行尾右对齐显示的快捷键文字。
 
 constexpr int kRowHeight = 36;
 constexpr int kSearchHeight = 36; ///< 搜索栏固定高度，与参考设计一致，避免随字体撑高。
@@ -88,13 +90,24 @@ public:
 
         const QString title = index.data(Qt::DisplayRole).toString();
         const QString detail = index.data(kDetailRole).toString();
+        const QString shortcut = index.data(kShortcutRole).toString();
         const qreal textLeft = badgeRect.right() + 14.0;
-        const QRectF textRect(textLeft, rowRect.top(), rowRect.right() - textLeft - 12.0,
-                              rowRect.height());
+        QRectF textRect(textLeft, rowRect.top(), rowRect.right() - textLeft - 12.0,
+                        rowRect.height());
         painter->setFont(option.font);
         // 必须用画笔实际字体的度量：样式表可能改了列表字体，option.font 量出的宽度会偏窄，
         // 短标题也被误省略。多留几像素抵消子像素取整。
         const QFontMetrics titleMetrics = painter->fontMetrics();
+        if (!shortcut.isEmpty()) {
+            // 快捷键贴右对齐并先占位，标题只在剩余宽度内省略：旧命令面板用制表符拼接名称和
+            // 快捷键，名称长短不一时两列错位，长名称还会被快捷键盖住。
+            const int shortcutWidth = titleMetrics.horizontalAdvance(shortcut) + 4;
+            painter->setPen(kMutedColor);
+            painter->drawText(QRectF(textRect.right() - shortcutWidth, textRect.top(),
+                                     shortcutWidth, textRect.height()),
+                              Qt::AlignVCenter | Qt::AlignRight, shortcut);
+            textRect.setRight(textRect.right() - shortcutWidth - 16.0);
+        }
         const int titleWidth = detail.isEmpty()
             ? int(textRect.width())
             : std::min(titleMetrics.horizontalAdvance(title) + 4, int(textRect.width() * 0.45));
@@ -245,7 +258,12 @@ void QuickCommandPopup::showEntries(const Mode mode,
 {
     m_mode = mode;
     m_entries = entries;
-    if (mode == Mode::Snippets) {
+    if (mode == Mode::Actions) {
+        m_chipLabel->setText(tr("Commands"));
+        m_searchEdit->setPlaceholderText(tr("Search commands"));
+        m_sectionLabel->setText(tr("Available commands"));
+        m_emptyLabel->setText(tr("No commands are available right now."));
+    } else if (mode == Mode::Snippets) {
         m_chipLabel->setText(tr("Snippets"));
         m_searchEdit->setPlaceholderText(tr("Search snippets"));
         m_sectionLabel->setText(tr("Snippets"));
@@ -267,7 +285,9 @@ void QuickCommandPopup::showEntries(const Mode mode,
         auto *item = new QListWidgetItem(entry.title, m_list);
         item->setData(kCommandRole, entry.command);
         item->setData(kDetailRole, entry.detail);
-        item->setToolTip(entry.command);
+        item->setData(kShortcutRole, entry.shortcut);
+        item->setData(kIndexRole, int(m_list->count() - 1));
+        item->setToolTip(entry.command.isEmpty() ? entry.title : entry.command);
     }
     {
         // 清空搜索框会触发 applyFilter；这里随后再显式调用一次，保证文本本来就为空时也刷新。
@@ -320,6 +340,22 @@ QString QuickCommandPopup::visibleCommandAt(const int position) const
         }
         if (visible == position) {
             return item->data(kCommandRole).toString();
+        }
+        ++visible;
+    }
+    return {};
+}
+
+QString QuickCommandPopup::visibleTitleAt(const int position) const
+{
+    int visible = 0;
+    for (int row = 0; row < m_list->count(); ++row) {
+        const QListWidgetItem *item = m_list->item(row);
+        if (item->isHidden()) {
+            continue;
+        }
+        if (visible == position) {
+            return item->text();
         }
         ++visible;
     }
@@ -400,7 +436,8 @@ void QuickCommandPopup::applyFilter()
         const bool matches = keyword.isEmpty()
             || item->text().contains(keyword, Qt::CaseInsensitive)
             || item->data(kCommandRole).toString().contains(keyword, Qt::CaseInsensitive)
-            || item->data(kDetailRole).toString().contains(keyword, Qt::CaseInsensitive);
+            || item->data(kDetailRole).toString().contains(keyword, Qt::CaseInsensitive)
+            || item->data(kShortcutRole).toString().contains(keyword, Qt::CaseInsensitive);
         item->setHidden(!matches);
         // 角标跟随可见顺序重新编号：筛选后按 1 执行的就是眼前第一行，而不是原列表第一项。
         item->setData(kDigitRole, matches && visible < kMaxDigitEntries ? visible + 1 : 0);
@@ -418,26 +455,41 @@ void QuickCommandPopup::applyFilter()
 
 void QuickCommandPopup::chooseVisible(const int position)
 {
-    const QString command = visibleCommandAt(position);
-    if (command.isEmpty()) {
-        return;
+    int visible = 0;
+    for (int row = 0; row < m_list->count(); ++row) {
+        const QListWidgetItem *item = m_list->item(row);
+        if (item->isHidden()) {
+            continue;
+        }
+        if (visible == position) {
+            chooseItem(item);
+            return;
+        }
+        ++visible;
     }
-    hide();
-    emit commandChosen(command);
 }
 
 void QuickCommandPopup::chooseCurrent()
 {
-    const QListWidgetItem *item = m_list->currentItem();
+    chooseItem(m_list->currentItem());
+}
+
+void QuickCommandPopup::chooseItem(const QListWidgetItem *item)
+{
     if (item == nullptr || item->isHidden()) {
         return;
     }
+    const int entryIndex = item->data(kIndexRole).toInt();
     const QString command = item->data(kCommandRole).toString();
-    if (command.isEmpty()) {
+    if (m_mode != Mode::Actions && command.isEmpty()) {
         return;
     }
+    // 先隐藏再发信号：被触发的动作可能弹出模态对话框，Popup 必须先交出键盘与焦点。
     hide();
-    emit commandChosen(command);
+    emit entryChosen(entryIndex);
+    if (!command.isEmpty()) {
+        emit commandChosen(command);
+    }
 }
 
 void QuickCommandPopup::moveSelection(const int delta)

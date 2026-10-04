@@ -1686,18 +1686,6 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">ssh, %1</translation>
     </message>
     <message>
-        <source>Command palette</source>
-        <translation type="unfinished">Палітра команд</translation>
-    </message>
-    <message>
-        <source>Type a command name to filter…</source>
-        <translation type="unfinished">Введіть ім’я команди для фільтрування…</translation>
-    </message>
-    <message>
-        <source>Enter to run, Esc to close; only currently available actions are shown here.</source>
-        <translation type="unfinished">Enter для виконання, Esc для закриття; тут показано лише доступні зараз дії.</translation>
-    </message>
-    <message>
         <source>Open a terminal session first</source>
         <translation type="unfinished">Спочатку відкрийте сеанс термінала</translation>
     </message>
@@ -2983,6 +2971,22 @@ To avoid overwriting existing credentials, Shellium does not create a new vault 
 </context>
 <context>
     <name>QuickCommandPopup</name>
+    <message>
+        <source>Commands</source>
+        <translation type="unfinished">Команди</translation>
+    </message>
+    <message>
+        <source>Search commands</source>
+        <translation type="unfinished">Пошук команд</translation>
+    </message>
+    <message>
+        <source>Available commands</source>
+        <translation type="unfinished">Доступні команди</translation>
+    </message>
+    <message>
+        <source>No commands are available right now.</source>
+        <translation type="unfinished">Зараз немає доступних команд.</translation>
+    </message>
     <message>
         <source>Snippets</source>
         <translation type="unfinished">Фрагменти</translation>

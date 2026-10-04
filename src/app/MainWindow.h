@@ -368,7 +368,8 @@ private:
      * @brief 打开可搜索命令面板并触发选中的当前可用 QAction。
      *
      * 面板在每次打开时从窗口实际动作树采集条目，因此插件式新增菜单动作后无需维护第二份
-     * 命令注册表；菜单容器、分隔符、不可见和禁用动作不会出现在结果中。
+     * 命令注册表；菜单容器、分隔符、不可见和禁用动作不会出现在结果中。外观与 Cmd+K 快速
+     * 面板一致（同一个 QuickCommandPopup 的 Actions 模式），快捷键在行尾右对齐。
      */
     void openCommandPalette();
 
@@ -391,6 +392,9 @@ private:
      * @param snippets true 为片段面板，false 为历史面板。
      */
     void openQuickCommandPopup(bool snippets);
+
+    /** @brief 返回三个快速面板共用的 QuickCommandPopup，首次调用时创建并接好信号。 */
+    QuickCommandPopup *ensureQuickCommandPopup();
 
     /** @brief 将当前终端纯文本通过 QSaveFile 原子写入用户选择的文件。 */
     void exportCurrentTerminal();
@@ -499,6 +503,8 @@ private:
     QuickCommandPopup *m_quickCommandPopup = nullptr;
     /** @brief 快速面板弹出时的目标终端；面板关闭前标签被关掉时自动置空。 */
     QPointer<TerminalPane> m_quickCommandPane;
+    /** @brief 命令面板本次展示的动作，下标与面板条目一一对应；动作销毁时自动置空。 */
+    QList<QPointer<QAction>> m_commandPaletteActions;
     /** @brief 导航轨“工作空间”页面，展示当前组的布局选择与终端缩略图。 */
     WorkspaceSidebarWidget *m_workspaceSidebar = nullptr;
     AiSettingsService *m_aiSettingsService = nullptr;

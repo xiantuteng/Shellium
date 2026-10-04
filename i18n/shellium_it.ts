@@ -1686,18 +1686,6 @@ Confermare che la chiave è cambiata, sostituire il vecchio record in known_host
         <translation type="unfinished">ssh, %1</translation>
     </message>
     <message>
-        <source>Command palette</source>
-        <translation type="unfinished">Palette comandi</translation>
-    </message>
-    <message>
-        <source>Type a command name to filter…</source>
-        <translation type="unfinished">Digita un nome di comando per filtrare…</translation>
-    </message>
-    <message>
-        <source>Enter to run, Esc to close; only currently available actions are shown here.</source>
-        <translation type="unfinished">Invio per eseguire, Esc per chiudere; qui sono mostrate solo le azioni attualmente disponibili.</translation>
-    </message>
-    <message>
         <source>Open a terminal session first</source>
         <translation type="unfinished">Apri prima una sessione di terminale</translation>
     </message>
@@ -2983,6 +2971,22 @@ Per non sovrascrivere credenziali esistenti, Shellium non crea automaticamente u
 </context>
 <context>
     <name>QuickCommandPopup</name>
+    <message>
+        <source>Commands</source>
+        <translation type="unfinished">Comandi</translation>
+    </message>
+    <message>
+        <source>Search commands</source>
+        <translation type="unfinished">Cerca comandi</translation>
+    </message>
+    <message>
+        <source>Available commands</source>
+        <translation type="unfinished">Comandi disponibili</translation>
+    </message>
+    <message>
+        <source>No commands are available right now.</source>
+        <translation type="unfinished">Al momento non è disponibile alcun comando.</translation>
+    </message>
     <message>
         <source>Snippets</source>
         <translation type="unfinished">Snippet</translation>

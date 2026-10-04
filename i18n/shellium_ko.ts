@@ -1686,18 +1686,6 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">ssh, %1</translation>
     </message>
     <message>
-        <source>Command palette</source>
-        <translation type="unfinished">명령 팔레트</translation>
-    </message>
-    <message>
-        <source>Type a command name to filter…</source>
-        <translation type="unfinished">필터링할 명령 이름을 입력…</translation>
-    </message>
-    <message>
-        <source>Enter to run, Esc to close; only currently available actions are shown here.</source>
-        <translation type="unfinished">Enter로 실행, Esc로 닫기. 여기에는 현재 사용 가능한 작업만 표시됩니다.</translation>
-    </message>
-    <message>
         <source>Open a terminal session first</source>
         <translation type="unfinished">먼저 터미널 세션을 여세요</translation>
     </message>
@@ -2983,6 +2971,22 @@ To avoid overwriting existing credentials, Shellium does not create a new vault 
 </context>
 <context>
     <name>QuickCommandPopup</name>
+    <message>
+        <source>Commands</source>
+        <translation type="unfinished">명령</translation>
+    </message>
+    <message>
+        <source>Search commands</source>
+        <translation type="unfinished">명령 검색</translation>
+    </message>
+    <message>
+        <source>Available commands</source>
+        <translation type="unfinished">사용 가능한 명령</translation>
+    </message>
+    <message>
+        <source>No commands are available right now.</source>
+        <translation type="unfinished">지금은 사용할 수 있는 명령이 없습니다.</translation>
+    </message>
     <message>
         <source>Snippets</source>
         <translation type="unfinished">스니펫</translation>

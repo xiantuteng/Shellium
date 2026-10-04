@@ -1686,18 +1686,6 @@ Bestätigen Sie, dass sich der Schlüssel geändert hat, ersetzen Sie den alten 
         <translation type="unfinished">ssh, %1</translation>
     </message>
     <message>
-        <source>Command palette</source>
-        <translation type="unfinished">Befehlspalette</translation>
-    </message>
-    <message>
-        <source>Type a command name to filter…</source>
-        <translation type="unfinished">Befehlsnamen zum Filtern eingeben …</translation>
-    </message>
-    <message>
-        <source>Enter to run, Esc to close; only currently available actions are shown here.</source>
-        <translation type="unfinished">Eingabe zum Ausführen, Esc zum Schließen; hier werden nur derzeit verfügbare Aktionen angezeigt.</translation>
-    </message>
-    <message>
         <source>Open a terminal session first</source>
         <translation type="unfinished">Öffnen Sie zuerst eine Terminalsitzung</translation>
     </message>
@@ -2983,6 +2971,22 @@ Um vorhandene Anmeldedaten nicht zu überschreiben, erstellt Shellium nicht auto
 </context>
 <context>
     <name>QuickCommandPopup</name>
+    <message>
+        <source>Commands</source>
+        <translation type="unfinished">Befehle</translation>
+    </message>
+    <message>
+        <source>Search commands</source>
+        <translation type="unfinished">Befehle durchsuchen</translation>
+    </message>
+    <message>
+        <source>Available commands</source>
+        <translation type="unfinished">Verfügbare Befehle</translation>
+    </message>
+    <message>
+        <source>No commands are available right now.</source>
+        <translation type="unfinished">Derzeit sind keine Befehle verfügbar.</translation>
+    </message>
     <message>
         <source>Snippets</source>
         <translation type="unfinished">Snippets</translation>

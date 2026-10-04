@@ -1686,18 +1686,6 @@ Confirmi că cheia s-a schimbat, înlocuiești vechea înregistrare din known_ho
         <translation type="unfinished">ssh, %1</translation>
     </message>
     <message>
-        <source>Command palette</source>
-        <translation type="unfinished">Paletă de comenzi</translation>
-    </message>
-    <message>
-        <source>Type a command name to filter…</source>
-        <translation type="unfinished">Introdu numele unei comenzi pentru a filtra…</translation>
-    </message>
-    <message>
-        <source>Enter to run, Esc to close; only currently available actions are shown here.</source>
-        <translation type="unfinished">Enter pentru a executa, Esc pentru a închide; aici sunt afișate doar acțiunile disponibile acum.</translation>
-    </message>
-    <message>
         <source>Open a terminal session first</source>
         <translation type="unfinished">Deschideți mai întâi o sesiune de terminal</translation>
     </message>
@@ -2983,6 +2971,22 @@ Pentru a nu suprascrie datele de autentificare existente, Shellium nu creează a
 </context>
 <context>
     <name>QuickCommandPopup</name>
+    <message>
+        <source>Commands</source>
+        <translation type="unfinished">Comenzi</translation>
+    </message>
+    <message>
+        <source>Search commands</source>
+        <translation type="unfinished">Căutați comenzi</translation>
+    </message>
+    <message>
+        <source>Available commands</source>
+        <translation type="unfinished">Comenzi disponibile</translation>
+    </message>
+    <message>
+        <source>No commands are available right now.</source>
+        <translation type="unfinished">Momentan nu este disponibilă nicio comandă.</translation>
+    </message>
     <message>
         <source>Snippets</source>
         <translation type="unfinished">Fragmente</translation>
