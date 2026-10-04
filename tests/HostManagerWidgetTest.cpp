@@ -167,6 +167,15 @@ private slots:
     /** @brief 搜索框右侧的标签胶囊必须进入 #标签 查询模式并保留焦点。 */
     void tagShortcutEntersTagSearchMode();
 
+    /** @brief 搜索模式默认选中首个结果，搜索框内上下键移动选中项，Enter 连接选中主机。 */
+    void searchModeSelectsFirstResultAndArrowKeysNavigate();
+
+    /** @brief 树中选中主机后 Enter 直接连接，Shift+Enter 打开"通过主机链连接"对话框。 */
+    void enterConnectsAndShiftEnterOpensHostChainDialog();
+
+    /** @brief focusSearch() 必须把焦点交给搜索框并全选旧关键字，便于直接覆盖输入。 */
+    void focusSearchFocusesEditAndSelectsExistingQuery();
+
     /** @brief 进入 #标签 模式后必须弹出全部已知标签供快捷选择，点击胶囊即完成精确筛选。 */
     void tagSearchModeShowsSuggestionPopupForQuickPick();
 
@@ -2507,6 +2516,117 @@ void HostManagerWidgetTest::hostCountTracksAllNestedHosts()
     QCOMPARE(widget.hostCount(), 3);
     QCOMPARE(countSpy.count(), 1);
     QCOMPARE(countSpy.constFirst().constFirst().toInt(), 3);
+}
+
+void HostManagerWidgetTest::searchModeSelectsFirstResultAndArrowKeysNavigate()
+{
+    const HostRecord first = saveChainTestHost(
+        m_database.get(), QStringLiteral("nav-1"), QStringLiteral("nav-alpha"),
+        QStringLiteral("10.212.14.221"));
+    const HostRecord second = saveChainTestHost(
+        m_database.get(), QStringLiteral("nav-2"), QStringLiteral("nav-beta"),
+        QStringLiteral("10.212.14.222"));
+    saveChainTestHost(m_database.get(), QStringLiteral("nav-other"), QStringLiteral("other"),
+                      QStringLiteral("192.0.2.1"));
+
+    HostManagerWidget widget(m_database.get(), m_vault.get());
+    widget.resize(320, 400);
+    widget.show();
+    widget.activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(&widget));
+
+    auto *searchEdit = widget.findChild<QLineEdit *>(QStringLiteral("HostSearchEdit"));
+    auto *tree = widget.findChild<QTreeWidget *>(QStringLiteral("HostTree"));
+    QVERIFY(searchEdit != nullptr);
+    QVERIFY(tree != nullptr);
+    searchEdit->setFocus();
+    QTest::keyClicks(searchEdit, "nav-");
+
+    QCOMPARE(tree->topLevelItemCount(), 2);
+    QTreeWidgetItem *current = tree->currentItem();
+    QVERIFY2(current != nullptr && current->isSelected(), "搜索后没有默认选中首个结果");
+    const QString firstId = current->data(0, Qt::UserRole).toString();
+
+    QTest::keyClick(searchEdit, Qt::Key_Down);
+    QVERIFY2(searchEdit->hasFocus(), "上下键不能把焦点从搜索框抢走，否则用户无法继续输入");
+    QVERIFY(tree->currentItem() != nullptr && tree->currentItem() != current);
+    QVERIFY(tree->currentItem()->isSelected());
+    const QString secondId = tree->currentItem()->data(0, Qt::UserRole).toString();
+    QCOMPARE(QSet<QString>({firstId, secondId}), QSet<QString>({first.id, second.id}));
+
+    QTest::keyClick(searchEdit, Qt::Key_Up);
+    QCOMPARE(tree->currentItem(), current);
+
+    QSignalSpy connectSpy(&widget, &HostManagerWidget::hostConnectionRequested);
+    QTest::keyClick(searchEdit, Qt::Key_Return);
+    QCOMPARE(connectSpy.count(), 1);
+    QCOMPARE(connectSpy.constFirst().at(0).toString(), firstId);
+}
+
+void HostManagerWidgetTest::enterConnectsAndShiftEnterOpensHostChainDialog()
+{
+    const HostRecord target = saveChainTestHost(
+        m_database.get(), QStringLiteral("enter-target"), QStringLiteral("回车目标"),
+        QStringLiteral("192.0.2.60"));
+    saveChainTestHost(m_database.get(), QStringLiteral("enter-jump"), QStringLiteral("回车跳板"),
+                      QStringLiteral("192.0.2.61"));
+
+    HostManagerWidget widget(m_database.get(), m_vault.get());
+    widget.resize(320, 400);
+    widget.show();
+    widget.activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(&widget));
+
+    auto *tree = widget.findChild<QTreeWidget *>(QStringLiteral("HostTree"));
+    QVERIFY(tree != nullptr);
+    QTreeWidgetItem *targetItem = findItem(widget, target.name);
+    QVERIFY(targetItem != nullptr);
+    tree->setFocus();
+    tree->setCurrentItem(targetItem);
+    targetItem->setSelected(true);
+
+    QSignalSpy connectSpy(&widget, &HostManagerWidget::hostConnectionRequested);
+    QTest::keyClick(tree, Qt::Key_Return);
+    QCOMPARE(connectSpy.count(), 1);
+    QCOMPARE(connectSpy.constFirst().at(0).toString(), target.id);
+    QTest::keyClick(tree, Qt::Key_Enter, Qt::KeypadModifier);
+    QCOMPARE(connectSpy.count(), 2);
+
+    QString dialogName;
+    QTimer::singleShot(0, [&dialogName]() {
+        if (auto *dialog = qobject_cast<QDialog *>(QApplication::activeModalWidget())) {
+            dialogName = dialog->findChild<QListWidget *>(
+                             QStringLiteral("hostChainConnectHostList")) != nullptr
+                ? QStringLiteral("hostChain")
+                : dialog->objectName();
+            dialog->reject();
+        }
+    });
+    QTest::keyClick(tree, Qt::Key_Return, Qt::ShiftModifier);
+    QCOMPARE(dialogName, QStringLiteral("hostChain"));
+    QCOMPARE(connectSpy.count(), 2);
+}
+
+void HostManagerWidgetTest::focusSearchFocusesEditAndSelectsExistingQuery()
+{
+    HostManagerWidget widget(m_database.get(), m_vault.get());
+    widget.resize(320, 400);
+    widget.show();
+    widget.activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(&widget));
+
+    auto *searchEdit = widget.findChild<QLineEdit *>(QStringLiteral("HostSearchEdit"));
+    auto *tree = widget.findChild<QTreeWidget *>(QStringLiteral("HostTree"));
+    QVERIFY(searchEdit != nullptr);
+    QVERIFY(tree != nullptr);
+    searchEdit->setText(QStringLiteral("old"));
+    tree->setFocus();
+
+    widget.focusSearch();
+    QVERIFY2(searchEdit->hasFocus(), "focusSearch() 没有聚焦搜索框");
+    QCOMPARE(searchEdit->selectedText(), QStringLiteral("old"));
+    QTest::keyClicks(searchEdit, "find");
+    QCOMPARE(searchEdit->text(), QStringLiteral("find"));
 }
 
 void HostManagerWidgetTest::tagShortcutEntersTagSearchMode()

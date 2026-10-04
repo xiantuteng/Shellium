@@ -1513,6 +1513,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">보기</translation>
     </message>
     <message>
+        <source>Search Hosts</source>
+        <translation type="unfinished">호스트 검색</translation>
+    </message>
+    <message>
         <source>Terminal</source>
         <translation type="unfinished">터미널</translation>
     </message>
@@ -2548,6 +2552,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>Close tab</source>
         <translation type="unfinished">탭 닫기</translation>
+    </message>
+    <message>
+        <source>Search hosts</source>
+        <translation type="unfinished">호스트 검색</translation>
     </message>
     <message>
         <source>Show/hide remote files</source>
@@ -4585,8 +4593,8 @@ Public key: %3</source>
         <translation type="unfinished">연결되지 않음</translation>
     </message>
     <message>
-        <source>Show the remote file manager for the current session (Ctrl+Shift+F)</source>
-        <translation type="unfinished">현재 세션의 원격 파일 관리자 표시 (Ctrl+Shift+F)</translation>
+        <source>Show the remote file manager for the current session (Ctrl+Shift+O)</source>
+        <translation type="unfinished">현재 세션의 원격 파일 관리자 표시 (Ctrl+Shift+O)</translation>
     </message>
     <message>
         <source>Remote file manager</source>
@@ -4761,8 +4769,8 @@ Confirm the key has changed and replace the old record in known_hosts?</source>
         <translation type="unfinished">현재 서버를 통해 %1에 대한 중첩 연결을 설정하는 중…</translation>
     </message>
     <message>
-        <source>Hide the remote file manager for the current session (Ctrl+Shift+F)</source>
-        <translation type="unfinished">현재 세션의 원격 파일 관리자 숨기기 (Ctrl+Shift+F)</translation>
+        <source>Hide the remote file manager for the current session (Ctrl+Shift+O)</source>
+        <translation type="unfinished">현재 세션의 원격 파일 관리자 숨기기 (Ctrl+Shift+O)</translation>
     </message>
     <message>
         <source>Press r to reconnect to %1, press x to close this tab</source>

@@ -1513,6 +1513,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">表示</translation>
     </message>
     <message>
+        <source>Search Hosts</source>
+        <translation type="unfinished">ホストを検索</translation>
+    </message>
+    <message>
         <source>Terminal</source>
         <translation type="unfinished">ターミナル</translation>
     </message>
@@ -2548,6 +2552,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>Close tab</source>
         <translation type="unfinished">タブを閉じる</translation>
+    </message>
+    <message>
+        <source>Search hosts</source>
+        <translation type="unfinished">ホストを検索</translation>
     </message>
     <message>
         <source>Show/hide remote files</source>
@@ -4585,8 +4593,8 @@ Public key: %3</source>
         <translation type="unfinished">未接続</translation>
     </message>
     <message>
-        <source>Show the remote file manager for the current session (Ctrl+Shift+F)</source>
-        <translation type="unfinished">現在のセッションのリモートファイルマネージャーを表示 (Ctrl+Shift+F)</translation>
+        <source>Show the remote file manager for the current session (Ctrl+Shift+O)</source>
+        <translation type="unfinished">現在のセッションのリモートファイルマネージャーを表示 (Ctrl+Shift+O)</translation>
     </message>
     <message>
         <source>Remote file manager</source>
@@ -4761,8 +4769,8 @@ Confirm the key has changed and replace the old record in known_hosts?</source>
         <translation type="unfinished">現在のサーバーを経由して %1 へのネスト接続を確立中…</translation>
     </message>
     <message>
-        <source>Hide the remote file manager for the current session (Ctrl+Shift+F)</source>
-        <translation type="unfinished">現在のセッションのリモートファイルマネージャーを非表示 (Ctrl+Shift+F)</translation>
+        <source>Hide the remote file manager for the current session (Ctrl+Shift+O)</source>
+        <translation type="unfinished">現在のセッションのリモートファイルマネージャーを非表示 (Ctrl+Shift+O)</translation>
     </message>
     <message>
         <source>Press r to reconnect to %1, press x to close this tab</source>

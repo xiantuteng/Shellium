@@ -1513,6 +1513,10 @@ Bestätigen Sie, dass sich der Schlüssel geändert hat, ersetzen Sie den alten 
         <translation type="unfinished">Ansicht</translation>
     </message>
     <message>
+        <source>Search Hosts</source>
+        <translation type="unfinished">Hosts suchen</translation>
+    </message>
+    <message>
         <source>Terminal</source>
         <translation type="unfinished">Terminal</translation>
     </message>
@@ -2548,6 +2552,10 @@ Bestätigen Sie, dass sich der Schlüssel geändert hat, ersetzen Sie den alten 
     <message>
         <source>Close tab</source>
         <translation type="unfinished">Tab schließen</translation>
+    </message>
+    <message>
+        <source>Search hosts</source>
+        <translation type="unfinished">Hosts suchen</translation>
     </message>
     <message>
         <source>Show/hide remote files</source>
@@ -4585,8 +4593,8 @@ Privater Schlüssel: %2
         <translation type="unfinished">Nicht verbunden</translation>
     </message>
     <message>
-        <source>Show the remote file manager for the current session (Ctrl+Shift+F)</source>
-        <translation type="unfinished">Den Remote-Dateimanager für die aktuelle Sitzung anzeigen (Strg+Umschalt+F)</translation>
+        <source>Show the remote file manager for the current session (Ctrl+Shift+O)</source>
+        <translation type="unfinished">Den Remote-Dateimanager für die aktuelle Sitzung anzeigen (Strg+Umschalt+O)</translation>
     </message>
     <message>
         <source>Remote file manager</source>
@@ -4761,8 +4769,8 @@ Bestätigen Sie, dass sich der Schlüssel geändert hat, und ersetzen Sie den al
         <translation type="unfinished">Eine verschachtelte Verbindung zu %1 über den aktuellen Server wird hergestellt …</translation>
     </message>
     <message>
-        <source>Hide the remote file manager for the current session (Ctrl+Shift+F)</source>
-        <translation type="unfinished">Den Remote-Dateimanager für die aktuelle Sitzung verbergen (Strg+Umschalt+F)</translation>
+        <source>Hide the remote file manager for the current session (Ctrl+Shift+O)</source>
+        <translation type="unfinished">Den Remote-Dateimanager für die aktuelle Sitzung verbergen (Strg+Umschalt+O)</translation>
     </message>
     <message>
         <source>Press r to reconnect to %1, press x to close this tab</source>

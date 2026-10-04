@@ -163,7 +163,7 @@ void TerminalWorkspace::setFileManagerVisible(const bool visible)
 {
     if (visible && !m_fileManagerAllowed) {
         // 快捷键和按钮最终都汇入这里。布局不允许时保持显式关闭，避免仅禁用按钮却被全局
-        // Ctrl+Shift+F 绕过，从而在网格单元中意外展开远程文件管理。
+        // Ctrl+Shift+O 绕过，从而在网格单元中意外展开远程文件管理。
         m_pane->setFileManagerVisible(false);
         return;
     }

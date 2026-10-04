@@ -751,7 +751,7 @@ MainWindow::MainWindow(ApplicationDatabase *database,
                          QT_TRANSLATE_NOOP("MainWindow", "Toggle remote file manager"),
                          QT_TRANSLATE_NOOP("MainWindow",
                              "Show or hide the remote file manager area inside the current terminal tab"));
-    toggleFilesAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+F")));
+    toggleFilesAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+O")));
 
     auto *searchTerminalAction = new QAction(this);
     registerTranslatable(searchTerminalAction, QT_TRANSLATE_NOOP("MainWindow", "Search Terminal Output"));
@@ -1127,6 +1127,20 @@ MainWindow::MainWindow(ApplicationDatabase *database,
             &QAction::triggered,
             this,
             [this]() { showSidebarPage(WorkspacesPage); });
+    // 全局"搜索主机"：无论当前停在哪个侧栏页、侧栏是否收起、焦点是否在终端里，都先切回
+    // 主机页并展开侧栏，再把焦点交给搜索框。菜单栏动作在 macOS 上是应用级快捷键，按键
+    // 不会被终端视图吞掉。
+    auto *searchHostsAction = new QAction(
+        UiIcons::symbol(this, UiIcons::Symbol::Search, this->palette().color(QPalette::WindowText)),
+        QString(),
+        this);
+    registerTranslatable(searchHostsAction, QT_TRANSLATE_NOOP("MainWindow", "Search Hosts"));
+    searchHostsAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+F")));
+    viewMenu->insertAction(showProductivityAction, searchHostsAction);
+    connect(searchHostsAction, &QAction::triggered, this, [this]() {
+        showSidebarPage(HostsPage);
+        m_hostManager->focusSearch();
+    });
 
     QMenu *terminalMenu = applicationMenuBar->addMenu(QString());
     registerTranslatable(terminalMenu, QT_TRANSLATE_NOOP("MainWindow", "Terminal"));
@@ -1167,6 +1181,7 @@ MainWindow::MainWindow(ApplicationDatabase *database,
         {QStringLiteral("terminal.local"), localShellAction},
         {QStringLiteral("tab.new"), newTabAction},
         {QStringLiteral("tab.close"), closeTabAction},
+        {QStringLiteral("hosts.search"), searchHostsAction},
         {QStringLiteral("files.toggle"), toggleFilesAction},
         {QStringLiteral("vault.lock"), lockVaultAction},
         {QStringLiteral("terminal.search"), searchTerminalAction},

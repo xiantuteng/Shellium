@@ -139,6 +139,8 @@ private slots:
     void colorSchemeFilterKeepsVisibleSwatchesPacked();
     void unknownColorSchemeIdFallsBackToDefault();
     void legacyTermiusColorSchemeIdMigratesToShellium();
+    /** @brief 旧库 files.toggle=Ctrl+Shift+F 时必须让位给搜索主机，且不得牵连其他自定义键。 */
+    void legacyFilesToggleShortcutYieldsToHostSearch();
     void colorSchemeSwitchKeepsApplicationTextColors();
     void fontComboOffersRecommendedFamiliesAndKeepsMissingOne();
     /** @brief 内置字体必须真的注册进 QFontDatabase，并排在字体下拉框最前面。 */
@@ -1110,6 +1112,52 @@ void SettingsUiTest::legacyTermiusColorSchemeIdMigratesToShellium()
     // 旧 id 只用于迁移，不能再作为一张独立的色板卡出现。
     QVERIFY(dialog.findChild<ThemeSwatchButton *>(QStringLiteral("colorSchemeSwatch_termius_dark"))
             == nullptr);
+}
+
+void SettingsUiTest::legacyFilesToggleShortcutYieldsToHostSearch()
+{
+    const QString hostSearchKey = QStringLiteral("shortcut/hosts.search");
+    const QString filesToggleKey = QStringLiteral("shortcut/files.toggle");
+    const QString newTabKey = QStringLiteral("shortcut/tab.new");
+    const QString lockKey = QStringLiteral("shortcut/vault.lock");
+    auto service = makeService();
+    QString error;
+
+    // 旧版本整表写库：files.toggle 存着旧默认 Ctrl+Shift+F，库里还没有 hosts.search。
+    QVERIFY(m_database->removeSetting(hostSearchKey, &error));
+    QVERIFY(m_database->setSetting(filesToggleKey, QStringLiteral("Ctrl+Shift+F"), &error));
+    QVERIFY(m_database->setSetting(newTabKey, QStringLiteral("Ctrl+Alt+T"), &error));
+    QVERIFY2(service->load(&error), qPrintable(error));
+    QCOMPARE(service->shortcut(QStringLiteral("hosts.search")),
+             QKeySequence(QStringLiteral("Ctrl+Shift+F")));
+    QCOMPARE(service->shortcut(QStringLiteral("files.toggle")),
+             QKeySequence(QStringLiteral("Ctrl+Shift+O")));
+    QVERIFY2(service->shortcut(QStringLiteral("tab.new")) == QKeySequence(QStringLiteral("Ctrl+Alt+T")),
+             "迁移不能把用户的其他自定义快捷键打回默认");
+
+    // 用户已把新默认键 Ctrl+Shift+O 占给别的动作：files.toggle 留空，而不是制造冲突。
+    QVERIFY(m_database->removeSetting(hostSearchKey, &error));
+    QVERIFY(m_database->setSetting(filesToggleKey, QStringLiteral("Ctrl+Shift+F"), &error));
+    QVERIFY(m_database->setSetting(lockKey, QStringLiteral("Ctrl+Shift+O"), &error));
+    QVERIFY2(service->load(&error), qPrintable(error));
+    QVERIFY(service->shortcut(QStringLiteral("files.toggle")).isEmpty());
+    QCOMPARE(service->shortcut(QStringLiteral("vault.lock")),
+             QKeySequence(QStringLiteral("Ctrl+Shift+O")));
+    QCOMPARE(service->shortcut(QStringLiteral("tab.new")), QKeySequence(QStringLiteral("Ctrl+Alt+T")));
+
+    // 用户把 Ctrl+Shift+F 自定义给了别的动作：搜索主机留空，原有绑定保持不变。
+    QVERIFY(m_database->removeSetting(hostSearchKey, &error));
+    QVERIFY(m_database->setSetting(filesToggleKey, QStringLiteral("Ctrl+Alt+F"), &error));
+    QVERIFY(m_database->setSetting(lockKey, QStringLiteral("Ctrl+Shift+F"), &error));
+    QVERIFY2(service->load(&error), qPrintable(error));
+    QVERIFY(service->shortcut(QStringLiteral("hosts.search")).isEmpty());
+    QCOMPARE(service->shortcut(QStringLiteral("vault.lock")),
+             QKeySequence(QStringLiteral("Ctrl+Shift+F")));
+    QCOMPARE(service->shortcut(QStringLiteral("files.toggle")),
+             QKeySequence(QStringLiteral("Ctrl+Alt+F")));
+
+    // 后续用例共用同一个数据库，恢复默认设置。
+    QVERIFY2(service->save(TerminalSettings{}.normalized(), &error), qPrintable(error));
 }
 
 void SettingsUiTest::colorSchemeSwitchKeepsApplicationTextColors()

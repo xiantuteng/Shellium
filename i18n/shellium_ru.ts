@@ -1513,6 +1513,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">Вид</translation>
     </message>
     <message>
+        <source>Search Hosts</source>
+        <translation type="unfinished">Поиск хостов</translation>
+    </message>
+    <message>
         <source>Terminal</source>
         <translation type="unfinished">Терминал</translation>
     </message>
@@ -2548,6 +2552,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>Close tab</source>
         <translation type="unfinished">Закрыть вкладку</translation>
+    </message>
+    <message>
+        <source>Search hosts</source>
+        <translation type="unfinished">Поиск хостов</translation>
     </message>
     <message>
         <source>Show/hide remote files</source>
@@ -4585,8 +4593,8 @@ Public key: %3</source>
         <translation type="unfinished">Не подключено</translation>
     </message>
     <message>
-        <source>Show the remote file manager for the current session (Ctrl+Shift+F)</source>
-        <translation type="unfinished">Показать удалённый файловый менеджер для текущего сеанса (Ctrl+Shift+F)</translation>
+        <source>Show the remote file manager for the current session (Ctrl+Shift+O)</source>
+        <translation type="unfinished">Показать удалённый файловый менеджер для текущего сеанса (Ctrl+Shift+O)</translation>
     </message>
     <message>
         <source>Remote file manager</source>
@@ -4761,8 +4769,8 @@ Confirm the key has changed and replace the old record in known_hosts?</source>
         <translation type="unfinished">Установка вложенного подключения к %1 через текущий сервер…</translation>
     </message>
     <message>
-        <source>Hide the remote file manager for the current session (Ctrl+Shift+F)</source>
-        <translation type="unfinished">Скрыть удалённый файловый менеджер для текущего сеанса (Ctrl+Shift+F)</translation>
+        <source>Hide the remote file manager for the current session (Ctrl+Shift+O)</source>
+        <translation type="unfinished">Скрыть удалённый файловый менеджер для текущего сеанса (Ctrl+Shift+O)</translation>
     </message>
     <message>
         <source>Press r to reconnect to %1, press x to close this tab</source>

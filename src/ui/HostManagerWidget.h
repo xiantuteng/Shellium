@@ -11,6 +11,7 @@ class ApplicationDatabase;
 class CredentialVault;
 class QDialog;
 class QFrame;
+class QKeyEvent;
 class QLineEdit;
 class QMenu;
 class QToolButton;
@@ -70,6 +71,14 @@ public:
      * 独立控件交出去，标题栏就不必知道主机页内部有哪些动作。
      */
     [[nodiscard]] QWidget *headerActionsWidget() const;
+
+    /**
+     * @brief 进入搜索主机模式：聚焦搜索框并全选已有关键字。
+     *
+     * 由主窗口的全局"搜索主机"快捷键调用；调用方负责先把侧栏切到主机页并确保可见，
+     * 否则隐藏控件拿不到焦点。
+     */
+    void focusSearch();
 
     /**
      * @brief 递归收集某个分组下的全部可连接主机（含任意深度子分组）。
@@ -191,6 +200,17 @@ private:
 
     /** @brief 把一个已知标签渲染成建议面板里可点击的胶囊按钮。 */
     [[nodiscard]] QToolButton *buildTagSuggestionChip(const QString &tag);
+
+    /**
+     * @brief 处理主机面板内的键盘操作。
+     * @param watched 事件接收者；只有它恰为当前焦点控件且位于本面板内时才处理。
+     * @param keyEvent KeyPress 事件。
+     * @return 已消费返回 true。
+     *
+     * 搜索框内上下键移动结果选中项；树或搜索框内 Enter 连接选中主机，
+     * Shift+Enter 打开"通过主机链连接"对话框。
+     */
+    bool handleTreeNavigationKey(QObject *watched, QKeyEvent *keyEvent);
 
     /** @brief 拦截全局鼠标点击与搜索框的 Esc 键，用于在点击面板外或取消时收起建议面板。 */
     bool eventFilter(QObject *watched, QEvent *event) override;

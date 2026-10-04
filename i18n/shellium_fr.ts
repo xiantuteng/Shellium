@@ -1513,6 +1513,10 @@ Confirmer que la clé a changé, remplacer l&apos;ancien enregistrement dans kno
         <translation type="unfinished">Affichage</translation>
     </message>
     <message>
+        <source>Search Hosts</source>
+        <translation type="unfinished">Rechercher des hôtes</translation>
+    </message>
+    <message>
         <source>Terminal</source>
         <translation type="unfinished">Terminal</translation>
     </message>
@@ -2548,6 +2552,10 @@ Confirmer que la clé a changé, remplacer l&apos;ancien enregistrement dans kno
     <message>
         <source>Close tab</source>
         <translation type="unfinished">Fermer l&apos;onglet</translation>
+    </message>
+    <message>
+        <source>Search hosts</source>
+        <translation type="unfinished">Rechercher des hôtes</translation>
     </message>
     <message>
         <source>Show/hide remote files</source>
@@ -4585,8 +4593,8 @@ Clé publique : %3</translation>
         <translation type="unfinished">Non connecté</translation>
     </message>
     <message>
-        <source>Show the remote file manager for the current session (Ctrl+Shift+F)</source>
-        <translation type="unfinished">Afficher le gestionnaire de fichiers distant pour la session actuelle (Ctrl+Maj+F)</translation>
+        <source>Show the remote file manager for the current session (Ctrl+Shift+O)</source>
+        <translation type="unfinished">Afficher le gestionnaire de fichiers distant pour la session actuelle (Ctrl+Maj+O)</translation>
     </message>
     <message>
         <source>Remote file manager</source>
@@ -4761,8 +4769,8 @@ Confirmer que la clé a changé et remplacer l&apos;ancien enregistrement dans k
         <translation type="unfinished">Établissement d&apos;une connexion imbriquée à %1 via le serveur actuel…</translation>
     </message>
     <message>
-        <source>Hide the remote file manager for the current session (Ctrl+Shift+F)</source>
-        <translation type="unfinished">Masquer le gestionnaire de fichiers distant pour la session actuelle (Ctrl+Maj+F)</translation>
+        <source>Hide the remote file manager for the current session (Ctrl+Shift+O)</source>
+        <translation type="unfinished">Masquer le gestionnaire de fichiers distant pour la session actuelle (Ctrl+Maj+O)</translation>
     </message>
     <message>
         <source>Press r to reconnect to %1, press x to close this tab</source>

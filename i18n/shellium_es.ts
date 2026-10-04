@@ -1513,6 +1513,10 @@ Puede ser una reinstalación del servidor o una rotación de clave, o un ataque 
         <translation type="unfinished">Ver</translation>
     </message>
     <message>
+        <source>Search Hosts</source>
+        <translation type="unfinished">Buscar hosts</translation>
+    </message>
+    <message>
         <source>Terminal</source>
         <translation type="unfinished">Terminal</translation>
     </message>
@@ -2548,6 +2552,10 @@ Puede ser una reinstalación del servidor o una rotación de clave, o un ataque 
     <message>
         <source>Close tab</source>
         <translation type="unfinished">Cerrar pestaña</translation>
+    </message>
+    <message>
+        <source>Search hosts</source>
+        <translation type="unfinished">Buscar hosts</translation>
     </message>
     <message>
         <source>Show/hide remote files</source>
@@ -4585,8 +4593,8 @@ Clave pública: %3</translation>
         <translation type="unfinished">No conectado</translation>
     </message>
     <message>
-        <source>Show the remote file manager for the current session (Ctrl+Shift+F)</source>
-        <translation type="unfinished">Mostrar el gestor de archivos remoto de la sesión actual (Ctrl+Mayús+F)</translation>
+        <source>Show the remote file manager for the current session (Ctrl+Shift+O)</source>
+        <translation type="unfinished">Mostrar el gestor de archivos remoto de la sesión actual (Ctrl+Mayús+O)</translation>
     </message>
     <message>
         <source>Remote file manager</source>
@@ -4761,8 +4769,8 @@ Puede ser una reinstalación del servidor o una rotación de clave, o un ataque 
         <translation type="unfinished">Estableciendo una conexión anidada a %1 a través del servidor actual…</translation>
     </message>
     <message>
-        <source>Hide the remote file manager for the current session (Ctrl+Shift+F)</source>
-        <translation type="unfinished">Ocultar el gestor de archivos remoto de la sesión actual (Ctrl+Mayús+F)</translation>
+        <source>Hide the remote file manager for the current session (Ctrl+Shift+O)</source>
+        <translation type="unfinished">Ocultar el gestor de archivos remoto de la sesión actual (Ctrl+Mayús+O)</translation>
     </message>
     <message>
         <source>Press r to reconnect to %1, press x to close this tab</source>

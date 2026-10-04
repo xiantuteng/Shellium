@@ -80,7 +80,7 @@ TerminalPane::TerminalPane(QWidget *parent)
     m_fileManagerButton->setIconSize(QSize(16, 16));
     m_fileManagerButton->setCursor(Qt::PointingHandCursor);
     m_fileManagerButton->setStyleSheet(UiIcons::sessionActionStyleSheet());
-    m_fileManagerButton->setToolTip(tr("Show the remote file manager for the current session (Ctrl+Shift+F)"));
+    m_fileManagerButton->setToolTip(tr("Show the remote file manager for the current session (Ctrl+Shift+O)"));
     m_fileManagerButton->setAccessibleName(tr("Remote file manager"));
     updateFileManagerButtonIcon();
     // 会话状态栏最右侧的外挂动作容器：单终端标签为空、零占位；工作空间给成员挂上
@@ -218,7 +218,7 @@ TerminalPane::TerminalPane(QWidget *parent)
     // 由 refreshHeaderLabel() 兜底；连接中/失败等瞬时提示会在下一次状态变化时转为新语言。
     i18n::onRetranslate(this, [this] {
         m_fileManagerButton->setToolTip(
-            tr("Show the remote file manager for the current session (Ctrl+Shift+F)"));
+            tr("Show the remote file manager for the current session (Ctrl+Shift+O)"));
         m_fileManagerButton->setAccessibleName(tr("Remote file manager"));
         refreshHeaderLabel();
     });
@@ -860,8 +860,8 @@ void TerminalPane::setFileManagerVisible(const bool visible)
     m_fileManagerButton->setChecked(visible);
     m_fileManagerButton->setToolTip(
         visible
-            ? tr("Hide the remote file manager for the current session (Ctrl+Shift+F)")
-            : tr("Show the remote file manager for the current session (Ctrl+Shift+F)"));
+            ? tr("Hide the remote file manager for the current session (Ctrl+Shift+O)")
+            : tr("Show the remote file manager for the current session (Ctrl+Shift+O)"));
     // 阻断 toggled 的同时也阻断了图标刷新，这里必须显式补上。
     updateFileManagerButtonIcon();
 }
@@ -877,8 +877,8 @@ void TerminalPane::setFileManagerEnabled(const bool enabled)
     // 恢复可用时根据真实勾选态重建提示。
     m_fileManagerButton->setToolTip(
         m_fileManagerButton->isChecked()
-            ? tr("Hide the remote file manager for the current session (Ctrl+Shift+F)")
-            : tr("Show the remote file manager for the current session (Ctrl+Shift+F)"));
+            ? tr("Hide the remote file manager for the current session (Ctrl+Shift+O)")
+            : tr("Show the remote file manager for the current session (Ctrl+Shift+O)"));
     m_fileManagerButton->setAccessibleName(tr("Remote file manager"));
 }
 

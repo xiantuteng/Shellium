@@ -1513,6 +1513,10 @@ Confirmi că cheia s-a schimbat, înlocuiești vechea înregistrare din known_ho
         <translation type="unfinished">Vizualizare</translation>
     </message>
     <message>
+        <source>Search Hosts</source>
+        <translation type="unfinished">Caută gazde</translation>
+    </message>
+    <message>
         <source>Terminal</source>
         <translation type="unfinished">Terminal</translation>
     </message>
@@ -2548,6 +2552,10 @@ Confirmi că cheia s-a schimbat, înlocuiești vechea înregistrare din known_ho
     <message>
         <source>Close tab</source>
         <translation type="unfinished">Închide fila</translation>
+    </message>
+    <message>
+        <source>Search hosts</source>
+        <translation type="unfinished">Caută gazde</translation>
     </message>
     <message>
         <source>Show/hide remote files</source>
@@ -4585,8 +4593,8 @@ Cheie publică: %3</translation>
         <translation type="unfinished">Neconectat</translation>
     </message>
     <message>
-        <source>Show the remote file manager for the current session (Ctrl+Shift+F)</source>
-        <translation type="unfinished">Afișează managerul de fișiere la distanță pentru sesiunea curentă (Ctrl+Shift+F)</translation>
+        <source>Show the remote file manager for the current session (Ctrl+Shift+O)</source>
+        <translation type="unfinished">Afișează managerul de fișiere la distanță pentru sesiunea curentă (Ctrl+Shift+O)</translation>
     </message>
     <message>
         <source>Remote file manager</source>
@@ -4761,8 +4769,8 @@ Confirmi că cheia s-a schimbat și înlocuiești vechea înregistrare din known
         <translation type="unfinished">Se stabilește conexiunea imbricată la %1 prin serverul curent…</translation>
     </message>
     <message>
-        <source>Hide the remote file manager for the current session (Ctrl+Shift+F)</source>
-        <translation type="unfinished">Ascunde managerul de fișiere la distanță pentru sesiunea curentă (Ctrl+Shift+F)</translation>
+        <source>Hide the remote file manager for the current session (Ctrl+Shift+O)</source>
+        <translation type="unfinished">Ascunde managerul de fișiere la distanță pentru sesiunea curentă (Ctrl+Shift+O)</translation>
     </message>
     <message>
         <source>Press r to reconnect to %1, press x to close this tab</source>

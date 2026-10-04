@@ -4369,6 +4369,12 @@ void HostManagerWidget::applyFilter()
     for (const HostRecord &record : results) {
         m_tree->addTopLevelItem(createTreeItem(record));
     }
+    // 搜索模式默认选中首个结果，用户敲完关键字直接回车即可连接；refresh() 会在之后按
+    // 原选中记录覆盖这里的默认值，因此不会打断刷新前的选择。
+    if (QTreeWidgetItem *first = m_tree->topLevelItem(0); first != nullptr) {
+        m_tree->setCurrentItem(first);
+        first->setSelected(true);
+    }
 }
 
 QToolButton *HostManagerWidget::buildTagSuggestionChip(const QString &tag)
@@ -4440,8 +4446,57 @@ void HostManagerWidget::hideTagSuggestions()
     }
 }
 
+void HostManagerWidget::focusSearch()
+{
+    m_searchEdit->setFocus(Qt::ShortcutFocusReason);
+    // 全选而不清空：沿用上次的关键字时直接回车即可，想换关键字时第一个字符就会覆盖旧内容。
+    m_searchEdit->selectAll();
+}
+
+bool HostManagerWidget::handleTreeNavigationKey(QObject *watched, QKeyEvent *keyEvent)
+{
+    QWidget *focus = QApplication::focusWidget();
+    if (focus == nullptr || watched != focus || (focus != this && !isAncestorOf(focus))) {
+        return false;
+    }
+
+    const int key = keyEvent->key();
+    const Qt::KeyboardModifiers modifiers =
+        keyEvent->modifiers() & ~(Qt::KeypadModifier | Qt::GroupSwitchModifier);
+    if (focus == m_searchEdit && (key == Qt::Key_Up || key == Qt::Key_Down)
+        && modifiers == Qt::NoModifier) {
+        // 搜索框保留输入焦点的同时，让上下键直接在结果里移动选中项；转交给树自身的键盘
+        // 导航，可复用它对隐藏节点、折叠目录和滚动可见性的全部处理。
+        QKeyEvent forwarded(QEvent::KeyPress, key, Qt::NoModifier);
+        QCoreApplication::sendEvent(m_tree, &forwarded);
+        return true;
+    }
+
+    if ((focus != m_searchEdit && focus != m_tree)
+        || (key != Qt::Key_Return && key != Qt::Key_Enter)
+        || (modifiers != Qt::NoModifier && modifiers != Qt::ShiftModifier)) {
+        return false;
+    }
+    QTreeWidgetItem *item = m_tree->currentItem();
+    if (item == nullptr || !item->isSelected()
+        || static_cast<HostNodeKind>(item->data(0, HostKindRole).toInt()) != HostNodeKind::Host) {
+        // 目录、分区标题或无选中项时交还默认处理，保留树对目录的原生 Enter 行为。
+        return false;
+    }
+    if (modifiers == Qt::ShiftModifier) {
+        openHostChainConnectDialog(item->data(0, HostIdRole).toString());
+    } else {
+        activateTreeItem(item);
+    }
+    return true;
+}
+
 bool HostManagerWidget::eventFilter(QObject *watched, QEvent *event)
 {
+    if (event->type() == QEvent::KeyPress
+        && handleTreeNavigationKey(watched, static_cast<QKeyEvent *>(event))) {
+        return true;
+    }
     if (m_tagSuggestionsPopup != nullptr && m_tagSuggestionsPopup->isVisible()) {
         if (event->type() == QEvent::MouseButtonPress) {
             auto *mouseEvent = static_cast<QMouseEvent *>(event);

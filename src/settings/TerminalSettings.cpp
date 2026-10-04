@@ -6,6 +6,7 @@
 #include <QFontDatabase>
 #include <QGuiApplication>
 #include <QPalette>
+#include <QSet>
 #include <QStyleHints>
 #include <QThread>
 
@@ -282,6 +283,46 @@ QString migrateLegacyColorSchemeId(const QString &id)
     return id;
 }
 
+/**
+ * @brief 为尚未存过"搜索主机"快捷键的旧设置腾出默认键位。
+ * @param shortcuts 已按库中值覆盖默认值的快捷键表，原地修改。
+ * @param storedIds 库中实际存在记录的动作 id。
+ *
+ * 保存设置会把全部快捷键整表写库，所以 0.2.x 用户库里都存着 files.toggle=Ctrl+Shift+F。
+ * 新增的 hosts.search 默认也是 Ctrl+Shift+F，不迁移的话 validate() 判定重复，会把用户的
+ * 全部自定义快捷键整体打回默认。旧默认值与"用户恰好选了同一个键"无法区分，按旧默认处理；
+ * 新默认键位若已被用户占用则让 files.toggle 留空，hosts.search 仍冲突时同样留空，交给用户
+ * 在设置里自行指定，绝不牵连其他动作。
+ */
+void migrateShortcutsWithoutHostSearch(QHash<QString, QKeySequence> *shortcuts,
+                                       const QSet<QString> &storedIds)
+{
+    const QString hostSearchId = QStringLiteral("hosts.search");
+    const QString filesToggleId = QStringLiteral("files.toggle");
+    if (storedIds.contains(hostSearchId)) {
+        return;
+    }
+    const QHash<QString, QKeySequence> defaults = TerminalSettings::defaultShortcuts();
+    const auto takenByOther = [shortcuts](const QKeySequence &sequence, const QString &exceptId) {
+        for (auto iterator = shortcuts->cbegin(); iterator != shortcuts->cend(); ++iterator) {
+            if (iterator.key() != exceptId && iterator.value() == sequence) {
+                return true;
+            }
+        }
+        return false;
+    };
+    if (storedIds.contains(filesToggleId)
+        && shortcuts->value(filesToggleId) == QKeySequence(QStringLiteral("Ctrl+Shift+F"))) {
+        const QKeySequence filesDefault = defaults.value(filesToggleId);
+        shortcuts->insert(filesToggleId,
+                          takenByOther(filesDefault, filesToggleId) ? QKeySequence{} : filesDefault);
+    }
+    const QKeySequence hostSearchDefault = defaults.value(hostSearchId);
+    shortcuts->insert(hostSearchId,
+                      takenByOther(hostSearchDefault, hostSearchId) ? QKeySequence{}
+                                                                    : hostSearchDefault);
+}
+
 } // namespace
 
 QHash<QString, QKeySequence> TerminalSettings::defaultShortcuts()
@@ -291,7 +332,9 @@ QHash<QString, QKeySequence> TerminalSettings::defaultShortcuts()
         {QStringLiteral("terminal.local"), QKeySequence(QStringLiteral("Ctrl+Shift+L"))},
         {QStringLiteral("tab.new"), QKeySequence(QStringLiteral("Ctrl+T"))},
         {QStringLiteral("tab.close"), QKeySequence(QStringLiteral("Ctrl+W"))},
-        {QStringLiteral("files.toggle"), QKeySequence(QStringLiteral("Ctrl+Shift+F"))},
+        // Shift+Cmd+F 让给全局"搜索主机"；远程文件管理改用 Shift+Cmd+O（Open files）。
+        {QStringLiteral("hosts.search"), QKeySequence(QStringLiteral("Ctrl+Shift+F"))},
+        {QStringLiteral("files.toggle"), QKeySequence(QStringLiteral("Ctrl+Shift+O"))},
         {QStringLiteral("vault.lock"), QKeySequence(QStringLiteral("Ctrl+Shift+K"))},
         {QStringLiteral("terminal.search"), QKeySequence::Find},
         {QStringLiteral("terminal.export"), QKeySequence(QStringLiteral("Ctrl+Shift+E"))},
@@ -318,6 +361,7 @@ QStringList TerminalSettings::shortcutIds()
         QStringLiteral("terminal.local"),
         QStringLiteral("tab.new"),
         QStringLiteral("tab.close"),
+        QStringLiteral("hosts.search"),
         QStringLiteral("files.toggle"),
         QStringLiteral("vault.lock"),
         QStringLiteral("terminal.search"),
@@ -339,6 +383,7 @@ QString TerminalSettings::shortcutDisplayName(const QString &id)
         {QStringLiteral("terminal.local"), QObject::tr("Open a local terminal")},
         {QStringLiteral("tab.new"), QObject::tr("New tab")},
         {QStringLiteral("tab.close"), QObject::tr("Close tab")},
+        {QStringLiteral("hosts.search"), QObject::tr("Search hosts")},
         {QStringLiteral("files.toggle"), QObject::tr("Show/hide remote files")},
         {QStringLiteral("vault.lock"), QObject::tr("Lock credential vault")},
         {QStringLiteral("terminal.search"), QObject::tr("Search terminal output")},
@@ -1430,11 +1475,13 @@ bool TerminalSettingsService::load(QString *errorMessage)
     assignInteger(kReconnectMaxAttemptsKey, &loaded.reconnectMaxAttempts);
     assignInteger(kReconnectBaseDelayKey, &loaded.reconnectBaseDelaySeconds);
 
+    QSet<QString> storedShortcutIds;
     for (const QString &id : TerminalSettings::shortcutIds()) {
         const std::optional<QString> raw = readValue(kShortcutPrefix + id, &queryFailed);
         if (!raw.has_value() || queryFailed) {
             continue;
         }
+        storedShortcutIds.insert(id);
         if (raw->isEmpty()) {
             loaded.shortcuts.insert(id, {});
             continue;
@@ -1450,6 +1497,7 @@ bool TerminalSettingsService::load(QString *errorMessage)
     if (queryFailed) {
         return false;
     }
+    migrateShortcutsWithoutHostSearch(&loaded.shortcuts, storedShortcutIds);
 
     loaded = loaded.normalized();
     QString validationError;

@@ -130,6 +130,8 @@ private slots:
      * 错位，关掉面板却触发了别的动作也会"看起来正常"。
      */
     void commandPaletteUsesQuickPopupAndTriggersAction();
+    /** @brief 任意侧栏页、侧栏收起、焦点在终端时，Shift+Cmd+F 都要切回主机页并聚焦搜索框。 */
+    void hostSearchShortcutSwitchesToHostsPageFromAnywhere();
 
     /**
      * @brief 浅色主题下效率工具"片段/历史"标签的选中态必须一眼可辨。
@@ -1682,6 +1684,73 @@ void MainWindowShellTest::quickSnippetAndHistoryShortcutsRunOnCurrentTerminal()
     QVERIFY(!popup->isVisible());
 
     m_database->removeSnippet(snippet.id);
+}
+
+void MainWindowShellTest::hostSearchShortcutSwitchesToHostsPageFromAnywhere()
+{
+    MainWindow window(m_database, m_vault);
+    window.resize(1200, 800);
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+    auto *tabs = window.findChild<QTabWidget *>(QStringLiteral("TerminalPages"));
+    auto *newTabButton = window.findChild<QToolButton *>(QStringLiteral("TitleNewTabButton"));
+    auto *stack = window.findChild<QStackedWidget *>(QStringLiteral("SidebarStack"));
+    auto *panel = window.findChild<QWidget *>(QStringLiteral("SidebarPanel"));
+    auto *rail = window.findChild<QWidget *>(QStringLiteral("NavigationRail"));
+    QVERIFY(tabs != nullptr && newTabButton != nullptr && stack != nullptr && panel != nullptr
+            && rail != nullptr);
+    auto *hostManager = window.findChild<HostManagerWidget *>();
+    QVERIFY(hostManager != nullptr);
+    auto *searchEdit = hostManager->findChild<QLineEdit *>(QStringLiteral("HostSearchEdit"));
+    QVERIFY(searchEdit != nullptr);
+
+    const QKeySequence hostSearchShortcut =
+        TerminalSettings::defaultShortcuts().value(QStringLiteral("hosts.search"));
+    QCOMPARE(hostSearchShortcut, QKeySequence(QStringLiteral("Ctrl+Shift+F")));
+    QVERIFY2(TerminalSettings::defaultShortcuts().value(QStringLiteral("files.toggle"))
+                 != hostSearchShortcut,
+             "远程文件管理不能再占用搜索主机的快捷键");
+
+    QTest::mouseClick(newTabButton, Qt::LeftButton);
+    auto *workspace = qobject_cast<TerminalWorkspace *>(tabs->widget(0));
+    QVERIFY(workspace != nullptr);
+    TerminalPane *pane = workspace->activePane();
+    QTRY_VERIFY_WITH_TIMEOUT(pane->isConnected(), 8000);
+    auto *view = pane->findChild<TerminalView *>();
+    QVERIFY(view != nullptr);
+
+    // 先切到其他侧栏页，再点一次当前导航按钮把侧栏收起。
+    QList<QToolButton *> navButtons;
+    for (QToolButton *button : rail->findChildren<QToolButton *>()) {
+        if (button->isCheckable()) {
+            navButtons.append(button);
+        }
+    }
+    QVERIFY(navButtons.size() >= 2);
+    QToolButton *otherButton = nullptr;
+    for (QToolButton *button : navButtons) {
+        if (!button->isChecked()) {
+            otherButton = button;
+            break;
+        }
+    }
+    QVERIFY(otherButton != nullptr);
+    QTest::mouseClick(otherButton, Qt::LeftButton);
+    QVERIFY(stack->currentWidget() != hostManager);
+    QTest::mouseClick(otherButton, Qt::LeftButton);
+    QTRY_VERIFY_WITH_TIMEOUT(!panel->isVisible(), 3000);
+
+    view->setFocus();
+    QVERIFY(QTest::qWaitForWindowActive(&window));
+    QVERIFY(view->hasFocus());
+    searchEdit->setText(QStringLiteral("old"));
+
+    QTest::keySequence(view, hostSearchShortcut);
+    QVERIFY2(panel->isVisible(), "搜索主机快捷键没有展开已收起的侧栏");
+    QCOMPARE(stack->currentWidget(), static_cast<QWidget *>(hostManager));
+    QVERIFY2(searchEdit->hasFocus(), "搜索主机快捷键没有把焦点交给主机搜索框");
+    QCOMPARE(searchEdit->selectedText(), QStringLiteral("old"));
+    searchEdit->clear();
 }
 
 void MainWindowShellTest::commandPaletteUsesQuickPopupAndTriggersAction()

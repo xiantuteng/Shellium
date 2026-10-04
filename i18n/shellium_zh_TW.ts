@@ -1513,6 +1513,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation>檢視</translation>
     </message>
     <message>
+        <source>Search Hosts</source>
+        <translation>搜尋主機</translation>
+    </message>
+    <message>
         <source>Terminal</source>
         <translation>終端</translation>
     </message>
@@ -2548,6 +2552,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>Close tab</source>
         <translation>關閉標籤</translation>
+    </message>
+    <message>
+        <source>Search hosts</source>
+        <translation>搜尋主機</translation>
     </message>
     <message>
         <source>Show/hide remote files</source>
@@ -4587,8 +4595,8 @@ Public key: %3</source>
         <translation>未連線</translation>
     </message>
     <message>
-        <source>Show the remote file manager for the current session (Ctrl+Shift+F)</source>
-        <translation>顯示當前會話的遠端檔案管理（Ctrl+Shift+F）</translation>
+        <source>Show the remote file manager for the current session (Ctrl+Shift+O)</source>
+        <translation>顯示當前會話的遠端檔案管理（Ctrl+Shift+O）</translation>
     </message>
     <message>
         <source>Remote file manager</source>
@@ -4763,8 +4771,8 @@ Confirm the key has changed and replace the old record in known_hosts?</source>
         <translation>正在經當前伺服器建立到 %1 的巢狀連線…</translation>
     </message>
     <message>
-        <source>Hide the remote file manager for the current session (Ctrl+Shift+F)</source>
-        <translation>隱藏當前會話的遠端檔案管理（Ctrl+Shift+F）</translation>
+        <source>Hide the remote file manager for the current session (Ctrl+Shift+O)</source>
+        <translation>隱藏當前會話的遠端檔案管理（Ctrl+Shift+O）</translation>
     </message>
     <message>
         <source>Press r to reconnect to %1, press x to close this tab</source>
