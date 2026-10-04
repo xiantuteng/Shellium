@@ -1510,14 +1510,6 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">Сховище було скинуто; конфігурації хостів збережено. Введіть заново потрібні облікові дані.</translation>
     </message>
     <message>
-        <source>Live broadcast turned on: %1 targets</source>
-        <translation type="unfinished">Пряму трансляцію ввімкнено: цілей — %1</translation>
-    </message>
-    <message>
-        <source>Live broadcast turned off</source>
-        <translation type="unfinished">Пряму трансляцію вимкнено</translation>
-    </message>
-    <message>
         <source>The credential vault was locked automatically due to inactivity</source>
         <translation type="unfinished">Сховище облікових даних було автоматично заблоковано через бездіяльність</translation>
     </message>
@@ -2324,6 +2316,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">Видалити вибраний фрагмент</translation>
     </message>
     <message>
+        <source>Search name / command…</source>
+        <translation type="unfinished">Пошук за ім’ям / командою…</translation>
+    </message>
+    <message>
         <source>Command snippets</source>
         <translation type="unfinished">Фрагменти команд</translation>
     </message>
@@ -2364,38 +2360,6 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">Копіювати команду</translation>
     </message>
     <message>
-        <source>After choosing targets you can turn on live keyboard broadcast; the source terminal is bound by the main window to the current tab.</source>
-        <translation type="unfinished">Після вибору цілей ви можете ввімкнути пряму трансляцію клавіатури; вихідний термінал прив’язується головним вікном до поточної вкладки.</translation>
-    </message>
-    <message>
-        <source>Turn on live raw input broadcast</source>
-        <translation type="unfinished">Увімкнути пряму трансляцію необробленого вводу</translation>
-    </message>
-    <message>
-        <source>Send a command once to the selected targets</source>
-        <translation type="unfinished">Надіслати команду один раз вибраним цілям</translation>
-    </message>
-    <message>
-        <source>Broadcast send</source>
-        <translation type="unfinished">Надіслати трансляцію</translation>
-    </message>
-    <message>
-        <source>Send a command once to the terminals you explicitly checked</source>
-        <translation type="unfinished">Надіслати команду один раз терміналам, які ви явно позначили</translation>
-    </message>
-    <message>
-        <source>Broadcast input</source>
-        <translation type="unfinished">Ввід трансляції</translation>
-    </message>
-    <message>
-        <source>Explicitly check at least one target terminal before turning on broadcast</source>
-        <translation type="unfinished">Явно позначте принаймні один цільовий термінал, перш ніж вмикати трансляцію</translation>
-    </message>
-    <message>
-        <source>Broadcast send requires a non-empty command and at least one explicit target</source>
-        <translation type="unfinished">Для надсилання трансляції потрібні непорожня команда та принаймні одна явна ціль</translation>
-    </message>
-    <message>
         <source>Name</source>
         <translation type="unfinished">Ім’я</translation>
     </message>
@@ -2420,12 +2384,8 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">Зберегти зміни поточного фрагмента</translation>
     </message>
     <message>
-        <source>Run  %1</source>
-        <translation type="unfinished">Виконати  %1</translation>
-    </message>
-    <message>
-        <source>Shortcut %1</source>
-        <translation type="unfinished">Сполучення клавіш %1</translation>
+        <source>Run (%1)</source>
+        <translation type="unfinished">Виконати (%1)</translation>
     </message>
     <message>
         <source>The productivity model is not ready yet</source>

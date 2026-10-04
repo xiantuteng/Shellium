@@ -1510,14 +1510,6 @@ Confirmer que la clé a changé, remplacer l&apos;ancien enregistrement dans kno
         <translation type="unfinished">Le coffre-fort a été réinitialisé ; les configurations d&apos;hôtes sont conservées. Ressaisissez les identifiants nécessaires.</translation>
     </message>
     <message>
-        <source>Live broadcast turned on: %1 targets</source>
-        <translation type="unfinished">Diffusion en direct activée : %1 cibles</translation>
-    </message>
-    <message>
-        <source>Live broadcast turned off</source>
-        <translation type="unfinished">Diffusion en direct désactivée</translation>
-    </message>
-    <message>
         <source>The credential vault was locked automatically due to inactivity</source>
         <translation type="unfinished">Le coffre-fort d&apos;identifiants a été verrouillé automatiquement pour cause d&apos;inactivité</translation>
     </message>
@@ -2324,6 +2316,10 @@ Confirmer que la clé a changé, remplacer l&apos;ancien enregistrement dans kno
         <translation type="unfinished">Supprimer l&apos;extrait sélectionné</translation>
     </message>
     <message>
+        <source>Search name / command…</source>
+        <translation type="unfinished">Rechercher un nom / une commande…</translation>
+    </message>
+    <message>
         <source>Command snippets</source>
         <translation type="unfinished">Extraits de commandes</translation>
     </message>
@@ -2364,38 +2360,6 @@ Confirmer que la clé a changé, remplacer l&apos;ancien enregistrement dans kno
         <translation type="unfinished">Copier la commande</translation>
     </message>
     <message>
-        <source>After choosing targets you can turn on live keyboard broadcast; the source terminal is bound by the main window to the current tab.</source>
-        <translation type="unfinished">Après avoir choisi les cibles, vous pouvez activer la diffusion clavier en direct ; le terminal source est lié par la fenêtre principale à l&apos;onglet actuel.</translation>
-    </message>
-    <message>
-        <source>Turn on live raw input broadcast</source>
-        <translation type="unfinished">Activer la diffusion en direct de l&apos;entrée brute</translation>
-    </message>
-    <message>
-        <source>Send a command once to the selected targets</source>
-        <translation type="unfinished">Envoyer une commande une fois aux cibles sélectionnées</translation>
-    </message>
-    <message>
-        <source>Broadcast send</source>
-        <translation type="unfinished">Envoyer la diffusion</translation>
-    </message>
-    <message>
-        <source>Send a command once to the terminals you explicitly checked</source>
-        <translation type="unfinished">Envoyer une commande une fois aux terminaux que vous avez explicitement cochés</translation>
-    </message>
-    <message>
-        <source>Broadcast input</source>
-        <translation type="unfinished">Entrée de diffusion</translation>
-    </message>
-    <message>
-        <source>Explicitly check at least one target terminal before turning on broadcast</source>
-        <translation type="unfinished">Cochez explicitement au moins un terminal cible avant d&apos;activer la diffusion</translation>
-    </message>
-    <message>
-        <source>Broadcast send requires a non-empty command and at least one explicit target</source>
-        <translation type="unfinished">L&apos;envoi de la diffusion nécessite une commande non vide et au moins une cible explicite</translation>
-    </message>
-    <message>
         <source>Name</source>
         <translation type="unfinished">Nom</translation>
     </message>
@@ -2420,12 +2384,8 @@ Confirmer que la clé a changé, remplacer l&apos;ancien enregistrement dans kno
         <translation type="unfinished">Enregistrer les modifications de l&apos;extrait actuel</translation>
     </message>
     <message>
-        <source>Run  %1</source>
-        <translation type="unfinished">Exécuter  %1</translation>
-    </message>
-    <message>
-        <source>Shortcut %1</source>
-        <translation type="unfinished">Raccourci %1</translation>
+        <source>Run (%1)</source>
+        <translation type="unfinished">Exécuter (%1)</translation>
     </message>
     <message>
         <source>The productivity model is not ready yet</source>

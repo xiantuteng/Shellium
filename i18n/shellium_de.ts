@@ -1510,14 +1510,6 @@ Bestätigen Sie, dass sich der Schlüssel geändert hat, ersetzen Sie den alten 
         <translation type="unfinished">Der Tresor wurde zurückgesetzt; Host-Konfigurationen bleiben erhalten. Geben Sie die benötigten Anmeldedaten erneut ein.</translation>
     </message>
     <message>
-        <source>Live broadcast turned on: %1 targets</source>
-        <translation type="unfinished">Live-Broadcast aktiviert: %1 Ziele</translation>
-    </message>
-    <message>
-        <source>Live broadcast turned off</source>
-        <translation type="unfinished">Live-Broadcast deaktiviert</translation>
-    </message>
-    <message>
         <source>The credential vault was locked automatically due to inactivity</source>
         <translation type="unfinished">Der Anmeldedaten-Tresor wurde wegen Inaktivität automatisch gesperrt</translation>
     </message>
@@ -2324,6 +2316,10 @@ Bestätigen Sie, dass sich der Schlüssel geändert hat, ersetzen Sie den alten 
         <translation type="unfinished">Das ausgewählte Snippet löschen</translation>
     </message>
     <message>
+        <source>Search name / command…</source>
+        <translation type="unfinished">Name / Befehl suchen …</translation>
+    </message>
+    <message>
         <source>Command snippets</source>
         <translation type="unfinished">Befehls-Snippets</translation>
     </message>
@@ -2364,38 +2360,6 @@ Bestätigen Sie, dass sich der Schlüssel geändert hat, ersetzen Sie den alten 
         <translation type="unfinished">Befehl kopieren</translation>
     </message>
     <message>
-        <source>After choosing targets you can turn on live keyboard broadcast; the source terminal is bound by the main window to the current tab.</source>
-        <translation type="unfinished">Nach der Auswahl der Ziele können Sie den Live-Tastatur-Broadcast aktivieren; das Quellterminal wird vom Hauptfenster an den aktuellen Tab gebunden.</translation>
-    </message>
-    <message>
-        <source>Turn on live raw input broadcast</source>
-        <translation type="unfinished">Live-Broadcast der Roh-Eingabe aktivieren</translation>
-    </message>
-    <message>
-        <source>Send a command once to the selected targets</source>
-        <translation type="unfinished">Einen Befehl einmalig an die ausgewählten Ziele senden</translation>
-    </message>
-    <message>
-        <source>Broadcast send</source>
-        <translation type="unfinished">Broadcast senden</translation>
-    </message>
-    <message>
-        <source>Send a command once to the terminals you explicitly checked</source>
-        <translation type="unfinished">Einen Befehl einmalig an die von Ihnen ausdrücklich markierten Terminals senden</translation>
-    </message>
-    <message>
-        <source>Broadcast input</source>
-        <translation type="unfinished">Broadcast-Eingabe</translation>
-    </message>
-    <message>
-        <source>Explicitly check at least one target terminal before turning on broadcast</source>
-        <translation type="unfinished">Markieren Sie ausdrücklich mindestens ein Zielterminal, bevor Sie den Broadcast aktivieren</translation>
-    </message>
-    <message>
-        <source>Broadcast send requires a non-empty command and at least one explicit target</source>
-        <translation type="unfinished">Broadcast senden erfordert einen nicht leeren Befehl und mindestens ein ausdrückliches Ziel</translation>
-    </message>
-    <message>
         <source>Name</source>
         <translation type="unfinished">Name</translation>
     </message>
@@ -2420,12 +2384,8 @@ Bestätigen Sie, dass sich der Schlüssel geändert hat, ersetzen Sie den alten 
         <translation type="unfinished">Änderungen am aktuellen Snippet speichern</translation>
     </message>
     <message>
-        <source>Run  %1</source>
-        <translation type="unfinished">Ausführen  %1</translation>
-    </message>
-    <message>
-        <source>Shortcut %1</source>
-        <translation type="unfinished">Kurzbefehl %1</translation>
+        <source>Run (%1)</source>
+        <translation type="unfinished">Ausführen (%1)</translation>
     </message>
     <message>
         <source>The productivity model is not ready yet</source>

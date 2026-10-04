@@ -1510,14 +1510,6 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">تمت إعادة تعيين الخزنة؛ حُفظت إعدادات المضيفين. أعد إدخال بيانات الاعتماد اللازمة.</translation>
     </message>
     <message>
-        <source>Live broadcast turned on: %1 targets</source>
-        <translation type="unfinished">البث المباشر مفعّل: %1 هدف</translation>
-    </message>
-    <message>
-        <source>Live broadcast turned off</source>
-        <translation type="unfinished">البث المباشر معطّل</translation>
-    </message>
-    <message>
         <source>The credential vault was locked automatically due to inactivity</source>
         <translation type="unfinished">تم قفل خزنة بيانات الاعتماد تلقائيًا بسبب عدم النشاط</translation>
     </message>
@@ -2324,6 +2316,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">حذف المقتطف المختار</translation>
     </message>
     <message>
+        <source>Search name / command…</source>
+        <translation type="unfinished">البحث بالاسم / الأمر…</translation>
+    </message>
+    <message>
         <source>Command snippets</source>
         <translation type="unfinished">مقتطفات الأوامر</translation>
     </message>
@@ -2364,38 +2360,6 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">نسخ الأمر</translation>
     </message>
     <message>
-        <source>After choosing targets you can turn on live keyboard broadcast; the source terminal is bound by the main window to the current tab.</source>
-        <translation type="unfinished">بعد اختيار الأهداف، يمكنك تفعيل البث المباشر للوحة المفاتيح؛ ترتبط الطرفية المصدر بواسطة النافذة الرئيسية بعلامة التبويب الحالية.</translation>
-    </message>
-    <message>
-        <source>Turn on live raw input broadcast</source>
-        <translation type="unfinished">تفعيل البث المباشر للإدخال الخام</translation>
-    </message>
-    <message>
-        <source>Send a command once to the selected targets</source>
-        <translation type="unfinished">إرسال الأمر مرة واحدة إلى الأهداف المختارة</translation>
-    </message>
-    <message>
-        <source>Broadcast send</source>
-        <translation type="unfinished">إرسال البث</translation>
-    </message>
-    <message>
-        <source>Send a command once to the terminals you explicitly checked</source>
-        <translation type="unfinished">إرسال الأمر مرة واحدة إلى الطرفيات التي وسمتها صراحةً</translation>
-    </message>
-    <message>
-        <source>Broadcast input</source>
-        <translation type="unfinished">إدخال البث</translation>
-    </message>
-    <message>
-        <source>Explicitly check at least one target terminal before turning on broadcast</source>
-        <translation type="unfinished">وسِّم صراحةً طرفية هدفًا واحدة على الأقل قبل تفعيل البث</translation>
-    </message>
-    <message>
-        <source>Broadcast send requires a non-empty command and at least one explicit target</source>
-        <translation type="unfinished">يتطلب إرسال البث أمرًا غير فارغ وهدفًا صريحًا واحدًا على الأقل</translation>
-    </message>
-    <message>
         <source>Name</source>
         <translation type="unfinished">الاسم</translation>
     </message>
@@ -2420,12 +2384,8 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">حفظ تغييرات المقتطف الحالي</translation>
     </message>
     <message>
-        <source>Run  %1</source>
-        <translation type="unfinished">تنفيذ  %1</translation>
-    </message>
-    <message>
-        <source>Shortcut %1</source>
-        <translation type="unfinished">اختصار %1</translation>
+        <source>Run (%1)</source>
+        <translation type="unfinished">تنفيذ (%1)</translation>
     </message>
     <message>
         <source>The productivity model is not ready yet</source>

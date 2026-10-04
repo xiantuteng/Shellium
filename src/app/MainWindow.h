@@ -390,10 +390,6 @@ private:
     /** @brief 将命令路由到指定主机 id 对应的全部已打开终端；空列表表示当前终端。 */
     void executeOnTargets(const QString &command, const QStringList &targetIds);
 
-    /** @brief 将原始终端字节发送到指定主机 id 的已打开终端，可排除广播源。 */
-    void sendBytesToTargets(const QByteArray &bytes,
-                            const QStringList &targetIds,
-                            TerminalPane *excludedSource = nullptr);
 
     TerminalWorkspace *m_workspace = nullptr;
     QTabWidget *m_tabs = nullptr;
@@ -465,6 +461,8 @@ private:
     QLabel *m_hostCountLabel = nullptr;
     /** @brief 主机页提供、挂在侧栏标题行右侧的动作条；仅在主机页可见。 */
     QWidget *m_hostHeaderActions = nullptr;
+    /** @brief 效率工具页的标题行动作条；仅在效率工具页可见，归 ProductivityWidget 管理逻辑。 */
+    QWidget *m_productivityHeaderActions = nullptr;
     /** @brief 导航轨上与三个侧栏页面一一对应的互斥按钮。 */
     QList<QToolButton *> m_navigationButtons;
     /** @brief 标题区及导航轨中需要随主题重新着色的图标按钮。 */
@@ -569,8 +567,4 @@ private:
      * 为空时静默跳过。
      */
     void applyLanguageSetting(const QString &storedLanguage);
-
-    /** @brief 实时广播开关和当前明确选择的目标主机 id。 */
-    bool m_broadcastEnabled = false;
-    QStringList m_broadcastTargetIds;
 };

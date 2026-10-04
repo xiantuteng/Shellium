@@ -1510,14 +1510,6 @@ Confermare che la chiave è cambiata, sostituire il vecchio record in known_host
         <translation type="unfinished">La cassaforte è stata reimpostata; le configurazioni degli host sono conservate. Reinserisci le credenziali necessarie.</translation>
     </message>
     <message>
-        <source>Live broadcast turned on: %1 targets</source>
-        <translation type="unfinished">Trasmissione in tempo reale attivata: %1 destinazioni</translation>
-    </message>
-    <message>
-        <source>Live broadcast turned off</source>
-        <translation type="unfinished">Trasmissione in tempo reale disattivata</translation>
-    </message>
-    <message>
         <source>The credential vault was locked automatically due to inactivity</source>
         <translation type="unfinished">La cassaforte credenziali è stata bloccata automaticamente per inattività</translation>
     </message>
@@ -2324,6 +2316,10 @@ Confermare che la chiave è cambiata, sostituire il vecchio record in known_host
         <translation type="unfinished">Elimina lo snippet selezionato</translation>
     </message>
     <message>
+        <source>Search name / command…</source>
+        <translation type="unfinished">Cerca nome / comando…</translation>
+    </message>
+    <message>
         <source>Command snippets</source>
         <translation type="unfinished">Snippet di comandi</translation>
     </message>
@@ -2364,38 +2360,6 @@ Confermare che la chiave è cambiata, sostituire il vecchio record in known_host
         <translation type="unfinished">Copia comando</translation>
     </message>
     <message>
-        <source>After choosing targets you can turn on live keyboard broadcast; the source terminal is bound by the main window to the current tab.</source>
-        <translation type="unfinished">Dopo aver scelto le destinazioni puoi attivare la trasmissione della tastiera in tempo reale; il terminale di origine è associato dalla finestra principale alla scheda corrente.</translation>
-    </message>
-    <message>
-        <source>Turn on live raw input broadcast</source>
-        <translation type="unfinished">Attiva la trasmissione in tempo reale dell&apos;input grezzo</translation>
-    </message>
-    <message>
-        <source>Send a command once to the selected targets</source>
-        <translation type="unfinished">Invia un comando una volta alle destinazioni selezionate</translation>
-    </message>
-    <message>
-        <source>Broadcast send</source>
-        <translation type="unfinished">Invia trasmissione</translation>
-    </message>
-    <message>
-        <source>Send a command once to the terminals you explicitly checked</source>
-        <translation type="unfinished">Invia un comando una volta ai terminali che hai selezionato esplicitamente</translation>
-    </message>
-    <message>
-        <source>Broadcast input</source>
-        <translation type="unfinished">Input di trasmissione</translation>
-    </message>
-    <message>
-        <source>Explicitly check at least one target terminal before turning on broadcast</source>
-        <translation type="unfinished">Seleziona esplicitamente almeno un terminale di destinazione prima di attivare la trasmissione</translation>
-    </message>
-    <message>
-        <source>Broadcast send requires a non-empty command and at least one explicit target</source>
-        <translation type="unfinished">L&apos;invio della trasmissione richiede un comando non vuoto e almeno una destinazione esplicita</translation>
-    </message>
-    <message>
         <source>Name</source>
         <translation type="unfinished">Nome</translation>
     </message>
@@ -2420,12 +2384,8 @@ Confermare che la chiave è cambiata, sostituire il vecchio record in known_host
         <translation type="unfinished">Salva le modifiche allo snippet corrente</translation>
     </message>
     <message>
-        <source>Run  %1</source>
-        <translation type="unfinished">Esegui  %1</translation>
-    </message>
-    <message>
-        <source>Shortcut %1</source>
-        <translation type="unfinished">Scorciatoia %1</translation>
+        <source>Run (%1)</source>
+        <translation type="unfinished">Esegui (%1)</translation>
     </message>
     <message>
         <source>The productivity model is not ready yet</source>

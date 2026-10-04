@@ -1510,14 +1510,6 @@ Puede ser una reinstalación del servidor o una rotación de clave, o un ataque 
         <translation type="unfinished">La bóveda se ha restablecido; se conservan las configuraciones de hosts. Vuelve a introducir las credenciales que necesites.</translation>
     </message>
     <message>
-        <source>Live broadcast turned on: %1 targets</source>
-        <translation type="unfinished">Difusión en directo activada: %1 destinos</translation>
-    </message>
-    <message>
-        <source>Live broadcast turned off</source>
-        <translation type="unfinished">Difusión en directo desactivada</translation>
-    </message>
-    <message>
         <source>The credential vault was locked automatically due to inactivity</source>
         <translation type="unfinished">La bóveda de credenciales se bloqueó automáticamente por inactividad</translation>
     </message>
@@ -2324,6 +2316,10 @@ Puede ser una reinstalación del servidor o una rotación de clave, o un ataque 
         <translation type="unfinished">Eliminar el fragmento seleccionado</translation>
     </message>
     <message>
+        <source>Search name / command…</source>
+        <translation type="unfinished">Buscar nombre / comando…</translation>
+    </message>
+    <message>
         <source>Command snippets</source>
         <translation type="unfinished">Fragmentos de comandos</translation>
     </message>
@@ -2364,38 +2360,6 @@ Puede ser una reinstalación del servidor o una rotación de clave, o un ataque 
         <translation type="unfinished">Copiar comando</translation>
     </message>
     <message>
-        <source>After choosing targets you can turn on live keyboard broadcast; the source terminal is bound by the main window to the current tab.</source>
-        <translation type="unfinished">Tras elegir los destinos puedes activar la difusión de teclado en directo; la ventana principal vincula el terminal de origen a la pestaña actual.</translation>
-    </message>
-    <message>
-        <source>Turn on live raw input broadcast</source>
-        <translation type="unfinished">Activar la difusión en directo de la entrada sin procesar</translation>
-    </message>
-    <message>
-        <source>Send a command once to the selected targets</source>
-        <translation type="unfinished">Enviar un comando una vez a los destinos seleccionados</translation>
-    </message>
-    <message>
-        <source>Broadcast send</source>
-        <translation type="unfinished">Enviar difusión</translation>
-    </message>
-    <message>
-        <source>Send a command once to the terminals you explicitly checked</source>
-        <translation type="unfinished">Enviar un comando una vez a los terminales que hayas marcado explícitamente</translation>
-    </message>
-    <message>
-        <source>Broadcast input</source>
-        <translation type="unfinished">Entrada de difusión</translation>
-    </message>
-    <message>
-        <source>Explicitly check at least one target terminal before turning on broadcast</source>
-        <translation type="unfinished">Marca explícitamente al menos un terminal de destino antes de activar la difusión</translation>
-    </message>
-    <message>
-        <source>Broadcast send requires a non-empty command and at least one explicit target</source>
-        <translation type="unfinished">Enviar la difusión requiere un comando no vacío y al menos un destino explícito</translation>
-    </message>
-    <message>
         <source>Name</source>
         <translation type="unfinished">Nombre</translation>
     </message>
@@ -2420,12 +2384,8 @@ Puede ser una reinstalación del servidor o una rotación de clave, o un ataque 
         <translation type="unfinished">Guardar los cambios del fragmento actual</translation>
     </message>
     <message>
-        <source>Run  %1</source>
-        <translation type="unfinished">Ejecutar  %1</translation>
-    </message>
-    <message>
-        <source>Shortcut %1</source>
-        <translation type="unfinished">Atajo %1</translation>
+        <source>Run (%1)</source>
+        <translation type="unfinished">Ejecutar (%1)</translation>
     </message>
     <message>
         <source>The productivity model is not ready yet</source>

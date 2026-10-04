@@ -1510,14 +1510,6 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">보관소가 재설정되었습니다. 호스트 구성은 유지되었습니다. 필요한 자격 증명을 다시 입력하세요.</translation>
     </message>
     <message>
-        <source>Live broadcast turned on: %1 targets</source>
-        <translation type="unfinished">라이브 브로드캐스트가 활성화됨: 대상 %1개</translation>
-    </message>
-    <message>
-        <source>Live broadcast turned off</source>
-        <translation type="unfinished">라이브 브로드캐스트가 비활성화됨</translation>
-    </message>
-    <message>
         <source>The credential vault was locked automatically due to inactivity</source>
         <translation type="unfinished">자격 증명 보관소가 비활성 상태로 인해 자동으로 잠겼습니다</translation>
     </message>
@@ -2324,6 +2316,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">선택한 스니펫 삭제</translation>
     </message>
     <message>
+        <source>Search name / command…</source>
+        <translation type="unfinished">이름 / 명령으로 검색…</translation>
+    </message>
+    <message>
         <source>Command snippets</source>
         <translation type="unfinished">명령 스니펫</translation>
     </message>
@@ -2364,38 +2360,6 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">명령 복사</translation>
     </message>
     <message>
-        <source>After choosing targets you can turn on live keyboard broadcast; the source terminal is bound by the main window to the current tab.</source>
-        <translation type="unfinished">대상을 선택한 후 키보드 라이브 브로드캐스트를 활성화할 수 있습니다. 소스 터미널은 메인 창에 의해 현재 탭에 바인딩됩니다.</translation>
-    </message>
-    <message>
-        <source>Turn on live raw input broadcast</source>
-        <translation type="unfinished">원시 입력의 라이브 브로드캐스트 활성화</translation>
-    </message>
-    <message>
-        <source>Send a command once to the selected targets</source>
-        <translation type="unfinished">선택한 대상에 명령을 한 번 보내기</translation>
-    </message>
-    <message>
-        <source>Broadcast send</source>
-        <translation type="unfinished">브로드캐스트 보내기</translation>
-    </message>
-    <message>
-        <source>Send a command once to the terminals you explicitly checked</source>
-        <translation type="unfinished">명시적으로 표시한 터미널에 명령을 한 번 보내기</translation>
-    </message>
-    <message>
-        <source>Broadcast input</source>
-        <translation type="unfinished">브로드캐스트 입력</translation>
-    </message>
-    <message>
-        <source>Explicitly check at least one target terminal before turning on broadcast</source>
-        <translation type="unfinished">브로드캐스트를 활성화하기 전에 대상 터미널을 하나 이상 명시적으로 표시하세요</translation>
-    </message>
-    <message>
-        <source>Broadcast send requires a non-empty command and at least one explicit target</source>
-        <translation type="unfinished">브로드캐스트를 보내려면 비어 있지 않은 명령과 하나 이상의 명시적 대상이 필요합니다</translation>
-    </message>
-    <message>
         <source>Name</source>
         <translation type="unfinished">이름</translation>
     </message>
@@ -2420,12 +2384,8 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">현재 스니펫 변경 저장</translation>
     </message>
     <message>
-        <source>Run  %1</source>
-        <translation type="unfinished">실행  %1</translation>
-    </message>
-    <message>
-        <source>Shortcut %1</source>
-        <translation type="unfinished">단축키 %1</translation>
+        <source>Run (%1)</source>
+        <translation type="unfinished">실행 (%1)</translation>
     </message>
     <message>
         <source>The productivity model is not ready yet</source>

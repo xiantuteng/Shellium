@@ -1510,14 +1510,6 @@ Confirmar que a chave mudou, substituir o registro antigo em known_hosts e conti
         <translation type="unfinished">O cofre foi redefinido; as configurações de hosts são mantidas. Informe novamente as credenciais necessárias.</translation>
     </message>
     <message>
-        <source>Live broadcast turned on: %1 targets</source>
-        <translation type="unfinished">Transmissão ao vivo ativada: %1 destinos</translation>
-    </message>
-    <message>
-        <source>Live broadcast turned off</source>
-        <translation type="unfinished">Transmissão ao vivo desativada</translation>
-    </message>
-    <message>
         <source>The credential vault was locked automatically due to inactivity</source>
         <translation type="unfinished">O cofre de credenciais foi bloqueado automaticamente por inatividade</translation>
     </message>
@@ -2324,6 +2316,10 @@ Confirmar que a chave mudou, substituir o registro antigo em known_hosts e conti
         <translation type="unfinished">Excluir o snippet selecionado</translation>
     </message>
     <message>
+        <source>Search name / command…</source>
+        <translation type="unfinished">Pesquisar nome / comando…</translation>
+    </message>
+    <message>
         <source>Command snippets</source>
         <translation type="unfinished">Snippets de comandos</translation>
     </message>
@@ -2364,38 +2360,6 @@ Confirmar que a chave mudou, substituir o registro antigo em known_hosts e conti
         <translation type="unfinished">Copiar comando</translation>
     </message>
     <message>
-        <source>After choosing targets you can turn on live keyboard broadcast; the source terminal is bound by the main window to the current tab.</source>
-        <translation type="unfinished">Depois de escolher os destinos, você pode ativar a transmissão de teclado ao vivo; o terminal de origem é vinculado pela janela principal à aba atual.</translation>
-    </message>
-    <message>
-        <source>Turn on live raw input broadcast</source>
-        <translation type="unfinished">Ativar a transmissão ao vivo da entrada bruta</translation>
-    </message>
-    <message>
-        <source>Send a command once to the selected targets</source>
-        <translation type="unfinished">Enviar um comando uma vez aos destinos selecionados</translation>
-    </message>
-    <message>
-        <source>Broadcast send</source>
-        <translation type="unfinished">Enviar transmissão</translation>
-    </message>
-    <message>
-        <source>Send a command once to the terminals you explicitly checked</source>
-        <translation type="unfinished">Enviar um comando uma vez aos terminais que você marcou explicitamente</translation>
-    </message>
-    <message>
-        <source>Broadcast input</source>
-        <translation type="unfinished">Entrada de transmissão</translation>
-    </message>
-    <message>
-        <source>Explicitly check at least one target terminal before turning on broadcast</source>
-        <translation type="unfinished">Marque explicitamente pelo menos um terminal de destino antes de ativar a transmissão</translation>
-    </message>
-    <message>
-        <source>Broadcast send requires a non-empty command and at least one explicit target</source>
-        <translation type="unfinished">Enviar a transmissão exige um comando não vazio e pelo menos um destino explícito</translation>
-    </message>
-    <message>
         <source>Name</source>
         <translation type="unfinished">Nome</translation>
     </message>
@@ -2420,12 +2384,8 @@ Confirmar que a chave mudou, substituir o registro antigo em known_hosts e conti
         <translation type="unfinished">Salvar as alterações do snippet atual</translation>
     </message>
     <message>
-        <source>Run  %1</source>
-        <translation type="unfinished">Executar  %1</translation>
-    </message>
-    <message>
-        <source>Shortcut %1</source>
-        <translation type="unfinished">Atalho %1</translation>
+        <source>Run (%1)</source>
+        <translation type="unfinished">Executar (%1)</translation>
     </message>
     <message>
         <source>The productivity model is not ready yet</source>

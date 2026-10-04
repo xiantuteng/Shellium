@@ -1510,14 +1510,6 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation>保险箱已重置；主机配置已保留，请重新录入所需凭据</translation>
     </message>
     <message>
-        <source>Live broadcast turned on: %1 targets</source>
-        <translation>实时广播已开启：%1 个目标</translation>
-    </message>
-    <message>
-        <source>Live broadcast turned off</source>
-        <translation>实时广播已关闭</translation>
-    </message>
-    <message>
         <source>The credential vault was locked automatically due to inactivity</source>
         <translation>凭据保险库因闲置已自动锁定</translation>
     </message>
@@ -2324,6 +2316,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation>删除当前选中的片段</translation>
     </message>
     <message>
+        <source>Search name / command…</source>
+        <translation>搜索名称 / 命令…</translation>
+    </message>
+    <message>
         <source>Command snippets</source>
         <translation>命令片段</translation>
     </message>
@@ -2364,38 +2360,6 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation>复制命令</translation>
     </message>
     <message>
-        <source>After choosing targets you can turn on live keyboard broadcast; the source terminal is bound by the main window to the current tab.</source>
-        <translation>选择目标后可开启实时键盘广播；源终端由主窗口绑定为当前标签页。</translation>
-    </message>
-    <message>
-        <source>Turn on live raw input broadcast</source>
-        <translation>开启实时原始输入广播</translation>
-    </message>
-    <message>
-        <source>Send a command once to the selected targets</source>
-        <translation>一次性向选中目标发送命令</translation>
-    </message>
-    <message>
-        <source>Broadcast send</source>
-        <translation>广播发送</translation>
-    </message>
-    <message>
-        <source>Send a command once to the terminals you explicitly checked</source>
-        <translation>向明确勾选的多个终端发送一次命令</translation>
-    </message>
-    <message>
-        <source>Broadcast input</source>
-        <translation>广播输入</translation>
-    </message>
-    <message>
-        <source>Explicitly check at least one target terminal before turning on broadcast</source>
-        <translation>开启广播前请明确勾选至少一个目标终端</translation>
-    </message>
-    <message>
-        <source>Broadcast send requires a non-empty command and at least one explicit target</source>
-        <translation>广播发送需要非空命令和至少一个明确目标</translation>
-    </message>
-    <message>
         <source>Name</source>
         <translation>名称</translation>
     </message>
@@ -2420,12 +2384,8 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation>保存当前片段修改</translation>
     </message>
     <message>
-        <source>Run  %1</source>
-        <translation>执行  %1</translation>
-    </message>
-    <message>
-        <source>Shortcut %1</source>
-        <translation>快捷键 %1</translation>
+        <source>Run (%1)</source>
+        <translation>执行（%1）</translation>
     </message>
     <message>
         <source>The productivity model is not ready yet</source>

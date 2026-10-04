@@ -95,6 +95,12 @@ private slots:
     void sidebarDensityPersistsAndRestores();
     /** @brief 导航轨中工作空间入口紧跟主机入口，页面索引与点击路由保持不变。 */
     void workspacesNavigationButtonFollowsHosts();
+
+    /**
+     * @brief 效率工具页的"新建片段/删除"挂在共享标题行，与主机页动作条互斥显示：
+     * 切到效率工具只出现前者，切回主机只出现后者。
+     */
+    void productivityHeaderActionsShareSidebarTitleRow();
     void duplicateMenuItemOpensASecondCopyOfTheTab();
 
     /** @brief 把终端拖入此前选中的标签后必须原位合并为可重命名的工作空间标签；
@@ -1328,6 +1334,48 @@ void MainWindowShellTest::workspacesNavigationButtonFollowsHosts()
     QTest::mouseClick(workspacesButton, Qt::LeftButton);
     QVERIFY(workspacesButton->isChecked());
     QVERIFY(!hostsButton->isChecked());
+}
+
+void MainWindowShellTest::productivityHeaderActionsShareSidebarTitleRow()
+{
+    MainWindow window(m_database, m_vault);
+    window.resize(1200, 800);
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+    auto *rail = window.findChild<QWidget *>(QStringLiteral("NavigationRail"));
+    QVERIFY(rail != nullptr);
+    QToolButton *hostsButton = nullptr;
+    QToolButton *productivityButton = nullptr;
+    for (QToolButton *button : rail->findChildren<QToolButton *>(QString(), Qt::FindDirectChildrenOnly)) {
+        if (button->accessibleName() == QStringLiteral("Hosts")) {
+            hostsButton = button;
+        } else if (button->accessibleName() == QStringLiteral("Productivity")) {
+            productivityButton = button;
+        }
+    }
+    QVERIFY(hostsButton != nullptr && productivityButton != nullptr);
+
+    auto *title = window.findChild<QLabel *>(QStringLiteral("SidebarHeader"));
+    auto *addHost = window.findChild<QAbstractButton *>(QStringLiteral("HostAddButton"));
+    auto *newSnippet = window.findChild<QAbstractButton *>(QStringLiteral("productivityNewSnippet"));
+    QVERIFY(title != nullptr && addHost != nullptr && newSnippet != nullptr);
+    // 两组动作都必须挂在标题所在的同一行，而不是留在各自页面内部。
+    QCOMPARE(newSnippet->parentWidget()->parentWidget(), title->parentWidget());
+
+    QTest::mouseClick(hostsButton, Qt::LeftButton);
+    QVERIFY(addHost->isVisible());
+    QVERIFY(!newSnippet->isVisible());
+
+    QTest::mouseClick(productivityButton, Qt::LeftButton);
+    QVERIFY(newSnippet->isVisible());
+    QVERIFY(!addHost->isVisible());
+    QVERIFY2(!window.findChild<QWidget *>(QStringLiteral("productivityBroadcastPage")),
+             "效率工具不应再有广播输入页");
+
+    QTest::mouseClick(hostsButton, Qt::LeftButton);
+    QVERIFY(addHost->isVisible());
+    QVERIFY(!newSnippet->isVisible());
 }
 
 void MainWindowShellTest::sidebarWidthIsRestoredOnNextLaunch()

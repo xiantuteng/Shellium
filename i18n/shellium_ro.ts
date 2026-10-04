@@ -1510,14 +1510,6 @@ Confirmi că cheia s-a schimbat, înlocuiești vechea înregistrare din known_ho
         <translation type="unfinished">Seiful a fost resetat; configurațiile de gazde au fost păstrate. Introdu din nou datele de autentificare necesare.</translation>
     </message>
     <message>
-        <source>Live broadcast turned on: %1 targets</source>
-        <translation type="unfinished">Difuzarea directă este activată: %1 ținte</translation>
-    </message>
-    <message>
-        <source>Live broadcast turned off</source>
-        <translation type="unfinished">Difuzarea directă este dezactivată</translation>
-    </message>
-    <message>
         <source>The credential vault was locked automatically due to inactivity</source>
         <translation type="unfinished">Seiful de date de autentificare a fost blocat automat din cauza inactivității</translation>
     </message>
@@ -2324,6 +2316,10 @@ Confirmi că cheia s-a schimbat, înlocuiești vechea înregistrare din known_ho
         <translation type="unfinished">Șterge fragmentul selectat</translation>
     </message>
     <message>
+        <source>Search name / command…</source>
+        <translation type="unfinished">Caută după nume / comandă…</translation>
+    </message>
+    <message>
         <source>Command snippets</source>
         <translation type="unfinished">Fragmente de comandă</translation>
     </message>
@@ -2364,38 +2360,6 @@ Confirmi că cheia s-a schimbat, înlocuiești vechea înregistrare din known_ho
         <translation type="unfinished">Copiază comanda</translation>
     </message>
     <message>
-        <source>After choosing targets you can turn on live keyboard broadcast; the source terminal is bound by the main window to the current tab.</source>
-        <translation type="unfinished">După selectarea țintelor, poți activa difuzarea directă a tastaturii; terminalul sursă este legat de fereastra principală de fila curentă.</translation>
-    </message>
-    <message>
-        <source>Turn on live raw input broadcast</source>
-        <translation type="unfinished">Activează difuzarea directă a intrării brute</translation>
-    </message>
-    <message>
-        <source>Send a command once to the selected targets</source>
-        <translation type="unfinished">Trimite comanda o dată către țintele selectate</translation>
-    </message>
-    <message>
-        <source>Broadcast send</source>
-        <translation type="unfinished">Trimite difuzarea</translation>
-    </message>
-    <message>
-        <source>Send a command once to the terminals you explicitly checked</source>
-        <translation type="unfinished">Trimite comanda o dată către terminalele marcate explicit</translation>
-    </message>
-    <message>
-        <source>Broadcast input</source>
-        <translation type="unfinished">Intrare de difuzare</translation>
-    </message>
-    <message>
-        <source>Explicitly check at least one target terminal before turning on broadcast</source>
-        <translation type="unfinished">Marchează explicit cel puțin un terminal țintă înainte de a activa difuzarea</translation>
-    </message>
-    <message>
-        <source>Broadcast send requires a non-empty command and at least one explicit target</source>
-        <translation type="unfinished">Trimiterea difuzării necesită o comandă nevidă și cel puțin o țintă explicită</translation>
-    </message>
-    <message>
         <source>Name</source>
         <translation type="unfinished">Nume</translation>
     </message>
@@ -2420,12 +2384,8 @@ Confirmi că cheia s-a schimbat, înlocuiești vechea înregistrare din known_ho
         <translation type="unfinished">Salvează modificările fragmentului curent</translation>
     </message>
     <message>
-        <source>Run  %1</source>
-        <translation type="unfinished">Execută  %1</translation>
-    </message>
-    <message>
-        <source>Shortcut %1</source>
-        <translation type="unfinished">Comandă rapidă %1</translation>
+        <source>Run (%1)</source>
+        <translation type="unfinished">Execută (%1)</translation>
     </message>
     <message>
         <source>The productivity model is not ready yet</source>

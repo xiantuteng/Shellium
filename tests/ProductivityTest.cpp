@@ -53,9 +53,21 @@ private slots:
 
     /**
      * @brief 界面层不再暴露分组功能，也不再提供多目标执行勾选框：Snippet 列表只显示扁平
-     * 记录，且执行始终发出空 targetIds（由上层解释为当前活动终端）。广播仍然保留多目标。
+     * 记录，且执行始终发出空 targetIds（由上层解释为当前活动终端）。
+     *
+     * "广播输入"标签页已整体移除（多终端同步输入只由工作空间标题栏开关负责），侧栏里不能
+     * 再残留任何广播目标列表、开关或一次性发送入口。
      */
-    void widgetHasNoGroupingAndExecutesOnCurrentTerminalWhileBroadcastKeepsTargets();
+    void widgetHasNoGroupingNoBroadcastAndExecutesOnCurrentTerminal();
+
+    /**
+     * @brief 标题行动作条与主机侧栏同构：绿色"新建片段"主按钮 + 删除图标；删除只在片段页
+     * 可用，切到历史页时置灰。
+     */
+    void headerActionsMatchHostSidebarAndFollowCurrentTab();
+
+    /** @brief 片段搜索按名称/命令/说明不区分大小写过滤，筛选期间必须关闭拖拽排序。 */
+    void snippetSearchFiltersRowsAndSuspendsReordering();
 
     /**
      * @brief 会话状态栏的瞬时提示必须紧邻服务器名，且到期后自动清空。
@@ -252,7 +264,7 @@ void ProductivityTest::terminalPanePersistsSubmittedCommands()
     QCOMPARE(history.at(1).command, QStringLiteral("uptime"));
 }
 
-void ProductivityTest::widgetHasNoGroupingAndExecutesOnCurrentTerminalWhileBroadcastKeepsTargets()
+void ProductivityTest::widgetHasNoGroupingNoBroadcastAndExecutesOnCurrentTerminal()
 {
     SnippetRecord snippet;
     snippet.id = QStringLiteral("snippet-disk");
@@ -286,9 +298,8 @@ void ProductivityTest::widgetHasNoGroupingAndExecutesOnCurrentTerminalWhileBroad
     QVERIFY(snippetList != nullptr);
     QListWidgetItem *snippetItem = findSnippetItem(snippetList, snippet.id);
     QVERIFY(snippetItem != nullptr);
-    auto *executeButton = qobject_cast<QPushButton *>(
-        snippetList->itemWidget(snippetItem)->findChild<QPushButton *>(
-            QStringLiteral("productivitySnippetExecute")));
+    auto *executeButton = snippetList->itemWidget(snippetItem)->findChild<QToolButton *>(
+        QStringLiteral("productivitySnippetExecute"));
     QVERIFY(executeButton != nullptr);
 
     QSignalSpy executionSpy(&widget, &ProductivityWidget::commandExecutionRequested);
@@ -298,34 +309,113 @@ void ProductivityTest::widgetHasNoGroupingAndExecutesOnCurrentTerminalWhileBroad
     // 空 targetIds：执行始终落在当前活动终端，不再由界面选择多个目标。
     QVERIFY(executionSpy.constFirst().at(1).toStringList().isEmpty());
 
-    // 广播仍然是多目标功能，保留其独立的勾选列表。
-    QListWidget *broadcastTargets = widget.findChild<QListWidget *>(
-        QStringLiteral("productivityBroadcastTargets"));
-    QCheckBox *broadcastEnabled = widget.findChild<QCheckBox *>(
-        QStringLiteral("productivityBroadcastEnabled"));
-    QLineEdit *broadcastInput = widget.findChild<QLineEdit *>(
-        QStringLiteral("productivityBroadcastInput"));
-    QPushButton *broadcastSend = widget.findChild<QPushButton *>(
-        QStringLiteral("productivityBroadcastSend"));
-    QVERIFY(broadcastTargets != nullptr);
-    QVERIFY(broadcastEnabled != nullptr);
-    QVERIFY(broadcastInput != nullptr);
-    QVERIFY(broadcastSend != nullptr);
-    QCOMPARE(broadcastTargets->count(), 2);
-    broadcastTargets->item(1)->setCheckState(Qt::Checked);
+    // 广播输入页及其全部控件必须彻底消失，而不只是隐藏标签。
+    auto *tabs = widget.findChild<QTabWidget *>(QStringLiteral("productivityTabs"));
+    QVERIFY(tabs != nullptr);
+    QCOMPARE(tabs->count(), 2);
+    for (int index = 0; index < tabs->count(); ++index) {
+        QVERIFY2(!tabs->tabText(index).contains(QStringLiteral("Broadcast")),
+                 "效率工具不应再有广播输入标签页");
+    }
+    QVERIFY(widget.findChild<QWidget *>(QStringLiteral("productivityBroadcastPage")) == nullptr);
+    QVERIFY(widget.findChild<QListWidget *>(QStringLiteral("productivityBroadcastTargets"))
+            == nullptr);
+    QVERIFY(widget.findChild<QCheckBox *>(QStringLiteral("productivityBroadcastEnabled"))
+            == nullptr);
+    QVERIFY(widget.findChild<QLineEdit *>(QStringLiteral("productivityBroadcastInput"))
+            == nullptr);
+    QVERIFY(widget.findChild<QPushButton *>(QStringLiteral("productivityBroadcastSend"))
+            == nullptr);
+    QVERIFY(widget.metaObject()->indexOfSignal("broadcastModeChanged(bool,QStringList)") < 0);
+    QVERIFY(widget.metaObject()->indexOfSignal("broadcastInputRequested(QByteArray,QStringList)")
+            < 0);
 
-    QSignalSpy modeSpy(&widget, &ProductivityWidget::broadcastModeChanged);
-    broadcastEnabled->setChecked(true);
-    QVERIFY(modeSpy.count() >= 1);
-    QCOMPARE(modeSpy.constLast().at(0).toBool(), true);
-    QCOMPARE(modeSpy.constLast().at(1).toStringList(), QStringList({QStringLiteral("host-b")}));
+    // 目标快照仍然驱动历史页的主机筛选：本地项 + 两台主机。
+    auto *historyHost = widget.findChild<QComboBox *>(QStringLiteral("productivityHistoryHost"));
+    QVERIFY(historyHost != nullptr);
+    QCOMPARE(historyHost->count(), 3);
+    QCOMPARE(historyHost->itemData(2).toString(), QStringLiteral("host-b"));
+}
 
-    QSignalSpy inputSpy(&widget, &ProductivityWidget::broadcastInputRequested);
-    broadcastInput->setText(QStringLiteral("hostname"));
-    broadcastSend->click();
-    QCOMPARE(inputSpy.count(), 1);
-    QCOMPARE(inputSpy.constFirst().at(0).toByteArray(), QByteArrayLiteral("hostname\r"));
-    QCOMPARE(inputSpy.constFirst().at(1).toStringList(), QStringList({QStringLiteral("host-b")}));
+void ProductivityTest::headerActionsMatchHostSidebarAndFollowCurrentTab()
+{
+    ProductivityWidget widget(m_model.get());
+    QWidget *header = widget.headerActionsWidget();
+    QVERIFY(header != nullptr);
+
+    auto *newSnippet = header->findChild<QPushButton *>(QStringLiteral("productivityNewSnippet"));
+    QVERIFY2(newSnippet != nullptr, "新建片段必须挂在标题行动作条里");
+    QVERIFY(newSnippet->property("primaryAction").toBool());
+    QVERIFY(newSnippet->property("hostPrimaryAction").toBool());
+    auto *remove = header->findChild<QToolButton *>(QStringLiteral("productivityRemoveSnippet"));
+    QVERIFY(remove != nullptr);
+    QVERIFY(remove->property("compactIconButton").toBool());
+    QCOMPARE(remove->toolButtonStyle(), Qt::ToolButtonIconOnly);
+
+    widget.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&widget));
+    QVERIFY(remove->isVisible());
+    auto *tabs = widget.findChild<QTabWidget *>(QStringLiteral("productivityTabs"));
+    QVERIFY(tabs != nullptr);
+    tabs->setCurrentIndex(1);
+    QVERIFY2(remove->isVisible() && !remove->isEnabled(),
+             "历史页没有可删除的片段，删除按钮必须置灰（但不隐藏，避免标题行跳动）");
+
+    // 在历史页点"新建片段"要切回片段页再弹编辑框，否则用户看不到新片段落在哪里。
+    newSnippet->click();
+    QCOMPARE(tabs->currentIndex(), 0);
+    QVERIFY(remove->isEnabled());
+    auto *dialog = widget.findChild<QDialog *>(QStringLiteral("productivitySnippetDialog"));
+    QVERIFY(dialog != nullptr && dialog->isVisible());
+    dialog->reject();
+}
+
+void ProductivityTest::snippetSearchFiltersRowsAndSuspendsReordering()
+{
+    SnippetRecord disk;
+    disk.id = QStringLiteral("snippet-disk");
+    disk.kind = SnippetNodeKind::Snippet;
+    disk.name = QStringLiteral("Disk usage");
+    disk.command = QStringLiteral("df -h");
+    disk.sortOrder = 0;
+    QVERIFY(m_model->saveSnippet(disk));
+    SnippetRecord nginx;
+    nginx.id = QStringLiteral("snippet-nginx");
+    nginx.kind = SnippetNodeKind::Snippet;
+    nginx.name = QStringLiteral("重启");
+    nginx.command = QStringLiteral("systemctl restart nginx");
+    nginx.description = QStringLiteral("Web 服务");
+    nginx.sortOrder = 1;
+    QVERIFY(m_model->saveSnippet(nginx));
+
+    ProductivityWidget widget(m_model.get());
+    auto *search = widget.findChild<QLineEdit *>(QStringLiteral("productivitySnippetSearch"));
+    auto *list = widget.findChild<QListWidget *>(QStringLiteral("productivitySnippetList"));
+    QVERIFY(search != nullptr);
+    QVERIFY(list != nullptr);
+    QCOMPARE(list->dragDropMode(), QAbstractItemView::InternalMove);
+
+    // 命令里的词、不同大小写都要命中；不匹配的行隐藏而不是删除。
+    search->setText(QStringLiteral("NGINX"));
+    QCOMPARE(list->count(), 2);
+    QVERIFY(findSnippetItem(list, disk.id)->isHidden());
+    QVERIFY(!findSnippetItem(list, nginx.id)->isHidden());
+    QCOMPARE(list->dragDropMode(), QAbstractItemView::NoDragDrop);
+
+    // 说明字段同样参与匹配。
+    search->setText(QStringLiteral("web"));
+    QVERIFY(findSnippetItem(list, disk.id)->isHidden());
+    QVERIFY(!findSnippetItem(list, nginx.id)->isHidden());
+
+    // 模型变化触发整表重建后，筛选必须继续生效。
+    disk.command = QStringLiteral("df -h /");
+    QVERIFY(m_model->saveSnippet(disk));
+    QVERIFY(findSnippetItem(list, disk.id)->isHidden());
+
+    search->clear();
+    QVERIFY(!findSnippetItem(list, disk.id)->isHidden());
+    QVERIFY(!findSnippetItem(list, nginx.id)->isHidden());
+    QCOMPARE(list->dragDropMode(), QAbstractItemView::InternalMove);
 }
 
 void ProductivityTest::terminalPaneShowsAndExpiresTransientStatus()
@@ -451,14 +541,14 @@ void ProductivityTest::snippetListIsFlatWithDescriptionFallbackAndShortcutHints(
 
     // 每行都要有执行/复制按钮；前两行（第 1、2 个片段）的执行按钮要提示 Ctrl+1、Ctrl+2。
     for (QWidget *row : {withDescRow, withoutDescRow}) {
-        QVERIFY(row->findChild<QPushButton *>(QStringLiteral("productivitySnippetExecute"))
+        QVERIFY(row->findChild<QToolButton *>(QStringLiteral("productivitySnippetExecute"))
                     != nullptr);
-        QVERIFY(row->findChild<QPushButton *>(QStringLiteral("productivitySnippetCopy"))
+        QVERIFY(row->findChild<QToolButton *>(QStringLiteral("productivitySnippetCopy"))
                     != nullptr);
     }
-    auto *firstExecute = withDescRow->findChild<QPushButton *>(
+    auto *firstExecute = withDescRow->findChild<QToolButton *>(
         QStringLiteral("productivitySnippetExecute"));
-    auto *secondExecute = withoutDescRow->findChild<QPushButton *>(
+    auto *secondExecute = withoutDescRow->findChild<QToolButton *>(
         QStringLiteral("productivitySnippetExecute"));
     QVERIFY2(firstExecute->toolTip().contains(QStringLiteral("Ctrl+1")),
              "第一个片段的执行按钮必须提示 Ctrl+1");
@@ -470,7 +560,7 @@ void ProductivityTest::snippetEditorDialogSavesWithoutGroupingField()
 {
     ProductivityWidget widget(m_model.get());
 
-    auto *newSnippetButton = widget.findChild<QToolButton *>(
+    auto *newSnippetButton = widget.findChild<QPushButton *>(
         QStringLiteral("productivityNewSnippet"));
     QVERIFY(newSnippetButton != nullptr);
     newSnippetButton->click();
@@ -551,7 +641,7 @@ void ProductivityTest::snippetRowCopyButtonWritesCommandToClipboard()
     QVERIFY(list != nullptr);
     QListWidgetItem *item = findSnippetItem(list, snippet.id);
     QVERIFY(item != nullptr);
-    auto *copyButton = list->itemWidget(item)->findChild<QPushButton *>(
+    auto *copyButton = list->itemWidget(item)->findChild<QToolButton *>(
         QStringLiteral("productivitySnippetCopy"));
     QVERIFY(copyButton != nullptr);
 
@@ -681,9 +771,10 @@ void ProductivityTest::snippetRowsAndTabsRetranslateOnLanguageChange()
     auto *list = widget.findChild<QListWidget *>(QStringLiteral("productivitySnippetList"));
     QVERIFY(list != nullptr);
     // 语言切换会整表重建，行控件指针随之失效，因此每次都按 id 重新定位当前行。
+    // 行内按钮已是纯图标，语言只体现在 Tooltip 上。
     const auto buttonText = [&](const QString &objectName) {
         QListWidgetItem *item = findSnippetItem(list, snippet.id);
-        return list->itemWidget(item)->findChild<QPushButton *>(objectName)->text();
+        return list->itemWidget(item)->findChild<QToolButton *>(objectName)->toolTip();
     };
     const auto executeText = [&]() {
         return buttonText(QStringLiteral("productivitySnippetExecute"));
@@ -691,19 +782,22 @@ void ProductivityTest::snippetRowsAndTabsRetranslateOnLanguageChange()
     const auto copyText = [&]() {
         return buttonText(QStringLiteral("productivitySnippetCopy"));
     };
-    QCOMPARE(copyText(), QStringLiteral("Copy"));
+    QCOMPARE(copyText(), QStringLiteral("Copy command"));
+    auto *search = widget.findChild<QLineEdit *>(QStringLiteral("productivitySnippetSearch"));
+    QVERIFY(search != nullptr);
 
     MarkerTranslator translator;
     QVERIFY(QCoreApplication::installTranslator(&translator));
     QCoreApplication::sendPostedEvents(nullptr, QEvent::LanguageChange);
 
     QCOMPARE(tabs->tabText(0), QStringLiteral("!!Command snippets"));
-    QCOMPARE(copyText(), QStringLiteral("!!Copy"));
-    QCOMPARE(executeText(), QStringLiteral("!!Run  %1").arg(QStringLiteral("Ctrl+1")));
+    QCOMPARE(copyText(), QStringLiteral("!!Copy command"));
+    QCOMPARE(executeText(), QStringLiteral("!!Run (%1)").arg(QStringLiteral("Ctrl+1")));
+    QVERIFY(search->placeholderText().startsWith(QStringLiteral("!!")));
 
     QVERIFY(QCoreApplication::removeTranslator(&translator));
     QCoreApplication::sendPostedEvents(nullptr, QEvent::LanguageChange);
-    QCOMPARE(copyText(), QStringLiteral("Copy"));
+    QCOMPARE(copyText(), QStringLiteral("Copy command"));
 }
 
 QTEST_MAIN(ProductivityTest)

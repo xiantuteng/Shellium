@@ -50,7 +50,7 @@ SftpService 使用独立连接，经正确的外层隧道访问该层
 | 主机管理缺少 UI | ✅ 左侧主机树、嵌套分组、继承、搜索、标签筛选、最近连接、历史和安全导入导出已接通 |
 | 端口转发无实现 | ✅ -L、-R、-D、规则 CRUD、一键启停、随连接启动、连接数与流量统计已接通 |
 | 终端设置硬编码 | ✅ 跟随系统/亮/暗主题、字体、行高、字距、光标、滚动行数、铃声、自动重连和快捷键可配置 |
-| 效率工具无实现 | ✅ Snippet 树、历史、历史补全、多主机执行和广播模式已接通 |
+| 效率工具无实现 | ✅ Snippet 树、历史、历史补全、多主机执行已接通（广播输入页已移除，统一由工作区标题栏广播开关负责） |
 | 工作区只有表结构 | ✅ 可保存、覆盖、打开、删除标签组合，并在替换前完整校验 JSON 和主机引用 |
 
 ### 0.3 当前剩余边界
@@ -218,7 +218,7 @@ Shellium 面向需要在跳板机、内网多层服务器与 SFTP 之间频繁�
 | 多主机执行 | P1 | ✅ 按持久主机 id 路由到匹配终端 |
 | 按主机记录命令历史 | P0 | ✅ |
 | 基于历史的前缀补全 | P1 | ✅ |
-| 广播模式 | P1 | ✅ 含防止终端间循环广播 |
+| 广播模式 | P1 | ✅ 由工作区标题栏开关提供，含防止终端间循环广播；效率工具侧栏的广播输入页已移除 |
 | 连接后自动执行启动 Snippet | P1 | ❌ |
 
 ### 3.5 终端增强
@@ -240,7 +240,7 @@ Shellium 面向需要在跳板机、内网多层服务器与 SFTP 之间频繁�
 | 工作区保存/覆盖/删除 | P1 | ✅ |
 | 标签标题、保存主机、文件栏显隐恢复 | P1 | ✅ |
 | 打开前完整校验并确认替换 | P1 | ✅ 无效 JSON、版本或主机引用不会破坏当前会话 |
-| 工作区内广播 | P1 | ✅ 复用效率工具广播 |
+| 工作区内广播 | P1 | ✅ TerminalWorkspaceGroup 标题栏开关，独立于效率工具 |
 | 独立“模板”类型 | P2 | ⚠️ 保存工作区可重复一键打开，尚无模板标记、只读或参数化能力 |
 
 ---
@@ -279,7 +279,7 @@ Shellium 面向需要在跳板机、内网多层服务器与 SFTP 之间频繁�
 | CredentialVault / Vault | 保险库状态机、KDF、认证加密与凭据引用 |
 | HostManagerWidget | 主机树、分组、搜索、最近连接和导入导出 |
 | PortForwardRuntime | 独立网络线程中的 -L/-R/-D 生命周期与统计 |
-| ProductivityModel/Widget | Snippet、历史、补全、多目标执行和广播 |
+| ProductivityModel/Widget | Snippet、历史、补全、多目标执行 |
 | TerminalSettingsService | 设置加载、校验、原子保存、实时预览与广播 |
 | ApplicationDatabase | SQLite schema、事务和全部领域记录 CRUD |
 
@@ -307,7 +307,7 @@ Shellium 面向需要在跳板机、内网多层服务器与 SFTP 之间频繁�
 | ShelliumCoreTests | 命令解析、终端输入/渲染、Shell Integration、设置、Vault |
 | ShelliumStorageTests | 主机、凭据、历史、工作区和设置持久化 |
 | ShelliumConnectionToolsTests | 配置导入导出、密钥、SOCKS5 纯协议逻辑 |
-| ShelliumProductivityTests | Snippet、历史、补全、多目标与广播接线 |
+| ShelliumProductivityTests | Snippet、历史、补全、搜索与标题行动作 |
 | ShelliumKeepAliveTests | 分层保活判定与失败退避 |
 | ShelliumSftpRecursiveTests | 递归路径安全、续传计划、失败聚合 |
 | ShelliumSshIntegrationTests | 真实 SSH/SFTP/多跳路径；缺少 SHELLIUM_IT_* 时安全跳过 |

@@ -7,11 +7,11 @@
 #include <QAbstractItemModel>
 #include <QAction>
 #include <QApplication>
-#include <QCheckBox>
 #include <QClipboard>
 #include <QComboBox>
 #include <QDialog>
 #include <QFormLayout>
+#include <QFrame>
 #include <QHBoxLayout>
 #include <QKeySequence>
 #include <QLabel>
@@ -21,7 +21,10 @@
 #include <QMessageBox>
 #include <QMenu>
 #include <QPushButton>
+#include <QSet>
 #include <QShortcut>
+#include <QSignalBlocker>
+#include <QTabBar>
 #include <QTabWidget>
 #include <QTextEdit>
 #include <QToolButton>
@@ -35,8 +38,8 @@ namespace {
 /** @brief QListWidgetItem::UserRole 中保存的稳定 Snippet id。 */
 constexpr int kIdRole = Qt::UserRole;
 
-/** @brief 目标列表项 UserRole 中保存的持久化主机 id。 */
-constexpr int kTargetIdRole = Qt::UserRole;
+/** @brief 片段行中参与搜索的名称、命令和说明，统一小写后存放，筛选时无需再查库。 */
+constexpr int kSearchTextRole = Qt::UserRole + 1;
 
 /** @brief 最多提供数字快捷键的片段数量：Ctrl+1..Ctrl+9、Ctrl+0。 */
 constexpr int kMaxShortcutSnippets = 10;
@@ -62,21 +65,49 @@ void configureProductivityIconButton(QToolButton *button, const QString &accessi
 }
 
 /**
- * @brief 创建一条可复选的目标列表项，供历史筛选和广播使用。
+ * @brief 列表行内的"执行/复制"按钮：比标题行按钮更小，平时透明，只在悬停时出底色。
  *
- * 列表项不保存 ConnectionTarget 全量对象，尤其不能复制 password；稳定 id 足以让上层在
- * 真正发送前重新定位会话，也避免侧栏快照意外延长凭据驻留时间。
+ * 主机树的行内没有任何彩色按钮；此前每行一枚绿色"执行"加一枚描边"复制"，在长列表里
+ * 形成一整列高亮块，与主机侧栏的安静行风格明显不一致。
  */
-QListWidgetItem *createTargetItem(const ConnectionTarget &target, QListWidget *list)
+void configureRowIconButton(QToolButton *button,
+                            const UiIcons::Symbol symbol,
+                            const QString &toolTip)
 {
-    auto *item = new QListWidgetItem(
-        target.displayName.isEmpty() ? target.connectionSpecifier(true) : target.displayName,
-        list);
-    item->setData(kTargetIdRole, target.id);
-    item->setToolTip(target.connectionSpecifier(true));
-    item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
-    item->setCheckState(Qt::Unchecked);
-    return item;
+    Q_ASSERT(button != nullptr);
+    button->setProperty("compactIconButton", true);
+    button->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    button->setAutoRaise(false);
+    button->setFixedSize(28, 28);
+    button->setIconSize(QSize(15, 15));
+    button->setIcon(UiIcons::symbol(button, symbol, button->palette().color(QPalette::WindowText)));
+    button->setToolTip(toolTip);
+    button->setAccessibleName(toolTip);
+}
+
+/**
+ * @brief 用与"主机"侧栏相同的外框包住一个搜索输入框。
+ * @param edit 实际承载输入的行编辑器；调用方保留其指针与 objectName，测试接口不变。
+ * @param parent 外框的父控件。
+ *
+ * 外观（圆角描边、无内框、左侧放大镜）由 MainWindow 样式表按 ProductivitySearchBar /
+ * ProductivitySearchEdit 两个名字与 HostSearchBar 共用同一组规则，这里只负责结构。
+ */
+QFrame *createSearchBar(QLineEdit *edit, QWidget *parent)
+{
+    auto *bar = new QFrame(parent);
+    bar->setObjectName(QStringLiteral("ProductivitySearchBar"));
+    auto *layout = new QHBoxLayout(bar);
+    layout->setContentsMargins(5, 0, 7, 0);
+    layout->setSpacing(2);
+    edit->setParent(bar);
+    edit->setProperty("productivitySearchEdit", true);
+    edit->setClearButtonEnabled(true);
+    edit->addAction(
+        UiIcons::symbol(edit, UiIcons::Symbol::Search, edit->palette().color(QPalette::WindowText)),
+        QLineEdit::LeadingPosition);
+    layout->addWidget(edit, 1);
+    return bar;
 }
 
 /**
@@ -105,39 +136,61 @@ void ProductivityWidget::buildUi()
 {
     auto *rootLayout = new QVBoxLayout(this);
     rootLayout->setContentsMargins(0, 0, 0, 0);
+    rootLayout->setSpacing(0);
     m_tabs = new QTabWidget(this);
     m_tabs->setObjectName(QStringLiteral("productivityTabs"));
     m_tabs->setDocumentMode(true);
+    // documentMode 下 macOS 会给标签栏画一条浅灰底座，在深色侧栏里很突兀；关掉底座并让
+    // 两个标签均分宽度，使其与下方通栏搜索框同宽对齐。
+    m_tabs->tabBar()->setDrawBase(false);
+    m_tabs->tabBar()->setExpanding(true);
     rootLayout->addWidget(m_tabs);
 
-    // -------------------------------------------------------------- Snippets 标签
-    auto *snippetPage = new QWidget(m_tabs);
-    auto *snippetPageLayout = new QVBoxLayout(snippetPage);
-    snippetPageLayout->setContentsMargins(0, 8, 0, 0);
-    snippetPageLayout->setSpacing(8);
-
-    auto *snippetToolbar = new QHBoxLayout;
-    snippetToolbar->setSpacing(5);
-    auto *newSnippetButton = new QToolButton(snippetPage);
+    // ------------------------------------------------------------ 标题行动作条
+    // 与"主机"侧栏一致：绿色文字主按钮 + 竖分隔线 + 次要图标按钮，整体由 MainWindow 摆进
+    // 共享标题行。页面内部因此不再需要一条单独的工具栏，纵向空间全部留给列表。
+    m_headerActions = new QWidget(this);
+    m_headerActions->setObjectName(QStringLiteral("productivityHeaderActions"));
+    auto *newSnippetButton = new QPushButton(tr("New snippet"), m_headerActions);
     newSnippetButton->setObjectName(QStringLiteral("productivityNewSnippet"));
-    newSnippetButton->setText(tr("New snippet"));
-    auto *removeButton = new QToolButton(snippetPage);
-    removeButton->setObjectName(QStringLiteral("productivityRemoveSnippet"));
-    removeButton->setText(tr("Delete"));
+    newSnippetButton->setProperty("primaryAction", true);
+    newSnippetButton->setProperty("hostPrimaryAction", true);
+    newSnippetButton->setMinimumWidth(90);
+    newSnippetButton->setFixedHeight(30);
+    // 主操作底色在深浅主题下都是固定的高亮绿，图标同主机页一样固定用深色保证对比度。
     UiIcons::decorateButton(
         newSnippetButton,
-        UiIcons::symbol(this, UiIcons::Symbol::Plus, this->palette().color(QPalette::WindowText)),
+        UiIcons::symbol(this, UiIcons::Symbol::Plus, QColor(QStringLiteral("#0c2f24"))),
         tr("Create an executable command snippet"));
+    auto *removeButton = new QToolButton(m_headerActions);
+    removeButton->setObjectName(QStringLiteral("productivityRemoveSnippet"));
+    removeButton->setText(tr("Delete"));
     UiIcons::decorateButton(
         removeButton,
         UiIcons::symbol(this, UiIcons::Symbol::Trash, this->palette().color(QPalette::WindowText)),
         tr("Delete the selected snippet"));
-    configureProductivityIconButton(newSnippetButton, tr("Create an executable command snippet"));
     configureProductivityIconButton(removeButton, tr("Delete the selected snippet"));
-    snippetToolbar->addWidget(newSnippetButton);
-    snippetToolbar->addStretch();
-    snippetToolbar->addWidget(removeButton);
-    snippetPageLayout->addLayout(snippetToolbar);
+    auto *actionDivider = new QFrame(m_headerActions);
+    actionDivider->setObjectName(QStringLiteral("HostHeaderActionDivider"));
+    actionDivider->setFrameShape(QFrame::VLine);
+    actionDivider->setFixedSize(1, 20);
+    auto *headerLayout = new QHBoxLayout(m_headerActions);
+    headerLayout->setContentsMargins(0, 0, 0, 0);
+    headerLayout->setSpacing(6);
+    headerLayout->addWidget(newSnippetButton);
+    headerLayout->addWidget(actionDivider, 0, Qt::AlignVCenter);
+    headerLayout->addWidget(removeButton);
+
+    // -------------------------------------------------------------- Snippets 标签
+    auto *snippetPage = new QWidget(m_tabs);
+    auto *snippetPageLayout = new QVBoxLayout(snippetPage);
+    snippetPageLayout->setContentsMargins(0, 10, 0, 0);
+    snippetPageLayout->setSpacing(10);
+
+    m_snippetSearchEdit = new QLineEdit(snippetPage);
+    m_snippetSearchEdit->setObjectName(QStringLiteral("productivitySnippetSearch"));
+    m_snippetSearchEdit->setPlaceholderText(tr("Search name / command…"));
+    snippetPageLayout->addWidget(createSearchBar(m_snippetSearchEdit, snippetPage));
 
     m_snippetList = new QListWidget(snippetPage);
     m_snippetList->setObjectName(QStringLiteral("productivitySnippetList"));
@@ -148,24 +201,38 @@ void ProductivityWidget::buildUi()
     m_snippetList->setDefaultDropAction(Qt::MoveAction);
     m_snippetList->setContextMenuPolicy(Qt::CustomContextMenu);
     m_snippetList->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
+    m_snippetList->setSpacing(1);
+    m_snippetList->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     snippetPageLayout->addWidget(m_snippetList, 1);
     const int snippetTabIndex = m_tabs->addTab(snippetPage, tr("Command snippets"));
     i18n::onRetranslate(this, [this, snippetTabIndex, newSnippetButton, removeButton] {
         m_tabs->setTabText(snippetTabIndex, tr("Command snippets"));
+        m_snippetSearchEdit->setPlaceholderText(tr("Search name / command…"));
         newSnippetButton->setText(tr("New snippet"));
         newSnippetButton->setToolTip(tr("Create an executable command snippet"));
         removeButton->setText(tr("Delete"));
         removeButton->setToolTip(tr("Delete the selected snippet"));
-        // 行内“执行/复制”按钮的文字在 createSnippetRowWidget 里一次性写死，语言切换时
+        removeButton->setAccessibleName(tr("Delete the selected snippet"));
+        // 行内“执行/复制”按钮的提示在 createSnippetRowWidget 里一次性写死，语言切换时
         // 不会自己更新；整表重建是让每一行都回到当前语言最省心的做法（右键菜单是按需
         // 构造的，下次弹出即为新语言，无需在此处理）。
         reloadSnippets();
     });
 
-    connect(newSnippetButton, &QToolButton::clicked,
-            this, [this]() { openSnippetEditor(QString()); });
+    // 删除只对片段页有意义；切到历史页时置灰，免得用户以为它能删历史记录。只置灰不隐藏，
+    // 否则标题行宽度变化会让"新建片段"按钮随标签切换左右跳动。
+    connect(m_tabs, &QTabWidget::currentChanged, this,
+            [snippetTabIndex, removeButton](const int index) {
+                removeButton->setEnabled(index == snippetTabIndex);
+            });
+    connect(newSnippetButton, &QPushButton::clicked, this, [this, snippetTabIndex]() {
+        m_tabs->setCurrentIndex(snippetTabIndex);
+        openSnippetEditor(QString());
+    });
     connect(removeButton, &QToolButton::clicked,
             this, &ProductivityWidget::removeSelectedRecord);
+    connect(m_snippetSearchEdit, &QLineEdit::textChanged,
+            this, &ProductivityWidget::applySnippetFilter);
     connect(m_snippetList, &QListWidget::itemDoubleClicked, this,
             [this](QListWidgetItem *item) {
                 if (item != nullptr) {
@@ -238,8 +305,8 @@ void ProductivityWidget::buildUi()
     auto *historyPage = new QWidget(m_tabs);
     historyPage->setObjectName(QStringLiteral("productivityHistoryPage"));
     auto *historyLayout = new QVBoxLayout(historyPage);
-    historyLayout->setContentsMargins(0, 8, 0, 0);
-    historyLayout->setSpacing(8);
+    historyLayout->setContentsMargins(0, 10, 0, 0);
+    historyLayout->setSpacing(10);
     m_historyHostCombo = new QComboBox(historyPage);
     UiIcons::modernizePopup(m_historyHostCombo);
     m_historyHostCombo->setObjectName(QStringLiteral("productivityHistoryHost"));
@@ -247,16 +314,19 @@ void ProductivityWidget::buildUi()
     m_historyPrefixEdit->setObjectName(QStringLiteral("productivityHistoryPrefix"));
     m_historyPrefixEdit->setPlaceholderText(tr("Filter by command prefix"));
     // 主机与前缀筛选在窄侧栏内上下堆叠；并排布局会让两个输入框都只剩百余像素，主机名
-    // 和长前缀同时被截断。
+    // 和长前缀同时被截断。前缀输入框套用与主机页相同的搜索框外观。
     historyLayout->addWidget(m_historyHostCombo);
-    historyLayout->addWidget(m_historyPrefixEdit);
+    historyLayout->addWidget(createSearchBar(m_historyPrefixEdit, historyPage));
     m_historyList = new QListWidget(historyPage);
+    m_historyList->setObjectName(QStringLiteral("productivityHistoryList"));
+    m_historyList->setSpacing(1);
     m_historyList->setContextMenuPolicy(Qt::CustomContextMenu);
     m_historyList->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
     historyLayout->addWidget(m_historyList, 1);
     auto *historyExecuteButton = new QPushButton(tr("Run on the selected host"), historyPage);
     historyExecuteButton->setObjectName(QStringLiteral("productivityHistoryExecute"));
-    historyExecuteButton->setProperty("primaryAction", true);
+    // 侧栏里唯一的绿色主按钮留给标题行的"新建片段"，与主机页只有"新增主机"高亮一致；
+    // 历史重跑是次要动作，使用普通描边按钮。
     UiIcons::decorateButton(
         historyExecuteButton,
         UiIcons::symbol(this, UiIcons::Symbol::Play, this->palette().color(QPalette::WindowText)),
@@ -326,75 +396,6 @@ void ProductivityWidget::buildUi()
                 });
                 menu.exec(m_historyList->viewport()->mapToGlobal(position));
             });
-
-    // --------------------------------------------------------------- 广播标签
-    auto *broadcastPage = new QWidget(m_tabs);
-    broadcastPage->setObjectName(QStringLiteral("productivityBroadcastPage"));
-    auto *broadcastLayout = new QVBoxLayout(broadcastPage);
-    broadcastLayout->setContentsMargins(0, 8, 0, 0);
-    broadcastLayout->setSpacing(8);
-    broadcastLayout->addWidget(new QLabel(
-        tr("After choosing targets you can turn on live keyboard broadcast; the source terminal is bound by the main window to the current tab."), broadcastPage));
-    m_broadcastTargets = new QListWidget(broadcastPage);
-    m_broadcastTargets->setObjectName(QStringLiteral("productivityBroadcastTargets"));
-    m_broadcastTargets->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
-    broadcastLayout->addWidget(m_broadcastTargets, 1);
-    m_broadcastEnabled = new QCheckBox(tr("Turn on live raw input broadcast"), broadcastPage);
-    m_broadcastEnabled->setObjectName(QStringLiteral("productivityBroadcastEnabled"));
-    broadcastLayout->addWidget(m_broadcastEnabled);
-    m_broadcastInput = new QLineEdit(broadcastPage);
-    m_broadcastInput->setObjectName(QStringLiteral("productivityBroadcastInput"));
-    m_broadcastInput->setPlaceholderText(tr("Send a command once to the selected targets"));
-    auto *broadcastSendButton = new QPushButton(tr("Broadcast send"), broadcastPage);
-    i18n::onRetranslate(this, [this, broadcastSendButton] {
-        m_broadcastEnabled->setText(tr("Turn on live raw input broadcast"));
-        m_broadcastInput->setPlaceholderText(tr("Send a command once to the selected targets"));
-        broadcastSendButton->setText(tr("Broadcast send"));
-        broadcastSendButton->setToolTip(
-            tr("Send a command once to the terminals you explicitly checked"));
-    });
-    broadcastSendButton->setProperty("primaryAction", true);
-    UiIcons::decorateButton(
-        broadcastSendButton,
-        UiIcons::symbol(this, UiIcons::Symbol::Send, this->palette().color(QPalette::WindowText)),
-        tr("Send a command once to the terminals you explicitly checked"));
-    broadcastSendButton->setObjectName(QStringLiteral("productivityBroadcastSend"));
-    // 一次性命令输入与发送按钮同样采用单列通栏布局，防止按钮文字挤占命令输入空间。
-    broadcastLayout->addWidget(m_broadcastInput);
-    broadcastLayout->addWidget(broadcastSendButton);
-    const int broadcastTabIndex = m_tabs->addTab(broadcastPage, tr("Broadcast input"));
-    i18n::onRetranslate(this, [this, broadcastTabIndex] {
-        m_tabs->setTabText(broadcastTabIndex, tr("Broadcast input"));
-    });
-
-    connect(m_broadcastEnabled, &QCheckBox::toggled, this, [this](const bool enabled) {
-        const QStringList ids = checkedTargetIds(m_broadcastTargets);
-        if (enabled && ids.isEmpty()) {
-            // 不自动选择全部目标：广播命令具有破坏性，必须由用户明确勾选接收方。
-            m_broadcastEnabled->setChecked(false);
-            emit statusMessage(tr("Explicitly check at least one target terminal before turning on broadcast"));
-            return;
-        }
-        emit broadcastModeChanged(enabled, ids);
-    });
-    connect(m_broadcastTargets, &QListWidget::itemChanged, this,
-            [this](QListWidgetItem *) {
-                if (m_broadcastEnabled->isChecked()) {
-                    emit broadcastModeChanged(true, checkedTargetIds(m_broadcastTargets));
-                }
-            });
-    connect(broadcastSendButton, &QPushButton::clicked, this, [this]() {
-        const QString command = m_broadcastInput->text();
-        const QStringList ids = checkedTargetIds(m_broadcastTargets);
-        if (command.trimmed().isEmpty() || ids.isEmpty()) {
-            emit statusMessage(tr("Broadcast send requires a non-empty command and at least one explicit target"));
-            return;
-        }
-        emit broadcastInputRequested(command.toUtf8() + QByteArrayLiteral("\r"), ids);
-        m_broadcastInput->clear();
-    });
-    connect(m_broadcastInput, &QLineEdit::returnPressed,
-            broadcastSendButton, &QPushButton::click);
 }
 
 void ProductivityWidget::buildEditorDialog()
@@ -447,6 +448,11 @@ void ProductivityWidget::buildEditorDialog()
             this, &ProductivityWidget::saveEditorRecord);
 }
 
+QWidget *ProductivityWidget::headerActionsWidget() const
+{
+    return m_headerActions;
+}
+
 void ProductivityWidget::setModel(ProductivityModel *model)
 {
     if (m_model != nullptr) {
@@ -471,7 +477,7 @@ void ProductivityWidget::setModel(ProductivityModel *model)
 void ProductivityWidget::setExecutionTargets(const QList<ConnectionTarget> &targets)
 {
     m_targets = targets;
-    populateTargetSelectors();
+    populateHistoryHostSelector();
 }
 
 void ProductivityWidget::refresh()
@@ -501,6 +507,9 @@ void ProductivityWidget::reloadSnippets()
         }
         auto *item = new QListWidgetItem;
         item->setData(kIdRole, record.id);
+        item->setData(kSearchTextRole,
+                      (record.name + QLatin1Char('\n') + record.command + QLatin1Char('\n')
+                       + record.description).toCaseFolded());
         item->setFlags(item->flags() & ~Qt::ItemIsDropEnabled);
         m_snippetList->addItem(item);
         QWidget *row = createSnippetRowWidget(record, shortcutIndex);
@@ -508,6 +517,21 @@ void ProductivityWidget::reloadSnippets()
         m_snippetList->setItemWidget(item, row);
         ++shortcutIndex;
     }
+    applySnippetFilter();
+}
+
+void ProductivityWidget::applySnippetFilter()
+{
+    const QString needle = m_snippetSearchEdit->text().trimmed().toCaseFolded();
+    for (int row = 0; row < m_snippetList->count(); ++row) {
+        QListWidgetItem *item = m_snippetList->item(row);
+        item->setHidden(!needle.isEmpty()
+                        && !item->data(kSearchTextRole).toString().contains(needle));
+    }
+    // 与主机页搜索相同：筛选结果只是局部视图，此时拖拽得到的顺序不能代表完整列表，
+    // 写回 sortOrder 会打乱被隐藏的片段，因此筛选期间直接关闭拖放。
+    m_snippetList->setDragDropMode(needle.isEmpty() ? QAbstractItemView::InternalMove
+                                                    : QAbstractItemView::NoDragDrop);
 }
 
 QWidget *ProductivityWidget::createSnippetRowWidget(const SnippetRecord &record,
@@ -515,8 +539,8 @@ QWidget *ProductivityWidget::createSnippetRowWidget(const SnippetRecord &record,
 {
     auto *row = new QWidget(m_snippetList);
     auto *rowLayout = new QHBoxLayout(row);
-    rowLayout->setContentsMargins(8, 6, 8, 6);
-    rowLayout->setSpacing(6);
+    rowLayout->setContentsMargins(10, 7, 6, 7);
+    rowLayout->setSpacing(4);
 
     // 文字区域设为鼠标事件透明，点击会穿透到下方的列表视口，这样用户仍可以直接在名称/
     // 说明区域按住拖拽排序，而不必找一个额外的拖拽手柄；右侧按钮区域保持正常可点击。
@@ -529,7 +553,7 @@ QWidget *ProductivityWidget::createSnippetRowWidget(const SnippetRecord &record,
     auto *nameLabel = new QLabel(record.name, textArea);
     nameLabel->setAttribute(Qt::WA_TransparentForMouseEvents);
     QFont nameFont = nameLabel->font();
-    nameFont.setBold(true);
+    nameFont.setWeight(QFont::DemiBold);
     nameLabel->setFont(nameFont);
 
     const QString preview = record.description.isEmpty() ? record.command : record.description;
@@ -540,33 +564,43 @@ QWidget *ProductivityWidget::createSnippetRowWidget(const SnippetRecord &record,
     previewLabel->setFont(previewFont);
     applyMutedPalette(previewLabel, 0.62);
 
+    // 长命令不能把行撑宽：横向忽略文字的理想宽度，超出部分直接裁掉，右侧按钮始终可见。
+    for (QLabel *label : {nameLabel, previewLabel}) {
+        label->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+    }
     textLayout->addWidget(nameLabel);
     textLayout->addWidget(previewLabel);
     rowLayout->addWidget(textArea, 1);
 
-    // 执行按钮采用与 AI 助手命令卡片一致的绿色主按钮样式（primaryAction），快捷键提示直接
-    // 拼进按钮文字，不再用单独的灰色标签摆在旁边。
-    auto *executeButton = new QPushButton(tr("Run"), row);
-    executeButton->setObjectName(QStringLiteral("productivitySnippetExecute"));
-    executeButton->setProperty("compactAction", true);
-    executeButton->setProperty("primaryAction", true);
+    // 快捷键以淡色小字放在行尾，执行/复制收成两枚透明图标按钮，与主机树行内只有文字、
+    // 交互靠悬停卡片表达的风格保持一致。
+    QString runToolTip = tr("Run");
     if (shortcutIndex >= 0 && shortcutIndex < kMaxShortcutSnippets) {
         const int digit = (shortcutIndex == kMaxShortcutSnippets - 1) ? 0 : shortcutIndex + 1;
         const QString hint = QStringLiteral("Ctrl+%1").arg(digit);
-        executeButton->setText(tr("Run  %1").arg(hint));
-        executeButton->setToolTip(tr("Shortcut %1").arg(hint));
+        runToolTip = tr("Run (%1)").arg(hint);
+        auto *shortcutLabel = new QLabel(hint, row);
+        shortcutLabel->setObjectName(QStringLiteral("productivitySnippetShortcutHint"));
+        shortcutLabel->setAttribute(Qt::WA_TransparentForMouseEvents);
+        shortcutLabel->setFont(previewFont);
+        applyMutedPalette(shortcutLabel, 0.5);
+        rowLayout->addWidget(shortcutLabel, 0, Qt::AlignVCenter);
     }
-    rowLayout->addWidget(executeButton);
 
-    auto *copyButton = new QPushButton(tr("Copy"), row);
+    auto *executeButton = new QToolButton(row);
+    executeButton->setObjectName(QStringLiteral("productivitySnippetExecute"));
+    configureRowIconButton(executeButton, UiIcons::Symbol::Play, runToolTip);
+    rowLayout->addWidget(executeButton, 0, Qt::AlignVCenter);
+
+    auto *copyButton = new QToolButton(row);
     copyButton->setObjectName(QStringLiteral("productivitySnippetCopy"));
-    copyButton->setProperty("compactAction", true);
-    rowLayout->addWidget(copyButton);
+    configureRowIconButton(copyButton, UiIcons::Symbol::Copy, tr("Copy command"));
+    rowLayout->addWidget(copyButton, 0, Qt::AlignVCenter);
 
     const QString id = record.id;
-    connect(executeButton, &QPushButton::clicked,
+    connect(executeButton, &QToolButton::clicked,
             this, [this, id]() { executeSnippetForId(id); });
-    connect(copyButton, &QPushButton::clicked,
+    connect(copyButton, &QToolButton::clicked,
             this, [this, id]() { copySnippetForId(id); });
 
     return row;
@@ -754,55 +788,28 @@ void ProductivityWidget::reloadHistory()
     }
 }
 
-QStringList ProductivityWidget::checkedTargetIds(const QListWidget *list)
-{
-    QStringList ids;
-    QSet<QString> seen;
-    for (int index = 0; index < list->count(); ++index) {
-        const QListWidgetItem *item = list->item(index);
-        const QString id = item->data(kTargetIdRole).toString();
-        if (item->checkState() == Qt::Checked && !id.isEmpty() && !seen.contains(id)) {
-            seen.insert(id);
-            ids.append(id);
-        }
-    }
-    return ids;
-}
-
-void ProductivityWidget::populateTargetSelectors()
+void ProductivityWidget::populateHistoryHostSelector()
 {
     const QString previousHistoryId = m_historyHostCombo->currentData().toString();
-    const QStringList previousBroadcastIds = checkedTargetIds(m_broadcastTargets);
 
-    m_broadcastTargets->clear();
-    m_historyHostCombo->clear();
-    m_historyHostCombo->addItem(tr("Local / current terminal"), QString());
+    // 重建期间屏蔽 currentIndexChanged，末尾统一 reloadHistory 一次，避免每加一项都查库。
+    {
+        const QSignalBlocker blocker(m_historyHostCombo);
+        m_historyHostCombo->clear();
+        m_historyHostCombo->addItem(tr("Local / current terminal"), QString());
 
-    QSet<QString> seen;
-    for (const ConnectionTarget &target : std::as_const(m_targets)) {
-        if (!target.isValid() || target.id.isEmpty() || seen.contains(target.id)) {
-            continue;
+        QSet<QString> seen;
+        for (const ConnectionTarget &target : std::as_const(m_targets)) {
+            if (!target.isValid() || target.id.isEmpty() || seen.contains(target.id)) {
+                continue;
+            }
+            seen.insert(target.id);
+            m_historyHostCombo->addItem(
+                target.displayName.isEmpty() ? target.connectionSpecifier(true) : target.displayName,
+                target.id);
         }
-        seen.insert(target.id);
-        QListWidgetItem *broadcastItem = createTargetItem(target, m_broadcastTargets);
-        broadcastItem->setCheckState(previousBroadcastIds.contains(target.id)
-                                         ? Qt::Checked : Qt::Unchecked);
-        m_historyHostCombo->addItem(
-            target.displayName.isEmpty() ? target.connectionSpecifier(true) : target.displayName,
-            target.id);
-    }
-    const int historyIndex = m_historyHostCombo->findData(previousHistoryId);
-    m_historyHostCombo->setCurrentIndex(historyIndex >= 0 ? historyIndex : 0);
-
-    // 目标列表更新可能使已启用广播的目标消失。立即同步新集合，不能继续向已关闭标签页
-    // 持有的旧指针发送输入；上层收到空集合后应安全关闭广播。
-    if (m_broadcastEnabled->isChecked()) {
-        const QStringList ids = checkedTargetIds(m_broadcastTargets);
-        if (ids.isEmpty()) {
-            m_broadcastEnabled->setChecked(false);
-        } else {
-            emit broadcastModeChanged(true, ids);
-        }
+        const int historyIndex = m_historyHostCombo->findData(previousHistoryId);
+        m_historyHostCombo->setCurrentIndex(historyIndex >= 0 ? historyIndex : 0);
     }
     reloadHistory();
 }

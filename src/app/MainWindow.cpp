@@ -644,6 +644,10 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     // 提供、在这里改挂到标题行；切到其他页面时隐藏，避免动作与页面内容对不上。
     m_hostHeaderActions = m_hostManager->headerActionsWidget();
     sidebarHeaderLayout->addWidget(m_hostHeaderActions);
+    // 效率工具沿用同一模式："新建片段 + 删除"与主机页的"新增主机 + 分组/刷新"同位同款。
+    m_productivityHeaderActions = m_productivityWidget->headerActionsWidget();
+    m_productivityHeaderActions->setVisible(false);
+    sidebarHeaderLayout->addWidget(m_productivityHeaderActions);
 
     // 终端区保留最小操作宽度；侧栏不参与弹性扩张，只有用户拖动把手时才改变其宽度。
     // 初始尺寸中的较大第二项只是表达“剩余空间归终端”，QSplitter 会按窗口实际宽度缩放。
@@ -1402,24 +1406,6 @@ MainWindow::MainWindow(ApplicationDatabase *database,
             &ProductivityWidget::commandExecutionRequested,
             this,
             &MainWindow::executeOnTargets);
-    connect(m_productivityWidget,
-            &ProductivityWidget::broadcastInputRequested,
-            this,
-            [this](const QByteArray &bytes, const QStringList &targetIds) {
-                sendBytesToTargets(bytes, targetIds);
-            });
-    connect(m_productivityWidget,
-            &ProductivityWidget::broadcastModeChanged,
-            this,
-            [this](const bool enabled, const QStringList &targetIds) {
-                m_broadcastEnabled = enabled && !targetIds.isEmpty();
-                m_broadcastTargetIds = m_broadcastEnabled ? targetIds : QStringList{};
-                showTransientMessage(
-                    m_broadcastEnabled
-                        ? tr("Live broadcast turned on: %1 targets").arg(m_broadcastTargetIds.size())
-                        : tr("Live broadcast turned off"),
-                    5000);
-            });
     refreshProductivityTargets();
 
     // 默认使用 CredentialVault 的 15 分钟阈值。每 15 秒检查一次只决定锁定延迟上界，
@@ -1969,6 +1955,9 @@ void MainWindow::showSidebarPage(const int pageIndex)
     if (m_hostHeaderActions != nullptr) {
         m_hostHeaderActions->setVisible(pageIndex == HostsPage);
     }
+    if (m_productivityHeaderActions != nullptr) {
+        m_productivityHeaderActions->setVisible(pageIndex == ProductivityPage);
+    }
 
     // 四个侧栏页面共用同一条标题栏和外边距——AI 助手不再自带独立顶栏，题图要求的正是
     // "顶部标题栏与主机侧边栏风格保持一致"，与其在页面内部复刻一份相近的样式，不如直接
@@ -2203,7 +2192,8 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
             color: @MUTED@;
             font-size: 13px;
         }
-        QFrame#HostSearchBar {
+        QFrame#HostSearchBar,
+        QFrame#ProductivitySearchBar {
             background: @SURFACE@;
             border: 1px solid @BORDER@;
             border-radius: 10px;
@@ -2211,7 +2201,9 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
             max-height: 34px;
         }
         QLineEdit#HostSearchEdit,
-        QLineEdit#HostSearchEdit:focus {
+        QLineEdit#HostSearchEdit:focus,
+        QLineEdit[productivitySearchEdit="true"],
+        QLineEdit[productivitySearchEdit="true"]:focus {
             color: @TEXT@;
             placeholder-text-color: @MUTED@;
             background: transparent;
@@ -2791,6 +2783,47 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
                通用选中色，重新形成已移除的左侧矩形尾巴并叠深右侧卡片底色。 */
             background: transparent;
             color: @TEXT@;
+        }
+        /* 效率工具的两个列表复刻主机树的行卡片：悬停用主机树专用的加深灰，选中为 13% 品牌绿
+           底 + 42% 品牌绿描边、9px 圆角，与 HostItemDelegate::paintInteractionBackground 同值。
+           这两个列表没有缩进区，用 QSS 即可画出同款卡片，无需自定义委托。 */
+        QTabWidget#productivityTabs QTabBar {
+            background: transparent;
+        }
+        QListWidget#productivitySnippetList,
+        QListWidget#productivityHistoryList {
+            background: transparent;
+            border: 0;
+        }
+        QListWidget#productivitySnippetList::item,
+        QListWidget#productivityHistoryList::item {
+            color: @TEXT@;
+            border: 1px solid transparent;
+            border-radius: 9px;
+        }
+        QListWidget#productivitySnippetList::item {
+            min-height: 0;
+            padding: 0;
+        }
+        QListWidget#productivityHistoryList::item {
+            min-height: 30px;
+            padding: 2px 9px;
+        }
+        QListWidget#productivitySnippetList::item:hover:!selected,
+        QListWidget#productivityHistoryList::item:hover:!selected {
+            background: @HOST_TREE_HOVER@;
+        }
+        QListWidget#productivitySnippetList::item:selected,
+        QListWidget#productivitySnippetList::item:selected:active,
+        QListWidget#productivitySnippetList::item:selected:!active,
+        QListWidget#productivitySnippetList::item:selected:hover,
+        QListWidget#productivityHistoryList::item:selected,
+        QListWidget#productivityHistoryList::item:selected:active,
+        QListWidget#productivityHistoryList::item:selected:!active,
+        QListWidget#productivityHistoryList::item:selected:hover {
+            color: @TEXT@;
+            background: rgba(43, 217, 129, 33);
+            border: 1px solid rgba(43, 217, 129, 107);
         }
     )QSS");
 
@@ -4085,17 +4118,6 @@ TerminalWorkspace *MainWindow::createWorkspaceTab(const QString &title)
                 m_productivityWidget->refresh();
             });
     connect(pane,
-            &TerminalPane::broadcastSourceInput,
-            this,
-            [this](TerminalPane *source, const QByteArray &bytes) {
-                TerminalWorkspace *workspace = activeWorkspace();
-                if (!m_broadcastEnabled || workspace == nullptr
-                    || workspace->activePane() != source) {
-                    return;
-                }
-                sendBytesToTargets(bytes, m_broadcastTargetIds, source);
-            });
-    connect(pane,
             &TerminalPane::forwardingSessionAboutToClose,
             this,
             [this, pane](SshSessionStack *sessionStack) {
@@ -4912,24 +4934,5 @@ void MainWindow::executeOnTargets(const QString &command, const QStringList &tar
     }
     if (delivered == 0) {
         showTransientMessage(tr("The selected target is closed or not connected yet"), 5000);
-    }
-}
-
-void MainWindow::sendBytesToTargets(const QByteArray &bytes,
-                                    const QStringList &targetIds,
-                                    TerminalPane *excludedSource)
-{
-    if (bytes.isEmpty() || targetIds.isEmpty()) {
-        return;
-    }
-    for (TerminalPane *pane : allTerminalPanes()) {
-        if (pane == excludedSource || !pane->isConnected()) {
-            continue;
-        }
-        if (targetIds.contains(pane->activeTarget().id)) {
-            // 接收端直接写 worker，不重发 broadcastSourceInput；否则两个开启广播的标签会
-            // 形成 A→B→A 的无限输入回路。
-            pane->sendInputBytes(bytes);
-        }
     }
 }

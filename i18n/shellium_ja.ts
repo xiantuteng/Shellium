@@ -1510,14 +1510,6 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">保管庫はリセットされました。ホスト構成は保持されています。必要な認証情報を再入力してください。</translation>
     </message>
     <message>
-        <source>Live broadcast turned on: %1 targets</source>
-        <translation type="unfinished">ライブブロードキャストが有効です: ターゲット %1 個</translation>
-    </message>
-    <message>
-        <source>Live broadcast turned off</source>
-        <translation type="unfinished">ライブブロードキャストが無効です</translation>
-    </message>
-    <message>
         <source>The credential vault was locked automatically due to inactivity</source>
         <translation type="unfinished">認証情報保管庫は非アクティブのため自動的にロックされました</translation>
     </message>
@@ -2324,6 +2316,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">選択したスニペットを削除</translation>
     </message>
     <message>
+        <source>Search name / command…</source>
+        <translation type="unfinished">名前 / コマンドで検索…</translation>
+    </message>
+    <message>
         <source>Command snippets</source>
         <translation type="unfinished">コマンドスニペット</translation>
     </message>
@@ -2364,38 +2360,6 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">コマンドをコピー</translation>
     </message>
     <message>
-        <source>After choosing targets you can turn on live keyboard broadcast; the source terminal is bound by the main window to the current tab.</source>
-        <translation type="unfinished">ターゲットを選択した後、キーボードのライブブロードキャストを有効にできます。ソースターミナルはメインウィンドウによって現在のタブにバインドされます。</translation>
-    </message>
-    <message>
-        <source>Turn on live raw input broadcast</source>
-        <translation type="unfinished">生入力のライブブロードキャストを有効にする</translation>
-    </message>
-    <message>
-        <source>Send a command once to the selected targets</source>
-        <translation type="unfinished">選択したターゲットにコマンドを 1 回送信</translation>
-    </message>
-    <message>
-        <source>Broadcast send</source>
-        <translation type="unfinished">ブロードキャストを送信</translation>
-    </message>
-    <message>
-        <source>Send a command once to the terminals you explicitly checked</source>
-        <translation type="unfinished">明示的にマークしたターミナルにコマンドを 1 回送信</translation>
-    </message>
-    <message>
-        <source>Broadcast input</source>
-        <translation type="unfinished">ブロードキャスト入力</translation>
-    </message>
-    <message>
-        <source>Explicitly check at least one target terminal before turning on broadcast</source>
-        <translation type="unfinished">ブロードキャストを有効にする前に、少なくとも 1 つのターゲットターミナルを明示的にマークしてください</translation>
-    </message>
-    <message>
-        <source>Broadcast send requires a non-empty command and at least one explicit target</source>
-        <translation type="unfinished">ブロードキャストの送信には、空でないコマンドと少なくとも 1 つの明示的なターゲットが必要です</translation>
-    </message>
-    <message>
         <source>Name</source>
         <translation type="unfinished">名前</translation>
     </message>
@@ -2420,12 +2384,8 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">現在のスニペットの変更を保存</translation>
     </message>
     <message>
-        <source>Run  %1</source>
-        <translation type="unfinished">実行  %1</translation>
-    </message>
-    <message>
-        <source>Shortcut %1</source>
-        <translation type="unfinished">ショートカット %1</translation>
+        <source>Run (%1)</source>
+        <translation type="unfinished">実行 (%1)</translation>
     </message>
     <message>
         <source>The productivity model is not ready yet</source>

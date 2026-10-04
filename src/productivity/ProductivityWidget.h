@@ -6,7 +6,6 @@
 #include <QWidget>
 
 class ProductivityModel;
-class QCheckBox;
 class QComboBox;
 class QDialog;
 class QLineEdit;
@@ -16,9 +15,10 @@ class QPushButton;
 class QShortcut;
 class QTabWidget;
 class QTextEdit;
+class QToolButton;
 
 /**
- * @brief Snippets、命令历史、自动补全入口和广播输入的独立效率工具侧栏。
+ * @brief Snippets、命令历史和自动补全入口的独立效率工具侧栏。
  *
  * 控件不持有 TerminalPane，也不直接向网络写数据。所有执行行为都通过携带稳定主机 id 的
  * 信号交给上层路由，因此同一控件既能嵌入 MainWindow，也能在测试或未来浮动窗口中复用。
@@ -26,6 +26,10 @@ class QTextEdit;
  *
  * Snippet 分组功能已移除：所有片段都是根层级的扁平列表，新增/编辑改用弹出对话框，
  * 列表本身支持拖拽排序；片段始终在当前活动终端执行，不再提供多目标勾选框。
+ *
+ * 原先的"广播输入"标签页已移除：向多个终端同步输入统一由工作空间标题栏的广播开关负责，
+ * 侧栏不再维护第二套目标勾选与实时广播状态。整体样式对齐"主机"侧栏：主操作放进共享
+ * 标题行、搜索框与主机搜索框同款、列表行使用同一套悬停/选中圆角卡片。
  */
 class ProductivityWidget final : public QWidget {
     Q_OBJECT
@@ -39,6 +43,14 @@ public:
     explicit ProductivityWidget(ProductivityModel *model = nullptr,
                                 QWidget *parent = nullptr);
 
+    /**
+     * @brief 返回需要挂到侧栏共享标题行右侧的动作条（新建片段 + 删除）。
+     *
+     * 与 HostManagerWidget::headerActionsWidget() 同一模式：控件由本类创建并持有逻辑，
+     * MainWindow 只负责摆放，并在切到其他侧栏页面时隐藏。
+     */
+    [[nodiscard]] QWidget *headerActionsWidget() const;
+
     /** @brief 切换业务模型并重新加载 Snippet 和历史。 */
     void setModel(ProductivityModel *model);
 
@@ -46,8 +58,7 @@ public:
      * @brief 更新当前可执行目标。
      * @param targets 通常对应已打开且可交互的终端；id 应使用持久化主机主键。
      *
-     * Snippet 始终在当前活动终端执行，不再使用该列表；广播模式仍然依赖它选择接收方，
-     * 历史筛选的主机下拉框同样从这里填充。
+     * Snippet 始终在当前活动终端执行，不再使用该列表；只有历史筛选的主机下拉框从这里填充。
      */
     void setExecutionTargets(const QList<ConnectionTarget> &targets);
 
@@ -62,25 +73,11 @@ signals:
      */
     void commandExecutionRequested(const QString &command, const QStringList &targetIds);
 
-    /**
-     * @brief 用户开启或关闭实时广播模式。
-     * @param enabled true 表示把源终端后续原始键盘字节复制给目标终端。
-     * @param targetIds 广播目标稳定主机 id；为空时上层应拒绝开启并提示用户选择目标。
-     */
-    void broadcastModeChanged(bool enabled, const QStringList &targetIds);
-
-    /**
-     * @brief 请求一次性向多个终端发送原始字节。
-     * @param bytes 已编码为 UTF-8 的输入；发送命令时末尾包含回车字节。
-     * @param targetIds 广播目标稳定主机 id。
-     */
-    void broadcastInputRequested(const QByteArray &bytes, const QStringList &targetIds);
-
     /** @brief 可展示在主窗口顶部非阻塞提示区的非致命结果或错误信息。 */
     void statusMessage(const QString &message);
 
 private:
-    /** @brief 创建三个标签页及其表单，构造函数只调用一次。 */
+    /** @brief 创建标题行动作条、两个标签页及其表单，构造函数只调用一次。 */
     void buildUi();
 
     /** @brief 创建新增/编辑片段弹窗，仅调用一次；随后每次复用并重置内容。 */
@@ -89,7 +86,10 @@ private:
     /** @brief 重新从模型加载扁平片段列表。 */
     void reloadSnippets();
 
-    /** @brief 为单个片段构造带"执行/复制"按钮的列表行控件。 */
+    /** @brief 按搜索框内容隐藏不匹配的片段行；筛选期间关闭拖拽，避免把局部顺序写回。 */
+    void applySnippetFilter();
+
+    /** @brief 为单个片段构造带"执行/复制"图标按钮的列表行控件。 */
     QWidget *createSnippetRowWidget(const SnippetRecord &record, int shortcutIndex);
 
     /** @brief 打开编辑弹窗并预填指定片段；id 为空表示新建。 */
@@ -113,11 +113,8 @@ private:
     /** @brief 根据当前主机和过滤前缀刷新历史列表。 */
     void reloadHistory();
 
-    /** @brief 从带复选框的目标列表提取稳定 id，保持界面顺序并去重。 */
-    [[nodiscard]] static QStringList checkedTargetIds(const QListWidget *list);
-
-    /** @brief 将目标同时填充到历史筛选和广播列表。 */
-    void populateTargetSelectors();
+    /** @brief 用最新目标快照重建历史筛选的主机下拉框，尽量保留原选中项。 */
+    void populateHistoryHostSelector();
 
 private slots:
     /**
@@ -132,7 +129,9 @@ private:
     ProductivityModel *m_model = nullptr; ///< 非拥有指针；业务模型通常由 MainWindow 持有。
     QList<ConnectionTarget> m_targets;     ///< 最近一次由上层提供的可执行目标快照。
 
+    QWidget *m_headerActions = nullptr; ///< 挂到侧栏标题行的动作条；见 headerActionsWidget()。
     QTabWidget *m_tabs = nullptr;
+    QLineEdit *m_snippetSearchEdit = nullptr;
     QListWidget *m_snippetList = nullptr;
 
     QDialog *m_editorDialog = nullptr;
@@ -155,10 +154,6 @@ private:
     QComboBox *m_historyHostCombo = nullptr;
     QLineEdit *m_historyPrefixEdit = nullptr;
     QListWidget *m_historyList = nullptr;
-
-    QListWidget *m_broadcastTargets = nullptr;
-    QCheckBox *m_broadcastEnabled = nullptr;
-    QLineEdit *m_broadcastInput = nullptr;
 
     QString m_editingId; ///< 当前弹窗正在编辑的片段 id；空表示新建。
 };
