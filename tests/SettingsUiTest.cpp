@@ -25,6 +25,7 @@
 #include <QFrame>
 #include <QGridLayout>
 #include <QLineEdit>
+#include <QScopeGuard>
 #include <QSet>
 #include <QListWidget>
 #include <QPushButton>
@@ -148,6 +149,8 @@ private slots:
     void aiModelRefreshFillsComboWithoutDiscardingManualEntry();
     /** @brief 模型名和思考开关都要能存进 AiSettingsService 并在重开设置页时回显。 */
     void aiModelAndThinkingToggleRoundTrip();
+    /** @brief “关于”页必须展示应用版本、版权声明，并提供可在外部浏览器打开的官网链接。 */
+    void aboutPageShowsVersionCopyrightAndWebsite();
 
 private:
     /** @brief 返回步进器里指定角色（increase/decrease）的按钮。 */
@@ -1239,7 +1242,8 @@ void SettingsUiTest::aiConnectionFieldsFillCardWidth()
     QVERIFY(navigation != nullptr);
 
     // AI 页不是默认页，必须先切换并显示窗口，Qt 才会为滚动区内的控件计算最终几何尺寸。
-    navigation->setCurrentRow(navigation->count() - 1);
+    // AI 页之后还有“关于”页，因此按固定行号定位，而不是取最后一行。
+    navigation->setCurrentRow(4);
     dialog.show();
     QVERIFY(QTest::qWaitForWindowExposed(&dialog));
 
@@ -1341,6 +1345,58 @@ void SettingsUiTest::aiModelAndThinkingToggleRoundTrip()
     QCOMPARE(reopened.findChild<QComboBox *>(QStringLiteral("aiModelCombo"))->currentText(),
              QStringLiteral("thinking-model"));
     QVERIFY(reopened.findChild<ToggleSwitch *>(QStringLiteral("aiThinkingToggle"))->isChecked());
+}
+
+void SettingsUiTest::aboutPageShowsVersionCopyrightAndWebsite()
+{
+    const QString previousVersion = QCoreApplication::applicationVersion();
+    QCoreApplication::setApplicationVersion(QStringLiteral("9.8.7"));
+    const auto restoreVersion = qScopeGuard(
+        [previousVersion] { QCoreApplication::setApplicationVersion(previousVersion); });
+
+    LocalizationService localization;
+    QVERIFY(localization.apply(QStringLiteral("en")));
+
+    auto service = makeService();
+    SettingsDialog dialog(service.get());
+    auto *navigation = dialog.findChild<QListWidget *>(QStringLiteral("SettingsNav"));
+    auto *pages = dialog.findChild<QStackedWidget *>(QStringLiteral("SettingsPages"));
+    QVERIFY(navigation != nullptr);
+    QVERIFY(pages != nullptr);
+
+    // “关于”是最后一个分类，导航文字与页面必须一一对应。
+    const int aboutRow = navigation->count() - 1;
+    QCOMPARE(navigation->item(aboutRow)->text(), QStringLiteral("About"));
+    navigation->setCurrentRow(aboutRow);
+    QCOMPARE(pages->currentIndex(), aboutRow);
+    QWidget *aboutPage = pages->currentWidget();
+
+    auto *versionLabel = aboutPage->findChild<QLabel *>(QStringLiteral("aboutVersionLabel"));
+    QVERIFY2(versionLabel != nullptr, "关于页必须位于导航最后一项对应的页面里");
+    QCOMPARE(versionLabel->text(), QStringLiteral("9.8.7"));
+
+    auto *copyrightLabel = aboutPage->findChild<QLabel *>(QStringLiteral("aboutCopyrightLabel"));
+    QVERIFY(copyrightLabel != nullptr);
+    QVERIFY2(copyrightLabel->text().contains(QStringLiteral("2026"))
+                 && copyrightLabel->text().contains(QStringLiteral("Shellium")),
+             qPrintable(copyrightLabel->text()));
+
+    // 官网链接必须交给系统浏览器打开：只有 openExternalLinks 打开时 QLabel 才会调用
+    // QDesktopServices，否则点击只会发出无人连接的 linkActivated 信号。
+    auto *websiteLink = aboutPage->findChild<QLabel *>(QStringLiteral("aboutWebsiteLink"));
+    QVERIFY(websiteLink != nullptr);
+    QVERIFY(websiteLink->openExternalLinks());
+    QVERIFY(websiteLink->textInteractionFlags().testFlag(Qt::LinksAccessibleByMouse));
+    QVERIFY2(websiteLink->text().contains(QStringLiteral("href=\"https://shellium.net\"")),
+             qPrintable(websiteLink->text()));
+
+    // 版本号为空（裸 QApplication）时不能显示空白值。
+    QCoreApplication::setApplicationVersion(QString());
+    SettingsDialog unversionedDialog(service.get());
+    auto *unknownLabel =
+        unversionedDialog.findChild<QLabel *>(QStringLiteral("aboutVersionLabel"));
+    QVERIFY(unknownLabel != nullptr);
+    QCOMPARE(unknownLabel->text(), QStringLiteral("Unknown"));
 }
 
 QTEST_MAIN(SettingsUiTest)

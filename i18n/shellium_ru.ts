@@ -3790,6 +3790,10 @@ This algorithm is obsolete; upgrading the server&apos;s SSH configuration is rec
         <translation type="unfinished">Шрифт</translation>
     </message>
     <message>
+        <source>About</source>
+        <translation>О программе</translation>
+    </message>
+    <message>
         <source>Confirm before hiding the sidebar</source>
         <translation>Подтверждать перед скрытием боковой панели</translation>
     </message>
@@ -4062,6 +4066,38 @@ Unsaved changes have been reverted.</source>
     <message>
         <source>%1 (not installed)</source>
         <translation type="unfinished">%1 (не установлен)</translation>
+    </message>
+    <message>
+        <source>Version information</source>
+        <translation>Сведения о версии</translation>
+    </message>
+    <message>
+        <source>Version</source>
+        <translation>Версия</translation>
+    </message>
+    <message>
+        <source>Qt runtime</source>
+        <translation>Среда выполнения Qt</translation>
+    </message>
+    <message>
+        <source>Official website</source>
+        <translation>Официальный сайт</translation>
+    </message>
+    <message>
+        <source>Copyright</source>
+        <translation>Авторские права</translation>
+    </message>
+    <message>
+        <source>Copyright © %1 Shellium contributors.</source>
+        <translation>© %1 Участники проекта Shellium.</translation>
+    </message>
+    <message>
+        <source>A desktop SSH terminal and remote file manager.</source>
+        <translation>Настольный SSH-терминал и менеджер удалённых файлов.</translation>
+    </message>
+    <message>
+        <source>Unknown</source>
+        <translation>Неизвестно</translation>
     </message>
     <message>
         <source>Sidebar density</source>

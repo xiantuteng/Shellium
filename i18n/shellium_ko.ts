@@ -3790,6 +3790,10 @@ This algorithm is obsolete; upgrading the server&apos;s SSH configuration is rec
         <translation type="unfinished">글꼴</translation>
     </message>
     <message>
+        <source>About</source>
+        <translation>정보</translation>
+    </message>
+    <message>
         <source>Confirm before hiding the sidebar</source>
         <translation>사이드바를 숨기기 전에 확인</translation>
     </message>
@@ -4062,6 +4066,38 @@ Unsaved changes have been reverted.</source>
     <message>
         <source>%1 (not installed)</source>
         <translation type="unfinished">%1(설치되지 않음)</translation>
+    </message>
+    <message>
+        <source>Version information</source>
+        <translation>버전 정보</translation>
+    </message>
+    <message>
+        <source>Version</source>
+        <translation>버전</translation>
+    </message>
+    <message>
+        <source>Qt runtime</source>
+        <translation>Qt 런타임</translation>
+    </message>
+    <message>
+        <source>Official website</source>
+        <translation>공식 웹사이트</translation>
+    </message>
+    <message>
+        <source>Copyright</source>
+        <translation>저작권</translation>
+    </message>
+    <message>
+        <source>Copyright © %1 Shellium contributors.</source>
+        <translation>Copyright © %1 Shellium 기여자.</translation>
+    </message>
+    <message>
+        <source>A desktop SSH terminal and remote file manager.</source>
+        <translation>데스크톱 SSH 터미널 및 원격 파일 관리자.</translation>
+    </message>
+    <message>
+        <source>Unknown</source>
+        <translation>알 수 없음</translation>
     </message>
     <message>
         <source>Sidebar density</source>

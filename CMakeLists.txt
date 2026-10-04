@@ -326,6 +326,8 @@ qt_add_translations(Shellium
 )
 
 target_include_directories(Shellium PRIVATE src)
+# 设置页“关于”与侧边栏显示的版本号只认 project(VERSION)，避免源码里再手写一份后漏改。
+target_compile_definitions(Shellium PRIVATE SHELLIUM_VERSION="${PROJECT_VERSION}")
 target_link_libraries(Shellium PRIVATE
     Qt6::Core
     Qt6::Widgets

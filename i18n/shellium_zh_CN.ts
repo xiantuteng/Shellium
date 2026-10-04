@@ -3792,6 +3792,10 @@ This algorithm is obsolete; upgrading the server&apos;s SSH configuration is rec
         <translation>字体</translation>
     </message>
     <message>
+        <source>About</source>
+        <translation>关于</translation>
+    </message>
+    <message>
         <source>Confirm before hiding the sidebar</source>
         <translation>隐藏侧边栏前确认</translation>
     </message>
@@ -4064,6 +4068,38 @@ Unsaved changes have been reverted.</source>
     <message>
         <source>%1 (not installed)</source>
         <translation>%1（本机未安装）</translation>
+    </message>
+    <message>
+        <source>Version information</source>
+        <translation>版本信息</translation>
+    </message>
+    <message>
+        <source>Version</source>
+        <translation>版本</translation>
+    </message>
+    <message>
+        <source>Qt runtime</source>
+        <translation>Qt 运行时</translation>
+    </message>
+    <message>
+        <source>Official website</source>
+        <translation>官方网站</translation>
+    </message>
+    <message>
+        <source>Copyright</source>
+        <translation>版权</translation>
+    </message>
+    <message>
+        <source>Copyright © %1 Shellium contributors.</source>
+        <translation>版权所有 © %1 Shellium 贡献者。</translation>
+    </message>
+    <message>
+        <source>A desktop SSH terminal and remote file manager.</source>
+        <translation>桌面 SSH 终端与远程文件管理工具。</translation>
+    </message>
+    <message>
+        <source>Unknown</source>
+        <translation>未知</translation>
     </message>
     <message>
         <source>Sidebar density</source>

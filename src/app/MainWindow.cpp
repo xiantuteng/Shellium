@@ -3079,6 +3079,11 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
             font-size: 14px;
             font-weight: 700;
         }
+        QLabel#AboutProductName {
+            color: @TEXT@;
+            font-size: 22px;
+            font-weight: 700;
+        }
         QLabel#SettingsRowLabel {
             color: @TEXT@;
         }

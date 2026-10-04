@@ -3790,6 +3790,10 @@ This algorithm is obsolete; upgrading the server&apos;s SSH configuration is rec
         <translation type="unfinished">الخط</translation>
     </message>
     <message>
+        <source>About</source>
+        <translation>حول</translation>
+    </message>
+    <message>
         <source>Confirm before hiding the sidebar</source>
         <translation>التأكيد قبل إخفاء الشريط الجانبي</translation>
     </message>
@@ -4062,6 +4066,38 @@ Unsaved changes have been reverted.</source>
     <message>
         <source>%1 (not installed)</source>
         <translation type="unfinished">%1 (غير مثبَّت)</translation>
+    </message>
+    <message>
+        <source>Version information</source>
+        <translation>معلومات الإصدار</translation>
+    </message>
+    <message>
+        <source>Version</source>
+        <translation>الإصدار</translation>
+    </message>
+    <message>
+        <source>Qt runtime</source>
+        <translation>بيئة تشغيل Qt</translation>
+    </message>
+    <message>
+        <source>Official website</source>
+        <translation>الموقع الرسمي</translation>
+    </message>
+    <message>
+        <source>Copyright</source>
+        <translation>حقوق النشر</translation>
+    </message>
+    <message>
+        <source>Copyright © %1 Shellium contributors.</source>
+        <translation>حقوق النشر © %1 للمساهمين في Shellium.</translation>
+    </message>
+    <message>
+        <source>A desktop SSH terminal and remote file manager.</source>
+        <translation>طرفية SSH لسطح المكتب ومدير ملفات عن بُعد.</translation>
+    </message>
+    <message>
+        <source>Unknown</source>
+        <translation>غير معروف</translation>
     </message>
     <message>
         <source>Sidebar density</source>

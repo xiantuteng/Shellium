@@ -13,6 +13,7 @@
 #include "ui/VaultDialog.h"
 
 #include <QApplication>
+#include <QIcon>
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QFontDatabase>
@@ -25,11 +26,13 @@
 #include <QLineEdit>
 #include <QListWidget>
 #include <QMessageBox>
+#include <QPixmap>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSpinBox>
 #include <QStackedWidget>
 #include <QToolButton>
+#include <QUrl>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -60,8 +63,12 @@ enum SettingsPage {
     TerminalPage,
     ConnectionPage,
     ShortcutPage,
-    AiPage
+    AiPage,
+    AboutPage
 };
+
+/** @brief 官方网站地址；关于页的链接与测试共用这一处，避免两边各写一份后悄悄分叉。 */
+constexpr auto kOfficialWebsite = "https://shellium.net";
 
 /** @brief 返回指定终端配色在当前主题下的实际颜色，供色板卡真实预览。 */
 TerminalPalette paletteForScheme(const TerminalSettings &base, const QString &colorSchemeId)
@@ -162,6 +169,7 @@ SettingsDialog::SettingsDialog(TerminalSettingsService *service,
     m_pages->addWidget(wrapInScrollArea(buildConnectionPage()));
     m_pages->addWidget(wrapInScrollArea(buildShortcutPage()));
     m_pages->addWidget(wrapInScrollArea(buildAiPage()));
+    m_pages->addWidget(wrapInScrollArea(buildAboutPage()));
     buildNavigation();
 
     auto *footer = new QWidget(this);
@@ -261,13 +269,13 @@ void SettingsDialog::buildNavigation()
     m_navigationList->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     m_navigationList->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
     m_navigationList->setUniformItemSizes(true);
-    for (int i = 0; i < 5; ++i) {
+    for (int i = 0; i <= AboutPage; ++i) {
         m_navigationList->addItem(QString());
     }
     i18n::onRetranslate(this, [this] {
         const QStringList entries{tr("Appearance"), tr("Terminal"),
                                   tr("Connections & Security"), tr("Shortcut"),
-                                  tr("AI Assistant")};
+                                  tr("AI Assistant"), tr("About")};
         for (int row = 0; row < entries.size() && row < m_navigationList->count(); ++row) {
             m_navigationList->item(row)->setText(entries.at(row));
         }
@@ -1116,4 +1124,81 @@ void SettingsDialog::updatePreviewCard(const TerminalSettings &settings)
                  palette.foreground.name(),
                  QString::number(normalized.lineHeightPercent),
                  palette.selection.name()));
+}
+
+QWidget *SettingsDialog::buildAboutPage()
+{
+    auto *page = new QWidget(m_pages);
+    page->setObjectName(QStringLiteral("SettingsPage"));
+    auto *layout = new QVBoxLayout(page);
+    layout->setContentsMargins(24, 22, 24, 22);
+    layout->setSpacing(16);
+
+    // 版本号与侧边栏底部同源：由 main() 写入 applicationVersion。测试或裸 QApplication
+    // 下为空，此时显示“未知”而不是留一个空白值，免得用户以为界面没加载完。
+    const QString version = QApplication::applicationVersion();
+
+    auto *identity = new SettingsCard(QString(), page);
+    auto *identityRow = new QWidget(identity);
+    auto *identityLayout = new QHBoxLayout(identityRow);
+    identityLayout->setContentsMargins(0, 0, 0, 0);
+    identityLayout->setSpacing(14);
+    // 应用图标同样由 main() 设置；测试环境没有窗口图标时直接省略，不画空白占位框。
+    const QIcon appIcon = QApplication::windowIcon();
+    if (!appIcon.isNull()) {
+        auto *iconLabel = new QLabel(identityRow);
+        iconLabel->setPixmap(appIcon.pixmap(QSize(56, 56)));
+        identityLayout->addWidget(iconLabel, 0, Qt::AlignVCenter);
+    }
+    auto *nameColumn = new QVBoxLayout;
+    nameColumn->setSpacing(2);
+    auto *productName = new QLabel(QStringLiteral("Shellium"), identityRow);
+    productName->setObjectName(QStringLiteral("AboutProductName"));
+    auto *tagline = new QLabel(identityRow);
+    tagline->setObjectName(QStringLiteral("SettingsRowHint"));
+    tagline->setWordWrap(true);
+    nameColumn->addWidget(productName);
+    nameColumn->addWidget(tagline);
+    identityLayout->addLayout(nameColumn, 1);
+    identity->addFullWidthWidget(identityRow);
+    layout->addWidget(identity);
+
+    auto *details = new SettingsCard([this] { return tr("Version information"); }, page);
+    auto *versionValue = new QLabel(details);
+    versionValue->setObjectName(QStringLiteral("aboutVersionLabel"));
+    // 版本号常被复制进问题反馈，允许直接选中复制。
+    versionValue->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    details->addRow([this] { return tr("Version"); }, versionValue);
+    auto *qtValue = new QLabel(QString::fromLatin1(qVersion()), details);
+    qtValue->setObjectName(QStringLiteral("aboutQtVersionLabel"));
+    qtValue->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    details->addRow([this] { return tr("Qt runtime"); }, qtValue);
+    auto *websiteLink = new QLabel(details);
+    websiteLink->setObjectName(QStringLiteral("aboutWebsiteLink"));
+    websiteLink->setTextFormat(Qt::RichText);
+    websiteLink->setTextInteractionFlags(Qt::TextBrowserInteraction);
+    // 交给系统默认浏览器打开，而不是在应用内嵌网页视图。
+    websiteLink->setOpenExternalLinks(true);
+    const QString website = QString::fromLatin1(kOfficialWebsite);
+    websiteLink->setText(QStringLiteral("<a href=\"%1\">%2</a>")
+                             .arg(website, QUrl(website).host()));
+    websiteLink->setToolTip(website);
+    details->addRow([this] { return tr("Official website"); }, websiteLink);
+    layout->addWidget(details);
+
+    auto *legal = new SettingsCard([this] { return tr("Copyright"); }, page);
+    auto *copyrightLabel = legal->addNote([this] {
+        // 与 Windows 版本资源中的 LegalCopyright 保持一致。
+        return tr("Copyright © %1 Shellium contributors.").arg(2026);
+    });
+    copyrightLabel->setObjectName(QStringLiteral("aboutCopyrightLabel"));
+    copyrightLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    layout->addWidget(legal);
+    layout->addStretch(1);
+
+    i18n::onRetranslate(page, [this, version, tagline, versionValue] {
+        tagline->setText(tr("A desktop SSH terminal and remote file manager."));
+        versionValue->setText(version.isEmpty() ? tr("Unknown") : version);
+    });
+    return page;
 }

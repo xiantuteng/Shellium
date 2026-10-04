@@ -3790,6 +3790,10 @@ This algorithm is obsolete; upgrading the server&apos;s SSH configuration is rec
         <translation type="unfinished">フォント</translation>
     </message>
     <message>
+        <source>About</source>
+        <translation>このアプリについて</translation>
+    </message>
+    <message>
         <source>Confirm before hiding the sidebar</source>
         <translation>サイドバーを非表示にする前に確認</translation>
     </message>
@@ -4062,6 +4066,38 @@ Unsaved changes have been reverted.</source>
     <message>
         <source>%1 (not installed)</source>
         <translation type="unfinished">%1（未インストール）</translation>
+    </message>
+    <message>
+        <source>Version information</source>
+        <translation>バージョン情報</translation>
+    </message>
+    <message>
+        <source>Version</source>
+        <translation>バージョン</translation>
+    </message>
+    <message>
+        <source>Qt runtime</source>
+        <translation>Qt ランタイム</translation>
+    </message>
+    <message>
+        <source>Official website</source>
+        <translation>公式サイト</translation>
+    </message>
+    <message>
+        <source>Copyright</source>
+        <translation>著作権</translation>
+    </message>
+    <message>
+        <source>Copyright © %1 Shellium contributors.</source>
+        <translation>Copyright © %1 Shellium コントリビューター</translation>
+    </message>
+    <message>
+        <source>A desktop SSH terminal and remote file manager.</source>
+        <translation>デスクトップ向け SSH ターミナル兼リモートファイルマネージャー。</translation>
+    </message>
+    <message>
+        <source>Unknown</source>
+        <translation>不明</translation>
     </message>
     <message>
         <source>Sidebar density</source>

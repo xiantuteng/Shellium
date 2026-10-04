@@ -3790,6 +3790,10 @@ Acest algoritm este învechit; se recomandă actualizarea configurației SSH a s
         <translation type="unfinished">Font</translation>
     </message>
     <message>
+        <source>About</source>
+        <translation>Despre</translation>
+    </message>
+    <message>
         <source>Confirm before hiding the sidebar</source>
         <translation>Confirmă înainte de a ascunde bara laterală</translation>
     </message>
@@ -4062,6 +4066,38 @@ Modificările nesalvate au fost anulate.</translation>
     <message>
         <source>%1 (not installed)</source>
         <translation type="unfinished">%1 (neinstalat)</translation>
+    </message>
+    <message>
+        <source>Version information</source>
+        <translation>Informații despre versiune</translation>
+    </message>
+    <message>
+        <source>Version</source>
+        <translation>Versiune</translation>
+    </message>
+    <message>
+        <source>Qt runtime</source>
+        <translation>Mediu de execuție Qt</translation>
+    </message>
+    <message>
+        <source>Official website</source>
+        <translation>Site oficial</translation>
+    </message>
+    <message>
+        <source>Copyright</source>
+        <translation>Drepturi de autor</translation>
+    </message>
+    <message>
+        <source>Copyright © %1 Shellium contributors.</source>
+        <translation>Copyright © %1 Contribuitorii Shellium.</translation>
+    </message>
+    <message>
+        <source>A desktop SSH terminal and remote file manager.</source>
+        <translation>Un terminal SSH desktop și manager de fișiere la distanță.</translation>
+    </message>
+    <message>
+        <source>Unknown</source>
+        <translation>Necunoscută</translation>
     </message>
     <message>
         <source>Sidebar density</source>

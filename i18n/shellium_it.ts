@@ -3790,6 +3790,10 @@ Questo algoritmo è obsoleto; si consiglia di aggiornare la configurazione SSH d
         <translation type="unfinished">Carattere</translation>
     </message>
     <message>
+        <source>About</source>
+        <translation>Informazioni</translation>
+    </message>
+    <message>
         <source>Confirm before hiding the sidebar</source>
         <translation>Conferma prima di nascondere la barra laterale</translation>
     </message>
@@ -4062,6 +4066,38 @@ Le modifiche non salvate sono state annullate.</translation>
     <message>
         <source>%1 (not installed)</source>
         <translation type="unfinished">%1 (non installato)</translation>
+    </message>
+    <message>
+        <source>Version information</source>
+        <translation>Informazioni sulla versione</translation>
+    </message>
+    <message>
+        <source>Version</source>
+        <translation>Versione</translation>
+    </message>
+    <message>
+        <source>Qt runtime</source>
+        <translation>Runtime Qt</translation>
+    </message>
+    <message>
+        <source>Official website</source>
+        <translation>Sito ufficiale</translation>
+    </message>
+    <message>
+        <source>Copyright</source>
+        <translation>Copyright</translation>
+    </message>
+    <message>
+        <source>Copyright © %1 Shellium contributors.</source>
+        <translation>Copyright © %1 Collaboratori di Shellium.</translation>
+    </message>
+    <message>
+        <source>A desktop SSH terminal and remote file manager.</source>
+        <translation>Un terminale SSH desktop e gestore di file remoti.</translation>
+    </message>
+    <message>
+        <source>Unknown</source>
+        <translation>Sconosciuta</translation>
     </message>
     <message>
         <source>Sidebar density</source>
