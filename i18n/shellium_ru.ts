@@ -1406,6 +1406,14 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">Палитра команд…</translation>
     </message>
     <message>
+        <source>Quick Snippets…</source>
+        <translation type="unfinished">Быстрые фрагменты…</translation>
+    </message>
+    <message>
+        <source>Quick Command History…</source>
+        <translation type="unfinished">Быстрая история команд…</translation>
+    </message>
+    <message>
         <source>Save Current Workspace…</source>
         <translation type="unfinished">Сохранить текущее рабочее пространство…</translation>
     </message>
@@ -1688,6 +1696,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>Enter to run, Esc to close; only currently available actions are shown here.</source>
         <translation type="unfinished">Enter для выполнения, Esc для закрытия; здесь показаны только доступные сейчас действия.</translation>
+    </message>
+    <message>
+        <source>Open a terminal session first</source>
+        <translation type="unfinished">Сначала откройте сеанс терминала</translation>
     </message>
     <message>
         <source>Export terminal output</source>
@@ -2384,10 +2396,6 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">Сохранить изменения текущего фрагмента</translation>
     </message>
     <message>
-        <source>Run (%1)</source>
-        <translation type="unfinished">Выполнить (%1)</translation>
-    </message>
-    <message>
         <source>The productivity model is not ready yet</source>
         <translation type="unfinished">Модель продуктивности ещё не готова</translation>
     </message>
@@ -2422,10 +2430,6 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>Snippet deleted</source>
         <translation type="unfinished">Фрагмент удалён</translation>
-    </message>
-    <message>
-        <source>Select a snippet to run first</source>
-        <translation type="unfinished">Сначала выберите фрагмент для выполнения</translation>
     </message>
     <message>
         <source>The snippet no longer exists or its command is empty</source>
@@ -2533,6 +2537,14 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>Open the command palette</source>
         <translation type="unfinished">Открыть палитру команд</translation>
+    </message>
+    <message>
+        <source>Quick run snippets</source>
+        <translation type="unfinished">Быстрый запуск фрагментов</translation>
+    </message>
+    <message>
+        <source>Quick run command history</source>
+        <translation type="unfinished">Быстрый запуск команд из истории</translation>
     </message>
     <message>
         <source>Open settings</source>
@@ -2967,6 +2979,41 @@ To avoid overwriting existing credentials, Shellium does not create a new vault 
     <message>
         <source>Reset terminal</source>
         <translation type="unfinished">Сбросить терминал</translation>
+    </message>
+</context>
+<context>
+    <name>QuickCommandPopup</name>
+    <message>
+        <source>Snippets</source>
+        <translation type="unfinished">Фрагменты</translation>
+    </message>
+    <message>
+        <source>Search snippets</source>
+        <translation type="unfinished">Поиск фрагментов</translation>
+    </message>
+    <message>
+        <source>No snippets yet. Add them in the Snippets sidebar.</source>
+        <translation type="unfinished">Фрагментов пока нет. Добавьте их на боковой панели «Фрагменты».</translation>
+    </message>
+    <message>
+        <source>History</source>
+        <translation type="unfinished">История</translation>
+    </message>
+    <message>
+        <source>Search command history</source>
+        <translation type="unfinished">Поиск в истории команд</translation>
+    </message>
+    <message>
+        <source>Recent commands</source>
+        <translation type="unfinished">Недавние команды</translation>
+    </message>
+    <message>
+        <source>No command history for this session yet.</source>
+        <translation type="unfinished">В этом сеансе пока нет истории команд.</translation>
+    </message>
+    <message>
+        <source>%1 run · Enter run selected · Esc close</source>
+        <translation type="unfinished">%1 выполнить · Enter выполнить выбранное · Esc закрыть</translation>
     </message>
 </context>
 <context>

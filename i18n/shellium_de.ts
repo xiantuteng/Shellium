@@ -1406,6 +1406,14 @@ Bestätigen Sie, dass sich der Schlüssel geändert hat, ersetzen Sie den alten 
         <translation type="unfinished">Befehlspalette …</translation>
     </message>
     <message>
+        <source>Quick Snippets…</source>
+        <translation type="unfinished">Schnell-Snippets …</translation>
+    </message>
+    <message>
+        <source>Quick Command History…</source>
+        <translation type="unfinished">Schnell-Befehlsverlauf …</translation>
+    </message>
+    <message>
         <source>Save Current Workspace…</source>
         <translation type="unfinished">Aktuellen Arbeitsbereich speichern …</translation>
     </message>
@@ -1688,6 +1696,10 @@ Bestätigen Sie, dass sich der Schlüssel geändert hat, ersetzen Sie den alten 
     <message>
         <source>Enter to run, Esc to close; only currently available actions are shown here.</source>
         <translation type="unfinished">Eingabe zum Ausführen, Esc zum Schließen; hier werden nur derzeit verfügbare Aktionen angezeigt.</translation>
+    </message>
+    <message>
+        <source>Open a terminal session first</source>
+        <translation type="unfinished">Öffnen Sie zuerst eine Terminalsitzung</translation>
     </message>
     <message>
         <source>Export terminal output</source>
@@ -2384,10 +2396,6 @@ Bestätigen Sie, dass sich der Schlüssel geändert hat, ersetzen Sie den alten 
         <translation type="unfinished">Änderungen am aktuellen Snippet speichern</translation>
     </message>
     <message>
-        <source>Run (%1)</source>
-        <translation type="unfinished">Ausführen (%1)</translation>
-    </message>
-    <message>
         <source>The productivity model is not ready yet</source>
         <translation type="unfinished">Das Produktivitätsmodell ist noch nicht bereit</translation>
     </message>
@@ -2422,10 +2430,6 @@ Bestätigen Sie, dass sich der Schlüssel geändert hat, ersetzen Sie den alten 
     <message>
         <source>Snippet deleted</source>
         <translation type="unfinished">Snippet gelöscht</translation>
-    </message>
-    <message>
-        <source>Select a snippet to run first</source>
-        <translation type="unfinished">Wählen Sie zuerst ein auszuführendes Snippet</translation>
     </message>
     <message>
         <source>The snippet no longer exists or its command is empty</source>
@@ -2533,6 +2537,14 @@ Bestätigen Sie, dass sich der Schlüssel geändert hat, ersetzen Sie den alten 
     <message>
         <source>Open the command palette</source>
         <translation type="unfinished">Die Befehlspalette öffnen</translation>
+    </message>
+    <message>
+        <source>Quick run snippets</source>
+        <translation type="unfinished">Snippets schnell ausführen</translation>
+    </message>
+    <message>
+        <source>Quick run command history</source>
+        <translation type="unfinished">Befehle aus dem Verlauf schnell ausführen</translation>
     </message>
     <message>
         <source>Open settings</source>
@@ -2967,6 +2979,41 @@ Um vorhandene Anmeldedaten nicht zu überschreiben, erstellt Shellium nicht auto
     <message>
         <source>Reset terminal</source>
         <translation type="unfinished">Terminal zurücksetzen</translation>
+    </message>
+</context>
+<context>
+    <name>QuickCommandPopup</name>
+    <message>
+        <source>Snippets</source>
+        <translation type="unfinished">Snippets</translation>
+    </message>
+    <message>
+        <source>Search snippets</source>
+        <translation type="unfinished">Snippets durchsuchen</translation>
+    </message>
+    <message>
+        <source>No snippets yet. Add them in the Snippets sidebar.</source>
+        <translation type="unfinished">Noch keine Snippets. Fügen Sie sie in der Snippets-Seitenleiste hinzu.</translation>
+    </message>
+    <message>
+        <source>History</source>
+        <translation type="unfinished">Verlauf</translation>
+    </message>
+    <message>
+        <source>Search command history</source>
+        <translation type="unfinished">Befehlsverlauf durchsuchen</translation>
+    </message>
+    <message>
+        <source>Recent commands</source>
+        <translation type="unfinished">Letzte Befehle</translation>
+    </message>
+    <message>
+        <source>No command history for this session yet.</source>
+        <translation type="unfinished">Für diese Sitzung gibt es noch keinen Befehlsverlauf.</translation>
+    </message>
+    <message>
+        <source>%1 run · Enter run selected · Esc close</source>
+        <translation type="unfinished">%1 ausführen · Eingabe Auswahl ausführen · Esc schließen</translation>
     </message>
 </context>
 <context>

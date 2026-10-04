@@ -8,6 +8,7 @@
 #include "i18n/LocalizationService.h"
 #include "productivity/ProductivityModel.h"
 #include "productivity/ProductivityWidget.h"
+#include "productivity/QuickCommandPopup.h"
 #include "security/Vault.h"
 #include "settings/TerminalSettings.h"
 #include "storage/ApplicationDatabase.h"
@@ -747,6 +748,12 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     auto *commandPaletteAction = new QAction(this);
     registerTranslatable(commandPaletteAction, QT_TRANSLATE_NOOP("MainWindow", "Command Palette…"));
     commandPaletteAction->setObjectName(QStringLiteral("CommandPaletteAction"));
+    auto *quickSnippetsAction = new QAction(this);
+    registerTranslatable(quickSnippetsAction, QT_TRANSLATE_NOOP("MainWindow", "Quick Snippets…"));
+    quickSnippetsAction->setObjectName(QStringLiteral("QuickSnippetsAction"));
+    auto *quickHistoryAction = new QAction(this);
+    registerTranslatable(quickHistoryAction, QT_TRANSLATE_NOOP("MainWindow", "Quick Command History…"));
+    quickHistoryAction->setObjectName(QStringLiteral("QuickHistoryAction"));
     auto *saveWorkspaceAction = new QAction(this);
     registerTranslatable(saveWorkspaceAction, QT_TRANSLATE_NOOP("MainWindow", "Save Current Workspace…"));
     auto *openWorkspaceAction = new QAction(this);
@@ -1093,6 +1100,8 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     terminalMenu->addAction(exportTerminalAction);
     terminalMenu->addSeparator();
     terminalMenu->addAction(commandPaletteAction);
+    terminalMenu->addAction(quickSnippetsAction);
+    terminalMenu->addAction(quickHistoryAction);
     terminalMenu->addAction(settingsAction);
 
     auto *unlockVaultAction = new QAction(this);
@@ -1129,6 +1138,8 @@ MainWindow::MainWindow(ApplicationDatabase *database,
         {QStringLiteral("terminal.search"), searchTerminalAction},
         {QStringLiteral("terminal.export"), exportTerminalAction},
         {QStringLiteral("command.palette"), commandPaletteAction},
+        {QStringLiteral("snippets.quick"), quickSnippetsAction},
+        {QStringLiteral("history.quick"), quickHistoryAction},
         {QStringLiteral("settings.open"), settingsAction},
     };
     applyConfiguredShortcuts();
@@ -1341,6 +1352,10 @@ MainWindow::MainWindow(ApplicationDatabase *database,
             this, &MainWindow::exportCurrentTerminal);
     connect(commandPaletteAction, &QAction::triggered,
             this, &MainWindow::openCommandPalette);
+    connect(quickSnippetsAction, &QAction::triggered,
+            this, &MainWindow::openQuickSnippets);
+    connect(quickHistoryAction, &QAction::triggered,
+            this, &MainWindow::openQuickHistory);
     connect(settingsAction, &QAction::triggered, this, [this]() {
         SettingsDialog dialog(m_settingsService, m_credentialVault, m_aiSettingsService, this);
         dialog.exec();
@@ -3142,6 +3157,8 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
                                      QColor(QStringLiteral("#f8f9fd")),
                                      QColor(QStringLiteral("#39415d")),
                                      QColor(QStringLiteral("#424b68")));
+        // 未选中标签常驻一块比标题栏（#292d42）略亮、比悬停色更暗的胶囊，三档亮度依次递进。
+        sessionTabs->setIdleTabColor(QColor(QStringLiteral("#31364d")));
     }
 
     const QColor chromeIconColor(QStringLiteral("#c6ccdc"));
@@ -4561,6 +4578,84 @@ void MainWindow::openCommandPalette()
             }
         });
     }
+}
+
+void MainWindow::openQuickSnippets()
+{
+    openQuickCommandPopup(true);
+}
+
+void MainWindow::openQuickHistory()
+{
+    openQuickCommandPopup(false);
+}
+
+void MainWindow::openQuickCommandPopup(const bool snippets)
+{
+    TerminalWorkspace *workspace = activeWorkspace();
+    TerminalPane *pane = workspace == nullptr ? nullptr : workspace->activePane();
+    if (pane == nullptr || m_productivityModel == nullptr) {
+        showTransientMessage(tr("Open a terminal session first"), 4000);
+        return;
+    }
+
+    QList<QuickCommandPopup::Entry> entries;
+    if (snippets) {
+        bool ok = false;
+        const QList<SnippetRecord> records = m_productivityModel->snippetsInGroup(QString(), &ok);
+        if (!ok) {
+            return; // 模型已经通过 errorOccurred 报告了具体原因。
+        }
+        for (const SnippetRecord &record : records) {
+            if (record.kind != SnippetNodeKind::Snippet || record.command.isEmpty()) {
+                continue;
+            }
+            entries.append({record.name, record.command, record.command});
+        }
+    } else {
+        const ConnectionTarget target = pane->activeTarget();
+        const QString hostId = target.isValid() ? target.id : QString();
+        bool ok = false;
+        const QList<CommandHistoryEntry> history =
+            m_productivityModel->recentHistory(hostId, 500, &ok);
+        if (!ok) {
+            return;
+        }
+        // 同一命令只保留最近一次；数字键要对准"最近用过的不同命令"，重复项会把它们挤出前 9 行。
+        QSet<QString> seen;
+        for (const CommandHistoryEntry &entry : history) {
+            if (entry.command.isEmpty() || seen.contains(entry.command)) {
+                continue;
+            }
+            seen.insert(entry.command);
+            entries.append({entry.command, QString(), entry.command});
+            if (entries.size() >= 100) {
+                break;
+            }
+        }
+    }
+
+    if (m_quickCommandPopup == nullptr) {
+        m_quickCommandPopup = new QuickCommandPopup(this);
+        connect(m_quickCommandPopup, &QuickCommandPopup::commandChosen,
+                this, [this](const QString &command) {
+                    // 执行到弹出时记下的终端，而不是"此刻的活动终端"：面板打开期间标签不会
+                    // 切换，但这样即使将来允许切换，命令也不会落到用户没看着的会话里。
+                    if (m_quickCommandPane != nullptr) {
+                        m_quickCommandPane->executeCommand(command);
+                    }
+                });
+    }
+    m_quickCommandPane = pane;
+    const QString actionId = snippets ? QStringLiteral("snippets.quick")
+                                      : QStringLiteral("history.quick");
+    const QAction *action = m_configurableActions.value(actionId);
+    const QString hint = action == nullptr
+        ? QString()
+        : action->shortcut().toString(QKeySequence::NativeText);
+    m_quickCommandPopup->showEntries(snippets ? QuickCommandPopup::Mode::Snippets
+                                              : QuickCommandPopup::Mode::History,
+                                     entries, hint, pane);
 }
 
 void MainWindow::searchCurrentTerminal()

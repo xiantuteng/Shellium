@@ -1406,6 +1406,14 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation>命令面板…</translation>
     </message>
     <message>
+        <source>Quick Snippets…</source>
+        <translation type="unfinished">快速片段…</translation>
+    </message>
+    <message>
+        <source>Quick Command History…</source>
+        <translation type="unfinished">快速命令歷史…</translation>
+    </message>
+    <message>
         <source>Save Current Workspace…</source>
         <translation>儲存當前工作區…</translation>
     </message>
@@ -1692,6 +1700,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>Enter to run, Esc to close; only currently available actions are shown here.</source>
         <translation>Enter 執行，Esc 關閉；這裡只顯示當前可用動作。</translation>
+    </message>
+    <message>
+        <source>Open a terminal session first</source>
+        <translation type="unfinished">請先開啟一個終端機工作階段</translation>
     </message>
     <message>
         <source>Export terminal output</source>
@@ -2384,10 +2396,6 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation>儲存當前片段修改</translation>
     </message>
     <message>
-        <source>Run (%1)</source>
-        <translation>執行（%1）</translation>
-    </message>
-    <message>
         <source>The productivity model is not ready yet</source>
         <translation>效率工具模型尚未就緒</translation>
     </message>
@@ -2422,10 +2430,6 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>Snippet deleted</source>
         <translation>已刪除 Snippet</translation>
-    </message>
-    <message>
-        <source>Select a snippet to run first</source>
-        <translation>請先選擇要執行的 Snippet</translation>
     </message>
     <message>
         <source>The snippet no longer exists or its command is empty</source>
@@ -2533,6 +2537,14 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>Open the command palette</source>
         <translation>開啟命令面板</translation>
+    </message>
+    <message>
+        <source>Quick run snippets</source>
+        <translation type="unfinished">快速執行命令片段</translation>
+    </message>
+    <message>
+        <source>Quick run command history</source>
+        <translation type="unfinished">快速執行命令歷史</translation>
     </message>
     <message>
         <source>Open settings</source>
@@ -2967,6 +2979,41 @@ To avoid overwriting existing credentials, Shellium does not create a new vault 
     <message>
         <source>Reset terminal</source>
         <translation type="unfinished">重置終端機</translation>
+    </message>
+</context>
+<context>
+    <name>QuickCommandPopup</name>
+    <message>
+        <source>Snippets</source>
+        <translation type="unfinished">片段</translation>
+    </message>
+    <message>
+        <source>Search snippets</source>
+        <translation type="unfinished">搜尋片段</translation>
+    </message>
+    <message>
+        <source>No snippets yet. Add them in the Snippets sidebar.</source>
+        <translation type="unfinished">還沒有片段，可在側欄的「命令片段」中新增。</translation>
+    </message>
+    <message>
+        <source>History</source>
+        <translation type="unfinished">歷史</translation>
+    </message>
+    <message>
+        <source>Search command history</source>
+        <translation type="unfinished">搜尋命令歷史</translation>
+    </message>
+    <message>
+        <source>Recent commands</source>
+        <translation type="unfinished">最近命令</translation>
+    </message>
+    <message>
+        <source>No command history for this session yet.</source>
+        <translation type="unfinished">目前工作階段還沒有命令歷史。</translation>
+    </message>
+    <message>
+        <source>%1 run · Enter run selected · Esc close</source>
+        <translation type="unfinished">%1 執行 · Enter 執行選取項 · Esc 關閉</translation>
     </message>
 </context>
 <context>

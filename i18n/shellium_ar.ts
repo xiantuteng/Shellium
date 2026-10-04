@@ -1406,6 +1406,14 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">لوحة الأوامر…</translation>
     </message>
     <message>
+        <source>Quick Snippets…</source>
+        <translation type="unfinished">المقتطفات السريعة…</translation>
+    </message>
+    <message>
+        <source>Quick Command History…</source>
+        <translation type="unfinished">سجل الأوامر السريع…</translation>
+    </message>
+    <message>
         <source>Save Current Workspace…</source>
         <translation type="unfinished">حفظ مساحة العمل الحالية…</translation>
     </message>
@@ -1688,6 +1696,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>Enter to run, Esc to close; only currently available actions are shown here.</source>
         <translation type="unfinished">Enter للتنفيذ، Esc للإغلاق؛ تُعرض هنا الإجراءات المتاحة حاليًا فقط.</translation>
+    </message>
+    <message>
+        <source>Open a terminal session first</source>
+        <translation type="unfinished">افتح جلسة طرفية أولًا</translation>
     </message>
     <message>
         <source>Export terminal output</source>
@@ -2384,10 +2396,6 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">حفظ تغييرات المقتطف الحالي</translation>
     </message>
     <message>
-        <source>Run (%1)</source>
-        <translation type="unfinished">تنفيذ (%1)</translation>
-    </message>
-    <message>
         <source>The productivity model is not ready yet</source>
         <translation type="unfinished">نموذج الإنتاجية غير جاهز بعد</translation>
     </message>
@@ -2422,10 +2430,6 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>Snippet deleted</source>
         <translation type="unfinished">تم حذف المقتطف</translation>
-    </message>
-    <message>
-        <source>Select a snippet to run first</source>
-        <translation type="unfinished">اختر أولاً مقتطفًا للتنفيذ</translation>
     </message>
     <message>
         <source>The snippet no longer exists or its command is empty</source>
@@ -2533,6 +2537,14 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>Open the command palette</source>
         <translation type="unfinished">فتح لوحة الأوامر</translation>
+    </message>
+    <message>
+        <source>Quick run snippets</source>
+        <translation type="unfinished">تشغيل المقتطفات بسرعة</translation>
+    </message>
+    <message>
+        <source>Quick run command history</source>
+        <translation type="unfinished">تشغيل أوامر السجل بسرعة</translation>
     </message>
     <message>
         <source>Open settings</source>
@@ -2967,6 +2979,41 @@ To avoid overwriting existing credentials, Shellium does not create a new vault 
     <message>
         <source>Reset terminal</source>
         <translation type="unfinished">إعادة تعيين الطرفية</translation>
+    </message>
+</context>
+<context>
+    <name>QuickCommandPopup</name>
+    <message>
+        <source>Snippets</source>
+        <translation type="unfinished">المقتطفات</translation>
+    </message>
+    <message>
+        <source>Search snippets</source>
+        <translation type="unfinished">البحث في المقتطفات</translation>
+    </message>
+    <message>
+        <source>No snippets yet. Add them in the Snippets sidebar.</source>
+        <translation type="unfinished">لا توجد مقتطفات بعد. أضِفها من الشريط الجانبي للمقتطفات.</translation>
+    </message>
+    <message>
+        <source>History</source>
+        <translation type="unfinished">السجل</translation>
+    </message>
+    <message>
+        <source>Search command history</source>
+        <translation type="unfinished">البحث في سجل الأوامر</translation>
+    </message>
+    <message>
+        <source>Recent commands</source>
+        <translation type="unfinished">الأوامر الأخيرة</translation>
+    </message>
+    <message>
+        <source>No command history for this session yet.</source>
+        <translation type="unfinished">لا يوجد سجل أوامر لهذه الجلسة بعد.</translation>
+    </message>
+    <message>
+        <source>%1 run · Enter run selected · Esc close</source>
+        <translation type="unfinished">%1 للتشغيل · Enter لتشغيل المحدد · Esc للإغلاق</translation>
     </message>
 </context>
 <context>

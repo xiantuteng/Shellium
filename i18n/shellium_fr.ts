@@ -1406,6 +1406,14 @@ Confirmer que la clé a changé, remplacer l&apos;ancien enregistrement dans kno
         <translation type="unfinished">Palette de commandes…</translation>
     </message>
     <message>
+        <source>Quick Snippets…</source>
+        <translation type="unfinished">Extraits rapides…</translation>
+    </message>
+    <message>
+        <source>Quick Command History…</source>
+        <translation type="unfinished">Historique rapide des commandes…</translation>
+    </message>
+    <message>
         <source>Save Current Workspace…</source>
         <translation type="unfinished">Enregistrer l&apos;espace de travail actuel…</translation>
     </message>
@@ -1688,6 +1696,10 @@ Confirmer que la clé a changé, remplacer l&apos;ancien enregistrement dans kno
     <message>
         <source>Enter to run, Esc to close; only currently available actions are shown here.</source>
         <translation type="unfinished">Entrée pour exécuter, Échap pour fermer ; seules les actions actuellement disponibles sont affichées ici.</translation>
+    </message>
+    <message>
+        <source>Open a terminal session first</source>
+        <translation type="unfinished">Ouvrez d’abord une session de terminal</translation>
     </message>
     <message>
         <source>Export terminal output</source>
@@ -2384,10 +2396,6 @@ Confirmer que la clé a changé, remplacer l&apos;ancien enregistrement dans kno
         <translation type="unfinished">Enregistrer les modifications de l&apos;extrait actuel</translation>
     </message>
     <message>
-        <source>Run (%1)</source>
-        <translation type="unfinished">Exécuter (%1)</translation>
-    </message>
-    <message>
         <source>The productivity model is not ready yet</source>
         <translation type="unfinished">Le modèle de productivité n&apos;est pas encore prêt</translation>
     </message>
@@ -2422,10 +2430,6 @@ Confirmer que la clé a changé, remplacer l&apos;ancien enregistrement dans kno
     <message>
         <source>Snippet deleted</source>
         <translation type="unfinished">Extrait supprimé</translation>
-    </message>
-    <message>
-        <source>Select a snippet to run first</source>
-        <translation type="unfinished">Sélectionnez d&apos;abord un extrait à exécuter</translation>
     </message>
     <message>
         <source>The snippet no longer exists or its command is empty</source>
@@ -2533,6 +2537,14 @@ Confirmer que la clé a changé, remplacer l&apos;ancien enregistrement dans kno
     <message>
         <source>Open the command palette</source>
         <translation type="unfinished">Ouvrir la palette de commandes</translation>
+    </message>
+    <message>
+        <source>Quick run snippets</source>
+        <translation type="unfinished">Exécuter rapidement un extrait</translation>
+    </message>
+    <message>
+        <source>Quick run command history</source>
+        <translation type="unfinished">Exécuter rapidement une commande de l’historique</translation>
     </message>
     <message>
         <source>Open settings</source>
@@ -2967,6 +2979,41 @@ Pour éviter d&apos;écraser des identifiants existants, Shellium ne crée pas a
     <message>
         <source>Reset terminal</source>
         <translation type="unfinished">Réinitialiser le terminal</translation>
+    </message>
+</context>
+<context>
+    <name>QuickCommandPopup</name>
+    <message>
+        <source>Snippets</source>
+        <translation type="unfinished">Extraits</translation>
+    </message>
+    <message>
+        <source>Search snippets</source>
+        <translation type="unfinished">Rechercher des extraits</translation>
+    </message>
+    <message>
+        <source>No snippets yet. Add them in the Snippets sidebar.</source>
+        <translation type="unfinished">Aucun extrait pour l’instant. Ajoutez-en dans la barre latérale Extraits.</translation>
+    </message>
+    <message>
+        <source>History</source>
+        <translation type="unfinished">Historique</translation>
+    </message>
+    <message>
+        <source>Search command history</source>
+        <translation type="unfinished">Rechercher dans l’historique des commandes</translation>
+    </message>
+    <message>
+        <source>Recent commands</source>
+        <translation type="unfinished">Commandes récentes</translation>
+    </message>
+    <message>
+        <source>No command history for this session yet.</source>
+        <translation type="unfinished">Aucun historique de commandes pour cette session.</translation>
+    </message>
+    <message>
+        <source>%1 run · Enter run selected · Esc close</source>
+        <translation type="unfinished">%1 exécuter · Entrée exécuter la sélection · Échap fermer</translation>
     </message>
 </context>
 <context>

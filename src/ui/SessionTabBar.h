@@ -91,6 +91,16 @@ public:
                          const QColor &hoverColor,
                          const QColor &selectedColor);
 
+    /**
+     * @brief 设置未选中、未悬停标签的常驻胶囊底色并立即重绘。
+     * @param idleColor 胶囊底色；传入无效颜色表示未选中标签不绘制底色（旧的"透明"样式）。
+     *
+     * 未选中标签也保留一块比标题栏略亮的圆角底色，让每个会话在标题栏里都是一个可辨认的
+     * 按钮，而不是只在悬停时才出现边界。单独提供该方法而不扩充 setVisualColors，是为了
+     * 不改变现有四色调用方的语义。
+     */
+    void setIdleTabColor(const QColor &idleColor);
+
 signals:
     /**
      * @brief 用户把一个终端标签拖放到此前选中的标签或页面/侧栏接收区。
@@ -298,6 +308,8 @@ private:
     QColor m_selectedTextColor = QColor(QStringLiteral("#f8f9fd"));
     /** @brief 普通标签悬停背景色。 */
     QColor m_hoverColor = QColor(QStringLiteral("#353c56"));
+    /** @brief 未选中且未悬停标签的常驻胶囊背景色；无效色表示不绘制。 */
+    QColor m_idleColor = QColor(QStringLiteral("#31364d"));
     /** @brief 当前标签胶囊背景色。 */
     QColor m_selectedColor = QColor(QStringLiteral("#424b68"));
     /**

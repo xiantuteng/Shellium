@@ -12,7 +12,6 @@ class QLineEdit;
 class QListWidget;
 class QListWidgetItem;
 class QPushButton;
-class QShortcut;
 class QTabWidget;
 class QTextEdit;
 class QToolButton;
@@ -90,7 +89,7 @@ private:
     void applySnippetFilter();
 
     /** @brief 为单个片段构造带"执行/复制"图标按钮的列表行控件。 */
-    QWidget *createSnippetRowWidget(const SnippetRecord &record, int shortcutIndex);
+    QWidget *createSnippetRowWidget(const SnippetRecord &record);
 
     /** @brief 打开编辑弹窗并预填指定片段；id 为空表示新建。 */
     void openSnippetEditor(const QString &id);
@@ -101,10 +100,7 @@ private:
     /** @brief 明确确认后删除当前选中片段。 */
     void removeSelectedRecord();
 
-    /** @brief 执行列表中指定行的 Snippet；供数字快捷键使用，内部转发到 executeSnippetForId。 */
-    void executeSnippetAtRow(int row);
-
-    /** @brief 按稳定 id 执行 Snippet；供行内按钮和快捷键共用，不受列表重排影响。 */
+    /** @brief 按稳定 id 执行 Snippet；供行内执行按钮使用，不受列表重排影响。 */
     void executeSnippetForId(const QString &id);
 
     /** @brief 把指定 id 片段的命令复制到剪贴板。 */
@@ -147,9 +143,6 @@ private:
     /** @brief 片段的一行简短说明；列表预览会优先展示该字段。 */
     QLineEdit *m_editorDescriptionEdit = nullptr;
     QPushButton *m_editorSaveButton = nullptr;
-
-    /** @brief Ctrl+1..Ctrl+9,Ctrl+0 对应列表前 10 个片段的执行快捷键，构造时一次性创建。 */
-    QList<QShortcut *> m_snippetShortcuts;
 
     QComboBox *m_historyHostCombo = nullptr;
     QLineEdit *m_historyPrefixEdit = nullptr;

@@ -22,7 +22,6 @@
 #include <QMenu>
 #include <QPushButton>
 #include <QSet>
-#include <QShortcut>
 #include <QSignalBlocker>
 #include <QTabBar>
 #include <QTabWidget>
@@ -40,9 +39,6 @@ constexpr int kIdRole = Qt::UserRole;
 
 /** @brief 片段行中参与搜索的名称、命令和说明，统一小写后存放，筛选时无需再查库。 */
 constexpr int kSearchTextRole = Qt::UserRole + 1;
-
-/** @brief 最多提供数字快捷键的片段数量：Ctrl+1..Ctrl+9、Ctrl+0。 */
-constexpr int kMaxShortcutSnippets = 10;
 
 /**
  * @brief 将效率侧栏的次要命令配置为紧凑图标按钮。
@@ -287,17 +283,8 @@ void ProductivityWidget::buildUi()
                 menu.exec(m_snippetList->viewport()->mapToGlobal(position));
             });
 
-    // Ctrl+1..Ctrl+9、Ctrl+0 分别执行列表中第 1..10 个片段；超出范围的按键在触发时安全
-    // 忽略。快捷键只创建一次，绑定的是行索引而非片段 id，与行内按钮提示的数字保持一致。
-    m_snippetShortcuts.reserve(kMaxShortcutSnippets);
-    for (int index = 0; index < kMaxShortcutSnippets; ++index) {
-        const int digit = (index == kMaxShortcutSnippets - 1) ? 0 : index + 1;
-        auto *shortcut = new QShortcut(QKeySequence(QStringLiteral("Ctrl+%1").arg(digit)), this);
-        shortcut->setContext(Qt::WidgetWithChildrenShortcut);
-        connect(shortcut, &QShortcut::activated,
-                this, [this, index]() { executeSnippetAtRow(index); });
-        m_snippetShortcuts.append(shortcut);
-    }
+    // 侧栏不再提供 Ctrl+1..Ctrl+0 数字快捷键：按序号执行片段统一由终端里的 Cmd+K 快速面板
+    // （Cmd+1..9）负责，两套编号并存只会让同一个片段在两处对应不同的按键。
 
     buildEditorDialog();
 
@@ -500,7 +487,6 @@ void ProductivityWidget::reloadSnippets()
     if (!ok) {
         return;
     }
-    int shortcutIndex = 0;
     for (const SnippetRecord &record : records) {
         if (record.kind != SnippetNodeKind::Snippet) {
             continue;
@@ -512,10 +498,9 @@ void ProductivityWidget::reloadSnippets()
                        + record.description).toCaseFolded());
         item->setFlags(item->flags() & ~Qt::ItemIsDropEnabled);
         m_snippetList->addItem(item);
-        QWidget *row = createSnippetRowWidget(record, shortcutIndex);
+        QWidget *row = createSnippetRowWidget(record);
         item->setSizeHint(row->sizeHint());
         m_snippetList->setItemWidget(item, row);
-        ++shortcutIndex;
     }
     applySnippetFilter();
 }
@@ -534,8 +519,7 @@ void ProductivityWidget::applySnippetFilter()
                                                     : QAbstractItemView::NoDragDrop);
 }
 
-QWidget *ProductivityWidget::createSnippetRowWidget(const SnippetRecord &record,
-                                                     const int shortcutIndex)
+QWidget *ProductivityWidget::createSnippetRowWidget(const SnippetRecord &record)
 {
     auto *row = new QWidget(m_snippetList);
     auto *rowLayout = new QHBoxLayout(row);
@@ -572,20 +556,9 @@ QWidget *ProductivityWidget::createSnippetRowWidget(const SnippetRecord &record,
     textLayout->addWidget(previewLabel);
     rowLayout->addWidget(textArea, 1);
 
-    // 快捷键以淡色小字放在行尾，执行/复制收成两枚透明图标按钮，与主机树行内只有文字、
-    // 交互靠悬停卡片表达的风格保持一致。
-    QString runToolTip = tr("Run");
-    if (shortcutIndex >= 0 && shortcutIndex < kMaxShortcutSnippets) {
-        const int digit = (shortcutIndex == kMaxShortcutSnippets - 1) ? 0 : shortcutIndex + 1;
-        const QString hint = QStringLiteral("Ctrl+%1").arg(digit);
-        runToolTip = tr("Run (%1)").arg(hint);
-        auto *shortcutLabel = new QLabel(hint, row);
-        shortcutLabel->setObjectName(QStringLiteral("productivitySnippetShortcutHint"));
-        shortcutLabel->setAttribute(Qt::WA_TransparentForMouseEvents);
-        shortcutLabel->setFont(previewFont);
-        applyMutedPalette(shortcutLabel, 0.5);
-        rowLayout->addWidget(shortcutLabel, 0, Qt::AlignVCenter);
-    }
+    // 执行/复制收成两枚透明图标按钮，与主机树行内只有文字、交互靠悬停卡片表达的风格
+    // 保持一致。
+    const QString runToolTip = tr("Run");
 
     auto *executeButton = new QToolButton(row);
     executeButton->setObjectName(QStringLiteral("productivitySnippetExecute"));
@@ -688,15 +661,6 @@ void ProductivityWidget::removeSelectedRecord()
         m_editingId.clear();
         emit statusMessage(tr("Snippet deleted"));
     }
-}
-
-void ProductivityWidget::executeSnippetAtRow(const int row)
-{
-    if (row < 0 || row >= m_snippetList->count()) {
-        emit statusMessage(tr("Select a snippet to run first"));
-        return;
-    }
-    executeSnippetForId(m_snippetList->item(row)->data(kIdRole).toString());
 }
 
 void ProductivityWidget::executeSnippetForId(const QString &id)

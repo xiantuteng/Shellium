@@ -296,6 +296,16 @@ QHash<QString, QKeySequence> TerminalSettings::defaultShortcuts()
         {QStringLiteral("terminal.search"), QKeySequence::Find},
         {QStringLiteral("terminal.export"), QKeySequence(QStringLiteral("Ctrl+Shift+E"))},
         {QStringLiteral("command.palette"), QKeySequence(QStringLiteral("Ctrl+Shift+P"))},
+        // macOS 的 Ctrl 即 Command，Cmd+K / Cmd+J 不会与终端按键冲突；其他平台的裸 Ctrl+K
+        // 是 readline 的删到行尾、Ctrl+J 是换行，被应用快捷键截走会破坏 Shell 编辑，因此
+        // 改用 Ctrl+Alt 组合。
+#if defined(Q_OS_MACOS)
+        {QStringLiteral("snippets.quick"), QKeySequence(QStringLiteral("Ctrl+K"))},
+        {QStringLiteral("history.quick"), QKeySequence(QStringLiteral("Ctrl+J"))},
+#else
+        {QStringLiteral("snippets.quick"), QKeySequence(QStringLiteral("Ctrl+Alt+K"))},
+        {QStringLiteral("history.quick"), QKeySequence(QStringLiteral("Ctrl+Alt+J"))},
+#endif
         {QStringLiteral("settings.open"), QKeySequence(QStringLiteral("Ctrl+,"))},
     };
 }
@@ -313,6 +323,8 @@ QStringList TerminalSettings::shortcutIds()
         QStringLiteral("terminal.search"),
         QStringLiteral("terminal.export"),
         QStringLiteral("command.palette"),
+        QStringLiteral("snippets.quick"),
+        QStringLiteral("history.quick"),
         QStringLiteral("settings.open"),
     };
 }
@@ -332,6 +344,8 @@ QString TerminalSettings::shortcutDisplayName(const QString &id)
         {QStringLiteral("terminal.search"), QObject::tr("Search terminal output")},
         {QStringLiteral("terminal.export"), QObject::tr("Export terminal output")},
         {QStringLiteral("command.palette"), QObject::tr("Open the command palette")},
+        {QStringLiteral("snippets.quick"), QObject::tr("Quick run snippets")},
+        {QStringLiteral("history.quick"), QObject::tr("Quick run command history")},
         {QStringLiteral("settings.open"), QObject::tr("Open settings")},
     };
     return names.value(id, id);

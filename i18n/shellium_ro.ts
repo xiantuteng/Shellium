@@ -1406,6 +1406,14 @@ Confirmi că cheia s-a schimbat, înlocuiești vechea înregistrare din known_ho
         <translation type="unfinished">Paletă de comenzi…</translation>
     </message>
     <message>
+        <source>Quick Snippets…</source>
+        <translation type="unfinished">Fragmente rapide…</translation>
+    </message>
+    <message>
+        <source>Quick Command History…</source>
+        <translation type="unfinished">Istoric rapid al comenzilor…</translation>
+    </message>
+    <message>
         <source>Save Current Workspace…</source>
         <translation type="unfinished">Salvează spațiul de lucru curent…</translation>
     </message>
@@ -1688,6 +1696,10 @@ Confirmi că cheia s-a schimbat, înlocuiești vechea înregistrare din known_ho
     <message>
         <source>Enter to run, Esc to close; only currently available actions are shown here.</source>
         <translation type="unfinished">Enter pentru a executa, Esc pentru a închide; aici sunt afișate doar acțiunile disponibile acum.</translation>
+    </message>
+    <message>
+        <source>Open a terminal session first</source>
+        <translation type="unfinished">Deschideți mai întâi o sesiune de terminal</translation>
     </message>
     <message>
         <source>Export terminal output</source>
@@ -2384,10 +2396,6 @@ Confirmi că cheia s-a schimbat, înlocuiești vechea înregistrare din known_ho
         <translation type="unfinished">Salvează modificările fragmentului curent</translation>
     </message>
     <message>
-        <source>Run (%1)</source>
-        <translation type="unfinished">Execută (%1)</translation>
-    </message>
-    <message>
         <source>The productivity model is not ready yet</source>
         <translation type="unfinished">Modelul de productivitate nu este încă pregătit</translation>
     </message>
@@ -2422,10 +2430,6 @@ Confirmi că cheia s-a schimbat, înlocuiești vechea înregistrare din known_ho
     <message>
         <source>Snippet deleted</source>
         <translation type="unfinished">Fragmentul a fost șters</translation>
-    </message>
-    <message>
-        <source>Select a snippet to run first</source>
-        <translation type="unfinished">Selectează mai întâi un fragment de executat</translation>
     </message>
     <message>
         <source>The snippet no longer exists or its command is empty</source>
@@ -2533,6 +2537,14 @@ Confirmi că cheia s-a schimbat, înlocuiești vechea înregistrare din known_ho
     <message>
         <source>Open the command palette</source>
         <translation type="unfinished">Deschide paleta de comenzi</translation>
+    </message>
+    <message>
+        <source>Quick run snippets</source>
+        <translation type="unfinished">Rulare rapidă a fragmentelor</translation>
+    </message>
+    <message>
+        <source>Quick run command history</source>
+        <translation type="unfinished">Rulare rapidă din istoricul comenzilor</translation>
     </message>
     <message>
         <source>Open settings</source>
@@ -2967,6 +2979,41 @@ Pentru a nu suprascrie datele de autentificare existente, Shellium nu creează a
     <message>
         <source>Reset terminal</source>
         <translation type="unfinished">Resetează terminalul</translation>
+    </message>
+</context>
+<context>
+    <name>QuickCommandPopup</name>
+    <message>
+        <source>Snippets</source>
+        <translation type="unfinished">Fragmente</translation>
+    </message>
+    <message>
+        <source>Search snippets</source>
+        <translation type="unfinished">Căutați fragmente</translation>
+    </message>
+    <message>
+        <source>No snippets yet. Add them in the Snippets sidebar.</source>
+        <translation type="unfinished">Încă nu există fragmente. Adăugați-le din bara laterală Fragmente.</translation>
+    </message>
+    <message>
+        <source>History</source>
+        <translation type="unfinished">Istoric</translation>
+    </message>
+    <message>
+        <source>Search command history</source>
+        <translation type="unfinished">Căutați în istoricul comenzilor</translation>
+    </message>
+    <message>
+        <source>Recent commands</source>
+        <translation type="unfinished">Comenzi recente</translation>
+    </message>
+    <message>
+        <source>No command history for this session yet.</source>
+        <translation type="unfinished">Această sesiune nu are încă istoric de comenzi.</translation>
+    </message>
+    <message>
+        <source>%1 run · Enter run selected · Esc close</source>
+        <translation type="unfinished">%1 rulare · Enter rulează selecția · Esc închide</translation>
     </message>
 </context>
 <context>

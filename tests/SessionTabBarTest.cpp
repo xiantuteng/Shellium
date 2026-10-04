@@ -171,6 +171,14 @@ private slots:
      * 标签一插入同一个索引就会平白顶着一个不属于自己的红点或绿点。
      */
     void connectionStateDotReflectsPerTabStateAndClearsOnRemoval();
+
+    /**
+     * @brief 未选中、未悬停的标签也必须绘制常驻胶囊底色，且与选中色互不混用。
+     *
+     * 旧样式只给选中和悬停标签画底色，未选中标签与标题栏融为一体；改版要求每个标签都是
+     * 一块可辨认的圆角按钮。同时断言选中标签内部没有空闲色，避免实现把两档颜色画反。
+     */
+    void unselectedTabPaintsIdlePill();
 };
 
 namespace {
@@ -599,5 +607,35 @@ void SessionTabBarTest::connectionStateDotReflectsPerTabStateAndClearsOnRemoval(
 }
 
 QTEST_MAIN(SessionTabBarTest)
+
+void SessionTabBarTest::unselectedTabPaintsIdlePill()
+{
+    SessionTabBar tabBar;
+    tabBar.resize(520, 42);
+    const QColor idleColor(QStringLiteral("#00a0ff"));
+    const QColor selectedColor(QStringLiteral("#ff0044"));
+    tabBar.setVisualColors(QColor(QStringLiteral("#ffffff")),
+                           QColor(QStringLiteral("#ffffff")),
+                           QColor(QStringLiteral("#202020")),
+                           selectedColor);
+    tabBar.setIdleTabColor(idleColor);
+    tabBar.addTab(QStringLiteral("当前"));
+    tabBar.addTab(QStringLiteral("未选中"));
+    tabBar.setCurrentIndex(0);
+    tabBar.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&tabBar));
+
+    const QPixmap frame = tabBar.grab();
+    const QRect selectedInterior = tabBar.tabRect(0).adjusted(8, 8, -8, -8);
+    const QRect idleInterior = tabBar.tabRect(1).adjusted(8, 8, -8, -8);
+    QVERIFY2(countPixelsNearColor(frame, idleInterior, idleColor) > 300,
+             "未选中标签必须绘制常驻胶囊底色");
+    QCOMPARE(countPixelsNearColor(frame, selectedInterior, idleColor), 0);
+    QVERIFY(countPixelsNearColor(frame, selectedInterior, selectedColor) > 300);
+
+    // 传入无效颜色可恢复为透明样式，未选中标签内部不再出现空闲色。
+    tabBar.setIdleTabColor(QColor());
+    QCOMPARE(countPixelsNearColor(tabBar.grab(), idleInterior, idleColor), 0);
+}
 
 #include "SessionTabBarTest.moc"

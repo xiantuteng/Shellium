@@ -1,5 +1,6 @@
 #include "productivity/ProductivityModel.h"
 #include "productivity/ProductivityWidget.h"
+#include "productivity/QuickCommandPopup.h"
 #include "ssh/SshSessionStack.h"
 #include "ssh/SshTunnelBroker.h"
 #include "storage/ApplicationDatabase.h"
@@ -16,6 +17,7 @@
 #include <QLineEdit>
 #include <QListWidget>
 #include <QPushButton>
+#include <QShortcut>
 #include <QSignalSpy>
 #include <QTabWidget>
 #include <QTest>
@@ -91,15 +93,20 @@ private slots:
 
     /**
      * @brief 片段列表必须是扁平单列列表，没有说明时要退化显示命令；每行还要带一个
-     * "执行/复制"按钮，前 10 行的执行按钮要在 Tooltip 中提示 Ctrl+1..Ctrl+0 快捷键。
+     * "执行/复制"按钮，且不再显示 Ctrl+数字快捷键提示（按序号执行已移到 Cmd+K 面板）。
      */
-    void snippetListIsFlatWithDescriptionFallbackAndShortcutHints();
+    void snippetListIsFlatWithDescriptionFallbackAndNoShortcutHints();
 
     /** @brief 新增/编辑片段改为弹出对话框；保存后数据落库、对话框关闭，且不再有分组字段。 */
     void snippetEditorDialogSavesWithoutGroupingField();
 
-    /** @brief Ctrl+1 快捷键应执行列表第一个片段，并像按钮一样只作用于当前活动终端。 */
-    void snippetShortcutExecutesFirstSnippetOnCurrentTerminal();
+    /**
+     * @brief 侧栏不得再注册任何 Ctrl+数字快捷键。
+     *
+     * 直接检查 QShortcut 对象而不是按键：按键路径依赖窗口是否被激活，窗口没拿到焦点时
+     * "按了没反应"会让一个仍然注册着快捷键的实现也通过。
+     */
+    void sidebarRegistersNoNumericSnippetShortcuts();
 
     /** @brief 复制按钮应把命令原样写入系统剪贴板，而不改动数据库。 */
     void snippetRowCopyButtonWritesCommandToClipboard();
@@ -115,6 +122,17 @@ private slots:
 
     /** @brief 嵌套路由必须保留远端密钥 SFTP 兜底所需的外层认证配置与内层端口。 */
     void tunnelBrokerReturnsRemoteSftpRelayEndpoints();
+
+    /**
+     * @brief Cmd+K / Cmd+J 面板：Cmd+1..9 执行第 N 个可见条目，越界数字安全忽略。
+     *
+     * 裸数字必须照常进入搜索框，否则含数字的命令无法搜索；Cmd+数字则被面板消费、不进入
+     * 搜索框。筛选后编号跟随可见顺序，第 10 项以后没有数字键。
+     */
+    void quickCommandPopupDigitsRunVisibleEntries();
+
+    /** @brief Esc 关闭不执行；方向键移动选中项、回车执行选中项。 */
+    void quickCommandPopupKeyboardNavigation();
 
 private:
     /** @brief 在 Snippet 列表中按稳定 id 查找对应的行。 */
@@ -479,7 +497,7 @@ void ProductivityTest::terminalPaneDoesNotExposeInferredTargetBadge()
              "终端状态栏不应创建“推测嵌套目标”徽章");
 }
 
-void ProductivityTest::snippetListIsFlatWithDescriptionFallbackAndShortcutHints()
+void ProductivityTest::snippetListIsFlatWithDescriptionFallbackAndNoShortcutHints()
 {
     // 分组功能已移除：即使数据库里还残留旧的 Folder 节点（例如从旧版本升级而来），界面
     // 也只应该展示根层级的可执行片段，不能尝试渲染分组本身。
@@ -539,7 +557,7 @@ void ProductivityTest::snippetListIsFlatWithDescriptionFallbackAndShortcutHints(
     }
     QVERIFY2(foundCommandFallback, "没有说明时第二行必须退化显示命令本身");
 
-    // 每行都要有执行/复制按钮；前两行（第 1、2 个片段）的执行按钮要提示 Ctrl+1、Ctrl+2。
+    // 每行都要有执行/复制按钮；执行按钮只提示"执行"，行内不再出现快捷键文字。
     for (QWidget *row : {withDescRow, withoutDescRow}) {
         QVERIFY(row->findChild<QToolButton *>(QStringLiteral("productivitySnippetExecute"))
                     != nullptr);
@@ -550,10 +568,14 @@ void ProductivityTest::snippetListIsFlatWithDescriptionFallbackAndShortcutHints(
         QStringLiteral("productivitySnippetExecute"));
     auto *secondExecute = withoutDescRow->findChild<QToolButton *>(
         QStringLiteral("productivitySnippetExecute"));
-    QVERIFY2(firstExecute->toolTip().contains(QStringLiteral("Ctrl+1")),
-             "第一个片段的执行按钮必须提示 Ctrl+1");
-    QVERIFY2(secondExecute->toolTip().contains(QStringLiteral("Ctrl+2")),
-             "第二个片段的执行按钮必须提示 Ctrl+2");
+    QCOMPARE(firstExecute->toolTip(), QStringLiteral("Run"));
+    QCOMPARE(secondExecute->toolTip(), QStringLiteral("Run"));
+    for (QWidget *row : {withDescRow, withoutDescRow}) {
+        for (const QLabel *label : row->findChildren<QLabel *>()) {
+            QVERIFY2(!label->text().startsWith(QStringLiteral("Ctrl+")),
+                     "片段行不应再显示 Ctrl+数字快捷键提示");
+        }
+    }
 }
 
 void ProductivityTest::snippetEditorDialogSavesWithoutGroupingField()
@@ -601,7 +623,7 @@ void ProductivityTest::snippetEditorDialogSavesWithoutGroupingField()
     QVERIFY(rootSnippets.constFirst().parentId.isEmpty());
 }
 
-void ProductivityTest::snippetShortcutExecutesFirstSnippetOnCurrentTerminal()
+void ProductivityTest::sidebarRegistersNoNumericSnippetShortcuts()
 {
     SnippetRecord snippet;
     snippet.id = QStringLiteral("snippet-shortcut");
@@ -611,20 +633,8 @@ void ProductivityTest::snippetShortcutExecutesFirstSnippetOnCurrentTerminal()
     QVERIFY(m_model->saveSnippet(snippet));
 
     ProductivityWidget widget(m_model.get());
-    widget.resize(360, 480);
-    widget.show();
-    QVERIFY(QTest::qWaitForWindowExposed(&widget));
-
-    auto *list = widget.findChild<QListWidget *>(QStringLiteral("productivitySnippetList"));
-    QVERIFY(list != nullptr);
-    list->setFocus();
-    QVERIFY(QTest::qWaitForWindowActive(&widget));
-
-    QSignalSpy executionSpy(&widget, &ProductivityWidget::commandExecutionRequested);
-    QTest::keyClick(&widget, Qt::Key_1, Qt::ControlModifier);
-    QCOMPARE(executionSpy.count(), 1);
-    QCOMPARE(executionSpy.constFirst().at(0).toString(), QStringLiteral("free -h"));
-    QVERIFY(executionSpy.constFirst().at(1).toStringList().isEmpty());
+    QVERIFY2(widget.findChildren<QShortcut *>().isEmpty(),
+             "效率工具侧栏不应再注册片段数字快捷键");
 }
 
 void ProductivityTest::snippetRowCopyButtonWritesCommandToClipboard()
@@ -792,12 +802,118 @@ void ProductivityTest::snippetRowsAndTabsRetranslateOnLanguageChange()
 
     QCOMPARE(tabs->tabText(0), QStringLiteral("!!Command snippets"));
     QCOMPARE(copyText(), QStringLiteral("!!Copy command"));
-    QCOMPARE(executeText(), QStringLiteral("!!Run (%1)").arg(QStringLiteral("Ctrl+1")));
+    QCOMPARE(executeText(), QStringLiteral("!!Run"));
     QVERIFY(search->placeholderText().startsWith(QStringLiteral("!!")));
 
     QVERIFY(QCoreApplication::removeTranslator(&translator));
     QCoreApplication::sendPostedEvents(nullptr, QEvent::LanguageChange);
     QCOMPARE(copyText(), QStringLiteral("Copy command"));
+}
+
+namespace {
+
+/** @brief 构造 count 条历史式条目，命令依次为 cmd-1、cmd-2…… */
+QList<QuickCommandPopup::Entry> numberedEntries(const int count)
+{
+    QList<QuickCommandPopup::Entry> entries;
+    for (int index = 1; index <= count; ++index) {
+        const QString command = QStringLiteral("cmd-%1").arg(index);
+        entries.append({command, QString(), command});
+    }
+    return entries;
+}
+
+} // namespace
+
+void ProductivityTest::quickCommandPopupDigitsRunVisibleEntries()
+{
+    QuickCommandPopup popup;
+    QSignalSpy chosenSpy(&popup, &QuickCommandPopup::commandChosen);
+    auto *search = popup.findChild<QLineEdit *>(QStringLiteral("QuickCommandSearch"));
+    QVERIFY(search != nullptr);
+
+    popup.showEntries(QuickCommandPopup::Mode::History, numberedEntries(12), QString(), nullptr);
+    QVERIFY(popup.isVisible());
+    QCOMPARE(popup.mode(), QuickCommandPopup::Mode::History);
+    // 裸数字是搜索输入：不执行，文字进入搜索框（cmd-2 与 cmd-12 匹配）。
+    QTest::keyClick(search, Qt::Key_2);
+    QCOMPARE(chosenSpy.count(), 0);
+    QCOMPARE(search->text(), QStringLiteral("2"));
+    QCOMPARE(popup.visibleCount(), 2);
+    search->clear();
+
+    QTest::keyClick(search, Qt::Key_2, Qt::ControlModifier);
+    QCOMPARE(chosenSpy.count(), 1);
+    QCOMPARE(chosenSpy.takeFirst().at(0).toString(), QStringLiteral("cmd-2"));
+    QVERIFY2(!popup.isVisible(), "执行后面板必须关闭，焦点交还终端");
+    QVERIFY2(search->text().isEmpty(), "Cmd+数字不能落进搜索框");
+
+    // 第 9 项可用小键盘数字执行。
+    popup.showEntries(QuickCommandPopup::Mode::History, numberedEntries(12), QString(), nullptr);
+    QTest::keyClick(search, Qt::Key_9, Qt::ControlModifier | Qt::KeypadModifier);
+    QCOMPARE(chosenSpy.count(), 1);
+    QCOMPARE(chosenSpy.takeFirst().at(0).toString(), QStringLiteral("cmd-9"));
+
+    // 只有 3 项时按 Cmd+5 不执行任何命令，面板保持打开。
+    popup.showEntries(QuickCommandPopup::Mode::Snippets, numberedEntries(3), QString(), nullptr);
+    QCOMPARE(popup.mode(), QuickCommandPopup::Mode::Snippets);
+    QTest::keyClick(search, Qt::Key_5, Qt::ControlModifier);
+    QCOMPARE(chosenSpy.count(), 0);
+    QVERIFY(popup.isVisible());
+
+    // 筛选后编号跟随可见顺序：输入 "cmd-1" 只剩 cmd-1、cmd-10、cmd-11、cmd-12。
+    popup.showEntries(QuickCommandPopup::Mode::History, numberedEntries(12), QString(), nullptr);
+    search->setText(QStringLiteral("cmd-1"));
+    QCOMPARE(popup.visibleCount(), 4);
+    QTest::keyClick(search, Qt::Key_3, Qt::ControlModifier);
+    QCOMPARE(chosenSpy.count(), 1);
+    QCOMPARE(chosenSpy.takeFirst().at(0).toString(), QStringLiteral("cmd-11"));
+
+    // 角标显示完整按键而不是裸数字，否则用户会以为单按数字就能执行。
+#if defined(Q_OS_MACOS)
+    QCOMPARE(QuickCommandPopup::digitShortcutText(1), QStringLiteral("⌘1"));
+#else
+    QCOMPARE(QuickCommandPopup::digitShortcutText(1), QStringLiteral("Ctrl+1"));
+#endif
+    QCOMPARE(QuickCommandPopup::digitShortcutText(9),
+             QKeySequence(Qt::CTRL | Qt::Key_9).toString(QKeySequence::NativeText));
+    QVERIFY(QuickCommandPopup::digitShortcutText(0).isEmpty());
+    QVERIFY(QuickCommandPopup::digitShortcutText(10).isEmpty());
+
+    // 每次弹出都清空上次的搜索词。
+    popup.showEntries(QuickCommandPopup::Mode::History, numberedEntries(12), QString(), nullptr);
+    QVERIFY(search->text().isEmpty());
+    QCOMPARE(popup.visibleCount(), 12);
+    popup.hide();
+}
+
+void ProductivityTest::quickCommandPopupKeyboardNavigation()
+{
+    QuickCommandPopup popup;
+    QSignalSpy chosenSpy(&popup, &QuickCommandPopup::commandChosen);
+    auto *search = popup.findChild<QLineEdit *>(QStringLiteral("QuickCommandSearch"));
+    QVERIFY(search != nullptr);
+
+    popup.showEntries(QuickCommandPopup::Mode::Snippets, numberedEntries(4), QString(), nullptr);
+    QTest::keyClick(search, Qt::Key_Escape);
+    QVERIFY(!popup.isVisible());
+    QCOMPARE(chosenSpy.count(), 0);
+
+    popup.showEntries(QuickCommandPopup::Mode::Snippets, numberedEntries(4), QString(), nullptr);
+    QTest::keyClick(search, Qt::Key_Down);
+    QTest::keyClick(search, Qt::Key_Down);
+    QTest::keyClick(search, Qt::Key_Up);
+    QTest::keyClick(search, Qt::Key_Return);
+    QCOMPARE(chosenSpy.count(), 1);
+    QCOMPARE(chosenSpy.takeFirst().at(0).toString(), QStringLiteral("cmd-2"));
+    QVERIFY(!popup.isVisible());
+
+    // 空列表回车不发出空命令。
+    popup.showEntries(QuickCommandPopup::Mode::History, {}, QString(), nullptr);
+    QTest::keyClick(search, Qt::Key_Return);
+    QTest::keyClick(search, Qt::Key_1, Qt::ControlModifier);
+    QCOMPARE(chosenSpy.count(), 0);
+    popup.hide();
 }
 
 QTEST_MAIN(ProductivityTest)

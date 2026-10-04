@@ -1406,6 +1406,14 @@ Puede ser una reinstalación del servidor o una rotación de clave, o un ataque 
         <translation type="unfinished">Paleta de comandos…</translation>
     </message>
     <message>
+        <source>Quick Snippets…</source>
+        <translation type="unfinished">Fragmentos rápidos…</translation>
+    </message>
+    <message>
+        <source>Quick Command History…</source>
+        <translation type="unfinished">Historial de comandos rápido…</translation>
+    </message>
+    <message>
         <source>Save Current Workspace…</source>
         <translation type="unfinished">Guardar el espacio de trabajo actual…</translation>
     </message>
@@ -1688,6 +1696,10 @@ Puede ser una reinstalación del servidor o una rotación de clave, o un ataque 
     <message>
         <source>Enter to run, Esc to close; only currently available actions are shown here.</source>
         <translation type="unfinished">Intro para ejecutar, Esc para cerrar; aquí solo se muestran las acciones disponibles actualmente.</translation>
+    </message>
+    <message>
+        <source>Open a terminal session first</source>
+        <translation type="unfinished">Abre primero una sesión de terminal</translation>
     </message>
     <message>
         <source>Export terminal output</source>
@@ -2384,10 +2396,6 @@ Puede ser una reinstalación del servidor o una rotación de clave, o un ataque 
         <translation type="unfinished">Guardar los cambios del fragmento actual</translation>
     </message>
     <message>
-        <source>Run (%1)</source>
-        <translation type="unfinished">Ejecutar (%1)</translation>
-    </message>
-    <message>
         <source>The productivity model is not ready yet</source>
         <translation type="unfinished">El modelo de productividad aún no está listo</translation>
     </message>
@@ -2422,10 +2430,6 @@ Puede ser una reinstalación del servidor o una rotación de clave, o un ataque 
     <message>
         <source>Snippet deleted</source>
         <translation type="unfinished">Fragmento eliminado</translation>
-    </message>
-    <message>
-        <source>Select a snippet to run first</source>
-        <translation type="unfinished">Selecciona primero un fragmento para ejecutar</translation>
     </message>
     <message>
         <source>The snippet no longer exists or its command is empty</source>
@@ -2533,6 +2537,14 @@ Puede ser una reinstalación del servidor o una rotación de clave, o un ataque 
     <message>
         <source>Open the command palette</source>
         <translation type="unfinished">Abrir la paleta de comandos</translation>
+    </message>
+    <message>
+        <source>Quick run snippets</source>
+        <translation type="unfinished">Ejecutar fragmentos rápidamente</translation>
+    </message>
+    <message>
+        <source>Quick run command history</source>
+        <translation type="unfinished">Ejecutar comandos del historial rápidamente</translation>
     </message>
     <message>
         <source>Open settings</source>
@@ -2967,6 +2979,41 @@ Para no sobrescribir credenciales existentes, Shellium no crea automáticamente 
     <message>
         <source>Reset terminal</source>
         <translation type="unfinished">Restablecer el terminal</translation>
+    </message>
+</context>
+<context>
+    <name>QuickCommandPopup</name>
+    <message>
+        <source>Snippets</source>
+        <translation type="unfinished">Fragmentos</translation>
+    </message>
+    <message>
+        <source>Search snippets</source>
+        <translation type="unfinished">Buscar fragmentos</translation>
+    </message>
+    <message>
+        <source>No snippets yet. Add them in the Snippets sidebar.</source>
+        <translation type="unfinished">Aún no hay fragmentos. Añádelos en la barra lateral de fragmentos.</translation>
+    </message>
+    <message>
+        <source>History</source>
+        <translation type="unfinished">Historial</translation>
+    </message>
+    <message>
+        <source>Search command history</source>
+        <translation type="unfinished">Buscar en el historial de comandos</translation>
+    </message>
+    <message>
+        <source>Recent commands</source>
+        <translation type="unfinished">Comandos recientes</translation>
+    </message>
+    <message>
+        <source>No command history for this session yet.</source>
+        <translation type="unfinished">Esta sesión aún no tiene historial de comandos.</translation>
+    </message>
+    <message>
+        <source>%1 run · Enter run selected · Esc close</source>
+        <translation type="unfinished">%1 ejecutar · Intro ejecutar selección · Esc cerrar</translation>
     </message>
 </context>
 <context>

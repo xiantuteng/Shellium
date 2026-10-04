@@ -168,6 +168,12 @@ void SessionTabBar::setVisualColors(const QColor &textColor,
     update();
 }
 
+void SessionTabBar::setIdleTabColor(const QColor &idleColor)
+{
+    m_idleColor = idleColor;
+    update();
+}
+
 void SessionTabBar::tabLayoutChange()
 {
     QTabBar::tabLayoutChange();
@@ -261,9 +267,12 @@ void SessionTabBar::drawSessionTab(QPainter &painter,
     const bool selected = index == currentIndex();
     // 标签之间保留 3 像素缝隙，圆角底色再向上下收缩，避免视觉上重新连成传统页签。
     const QRectF pillRect = QRectF(rawRect).adjusted(3.0, 4.0, -3.0, -4.0);
-    if (selected || hovered) {
+    const QColor pillColor = selected ? m_selectedColor
+        : hovered                     ? m_hoverColor
+                                      : m_idleColor;
+    if (pillColor.isValid()) {
         painter.setPen(Qt::NoPen);
-        painter.setBrush(selected ? m_selectedColor : m_hoverColor);
+        painter.setBrush(pillColor);
         painter.drawRoundedRect(pillRect, 10.0, 10.0);
     }
 

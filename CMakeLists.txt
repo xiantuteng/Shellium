@@ -164,6 +164,8 @@ set(SHELLIUM_APP_SOURCES
     src/productivity/ProductivityModel.h
     src/productivity/ProductivityWidget.cpp
     src/productivity/ProductivityWidget.h
+    src/productivity/QuickCommandPopup.cpp
+    src/productivity/QuickCommandPopup.h
     src/security/Vault.cpp
     src/security/Vault.h
     src/security/SshKeyManager.cpp
@@ -601,6 +603,8 @@ if(BUILD_TESTING)
         src/productivity/ProductivityModel.h
         src/productivity/ProductivityWidget.cpp
         src/productivity/ProductivityWidget.h
+        src/productivity/QuickCommandPopup.cpp
+        src/productivity/QuickCommandPopup.h
         src/settings/TerminalSettings.cpp
         src/settings/TerminalSettings.h
         src/storage/ApplicationDatabase.cpp

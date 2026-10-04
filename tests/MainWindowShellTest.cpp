@@ -1,4 +1,5 @@
 #include "app/MainWindow.h"
+#include "productivity/QuickCommandPopup.h"
 #include "i18n/LocalizationService.h"
 #include "core/ConnectionTarget.h"
 #include "core/HostRecord.h"
@@ -104,6 +105,15 @@ private slots:
      * 切到效率工具只出现前者，切回主机只出现后者。
      */
     void productivityHeaderActionsShareSidebarTitleRow();
+
+    /**
+     * @brief 终端里按 Cmd+K 弹出片段面板、按 Cmd+1 在该终端执行；随后 Cmd+J 的历史面板第一项
+     * 就是刚执行的命令。
+     *
+     * 走真实窗口快捷键与本地 Shell：只测面板控件测不到"快捷键是否注册、命令是否真的送进
+     * 弹出时那个终端并写入历史"。
+     */
+    void quickSnippetAndHistoryShortcutsRunOnCurrentTerminal();
 
     /**
      * @brief 浅色主题下效率工具"片段/历史"标签的选中态必须一眼可辨。
@@ -1345,6 +1355,80 @@ void MainWindowShellTest::workspacesNavigationButtonFollowsHosts()
     QTest::mouseClick(workspacesButton, Qt::LeftButton);
     QVERIFY(workspacesButton->isChecked());
     QVERIFY(!hostsButton->isChecked());
+}
+
+void MainWindowShellTest::quickSnippetAndHistoryShortcutsRunOnCurrentTerminal()
+{
+    const QString command = QStringLiteral("echo shellium-quick-snippet-%1")
+                                .arg(QDateTime::currentMSecsSinceEpoch());
+    SnippetRecord snippet;
+    snippet.id = QStringLiteral("quick-popup-snippet");
+    snippet.kind = SnippetNodeKind::Snippet;
+    snippet.name = QStringLiteral("快速片段");
+    snippet.command = command;
+    snippet.sortOrder = -1000; // 排在其他用例可能留下的片段之前，确保它是数字 1。
+    QString error;
+    QVERIFY2(m_database->saveSnippet(snippet, &error), qPrintable(error));
+
+    MainWindow window(m_database, m_vault);
+    window.resize(1200, 800);
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+    auto *tabs = window.findChild<QTabWidget *>(QStringLiteral("TerminalPages"));
+    auto *newTabButton = window.findChild<QToolButton *>(QStringLiteral("TitleNewTabButton"));
+    QVERIFY(tabs != nullptr && newTabButton != nullptr);
+    QTest::mouseClick(newTabButton, Qt::LeftButton);
+    auto *workspace = qobject_cast<TerminalWorkspace *>(tabs->widget(0));
+    QVERIFY(workspace != nullptr);
+    TerminalPane *pane = workspace->activePane();
+    QTRY_VERIFY_WITH_TIMEOUT(pane->isConnected(), 8000);
+    auto *view = pane->findChild<TerminalView *>();
+    QVERIFY(view != nullptr);
+    view->setFocus();
+    QVERIFY(QTest::qWaitForWindowActive(&window));
+
+    const QKeySequence snippetsShortcut =
+        TerminalSettings::defaultShortcuts().value(QStringLiteral("snippets.quick"));
+    const QKeySequence historyShortcut =
+        TerminalSettings::defaultShortcuts().value(QStringLiteral("history.quick"));
+    QVERIFY(!snippetsShortcut.isEmpty() && !historyShortcut.isEmpty());
+#if defined(Q_OS_MACOS)
+    QCOMPARE(snippetsShortcut, QKeySequence(QStringLiteral("Ctrl+K")));
+    QCOMPARE(historyShortcut, QKeySequence(QStringLiteral("Ctrl+J")));
+#endif
+
+    QTest::keySequence(view, snippetsShortcut);
+    auto *popup = window.findChild<QuickCommandPopup *>(QStringLiteral("QuickCommandPopup"));
+    QVERIFY2(popup != nullptr && popup->isVisible(), "片段快捷键没有弹出面板");
+    QCOMPARE(popup->mode(), QuickCommandPopup::Mode::Snippets);
+    QCOMPARE(popup->visibleCommandAt(0), command);
+    // 面板以终端为参照水平居中，侧栏展开时也不能偏到终端左侧。
+    const int paneCenterX = pane->mapToGlobal(pane->rect().center()).x();
+    QVERIFY2(qAbs(popup->geometry().center().x() - paneCenterX) <= 2,
+             "快速面板没有在终端上方水平居中");
+    auto *search = popup->findChild<QLineEdit *>(QStringLiteral("QuickCommandSearch"));
+    QVERIFY(search != nullptr);
+    QTest::keyClick(search, Qt::Key_1, Qt::ControlModifier);
+    QVERIFY(!popup->isVisible());
+
+    // 命令真的进了这个终端：写入了本地 Shell 的历史，且输出出现在屏幕上。
+    QTRY_VERIFY_WITH_TIMEOUT(
+        [&]() {
+            const QList<CommandHistoryEntry> history =
+                m_database->recentCommands(QString(), 5);
+            return !history.isEmpty() && history.constFirst().command == command;
+        }(),
+        8000);
+
+    view->setFocus();
+    QTest::keySequence(view, historyShortcut);
+    QVERIFY2(popup->isVisible(), "历史快捷键没有弹出面板");
+    QCOMPARE(popup->mode(), QuickCommandPopup::Mode::History);
+    QCOMPARE(popup->visibleCommandAt(0), command);
+    QTest::keyClick(search, Qt::Key_Escape);
+    QVERIFY(!popup->isVisible());
+
+    m_database->removeSnippet(snippet.id);
 }
 
 void MainWindowShellTest::productivityHeaderActionsShareSidebarTitleRow()

@@ -1406,6 +1406,14 @@ Confirmar que a chave mudou, substituir o registro antigo em known_hosts e conti
         <translation type="unfinished">Paleta de comandos…</translation>
     </message>
     <message>
+        <source>Quick Snippets…</source>
+        <translation type="unfinished">Snippets rápidos…</translation>
+    </message>
+    <message>
+        <source>Quick Command History…</source>
+        <translation type="unfinished">Histórico de comandos rápido…</translation>
+    </message>
+    <message>
         <source>Save Current Workspace…</source>
         <translation type="unfinished">Salvar o espaço de trabalho atual…</translation>
     </message>
@@ -1688,6 +1696,10 @@ Confirmar que a chave mudou, substituir o registro antigo em known_hosts e conti
     <message>
         <source>Enter to run, Esc to close; only currently available actions are shown here.</source>
         <translation type="unfinished">Enter para executar, Esc para fechar; aqui só são mostradas as ações disponíveis no momento.</translation>
+    </message>
+    <message>
+        <source>Open a terminal session first</source>
+        <translation type="unfinished">Abra primeiro uma sessão de terminal</translation>
     </message>
     <message>
         <source>Export terminal output</source>
@@ -2384,10 +2396,6 @@ Confirmar que a chave mudou, substituir o registro antigo em known_hosts e conti
         <translation type="unfinished">Salvar as alterações do snippet atual</translation>
     </message>
     <message>
-        <source>Run (%1)</source>
-        <translation type="unfinished">Executar (%1)</translation>
-    </message>
-    <message>
         <source>The productivity model is not ready yet</source>
         <translation type="unfinished">O modelo de produtividade ainda não está pronto</translation>
     </message>
@@ -2422,10 +2430,6 @@ Confirmar que a chave mudou, substituir o registro antigo em known_hosts e conti
     <message>
         <source>Snippet deleted</source>
         <translation type="unfinished">Snippet excluído</translation>
-    </message>
-    <message>
-        <source>Select a snippet to run first</source>
-        <translation type="unfinished">Selecione primeiro um snippet para executar</translation>
     </message>
     <message>
         <source>The snippet no longer exists or its command is empty</source>
@@ -2533,6 +2537,14 @@ Confirmar que a chave mudou, substituir o registro antigo em known_hosts e conti
     <message>
         <source>Open the command palette</source>
         <translation type="unfinished">Abrir a paleta de comandos</translation>
+    </message>
+    <message>
+        <source>Quick run snippets</source>
+        <translation type="unfinished">Executar snippets rapidamente</translation>
+    </message>
+    <message>
+        <source>Quick run command history</source>
+        <translation type="unfinished">Executar comandos do histórico rapidamente</translation>
     </message>
     <message>
         <source>Open settings</source>
@@ -2967,6 +2979,41 @@ Para não sobrescrever credenciais existentes, o Shellium não cria automaticame
     <message>
         <source>Reset terminal</source>
         <translation type="unfinished">Redefinir o terminal</translation>
+    </message>
+</context>
+<context>
+    <name>QuickCommandPopup</name>
+    <message>
+        <source>Snippets</source>
+        <translation type="unfinished">Snippets</translation>
+    </message>
+    <message>
+        <source>Search snippets</source>
+        <translation type="unfinished">Pesquisar snippets</translation>
+    </message>
+    <message>
+        <source>No snippets yet. Add them in the Snippets sidebar.</source>
+        <translation type="unfinished">Ainda não há snippets. Adicione-os na barra lateral de snippets.</translation>
+    </message>
+    <message>
+        <source>History</source>
+        <translation type="unfinished">Histórico</translation>
+    </message>
+    <message>
+        <source>Search command history</source>
+        <translation type="unfinished">Pesquisar no histórico de comandos</translation>
+    </message>
+    <message>
+        <source>Recent commands</source>
+        <translation type="unfinished">Comandos recentes</translation>
+    </message>
+    <message>
+        <source>No command history for this session yet.</source>
+        <translation type="unfinished">Esta sessão ainda não tem histórico de comandos.</translation>
+    </message>
+    <message>
+        <source>%1 run · Enter run selected · Esc close</source>
+        <translation type="unfinished">%1 executar · Enter executar seleção · Esc fechar</translation>
     </message>
 </context>
 <context>

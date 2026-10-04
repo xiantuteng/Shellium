@@ -1406,6 +1406,14 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">コマンドパレット…</translation>
     </message>
     <message>
+        <source>Quick Snippets…</source>
+        <translation type="unfinished">クイックスニペット…</translation>
+    </message>
+    <message>
+        <source>Quick Command History…</source>
+        <translation type="unfinished">クイックコマンド履歴…</translation>
+    </message>
+    <message>
         <source>Save Current Workspace…</source>
         <translation type="unfinished">現在のワークスペースを保存…</translation>
     </message>
@@ -1688,6 +1696,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>Enter to run, Esc to close; only currently available actions are shown here.</source>
         <translation type="unfinished">Enter で実行、Esc で閉じる。ここには現在利用可能な操作のみ表示されます。</translation>
+    </message>
+    <message>
+        <source>Open a terminal session first</source>
+        <translation type="unfinished">先にターミナルセッションを開いてください</translation>
     </message>
     <message>
         <source>Export terminal output</source>
@@ -2384,10 +2396,6 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">現在のスニペットの変更を保存</translation>
     </message>
     <message>
-        <source>Run (%1)</source>
-        <translation type="unfinished">実行 (%1)</translation>
-    </message>
-    <message>
         <source>The productivity model is not ready yet</source>
         <translation type="unfinished">生産性モデルの準備ができていません</translation>
     </message>
@@ -2422,10 +2430,6 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>Snippet deleted</source>
         <translation type="unfinished">スニペットを削除しました</translation>
-    </message>
-    <message>
-        <source>Select a snippet to run first</source>
-        <translation type="unfinished">先に実行するスニペットを選択してください</translation>
     </message>
     <message>
         <source>The snippet no longer exists or its command is empty</source>
@@ -2533,6 +2537,14 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>Open the command palette</source>
         <translation type="unfinished">コマンドパレットを開く</translation>
+    </message>
+    <message>
+        <source>Quick run snippets</source>
+        <translation type="unfinished">スニペットをすばやく実行</translation>
+    </message>
+    <message>
+        <source>Quick run command history</source>
+        <translation type="unfinished">コマンド履歴からすばやく実行</translation>
     </message>
     <message>
         <source>Open settings</source>
@@ -2967,6 +2979,41 @@ To avoid overwriting existing credentials, Shellium does not create a new vault 
     <message>
         <source>Reset terminal</source>
         <translation type="unfinished">端末をリセット</translation>
+    </message>
+</context>
+<context>
+    <name>QuickCommandPopup</name>
+    <message>
+        <source>Snippets</source>
+        <translation type="unfinished">スニペット</translation>
+    </message>
+    <message>
+        <source>Search snippets</source>
+        <translation type="unfinished">スニペットを検索</translation>
+    </message>
+    <message>
+        <source>No snippets yet. Add them in the Snippets sidebar.</source>
+        <translation type="unfinished">スニペットはまだありません。サイドバーのスニペットで追加してください。</translation>
+    </message>
+    <message>
+        <source>History</source>
+        <translation type="unfinished">履歴</translation>
+    </message>
+    <message>
+        <source>Search command history</source>
+        <translation type="unfinished">コマンド履歴を検索</translation>
+    </message>
+    <message>
+        <source>Recent commands</source>
+        <translation type="unfinished">最近のコマンド</translation>
+    </message>
+    <message>
+        <source>No command history for this session yet.</source>
+        <translation type="unfinished">このセッションにはまだコマンド履歴がありません。</translation>
+    </message>
+    <message>
+        <source>%1 run · Enter run selected · Esc close</source>
+        <translation type="unfinished">%1 で実行 · Enter で選択項目を実行 · Esc で閉じる</translation>
     </message>
 </context>
 <context>

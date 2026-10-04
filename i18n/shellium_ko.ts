@@ -1406,6 +1406,14 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">명령 팔레트…</translation>
     </message>
     <message>
+        <source>Quick Snippets…</source>
+        <translation type="unfinished">빠른 스니펫…</translation>
+    </message>
+    <message>
+        <source>Quick Command History…</source>
+        <translation type="unfinished">빠른 명령 기록…</translation>
+    </message>
+    <message>
         <source>Save Current Workspace…</source>
         <translation type="unfinished">현재 작업 공간 저장…</translation>
     </message>
@@ -1688,6 +1696,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>Enter to run, Esc to close; only currently available actions are shown here.</source>
         <translation type="unfinished">Enter로 실행, Esc로 닫기. 여기에는 현재 사용 가능한 작업만 표시됩니다.</translation>
+    </message>
+    <message>
+        <source>Open a terminal session first</source>
+        <translation type="unfinished">먼저 터미널 세션을 여세요</translation>
     </message>
     <message>
         <source>Export terminal output</source>
@@ -2384,10 +2396,6 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">현재 스니펫 변경 저장</translation>
     </message>
     <message>
-        <source>Run (%1)</source>
-        <translation type="unfinished">실행 (%1)</translation>
-    </message>
-    <message>
         <source>The productivity model is not ready yet</source>
         <translation type="unfinished">생산성 모델이 아직 준비되지 않았습니다</translation>
     </message>
@@ -2422,10 +2430,6 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>Snippet deleted</source>
         <translation type="unfinished">스니펫을 삭제했습니다</translation>
-    </message>
-    <message>
-        <source>Select a snippet to run first</source>
-        <translation type="unfinished">먼저 실행할 스니펫을 선택하세요</translation>
     </message>
     <message>
         <source>The snippet no longer exists or its command is empty</source>
@@ -2533,6 +2537,14 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>Open the command palette</source>
         <translation type="unfinished">명령 팔레트 열기</translation>
+    </message>
+    <message>
+        <source>Quick run snippets</source>
+        <translation type="unfinished">스니펫 빠르게 실행</translation>
+    </message>
+    <message>
+        <source>Quick run command history</source>
+        <translation type="unfinished">명령 기록에서 빠르게 실행</translation>
     </message>
     <message>
         <source>Open settings</source>
@@ -2967,6 +2979,41 @@ To avoid overwriting existing credentials, Shellium does not create a new vault 
     <message>
         <source>Reset terminal</source>
         <translation type="unfinished">터미널 초기화</translation>
+    </message>
+</context>
+<context>
+    <name>QuickCommandPopup</name>
+    <message>
+        <source>Snippets</source>
+        <translation type="unfinished">스니펫</translation>
+    </message>
+    <message>
+        <source>Search snippets</source>
+        <translation type="unfinished">스니펫 검색</translation>
+    </message>
+    <message>
+        <source>No snippets yet. Add them in the Snippets sidebar.</source>
+        <translation type="unfinished">아직 스니펫이 없습니다. 사이드바의 스니펫에서 추가하세요.</translation>
+    </message>
+    <message>
+        <source>History</source>
+        <translation type="unfinished">기록</translation>
+    </message>
+    <message>
+        <source>Search command history</source>
+        <translation type="unfinished">명령 기록 검색</translation>
+    </message>
+    <message>
+        <source>Recent commands</source>
+        <translation type="unfinished">최근 명령</translation>
+    </message>
+    <message>
+        <source>No command history for this session yet.</source>
+        <translation type="unfinished">이 세션에는 아직 명령 기록이 없습니다.</translation>
+    </message>
+    <message>
+        <source>%1 run · Enter run selected · Esc close</source>
+        <translation type="unfinished">%1 실행 · Enter 선택 항목 실행 · Esc 닫기</translation>
     </message>
 </context>
 <context>

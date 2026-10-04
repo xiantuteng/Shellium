@@ -5,6 +5,7 @@
 #include <QMainWindow>
 #include <QHash>
 #include <QList>
+#include <QPointer>
 #include <QStringList>
 #include <QVector>
 
@@ -21,6 +22,7 @@ class LocalizationService;
 class PortForwardManagerWidget;
 class ProductivityModel;
 class ProductivityWidget;
+class QuickCommandPopup;
 struct TerminalSettings;
 class QAction;
 class QEvent;
@@ -370,6 +372,26 @@ private:
      */
     void openCommandPalette();
 
+    /**
+     * @brief 在当前终端上方弹出命令片段快速面板（默认 Cmd+K）。
+     *
+     * 按 1..9 直接在弹出时的那个终端执行对应片段；没有活动终端时只提示，不弹面板。
+     */
+    void openQuickSnippets();
+
+    /**
+     * @brief 在当前终端上方弹出该会话主机的命令历史快速面板（默认 Cmd+J）。
+     *
+     * 历史按最近执行倒序、按命令去重；主机取当前活动层的稳定 id，本地 Shell 为空。
+     */
+    void openQuickHistory();
+
+    /**
+     * @brief 两个快速面板的共同入口：定位终端、弹出面板并把选中命令送回同一终端。
+     * @param snippets true 为片段面板，false 为历史面板。
+     */
+    void openQuickCommandPopup(bool snippets);
+
     /** @brief 将当前终端纯文本通过 QSaveFile 原子写入用户选择的文件。 */
     void exportCurrentTerminal();
 
@@ -473,6 +495,10 @@ private:
     PortForwardManagerWidget *m_portForwardManager = nullptr;
     ProductivityModel *m_productivityModel = nullptr;
     ProductivityWidget *m_productivityWidget = nullptr;
+    /** @brief Cmd+K / Cmd+J 共用的快速命令面板；首次使用时创建，由本窗口拥有。 */
+    QuickCommandPopup *m_quickCommandPopup = nullptr;
+    /** @brief 快速面板弹出时的目标终端；面板关闭前标签被关掉时自动置空。 */
+    QPointer<TerminalPane> m_quickCommandPane;
     /** @brief 导航轨“工作空间”页面，展示当前组的布局选择与终端缩略图。 */
     WorkspaceSidebarWidget *m_workspaceSidebar = nullptr;
     AiSettingsService *m_aiSettingsService = nullptr;
