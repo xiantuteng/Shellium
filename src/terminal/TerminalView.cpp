@@ -422,6 +422,18 @@ TerminalView::TerminalView(QWidget *parent)
     // resize→SIGWINCH→重排→滚动条再次切换的死循环，表现为窗口不停上下跳动；关闭横向
     // 滚动条彻底切断这个反馈环。
     setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    // AlwaysOff 只是不画滚动条，范围仍按文档最宽一行计算：窗口收窄（例如打开 AI 助手
+    // 侧栏）后，旧宽度下写满的滚动历史不回流、仍比视口宽，行尾的行高锚点也可能把整行
+    // 顶出视口。此时触控板横向轻扫、setTextCursor 让光标可见都会把整块画面左移，top 的
+    // 第一列被切掉。终端列数本来就按视口算好，把横向范围钉死在 0，彻底不允许左右滚动。
+    QScrollBar *horizontalBar = horizontalScrollBar();
+    connect(horizontalBar, &QScrollBar::rangeChanged, this,
+            [horizontalBar](const int minimum, const int maximum) {
+                if (minimum != 0 || maximum != 0) {
+                    horizontalBar->setRange(0, 0);
+                }
+            });
+    horizontalBar->setRange(0, 0);
     // 终端中的 Tab 属于 Shell 补全协议，不应切换到右侧文件管理器或工具栏。
     setTabChangesFocus(false);
     setFocusPolicy(Qt::StrongFocus);

@@ -3,6 +3,7 @@
 #include "core/ConnectionTarget.h"
 #include "core/HostRecord.h"
 #include "security/Vault.h"
+#include "settings/TerminalSettings.h"
 #include "storage/ApplicationDatabase.h"
 #include "terminal/TerminalPane.h"
 #include "terminal/TerminalSearchBar.h"
@@ -34,6 +35,8 @@
 #include <QLineEdit>
 #include <QTimer>
 #include <QListWidget>
+#include <QCursor>
+#include <QImage>
 #include <QMenu>
 #include <QMenuBar>
 #include <QSignalSpy>
@@ -101,6 +104,14 @@ private slots:
      * 切到效率工具只出现前者，切回主机只出现后者。
      */
     void productivityHeaderActionsShareSidebarTitleRow();
+
+    /**
+     * @brief 浅色主题下效率工具"片段/历史"标签的选中态必须一眼可辨。
+     *
+     * 通用 RAISED 选中底 (#f0f3f5) 与浅色侧栏 (#f5f7f8) 每通道只差几个灰阶，用户看不出
+     * 当前在哪一页；直接对渲染结果取样，比较选中与未选中标签的底色差。
+     */
+    void productivityTabSelectionIsVisibleInLightTheme();
     void duplicateMenuItemOpensASecondCopyOfTheTab();
 
     /** @brief 把终端拖入此前选中的标签后必须原位合并为可重命名的工作空间标签；
@@ -1376,6 +1387,59 @@ void MainWindowShellTest::productivityHeaderActionsShareSidebarTitleRow()
     QTest::mouseClick(hostsButton, Qt::LeftButton);
     QVERIFY(addHost->isVisible());
     QVERIFY(!newSnippet->isVisible());
+}
+
+void MainWindowShellTest::productivityTabSelectionIsVisibleInLightTheme()
+{
+    MainWindow window(m_database, m_vault);
+    window.resize(1200, 800);
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+    auto *service = window.findChild<TerminalSettingsService *>();
+    QVERIFY(service != nullptr);
+    TerminalSettings settings = service->currentSettings();
+    settings.themeMode = ThemeMode::Light;
+    QString error;
+    QVERIFY2(service->save(settings, &error), qPrintable(error));
+
+    auto *rail = window.findChild<QWidget *>(QStringLiteral("NavigationRail"));
+    QVERIFY(rail != nullptr);
+    for (QToolButton *button : rail->findChildren<QToolButton *>(QString(), Qt::FindDirectChildrenOnly)) {
+        if (button->accessibleName() == QStringLiteral("Productivity")) {
+            QTest::mouseClick(button, Qt::LeftButton);
+        }
+    }
+    auto *tabs = window.findChild<QTabWidget *>(QStringLiteral("productivityTabs"));
+    QVERIFY(tabs != nullptr && tabs->isVisible());
+    QTabBar *bar = tabs->tabBar();
+    // 鼠标停在标签上会触发悬停底色，干扰对未选中态的取样。
+    QCursor::setPos(window.mapToGlobal(QPoint(window.width() - 10, window.height() - 10)));
+    QTest::qWait(50);
+
+    const auto fillAt = [&window, bar](const int index) {
+        // 标签栏本身是透明的，单独 grab 会把未选中标签采成透明黑；必须连同侧栏底色一起
+        // 从整窗渲染结果里取样，才是用户实际看到的颜色。
+        const QImage image = window.grab().toImage();
+        const qreal ratio = image.devicePixelRatio();
+        const QRect rect = bar->tabRect(index);
+        // 取标签左侧内边距区的竖直中点：避开圆角、描边和居中的文字。
+        const QPoint point = bar->mapTo(&window, QPoint(rect.left() + 8, rect.center().y()));
+        return image.pixelColor(qRound(point.x() * ratio), qRound(point.y() * ratio));
+    };
+    const auto distance = [](const QColor &a, const QColor &b) {
+        return qAbs(a.red() - b.red()) + qAbs(a.green() - b.green()) + qAbs(a.blue() - b.blue());
+    };
+
+    for (const int selected : {0, 1}) {
+        tabs->setCurrentIndex(selected);
+        QTest::qWait(20);
+        const QColor selectedFill = fillAt(selected);
+        const QColor otherFill = fillAt(1 - selected);
+        QVERIFY2(distance(selectedFill, otherFill) >= 24,
+                 qPrintable(QStringLiteral("选中标签 %1 与未选中标签 %2 底色过于接近")
+                                .arg(selectedFill.name(), otherFill.name())));
+    }
 }
 
 void MainWindowShellTest::sidebarWidthIsRestoredOnNextLaunch()

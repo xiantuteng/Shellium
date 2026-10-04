@@ -554,6 +554,16 @@ zsh 回车是两次写入：先 `\r\r\n` 与 PROMPT_SP 的 `\r \r`，约 20ms �
 打字回显也是输出，那样光标会随每次按键闪。回归用例
 `TerminalAltScreenTest::cursorHiddenAtBlankLineStartUntilPromptArrives`。
 
+### 15.10 横向滚动范围钉死为 0，光关滚动条不够
+
+`setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff)` 只是不画滚动条，范围仍按文档最宽
+一行计算。窗口收窄（打开 AI 助手侧栏）后，旧宽度下写满的滚动历史不回流（§15.7(1)），仍比
+视口宽；行尾的行高锚点"中"约占两格，也可能把写满的一行顶出视口。于是触控板横向轻扫、
+`setTextCursor` 让光标可见都会让整块画面左移几像素，top 的 USER 列首字母被切掉。
+`TerminalView` 在 `rangeChanged` 里把横向范围强制复位到 `(0, 0)`。别改成只在 `wheelEvent`
+里过滤横向增量：程序化滚动不走滚轮。回归用例
+`TerminalAltScreenTest::fullWidthOutputNeverScrollsHorizontally`。
+
 ---
 
 ## 十六、Qt 拖拽：非 item-view 的 QAbstractScrollArea 要注册 viewport

@@ -2790,6 +2790,29 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
         QTabWidget#productivityTabs QTabBar {
             background: transparent;
         }
+        /* 效率工具的两个标签是"片段/历史"二选一的分段控件。通用规则的选中底色 RAISED 在浅色
+           侧栏上只比背景深一两个灰阶，几乎看不出选中了哪一页；这里改用与主机树/片段行选中态
+           同一套语言：SELECTION 淡绿底 + 42% 品牌绿描边 + 半粗体，深浅两套主题下都能一眼区分。
+           未选中项保留同宽透明描边，切换时文字位置不跳动。 */
+        QTabWidget#productivityTabs QTabBar::tab {
+            color: @MUTED@;
+            background: transparent;
+            border: 1px solid transparent;
+            border-radius: 8px;
+            min-height: 26px;
+            padding: 4px 11px;
+            margin: 1px 2px;
+        }
+        QTabWidget#productivityTabs QTabBar::tab:selected {
+            color: @TEXT@;
+            background: @SELECTION@;
+            border: 1px solid rgba(43, 217, 129, 107);
+            font-weight: 600;
+        }
+        QTabWidget#productivityTabs QTabBar::tab:hover:!selected {
+            color: @TEXT@;
+            background: @HOST_TREE_HOVER@;
+        }
         QListWidget#productivitySnippetList,
         QListWidget#productivityHistoryList {
             background: transparent;

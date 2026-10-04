@@ -233,6 +233,9 @@ private slots:
     void contextMenuPasteDuringLocalCaptureStaysLocal();
     /** @brief 终端滚动条空闲时不绘制，手动滚动时以与终端背景有对比的圆角滑块显示。 */
     void scrollBarHiddenUntilManualScrollAndContrastsWithTheme();
+    // 回归：top 这类占满整行宽度的输出加上行尾不可见的行高锚点，会让文档比视口略宽；
+    // 列数本来就按视口宽度算好，终端任何时候都不该左右滚动。
+    void fullWidthOutputNeverScrollsHorizontally();
 };
 
 void TerminalAltScreenTest::resetPreservesThemeAndChunkedChinese()
@@ -1056,6 +1059,67 @@ void TerminalAltScreenTest::wheelScrollsFullScreenApplicationWithArrowKeys()
     for (int index = 0; index < 3; ++index) {
         QCOMPARE(inputSpy.at(index).at(0).toByteArray(), QByteArrayLiteral("\x1bOA"));
     }
+}
+
+void TerminalAltScreenTest::fullWidthOutputNeverScrollsHorizontally()
+{
+    TerminalView view;
+    QVERIFY(showAndSettle(view));
+
+    // 模拟 top：备用屏里每一行都恰好写满当前整行宽度，光标停在最后一格；收到 SIGWINCH
+    // 后按新列数整屏重画。
+    const auto drawTopFrame = [&view]() {
+        const int rows = view.terminalRows();
+        const int columns = view.terminalColumns();
+        QByteArray frame("\x1b[H\x1b[2J");
+        for (int row = 1; row <= rows; ++row) {
+            frame += QByteArray("\x1b[") + QByteArray::number(row) + ";1H";
+            frame += QByteArray(columns, 'x');
+        }
+        frame += QByteArray("\x1b[") + QByteArray::number(rows) + ";"
+            + QByteArray::number(columns) + "H";
+        view.appendTerminalOutput(frame);
+        QTest::qWait(50);
+    };
+    const auto swipeLeft = [&view]() {
+        QWheelEvent wheel(QPointF(10, 10),
+                          view.mapToGlobal(QPoint(10, 10)),
+                          QPoint(-240, 0),
+                          QPoint(-240, 0),
+                          Qt::NoButton,
+                          Qt::NoModifier,
+                          Qt::NoScrollPhase,
+                          false);
+        QApplication::sendEvent(view.viewport(), &wheel);
+    };
+
+    // 先在宽窗口里留下写满整行的滚动历史，再像打开 AI 助手侧栏那样把终端收窄：远端
+    // 按新列数重画，但历史行不回流，仍比视口宽，文档因此有了横向滚动范围。
+    view.resize(1100, 400);
+    QTest::qWait(200);
+    fillScrollback(view, view.terminalRows() * 3);
+    view.appendTerminalOutput(QByteArray(view.terminalColumns(), 'z') + "\r\n");
+    view.appendTerminalOutput(QByteArrayLiteral("\x1b[?1049h"));
+    drawTopFrame();
+    view.resize(640, 400);
+    QTest::qWait(200);
+    drawTopFrame();
+
+    QScrollBar *horizontal = view.horizontalScrollBar();
+    QCOMPARE(horizontal->value(), 0);
+    // 触控板横向轻扫：不能把内容挪走，否则左侧第一列（top 的 USER 列首字母）会被切掉。
+    swipeLeft();
+    QCOMPARE(horizontal->value(), 0);
+
+    // 退回主屏后历史行重新进入文档，横向轻扫同样不能把视图挪走。
+    view.appendTerminalOutput(QByteArrayLiteral("\x1b[?1049l"));
+    view.appendTerminalOutput(QByteArray(view.terminalColumns(), 'y') + "\r\n");
+    QTest::qWait(50);
+    swipeLeft();
+    QCOMPARE(horizontal->value(), 0);
+    // setTextCursor 让光标可见时走的是同一根滚动条，程序化改值也必须留在第 0 列。
+    horizontal->setValue(40);
+    QCOMPARE(horizontal->value(), 0);
 }
 
 void TerminalAltScreenTest::lastRowStaysVisibleInsideFullScreenApplication()
