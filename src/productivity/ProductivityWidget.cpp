@@ -2,6 +2,7 @@
 
 #include "productivity/ProductivityModel.h"
 #include "i18n/Retranslate.h"
+#include "ui/FocusWithin.h"
 #include "ui/UiIcons.h"
 
 #include <QAbstractItemModel>
@@ -103,6 +104,7 @@ QFrame *createSearchBar(QLineEdit *edit, QWidget *parent)
         UiIcons::symbol(edit, UiIcons::Symbol::Search, edit->palette().color(QPalette::WindowText)),
         QLineEdit::LeadingPosition);
     layout->addWidget(edit, 1);
+    FocusWithin::track(bar);
     return bar;
 }
 

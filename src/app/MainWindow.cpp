@@ -2272,6 +2272,12 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
             min-height: 34px;
             max-height: 34px;
         }
+        /* 组合搜索栏的描边在外框上，内部输入框无边框，靠 FocusWithin 写入的属性高亮，
+           与普通输入框的 :focus 描边保持一致。 */
+        QFrame#HostSearchBar[focusWithin="true"],
+        QFrame#ProductivitySearchBar[focusWithin="true"] {
+            border-color: @ACCENT@;
+        }
         QLineEdit#HostSearchEdit,
         QLineEdit#HostSearchEdit:focus,
         QLineEdit[productivitySearchEdit="true"],

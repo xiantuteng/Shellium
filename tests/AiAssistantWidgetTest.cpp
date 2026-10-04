@@ -25,7 +25,13 @@
 #include <QSignalSpy>
 #include <QTcpServer>
 #include <QTcpSocket>
+#include <QColor>
+#include <QImage>
+#include <QFrame>
+#include <QGuiApplication>
 #include <QTest>
+
+#include <cmath>
 #include <QTextEdit>
 #include <QTimer>
 #include <QToolButton>
@@ -149,6 +155,8 @@ class AiAssistantWidgetTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    /** @brief 输入框获得焦点时，承担描边的编辑器面板必须换成强调色。 */
+    void composerHighlightsBorderWhenInputFocused();
     void executingCommandAutoCapturesOutputAndContinuesConversation();
     void newSessionClearsHistoryAndReadPosition();
     void assistantNarrativeRendersAsMarkdown();
@@ -170,6 +178,52 @@ private slots:
     /** @brief 语言热切换后聊天区的固定文案（附件开关、系统提示气泡）必须跟随新语言。 */
     void chatChromeFollowsLanguageSwitch();
 };
+
+namespace {
+
+/** @brief 取外框左边缘垂直居中处的像素色，即描边颜色。 */
+QColor leftBorderColor(QWidget *frame)
+{
+    const QImage image = frame->grab().toImage();
+    return image.pixelColor(0, image.height() / 2);
+}
+
+/** @brief 两种颜色的 RGB 欧氏距离，用来容忍抗锯齿带来的轻微色差。 */
+double colorDistance(const QColor &left, const QColor &right)
+{
+    const double red = left.red() - right.red();
+    const double green = left.green() - right.green();
+    const double blue = left.blue() - right.blue();
+    return std::sqrt(red * red + green * green + blue * blue);
+}
+
+} // namespace
+
+void AiAssistantWidgetTest::composerHighlightsBorderWhenInputFocused()
+{
+    AiSettingsService settingsService(nullptr, nullptr);
+    AiAssistantWidget widget(&settingsService);
+    widget.resize(420, 640);
+    widget.show();
+    widget.activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(&widget));
+
+    auto *composer = widget.findChild<QFrame *>(QStringLiteral("AiComposer"));
+    auto *inputEdit = widget.findChild<QTextEdit *>(QStringLiteral("aiInputEdit"));
+    QVERIFY(composer != nullptr && inputEdit != nullptr);
+    const bool dark = QGuiApplication::palette().color(QPalette::Window).lightnessF() < 0.5;
+    const QColor accent(dark ? QStringLiteral("#2bd981") : QStringLiteral("#17834f"));
+
+    widget.setFocus();
+    inputEdit->clearFocus();
+    QVERIFY(!inputEdit->hasFocus());
+    QVERIFY2(colorDistance(leftBorderColor(composer), accent) > 60,
+             "输入框未聚焦时编辑器面板不应显示强调色描边");
+    inputEdit->setFocus();
+    QVERIFY(inputEdit->hasFocus());
+    QVERIFY2(colorDistance(leftBorderColor(composer), accent) < 60,
+             "AI 输入框获得焦点后编辑器面板没有高亮");
+}
 
 void AiAssistantWidgetTest::executingCommandAutoCapturesOutputAndContinuesConversation()
 {

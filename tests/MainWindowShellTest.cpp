@@ -43,6 +43,7 @@
 #include <QSignalSpy>
 #include <QRegularExpression>
 #include <QPointer>
+#include <cmath>
 #include <functional>
 #include <QStackedWidget>
 #include <QSplitter>
@@ -50,6 +51,7 @@
 #include <QStandardPaths>
 #include <QTabBar>
 #include <QTabWidget>
+#include <QColor>
 #include <QTest>
 #include <QToolButton>
 #include <QTreeWidget>
@@ -132,6 +134,8 @@ private slots:
     void commandPaletteUsesQuickPopupAndTriggersAction();
     /** @brief 任意侧栏页、侧栏收起、焦点在终端时，Shift+Cmd+F 都要切回主机页并聚焦搜索框。 */
     void hostSearchShortcutSwitchesToHostsPageFromAnywhere();
+    /** @brief 组合搜索栏内部输入框获得焦点时，外框必须换成强调色描边，与普通输入框一致。 */
+    void compositeSearchBarsHighlightBorderOnFocus();
 
     /**
      * @brief 浅色主题下效率工具"片段/历史"标签的选中态必须一眼可辨。
@@ -1684,6 +1688,85 @@ void MainWindowShellTest::quickSnippetAndHistoryShortcutsRunOnCurrentTerminal()
     QVERIFY(!popup->isVisible());
 
     m_database->removeSnippet(snippet.id);
+}
+
+
+namespace {
+
+/**
+ * @brief 取组合输入框外框左边缘垂直居中处的像素色，即描边颜色。
+ * @param frame 已显示的外框控件。
+ */
+QColor leftBorderColor(QWidget *frame)
+{
+    const QImage image = frame->grab().toImage();
+    return image.pixelColor(0, image.height() / 2);
+}
+
+/** @brief 两种颜色的 RGB 欧氏距离，用来容忍抗锯齿带来的轻微色差。 */
+double colorDistance(const QColor &left, const QColor &right)
+{
+    const double red = left.red() - right.red();
+    const double green = left.green() - right.green();
+    const double blue = left.blue() - right.blue();
+    return std::sqrt(red * red + green * green + blue * blue);
+}
+
+} // namespace
+
+void MainWindowShellTest::compositeSearchBarsHighlightBorderOnFocus()
+{
+    MainWindow window(m_database, m_vault);
+    window.resize(1200, 800);
+    window.show();
+    window.activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(&window));
+    const QColor accent(QStringLiteral("#2bd981"));
+
+    auto *hostBar = window.findChild<QFrame *>(QStringLiteral("HostSearchBar"));
+    auto *hostEdit = window.findChild<QLineEdit *>(QStringLiteral("HostSearchEdit"));
+    auto *hostTree = window.findChild<QTreeWidget *>(QStringLiteral("HostTree"));
+    QVERIFY(hostBar != nullptr && hostEdit != nullptr && hostTree != nullptr);
+    hostTree->setFocus();
+    QVERIFY2(colorDistance(leftBorderColor(hostBar), accent) > 100,
+             "主机搜索栏未聚焦时不应显示强调色描边");
+    hostEdit->setFocus();
+    QVERIFY(hostEdit->hasFocus());
+    QVERIFY2(colorDistance(leftBorderColor(hostBar), accent) < 60,
+             "主机搜索框获得焦点后外框没有高亮");
+    hostTree->setFocus();
+    QVERIFY2(colorDistance(leftBorderColor(hostBar), accent) > 100,
+             "焦点离开主机搜索框后外框高亮没有撤销");
+
+    auto *rail = window.findChild<QWidget *>(QStringLiteral("NavigationRail"));
+    QVERIFY(rail != nullptr);
+    auto *stack = window.findChild<QStackedWidget *>(QStringLiteral("SidebarStack"));
+    QVERIFY(stack != nullptr);
+    QFrame *productivityBar = nullptr;
+    for (QToolButton *button : rail->findChildren<QToolButton *>()) {
+        if (!button->isCheckable() || button->isChecked()) {
+            continue;
+        }
+        QTest::mouseClick(button, Qt::LeftButton);
+        for (QFrame *bar : stack->currentWidget()->findChildren<QFrame *>(
+                 QStringLiteral("ProductivitySearchBar"))) {
+            if (bar->isVisible()) {
+                productivityBar = bar;
+                break;
+            }
+        }
+        if (productivityBar != nullptr) {
+            break;
+        }
+    }
+    QVERIFY2(productivityBar != nullptr, "没有找到可见的效率工具搜索栏");
+    auto *productivityEdit = productivityBar->findChild<QLineEdit *>();
+    QVERIFY(productivityEdit != nullptr);
+    hostTree->setFocus();
+    QVERIFY(colorDistance(leftBorderColor(productivityBar), accent) > 100);
+    productivityEdit->setFocus();
+    QVERIFY2(colorDistance(leftBorderColor(productivityBar), accent) < 60,
+             "效率工具搜索框获得焦点后外框没有高亮");
 }
 
 void MainWindowShellTest::hostSearchShortcutSwitchesToHostsPageFromAnywhere()

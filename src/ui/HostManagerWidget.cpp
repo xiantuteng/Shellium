@@ -7,6 +7,7 @@
 #include "ssh/SshSessionStack.h"
 #include "storage/ApplicationDatabase.h"
 #include "ui/SettingsWidgets.h"
+#include "ui/FocusWithin.h"
 #include "ui/HostDistributionIcon.h"
 #include "ui/UiIcons.h"
 #include "ui/VaultDialog.h"
@@ -3692,6 +3693,7 @@ HostManagerWidget::HostManagerWidget(ApplicationDatabase *database,
     tagFilterButton->setCursor(Qt::PointingHandCursor);
     searchBarLayout->addWidget(tagFilterButton, 0, Qt::AlignVCenter);
     m_searchBar = searchBar;
+    FocusWithin::track(searchBar);
 
     // 建议面板用 Qt::Tool + WA_ShowWithoutActivating：既不抢主窗口的键盘焦点（用户在弹出面板
     // 悬浮期间仍能继续在搜索框里敲字过滤标签），又不像子控件那样被主机树裁剪，可以画到列表

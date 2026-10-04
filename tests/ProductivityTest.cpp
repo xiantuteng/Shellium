@@ -20,7 +20,11 @@
 #include <QShortcut>
 #include <QSignalSpy>
 #include <QTabWidget>
+#include <QColor>
+#include <QImage>
 #include <QTest>
+
+#include <cmath>
 #include <QTextEdit>
 #include <QToolButton>
 #include <QTranslator>
@@ -130,6 +134,8 @@ private slots:
      * 搜索框。筛选后编号跟随可见顺序，第 10 项以后没有数字键。
      */
     void quickCommandPopupDigitsRunVisibleEntries();
+    /** @brief 快速面板的搜索框获得焦点时，外框必须显示强调色描边。 */
+    void quickCommandPopupSearchFrameHighlightsOnFocus();
 
     /** @brief Esc 关闭不执行；方向键移动选中项、回车执行选中项。 */
     void quickCommandPopupKeyboardNavigation();
@@ -830,6 +836,44 @@ QList<QuickCommandPopup::Entry> numberedEntries(const int count)
 }
 
 } // namespace
+
+namespace {
+
+/** @brief 取外框左边缘垂直居中处的像素色，即描边颜色。 */
+QColor leftBorderColor(QWidget *frame)
+{
+    const QImage image = frame->grab().toImage();
+    return image.pixelColor(0, image.height() / 2);
+}
+
+/** @brief 两种颜色的 RGB 欧氏距离，用来容忍抗锯齿带来的轻微色差。 */
+double colorDistance(const QColor &left, const QColor &right)
+{
+    const double red = left.red() - right.red();
+    const double green = left.green() - right.green();
+    const double blue = left.blue() - right.blue();
+    return std::sqrt(red * red + green * green + blue * blue);
+}
+
+} // namespace
+
+void ProductivityTest::quickCommandPopupSearchFrameHighlightsOnFocus()
+{
+    QuickCommandPopup popup;
+    auto *frame = popup.findChild<QWidget *>(QStringLiteral("QuickCommandSearchFrame"));
+    auto *search = popup.findChild<QLineEdit *>(QStringLiteral("QuickCommandSearch"));
+    QVERIFY(frame != nullptr && search != nullptr);
+    const QColor accent(QStringLiteral("#2bd981"));
+
+    popup.showEntries(QuickCommandPopup::Mode::History, numberedEntries(3), QString(), nullptr);
+    QTRY_VERIFY(search->hasFocus());
+    QVERIFY2(colorDistance(leftBorderColor(frame), accent) < 60,
+             "快速面板搜索框获得焦点后外框没有高亮");
+    search->clearFocus();
+    QVERIFY2(colorDistance(leftBorderColor(frame), accent) > 100,
+             "焦点离开后快速面板搜索框外框高亮没有撤销");
+    popup.hide();
+}
 
 void ProductivityTest::quickCommandPopupDigitsRunVisibleEntries()
 {

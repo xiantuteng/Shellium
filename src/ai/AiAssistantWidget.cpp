@@ -5,6 +5,7 @@
 #include "ai/AiSettingsService.h"
 #include "i18n/Retranslate.h"
 #include "ai/CommandRiskClassifier.h"
+#include "ui/FocusWithin.h"
 #include "ui/UiIcons.h"
 
 #include <QAction>
@@ -440,6 +441,9 @@ void AiAssistantWidget::applyPanelTheme()
             border: 1px solid @BORDER@;
             border-radius: 12px;
         }
+        QFrame#AiComposer[focusWithin="true"] {
+            border-color: @ACCENT@;
+        }
         QFrame#AiComposer QTextEdit#aiInputEdit {
             color: @TEXT@;
             background: transparent;
@@ -483,6 +487,7 @@ void AiAssistantWidget::applyPanelTheme()
     styleSheet.replace(QStringLiteral("@PANEL@"), m_colors.panel);
     styleSheet.replace(QStringLiteral("@SURFACE@"), m_colors.surface);
     styleSheet.replace(QStringLiteral("@BORDER@"), m_colors.border);
+    styleSheet.replace(QStringLiteral("@ACCENT@"), m_colors.accent);
     styleSheet.replace(QStringLiteral("@TEXT@"), m_colors.text);
     styleSheet.replace(QStringLiteral("@MUTED@"), m_colors.muted);
     styleSheet.replace(QStringLiteral("@ACTION_BORDER@"), m_colors.actionBorder);
@@ -630,6 +635,7 @@ void AiAssistantWidget::buildUi()
     // 面板一起向上扩展，附件行始终停留在底部，不会漂在编辑区外面。
     auto *composer = new QFrame(this);
     composer->setObjectName(QStringLiteral("AiComposer"));
+    FocusWithin::track(composer);
     auto *composerLayout = new QVBoxLayout(composer);
     composerLayout->setContentsMargins(10, 7, 8, 7);
     composerLayout->setSpacing(3);

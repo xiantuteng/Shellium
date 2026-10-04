@@ -1,5 +1,7 @@
 #include "productivity/QuickCommandPopup.h"
 
+#include "ui/FocusWithin.h"
+
 #include <QApplication>
 #include <QHBoxLayout>
 #include <QKeyEvent>
@@ -166,6 +168,8 @@ QuickCommandPopup::QuickCommandPopup(QWidget *parent)
 
     auto *searchFrame = new QWidget(this);
     searchFrame->setObjectName(QStringLiteral("QuickCommandSearchFrame"));
+    searchFrame->setAttribute(Qt::WA_StyledBackground, true);
+    FocusWithin::track(searchFrame);
     auto *searchLayout = new QHBoxLayout(searchFrame);
     searchFrame->setFixedHeight(kSearchHeight);
     searchLayout->setContentsMargins(8, 0, 12, 0);
@@ -216,7 +220,12 @@ QuickCommandPopup::QuickCommandPopup(QWidget *parent)
     setStyleSheet(QStringLiteral(R"QSS(
         QWidget#QuickCommandSearchFrame {
             background: #293147;
+            /* 常驻 1px 透明描边占位，聚焦时只换颜色，避免框内内容跳动。 */
+            border: 1px solid transparent;
             border-radius: 9px;
+        }
+        QWidget#QuickCommandSearchFrame[focusWithin="true"] {
+            border-color: #2bd981;
         }
         QLabel#QuickCommandChip {
             background: #39415d;

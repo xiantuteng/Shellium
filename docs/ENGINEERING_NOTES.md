@@ -646,3 +646,19 @@ viewport()->setAcceptDrops(true);
   正是据此兜底。
 - 新增 `QSignalBlocker` 前先确认被挡的对象还有没有别的监听者靠信号同步状态；能用一个布尔
   守卫跳过特定槽，就别屏蔽整个对象。
+
+## 十九、输入框聚焦描边：组合框要用 FocusWithin
+
+约定：**所有输入框获得焦点时都要显示强调色描边**。普通输入框靠 MainWindow 全局样式表的
+`QLineEdit:focus` 等规则自动满足，下面两种情况会悄悄失效：
+
+- **组合输入框**（外框 QFrame 画描边，内部 QLineEdit/QTextEdit 设 `border: 0`，如主机/效率工具
+  搜索栏、AI 编辑器面板、快速面板搜索框）：Qt 样式表没有 `:focus-within`，外框的 `:focus` 只在
+  外框自己持焦点时成立。外框必须调用 `FocusWithin::track()`（`src/ui/FocusWithin.h`），
+  样式表用 `[focusWithin="true"]` 换描边色。外框没有描边时先写 `1px solid transparent` 占位，
+  避免聚焦时内容跳动。
+- **带 id / 属性选择器的输入框**：`QLineEdit#X { border: … }` 的优先级高于通用
+  `QLineEdit:focus`，必须同时写 `QLineEdit#X:focus`；控件级 `setStyleSheet` 同理。
+
+用例按像素取外框左边缘颜色断言（见 `compositeSearchBarsHighlightBorderOnFocus`），只断言属性
+值测不出样式表没写对规则。
