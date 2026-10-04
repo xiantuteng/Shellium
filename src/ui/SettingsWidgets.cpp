@@ -277,6 +277,7 @@ QString hostChainDialogStyleSheet(const bool dark)
     QString styleSheet = QStringLiteral(R"QSS(
         QDialog#HostChainDialog,
         QDialog#HostPickerDialog,
+        QDialog#HostChainConnectDialog,
         QWidget#HostChainBody,
         QWidget#HostPickerBody {
             color: @TEXT@;
@@ -287,7 +288,8 @@ QString hostChainDialogStyleSheet(const bool dark)
             color: @MUTED@;
             font-size: 12px;
         }
-        QLineEdit#hostChainSearchEdit {
+        QLineEdit#hostChainSearchEdit,
+        QLineEdit#hostChainConnectSearchEdit {
             color: @TEXT@;
             background: @SURFACE@;
             border: 1px solid @BORDER@;
@@ -295,17 +297,34 @@ QString hostChainDialogStyleSheet(const bool dark)
             min-height: 30px;
             padding: 4px 10px;
         }
-        QLineEdit#hostChainSearchEdit:focus {
+        QLineEdit#hostChainSearchEdit:focus,
+        QLineEdit#hostChainConnectSearchEdit:focus {
             border-color: @ACCENT@;
         }
         QListWidget#hostChainList,
-        QListWidget#hostChainCandidateList {
+        QListWidget#hostChainCandidateList,
+        QListWidget#hostChainConnectRecentList,
+        QListWidget#hostChainConnectHostList {
             color: @TEXT@;
             background: @SURFACE@;
             border: 1px solid @BORDER@;
             border-radius: 11px;
             outline: 0;
             padding: 0;
+        }
+        QLabel#hostChainConnectRecentLabel,
+        QLabel#hostChainConnectHostLabel {
+            color: @MUTED@;
+            background: transparent;
+            font-size: 11px;
+            font-weight: 700;
+            padding-top: 4px;
+        }
+        QLabel#hostChainConnectEmptyLabel,
+        QLabel#hostChainConnectShortcutTip {
+            color: @MUTED@;
+            background: transparent;
+            font-size: 12px;
         }
         QLabel#hostChainRouteArrow {
             color: @MUTED@;

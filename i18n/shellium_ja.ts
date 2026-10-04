@@ -402,6 +402,53 @@ Run it in the current terminal?</source>
     </message>
 </context>
 <context>
+    <name>HostChainConnectDialog</name>
+    <message>
+        <source>Connect via Host Chain</source>
+        <translation type="unfinished">ホストチェーン経由で接続</translation>
+    </message>
+    <message>
+        <source>Choose a jump host to pass through before connecting to &lt;b&gt;%1&lt;/b&gt; &lt;span style=&quot;font-family: monospace;&quot;&gt;%2&lt;/span&gt;.</source>
+        <translation type="unfinished">&lt;b&gt;%1&lt;/b&gt; &lt;span style=&quot;font-family: monospace;&quot;&gt;%2&lt;/span&gt; に接続する前に経由する中継ホストを選択してください。</translation>
+    </message>
+    <message>
+        <source>Search name, address, or account</source>
+        <translation type="unfinished">名前、アドレス、アカウントで検索</translation>
+    </message>
+    <message>
+        <source>Recent connections</source>
+        <translation type="unfinished">最近の接続</translation>
+    </message>
+    <message>
+        <source>All hosts</source>
+        <translation type="unfinished">すべてのホスト</translation>
+    </message>
+    <message>
+        <source>No other hosts available</source>
+        <translation type="unfinished">他に利用可能なホストがありません</translation>
+    </message>
+    <message>
+        <source>Connect</source>
+        <translation type="unfinished">接続</translation>
+    </message>
+    <message>
+        <source>Connect to the target host through the selected jump host</source>
+        <translation type="unfinished">選択した中継ホスト経由でターゲットホストに接続</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation type="unfinished">キャンセル</translation>
+    </message>
+    <message>
+        <source>Press %1–%2 to connect quickly</source>
+        <translation type="unfinished">%1–%2 ですばやく接続</translation>
+    </message>
+    <message>
+        <source>No matching hosts</source>
+        <translation type="unfinished">一致するホストがありません</translation>
+    </message>
+</context>
+<context>
     <name>HostChainDialog</name>
     <message>
         <source>Edit host chain</source>
@@ -503,10 +550,6 @@ Run it in the current terminal?</source>
         <translation type="unfinished">接続</translation>
     </message>
     <message>
-        <source>Connect via Host Chain</source>
-        <translation type="unfinished">ホストチェーン経由で接続</translation>
-    </message>
-    <message>
         <source>Connect in Workspace</source>
         <translation type="unfinished">ワークスペースで接続</translation>
     </message>
@@ -537,18 +580,6 @@ Run it in the current terminal?</source>
     <message>
         <source>Failed to load hosts</source>
         <translation type="unfinished">ホストの読み込みに失敗しました</translation>
-    </message>
-    <message>
-        <source>No other hosts available</source>
-        <translation type="unfinished">他に利用可能なホストがありません</translation>
-    </message>
-    <message>
-        <source>%1 (%2)</source>
-        <translation type="unfinished">%1（%2）</translation>
-    </message>
-    <message>
-        <source>Last connected: %1</source>
-        <translation type="unfinished">前回接続: %1</translation>
     </message>
     <message>
         <source>Ungrouped</source>
@@ -773,6 +804,10 @@ Run it in the current terminal?</source>
     <message>
         <source>Resolve host chain</source>
         <translation type="unfinished">ホストチェーンを解決</translation>
+    </message>
+    <message>
+        <source>Connect via Host Chain…</source>
+        <translation type="unfinished">ホストチェーン経由で接続…</translation>
     </message>
     <message>
         <source>The host record or chain does not exist</source>

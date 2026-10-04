@@ -146,10 +146,10 @@ private:
                           bool openInNewTab = false);
 
     /**
-     * @brief 由"通过主机链连接"菜单手动指定跳板发起连接。
+     * @brief 由"通过主机链连接"对话框手动指定跳板发起连接。
      * @param hostId 最终目标主机的稳定 id。
      * @param jumpHostId 用户手动选中的跳板主机稳定 id；只有本次连接握手成功后才会被记为
-     *        该目标主机"上一次连接使用的跳板"，供下次打开菜单时置顶同一跳板。
+     *        该目标主机"最近连接"的跳板，供下次打开对话框时列在最前。
      * @param connectionPlan 已拼接好跳板与目标两段的完整连接计划。
      * @param openInNewTab true 时新建标签页，与 connectSavedHost() 语义一致。
      *
@@ -567,9 +567,9 @@ private:
     QHash<TerminalPane *, qint64> m_openHistoryRows;
 
     /**
-     * @brief 正在连接、且由"通过主机链连接"菜单手动指定了跳板的面板与该跳板 id。
+     * @brief 正在连接、且由"通过主机链连接"对话框手动指定了跳板的面板与该跳板 id。
      *
-     * 只有认证成功后才会据此把跳板记为目标主机的"上一次连接"；失败或面板销毁时直接
+     * 只有认证成功后才会据此把跳板记为目标主机的"最近连接"；失败或面板销毁时直接
      * 丢弃，绝不能把未验证成功的跳板选择当作历史结果持久化。
      */
     QHash<TerminalPane *, QString> m_pendingChainJumpHosts;

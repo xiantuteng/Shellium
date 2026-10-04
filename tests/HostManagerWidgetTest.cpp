@@ -20,6 +20,7 @@
 #include <QFileIconProvider>
 #include <QFrame>
 #include <QImage>
+#include <QKeySequence>
 #include <QLabel>
 #include <QLayout>
 #include <QLineEdit>
@@ -80,12 +81,18 @@ private slots:
     void folderContextMenuOffersConnectInWorkspaceAndEmitsGroupSignal();
 
     /**
-     * @brief 主机右键菜单的“Connect”之后必须紧跟“通过主机链连接”子菜单；子菜单需要把
-     * “上一次成功连接到*本目标主机*所用的跳板”排在最前面——这与其他主机的连接历史或
-     * 全局最近连接无关，必须严格按目标主机区分，并排除目标主机自身。点击任一候选项都
-     * 必须发出携带“跳板 + 目标”两跳连接计划的 hostChainConnectionRequested 信号。
+     * @brief 主机右键菜单的“Connect”之后必须紧跟“通过主机链连接…”动作，它打开对话框
+     * 而不是子菜单；对话框顶部“最近连接”按时间倒序列出成功连接到*本目标主机*所用的跳板，
+     * 至多三个，且与其他目标的连接历史无关；“全部主机”不重复列出它们，也不含目标自身。
+     * 可见行依次绑定 Cmd+1…Cmd+9，按下即发出“跳板 + 目标”两跳连接计划。
      */
-    void hostContextMenuOffersHostChainSubmenuLedByLastConnectedHost();
+    void hostContextMenuOpensHostChainDialogWithRecentConnections();
+
+    /** @brief 搜索过滤后 Cmd+数字 必须按当前可见行重新编号，不能连到被隐藏的主机。 */
+    void hostChainDialogShortcutsFollowVisibleRowsAfterSearch();
+
+    /** @brief 旧版只记录一个“上次连接”跳板的设置在升级后仍作为最近连接展示。 */
+    void hostChainDialogReadsLegacyLastJumpSetting();
 
     /** @brief 分组连接必须递归收集任意深度子分组下的主机，且不包含分组节点本身。 */
     void collectHostsInGroupRecursesNestedFolders();
@@ -544,44 +551,65 @@ void HostManagerWidgetTest::folderContextMenuOffersConnectInWorkspaceAndEmitsGro
     QCOMPARE(emitted.at(1).toString(), group.name);
 }
 
-void HostManagerWidgetTest::hostContextMenuOffersHostChainSubmenuLedByLastConnectedHost()
+namespace {
+
+/** @brief 保存一台测试主机并返回其记录。 */
+HostRecord saveChainTestHost(ApplicationDatabase *database,
+                             const QString &id,
+                             const QString &name,
+                             const QString &address)
 {
-    HostRecord target;
-    target.id = QStringLiteral("chain-target-host");
-    target.kind = HostNodeKind::Host;
-    target.name = QStringLiteral("链目标主机");
-    target.host = QStringLiteral("192.0.2.30");
+    HostRecord record;
+    record.id = id;
+    record.kind = HostNodeKind::Host;
+    record.name = name;
+    record.host = address;
     QString error;
-    QVERIFY2(m_database->saveHost(target, &error), qPrintable(error));
+    if (!database->saveHost(record, &error)) {
+        qWarning() << "保存测试主机失败" << error;
+    }
+    return record;
+}
 
-    HostRecord otherTarget;
-    otherTarget.id = QStringLiteral("chain-other-target-host");
-    otherTarget.kind = HostNodeKind::Host;
-    otherTarget.name = QStringLiteral("另一台目标主机");
-    otherTarget.host = QStringLiteral("192.0.2.33");
-    QVERIFY2(m_database->saveHost(otherTarget, &error), qPrintable(error));
+/** @brief 返回列表中全部行的主机 id，按显示顺序。 */
+QStringList listHostIds(const QListWidget *list)
+{
+    QStringList ids;
+    for (int row = 0; row < list->count(); ++row) {
+        ids.append(list->item(row)->data(Qt::UserRole).toString());
+    }
+    return ids;
+}
 
-    HostRecord jumpA;
-    jumpA.id = QStringLiteral("chain-jump-a");
-    jumpA.kind = HostNodeKind::Host;
-    jumpA.name = QStringLiteral("跳板A-未成功过");
-    jumpA.host = QStringLiteral("192.0.2.31");
-    QVERIFY2(m_database->saveHost(jumpA, &error), qPrintable(error));
+/** @brief 返回 Cmd+数字 在本平台对应的修饰键；Qt/macOS 把物理 Command 映射为 ControlModifier。 */
+constexpr Qt::KeyboardModifier kCommandModifier = Qt::ControlModifier;
 
-    HostRecord jumpB;
-    jumpB.id = QStringLiteral("chain-jump-b");
-    jumpB.kind = HostNodeKind::Host;
-    jumpB.name = QStringLiteral("跳板B-上次成功连接目标主机");
-    jumpB.host = QStringLiteral("192.0.2.32");
-    QVERIFY2(m_database->saveHost(jumpB, &error), qPrintable(error));
+} // namespace
+
+void HostManagerWidgetTest::hostContextMenuOpensHostChainDialogWithRecentConnections()
+{
+    const HostRecord target = saveChainTestHost(
+        m_database.get(), QStringLiteral("chain-target-host"), QStringLiteral("链目标主机"),
+        QStringLiteral("192.0.2.30"));
+    const HostRecord otherTarget = saveChainTestHost(
+        m_database.get(), QStringLiteral("chain-other-target-host"), QStringLiteral("另一台目标主机"),
+        QStringLiteral("192.0.2.33"));
+    QList<HostRecord> jumps;
+    for (int index = 1; index <= 5; ++index) {
+        jumps.append(saveChainTestHost(m_database.get(),
+                                       QStringLiteral("chain-jump-%1").arg(index),
+                                       QStringLiteral("跳板%1").arg(index),
+                                       QStringLiteral("192.0.2.%1").arg(40 + index)));
+    }
 
     HostManagerWidget widget(m_database.get(), m_vault.get());
 
-    // “上一次连接”必须严格绑定到具体目标主机：跳板 A 曾经成功连接过*另一台*目标主机，
-    // 这不应该让它出现在“链目标主机”的置顶位置——不同目标习惯经过的跳板通常并不相同。
-    widget.recordSuccessfulChainConnection(otherTarget.id, jumpA.id);
-    // 跳板 B 才是上一次成功连接到*本次目标主机*所用的跳板，必须置顶。
-    widget.recordSuccessfulChainConnection(target.id, jumpB.id);
+    // 跳板 5 只成功连接过“另一台目标主机”，不能出现在本目标的最近连接里。
+    widget.recordSuccessfulChainConnection(otherTarget.id, jumps.at(4).id);
+    // 本目标依次成功经过 1、2、3、4、2：最近连接应为 2、4、3（去重、最新在前、至多三个）。
+    for (const int index : {0, 1, 2, 3, 1}) {
+        widget.recordSuccessfulChainConnection(target.id, jumps.at(index).id);
+    }
 
     QTreeWidgetItem *targetItem = findItem(widget, target.name);
     QVERIFY2(targetItem != nullptr, "目标主机节点未出现在树中");
@@ -595,38 +623,33 @@ void HostManagerWidgetTest::hostContextMenuOffersHostChainSubmenuLedByLastConnec
                                                     return action->text() == QStringLiteral("Connect");
                                                 })
         - topLevelActions.constBegin();
-    QVERIFY2(connectIndex < topLevelActions.size(), "主机右键菜单缺少 Connect 动作");
-    QVERIFY2(connectIndex + 1 < topLevelActions.size(),
-             "Connect 之后缺少通过主机链连接子菜单");
-    QAction *chainMenuAction = topLevelActions.at(connectIndex + 1);
-    QCOMPARE(chainMenuAction->text(), QStringLiteral("Connect via Host Chain"));
-    QMenu *chainMenu = chainMenuAction->menu();
-    QVERIFY2(chainMenu != nullptr, "通过主机链连接必须是一个子菜单而不是直接动作");
+    QVERIFY2(connectIndex + 1 < topLevelActions.size(), "Connect 之后缺少通过主机链连接动作");
+    QAction *chainAction = topLevelActions.at(connectIndex + 1);
+    QCOMPARE(chainAction->text(), QStringLiteral("Connect via Host Chain…"));
+    QVERIFY2(chainAction->menu() == nullptr, "通过主机链连接必须弹出对话框，不能再是子菜单");
 
-    const QList<QAction *> chainActions = chainMenu->actions();
-    QVERIFY2(!chainActions.isEmpty(), "通过主机链连接子菜单不应为空");
-    QVERIFY2(chainActions.constFirst()->text().startsWith(QStringLiteral("Last connected: ")),
-             "上一次成功连接过的跳板没有排在子菜单最前面");
-    QVERIFY2(chainActions.constFirst()->text().contains(jumpB.name),
-             "子菜单最前面必须是上一次成功连接到本目标主机所用的跳板B，而不是跳板A");
+    std::unique_ptr<QDialog> dialog(widget.createHostChainConnectDialog(target.id));
+    QVERIFY(dialog != nullptr);
+    auto *recentList = dialog->findChild<QListWidget *>(QStringLiteral("hostChainConnectRecentList"));
+    auto *hostList = dialog->findChild<QListWidget *>(QStringLiteral("hostChainConnectHostList"));
+    QVERIFY(recentList != nullptr);
+    QVERIFY(hostList != nullptr);
 
-    QStringList otherActionTexts;
-    for (QAction *action : chainActions) {
-        if (!action->isSeparator()) {
-            otherActionTexts.append(action->text());
-        }
+    QCOMPARE(listHostIds(recentList),
+             QStringList({jumps.at(1).id, jumps.at(3).id, jumps.at(2).id}));
+    const QStringList hostIds = listHostIds(hostList);
+    QVERIFY2(!hostIds.contains(target.id), "全部主机不应把目标主机自身列为候选跳板");
+    for (const QString &recentId : listHostIds(recentList)) {
+        QVERIFY2(!hostIds.contains(recentId), "最近连接中的跳板不应在全部主机里重复出现");
     }
-    QVERIFY2(!otherActionTexts.join(QLatin1Char('\n')).contains(target.name),
-             "通过主机链连接子菜单不应把目标主机自身列为候选跳板");
-    // 跳板 A 只成功连接过“另一台目标主机”，对“链目标主机”而言它仍然只是普通候选项，
-    // 不应该被误置顶——否则就是把全局最近连接当成了“当前目标的上一次连接”。
-    const bool jumpAListedAsOrdinaryCandidate =
-        std::any_of(chainActions.constBegin() + 1,
-                   chainActions.constEnd(),
-                   [&jumpA](const QAction *action) { return action->text().contains(jumpA.name); });
-    QVERIFY2(jumpAListedAsOrdinaryCandidate, "子菜单遗漏了未针对本目标成功连接过的其他主机");
-    QVERIFY2(!chainActions.constFirst()->text().contains(jumpA.name),
-             "跳板A不应被当作本目标主机的“上一次连接”置顶");
+    QVERIFY2(hostIds.contains(jumps.at(4).id), "只连过其他目标的跳板仍应作为普通候选出现");
+    QVERIFY2(hostIds.contains(jumps.at(0).id), "被挤出最近连接的跳板仍应作为普通候选出现");
+
+    // 编号从最近连接开始，跨到全部主机继续递增。
+    const QString cmd1 = QKeySequence(Qt::CTRL | Qt::Key_1).toString(QKeySequence::NativeText);
+    const QString cmd4 = QKeySequence(Qt::CTRL | Qt::Key_4).toString(QKeySequence::NativeText);
+    QCOMPARE(recentList->item(0)->data(Qt::UserRole + 2).toString(), cmd1);
+    QCOMPARE(hostList->item(0)->data(Qt::UserRole + 2).toString(), cmd4);
 
     int connectionRequestCount = 0;
     QString requestedHostId;
@@ -647,15 +670,97 @@ void HostManagerWidgetTest::hostContextMenuOffersHostChainSubmenuLedByLastConnec
                 requestedNewTab = openInNewTab;
             });
 
-    chainActions.constFirst()->trigger();
+    dialog->show();
+    dialog->activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(dialog.get()));
+    // 焦点停在搜索框时 Cmd+2 也必须生效：这是打开对话框后的默认状态。
+    auto *searchEdit = dialog->findChild<QLineEdit *>(QStringLiteral("hostChainConnectSearchEdit"));
+    QVERIFY(searchEdit != nullptr);
+    QTRY_VERIFY(searchEdit->hasFocus());
+    QTest::keyClick(searchEdit, Qt::Key_2, kCommandModifier);
 
-    QCOMPARE(connectionRequestCount, 1);
+    QTRY_COMPARE(connectionRequestCount, 1);
+    QCOMPARE(dialog->result(), static_cast<int>(QDialog::Accepted));
     QCOMPARE(requestedHostId, target.id);
-    QCOMPARE(requestedJumpHostId, jumpB.id);
+    QCOMPARE(requestedJumpHostId, jumps.at(3).id);
     QVERIFY2(requestedNewTab, "通过主机链连接必须像 Connect 一样新开标签页");
     QCOMPARE(requestedPlan.size(), 2);
-    QCOMPARE(requestedPlan.at(0).host, jumpB.host);
+    QCOMPARE(requestedPlan.at(0).host, jumps.at(3).host);
     QCOMPARE(requestedPlan.at(1).host, target.host);
+}
+
+void HostManagerWidgetTest::hostChainDialogShortcutsFollowVisibleRowsAfterSearch()
+{
+    const HostRecord target = saveChainTestHost(
+        m_database.get(), QStringLiteral("filter-target"), QStringLiteral("过滤目标"),
+        QStringLiteral("192.0.2.60"));
+    const HostRecord alpha = saveChainTestHost(
+        m_database.get(), QStringLiteral("filter-alpha"), QStringLiteral("alpha-bastion"),
+        QStringLiteral("192.0.2.61"));
+    saveChainTestHost(
+        m_database.get(), QStringLiteral("filter-beta"), QStringLiteral("beta-bastion"),
+        QStringLiteral("192.0.2.62"));
+    const HostRecord gamma = saveChainTestHost(
+        m_database.get(), QStringLiteral("filter-gamma"), QStringLiteral("gamma-relay"),
+        QStringLiteral("192.0.2.63"));
+
+    HostManagerWidget widget(m_database.get(), m_vault.get());
+    widget.recordSuccessfulChainConnection(target.id, alpha.id);
+
+    std::unique_ptr<QDialog> dialog(widget.createHostChainConnectDialog(target.id));
+    QVERIFY(dialog != nullptr);
+    auto *recentList = dialog->findChild<QListWidget *>(QStringLiteral("hostChainConnectRecentList"));
+    auto *hostList = dialog->findChild<QListWidget *>(QStringLiteral("hostChainConnectHostList"));
+    auto *searchEdit = dialog->findChild<QLineEdit *>(QStringLiteral("hostChainConnectSearchEdit"));
+    QVERIFY(recentList != nullptr && hostList != nullptr && searchEdit != nullptr);
+
+    QSignalSpy requestSpy(&widget, &HostManagerWidget::hostChainConnectionRequested);
+    dialog->show();
+    dialog->activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(dialog.get()));
+
+    // 只剩 gamma 可见：它必须改绑为 Cmd+1，最近连接分区整体隐藏。
+    searchEdit->setText(QStringLiteral("relay"));
+    QVERIFY(recentList->isHidden());
+    const QString cmd1 = QKeySequence(Qt::CTRL | Qt::Key_1).toString(QKeySequence::NativeText);
+    for (int row = 0; row < hostList->count(); ++row) {
+        QListWidgetItem *item = hostList->item(row);
+        const bool isGamma = item->data(Qt::UserRole).toString() == gamma.id;
+        QCOMPARE(item->isHidden(), !isGamma);
+        QCOMPARE(item->data(Qt::UserRole + 2).toString(), isGamma ? cmd1 : QString());
+    }
+
+    // Cmd+2 已没有对应可见行，必须什么都不做，绝不能连到被隐藏的 beta。
+    QTest::keyClick(searchEdit, Qt::Key_2, kCommandModifier);
+    QTest::qWait(50);
+    QCOMPARE(requestSpy.count(), 0);
+    QVERIFY(dialog->isVisible());
+
+    QTest::keyClick(searchEdit, Qt::Key_1, kCommandModifier);
+    QTRY_COMPARE(requestSpy.count(), 1);
+    QCOMPARE(requestSpy.at(0).at(1).toString(), gamma.id);
+}
+
+void HostManagerWidgetTest::hostChainDialogReadsLegacyLastJumpSetting()
+{
+    const HostRecord target = saveChainTestHost(
+        m_database.get(), QStringLiteral("legacy-target"), QStringLiteral("旧版目标"),
+        QStringLiteral("192.0.2.70"));
+    const HostRecord jump = saveChainTestHost(
+        m_database.get(), QStringLiteral("legacy-jump"), QStringLiteral("旧版跳板"),
+        QStringLiteral("192.0.2.71"));
+    saveChainTestHost(m_database.get(), QStringLiteral("legacy-other"), QStringLiteral("其他主机"),
+                      QStringLiteral("192.0.2.72"));
+    QVERIFY(m_database->setSetting(
+        QStringLiteral("ui/host_chain_last_jump_v1"),
+        QStringLiteral(R"({"version":1,"jumps":{"legacy-target":"legacy-jump"}})")));
+
+    HostManagerWidget widget(m_database.get(), m_vault.get());
+    std::unique_ptr<QDialog> dialog(widget.createHostChainConnectDialog(target.id));
+    QVERIFY(dialog != nullptr);
+    auto *recentList = dialog->findChild<QListWidget *>(QStringLiteral("hostChainConnectRecentList"));
+    QVERIFY(recentList != nullptr);
+    QCOMPARE(listHostIds(recentList), QStringList({jump.id}));
 }
 
 void HostManagerWidgetTest::collectHostsInGroupRecursesNestedFolders()

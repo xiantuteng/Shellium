@@ -402,6 +402,53 @@ Run it in the current terminal?</source>
     </message>
 </context>
 <context>
+    <name>HostChainConnectDialog</name>
+    <message>
+        <source>Connect via Host Chain</source>
+        <translation type="unfinished">الاتصال عبر سلسلة مضيفين</translation>
+    </message>
+    <message>
+        <source>Choose a jump host to pass through before connecting to &lt;b&gt;%1&lt;/b&gt; &lt;span style=&quot;font-family: monospace;&quot;&gt;%2&lt;/span&gt;.</source>
+        <translation type="unfinished">اختر المضيف الوسيط الذي يمر عبره الاتصال قبل الوصول إلى &lt;b&gt;%1&lt;/b&gt; &lt;span style=&quot;font-family: monospace;&quot;&gt;%2&lt;/span&gt;.</translation>
+    </message>
+    <message>
+        <source>Search name, address, or account</source>
+        <translation type="unfinished">البحث بالاسم أو العنوان أو الحساب</translation>
+    </message>
+    <message>
+        <source>Recent connections</source>
+        <translation type="unfinished">الاتصالات الأخيرة</translation>
+    </message>
+    <message>
+        <source>All hosts</source>
+        <translation type="unfinished">جميع المضيفين</translation>
+    </message>
+    <message>
+        <source>No other hosts available</source>
+        <translation type="unfinished">لا يوجد مضيفون آخرون متاحون</translation>
+    </message>
+    <message>
+        <source>Connect</source>
+        <translation type="unfinished">اتصال</translation>
+    </message>
+    <message>
+        <source>Connect to the target host through the selected jump host</source>
+        <translation type="unfinished">الاتصال بالمضيف الهدف عبر المضيف الوسيط المحدد</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation type="unfinished">إلغاء</translation>
+    </message>
+    <message>
+        <source>Press %1–%2 to connect quickly</source>
+        <translation type="unfinished">اضغط %1–%2 للاتصال بسرعة</translation>
+    </message>
+    <message>
+        <source>No matching hosts</source>
+        <translation type="unfinished">لا يوجد مضيفون مطابقون</translation>
+    </message>
+</context>
+<context>
     <name>HostChainDialog</name>
     <message>
         <source>Edit host chain</source>
@@ -503,10 +550,6 @@ Run it in the current terminal?</source>
         <translation type="unfinished">اتصال</translation>
     </message>
     <message>
-        <source>Connect via Host Chain</source>
-        <translation type="unfinished">الاتصال عبر سلسلة مضيفين</translation>
-    </message>
-    <message>
         <source>Connect in Workspace</source>
         <translation type="unfinished">الاتصال في مساحة العمل</translation>
     </message>
@@ -537,18 +580,6 @@ Run it in the current terminal?</source>
     <message>
         <source>Failed to load hosts</source>
         <translation type="unfinished">تعذّر تحميل المضيفين</translation>
-    </message>
-    <message>
-        <source>No other hosts available</source>
-        <translation type="unfinished">لا يوجد مضيفون آخرون متاحون</translation>
-    </message>
-    <message>
-        <source>%1 (%2)</source>
-        <translation type="unfinished">%1 (%2)</translation>
-    </message>
-    <message>
-        <source>Last connected: %1</source>
-        <translation type="unfinished">آخر اتصال: %1</translation>
     </message>
     <message>
         <source>Ungrouped</source>
@@ -773,6 +804,10 @@ Run it in the current terminal?</source>
     <message>
         <source>Resolve host chain</source>
         <translation type="unfinished">حلّ سلسلة المضيفين</translation>
+    </message>
+    <message>
+        <source>Connect via Host Chain…</source>
+        <translation type="unfinished">الاتصال عبر سلسلة مضيفين…</translation>
     </message>
     <message>
         <source>The host record or chain does not exist</source>

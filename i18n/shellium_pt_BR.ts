@@ -402,6 +402,53 @@ Executá-lo no terminal atual?</translation>
     </message>
 </context>
 <context>
+    <name>HostChainConnectDialog</name>
+    <message>
+        <source>Connect via Host Chain</source>
+        <translation type="unfinished">Conectar via cadeia de hosts</translation>
+    </message>
+    <message>
+        <source>Choose a jump host to pass through before connecting to &lt;b&gt;%1&lt;/b&gt; &lt;span style=&quot;font-family: monospace;&quot;&gt;%2&lt;/span&gt;.</source>
+        <translation type="unfinished">Escolha o host de salto pelo qual passar antes de se conectar a &lt;b&gt;%1&lt;/b&gt; &lt;span style=&quot;font-family: monospace;&quot;&gt;%2&lt;/span&gt;.</translation>
+    </message>
+    <message>
+        <source>Search name, address, or account</source>
+        <translation type="unfinished">Pesquisar nome, endereço ou conta</translation>
+    </message>
+    <message>
+        <source>Recent connections</source>
+        <translation type="unfinished">Conexões recentes</translation>
+    </message>
+    <message>
+        <source>All hosts</source>
+        <translation type="unfinished">Todos os hosts</translation>
+    </message>
+    <message>
+        <source>No other hosts available</source>
+        <translation type="unfinished">Nenhum outro host disponível</translation>
+    </message>
+    <message>
+        <source>Connect</source>
+        <translation type="unfinished">Conectar</translation>
+    </message>
+    <message>
+        <source>Connect to the target host through the selected jump host</source>
+        <translation type="unfinished">Conectar ao host de destino pelo host de salto selecionado</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation type="unfinished">Cancelar</translation>
+    </message>
+    <message>
+        <source>Press %1–%2 to connect quickly</source>
+        <translation type="unfinished">Pressione %1–%2 para conectar rapidamente</translation>
+    </message>
+    <message>
+        <source>No matching hosts</source>
+        <translation type="unfinished">Nenhum host correspondente</translation>
+    </message>
+</context>
+<context>
     <name>HostChainDialog</name>
     <message>
         <source>Edit host chain</source>
@@ -503,10 +550,6 @@ Executá-lo no terminal atual?</translation>
         <translation type="unfinished">Conectar</translation>
     </message>
     <message>
-        <source>Connect via Host Chain</source>
-        <translation type="unfinished">Conectar via cadeia de hosts</translation>
-    </message>
-    <message>
         <source>Connect in Workspace</source>
         <translation type="unfinished">Conectar em um espaço de trabalho</translation>
     </message>
@@ -537,18 +580,6 @@ Executá-lo no terminal atual?</translation>
     <message>
         <source>Failed to load hosts</source>
         <translation type="unfinished">Falha ao carregar os hosts</translation>
-    </message>
-    <message>
-        <source>No other hosts available</source>
-        <translation type="unfinished">Nenhum outro host disponível</translation>
-    </message>
-    <message>
-        <source>%1 (%2)</source>
-        <translation type="unfinished">%1 (%2)</translation>
-    </message>
-    <message>
-        <source>Last connected: %1</source>
-        <translation type="unfinished">Última conexão: %1</translation>
     </message>
     <message>
         <source>Ungrouped</source>
@@ -773,6 +804,10 @@ Executá-lo no terminal atual?</translation>
     <message>
         <source>Resolve host chain</source>
         <translation type="unfinished">Resolver a cadeia de hosts</translation>
+    </message>
+    <message>
+        <source>Connect via Host Chain…</source>
+        <translation type="unfinished">Conectar via cadeia de hosts…</translation>
     </message>
     <message>
         <source>The host record or chain does not exist</source>

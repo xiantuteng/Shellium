@@ -9,6 +9,7 @@
 
 class ApplicationDatabase;
 class CredentialVault;
+class QDialog;
 class QFrame;
 class QLineEdit;
 class QMenu;
@@ -82,12 +83,12 @@ public:
                              QString *errorMessage) const;
 
     /**
-     * @brief 把一次成功的"通过主机链连接"记为该目标主机的最新跳板选择。
+     * @brief 把一次成功的"通过主机链连接"记入该目标主机的最近跳板列表（最新在前，至多三个）。
      * @param targetHostId 最终目标主机的稳定 id。
      * @param jumpHostId 本次握手成功所使用的跳板主机稳定 id。
      *
      * 只应在调用方已确认握手成功后调用；本方法不做成功与否的判断，也不校验两个 id
-     * 是否仍然存在——下次打开子菜单时会按当前主机树重新过滤失效的记录。持久化到全局
+     * 是否仍然存在——下次打开对话框时会按当前主机树重新过滤失效的记录。持久化到全局
      * 设置里而不是 hostChain 字段，因为这是"最近一次手动选择"的轻量记忆，不代表用户想
      * 把跳板固定进这台主机的正式配置。
      */
@@ -115,7 +116,7 @@ signals:
                                  bool openInNewTab);
 
     /**
-     * @brief 用户在"通过主机链连接"子菜单里手动选中了跳板主机。
+     * @brief 用户在"通过主机链连接"对话框里手动选中了跳板主机。
      * @param hostId 最终目标主机的稳定 id。
      * @param jumpHostId 用户手动选中的跳板主机稳定 id。
      * @param connectionPlan 跳板受管链与目标受管链拼接后的完整连接计划。
@@ -257,7 +258,7 @@ private:
     /**
      * @brief 手动指定一个跳板主机，在其受管链之后再连接目标主机。
      * @param hostId 最终目标主机的稳定 id。
-     * @param jumpHostId 用户在"通过主机链连接"子菜单中选中的跳板主机稳定 id。
+     * @param jumpHostId 用户在"通过主机链连接"对话框中选中的跳板主机稳定 id。
      *
      * 跳板主机自身的受管链会先展开，再拼接目标主机自身的受管链，构成一条完整的
      * 连接计划。与 requestConnection() 不同，这里的跳板不落库到目标主机的
@@ -282,14 +283,19 @@ private:
     void populateContextMenu(QMenu *menu, QTreeWidgetItem *item);
 
     /**
-     * @brief 为"通过主机链连接"子菜单填充候选跳板主机。
-     * @param menu 子菜单对象，由调用方通过 QMenu::addMenu() 创建。
-     * @param targetHostId 当前右键命中的目标主机稳定 id，用于从候选列表中排除自身。
+     * @brief 创建"通过主机链连接"对话框，供用户为本次连接挑选跳板主机。
+     * @param targetHostId 右键命中的目标主机稳定 id，会从候选列表中排除。
+     * @return 以本控件为父的对话框，调用方负责显示与释放；读取主机失败或目标已不存在时
+     *         提示错误并返回 nullptr。
      *
-     * 第一项固定为最近一次成功连接过的主机（若存在且不是目标主机自身），随后是分隔线，
-     * 再列出其余全部可连接主机；点击任一项都会调用 requestConnectionViaChain()。
+     * 对话框顶部列出本目标最近成功使用过的至多三个跳板，其下是其余全部主机，可见行依次
+     * 绑定 Cmd+1…Cmd+9。对话框被接受后会自动调用 requestConnectionViaChain()。拆出创建
+     * 步骤是为了让界面回归测试无需进入模态事件循环即可操作对话框。
      */
-    void populateHostChainMenu(QMenu *menu, const QString &targetHostId);
+    [[nodiscard]] QDialog *createHostChainConnectDialog(const QString &targetHostId);
+
+    /** @brief 以模态方式打开"通过主机链连接"对话框，关闭后释放。 */
+    void openHostChainConnectDialog(const QString &targetHostId);
 
     /** @brief 把一条主机/分组记录转换为树节点，并保存稳定 id 与类型到 UserRole。 */
     [[nodiscard]] QTreeWidgetItem *createTreeItem(const HostRecord &record) const;

@@ -402,6 +402,53 @@ O execuți în terminalul curent?</translation>
     </message>
 </context>
 <context>
+    <name>HostChainConnectDialog</name>
+    <message>
+        <source>Connect via Host Chain</source>
+        <translation type="unfinished">Conectare printr-un lanț de gazde</translation>
+    </message>
+    <message>
+        <source>Choose a jump host to pass through before connecting to &lt;b&gt;%1&lt;/b&gt; &lt;span style=&quot;font-family: monospace;&quot;&gt;%2&lt;/span&gt;.</source>
+        <translation type="unfinished">Alegeți gazda intermediară prin care să treceți înainte de conectarea la &lt;b&gt;%1&lt;/b&gt; &lt;span style=&quot;font-family: monospace;&quot;&gt;%2&lt;/span&gt;.</translation>
+    </message>
+    <message>
+        <source>Search name, address, or account</source>
+        <translation type="unfinished">Caută după nume, adresă sau cont</translation>
+    </message>
+    <message>
+        <source>Recent connections</source>
+        <translation type="unfinished">Conexiuni recente</translation>
+    </message>
+    <message>
+        <source>All hosts</source>
+        <translation type="unfinished">Toate gazdele</translation>
+    </message>
+    <message>
+        <source>No other hosts available</source>
+        <translation type="unfinished">Nu există alte gazde disponibile</translation>
+    </message>
+    <message>
+        <source>Connect</source>
+        <translation type="unfinished">Conectează</translation>
+    </message>
+    <message>
+        <source>Connect to the target host through the selected jump host</source>
+        <translation type="unfinished">Conectare la gazda țintă prin gazda intermediară selectată</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation type="unfinished">Anulează</translation>
+    </message>
+    <message>
+        <source>Press %1–%2 to connect quickly</source>
+        <translation type="unfinished">Apăsați %1–%2 pentru conectare rapidă</translation>
+    </message>
+    <message>
+        <source>No matching hosts</source>
+        <translation type="unfinished">Nicio gazdă potrivită</translation>
+    </message>
+</context>
+<context>
     <name>HostChainDialog</name>
     <message>
         <source>Edit host chain</source>
@@ -503,10 +550,6 @@ O execuți în terminalul curent?</translation>
         <translation type="unfinished">Conectează</translation>
     </message>
     <message>
-        <source>Connect via Host Chain</source>
-        <translation type="unfinished">Conectare printr-un lanț de gazde</translation>
-    </message>
-    <message>
         <source>Connect in Workspace</source>
         <translation type="unfinished">Conectare într-un spațiu de lucru</translation>
     </message>
@@ -537,18 +580,6 @@ O execuți în terminalul curent?</translation>
     <message>
         <source>Failed to load hosts</source>
         <translation type="unfinished">Încărcarea gazdelor a eșuat</translation>
-    </message>
-    <message>
-        <source>No other hosts available</source>
-        <translation type="unfinished">Nu există alte gazde disponibile</translation>
-    </message>
-    <message>
-        <source>%1 (%2)</source>
-        <translation type="unfinished">%1 (%2)</translation>
-    </message>
-    <message>
-        <source>Last connected: %1</source>
-        <translation type="unfinished">Ultima conectare: %1</translation>
     </message>
     <message>
         <source>Ungrouped</source>
@@ -773,6 +804,10 @@ O execuți în terminalul curent?</translation>
     <message>
         <source>Resolve host chain</source>
         <translation type="unfinished">Rezolvă lanțul de gazde</translation>
+    </message>
+    <message>
+        <source>Connect via Host Chain…</source>
+        <translation type="unfinished">Conectare printr-un lanț de gazde…</translation>
     </message>
     <message>
         <source>The host record or chain does not exist</source>

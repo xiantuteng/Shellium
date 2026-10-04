@@ -402,6 +402,53 @@ Run it in the current terminal?</source>
     </message>
 </context>
 <context>
+    <name>HostChainConnectDialog</name>
+    <message>
+        <source>Connect via Host Chain</source>
+        <translation type="unfinished">호스트 체인을 통해 연결</translation>
+    </message>
+    <message>
+        <source>Choose a jump host to pass through before connecting to &lt;b&gt;%1&lt;/b&gt; &lt;span style=&quot;font-family: monospace;&quot;&gt;%2&lt;/span&gt;.</source>
+        <translation type="unfinished">&lt;b&gt;%1&lt;/b&gt; &lt;span style=&quot;font-family: monospace;&quot;&gt;%2&lt;/span&gt;에 연결하기 전에 거칠 중간 호스트를 선택하세요.</translation>
+    </message>
+    <message>
+        <source>Search name, address, or account</source>
+        <translation type="unfinished">이름, 주소 또는 계정으로 검색</translation>
+    </message>
+    <message>
+        <source>Recent connections</source>
+        <translation type="unfinished">최근 연결</translation>
+    </message>
+    <message>
+        <source>All hosts</source>
+        <translation type="unfinished">모든 호스트</translation>
+    </message>
+    <message>
+        <source>No other hosts available</source>
+        <translation type="unfinished">사용 가능한 다른 호스트가 없습니다</translation>
+    </message>
+    <message>
+        <source>Connect</source>
+        <translation type="unfinished">연결</translation>
+    </message>
+    <message>
+        <source>Connect to the target host through the selected jump host</source>
+        <translation type="unfinished">선택한 중간 호스트를 거쳐 대상 호스트에 연결</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation type="unfinished">취소</translation>
+    </message>
+    <message>
+        <source>Press %1–%2 to connect quickly</source>
+        <translation type="unfinished">%1–%2를 눌러 빠르게 연결</translation>
+    </message>
+    <message>
+        <source>No matching hosts</source>
+        <translation type="unfinished">일치하는 호스트가 없습니다</translation>
+    </message>
+</context>
+<context>
     <name>HostChainDialog</name>
     <message>
         <source>Edit host chain</source>
@@ -503,10 +550,6 @@ Run it in the current terminal?</source>
         <translation type="unfinished">연결</translation>
     </message>
     <message>
-        <source>Connect via Host Chain</source>
-        <translation type="unfinished">호스트 체인을 통해 연결</translation>
-    </message>
-    <message>
         <source>Connect in Workspace</source>
         <translation type="unfinished">워크스페이스에서 연결</translation>
     </message>
@@ -537,18 +580,6 @@ Run it in the current terminal?</source>
     <message>
         <source>Failed to load hosts</source>
         <translation type="unfinished">호스트를 불러오지 못했습니다</translation>
-    </message>
-    <message>
-        <source>No other hosts available</source>
-        <translation type="unfinished">사용 가능한 다른 호스트가 없습니다</translation>
-    </message>
-    <message>
-        <source>%1 (%2)</source>
-        <translation type="unfinished">%1(%2)</translation>
-    </message>
-    <message>
-        <source>Last connected: %1</source>
-        <translation type="unfinished">마지막 연결: %1</translation>
     </message>
     <message>
         <source>Ungrouped</source>
@@ -773,6 +804,10 @@ Run it in the current terminal?</source>
     <message>
         <source>Resolve host chain</source>
         <translation type="unfinished">호스트 체인 확인</translation>
+    </message>
+    <message>
+        <source>Connect via Host Chain…</source>
+        <translation type="unfinished">호스트 체인을 통해 연결…</translation>
     </message>
     <message>
         <source>The host record or chain does not exist</source>

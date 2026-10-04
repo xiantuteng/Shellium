@@ -402,6 +402,53 @@ Run it in the current terminal?</source>
     </message>
 </context>
 <context>
+    <name>HostChainConnectDialog</name>
+    <message>
+        <source>Connect via Host Chain</source>
+        <translation type="unfinished">通过主机链连接</translation>
+    </message>
+    <message>
+        <source>Choose a jump host to pass through before connecting to &lt;b&gt;%1&lt;/b&gt; &lt;span style=&quot;font-family: monospace;&quot;&gt;%2&lt;/span&gt;.</source>
+        <translation type="unfinished">选择连接到 &lt;b&gt;%1&lt;/b&gt; &lt;span style=&quot;font-family: monospace;&quot;&gt;%2&lt;/span&gt; 之前要经过的跳板机。</translation>
+    </message>
+    <message>
+        <source>Search name, address, or account</source>
+        <translation type="unfinished">搜索名称、地址或账号</translation>
+    </message>
+    <message>
+        <source>Recent connections</source>
+        <translation type="unfinished">最近连接</translation>
+    </message>
+    <message>
+        <source>All hosts</source>
+        <translation type="unfinished">全部主机</translation>
+    </message>
+    <message>
+        <source>No other hosts available</source>
+        <translation type="unfinished">没有其他可用主机</translation>
+    </message>
+    <message>
+        <source>Connect</source>
+        <translation type="unfinished">连接</translation>
+    </message>
+    <message>
+        <source>Connect to the target host through the selected jump host</source>
+        <translation type="unfinished">经由所选跳板机连接到目标主机</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation type="unfinished">取消</translation>
+    </message>
+    <message>
+        <source>Press %1–%2 to connect quickly</source>
+        <translation type="unfinished">按 %1–%2 快速连接</translation>
+    </message>
+    <message>
+        <source>No matching hosts</source>
+        <translation type="unfinished">没有匹配的主机</translation>
+    </message>
+</context>
+<context>
     <name>HostChainDialog</name>
     <message>
         <source>Edit host chain</source>
@@ -503,10 +550,6 @@ Run it in the current terminal?</source>
         <translation>连接</translation>
     </message>
     <message>
-        <source>Connect via Host Chain</source>
-        <translation type="unfinished">通过主机链连接</translation>
-    </message>
-    <message>
         <source>Connect in Workspace</source>
         <translation type="unfinished">在工作空间中连接</translation>
     </message>
@@ -537,18 +580,6 @@ Run it in the current terminal?</source>
     <message>
         <source>Failed to load hosts</source>
         <translation type="unfinished">加载主机列表失败</translation>
-    </message>
-    <message>
-        <source>No other hosts available</source>
-        <translation type="unfinished">没有其他可用主机</translation>
-    </message>
-    <message>
-        <source>%1 (%2)</source>
-        <translation type="unfinished">%1（%2）</translation>
-    </message>
-    <message>
-        <source>Last connected: %1</source>
-        <translation type="unfinished">上次连接：%1</translation>
     </message>
     <message>
         <source>Ungrouped</source>
@@ -773,6 +804,10 @@ Run it in the current terminal?</source>
     <message>
         <source>Resolve host chain</source>
         <translation>解析主机链</translation>
+    </message>
+    <message>
+        <source>Connect via Host Chain…</source>
+        <translation type="unfinished">通过主机链连接…</translation>
     </message>
     <message>
         <source>The host record or chain does not exist</source>

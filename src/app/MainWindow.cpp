@@ -3932,7 +3932,7 @@ void MainWindow::recordConnectionSucceeded(TerminalPane *pane,
     entry.connectedAt = m_pendingHistoryStartedAt.take(pane);
     entry.succeeded = true;
 
-    // 只有握手真正成功才能把这次手选的跳板记为"上一次连接"；连接历史写库失败不影响这一
+    // 只有握手真正成功才能把这次手选的跳板记为"最近连接"；连接历史写库失败不影响这一
     // 判断——历史记录只是展示用的旁路统计，不是本次连接是否成功的依据。
     const QString chainJumpHostId = m_pendingChainJumpHosts.take(pane);
     if (!chainJumpHostId.isEmpty()) {
@@ -3959,7 +3959,7 @@ void MainWindow::recordConnectionFailed(TerminalPane *pane,
         return;
     }
 
-    // 没有成功握手，手选的跳板不能被记为"上一次连接"，直接丢弃即可。
+    // 没有成功握手，手选的跳板不能被记为"最近连接"，直接丢弃即可。
     m_pendingChainJumpHosts.remove(pane);
 
     ConnectionHistoryEntry entry;

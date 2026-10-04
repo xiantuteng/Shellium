@@ -45,6 +45,7 @@
 #include <QPushButton>
 #include <QDir>
 #include <QSet>
+#include <QShortcut>
 #include <QSaveFile>
 #include <QScrollBar>
 #include <QSignalBlocker>
@@ -111,55 +112,81 @@ const QString kHostTagColorSettingKey = QStringLiteral("ui/host_tag_colors_v1");
 constexpr int kHostTagColorStateVersion = 1;
 
 /**
- * @brief "通过主机链连接"最近一次成功跳板选择在 settings 表中的稳定键名。
+ * @brief "通过主机链连接"最近成功跳板列表在 settings 表中的稳定键名。
  *
- * 值是 {"version":1,"jumps":{"<目标主机id>":"<跳板主机id>"}} 形式的 JSON，按目标主机
- * 而不是全局记录，因为不同目标主机习惯经过的跳板通常不同；只在握手真正成功后才会
- * 更新某个目标的条目，绝不能把尝试中或已失败的跳板选择当作"上一次连接"展示出来。
+ * 值是 {"version":2,"recent":{"<目标主机id>":["<最新跳板id>", ...]}} 形式的 JSON，按目标
+ * 主机而不是全局记录，因为不同目标主机习惯经过的跳板通常不同；只在握手真正成功后才会
+ * 更新某个目标的条目，绝不能把尝试中或已失败的跳板选择当作"最近连接"展示出来。
  */
-const QString kHostChainLastJumpSettingKey =
+const QString kHostChainRecentJumpsSettingKey =
+    QStringLiteral("ui/host_chain_recent_jumps_v2");
+
+/** @brief 旧版只记一个"上次连接"跳板的键名；新键缺失时读取它，升级后不丢失既有记忆。 */
+const QString kHostChainLastJumpLegacySettingKey =
     QStringLiteral("ui/host_chain_last_jump_v1");
 
 /** @brief 当前"主机链最近跳板"JSON 结构版本。 */
-constexpr int kHostChainLastJumpStateVersion = 1;
+constexpr int kHostChainRecentJumpsStateVersion = 2;
 
-/** @brief 读取全部目标主机 -> 最近一次成功跳板 id 的映射。 */
-[[nodiscard]] QHash<QString, QString> loadLastChainJumps(const ApplicationDatabase *database)
+/** @brief 每个目标主机最多记住并展示的最近成功跳板个数。 */
+constexpr int kHostChainRecentJumpLimit = 3;
+
+/** @brief 读取全部目标主机 -> 最近成功跳板 id 列表（最新在前）的映射。 */
+[[nodiscard]] QHash<QString, QStringList> loadRecentChainJumps(const ApplicationDatabase *database)
 {
-    QHash<QString, QString> jumps;
+    QHash<QString, QStringList> recent;
     if (database == nullptr) {
-        return jumps;
+        return recent;
     }
-    const std::optional<QString> stored = database->setting(kHostChainLastJumpSettingKey);
-    if (!stored.has_value()) {
-        return jumps;
+    const std::optional<QString> stored = database->setting(kHostChainRecentJumpsSettingKey);
+    if (stored.has_value()) {
+        const QJsonObject root = QJsonDocument::fromJson(stored->toUtf8()).object();
+        const QJsonObject entries = root.value(QStringLiteral("recent")).toObject();
+        for (auto entry = entries.constBegin(); entry != entries.constEnd(); ++entry) {
+            QStringList jumpHostIds;
+            for (const QJsonValue &value : entry.value().toArray()) {
+                const QString jumpHostId = value.toString();
+                if (!jumpHostId.isEmpty() && !jumpHostIds.contains(jumpHostId)) {
+                    jumpHostIds.append(jumpHostId);
+                }
+            }
+            if (!jumpHostIds.isEmpty()) {
+                recent.insert(entry.key(), jumpHostIds.mid(0, kHostChainRecentJumpLimit));
+            }
+        }
+        return recent;
     }
-    const QJsonObject root = QJsonDocument::fromJson(stored->toUtf8()).object();
+
+    const std::optional<QString> legacy = database->setting(kHostChainLastJumpLegacySettingKey);
+    if (!legacy.has_value()) {
+        return recent;
+    }
+    const QJsonObject root = QJsonDocument::fromJson(legacy->toUtf8()).object();
     const QJsonObject entries = root.value(QStringLiteral("jumps")).toObject();
     for (auto entry = entries.constBegin(); entry != entries.constEnd(); ++entry) {
         const QString jumpHostId = entry.value().toString();
         if (!jumpHostId.isEmpty()) {
-            jumps.insert(entry.key(), jumpHostId);
+            recent.insert(entry.key(), {jumpHostId});
         }
     }
-    return jumps;
+    return recent;
 }
 
-/** @brief 覆盖写入全部目标主机 -> 最近一次成功跳板 id 的映射。 */
-bool saveLastChainJumps(ApplicationDatabase *database, const QHash<QString, QString> &jumps)
+/** @brief 覆盖写入全部目标主机 -> 最近成功跳板 id 列表的映射。 */
+bool saveRecentChainJumps(ApplicationDatabase *database, const QHash<QString, QStringList> &recent)
 {
     if (database == nullptr) {
         return false;
     }
     QJsonObject entries;
-    for (auto entry = jumps.constBegin(); entry != jumps.constEnd(); ++entry) {
-        entries.insert(entry.key(), entry.value());
+    for (auto entry = recent.constBegin(); entry != recent.constEnd(); ++entry) {
+        entries.insert(entry.key(), QJsonArray::fromStringList(entry.value()));
     }
     QJsonObject root;
-    root.insert(QStringLiteral("version"), kHostChainLastJumpStateVersion);
-    root.insert(QStringLiteral("jumps"), entries);
+    root.insert(QStringLiteral("version"), kHostChainRecentJumpsStateVersion);
+    root.insert(QStringLiteral("recent"), entries);
     return database->setSetting(
-        kHostChainLastJumpSettingKey,
+        kHostChainRecentJumpsSettingKey,
         QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Compact)));
 }
 
@@ -2709,6 +2736,13 @@ private:
 };
 
 /**
+ * @brief 主机卡片右侧快捷键提示文本（如"⌘1"）所在的数据角色；为空时不绘制提示。
+ *
+ * 与 Qt::UserRole（主机 id）、Qt::UserRole + 1（小写搜索索引）错开，避免互相覆盖。
+ */
+constexpr int kHostRowShortcutHintRole = Qt::UserRole + 2;
+
+/**
  * @brief 绘制主机链与跳板机选择器中的两行主机卡片。
  *
  * 主机链行额外绘制六点拖拽手柄，并把名称/连接地址相对整张卡片居中；选择器行不显示手柄，
@@ -2802,7 +2836,31 @@ protected:
         const int blockHeight = titleMetrics.height() + detailMetrics.height() + 1;
         const int blockTop = option.rect.center().y() - (blockHeight / 2);
         const int horizontalInset = m_centerContent ? 42 : 16;
-        const QRect textBounds = option.rect.adjusted(horizontalInset, 0, -horizontalInset, 0);
+        QRect textBounds = option.rect.adjusted(horizontalInset, 0, -horizontalInset, 0);
+
+        const QString shortcutHint = index.data(kHostRowShortcutHintRole).toString();
+        if (!shortcutHint.isEmpty()) {
+            // 快捷键提示固定贴在卡片右侧，并从文字区域中扣除，长主机名省略时不会压到提示上。
+            const QFont hintFont = connectionDetailFont(option.font);
+            const QFontMetrics hintMetrics(hintFont);
+            const int hintWidth = hintMetrics.horizontalAdvance(shortcutHint) + 12;
+            const int hintHeight = hintMetrics.height() + 4;
+            const QRect hintRect(option.rect.right() - horizontalInset - hintWidth + 1,
+                                 option.rect.center().y() - (hintHeight / 2),
+                                 hintWidth,
+                                 hintHeight);
+            QColor hintFill = textColor;
+            hintFill.setAlphaF(0.07F);
+            painter->setPen(Qt::NoPen);
+            painter->setBrush(hintFill);
+            painter->drawRoundedRect(hintRect, 5, 5);
+            QColor hintColor = textColor;
+            hintColor.setAlphaF(0.62F);
+            painter->setFont(hintFont);
+            painter->setPen(hintColor);
+            painter->drawText(hintRect, Qt::AlignCenter, shortcutHint);
+            textBounds.setRight(hintRect.left() - 10);
+        }
         const Qt::Alignment horizontalAlignment = m_centerContent ? Qt::AlignHCenter
                                                                   : Qt::AlignLeft;
 
@@ -2978,6 +3036,299 @@ private:
     QLineEdit *m_searchEdit = nullptr;
     QListWidget *m_list = nullptr;
     bool m_createNewRequested = false;
+};
+
+/** @brief "通过主机链连接"对话框中的一个候选跳板主机。 */
+struct HostChainConnectCandidate {
+    /** @brief 跳板主机稳定 id。 */
+    QString id;
+    /** @brief 主机显示名称。 */
+    QString name;
+    /** @brief 已补齐继承字段的连接说明，如 user@host:port。 */
+    QString detail;
+};
+
+/**
+ * @brief "通过主机链连接"对话框：为一次连接手动挑选跳板主机。
+ *
+ * 顶部"最近连接"列出本目标主机最近成功使用过的跳板（最多 kHostChainRecentJumpLimit 个，
+ * 最新在前），下方"全部主机"列出其余可连接主机，二者互不重复。可见行按从上到下的顺序依次
+ * 绑定 Cmd+1…Cmd+9（其他平台为 Ctrl），搜索过滤后编号随之重排，因此按下的数字永远对应
+ * 当前看得见的那一行，而不是被隐藏的旧行。
+ */
+class HostChainConnectDialog final : public QDialog {
+    Q_DECLARE_TR_FUNCTIONS(HostChainConnectDialog)
+public:
+    /**
+     * @brief 创建对话框。
+     * @param targetName 最终目标主机名称，仅用于说明文字。
+     * @param targetDetail 最终目标主机连接说明。
+     * @param recent 最近成功使用过的跳板，最新在前；调用方保证不含目标自身。
+     * @param others 其余候选跳板；调用方保证与 recent 不重复。
+     * @param parent Qt 父对象。
+     */
+    HostChainConnectDialog(const QString &targetName,
+                           const QString &targetDetail,
+                           const QList<HostChainConnectCandidate> &recent,
+                           const QList<HostChainConnectCandidate> &others,
+                           QWidget *parent = nullptr)
+        : QDialog(parent)
+        , m_searchEdit(new QLineEdit(this))
+        , m_recentList(new QListWidget(this))
+        , m_hostList(new QListWidget(this))
+    {
+        setObjectName(QStringLiteral("HostChainConnectDialog"));
+        setWindowTitle(tr("Connect via Host Chain"));
+        setMinimumSize(480, 520);
+        ShelliumUi::applyStandaloneDialogStyle(this);
+
+        auto *body = new QWidget(this);
+        body->setObjectName(QStringLiteral("HostPickerBody"));
+        auto *subtitle = new QLabel(
+            tr("Choose a jump host to pass through before connecting to <b>%1</b> <span style=\"font-family: monospace;\">%2</span>.")
+                .arg(targetName.toHtmlEscaped(), targetDetail.toHtmlEscaped()),
+            body);
+        subtitle->setObjectName(QStringLiteral("HostPickerSubtitle"));
+        subtitle->setTextFormat(Qt::RichText);
+        subtitle->setWordWrap(true);
+
+        m_searchEdit->setObjectName(QStringLiteral("hostChainConnectSearchEdit"));
+        m_searchEdit->setPlaceholderText(tr("Search name, address, or account"));
+        m_searchEdit->addAction(
+            UiIcons::symbol(
+                this,
+                UiIcons::Symbol::Search,
+                this->palette().color(QPalette::PlaceholderText)),
+            QLineEdit::LeadingPosition);
+
+        m_recentLabel = new QLabel(tr("Recent connections"), body);
+        m_recentLabel->setObjectName(QStringLiteral("hostChainConnectRecentLabel"));
+        m_hostLabel = new QLabel(tr("All hosts"), body);
+        m_hostLabel->setObjectName(QStringLiteral("hostChainConnectHostLabel"));
+        m_emptyLabel = new QLabel(tr("No other hosts available"), body);
+        m_emptyLabel->setObjectName(QStringLiteral("hostChainConnectEmptyLabel"));
+        m_emptyLabel->setAlignment(Qt::AlignCenter);
+
+        m_recentList->setObjectName(QStringLiteral("hostChainConnectRecentList"));
+        m_hostList->setObjectName(QStringLiteral("hostChainConnectHostList"));
+        for (QListWidget *list : {m_recentList, m_hostList}) {
+            list->setSelectionMode(QAbstractItemView::SingleSelection);
+            list->setItemDelegate(new HostChainRowDelegate(false, false, list));
+            list->setMouseTracking(true);
+            list->setUniformItemSizes(true);
+            list->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
+        }
+        // 最近连接最多三行，按内容定高且不滚动；剩余空间全部留给"全部主机"。
+        m_recentList->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        m_recentList->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        appendCandidates(m_recentList, recent);
+        appendCandidates(m_hostList, others);
+
+        m_connectButton = new QPushButton(tr("Connect"), this);
+        m_connectButton->setObjectName(QStringLiteral("hostChainConnectButton"));
+        m_connectButton->setProperty("primaryAction", true);
+        m_connectButton->setDefault(true);
+        UiIcons::decorateButton(
+            m_connectButton,
+            UiIcons::symbol(
+                this,
+                UiIcons::Symbol::Connect,
+                QColor(QStringLiteral("#0c2f24"))),
+            tr("Connect to the target host through the selected jump host"));
+        auto *cancelButton = new QPushButton(tr("Cancel"), this);
+        cancelButton->setObjectName(QStringLiteral("hostChainConnectCancelButton"));
+        auto *shortcutTip = new QLabel(
+            tr("Press %1–%2 to connect quickly")
+                .arg(shortcutText(1), shortcutText(kShortcutCount)),
+            this);
+        shortcutTip->setObjectName(QStringLiteral("hostChainConnectShortcutTip"));
+
+        auto *bodyLayout = new QVBoxLayout(body);
+        bodyLayout->setContentsMargins(24, 18, 24, 20);
+        bodyLayout->setSpacing(10);
+        bodyLayout->addWidget(subtitle);
+        bodyLayout->addWidget(m_searchEdit);
+        bodyLayout->addWidget(m_recentLabel);
+        bodyLayout->addWidget(m_recentList);
+        bodyLayout->addWidget(m_hostLabel);
+        bodyLayout->addWidget(m_hostList, 1);
+        bodyLayout->addWidget(m_emptyLabel, 1);
+
+        auto *footer = new QWidget(this);
+        footer->setObjectName(QStringLiteral("HostPickerFooter"));
+        auto *footerLayout = new QHBoxLayout(footer);
+        footerLayout->setContentsMargins(24, 13, 24, 13);
+        footerLayout->setSpacing(10);
+        footerLayout->addWidget(shortcutTip);
+        footerLayout->addStretch(1);
+        footerLayout->addWidget(cancelButton);
+        footerLayout->addWidget(m_connectButton);
+
+        auto *layout = new QVBoxLayout(this);
+        layout->setContentsMargins(0, 0, 0, 0);
+        layout->setSpacing(0);
+        layout->addWidget(body, 1);
+        layout->addWidget(footer);
+
+        for (int number = 1; number <= kShortcutCount; ++number) {
+            auto *shortcut = new QShortcut(shortcutSequence(number), this);
+            shortcut->setObjectName(QStringLiteral("hostChainConnectShortcut%1").arg(number));
+            connect(shortcut, &QShortcut::activated, this, [this, number]() {
+                if (number <= m_shortcutItems.size()) {
+                    acceptItem(m_shortcutItems.at(number - 1));
+                }
+            });
+        }
+
+        connect(m_searchEdit, &QLineEdit::textChanged, this, [this]() { applyFilter(); });
+        for (QListWidget *list : {m_recentList, m_hostList}) {
+            QListWidget *other = list == m_recentList ? m_hostList : m_recentList;
+            connect(list, &QListWidget::currentItemChanged, this,
+                    [this, other](QListWidgetItem *current) {
+                        // 两个列表共同构成一个单选集合：选中一侧时清掉另一侧，"连接"按钮
+                        // 才不会提交一个已经看不出被选中的旧主机。
+                        if (current != nullptr && other->currentItem() != nullptr) {
+                            other->setCurrentItem(nullptr);
+                            other->clearSelection();
+                        }
+                        refreshConnectButton();
+                    });
+            connect(list, &QListWidget::itemActivated, this,
+                    [this](QListWidgetItem *item) { acceptItem(item); });
+        }
+        connect(m_connectButton, &QPushButton::clicked, this, [this]() {
+            acceptItem(currentVisibleItem());
+        });
+        connect(cancelButton, &QPushButton::clicked, this, &QDialog::reject);
+
+        applyFilter();
+        m_searchEdit->setFocus();
+    }
+
+    /** @brief 返回用户最终选择的跳板主机 id；未接受对话框时为空。 */
+    [[nodiscard]] QString selectedJumpHostId() const { return m_selectedJumpHostId; }
+
+private:
+    /** @brief 可绑定快捷键的行数：Cmd+1 至 Cmd+9。 */
+    static constexpr int kShortcutCount = 9;
+
+    /** @brief 第 number 行对应的快捷键；Qt::CTRL 在 macOS 上即 Command 键。 */
+    [[nodiscard]] static QKeySequence shortcutSequence(const int number)
+    {
+        return QKeySequence(Qt::CTRL | static_cast<Qt::Key>(Qt::Key_1 + number - 1));
+    }
+
+    /** @brief 本平台原生写法的快捷键文本，如 macOS 上的"⌘1"。 */
+    [[nodiscard]] static QString shortcutText(const int number)
+    {
+        return shortcutSequence(number).toString(QKeySequence::NativeText);
+    }
+
+    /** @brief 把候选主机追加到列表，并写入 id 与小写搜索索引。 */
+    static void appendCandidates(QListWidget *list, const QList<HostChainConnectCandidate> &candidates)
+    {
+        for (const HostChainConnectCandidate &candidate : candidates) {
+            auto *item = new QListWidgetItem(
+                QStringLiteral("%1\n%2").arg(candidate.name, candidate.detail), list);
+            item->setData(Qt::UserRole, candidate.id);
+            item->setData(Qt::UserRole + 1,
+                          QStringLiteral("%1 %2").arg(candidate.name, candidate.detail).toLower());
+            item->setSizeHint(QSize(0, 62));
+        }
+    }
+
+    /** @brief 按搜索词隐藏不匹配行，重排快捷键编号，并同步分区可见性与选中项。 */
+    void applyFilter()
+    {
+        const QString needle = m_searchEdit->text().trimmed().toLower();
+        int recentVisible = 0;
+        int hostVisible = 0;
+        for (QListWidget *list : {m_recentList, m_hostList}) {
+            for (int row = 0; row < list->count(); ++row) {
+                QListWidgetItem *item = list->item(row);
+                const bool visible = needle.isEmpty()
+                    || item->data(Qt::UserRole + 1).toString().contains(needle);
+                item->setHidden(!visible);
+                if (visible) {
+                    ++(list == m_recentList ? recentVisible : hostVisible);
+                }
+            }
+            if (list->currentItem() != nullptr && list->currentItem()->isHidden()) {
+                list->setCurrentItem(nullptr);
+                list->clearSelection();
+            }
+        }
+
+        m_recentLabel->setVisible(recentVisible > 0);
+        m_recentList->setVisible(recentVisible > 0);
+        m_recentList->setFixedHeight(recentVisible * 62 + (2 * m_recentList->frameWidth()));
+        m_hostLabel->setVisible(hostVisible > 0);
+        m_hostList->setVisible(hostVisible > 0);
+        m_emptyLabel->setVisible(recentVisible + hostVisible == 0);
+        m_emptyLabel->setText(m_recentList->count() + m_hostList->count() == 0
+                                  ? tr("No other hosts available")
+                                  : tr("No matching hosts"));
+
+        m_shortcutItems.clear();
+        for (QListWidget *list : {m_recentList, m_hostList}) {
+            for (int row = 0; row < list->count(); ++row) {
+                QListWidgetItem *item = list->item(row);
+                const bool numbered = !item->isHidden() && m_shortcutItems.size() < kShortcutCount;
+                if (numbered) {
+                    m_shortcutItems.append(item);
+                }
+                item->setData(kHostRowShortcutHintRole,
+                              numbered ? shortcutText(static_cast<int>(m_shortcutItems.size()))
+                                       : QString());
+            }
+        }
+
+        // 始终保持一个可见的默认选中项：打开即可按回车连接最近一次的跳板，搜索后回车则
+        // 连接第一个匹配项。
+        if (currentVisibleItem() == nullptr && !m_shortcutItems.isEmpty()) {
+            QListWidgetItem *first = m_shortcutItems.constFirst();
+            first->listWidget()->setCurrentItem(first);
+        }
+        refreshConnectButton();
+    }
+
+    /** @brief 返回两个列表中当前选中且可见的项；没有时为 nullptr。 */
+    [[nodiscard]] QListWidgetItem *currentVisibleItem() const
+    {
+        for (QListWidget *list : {m_recentList, m_hostList}) {
+            QListWidgetItem *item = list->currentItem();
+            if (item != nullptr && !item->isHidden()) {
+                return item;
+            }
+        }
+        return nullptr;
+    }
+
+    void refreshConnectButton()
+    {
+        m_connectButton->setEnabled(currentVisibleItem() != nullptr);
+    }
+
+    /** @brief 记录所选跳板并关闭对话框；空项或隐藏项被忽略。 */
+    void acceptItem(QListWidgetItem *item)
+    {
+        if (item == nullptr || item->isHidden()) {
+            return;
+        }
+        m_selectedJumpHostId = item->data(Qt::UserRole).toString();
+        accept();
+    }
+
+    QLineEdit *m_searchEdit = nullptr;
+    QListWidget *m_recentList = nullptr;
+    QListWidget *m_hostList = nullptr;
+    QLabel *m_recentLabel = nullptr;
+    QLabel *m_hostLabel = nullptr;
+    QLabel *m_emptyLabel = nullptr;
+    QPushButton *m_connectButton = nullptr;
+    /** @brief 当前绑定到 Cmd+1…Cmd+9 的可见行，下标 0 对应 Cmd+1。 */
+    QList<QListWidgetItem *> m_shortcutItems;
+    QString m_selectedJumpHostId;
 };
 
 /**
@@ -3558,13 +3909,15 @@ void HostManagerWidget::populateContextMenu(QMenu *menu, QTreeWidgetItem *item)
         connect(connectAction, &QAction::triggered,
                 this, [this, item]() { activateTreeItem(item); });
 
-        QMenu *chainMenu = menu->addMenu(
+        QAction *chainAction = menu->addAction(
             UiIcons::symbol(this,
                             UiIcons::Symbol::Connect,
                             this->palette().color(QPalette::WindowText)),
-            tr("Connect via Host Chain"));
-        UiIcons::modernizePopup(chainMenu);
-        populateHostChainMenu(chainMenu, item->data(0, HostIdRole).toString());
+            tr("Connect via Host Chain…"));
+        const QString targetHostId = item->data(0, HostIdRole).toString();
+        connect(chainAction, &QAction::triggered, this, [this, targetHostId]() {
+            openHostChainConnectDialog(targetHostId);
+        });
 
         menu->addSeparator();
     }
@@ -3662,76 +4015,84 @@ void HostManagerWidget::populateContextMenu(QMenu *menu, QTreeWidgetItem *item)
     connect(refreshAction, &QAction::triggered, this, &HostManagerWidget::refresh);
 }
 
-void HostManagerWidget::populateHostChainMenu(QMenu *menu, const QString &targetHostId)
+QDialog *HostManagerWidget::createHostChainConnectDialog(const QString &targetHostId)
 {
     QString error;
     QList<HostRecord> allRecords;
     if (!collectRecords({}, &allRecords, &error)) {
-        QAction *errorAction = menu->addAction(tr("Failed to load hosts"));
-        errorAction->setEnabled(false);
-        return;
+        showDatabaseError(tr("Failed to load hosts"), error);
+        return nullptr;
     }
 
-    QList<HostRecord> candidates;
-    candidates.reserve(allRecords.size());
-    for (const HostRecord &record : allRecords) {
-        if (record.kind == HostNodeKind::Host && record.id != targetHostId) {
-            candidates.append(record);
-        }
-    }
-
-    if (candidates.isEmpty()) {
-        QAction *emptyAction = menu->addAction(tr("No other hosts available"));
-        emptyAction->setEnabled(false);
-        return;
-    }
-
-    // 副标题复用 createTreeItem() 的展示口径：resolveHost 补齐继承字段，避免只显示
+    // 连接说明复用 createTreeItem() 的展示口径：resolveHost 补齐继承字段，避免只显示
     // 记录自身的空账号/空端口。
-    auto candidateLabel = [this](const HostRecord &record) {
+    auto toCandidate = [this](const HostRecord &record) {
         const std::optional<HostRecord> resolved = m_database->resolveHost(record.id);
         const HostRecord displayRecord = resolved.has_value() ? *resolved : record;
-        return tr("%1 (%2)").arg(record.name,
-                                 displayRecord.toConnectionTarget().connectionSpecifier(true));
-    };
-    auto addCandidateAction = [this, menu, targetHostId, &candidateLabel](const HostRecord &record) {
-        QAction *action = menu->addAction(candidateLabel(record));
-        const QString jumpHostId = record.id;
-        connect(action, &QAction::triggered, this, [this, targetHostId, jumpHostId]() {
-            requestConnectionViaChain(targetHostId, jumpHostId);
-        });
+        return HostChainConnectCandidate{
+            record.id, record.name, displayRecord.toConnectionTarget().connectionSpecifier(true)};
     };
 
-    // "上一次连接"专指：上一次通过本菜单成功连接到*这台目标主机*时用的那个跳板，不是
-    // 任意主机的全局最近连接记录——不同目标主机习惯经过的跳板通常并不相同，混用全局
-    // 最近连接会把无关的跳板推荐给完全不同的目标。未成功过或跳板已被删除时不展示。
-    const QHash<QString, QString> lastChainJumps = loadLastChainJumps(m_database);
-    std::optional<HostRecord> lastConnected;
-    const auto lastJumpIt = lastChainJumps.constFind(targetHostId);
-    if (lastJumpIt != lastChainJumps.constEnd()) {
-        const auto it = std::find_if(
-            candidates.constBegin(), candidates.constEnd(),
-            [&lastJumpIt](const HostRecord &record) { return record.id == lastJumpIt.value(); });
-        if (it != candidates.constEnd()) {
-            lastConnected = *it;
-        }
-    }
-
-    if (lastConnected.has_value()) {
-        QAction *recentAction = menu->addAction(tr("Last connected: %1").arg(candidateLabel(*lastConnected)));
-        const QString jumpHostId = lastConnected->id;
-        connect(recentAction, &QAction::triggered, this, [this, targetHostId, jumpHostId]() {
-            requestConnectionViaChain(targetHostId, jumpHostId);
-        });
-        menu->addSeparator();
-    }
-
-    for (const HostRecord &record : candidates) {
-        if (lastConnected.has_value() && record.id == lastConnected->id) {
+    std::optional<HostRecord> target;
+    QHash<QString, HostRecord> candidatesById;
+    QList<HostRecord> candidates;
+    for (const HostRecord &record : allRecords) {
+        if (record.kind != HostNodeKind::Host) {
             continue;
         }
-        addCandidateAction(record);
+        if (record.id == targetHostId) {
+            target = record;
+            continue;
+        }
+        candidates.append(record);
+        candidatesById.insert(record.id, record);
     }
+    if (!target.has_value()) {
+        showDatabaseError(tr("Resolve host chain"), tr("The host record or chain does not exist"));
+        return nullptr;
+    }
+
+    // "最近连接"专指通过本对话框成功连接到*这台目标主机*时用过的跳板，不是任意主机的全局
+    // 最近连接记录——不同目标主机习惯经过的跳板通常并不相同。跳板已被删除时跳过。
+    QList<HostChainConnectCandidate> recent;
+    QSet<QString> recentIds;
+    for (const QString &jumpHostId : loadRecentChainJumps(m_database).value(targetHostId)) {
+        const auto it = candidatesById.constFind(jumpHostId);
+        if (it == candidatesById.constEnd() || recentIds.contains(jumpHostId)) {
+            continue;
+        }
+        recent.append(toCandidate(it.value()));
+        recentIds.insert(jumpHostId);
+        if (recent.size() >= kHostChainRecentJumpLimit) {
+            break;
+        }
+    }
+    QList<HostChainConnectCandidate> others;
+    for (const HostRecord &record : candidates) {
+        if (!recentIds.contains(record.id)) {
+            others.append(toCandidate(record));
+        }
+    }
+
+    const HostChainConnectCandidate targetInfo = toCandidate(*target);
+    auto *dialog = new HostChainConnectDialog(targetInfo.name, targetInfo.detail, recent, others, this);
+    connect(dialog, &QDialog::accepted, this, [this, dialog, targetHostId]() {
+        const QString jumpHostId = dialog->selectedJumpHostId();
+        if (!jumpHostId.isEmpty()) {
+            requestConnectionViaChain(targetHostId, jumpHostId);
+        }
+    });
+    return dialog;
+}
+
+void HostManagerWidget::openHostChainConnectDialog(const QString &targetHostId)
+{
+    QDialog *dialog = createHostChainConnectDialog(targetHostId);
+    if (dialog == nullptr) {
+        return;
+    }
+    dialog->exec();
+    dialog->deleteLater();
 }
 
 void HostManagerWidget::refresh()
@@ -4671,7 +5032,7 @@ void HostManagerWidget::requestConnectionViaChain(const QString &hostId, const Q
     }
 
     // 与"Connect"保持一致，手动挑选主机链是一次显式操作，总是新开标签页而不是复用当前页。
-    // 是否把 jumpHostId 记为"上一次连接"由 MainWindow 在握手结果确定后决定，这里只负责
+    // 是否把 jumpHostId 记入"最近连接"由 MainWindow 在握手结果确定后决定，这里只负责
     // 把跳板身份随请求一起带出去。
     emit hostChainConnectionRequested(hostId, jumpHostId, connectionPlan, true);
 }
@@ -4682,9 +5043,12 @@ void HostManagerWidget::recordSuccessfulChainConnection(const QString &targetHos
     if (targetHostId.isEmpty() || jumpHostId.isEmpty()) {
         return;
     }
-    QHash<QString, QString> jumps = loadLastChainJumps(m_database);
-    jumps.insert(targetHostId, jumpHostId);
-    saveLastChainJumps(m_database, jumps);
+    QHash<QString, QStringList> recent = loadRecentChainJumps(m_database);
+    QStringList &jumpHostIds = recent[targetHostId];
+    jumpHostIds.removeAll(jumpHostId);
+    jumpHostIds.prepend(jumpHostId);
+    jumpHostIds = jumpHostIds.mid(0, kHostChainRecentJumpLimit);
+    saveRecentChainJumps(m_database, recent);
 }
 
 std::optional<HostRecord> HostManagerWidget::selectedRecord(QString *errorMessage) const
