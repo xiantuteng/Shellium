@@ -340,6 +340,21 @@ private:
                            const QPoint &globalDropPosition,
                            bool droppedOnTargetTab);
 
+    /**
+     * @brief 接上工作空间成员“拖回标题栏”的手势：拖动中预告插入位置，松手后移出工作空间。
+     * @param group 新建的工作空间；每个工作空间只应调用一次。
+     */
+    void connectWorkspaceDragOut(TerminalWorkspaceGroup *group);
+
+    /**
+     * @brief 把工作空间成员移出并恢复为独立顶层标签，会话不重建。
+     * @param member 工作空间中的终端；不属于任何工作空间时忽略。
+     * @param insertIndex 新标签在标题栏中的插入位置（按移出前的索引）。
+     *
+     * AI 页面随终端一起回到顶层栈；工作空间因此变空时整体关闭。
+     */
+    void detachTerminalFromWorkspace(TerminalWorkspace *member, int insertIndex);
+
     /** @brief 查找某个终端所属的顶层标签索引，兼容单终端与工作空间成员。 */
     [[nodiscard]] int topLevelIndexForWorkspace(TerminalWorkspace *workspace) const;
 

@@ -174,6 +174,27 @@ void SessionTabBar::setIdleTabColor(const QColor &idleColor)
     update();
 }
 
+int SessionTabBar::insertionIndexAt(const QPoint &globalPosition) const
+{
+    const int x = mapFromGlobal(globalPosition).x();
+    for (int index = 0; index < count(); ++index) {
+        if (x < tabRect(index).center().x()) {
+            return index;
+        }
+    }
+    return count();
+}
+
+void SessionTabBar::setDropInsertionIndex(const int index)
+{
+    const int normalized = index < 0 ? -1 : std::min(index, count());
+    if (normalized == m_dropInsertionIndex) {
+        return;
+    }
+    m_dropInsertionIndex = normalized;
+    update();
+}
+
 void SessionTabBar::tabLayoutChange()
 {
     QTabBar::tabLayoutChange();
@@ -235,6 +256,18 @@ void SessionTabBar::paintEvent(QPaintEvent *event)
                 && selectedIndex == m_hoveredIndex;
             drawSessionTab(painter, selectedIndex, selectedRect, hovered);
         }
+    }
+
+    if (m_dropInsertionIndex >= 0 && count() > 0) {
+        // 竖线画在相邻两个胶囊之间的缝隙中央；首尾位置贴着第一个/最后一个标签外侧。
+        const int x = m_dropInsertionIndex < count()
+            ? tabRect(m_dropInsertionIndex).left()
+            : tabRect(count() - 1).right() + 1;
+        const QRect reference = tabRect(std::min(m_dropInsertionIndex, count() - 1));
+        const QRectF marker(x - 1.5, reference.top() + 6, 3.0, std::max(0, reference.height() - 12));
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(m_selectedTextColor);
+        painter.drawRoundedRect(marker, 1.5, 1.5);
     }
 
     if (!m_dragActive) {

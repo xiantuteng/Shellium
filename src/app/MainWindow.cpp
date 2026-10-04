@@ -3523,6 +3523,7 @@ void MainWindow::mergeTerminalTabs(const int sourceIndex,
     }
 
     auto *group = new TerminalWorkspaceGroup(m_tabs);
+    connectWorkspaceDragOut(group);
     group->addTerminal(targetWorkspace, targetTitle);
     group->addTerminal(sourceWorkspace, sourceTitle);
     // 若拖到目标终端的某个半区上松手，就按该方向决定新会话与原会话是水平还是垂直排列；
@@ -3842,6 +3843,7 @@ void MainWindow::connectHostGroupInWorkspace(const QString &groupId, const QStri
     }
 
     auto *group = new TerminalWorkspaceGroup(m_tabs);
+    connectWorkspaceDragOut(group);
     for (int i = 0; i < members.size(); ++i) {
         group->addTerminal(members.at(i), memberTitles.at(i));
     }
@@ -4376,6 +4378,119 @@ TerminalWorkspaceGroup *MainWindow::activeWorkspaceGroup() const
     return m_tabs == nullptr
         ? nullptr
         : qobject_cast<TerminalWorkspaceGroup *>(m_tabs->currentWidget());
+}
+
+void MainWindow::connectWorkspaceDragOut(TerminalWorkspaceGroup *group)
+{
+    const auto overTitleBar = [this](const QPoint &globalPosition) {
+        return m_titleChrome != nullptr && m_titleChrome->isVisible()
+            && m_titleChrome->rect().contains(m_titleChrome->mapFromGlobal(globalPosition));
+    };
+    connect(group,
+            &TerminalWorkspaceGroup::memberDragMoved,
+            this,
+            [this, overTitleBar](TerminalWorkspace *, const QPoint &globalPosition) {
+                if (m_titleTabBar == nullptr) {
+                    return;
+                }
+                m_titleTabBar->setDropInsertionIndex(
+                    overTitleBar(globalPosition) ? m_titleTabBar->insertionIndexAt(globalPosition)
+                                                 : -1);
+            });
+    connect(group,
+            &TerminalWorkspaceGroup::memberDragReleased,
+            this,
+            [this, overTitleBar](TerminalWorkspace *member, const QPoint &globalPosition) {
+                if (m_titleTabBar != nullptr) {
+                    m_titleTabBar->setDropInsertionIndex(-1);
+                }
+                if (m_titleTabBar == nullptr || !overTitleBar(globalPosition)) {
+                    return;
+                }
+                const int insertIndex = m_titleTabBar->insertionIndexAt(globalPosition);
+                // 信号发自成员框自己的事件过滤器；移出会销毁该框，工作空间变空时还会销毁
+                // 整个组，必须等这次鼠标事件完全返回后再执行。
+                QPointer<TerminalWorkspace> guard(member);
+                QTimer::singleShot(0, this, [this, guard, insertIndex]() {
+                    if (!guard.isNull()) {
+                        detachTerminalFromWorkspace(guard, insertIndex);
+                    }
+                });
+            });
+}
+
+void MainWindow::detachTerminalFromWorkspace(TerminalWorkspace *member, int insertIndex)
+{
+    const int groupIndex = topLevelIndexForWorkspace(member);
+    auto *group = groupIndex < 0
+        ? nullptr
+        : qobject_cast<TerminalWorkspaceGroup *>(m_tabs->widget(groupIndex));
+    if (group == nullptr) {
+        return;
+    }
+
+    const QString title = group->terminalTitle(member);
+    // 嵌套 AI 栈与 terminals() 同序（activeTerminalChanged 也按此对应），必须在摘除前取下标。
+    const int memberIndex = group->terminals().indexOf(member);
+    auto *assistantGroup = m_aiAssistantStack != nullptr && groupIndex < m_aiAssistantStack->count()
+        ? qobject_cast<QStackedWidget *>(m_aiAssistantStack->widget(groupIndex))
+        : nullptr;
+    QWidget *assistant = assistantGroup != nullptr && memberIndex < assistantGroup->count()
+        ? assistantGroup->widget(memberIndex)
+        : nullptr;
+
+    if (!group->takeTerminal(member)) {
+        return;
+    }
+    if (assistant != nullptr) {
+        assistantGroup->removeWidget(assistant);
+    }
+
+    insertIndex = std::clamp(insertIndex, 0, m_tabs->count());
+    const QIcon terminalIcon = UiIcons::symbol(
+        this, UiIcons::Symbol::Terminal, palette().color(QPalette::WindowText));
+    m_tabs->insertTab(insertIndex, member, terminalIcon, title);
+    m_tabs->tabBar()->hide();
+    if (m_titleTabBar != nullptr) {
+        const QSignalBlocker titleBlocker(m_titleTabBar);
+        m_titleTabBar->insertTab(insertIndex, terminalIcon, title);
+        m_titleTabBar->setTabToolTip(insertIndex, title);
+        m_titleTabBar->setTabKind(insertIndex, SessionTabBar::TabKind::Terminal);
+        if (TerminalPane *pane = member->activePane();
+            pane != nullptr && m_paneConnectionState.contains(pane)) {
+            m_titleTabBar->setTabConnectionState(
+                insertIndex,
+                static_cast<SessionTabBar::ConnectionState>(m_paneConnectionState.value(pane)));
+        }
+    }
+    // 与 createWorkspaceTab 相同：立即按新宽度布局，避免标签栏先误判溢出再弹回的闪烁。
+    if (m_titleChrome != nullptr && m_titleChrome->layout() != nullptr) {
+        m_titleChrome->layout()->activate();
+    }
+    if (m_aiAssistantStack != nullptr) {
+        if (assistant == nullptr) {
+            // 顶层 AI 栈必须与标签一一对应；缺失时补一个空页占位，避免后续索引整体错位。
+            assistant = new QWidget(m_aiAssistantStack);
+        }
+        m_aiAssistantStack->insertWidget(insertIndex, assistant);
+    }
+
+    // 工作空间最后一个成员被拖走后不再有可交互内容，与关闭最后一个成员走同一路径。
+    if (group->terminals().isEmpty()) {
+        closeWorkspaceTab(m_tabs->indexOf(group));
+    }
+
+    // 用户刚把它拖出来，直接切到这个独立标签。
+    m_tabs->setCurrentWidget(member);
+    const int memberTopIndex = m_tabs->indexOf(member);
+    if (m_titleTabBar != nullptr) {
+        m_titleTabBar->setCurrentIndex(memberTopIndex);
+    }
+    if (m_aiAssistantStack != nullptr) {
+        m_aiAssistantStack->setCurrentIndex(memberTopIndex);
+    }
+    refreshWorkspaceSidebar();
+    refreshProductivityTargets();
 }
 
 int MainWindow::topLevelIndexForWorkspace(TerminalWorkspace *workspace) const

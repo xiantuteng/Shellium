@@ -147,6 +147,21 @@ signals:
     /** @brief 广播开关状态发生变化。 */
     void broadcastEnabledChanged(bool enabled);
 
+    /**
+     * @brief 成员会话状态栏拖动进行中（分屏与切换模式都会发出）。
+     *
+     * MainWindow 据此在标题栏预告“拖回标签栏移出工作空间”的插入位置。
+     */
+    void memberDragMoved(TerminalWorkspace *source, const QPoint &globalPosition);
+
+    /**
+     * @brief 成员拖动在给定全局坐标释放。
+     *
+     * 在组内停靠之前发出；接收方若要把成员移出工作空间，必须排队执行（发出时仍处于成员
+     * 自身的事件过滤器里），本组发现成员已不在组内时不会再做停靠。
+     */
+    void memberDragReleased(TerminalWorkspace *source, const QPoint &globalPosition);
+
 private:
     /** @brief 按当前模式刷新容器底色、成员可见性与远程文件管理开关。 */
     void rebuildLayout();

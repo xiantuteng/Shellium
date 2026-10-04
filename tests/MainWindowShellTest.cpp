@@ -42,6 +42,8 @@
 #include <QMenuBar>
 #include <QSignalSpy>
 #include <QRegularExpression>
+#include <QPointer>
+#include <functional>
 #include <QStackedWidget>
 #include <QSplitter>
 #include <QSplitterHandle>
@@ -151,6 +153,7 @@ private slots:
 
     /** @brief 拖动组内某终端的会话状态栏必须亮出浮动快照与落点高亮，并在松手后重排分屏。 */
     void draggingTerminalHeaderReDocksWithinWorkspace();
+    void draggingWorkspaceMemberToTitleBarDetachesIt();
 
     /** @brief 从标签栏拖入既有工作空间时，落点半区必须走与内部拖动相同的命中逻辑。 */
     void externalDropHintResolvesToDockTarget();
@@ -942,6 +945,101 @@ void MainWindowShellTest::dockingTerminalBuildsRecursiveSplitterTree()
     QCOMPARE(root->count(), 2);
 
     delete c;
+}
+
+void MainWindowShellTest::draggingWorkspaceMemberToTitleBarDetachesIt()
+{
+    MainWindow window(m_database, m_vault);
+    window.resize(1200, 800);
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+    auto *tabs = window.findChild<QTabWidget *>(QStringLiteral("TerminalPages"));
+    auto *tabBar = window.findChild<SessionTabBar *>(QStringLiteral("SessionTitleTabs"));
+    auto *newTabButton = window.findChild<QToolButton *>(QStringLiteral("TitleNewTabButton"));
+    auto *assistantStack = window.findChild<QStackedWidget *>(QStringLiteral("AiAssistantStack"));
+    QVERIFY(tabs != nullptr && tabBar != nullptr && newTabButton != nullptr
+            && assistantStack != nullptr);
+
+    // 先用拖拽把两个终端合并成工作空间，再开一个普通标签：[工作空间, 终端]。
+    QTest::mouseClick(newTabButton, Qt::LeftButton);
+    QTest::mouseClick(newTabButton, Qt::LeftButton);
+    QCOMPARE(tabs->count(), 2);
+    QTest::mouseClick(tabBar, Qt::LeftButton, Qt::NoModifier, tabBar->tabRect(0).center());
+    auto *mergeTarget = qobject_cast<TerminalWorkspace *>(tabs->widget(0));
+    QVERIFY(mergeTarget != nullptr && mergeTarget->activePane() != nullptr);
+    const QPoint mergeSource = tabBar->tabRect(1).center();
+    const QPoint mergeDrop = tabBar->mapFromGlobal(mergeTarget->activePane()->mapToGlobal(
+        mergeTarget->activePane()->rect().center()));
+    QTest::mousePress(tabBar, Qt::LeftButton, Qt::NoModifier, mergeSource);
+    QTest::mouseMove(tabBar, QPoint(mergeSource.x(), tabBar->height() + 12), 40);
+    QTest::mouseMove(tabBar, mergeDrop, 80);
+    QTest::mouseRelease(tabBar, Qt::LeftButton, Qt::NoModifier, mergeDrop);
+    QTRY_COMPARE(tabs->count(), 1);
+    QPointer<TerminalWorkspaceGroup> group = qobject_cast<TerminalWorkspaceGroup *>(tabs->widget(0));
+    QVERIFY(group != nullptr);
+    QCOMPARE(group->terminals().size(), 2);
+    QTest::mouseClick(newTabButton, Qt::LeftButton);
+    QCOMPARE(tabs->count(), 2);
+    QTest::mouseClick(tabBar, Qt::LeftButton, Qt::NoModifier, tabBar->tabRect(0).center());
+    QCOMPARE(tabs->currentWidget(), static_cast<QWidget *>(group.data()));
+    QTest::qWait(30);
+
+    // 拖动成员的会话状态栏到标题栏、最后一个标签右半部：插入竖线预告位置 2，松手后成员
+    // 成为独立标签插在末尾，会话对象原样保留（不重建）。
+    const auto dragHeaderTo = [](TerminalWorkspace *member, const QPoint &targetGlobal,
+                                 const std::function<void()> &whileHovering) {
+        auto *header = member->findChild<QWidget *>(QStringLiteral("terminalSessionStatusBar"));
+        QVERIFY(header != nullptr && header->isVisible());
+        QCursor::setPos(header->mapToGlobal(header->rect().center()));
+        QTest::mousePress(header, Qt::LeftButton, Qt::NoModifier, header->rect().center());
+        QTest::mouseMove(header, header->rect().center() + QPoint(0, 40));
+        QTest::mouseMove(header, header->mapFromGlobal(targetGlobal));
+        whileHovering();
+        QTest::mouseRelease(header, Qt::LeftButton, Qt::NoModifier,
+                            header->mapFromGlobal(targetGlobal));
+    };
+
+    QPointer<TerminalWorkspace> first = group->terminals().at(1);
+    const QRect lastTab = tabBar->tabRect(1);
+    const QPoint endOfBar = tabBar->mapToGlobal(QPoint(lastTab.right() - 4, lastTab.center().y()));
+    dragHeaderTo(first, endOfBar, [tabBar]() {
+        QCOMPARE(tabBar->dropInsertionIndex(), 2);
+    });
+    QCOMPARE(tabBar->dropInsertionIndex(), -1);
+    QTRY_COMPARE(tabs->count(), 3);
+    QVERIFY(!first.isNull());
+    QCOMPARE(tabs->widget(2), static_cast<QWidget *>(first.data()));
+    QCOMPARE(tabs->currentWidget(), static_cast<QWidget *>(first.data()));
+    QCOMPARE(tabBar->count(), 3);
+    QCOMPARE(tabBar->currentIndex(), 2);
+    QCOMPARE(tabBar->tabKind(2), SessionTabBar::TabKind::Terminal);
+    QCOMPARE(assistantStack->count(), 3);
+    QVERIFY(!group.isNull());
+    QCOMPARE(group->terminals().size(), 1);
+    QVERIFY2(!group->contains(first), "拖回标题栏的终端必须离开工作空间");
+    QVERIFY2(first->isFileManagerAllowed(), "独立标签必须恢复远程文件管理入口");
+
+    // 切换模式下拖出最后一个成员到最左侧：空工作空间整体关闭，终端成为第一个标签。
+    QTest::mouseClick(tabBar, Qt::LeftButton, Qt::NoModifier, tabBar->tabRect(0).center());
+    group->setLayoutMode(TerminalWorkspaceGroup::LayoutMode::Switch);
+    QTest::qWait(30);
+    QPointer<TerminalWorkspace> last = group->terminals().constFirst();
+    const QPoint startOfBar = tabBar->mapToGlobal(
+        QPoint(tabBar->tabRect(0).left() + 4, tabBar->tabRect(0).center().y()));
+    dragHeaderTo(last, startOfBar, [tabBar]() {
+        QCOMPARE(tabBar->dropInsertionIndex(), 0);
+    });
+    QTRY_VERIFY2(group.isNull(), "最后一个成员被拖走后工作空间标签必须关闭");
+    QCOMPARE(tabs->count(), 3);
+    QVERIFY(!last.isNull());
+    QCOMPARE(tabs->widget(0), static_cast<QWidget *>(last.data()));
+    QCOMPARE(tabs->currentWidget(), static_cast<QWidget *>(last.data()));
+    QCOMPARE(tabBar->count(), 3);
+    QCOMPARE(assistantStack->count(), 3);
+    for (int i = 0; i < tabs->count(); ++i) {
+        QVERIFY(qobject_cast<TerminalWorkspace *>(tabs->widget(i)) != nullptr);
+    }
 }
 
 void MainWindowShellTest::draggingTerminalHeaderReDocksWithinWorkspace()

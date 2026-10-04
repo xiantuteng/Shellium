@@ -926,10 +926,14 @@ TerminalWorkspaceGroup::hitTestDock(const QPoint &globalPosition) const
 
 void TerminalWorkspaceGroup::beginDockDrag(TerminalWorkspace *source)
 {
-    if (m_layoutMode != LayoutMode::Tiled || !contains(source)) {
+    if (!contains(source)) {
         return;
     }
+    // 切换模式下也记录拖动源：成员虽不能在组内重排，仍可被拖回标题栏移出工作空间。
     m_dockDragSource = source;
+    if (m_layoutMode != LayoutMode::Tiled) {
+        return;
+    }
     m_dockOverlay->setZone({});
     m_dockOverlay->setGeometry(m_content->rect());
     m_dockOverlay->show();
@@ -941,8 +945,11 @@ void TerminalWorkspaceGroup::updateDockDrag(const QPoint &globalPosition)
     if (m_dockDragSource == nullptr) {
         return;
     }
-    const DockTargetHit hit = hitTestDock(globalPosition);
-    m_dockOverlay->setZone(hit.valid ? hit.zoneInContent : QRect());
+    if (m_layoutMode == LayoutMode::Tiled) {
+        const DockTargetHit hit = hitTestDock(globalPosition);
+        m_dockOverlay->setZone(hit.valid ? hit.zoneInContent : QRect());
+    }
+    emit memberDragMoved(m_dockDragSource, globalPosition);
 }
 
 void TerminalWorkspaceGroup::endDockDrag(const QPoint &globalPosition)
@@ -952,6 +959,11 @@ void TerminalWorkspaceGroup::endDockDrag(const QPoint &globalPosition)
     m_dockOverlay->setZone({});
     m_dockOverlay->hide();
     if (source == nullptr) {
+        return;
+    }
+    // 先让外层判断是否落在了组外（例如标题栏）；内部停靠的命中区只在内容区之内，两者互斥。
+    emit memberDragReleased(source, globalPosition);
+    if (m_layoutMode != LayoutMode::Tiled || !contains(source)) {
         return;
     }
     const DockTargetHit hit = hitTestDock(globalPosition);

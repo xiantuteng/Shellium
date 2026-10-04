@@ -101,6 +101,22 @@ public:
      */
     void setIdleTabColor(const QColor &idleColor);
 
+    /**
+     * @brief 按全局横坐标计算外部拖入物应插入的标签索引。
+     * @param globalPosition 指针全局坐标；只看横向位置，纵向在标题栏外也照常换算。
+     * @return 0..count()：落在某标签左半部插在它之前，右半部插在它之后。
+     */
+    [[nodiscard]] int insertionIndexAt(const QPoint &globalPosition) const;
+
+    /**
+     * @brief 显示或清除外部拖入的插入位置竖线。
+     * @param index 0..count() 表示在该位置前画竖线；-1 清除。
+     */
+    void setDropInsertionIndex(int index);
+
+    /** @brief 当前显示的插入位置；-1 表示未显示。 */
+    [[nodiscard]] int dropInsertionIndex() const { return m_dropInsertionIndex; }
+
 signals:
     /**
      * @brief 用户把一个终端标签拖放到此前选中的标签或页面/侧栏接收区。
@@ -310,6 +326,8 @@ private:
     QColor m_hoverColor = QColor(QStringLiteral("#353c56"));
     /** @brief 未选中且未悬停标签的常驻胶囊背景色；无效色表示不绘制。 */
     QColor m_idleColor = QColor(QStringLiteral("#31364d"));
+    /** @brief 外部拖入的插入位置竖线；-1 表示不绘制。 */
+    int m_dropInsertionIndex = -1;
     /** @brief 当前标签胶囊背景色。 */
     QColor m_selectedColor = QColor(QStringLiteral("#424b68"));
     /**
