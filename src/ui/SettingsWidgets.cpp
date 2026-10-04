@@ -642,9 +642,12 @@ void ThemeSwatchButton::paintEvent(QPaintEvent *event)
 
     // 缩略终端：底色铺满，再画三条不同色的“文本行”，用户可直接判断对比度是否舒适。
     const QRectF preview(card.left() + 10.0, card.top() + 10.0, 46.0, card.height() - 20.0);
-    painter.setPen(Qt::NoPen);
+    // 缩略图加一圈细描边：浅色配色（白底、米白底）贴在同色卡片上时，没有描边就看不出
+    // 缩略图的边界，色条像是浮在卡片上。
+    painter.setPen(QPen(trackColor(palette()), 1.0));
     painter.setBrush(m_background);
     painter.drawRoundedRect(preview, 6, 6);
+    painter.setPen(Qt::NoPen);
 
     const QList<QColor> barColors{m_foreground, m_link, m_cursor};
     const QList<qreal> barWidths{0.74, 0.52, 0.62};

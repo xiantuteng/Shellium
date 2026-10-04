@@ -511,6 +511,15 @@ private:
     QTimer *m_cursorBlinkTimer = nullptr;
 
     /**
+     * @brief 光标落在空行行首后的"静置"定时器，超时前不绘制光标。
+     *
+     * Shell 换行与重绘提示符是两次独立写入：zsh 回车先发 "\r\n"（以及 PROMPT_SP 的
+     * "\r \r"），十几毫秒后才发提示符。空闲后首帧立即渲染，于是两次写入之间会单独画出
+     * 一帧"光标停在新行第 0 列"，连续回车时就是行首不停闪一下。见 appendTerminalOutput()。
+     */
+    QTimer *m_cursorSettleTimer = nullptr;
+
+    /**
      * @brief 连续窗口尺寸事件的防抖定时器。
      *
      * 分隔条拖动时 Qt 会产生高频 resizeEvent。若每次都立即向 PTY 发送尺寸，远端 readline
@@ -559,6 +568,8 @@ private:
 
     /** @brief 当前光标闪烁相位和形态，供 paintEvent 与 VtermBridge 同步使用。 */
     bool m_cursorPhaseVisible = true;
+    /** @brief 光标停在空行行首、正等待后续输出（通常是提示符）；为真时 paintEvent 不画光标。 */
+    bool m_cursorSettling = false;
     /** @brief 设置中是否开启光标闪烁；失焦时计时器会停，重新获得焦点时据此决定是否恢复。 */
     bool m_cursorBlinkEnabled = true;
     int m_cursorShape = 0;

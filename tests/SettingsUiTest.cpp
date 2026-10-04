@@ -11,6 +11,9 @@
 
 #include <QLabel>
 
+#include <algorithm>
+#include <cmath>
+
 #include <QAbstractItemView>
 #include <QAbstractSpinBox>
 #include <QAbstractButton>
@@ -134,6 +137,7 @@ private slots:
     void referenceThemesCarryTheirPublishedAnsiPalette();
     void colorSchemeFilterKeepsVisibleSwatchesPacked();
     void unknownColorSchemeIdFallsBackToDefault();
+    void legacyTermiusColorSchemeIdMigratesToShellium();
     void colorSchemeSwitchKeepsApplicationTextColors();
     void fontComboOffersRecommendedFamiliesAndKeepsMissingOne();
     /** @brief 内置字体必须真的注册进 QFontDatabase，并排在字体下拉框最前面。 */
@@ -879,7 +883,10 @@ void SettingsUiTest::everyThemePresetGetsUniqueSwatchAndPalette()
 
     const QList<TerminalThemePreset> &presets = TerminalSettings::themePresets();
     QVERIFY(presets.size() >= 60);
-    QCOMPARE(presets.first().id, QStringLiteral("default"));
+    // Shellium 自有配色排在色板最前，其后紧跟“默认”。
+    QCOMPARE(presets.at(0).id, QStringLiteral("shellium_dark"));
+    QCOMPARE(presets.at(1).id, QStringLiteral("shellium_light"));
+    QCOMPARE(presets.at(2).id, QStringLiteral("default"));
 
     QSet<QString> seenIds;
     QSet<QString> seenNames;
@@ -944,9 +951,15 @@ void SettingsUiTest::referenceThemesCarryTheirPublishedAnsiPalette()
         {"flexoki_light", 4, "#205ea6"},
         // `ll` 可能通过普通蓝或粗体亮蓝呈现目录名，两个色槽必须
         // 都保持为用户指定的 #015fff，避免远端配置差异改变目录名颜色。
-        {"termius_dark", 4, "#015fff"},
-        {"termius_dark", 12, "#015fff"},
-        {"termius_light", 4, "#2f6fd0"},
+        {"shellium_dark", 4, "#015fff"},
+        {"shellium_dark", 12, "#015fff"},
+        {"shellium_light", 4, "#2f6fd0"},
+        {"dracula", 4, "#bd93f9"},
+        {"nord", 4, "#81a1c1"},
+        {"gruvbox_dark", 4, "#458588"},
+        {"solarized_dark", 4, "#268bd2"},
+        {"tokyo_night", 4, "#7aa2f7"},
+        {"catppuccin_mocha", 4, "#89b4fa"},
     };
     for (const Expectation &expectation : expectations) {
         TerminalSettings probe;
@@ -954,6 +967,38 @@ void SettingsUiTest::referenceThemesCarryTheirPublishedAnsiPalette()
         const TerminalPalette palette = probe.normalized().effectivePalette();
         QCOMPARE(palette.ansi.value(expectation.index),
                  QColor(QLatin1String(expectation.hex)));
+    }
+
+    // Shellium 自有配色是自拟的，没有上游可对照，因此直接按对比度把关：正文相对背景至少
+    // 7:1，ANSI 彩色（红绿黄蓝品青及其亮色）至少 3:1。旧版深色正文用的是高饱和品牌绿，
+    // 整屏绿字久看刺眼，正文因此必须是近乎无彩的中性色。
+    const auto luminance = [](const QColor &color) {
+        const auto channel = [](const qreal value) {
+            return value <= 0.03928 ? value / 12.92 : std::pow((value + 0.055) / 1.055, 2.4);
+        };
+        return 0.2126 * channel(color.redF()) + 0.7152 * channel(color.greenF())
+            + 0.0722 * channel(color.blueF());
+    };
+    const auto contrast = [&luminance](const QColor &first, const QColor &second) {
+        const qreal a = luminance(first);
+        const qreal b = luminance(second);
+        return (std::max(a, b) + 0.05) / (std::min(a, b) + 0.05);
+    };
+    for (const char *id : {"shellium_dark", "shellium_light"}) {
+        TerminalSettings shellium;
+        shellium.colorSchemeId = QString::fromLatin1(id);
+        const TerminalPalette palette = shellium.normalized().effectivePalette();
+        QVERIFY2(contrast(palette.foreground, palette.background) >= 7.0, id);
+        // 用通道极差（色度）而不是 HSV 饱和度衡量：深灰的 HSV 饱和度会被放大，而旧版的
+        // #3ecf8f 色度约 0.57，远超中性色。
+        const QColor fg = palette.foreground;
+        const int chroma = std::max({fg.red(), fg.green(), fg.blue()})
+            - std::min({fg.red(), fg.green(), fg.blue()});
+        QVERIFY2(chroma < 40, id);
+        for (const int index : {1, 2, 3, 4, 5, 6, 9, 10, 11, 12, 13, 14}) {
+            QVERIFY2(contrast(palette.ansi.at(index), palette.background) >= 3.0,
+                     qPrintable(QStringLiteral("%1 ansi[%2]").arg(QLatin1String(id)).arg(index)));
+        }
     }
 
     // 默认（跟随明暗）的深色调色板同样对着参考截图定过 4 号蓝：`ls` 的目录名用的就是它，
@@ -1036,6 +1081,32 @@ void SettingsUiTest::unknownColorSchemeIdFallsBackToDefault()
     SettingsDialog dialog(service.get());
     QVERIFY(dialog.findChild<ThemeSwatchButton *>(QStringLiteral("colorSchemeSwatch_default"))
                 ->isChecked());
+}
+
+void SettingsUiTest::legacyTermiusColorSchemeIdMigratesToShellium()
+{
+    // 0.2.5 及更早版本把 Shellium 配色存为 termius_*。改名后若不迁移，未知 id 校验会把
+    // 这些用户静默打回“默认”，等于丢了他们选好的配色。
+    TerminalSettings handmade;
+    handmade.colorSchemeId = QStringLiteral("termius_dark");
+    QCOMPARE(handmade.normalized().colorSchemeId, QStringLiteral("shellium_dark"));
+    handmade.colorSchemeId = QStringLiteral("termius_light");
+    QCOMPARE(handmade.normalized().colorSchemeId, QStringLiteral("shellium_light"));
+
+    auto service = makeService();
+    QString error;
+    QVERIFY(m_database->setSetting(QStringLiteral("appearance/color_scheme"),
+                                   QStringLiteral("termius_dark"),
+                                   &error));
+    QVERIFY2(service->load(&error), qPrintable(error));
+    QCOMPARE(service->currentSettings().colorSchemeId, QStringLiteral("shellium_dark"));
+
+    SettingsDialog dialog(service.get());
+    QVERIFY(dialog.findChild<ThemeSwatchButton *>(QStringLiteral("colorSchemeSwatch_shellium_dark"))
+                ->isChecked());
+    // 旧 id 只用于迁移，不能再作为一张独立的色板卡出现。
+    QVERIFY(dialog.findChild<ThemeSwatchButton *>(QStringLiteral("colorSchemeSwatch_termius_dark"))
+            == nullptr);
 }
 
 void SettingsUiTest::colorSchemeSwitchKeepsApplicationTextColors()

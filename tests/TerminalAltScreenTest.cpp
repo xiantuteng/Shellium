@@ -220,6 +220,13 @@ private slots:
     void commandCompletionHonorsSwitchAndUsesCompactTerminalLayout();
     /** @brief 失去焦点后光标改画为不闪烁的空心块，重新获得焦点后恢复实心块。 */
     void unfocusedCursorIsHollowBlock();
+    /**
+     * @brief 连续回车时，换行与提示符之间那一帧不得在新行行首画出光标。
+     *
+     * zsh 回车先发 "\r\n" 与 PROMPT_SP 的 "\r \r"，十几毫秒后才发提示符；空闲后首帧立即
+     * 渲染，光标就在新行第 0 列闪一下。停在空行行首等输入（cat）时，光标仍须随后出现。
+     */
+    void cursorHiddenAtBlankLineStartUntilPromptArrives();
     /** @brief 右键菜单在"复制"之后提供"粘贴"，与快捷键走同一条清理与括号粘贴路径。 */
     void contextMenuPasteMatchesShortcutPaste();
     /** @brief 本地密码捕获期间，菜单粘贴只进入待提交行，绝不发往远端。 */
@@ -518,12 +525,12 @@ void TerminalAltScreenTest::themeAnsiPaletteReplacesVgaDefaults()
 
     // Linux 的 `ls --color` 通常用 `01;34` 呈现目录名。单独覆盖这条带粗体的
     // 实际序列，可以防止测试只验证 SGR 34，却漏掉用户真正看到的着色路径。
-    TerminalView termiusView;
-    settings.colorSchemeId = QStringLiteral("termius_dark");
-    termiusView.applySettings(settings);
-    termiusView.appendTerminalOutput(QByteArrayLiteral("\x1b[01;34mlog\x1b[0m"));
+    TerminalView shelliumView;
+    settings.colorSchemeId = QStringLiteral("shellium_dark");
+    shelliumView.applySettings(settings);
+    shelliumView.appendTerminalOutput(QByteArrayLiteral("\x1b[01;34mlog\x1b[0m"));
     QTest::qWait(50);
-    QCOMPARE(termiusView.document()->lastBlock().begin().fragment().charFormat()
+    QCOMPARE(shelliumView.document()->lastBlock().begin().fragment().charFormat()
                  .foreground().color(),
              QColor(QStringLiteral("#015fff")));
 
@@ -1600,6 +1607,44 @@ void TerminalAltScreenTest::scrollBarHiddenUntilManualScrollAndContrastsWithThem
 
     QTRY_VERIFY_WITH_TIMEOUT(!bar->property("shelliumScrollActive").toBool(), 1600);
     QCOMPARE(contrastingPixels(), 0);
+}
+
+void TerminalAltScreenTest::cursorHiddenAtBlankLineStartUntilPromptArrives()
+{
+    TerminalSettings settings = TerminalSettings{}.normalized();
+    // 关掉闪烁：否则采样可能恰好落在隐藏相位，"光标没画"就分不清是谁造成的。
+    settings.cursorBlink = false;
+    const TerminalPalette palette = settings.effectivePalette();
+    QVERIFY(!colorsClose(palette.cursor, palette.background, 8));
+    QVERIFY(!colorsClose(palette.cursor, palette.foreground, 8));
+
+    TerminalView view;
+    view.applySettings(settings);
+    QVERIFY(showAndSettle(view));
+    QVERIFY(focusTerminal(view));
+    const auto cursorPixels = [&]() {
+        return findCursorPixels(view.viewport()->grab().toImage(), palette.cursor).count;
+    };
+
+    view.appendTerminalOutput(QByteArrayLiteral("john@host ~ % "));
+    QTRY_VERIFY_WITH_TIMEOUT(cursorPixels() > 0, 2000);
+
+    // 按 zsh 实际的分片顺序：先换行，再 PROMPT_SP，提示符稍后才到。
+    for (int round = 0; round < 3; ++round) {
+        view.appendTerminalOutput(QByteArrayLiteral("\x1b[?2004l\r\r\n"));
+        view.appendTerminalOutput(QByteArrayLiteral("\x1b[7m%\x1b[27m   \r \r"));
+        QTest::qWait(30);
+        QVERIFY2(cursorPixels() == 0, "提示符到达之前，新行行首不得画出光标");
+
+        view.appendTerminalOutput(QByteArrayLiteral("\r\x1b[Jjohn@host ~ % \x1b[K\x1b[?2004h"));
+        QTRY_VERIFY2_WITH_TIMEOUT(cursorPixels() > 0, "提示符到达后光标必须立即出现在行尾", 60);
+    }
+
+    // 真正停在空行行首等输入（cat、read）：等不到后续输出，光标随后仍要出现。
+    view.appendTerminalOutput(QByteArrayLiteral("\r\n"));
+    QTest::qWait(30);
+    QCOMPARE(cursorPixels(), 0);
+    QTRY_VERIFY2_WITH_TIMEOUT(cursorPixels() > 0, "空行行首静置后光标必须出现", 1000);
 }
 
 QTEST_MAIN(TerminalAltScreenTest)

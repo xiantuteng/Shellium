@@ -185,6 +185,9 @@ public:
     /** @brief 远端是否要求显示光标（DECTCEM）；全屏程序绘制期间会临时隐藏。 */
     [[nodiscard]] bool isCursorVisible() const { return m_cursorVisible; }
 
+    /** @brief libvterm 屏幕模型中的光标列（从 0 开始），不依赖 QTextDocument 是否已同步。 */
+    [[nodiscard]] int cursorColumn() const { return m_cursorColumn; }
+
     /**
      * @brief 返回终端光标当前所在屏幕行的可见文本。
      * @return 已移除行尾空白的文本；光标位置无效时返回空字符串。

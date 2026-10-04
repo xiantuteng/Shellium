@@ -109,6 +109,15 @@ constexpr int kTerminalResizeDebounceMilliseconds = 80;
 constexpr int kRenderCoalesceMilliseconds = 16;
 
 /**
+ * @brief 光标落在空行行首后，最多等多久的后续输出才把它画出来（毫秒）。
+ *
+ * 实测 zsh 从换行到提示符约 20ms，带 git 状态等 precmd 钩子时更久；按住回车的键盘重复间隔
+ * 约 30~80ms。取 120ms 能盖住这段空窗，而真正停在空行行首等输入的程序（cat、read）晚
+ * 这一点点出现光标，肉眼几乎察觉不到。
+ */
+constexpr int kCursorSettleMilliseconds = 120;
+
+/**
  * @brief 出现可释放的排版缓存后，最迟多久清理一次（毫秒）。
  *
  * 计时器在第一次"变脏"时启动、期间不再续期，因此持续刷屏时也按这个节拍清理，而不是等到
@@ -394,6 +403,7 @@ TerminalView::TerminalView(QWidget *parent)
     , m_commandCompleter(new QCompleter(this))
     , m_completionModel(new QStringListModel(this))
     , m_cursorBlinkTimer(new QTimer(this))
+    , m_cursorSettleTimer(new QTimer(this))
     , m_resizeDebounceTimer(new QTimer(this))
     , m_renderCoalesceTimer(new QTimer(this))
     , m_layoutReleaseTimer(new QTimer(this))
@@ -513,6 +523,18 @@ TerminalView::TerminalView(QWidget *parent)
         // 相位翻转都要整体重建文档：一万行历史时单次重建约半秒，而定时器每 600ms 就来一次
         // ——界面等于长期满负荷，用户什么都不做也卡。现在三种形态全部由 paintEvent 叠加，
         // 闪烁只需要让光标所在的那一小块重绘。
+        updateCursorArea();
+    });
+
+    m_cursorSettleTimer->setSingleShot(true);
+    m_cursorSettleTimer->setInterval(kCursorSettleMilliseconds);
+    connect(m_cursorSettleTimer, &QTimer::timeout, this, [this]() {
+        m_cursorSettling = false;
+        // 从"可见"相位开始，并让闪烁重新计时：否则刚露面的光标可能紧接着就被翻成隐藏。
+        m_cursorPhaseVisible = true;
+        if (m_cursorBlinkTimer->isActive()) {
+            m_cursorBlinkTimer->start();
+        }
         updateCursorArea();
     });
 
@@ -1426,6 +1448,18 @@ void TerminalView::appendTerminalOutput(const QByteArray &bytes)
     }
 
     m_vtermBridge->feed(bytes);
+    // 换行之后、提示符到达之前，光标停在空行第 0 列；这一帧画出光标就是连续回车时行首的
+    // 闪烁。只看 libvterm 状态（它总比文档新），一旦光标离开空行行首就立刻恢复绘制，
+    // 打字回显、命令输出不受影响。
+    const bool cursorAtBlankLineStart = m_vtermBridge->cursorColumn() == 0
+        && m_vtermBridge->cursorLineText().isEmpty();
+    if (cursorAtBlankLineStart) {
+        m_cursorSettling = true;
+        m_cursorSettleTimer->start();
+    } else if (m_cursorSettling) {
+        m_cursorSettling = false;
+        m_cursorSettleTimer->stop();
+    }
     // 渲染合帧：`tail -f`、`cat 大文件` 会把输出切成成百上千个网络分片，每片都同步重绘等于
     // 一秒钟做上千次文档编辑和布局，界面就是这样被自己的输出压死的。libvterm 已经吃下全部
     // 字节，屏幕状态是最新的；真正需要保证的只是"用户眼睛能看到的帧率"，因此攒够一帧再画。
@@ -1921,7 +1955,7 @@ void TerminalView::paintEvent(QPaintEvent *event)
 
     // 三种光标形态全部在这里叠加绘制。把光标画进 QTextCharFormat 看似省事，代价却是每次
     // 闪烁都要重建整份文档；改成叠加后，闪烁只是一次局部重绘，与历史长度完全无关。
-    if (!m_cursorPhaseVisible || !m_vtermBridge->isCursorVisible()) {
+    if (!m_cursorPhaseVisible || m_cursorSettling || !m_vtermBridge->isCursorVisible()) {
         return;
     }
     const QRect cursorArea = visualCursorRect();

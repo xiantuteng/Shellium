@@ -544,6 +544,16 @@ SSH 通道（`SshSessionStack`）用同一套在途字节背压，同一条"无�
 文档同步、文档原样保留，切回时做一次增量同步，`flushPendingRender()` 会补上隐藏期间欠的帧，
 导出与查找读到的是最新内容。回归用例在 `tests/TerminalMemoryTest.cpp`。
 
+### 15.9 换行与提示符之间不画光标
+
+zsh 回车是两次写入：先 `\r\r\n` 与 PROMPT_SP 的 `\r \r`，约 20ms 后（precmd 钩子越重越久）
+才发提示符。空闲后首帧立即渲染，于是会单独画出一帧"光标在新行第 0 列"，连续回车时行首
+一直闪。`TerminalView` 在 feed 后按 libvterm 状态判断：光标在第 0 列且该行为空，就暂停绘制
+光标，后续输出让光标离开空行行首时立即恢复，最多等 `kCursorSettleMilliseconds`（120ms）——
+`cat`、`read` 这类真正停在空行行首等输入的程序随后照样能看到光标。别改成"有输出就藏光标"：
+打字回显也是输出，那样光标会随每次按键闪。回归用例
+`TerminalAltScreenTest::cursorHiddenAtBlankLineStartUntilPromptArrives`。
+
 ---
 
 ## 十六、Qt 拖拽：非 item-view 的 QAbstractScrollArea 要注册 viewport
