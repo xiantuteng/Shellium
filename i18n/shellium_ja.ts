@@ -1934,6 +1934,29 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     </message>
 </context>
 <context>
+    <name>OpenSourceLicensesDialog</name>
+    <message>
+        <source>Open Source Licenses</source>
+        <translation>オープンソースライセンス</translation>
+    </message>
+    <message>
+        <source>%1 are licensed under the LGPL and dynamically linked, so you can replace them with modified versions. Source code is available from each project&apos;s website, or on request via %2 for three years.</source>
+        <translation>%1 は LGPL に基づき動的リンクされているため、改変したバージョンに置き換えられます。ソースコードは各プロジェクトの Web サイトから入手でき、3 年間は %2 からも請求できます。</translation>
+    </message>
+    <message>
+        <source>License</source>
+        <translation>ライセンス</translation>
+    </message>
+    <message>
+        <source>Website</source>
+        <translation>Web サイト</translation>
+    </message>
+    <message>
+        <source>The license text could not be loaded.</source>
+        <translation>ライセンス本文を読み込めませんでした。</translation>
+    </message>
+</context>
+<context>
     <name>PortForwardManagerWidget</name>
     <message>
         <source>No port forwarding is running yet</source>
@@ -4135,12 +4158,24 @@ Unsaved changes have been reverted.</source>
         <translation>Copyright © %1 Shellium コントリビューター</translation>
     </message>
     <message>
+        <source>Open source software</source>
+        <translation>オープンソースソフトウェア</translation>
+    </message>
+    <message>
+        <source>Shellium is built on open source software. Their copyright notices and licenses are included with the application.</source>
+        <translation>Shellium はオープンソースソフトウェアを基に構築されています。それらの著作権表示とライセンスはアプリケーションに同梱されています。</translation>
+    </message>
+    <message>
         <source>A desktop SSH terminal and remote file manager.</source>
         <translation>デスクトップ向け SSH ターミナル兼リモートファイルマネージャー。</translation>
     </message>
     <message>
         <source>Unknown</source>
         <translation>不明</translation>
+    </message>
+    <message>
+        <source>View licenses</source>
+        <translation>ライセンスを表示</translation>
     </message>
     <message>
         <source>Sidebar density</source>

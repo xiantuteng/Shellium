@@ -106,7 +106,7 @@ private:
     /** @brief 构建“AI 助手”页：大模型地址、密钥、模型名称及连通性测试。 */
     QWidget *buildAiPage();
 
-    /** @brief 构建“关于”页：产品版本、Qt 运行时版本、版权声明与官方网站链接。 */
+    /** @brief 构建“关于”页：产品版本、Qt 运行时版本、版权声明、官方网站与开源软件许可。 */
     QWidget *buildAboutPage();
 
     /** @brief 把当前 AI 页各控件的值写入 AiSettingsService；失败时把原因显示在状态行。 */

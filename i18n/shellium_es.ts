@@ -1934,6 +1934,29 @@ Puede ser una reinstalación del servidor o una rotación de clave, o un ataque 
     </message>
 </context>
 <context>
+    <name>OpenSourceLicensesDialog</name>
+    <message>
+        <source>Open Source Licenses</source>
+        <translation>Licencias de código abierto</translation>
+    </message>
+    <message>
+        <source>%1 are licensed under the LGPL and dynamically linked, so you can replace them with modified versions. Source code is available from each project&apos;s website, or on request via %2 for three years.</source>
+        <translation>%1 se distribuyen bajo la LGPL y se enlazan dinámicamente, por lo que puede sustituirlos por versiones modificadas. El código fuente está disponible en el sitio web de cada proyecto o, previa solicitud, a través de %2 durante tres años.</translation>
+    </message>
+    <message>
+        <source>License</source>
+        <translation>Licencia</translation>
+    </message>
+    <message>
+        <source>Website</source>
+        <translation>Sitio web</translation>
+    </message>
+    <message>
+        <source>The license text could not be loaded.</source>
+        <translation>No se pudo cargar el texto de la licencia.</translation>
+    </message>
+</context>
+<context>
     <name>PortForwardManagerWidget</name>
     <message>
         <source>No port forwarding is running yet</source>
@@ -4135,12 +4158,24 @@ Los cambios sin guardar se han revertido.</translation>
         <translation>Copyright © %1 Colaboradores de Shellium.</translation>
     </message>
     <message>
+        <source>Open source software</source>
+        <translation>Software de código abierto</translation>
+    </message>
+    <message>
+        <source>Shellium is built on open source software. Their copyright notices and licenses are included with the application.</source>
+        <translation>Shellium está creado con software de código abierto. Sus avisos de copyright y licencias se incluyen con la aplicación.</translation>
+    </message>
+    <message>
         <source>A desktop SSH terminal and remote file manager.</source>
         <translation>Un terminal SSH de escritorio y gestor de archivos remotos.</translation>
     </message>
     <message>
         <source>Unknown</source>
         <translation>Desconocida</translation>
+    </message>
+    <message>
+        <source>View licenses</source>
+        <translation>Ver licencias</translation>
     </message>
     <message>
         <source>Sidebar density</source>

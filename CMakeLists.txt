@@ -126,6 +126,28 @@ function(shellium_add_bundled_fonts target)
     )
 endfunction()
 
+# 关于页的“开源软件许可”对话框从 :/licenses/ 读取许可证全文。安装包里分发了 Qt、libssh 等
+# 动态库与内置字体，它们的许可证要求随程序附带版权声明与许可证原文；编进资源而不是放在包外，
+# 是为了无论用户怎样拷贝 App 或解压 ZIP，声明都不会和程序分离。字体许可证沿用
+# resources/fonts/licenses/ 原位置，映射到 :/licenses/fonts/。组件清单见
+# OpenSourceLicensesDialog.cpp，新增依赖的流程见 resources/licenses/README.md。
+file(GLOB SHELLIUM_LICENSE_FILES CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/resources/licenses/*.txt")
+file(GLOB SHELLIUM_FONT_LICENSE_FILES CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/resources/fonts/licenses/*.txt")
+function(shellium_add_license_notices target)
+    qt_add_resources("${target}" "shellium_license_notices"
+        PREFIX "/licenses"
+        BASE "${CMAKE_CURRENT_SOURCE_DIR}/resources/licenses"
+        FILES ${SHELLIUM_LICENSE_FILES}
+    )
+    qt_add_resources("${target}" "shellium_font_license_notices"
+        PREFIX "/licenses/fonts"
+        BASE "${CMAKE_CURRENT_SOURCE_DIR}/resources/fonts/licenses"
+        FILES ${SHELLIUM_FONT_LICENSE_FILES}
+    )
+endfunction()
+
 # 主窗口把标签页、终端、SSH、SFTP、端口转发和 AI 助手串在一起，任何界面级回归测试都必须
 # 链接同一套实现。源文件清单因此集中一处，测试目标复用它，避免清单在两处慢慢分叉后测试
 # 编译的是一个与正式程序不同的窗口。
@@ -214,6 +236,8 @@ set(SHELLIUM_APP_SOURCES
     src/ui/HostManagerWidget.cpp
     src/ui/HostManagerWidget.h
     src/ui/HostDistributionIcon.h
+    src/ui/OpenSourceLicensesDialog.cpp
+    src/ui/OpenSourceLicensesDialog.h
     src/ui/SettingsDialog.cpp
     src/ui/SettingsDialog.h
     src/ui/SettingsWidgets.cpp
@@ -291,6 +315,7 @@ qt_add_resources(Shellium "shellium_distribution_icons"
 )
 
 shellium_add_bundled_fonts(Shellium)
+shellium_add_license_notices(Shellium)
 
 # 界面翻译：源语言为源码里的简体中文 tr() 字面量，无需 .ts。每新增一门语言就在 i18n/ 下
 # 添加 shellium_<locale>.ts 并登记到此列表，同时同步 LocalizationService 的
@@ -735,6 +760,7 @@ if(BUILD_TESTING)
             resources/icons/distros/zorin.svg
     )
     shellium_add_bundled_fonts(ShelliumMainWindowShellTests)
+    shellium_add_license_notices(ShelliumMainWindowShellTests)
     target_include_directories(ShelliumMainWindowShellTests PRIVATE src)
     target_link_libraries(ShelliumMainWindowShellTests PRIVATE
         Qt6::Core
@@ -945,6 +971,8 @@ if(BUILD_TESTING)
         src/storage/ApplicationDatabase.h
         src/ui/ConnectionDialog.cpp
         src/ui/ConnectionDialog.h
+        src/ui/OpenSourceLicensesDialog.cpp
+        src/ui/OpenSourceLicensesDialog.h
         src/ui/SettingsDialog.cpp
         src/ui/SettingsDialog.h
         src/ui/SettingsWidgets.cpp
@@ -953,6 +981,7 @@ if(BUILD_TESTING)
         src/ui/VaultDialog.h
     )
     shellium_add_bundled_fonts(ShelliumSettingsUiTests)
+    shellium_add_license_notices(ShelliumSettingsUiTests)
     target_include_directories(ShelliumSettingsUiTests PRIVATE src)
     target_link_libraries(ShelliumSettingsUiTests PRIVATE
         Qt6::Core Qt6::Gui Qt6::Network Qt6::Widgets Qt6::Sql Qt6::Test ShelliumDependencies::libsodium)

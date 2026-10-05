@@ -5,6 +5,7 @@
 #include "security/Vault.h"
 #include "storage/ApplicationDatabase.h"
 #include "ui/ConnectionDialog.h"
+#include "ui/OpenSourceLicensesDialog.h"
 #include "ui/SettingsDialog.h"
 #include "i18n/LocalizationService.h"
 #include "ui/SettingsWidgets.h"
@@ -19,6 +20,9 @@
 #include <QAbstractButton>
 #include <QApplication>
 #include <QComboBox>
+#include <QDir>
+#include <QDirIterator>
+#include <QFile>
 #include <QDoubleSpinBox>
 #include <QFontDatabase>
 #include <QFontInfo>
@@ -42,6 +46,7 @@
 #include <QSharedPointer>
 #include <QTcpServer>
 #include <QTcpSocket>
+#include <QTextBrowser>
 #include <QToolButton>
 
 namespace {
@@ -153,6 +158,13 @@ private slots:
     void aiModelAndThinkingToggleRoundTrip();
     /** @brief “关于”页必须展示应用版本、版权声明，并提供可在外部浏览器打开的官网链接。 */
     void aboutPageShowsVersionCopyrightAndWebsite();
+    /**
+     * @brief 开源组件清单必须覆盖全部直接依赖与内置字体，每条都能读到许可证全文，
+     *        资源里也不能有无人引用的许可证文件（说明清单与资源已经分叉）。
+     */
+    void openSourceNoticesCoverEveryDistributedComponent();
+    /** @brief 关于页的按钮要打开许可证对话框，并展示 LGPL 声明与许可证要求的署名。 */
+    void aboutPageOpensOpenSourceLicenses();
 
 private:
     /** @brief 返回步进器里指定角色（increase/decrease）的按钮。 */
@@ -1445,6 +1457,125 @@ void SettingsUiTest::aboutPageShowsVersionCopyrightAndWebsite()
         unversionedDialog.findChild<QLabel *>(QStringLiteral("aboutVersionLabel"));
     QVERIFY(unknownLabel != nullptr);
     QCOMPARE(unknownLabel->text(), QStringLiteral("Unknown"));
+}
+
+void SettingsUiTest::openSourceNoticesCoverEveryDistributedComponent()
+{
+    const QList<OpenSourceComponent> components = OpenSourceNotices::components();
+    QSet<QString> names;
+    QSet<QString> referencedFiles;
+    for (const OpenSourceComponent &component : components) {
+        QVERIFY2(!names.contains(component.name), qPrintable(component.name));
+        names.insert(component.name);
+        QVERIFY2(!component.license.isEmpty(), qPrintable(component.name));
+        QVERIFY2(component.homepage.startsWith(QStringLiteral("http")), qPrintable(component.name));
+        QVERIFY2(!component.licenseFiles.isEmpty(), qPrintable(component.name));
+        for (const QString &file : component.licenseFiles) {
+            QVERIFY2(QFile::exists(OpenSourceNotices::resourcePath(file)), qPrintable(file));
+            referencedFiles.insert(file);
+        }
+        const QString text = OpenSourceNotices::licenseText(component);
+        QVERIFY2(text.size() > 100, qPrintable(component.name));
+        QVERIFY2(!text.startsWith(QChar(0xFEFF)), qPrintable(component.name));
+        if (component.lgpl) {
+            QVERIFY2(text.contains(QStringLiteral("GNU LESSER GENERAL PUBLIC LICENSE")),
+                     qPrintable(component.name));
+        }
+    }
+
+    // CMakeLists.txt 里 shellium_resolve_dependency 解析出的每个直接依赖都随安装包分发。
+    const QStringList directDependencies{
+        QStringLiteral("Qt"),        QStringLiteral("libssh"), QStringLiteral("libvterm"),
+        QStringLiteral("libsodium"), QStringLiteral("spdlog"), QStringLiteral("{fmt}"),
+        QStringLiteral("minizip"),   QStringLiteral("zlib"),   QStringLiteral("OpenSSL")};
+    for (const QString &dependency : directDependencies) {
+        QVERIFY2(names.contains(dependency), qPrintable(dependency));
+    }
+    // OFL/Apache 要求字体随附许可证：每款内置字体都必须有对应条目。
+    for (const QString &family : BundledFonts::familyNames()) {
+        QVERIFY2(names.contains(family), qPrintable(family));
+    }
+
+    // Qt 按 LGPLv3 分发，而 LGPLv3 是 GPLv3 的附加条款，两份全文都必须附带。
+    const auto qt = std::find_if(components.cbegin(), components.cend(),
+                                 [](const OpenSourceComponent &c) { return c.name == QLatin1String("Qt"); });
+    QVERIFY(qt != components.cend());
+    QVERIFY(qt->lgpl);
+    const QString qtText = OpenSourceNotices::licenseText(*qt);
+    QVERIFY(qtText.contains(QStringLiteral("GNU LESSER GENERAL PUBLIC LICENSE")));
+    QVERIFY(qtText.contains(QStringLiteral("GNU GENERAL PUBLIC LICENSE")));
+
+    QDirIterator it(QStringLiteral(":/licenses"), QDir::Files, QDirIterator::Subdirectories);
+    int bundledFiles = 0;
+    while (it.hasNext()) {
+        const QString path = it.next();
+        const QString relative = path.mid(QStringLiteral(":/licenses/").size());
+        QVERIFY2(referencedFiles.contains(relative), qPrintable(path));
+        ++bundledFiles;
+    }
+    QCOMPARE(bundledFiles, referencedFiles.size());
+}
+
+void SettingsUiTest::aboutPageOpensOpenSourceLicenses()
+{
+    LocalizationService localization;
+    QVERIFY(localization.apply(QStringLiteral("en")));
+
+    auto service = makeService();
+    SettingsDialog dialog(service.get());
+    auto *button = dialog.findChild<QPushButton *>(QStringLiteral("aboutOpenSourceLicensesButton"));
+    QVERIFY2(button != nullptr, "关于页必须提供开源软件许可入口");
+    QCOMPARE(button->text(), QStringLiteral("View licenses"));
+
+    QVERIFY(dialog.findChild<OpenSourceLicensesDialog *>() == nullptr);
+    button->click();
+    auto *licenses = dialog.findChild<OpenSourceLicensesDialog *>();
+    QVERIFY(licenses != nullptr);
+    QVERIFY(licenses->isVisible());
+    QVERIFY(licenses->testAttribute(Qt::WA_DeleteOnClose));
+    QCOMPARE(licenses->windowTitle(), QStringLiteral("Open Source Licenses"));
+
+    auto *list = licenses->findChild<QListWidget *>(QStringLiteral("openSourceComponentList"));
+    QVERIFY(list != nullptr);
+    QCOMPARE(list->count(), OpenSourceNotices::components().size());
+
+    // 横纵滚动条同时出现会在列表右下角留下空白角块，组件名过长时只能省略显示。
+    QCOMPARE(list->horizontalScrollBarPolicy(), Qt::ScrollBarAlwaysOff);
+
+    // 顶部声明保持精简：点名动态链接的 LGPL 组件并给出源代码索取方式即可。
+    auto *notice = licenses->findChild<QLabel *>(QStringLiteral("openSourceNoticeLabel"));
+    QVERIFY(notice != nullptr);
+    const QString noticeText = notice->text();
+    QVERIFY2(noticeText.contains(QStringLiteral("LGPL")), qPrintable(noticeText));
+    QVERIFY2(noticeText.contains(QStringLiteral("Qt, libssh")), qPrintable(noticeText));
+    QVERIFY2(noticeText.contains(QStringLiteral("https://shellium.net")), qPrintable(noticeText));
+    QVERIFY2(!noticeText.contains(QStringLiteral("FreeType")), qPrintable(noticeText));
+    QVERIFY(notice->openExternalLinks());
+
+    auto *view = licenses->findChild<QTextBrowser *>(QStringLiteral("openSourceLicenseView"));
+    QVERIFY(view != nullptr);
+    QVERIFY(licenses->selectComponent(QStringLiteral("libssh")));
+    QVERIFY2(view->toPlainText().contains(QStringLiteral("Linking with OpenSSL")),
+             qPrintable(view->toPlainText().left(300)));
+    QVERIFY(view->toPlainText().contains(QStringLiteral("https://www.libssh.org/")));
+    // FreeType 与 IJG 许可证要求出现在文档里的署名语句，随各自组件的详情页展示。
+    QVERIFY(licenses->selectComponent(QStringLiteral("FreeType")));
+    QVERIFY(view->toPlainText().contains(
+        QStringLiteral("Portions of this software are copyright \u00A9 2026 The FreeType Project")));
+    QVERIFY(licenses->selectComponent(QStringLiteral("libjpeg-turbo")));
+    QVERIFY(view->toPlainText().contains(
+        QStringLiteral("based in part on the work of the Independent JPEG Group")));
+    QVERIFY(licenses->selectComponent(QStringLiteral("Meslo LG S")));
+    QVERIFY(view->toPlainText().contains(QStringLiteral("Apache License")));
+    QVERIFY(!licenses->selectComponent(QStringLiteral("no-such-component")));
+
+    // 按钮与对话框都是常驻控件，切换语言后必须就地重译，而不是停留在英文。
+    QVERIFY(localization.apply(QStringLiteral("zh_CN")));
+    QCOMPARE(button->text(), QStringLiteral("查看许可证"));
+    QCOMPARE(licenses->windowTitle(), QStringLiteral("开源软件许可"));
+    QVERIFY(localization.apply(QStringLiteral("en")));
+
+    licenses->close();
 }
 
 QTEST_MAIN(SettingsUiTest)

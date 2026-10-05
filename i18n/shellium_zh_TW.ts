@@ -1934,6 +1934,29 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     </message>
 </context>
 <context>
+    <name>OpenSourceLicensesDialog</name>
+    <message>
+        <source>Open Source Licenses</source>
+        <translation>開放原始碼授權</translation>
+    </message>
+    <message>
+        <source>%1 are licensed under the LGPL and dynamically linked, so you can replace them with modified versions. Source code is available from each project&apos;s website, or on request via %2 for three years.</source>
+        <translation>%1 依 LGPL 授權並動態連結，可替換為自行修改的版本。原始碼可從各專案網站取得，三年內亦可透過 %2 索取。</translation>
+    </message>
+    <message>
+        <source>License</source>
+        <translation>授權條款</translation>
+    </message>
+    <message>
+        <source>Website</source>
+        <translation>網站</translation>
+    </message>
+    <message>
+        <source>The license text could not be loaded.</source>
+        <translation>無法載入授權條款文字。</translation>
+    </message>
+</context>
+<context>
     <name>PortForwardManagerWidget</name>
     <message>
         <source>No port forwarding is running yet</source>
@@ -4137,12 +4160,24 @@ Unsaved changes have been reverted.</source>
         <translation>版權所有 © %1 Shellium 貢獻者。</translation>
     </message>
     <message>
+        <source>Open source software</source>
+        <translation>開放原始碼軟體</translation>
+    </message>
+    <message>
+        <source>Shellium is built on open source software. Their copyright notices and licenses are included with the application.</source>
+        <translation>Shellium 以開放原始碼軟體建構，其著作權聲明與授權條款已隨應用程式一併提供。</translation>
+    </message>
+    <message>
         <source>A desktop SSH terminal and remote file manager.</source>
         <translation>桌面 SSH 終端機與遠端檔案管理工具。</translation>
     </message>
     <message>
         <source>Unknown</source>
         <translation>未知</translation>
+    </message>
+    <message>
+        <source>View licenses</source>
+        <translation>檢視授權條款</translation>
     </message>
     <message>
         <source>Sidebar density</source>

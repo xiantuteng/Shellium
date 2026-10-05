@@ -1934,6 +1934,29 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     </message>
 </context>
 <context>
+    <name>OpenSourceLicensesDialog</name>
+    <message>
+        <source>Open Source Licenses</source>
+        <translation>开源软件许可</translation>
+    </message>
+    <message>
+        <source>%1 are licensed under the LGPL and dynamically linked, so you can replace them with modified versions. Source code is available from each project&apos;s website, or on request via %2 for three years.</source>
+        <translation>%1 依照 LGPL 授权并动态链接，可替换为自行修改的版本。源代码可从各项目网站获取，三年内也可通过 %2 索取。</translation>
+    </message>
+    <message>
+        <source>License</source>
+        <translation>许可证</translation>
+    </message>
+    <message>
+        <source>Website</source>
+        <translation>网站</translation>
+    </message>
+    <message>
+        <source>The license text could not be loaded.</source>
+        <translation>无法加载许可证文本。</translation>
+    </message>
+</context>
+<context>
     <name>PortForwardManagerWidget</name>
     <message>
         <source>No port forwarding is running yet</source>
@@ -4137,12 +4160,24 @@ Unsaved changes have been reverted.</source>
         <translation>版权所有 © %1 Shellium 贡献者。</translation>
     </message>
     <message>
+        <source>Open source software</source>
+        <translation>开源软件</translation>
+    </message>
+    <message>
+        <source>Shellium is built on open source software. Their copyright notices and licenses are included with the application.</source>
+        <translation>Shellium 基于开源软件构建，其版权声明与许可证已随应用程序一并提供。</translation>
+    </message>
+    <message>
         <source>A desktop SSH terminal and remote file manager.</source>
         <translation>桌面 SSH 终端与远程文件管理工具。</translation>
     </message>
     <message>
         <source>Unknown</source>
         <translation>未知</translation>
+    </message>
+    <message>
+        <source>View licenses</source>
+        <translation>查看许可证</translation>
     </message>
     <message>
         <source>Sidebar density</source>

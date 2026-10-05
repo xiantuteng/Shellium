@@ -1934,6 +1934,29 @@ Confermare che la chiave è cambiata, sostituire il vecchio record in known_host
     </message>
 </context>
 <context>
+    <name>OpenSourceLicensesDialog</name>
+    <message>
+        <source>Open Source Licenses</source>
+        <translation>Licenze open source</translation>
+    </message>
+    <message>
+        <source>%1 are licensed under the LGPL and dynamically linked, so you can replace them with modified versions. Source code is available from each project&apos;s website, or on request via %2 for three years.</source>
+        <translation>%1 sono distribuiti sotto LGPL e collegati dinamicamente, quindi puoi sostituirli con versioni modificate. Il codice sorgente è disponibile sul sito di ciascun progetto o su richiesta tramite %2 per tre anni.</translation>
+    </message>
+    <message>
+        <source>License</source>
+        <translation>Licenza</translation>
+    </message>
+    <message>
+        <source>Website</source>
+        <translation>Sito web</translation>
+    </message>
+    <message>
+        <source>The license text could not be loaded.</source>
+        <translation>Impossibile caricare il testo della licenza.</translation>
+    </message>
+</context>
+<context>
     <name>PortForwardManagerWidget</name>
     <message>
         <source>No port forwarding is running yet</source>
@@ -4135,12 +4158,24 @@ Le modifiche non salvate sono state annullate.</translation>
         <translation>Copyright © %1 Collaboratori di Shellium.</translation>
     </message>
     <message>
+        <source>Open source software</source>
+        <translation>Software open source</translation>
+    </message>
+    <message>
+        <source>Shellium is built on open source software. Their copyright notices and licenses are included with the application.</source>
+        <translation>Shellium è realizzato con software open source. Le relative note di copyright e licenze sono incluse nell&apos;applicazione.</translation>
+    </message>
+    <message>
         <source>A desktop SSH terminal and remote file manager.</source>
         <translation>Un terminale SSH desktop e gestore di file remoti.</translation>
     </message>
     <message>
         <source>Unknown</source>
         <translation>Sconosciuta</translation>
+    </message>
+    <message>
+        <source>View licenses</source>
+        <translation>Visualizza licenze</translation>
     </message>
     <message>
         <source>Sidebar density</source>

@@ -1934,6 +1934,29 @@ Confirmi că cheia s-a schimbat, înlocuiești vechea înregistrare din known_ho
     </message>
 </context>
 <context>
+    <name>OpenSourceLicensesDialog</name>
+    <message>
+        <source>Open Source Licenses</source>
+        <translation>Licențe open source</translation>
+    </message>
+    <message>
+        <source>%1 are licensed under the LGPL and dynamically linked, so you can replace them with modified versions. Source code is available from each project&apos;s website, or on request via %2 for three years.</source>
+        <translation>%1 sunt licențiate sub LGPL și legate dinamic, deci le puteți înlocui cu versiuni modificate. Codul sursă este disponibil pe site-ul fiecărui proiect sau, la cerere, prin %2, timp de trei ani.</translation>
+    </message>
+    <message>
+        <source>License</source>
+        <translation>Licență</translation>
+    </message>
+    <message>
+        <source>Website</source>
+        <translation>Site web</translation>
+    </message>
+    <message>
+        <source>The license text could not be loaded.</source>
+        <translation>Textul licenței nu a putut fi încărcat.</translation>
+    </message>
+</context>
+<context>
     <name>PortForwardManagerWidget</name>
     <message>
         <source>No port forwarding is running yet</source>
@@ -4135,12 +4158,24 @@ Modificările nesalvate au fost anulate.</translation>
         <translation>Copyright © %1 Contribuitorii Shellium.</translation>
     </message>
     <message>
+        <source>Open source software</source>
+        <translation>Software open source</translation>
+    </message>
+    <message>
+        <source>Shellium is built on open source software. Their copyright notices and licenses are included with the application.</source>
+        <translation>Shellium este construit pe software open source. Notificările privind drepturile de autor și licențele acestora sunt incluse în aplicație.</translation>
+    </message>
+    <message>
         <source>A desktop SSH terminal and remote file manager.</source>
         <translation>Un terminal SSH desktop și manager de fișiere la distanță.</translation>
     </message>
     <message>
         <source>Unknown</source>
         <translation>Necunoscută</translation>
+    </message>
+    <message>
+        <source>View licenses</source>
+        <translation>Vizualizați licențele</translation>
     </message>
     <message>
         <source>Sidebar density</source>

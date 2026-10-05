@@ -1934,6 +1934,29 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     </message>
 </context>
 <context>
+    <name>OpenSourceLicensesDialog</name>
+    <message>
+        <source>Open Source Licenses</source>
+        <translation>오픈 소스 라이선스</translation>
+    </message>
+    <message>
+        <source>%1 are licensed under the LGPL and dynamically linked, so you can replace them with modified versions. Source code is available from each project&apos;s website, or on request via %2 for three years.</source>
+        <translation>%1은(는) LGPL에 따라 동적으로 링크되므로 수정한 버전으로 교체할 수 있습니다. 소스 코드는 각 프로젝트 웹사이트에서 받을 수 있으며, 3년 동안 %2을(를) 통해 요청할 수도 있습니다.</translation>
+    </message>
+    <message>
+        <source>License</source>
+        <translation>라이선스</translation>
+    </message>
+    <message>
+        <source>Website</source>
+        <translation>웹사이트</translation>
+    </message>
+    <message>
+        <source>The license text could not be loaded.</source>
+        <translation>라이선스 텍스트를 불러올 수 없습니다.</translation>
+    </message>
+</context>
+<context>
     <name>PortForwardManagerWidget</name>
     <message>
         <source>No port forwarding is running yet</source>
@@ -4135,12 +4158,24 @@ Unsaved changes have been reverted.</source>
         <translation>Copyright © %1 Shellium 기여자.</translation>
     </message>
     <message>
+        <source>Open source software</source>
+        <translation>오픈 소스 소프트웨어</translation>
+    </message>
+    <message>
+        <source>Shellium is built on open source software. Their copyright notices and licenses are included with the application.</source>
+        <translation>Shellium은 오픈 소스 소프트웨어를 기반으로 만들어졌습니다. 해당 저작권 고지와 라이선스는 애플리케이션에 함께 포함되어 있습니다.</translation>
+    </message>
+    <message>
         <source>A desktop SSH terminal and remote file manager.</source>
         <translation>데스크톱 SSH 터미널 및 원격 파일 관리자.</translation>
     </message>
     <message>
         <source>Unknown</source>
         <translation>알 수 없음</translation>
+    </message>
+    <message>
+        <source>View licenses</source>
+        <translation>라이선스 보기</translation>
     </message>
     <message>
         <source>Sidebar density</source>

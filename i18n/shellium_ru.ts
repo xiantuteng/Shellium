@@ -1934,6 +1934,29 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     </message>
 </context>
 <context>
+    <name>OpenSourceLicensesDialog</name>
+    <message>
+        <source>Open Source Licenses</source>
+        <translation>Лицензии открытого ПО</translation>
+    </message>
+    <message>
+        <source>%1 are licensed under the LGPL and dynamically linked, so you can replace them with modified versions. Source code is available from each project&apos;s website, or on request via %2 for three years.</source>
+        <translation>%1 распространяются по лицензии LGPL и подключаются динамически, поэтому их можно заменить изменёнными версиями. Исходный код доступен на сайте каждого проекта или по запросу через %2 в течение трёх лет.</translation>
+    </message>
+    <message>
+        <source>License</source>
+        <translation>Лицензия</translation>
+    </message>
+    <message>
+        <source>Website</source>
+        <translation>Сайт</translation>
+    </message>
+    <message>
+        <source>The license text could not be loaded.</source>
+        <translation>Не удалось загрузить текст лицензии.</translation>
+    </message>
+</context>
+<context>
     <name>PortForwardManagerWidget</name>
     <message>
         <source>No port forwarding is running yet</source>
@@ -4135,12 +4158,24 @@ Unsaved changes have been reverted.</source>
         <translation>© %1 Участники проекта Shellium.</translation>
     </message>
     <message>
+        <source>Open source software</source>
+        <translation>Программное обеспечение с открытым исходным кодом</translation>
+    </message>
+    <message>
+        <source>Shellium is built on open source software. Their copyright notices and licenses are included with the application.</source>
+        <translation>Shellium создан на основе программного обеспечения с открытым исходным кодом. Уведомления об авторских правах и лицензии этих компонентов поставляются вместе с приложением.</translation>
+    </message>
+    <message>
         <source>A desktop SSH terminal and remote file manager.</source>
         <translation>Настольный SSH-терминал и менеджер удалённых файлов.</translation>
     </message>
     <message>
         <source>Unknown</source>
         <translation>Неизвестно</translation>
+    </message>
+    <message>
+        <source>View licenses</source>
+        <translation>Просмотреть лицензии</translation>
     </message>
     <message>
         <source>Sidebar density</source>

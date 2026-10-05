@@ -1934,6 +1934,29 @@ Bestätigen Sie, dass sich der Schlüssel geändert hat, ersetzen Sie den alten 
     </message>
 </context>
 <context>
+    <name>OpenSourceLicensesDialog</name>
+    <message>
+        <source>Open Source Licenses</source>
+        <translation>Open-Source-Lizenzen</translation>
+    </message>
+    <message>
+        <source>%1 are licensed under the LGPL and dynamically linked, so you can replace them with modified versions. Source code is available from each project&apos;s website, or on request via %2 for three years.</source>
+        <translation>%1 stehen unter der LGPL und sind dynamisch gelinkt, sodass Sie sie durch geänderte Versionen ersetzen können. Der Quellcode ist auf der Website des jeweiligen Projekts erhältlich oder drei Jahre lang auf Anfrage über %2.</translation>
+    </message>
+    <message>
+        <source>License</source>
+        <translation>Lizenz</translation>
+    </message>
+    <message>
+        <source>Website</source>
+        <translation>Website</translation>
+    </message>
+    <message>
+        <source>The license text could not be loaded.</source>
+        <translation>Der Lizenztext konnte nicht geladen werden.</translation>
+    </message>
+</context>
+<context>
     <name>PortForwardManagerWidget</name>
     <message>
         <source>No port forwarding is running yet</source>
@@ -4135,12 +4158,24 @@ Nicht gespeicherte Änderungen wurden zurückgesetzt.</translation>
         <translation>Copyright © %1 Shellium-Mitwirkende.</translation>
     </message>
     <message>
+        <source>Open source software</source>
+        <translation>Open-Source-Software</translation>
+    </message>
+    <message>
+        <source>Shellium is built on open source software. Their copyright notices and licenses are included with the application.</source>
+        <translation>Shellium basiert auf Open-Source-Software. Deren Urheberrechtshinweise und Lizenzen werden mit der Anwendung mitgeliefert.</translation>
+    </message>
+    <message>
         <source>A desktop SSH terminal and remote file manager.</source>
         <translation>Ein Desktop-SSH-Terminal und Dateimanager für entfernte Systeme.</translation>
     </message>
     <message>
         <source>Unknown</source>
         <translation>Unbekannt</translation>
+    </message>
+    <message>
+        <source>View licenses</source>
+        <translation>Lizenzen anzeigen</translation>
     </message>
     <message>
         <source>Sidebar density</source>

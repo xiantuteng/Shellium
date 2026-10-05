@@ -21,6 +21,13 @@ Shellium 源语言是英文，界面文案通过 Qt Linguist 管理，支持 14 
 4. 新增常驻控件文案时按 `src/i18n/Retranslate.h` 的 `i18n::onRetranslate` 模式接入热切换；
    无 `Q_OBJECT` 的嵌套对话框类必须加 `Q_DECLARE_TR_FUNCTIONS(类名)`。
 
+## 第三方依赖与开源许可
+
+新增、替换或升级会进入安装包的第三方库（含被间接带入的动态库）或内置字体/图标时，必须同步
+`resources/licenses/` 的许可证原文与 `OpenSourceNotices::components()` 的组件清单，否则
+「关于 → 开源软件」里的声明会漏项。LGPL 组件（Qt、libssh 等）必须保持动态链接。流程见
+`resources/licenses/README.md`。
+
 ## 改完必须补测试
 
 新功能与修 BUG 一律补自动化用例；修 BUG 时先临时还原缺陷，验证新用例确实会失败。

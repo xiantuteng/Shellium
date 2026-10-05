@@ -8,6 +8,7 @@
 #include "settings/BundledFonts.h"
 #include "settings/TerminalSettings.h"
 #include "security/Vault.h"
+#include "ui/OpenSourceLicensesDialog.h"
 #include "ui/SettingsWidgets.h"
 #include "ui/UiIcons.h"
 #include "ui/VaultDialog.h"
@@ -1194,11 +1195,34 @@ QWidget *SettingsDialog::buildAboutPage()
     copyrightLabel->setObjectName(QStringLiteral("aboutCopyrightLabel"));
     copyrightLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
     layout->addWidget(legal);
+
+    // 随包分发的 Qt、libssh 等开源组件要求附带版权声明与许可证全文（LGPL 还要求说明可替换
+    // 与源代码获取方式），统一在独立对话框里展示，清单见 OpenSourceNotices::components()。
+    auto *openSource = new SettingsCard([this] { return tr("Open source software"); }, page);
+    openSource->addNote([this] {
+        return tr("Shellium is built on open source software. Their copyright notices and "
+                  "licenses are included with the application.");
+    });
+    auto *licensesButton = new QPushButton(openSource);
+    licensesButton->setObjectName(QStringLiteral("aboutOpenSourceLicensesButton"));
+    connect(licensesButton, &QPushButton::clicked, this, [this] {
+        auto *licenses = new OpenSourceLicensesDialog(this);
+        licenses->setAttribute(Qt::WA_DeleteOnClose);
+        licenses->open();
+    });
+    auto *licensesRow = new QWidget(openSource);
+    auto *licensesLayout = new QHBoxLayout(licensesRow);
+    licensesLayout->setContentsMargins(0, 4, 0, 0);
+    licensesLayout->addWidget(licensesButton);
+    licensesLayout->addStretch(1);
+    openSource->addFullWidthWidget(licensesRow);
+    layout->addWidget(openSource);
     layout->addStretch(1);
 
-    i18n::onRetranslate(page, [this, version, tagline, versionValue] {
+    i18n::onRetranslate(page, [this, version, tagline, versionValue, licensesButton] {
         tagline->setText(tr("A desktop SSH terminal and remote file manager."));
         versionValue->setText(version.isEmpty() ? tr("Unknown") : version);
+        licensesButton->setText(tr("View licenses"));
     });
     return page;
 }

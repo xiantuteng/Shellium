@@ -1934,6 +1934,29 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     </message>
 </context>
 <context>
+    <name>OpenSourceLicensesDialog</name>
+    <message>
+        <source>Open Source Licenses</source>
+        <translation>تراخيص البرمجيات مفتوحة المصدر</translation>
+    </message>
+    <message>
+        <source>%1 are licensed under the LGPL and dynamically linked, so you can replace them with modified versions. Source code is available from each project&apos;s website, or on request via %2 for three years.</source>
+        <translation>%1 مرخّصة بموجب LGPL ومرتبطة ديناميكيًا، لذا يمكنك استبدالها بإصدارات معدّلة. الشيفرة المصدرية متاحة على موقع كل مشروع، أو عند الطلب عبر %2 لمدة ثلاث سنوات.</translation>
+    </message>
+    <message>
+        <source>License</source>
+        <translation>الترخيص</translation>
+    </message>
+    <message>
+        <source>Website</source>
+        <translation>الموقع الإلكتروني</translation>
+    </message>
+    <message>
+        <source>The license text could not be loaded.</source>
+        <translation>تعذّر تحميل نص الترخيص.</translation>
+    </message>
+</context>
+<context>
     <name>PortForwardManagerWidget</name>
     <message>
         <source>No port forwarding is running yet</source>
@@ -4135,12 +4158,24 @@ Unsaved changes have been reverted.</source>
         <translation>حقوق النشر © %1 للمساهمين في Shellium.</translation>
     </message>
     <message>
+        <source>Open source software</source>
+        <translation>البرمجيات مفتوحة المصدر</translation>
+    </message>
+    <message>
+        <source>Shellium is built on open source software. Their copyright notices and licenses are included with the application.</source>
+        <translation>بُني Shellium على برمجيات مفتوحة المصدر. إشعارات حقوق النشر والتراخيص الخاصة بها مرفقة مع التطبيق.</translation>
+    </message>
+    <message>
         <source>A desktop SSH terminal and remote file manager.</source>
         <translation>طرفية SSH لسطح المكتب ومدير ملفات عن بُعد.</translation>
     </message>
     <message>
         <source>Unknown</source>
         <translation>غير معروف</translation>
+    </message>
+    <message>
+        <source>View licenses</source>
+        <translation>عرض التراخيص</translation>
     </message>
     <message>
         <source>Sidebar density</source>
