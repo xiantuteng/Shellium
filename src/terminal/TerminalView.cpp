@@ -472,6 +472,7 @@ TerminalView::TerminalView(QWidget *parent)
         // 命令。继续累积前缀会弹出历史补全浮层，而浮层随后会抢走 Tab、回车和 Esc——那正是
         // vim 最关键的三个键，表现为"进了 vim 就没法编辑"。
         m_currentCommand.clear();
+        resetCommandLineTracking();
         m_commandCompleter->popup()->hide();
         // 备用屏没有可回溯的历史，滚动条只会误导用户去滚动一块固定画布。
         setVerticalScrollBarPolicy(active ? Qt::ScrollBarAlwaysOff : Qt::ScrollBarAsNeeded);
@@ -801,7 +802,63 @@ void TerminalView::sendUserInput(const QByteArray &bytes)
     // 先贴底再发字节：随后的回显与输出经 renderPreservingScroll 重建时，isScrolledToBottom()
     // 已经为真，会继续跟随末尾，用户敲的每个字符都留在视口内。
     scrollToOutputTail();
+    notePromptAnchor();
     emit inputBytes(bytes);
+}
+
+void TerminalView::notePromptAnchor()
+{
+    if (m_hasPromptAnchor || m_localCapture || m_vtermBridge->isAlternateScreen()) {
+        return;
+    }
+    const VtermBridge::InputLine line = m_vtermBridge->cursorInputLine();
+    m_promptAnchor = line.text.left(line.cursorOffset);
+    m_hasPromptAnchor = true;
+}
+
+void TerminalView::resetCommandLineTracking()
+{
+    m_promptAnchor.clear();
+    m_hasPromptAnchor = false;
+    m_commandLineEditedRemotely = false;
+}
+
+QString TerminalView::echoedCommandLine() const
+{
+    if (!m_hasPromptAnchor || m_vtermBridge->isAlternateScreen()) {
+        return {};
+    }
+    const VtermBridge::InputLine line = m_vtermBridge->cursorInputLine();
+    // bash 列出多个补全候选后会在新行重画提示符和输入行，比对的是提示符文本而不是行号，
+    // 所以重画后依然能对上；对不上说明这一行已不是本轮输入（命令输出冲掉了提示符等）。
+    if (line.cursorOffset < m_promptAnchor.size() || !line.text.startsWith(m_promptAnchor)) {
+        return {};
+    }
+    const QString beforeCursor =
+        line.text.mid(m_promptAnchor.size(), line.cursorOffset - m_promptAnchor.size());
+    QString afterCursor = line.text.mid(line.cursorOffset);
+    if (afterCursor.startsWith(QStringLiteral("  "))) {
+        afterCursor.clear();
+    }
+    QString command = beforeCursor + afterCursor;
+    // 只裁右侧：行首空格是 HISTCONTROL=ignorespace 的约定，历史记录要据此跳过这条命令。
+    qsizetype end = command.size();
+    while (end > 0 && command.at(end - 1).isSpace()) {
+        --end;
+    }
+    command.truncate(end);
+    return command;
+}
+
+QString TerminalView::submittedCommandLine() const
+{
+    if (m_commandLineEditedRemotely) {
+        const QString echoed = echoedCommandLine();
+        if (!echoed.trimmed().isEmpty()) {
+            return echoed;
+        }
+    }
+    return m_currentCommand;
 }
 
 void TerminalView::renderPreservingScroll()
@@ -1185,6 +1242,7 @@ void TerminalView::submitCommand(const QString &command)
     sendUserInput(command.toUtf8() + QByteArrayLiteral("\r"));
     emit commandSubmitted(command);
     m_currentCommand.clear();
+    resetCommandLineTracking();
     m_commandCompleter->popup()->hide();
 }
 
@@ -1539,6 +1597,8 @@ void TerminalView::keyPressEvent(QKeyEvent *event)
     }
 
     QByteArray encoded;
+    // 本次按键是否会让远端输入行出现本地缓冲无法推算的内容；见 submittedCommandLine()。
+    bool editsRemoteLine = false;
     const bool terminalControl = hasTerminalControlModifier(event);
 
     if (m_localCapture) {
@@ -1608,6 +1668,11 @@ void TerminalView::keyPressEvent(QKeyEvent *event)
         }
         // 方向键等导航键的字节由 libvterm 生成，不经过 sendUserInput，但同样是用户输入。
         scrollToOutputTail();
+        if (!alternateScreen) {
+            // 上翻历史、左右移动光标后再编辑，结果只存在于远端输入行里。
+            notePromptAnchor();
+            m_commandLineEditedRemotely = true;
+        }
         m_vtermBridge->sendKey(*navigationKey, toVtermModifiers(event));
         event->accept();
         return;
@@ -1651,7 +1716,7 @@ void TerminalView::keyPressEvent(QKeyEvent *event)
             return;
         }
         const QString submittedCommand = recoverEchoedSshCommand(
-            m_currentCommand, m_vtermBridge->cursorLineText());
+            submittedCommandLine(), m_vtermBridge->cursorLineText());
         m_currentCommand.clear();
         m_commandCompleter->popup()->hide();
         // 提交密码或普通命令后允许识别下一次认证重试提示。
@@ -1666,17 +1731,20 @@ void TerminalView::keyPressEvent(QKeyEvent *event)
             encoded.prepend('\x1b');
         }
         sendUserInput(encoded);
+        resetCommandLineTracking();
         emit commandSubmitted(submittedCommand);
         event->accept();
         return;
     } else if (event->key() == Qt::Key_Tab && !event->modifiers().testFlag(Qt::ShiftModifier)) {
         // ASCII HT(0x09) 由远端 readline/zle 解释，真正的候选生成仍在服务器 Shell 中完成。
         encoded = QByteArrayLiteral("\t");
+        editsRemoteLine = true;
     } else if (event->key() == Qt::Key_Backtab
                || (event->key() == Qt::Key_Tab
                    && event->modifiers().testFlag(Qt::ShiftModifier))) {
         // xterm 使用 CSI Z 表示反向 Tab；zsh 菜单补全和部分 TUI 会使用该序列。
         encoded = QByteArrayLiteral("\x1b[Z");
+        editsRemoteLine = true;
     } else if (event->key() == Qt::Key_Backspace) {
         encoded = QByteArray(1, '\x7f');
         if (!m_currentCommand.isEmpty()) {
@@ -1693,8 +1761,12 @@ void TerminalView::keyPressEvent(QKeyEvent *event)
             // Ctrl-D 只有在当前输入行为空时才是 EOF；行中是 delete-char-forward，而在
             // cat/python/mysql 里退出的也是那个程序而非 Shell。误判会弹掉一层真实存在的
             // 服务器，导致文件管理器少一层。
-            if (m_currentCommand.isEmpty()) {
+            // 上翻历史后的输入行在本地缓冲里是空的，必须看回显才知道行里还有没有内容。
+            if (submittedCommandLine().isEmpty()) {
                 emit commandSubmitted(QStringLiteral("Ctrl-D"));
+                resetCommandLineTracking();
+            } else {
+                editsRemoteLine = true;
             }
             m_currentCommand.clear();
         } else if (event->key() == Qt::Key_C) {
@@ -1702,13 +1774,18 @@ void TerminalView::keyPressEvent(QKeyEvent *event)
             // 目标时才据此回滚，普通命令的中断不会影响连接链。
             emit nestedSshAborted();
             m_currentCommand.clear();
+            resetCommandLineTracking();
             m_commandCompleter->popup()->hide();
+        } else {
+            // Ctrl-R、Ctrl-W、Ctrl-U、Ctrl-Y 等 readline 编辑键的结果只有远端知道。
+            editsRemoteLine = true;
         }
     } else if (const std::optional<char> controlCode =
                    terminalControl ? controlCodeForNonLetterKey(event->key()) : std::nullopt;
                controlCode.has_value()) {
         // Ctrl+[ 是 vim 用户退出插入模式最常用的按法；只处理 A~Z 会让它被整个吞掉。
         encoded = QByteArray(1, *controlCode);
+        editsRemoteLine = true;
     } else if (!event->text().isEmpty()
                && !event->modifiers().testFlag(Qt::ControlModifier)
                && !event->modifiers().testFlag(Qt::MetaModifier)) {
@@ -1724,8 +1801,13 @@ void TerminalView::keyPressEvent(QKeyEvent *event)
 
     if (event->modifiers().testFlag(Qt::AltModifier) && !encoded.startsWith('\x1b')) {
         encoded.prepend('\x1b');
+        // Alt-B/Alt-F/Alt-. 等是 readline 的移动、取上条参数键。
+        editsRemoteLine = true;
     }
     sendUserInput(encoded);
+    if (editsRemoteLine && !alternateScreen) {
+        m_commandLineEditedRemotely = true;
+    }
     // 普通字符、粘贴和退格会改变前缀；重复计算只涉及很小的内存模型，可换来所有输入路径的
     // 一致行为并避免漏掉输入法或未来新增按键分支。备用屏下没有命令行可补全。
     if (!alternateScreen) {
@@ -2148,8 +2230,9 @@ void TerminalView::inputMethodEvent(QInputMethodEvent *event)
         // 输入法一次可能提交多个字符，因此按字符维护命令缓冲；换行代表提交当前命令。
         for (const QChar character : committedText) {
             if (character == QLatin1Char('\r') || character == QLatin1Char('\n')) {
-                emit commandSubmitted(m_currentCommand);
+                emit commandSubmitted(submittedCommandLine());
                 m_currentCommand.clear();
+                resetCommandLineTracking();
                 // 输入法直接提交换行时同样要开启下一轮认证提示检测；否则第二次密码提示
                 // 会因为第一次的 reported 状态而被忽略。
                 m_authenticationPromptReported = false;

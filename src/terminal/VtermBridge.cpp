@@ -697,6 +697,47 @@ QString VtermBridge::cursorLineText() const
     return text.trimmed();
 }
 
+VtermBridge::InputLine VtermBridge::cursorInputLine() const
+{
+    InputLine result;
+    if (m_cursorRow < 0 || m_cursorRow >= m_rows) {
+        return result;
+    }
+
+    VTermState *state = vterm_obtain_state(m_vterm);
+    const auto continues = [state](const int row) {
+        const VTermLineInfo *info = vterm_state_get_lineinfo(state, row);
+        return info != nullptr && info->continuation;
+    };
+    int firstRow = m_cursorRow;
+    while (firstRow > 0 && continues(firstRow)) {
+        --firstRow;
+    }
+    int lastRow = m_cursorRow;
+    while (lastRow + 1 < m_rows && continues(lastRow + 1)) {
+        ++lastRow;
+    }
+
+    result.cursorOffset = -1;
+    for (int row = firstRow; row <= lastRow; ++row) {
+        const Line line = screenLine(row);
+        for (int column = 0; column < line.size(); ++column) {
+            if (row == m_cursorRow && column == m_cursorColumn) {
+                result.cursorOffset = result.text.size();
+            }
+            const Cell &cell = line.at(column);
+            // 宽度为 0 的单元格是宽字符的占位续格，重复拼接会破坏中文或 Nerd Font 字符。
+            if (cell.width > 0) {
+                result.text.append(cell.text.isEmpty() ? QStringLiteral(" ") : cell.text);
+            }
+        }
+    }
+    if (result.cursorOffset < 0) {
+        result.cursorOffset = result.text.size();
+    }
+    return result;
+}
+
 bool VtermBridge::isBlankCell(const Cell &cell)
 {
     for (const QChar character : cell.text) {

@@ -183,6 +183,15 @@ private slots:
     /** @brief 本地键盘缓冲缺失时必须能从 PTY 当前光标行恢复嵌套 ssh 命令。 */
     void terminalViewRecoversSshCommandFromCursorLine();
 
+    /** @brief Tab 补全、上翻历史后提交的命令必须取远端回显，而不是残缺的本地按键缓冲。 */
+    void terminalViewSubmitsShellCompletedCommand();
+
+    /** @brief 折行的长命令要整条拼回；回显不可用时退回本地缓冲。 */
+    void terminalViewSubmitsWrappedEchoAndFallsBack();
+
+    /** @brief 上翻历史后行内的 Ctrl-D 不是 EOF。 */
+    void terminalViewIgnoresCtrlDOnRecalledLine();
+
     /** @brief 内层 Shell 提示符必须在渲染完成后被识别，用于延迟开放第 2 层文件管理。 */
     void terminalViewDetectsRenderedShellPrompt();
 
@@ -1346,6 +1355,117 @@ void SshCommandParserTest::terminalViewRecoversSshCommandFromCursorLine()
     QCOMPARE(commandSpy.size(), 1);
     QCOMPARE(commandSpy.at(0).at(0).toString(),
              QStringLiteral("ssh root@10.0.0.2"));
+}
+
+void SshCommandParserTest::terminalViewSubmitsShellCompletedCommand()
+{
+    TerminalView view;
+    QSignalSpy commandSpy(&view, &TerminalView::commandSubmitted);
+
+    // 测试里没有 PTY，回显由 appendTerminalOutput 手工扮演远端 Shell。
+    view.appendTerminalOutput(QByteArrayLiteral("[root@host ~]# "));
+    QTest::keyClicks(&view, QStringLiteral("./sta"));
+    view.appendTerminalOutput(QByteArrayLiteral("./sta"));
+    QTest::keyClick(&view, Qt::Key_Tab);
+    view.appendTerminalOutput(QByteArrayLiteral("rt.sh "));
+    QTest::keyClick(&view, Qt::Key_Return);
+    QCOMPARE(commandSpy.size(), 1);
+    QCOMPARE(commandSpy.at(0).at(0).toString(), QStringLiteral("./start.sh"));
+
+    // 路径中段补全后继续手打：缓冲是 "cd /dageo"，远端实际是 "cd /data/geohoop"。
+    view.appendTerminalOutput(QByteArrayLiteral("\r\n[root@host ~]# "));
+    QTest::keyClicks(&view, QStringLiteral("cd /da"));
+    view.appendTerminalOutput(QByteArrayLiteral("cd /da"));
+    QTest::keyClick(&view, Qt::Key_Tab);
+    view.appendTerminalOutput(QByteArrayLiteral("ta/"));
+    QTest::keyClicks(&view, QStringLiteral("geo"));
+    view.appendTerminalOutput(QByteArrayLiteral("geo"));
+    QTest::keyClick(&view, Qt::Key_Tab);
+    // bash 有多个候选时会列出它们，再在新行重画提示符和输入行。
+    view.appendTerminalOutput(QByteArrayLiteral(
+        "\r\ngeohoop/  geohosma/\r\n[root@host ~]# cd /data/geoho"));
+    QTest::keyClicks(&view, QStringLiteral("op"));
+    view.appendTerminalOutput(QByteArrayLiteral("op"));
+    QTest::keyClick(&view, Qt::Key_Return);
+    QCOMPARE(commandSpy.size(), 2);
+    QCOMPARE(commandSpy.at(1).at(0).toString(), QStringLiteral("cd /data/geohoop"));
+
+    // 上翻历史：本地缓冲为空，整条命令都来自远端。
+    view.appendTerminalOutput(QByteArrayLiteral("\r\n[root@host ~]# "));
+    QTest::keyClick(&view, Qt::Key_Up);
+    view.appendTerminalOutput(QByteArrayLiteral("vi app"));
+    QTest::keyClick(&view, Qt::Key_Return);
+    QCOMPARE(commandSpy.size(), 3);
+    QCOMPARE(commandSpy.at(2).at(0).toString(), QStringLiteral("vi app"));
+
+    // zsh RPROMPT 右对齐在同一行，与光标隔着大段空白，不属于命令。
+    view.appendTerminalOutput(QByteArrayLiteral("\r\n\x1b[70G~/src\r% "));
+    QTest::keyClicks(&view, QStringLiteral("ls -"));
+    view.appendTerminalOutput(QByteArrayLiteral("ls -"));
+    QTest::keyClick(&view, Qt::Key_Tab);
+    view.appendTerminalOutput(QByteArrayLiteral("-all"));
+    QTest::keyClick(&view, Qt::Key_Return);
+    QCOMPARE(commandSpy.size(), 4);
+    QCOMPARE(commandSpy.at(3).at(0).toString(), QStringLiteral("ls --all"));
+
+    // 光标左移到行中再回车，光标后的内容仍是命令的一部分。
+    view.appendTerminalOutput(QByteArrayLiteral("\r\n$ "));
+    QTest::keyClick(&view, Qt::Key_Up);
+    view.appendTerminalOutput(QByteArrayLiteral("mv ho ho1006\b\b\b\b"));
+    QTest::keyClick(&view, Qt::Key_Return);
+    QCOMPARE(commandSpy.size(), 5);
+    QCOMPARE(commandSpy.at(4).at(0).toString(), QStringLiteral("mv ho ho1006"));
+}
+
+void SshCommandParserTest::terminalViewSubmitsWrappedEchoAndFallsBack()
+{
+    TerminalView view;
+    QSignalSpy commandSpy(&view, &TerminalView::commandSubmitted);
+
+    // 默认 80 列：提示符加 URL 必然折到第二、三行，只读光标行会丢掉开头的 wget。
+    const QString url = QStringLiteral("http://10.212.14.25:8888/1006/")
+        + QString(120, QLatin1Char('a')) + QStringLiteral(".jar");
+    view.appendTerminalOutput(QByteArrayLiteral("[root@host ~]# "));
+    QTest::keyClicks(&view, QStringLiteral("wget http"));
+    view.appendTerminalOutput(QByteArrayLiteral("wget http"));
+    QTest::keyClick(&view, Qt::Key_Tab);
+    view.appendTerminalOutput(url.mid(4).toUtf8());
+    QTest::keyClick(&view, Qt::Key_Return);
+    QCOMPARE(commandSpy.size(), 1);
+    QCOMPARE(commandSpy.at(0).at(0).toString(), QStringLiteral("wget ") + url);
+
+    // 提示符被后台输出冲掉、对不上锚点时，宁可用本地缓冲也不能把别的输出当成命令。
+    view.appendTerminalOutput(QByteArrayLiteral("\r\n[root@host ~]# "));
+    QTest::keyClicks(&view, QStringLiteral("make"));
+    QTest::keyClick(&view, Qt::Key_Tab);
+    view.appendTerminalOutput(QByteArrayLiteral("\r\nbackground job done"));
+    QTest::keyClick(&view, Qt::Key_Return);
+    QCOMPARE(commandSpy.size(), 2);
+    QCOMPARE(commandSpy.at(1).at(0).toString(), QStringLiteral("make"));
+
+    // 纯手打不依赖回显：远端还没来得及回显就回车，命令也不能丢字。
+    view.appendTerminalOutput(QByteArrayLiteral("\r\n[root@host ~]# "));
+    QTest::keyClicks(&view, QStringLiteral("ls"));
+    QTest::keyClick(&view, Qt::Key_Return);
+    QCOMPARE(commandSpy.size(), 3);
+    QCOMPARE(commandSpy.at(2).at(0).toString(), QStringLiteral("ls"));
+}
+
+void SshCommandParserTest::terminalViewIgnoresCtrlDOnRecalledLine()
+{
+    TerminalView view;
+    QSignalSpy commandSpy(&view, &TerminalView::commandSubmitted);
+
+    view.appendTerminalOutput(QByteArrayLiteral("$ "));
+    QTest::keyClick(&view, Qt::Key_Up);
+    view.appendTerminalOutput(QByteArrayLiteral("exit\b\b\b\b"));
+#if defined(Q_OS_MACOS)
+    QTest::keyClick(&view, Qt::Key_D, Qt::MetaModifier);
+#else
+    QTest::keyClick(&view, Qt::Key_D, Qt::ControlModifier);
+#endif
+    // 行里还有上翻出来的 exit，这一下只是删掉光标处的字符，不能弹掉一层服务器。
+    QCOMPARE(commandSpy.size(), 0);
 }
 
 void SshCommandParserTest::terminalViewDetectsRenderedShellPrompt()

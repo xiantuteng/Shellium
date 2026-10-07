@@ -469,8 +469,46 @@ private:
     /** @brief 接受补全候选，只向 PTY 发送尚未输入的后缀。 */
     void acceptCompletion(const QString &completion);
 
+    /**
+     * @brief 在本轮输入的第一个字节发出前，记下光标之前的提示符文本。
+     *
+     * 此刻远端尚未回显任何输入，光标正好停在提示符末尾；回车时以它为锚点从回显行里切出
+     * 命令。已有锚点、备用屏或本地捕获期间不做任何事。
+     */
+    void notePromptAnchor();
+
+    /** @brief 一条命令已提交或作废：清空提示符锚点与"远端改过输入行"标记。 */
+    void resetCommandLineTracking();
+
+    /**
+     * @brief 从 PTY 回显中取出用户当前输入行的内容。
+     * @return 锚点失配（提示符被输出冲掉、预输入等）或内容为空时返回空字符串。
+     *
+     * 光标后的内容只有紧挨光标时才算命令的一部分；隔着两个以上空白的是 zsh RPROMPT
+     * 之类右对齐的提示信息，不能被写进历史。
+     */
+    [[nodiscard]] QString echoedCommandLine() const;
+
+    /**
+     * @brief 回车时真正被执行的命令。
+     *
+     * 只要按过 Tab、方向键或 Ctrl/Alt 行编辑键，本地按键缓冲就不再代表远端输入行：
+     * `./sta<Tab>` 在缓冲里仍是 `./sta`，上翻历史后缓冲甚至是空的。这时以回显为准，
+     * 回显不可用才退回缓冲；纯手打的命令仍用缓冲，不受远端回显延迟影响。
+     */
+    [[nodiscard]] QString submittedCommandLine() const;
+
     /** @brief 当前尚未按回车提交的输入；同时用于识别 ssh 命令和一次性复用内层密码。 */
     QString m_currentCommand;
+
+    /** @brief 本轮输入开始时光标前的提示符文本；见 notePromptAnchor()。 */
+    QString m_promptAnchor;
+
+    /** @brief m_promptAnchor 是否已为本轮输入记录过（空字符串本身也是合法的提示符）。 */
+    bool m_hasPromptAnchor = false;
+
+    /** @brief 本轮输入是否用过只有远端 Shell 才知道结果的编辑键（Tab、方向键等）。 */
+    bool m_commandLineEditedRemotely = false;
 
     /** @brief 负责 VT 状态机、屏幕渲染和终端协议应答的桥接对象。 */
     VtermBridge *m_vtermBridge = nullptr;

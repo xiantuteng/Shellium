@@ -197,6 +197,22 @@ public:
      */
     [[nodiscard]] QString cursorLineText() const;
 
+    /** @brief 光标所在逻辑行（自动折行的多段屏幕行拼接而成）及光标在其中的字符偏移。 */
+    struct InputLine {
+        QString text;
+        qsizetype cursorOffset = 0;
+    };
+
+    /**
+     * @brief 返回光标所在的逻辑行，保留行尾空白。
+     *
+     * 远端 Shell 的 Tab 补全、历史回溯与行编辑都在服务器上完成，本地按键缓冲看不到它们的
+     * 结果；用户真正执行的命令只存在于 PTY 回显里。长命令（例如带完整 URL 的 wget）会被
+     * 终端自动折到下一屏幕行，只读光标那一行会截掉前半段，因此按 libvterm 的续行标记把
+     * 整条逻辑行拼回来。行尾空白不裁剪：提示符结尾的空格是调用方比对提示符前缀的依据。
+     */
+    [[nodiscard]] InputLine cursorInputLine() const;
+
     /**
      * @brief 把滚动历史与当前屏幕同步到 QTextDocument。
      * @param document 终端视图持有的文档。
