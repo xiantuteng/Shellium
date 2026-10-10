@@ -86,6 +86,8 @@ private slots:
      * 至多三个，且与其他目标的连接历史无关；“全部主机”不重复列出它们，也不含目标自身。
      * 可见行依次绑定 Cmd+1…Cmd+9，按下即发出“跳板 + 目标”两跳连接计划。
      */
+    /** @brief 主机右键菜单提供“新增端口转发”并带出该主机 id；分组节点不提供。 */
+    void hostContextMenuRequestsNewPortForwardForThatHost();
     void hostContextMenuOpensHostChainDialogWithRecentConnections();
 
     /** @brief 搜索过滤后 Cmd+数字 必须按当前可见行重新编号，不能连到被隐藏的主机。 */
@@ -558,6 +560,52 @@ void HostManagerWidgetTest::folderContextMenuOffersConnectInWorkspaceAndEmitsGro
     const QList<QVariant> emitted = groupConnectSpy.constFirst();
     QCOMPARE(emitted.at(0).toString(), group.id);
     QCOMPARE(emitted.at(1).toString(), group.name);
+}
+
+void HostManagerWidgetTest::hostContextMenuRequestsNewPortForwardForThatHost()
+{
+    HostRecord group;
+    group.id = QStringLiteral("forward-menu-group");
+    group.kind = HostNodeKind::Folder;
+    group.name = QStringLiteral("转发菜单分组");
+    QString error;
+    QVERIFY2(m_database->saveHost(group, &error), qPrintable(error));
+
+    HostRecord host;
+    host.id = QStringLiteral("forward-menu-host");
+    host.kind = HostNodeKind::Host;
+    host.parentId = group.id;
+    host.name = QStringLiteral("转发菜单主机");
+    host.host = QStringLiteral("192.0.2.30");
+    QVERIFY2(m_database->saveHost(host, &error), qPrintable(error));
+
+    HostManagerWidget widget(m_database.get(), m_vault.get());
+    const QString actionText = QStringLiteral("New Port Forwarding…");
+
+    QTreeWidgetItem *hostItem = findItem(widget, host.name);
+    QVERIFY2(hostItem != nullptr, "主机节点未出现在树中");
+    QMenu hostMenu;
+    widget.populateContextMenu(&hostMenu, hostItem);
+    QAction *forwardAction = nullptr;
+    for (QAction *action : hostMenu.actions()) {
+        if (action->text() == actionText) {
+            forwardAction = action;
+        }
+    }
+    QVERIFY2(forwardAction != nullptr, "主机右键菜单缺少新增端口转发动作");
+
+    QSignalSpy spy(&widget, &HostManagerWidget::newPortForwardRequested);
+    forwardAction->trigger();
+    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.constFirst().at(0).toString(), host.id);
+
+    QTreeWidgetItem *groupItem = findItem(widget, group.name);
+    QVERIFY2(groupItem != nullptr, "分组节点未出现在树中");
+    QMenu groupMenu;
+    widget.populateContextMenu(&groupMenu, groupItem);
+    for (const QAction *action : groupMenu.actions()) {
+        QVERIFY2(action->text() != actionText, "规则不能绑定分组，分组菜单不应出现新增端口转发");
+    }
 }
 
 namespace {

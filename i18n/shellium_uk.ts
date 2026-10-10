@@ -550,6 +550,10 @@ Run it in the current terminal?</source>
         <translation type="unfinished">Підключитися</translation>
     </message>
     <message>
+        <source>New Port Forwarding…</source>
+        <translation>Нова переадресація портів…</translation>
+    </message>
+    <message>
         <source>Connect in Workspace</source>
         <translation type="unfinished">Підключити в робочій області</translation>
     </message>
@@ -2005,6 +2009,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>Select a rule to edit</source>
         <translation type="unfinished">Виберіть правило для зміни</translation>
+    </message>
+    <message>
+        <source>This host cannot have port forwarding rules</source>
+        <translation>Для цього хоста не можна додати правила переадресації портів</translation>
     </message>
     <message>
         <source>Failed to read port forwarding hosts: %1</source>
@@ -4537,6 +4545,10 @@ Public key: %3</source>
     <message>
         <source>Failed to cancel remote listener %1:%2: %3</source>
         <translation type="unfinished">Не вдалося скасувати віддаленого слухача %1:%2: %3</translation>
+    </message>
+    <message>
+        <source>the server has probably reached its MaxSessions limit (default 10). Each forwarded connection uses one SSH session because this server disables TCP forwarding; set AllowTcpForwarding yes or raise MaxSessions in sshd_config</source>
+        <translation>імовірно, сервер досяг ліміту MaxSessions (типово 10). На цьому сервері TCP-переадресацію вимкнено, тому кожне переадресоване з’єднання займає окремий SSH-сеанс; задайте AllowTcpForwarding yes або збільште MaxSessions у sshd_config</translation>
     </message>
 </context>
 <context>

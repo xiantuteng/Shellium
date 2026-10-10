@@ -3,7 +3,9 @@
 #include "forwarding/PortForwardRule.h"
 #include "storage/ApplicationDatabase.h"
 
+#include <QApplication>
 #include <QComboBox>
+#include <QDialog>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QItemSelectionModel>
@@ -13,6 +15,7 @@
 #include <QSet>
 #include <QStyle>
 #include <QTest>
+#include <QTimer>
 #include <QTreeWidget>
 #include <QTreeWidgetItemIterator>
 
@@ -53,6 +56,12 @@ private slots:
 
     /** @brief 异步状态刷新重建卡片列表后，必须按稳定规则 id 恢复用户选择。 */
     void runtimeRefreshPreservesSelectedRule();
+
+    /** @brief selectHost 切到已保存主机；未知 id（本地 Shell、临时连接）不得冲掉当前选择。 */
+    void selectHostSwitchesOnlyToKnownHosts();
+
+    /** @brief 从主机右键发起的新建必须先切到那台主机，再弹出“新建端口转发”对话框。 */
+    void createRuleForHostOpensNewRuleDialogForThatHost();
 
 private:
     /** @brief 递归查找控件树中第一个显示指定文本的 QLabel。 */
@@ -456,6 +465,67 @@ void PortForwardManagerWidgetTest::runtimeRefreshPreservesSelectedRule()
     QVERIFY2(list->currentItem() != nullptr, "状态刷新后当前选择不得变为空");
     QCOMPARE(list->currentItem()->data(kRuleIdRole).toString(), selectedRuleId);
     QVERIFY2(list->currentItem()->isSelected(), "恢复 currentItem 时也必须恢复实际选中标记");
+}
+
+void PortForwardManagerWidgetTest::selectHostSwitchesOnlyToKnownHosts()
+{
+    QString error;
+    for (const QString &id : {QStringLiteral("select-a"), QStringLiteral("select-b")}) {
+        HostRecord host;
+        host.id = id;
+        host.kind = HostNodeKind::Host;
+        host.name = id;
+        host.host = QStringLiteral("10.0.0.9");
+        QVERIFY2(m_database->saveHost(host, &error), qPrintable(error));
+    }
+
+    PortForwardManagerWidget widget(m_database.get());
+    auto *hostCombo = widget.findChild<QComboBox *>();
+    QVERIFY(hostCombo != nullptr);
+    hostCombo->setCurrentIndex(hostCombo->findData(QStringLiteral("select-a")));
+
+    QVERIFY(widget.selectHost(QStringLiteral("select-b")));
+    QCOMPARE(hostCombo->currentData().toString(), QStringLiteral("select-b"));
+
+    QVERIFY(!widget.selectHost(QStringLiteral("temporary-connection-uuid")));
+    QVERIFY(!widget.selectHost(QString()));
+    QCOMPARE(hostCombo->currentData().toString(), QStringLiteral("select-b"));
+}
+
+void PortForwardManagerWidgetTest::createRuleForHostOpensNewRuleDialogForThatHost()
+{
+    QString error;
+    for (const QString &id : {QStringLiteral("create-a"), QStringLiteral("create-b")}) {
+        HostRecord host;
+        host.id = id;
+        host.kind = HostNodeKind::Host;
+        host.name = id;
+        host.host = QStringLiteral("10.0.0.10");
+        QVERIFY2(m_database->saveHost(host, &error), qPrintable(error));
+    }
+
+    PortForwardManagerWidget widget(m_database.get());
+    auto *hostCombo = widget.findChild<QComboBox *>();
+    QVERIFY(hostCombo != nullptr);
+    hostCombo->setCurrentIndex(hostCombo->findData(QStringLiteral("create-a")));
+
+    // 对话框是模态 exec()；在事件循环里记下标题与当时的主机选择后取消，避免测试阻塞。
+    QString dialogTitle;
+    QString hostWhileDialogOpen;
+    QTimer::singleShot(0, &widget, [&]() {
+        auto *dialog = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+        if (dialog == nullptr) {
+            return;
+        }
+        dialogTitle = dialog->windowTitle();
+        hostWhileDialogOpen = hostCombo->currentData().toString();
+        dialog->reject();
+    });
+    widget.createRuleForHost(QStringLiteral("create-b"));
+
+    QCOMPARE(dialogTitle, QStringLiteral("New port forwarding"));
+    QCOMPARE(hostWhileDialogOpen, QStringLiteral("create-b"));
+    QCOMPARE(hostCombo->currentData().toString(), QStringLiteral("create-b"));
 }
 
 QTEST_MAIN(PortForwardManagerWidgetTest)

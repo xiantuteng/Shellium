@@ -134,6 +134,8 @@ private slots:
     void commandPaletteUsesQuickPopupAndTriggersAction();
     /** @brief 任意侧栏页、侧栏收起、焦点在终端时，Shift+Cmd+F 都要切回主机页并聚焦搜索框。 */
     void hostSearchShortcutSwitchesToHostsPageFromAnywhere();
+    /** @brief 激活端口转发页或在该页上切换标签时，主机选择器必须跟随当前终端的主机。 */
+    void forwardingPageFollowsActiveTerminalHost();
     /** @brief 组合搜索栏内部输入框获得焦点时，外框必须换成强调色描边，与普通输入框一致。 */
     void compositeSearchBarsHighlightBorderOnFocus();
 
@@ -1767,6 +1769,67 @@ void MainWindowShellTest::compositeSearchBarsHighlightBorderOnFocus()
     productivityEdit->setFocus();
     QVERIFY2(colorDistance(leftBorderColor(productivityBar), accent) < 60,
              "效率工具搜索框获得焦点后外框没有高亮");
+}
+
+void MainWindowShellTest::forwardingPageFollowsActiveTerminalHost()
+{
+    QString error;
+    QList<HostRecord> hosts;
+    for (const QString &id : {QStringLiteral("follow-host-a"), QStringLiteral("follow-host-b")}) {
+        HostRecord host;
+        host.id = id;
+        host.kind = HostNodeKind::Host;
+        host.name = id;
+        // 不可达端口：只需要连接计划写入面板，测试不等待任何网络结果。
+        host.host = QStringLiteral("127.0.0.1");
+        host.port = quint16{1};
+        host.username = QStringLiteral("test");
+        QVERIFY2(m_database->saveHost(host, &error), qPrintable(error));
+        hosts.append(host);
+    }
+
+    MainWindow window(m_database, m_vault);
+    window.resize(1200, 800);
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+    auto *tabs = window.findChild<QTabWidget *>(QStringLiteral("TerminalPages"));
+    auto *newTabButton = window.findChild<QToolButton *>(QStringLiteral("TitleNewTabButton"));
+    auto *stack = window.findChild<QStackedWidget *>(QStringLiteral("SidebarStack"));
+    auto *rail = window.findChild<QWidget *>(QStringLiteral("NavigationRail"));
+    QVERIFY(tabs != nullptr && newTabButton != nullptr && stack != nullptr && rail != nullptr);
+    auto *forwardingPage = stack->widget(2);
+    auto *hostCombo = forwardingPage->findChild<QComboBox *>(QStringLiteral("PortForwardHostCombo"));
+    QVERIFY(hostCombo != nullptr);
+
+    for (const HostRecord &host : hosts) {
+        QTest::mouseClick(newTabButton, Qt::LeftButton);
+        auto *workspace = qobject_cast<TerminalWorkspace *>(tabs->widget(tabs->count() - 1));
+        QVERIFY(workspace != nullptr);
+        ConnectionTarget target;
+        target.id = host.id;
+        target.host = host.host;
+        target.port = *host.port;
+        target.username = host.username;
+        workspace->activePane()->connectToHosts({target});
+    }
+    QCOMPARE(tabs->count(), 2);
+    tabs->setCurrentIndex(1);
+
+    // 先把选择器停在另一台主机上，才能区分“跟随了终端”与“碰巧是默认第一项”。
+    hostCombo->setCurrentIndex(hostCombo->findData(hosts.at(0).id));
+    QToolButton *forwardingButton = nullptr;
+    for (QToolButton *button : rail->findChildren<QToolButton *>()) {
+        if (button->accessibleName() == QStringLiteral("Port forwarding")) {
+            forwardingButton = button;
+        }
+    }
+    QVERIFY(forwardingButton != nullptr);
+    QTest::mouseClick(forwardingButton, Qt::LeftButton);
+    QCOMPARE(stack->currentWidget(), forwardingPage);
+    QCOMPARE(hostCombo->currentData().toString(), hosts.at(1).id);
+
+    tabs->setCurrentIndex(0);
+    QCOMPARE(hostCombo->currentData().toString(), hosts.at(0).id);
 }
 
 void MainWindowShellTest::hostSearchShortcutSwitchesToHostsPageFromAnywhere()

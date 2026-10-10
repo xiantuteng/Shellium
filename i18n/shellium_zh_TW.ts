@@ -550,6 +550,10 @@ Run it in the current terminal?</source>
         <translation>連線</translation>
     </message>
     <message>
+        <source>New Port Forwarding…</source>
+        <translation>新增埠轉發…</translation>
+    </message>
+    <message>
         <source>Connect in Workspace</source>
         <translation type="unfinished">在工作空間中連線</translation>
     </message>
@@ -2005,6 +2009,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>Select a rule to edit</source>
         <translation>請選擇要編輯的規則</translation>
+    </message>
+    <message>
+        <source>This host cannot have port forwarding rules</source>
+        <translation>此主機無法新增埠轉發規則</translation>
     </message>
     <message>
         <source>Failed to read port forwarding hosts: %1</source>
@@ -4539,6 +4547,10 @@ Public key: %3</source>
     <message>
         <source>Failed to cancel remote listener %1:%2: %3</source>
         <translation>取消遠端監聽 %1:%2 失敗：%3</translation>
+    </message>
+    <message>
+        <source>the server has probably reached its MaxSessions limit (default 10). Each forwarded connection uses one SSH session because this server disables TCP forwarding; set AllowTcpForwarding yes or raise MaxSessions in sshd_config</source>
+        <translation>伺服器可能已達到 MaxSessions 上限（預設 10）。該伺服器停用了 TCP 轉發，每條轉發連線都要佔用一個 SSH 工作階段；請在 sshd_config 中設定 AllowTcpForwarding yes 或調大 MaxSessions</translation>
     </message>
 </context>
 <context>

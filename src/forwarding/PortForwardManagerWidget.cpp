@@ -1250,6 +1250,34 @@ void PortForwardManagerWidget::refresh()
     reloadHosts();
 }
 
+bool PortForwardManagerWidget::selectHost(const QString &hostId)
+{
+    if (hostId.isEmpty()) {
+        return false;
+    }
+    const int index = m_hostCombo->findData(hostId);
+    if (index < 0) {
+        return false;
+    }
+    // currentIndexChanged 已接到 reloadRules；索引未变时不会发信号，规则列表本来就是该主机的。
+    m_hostCombo->setCurrentIndex(index);
+    return true;
+}
+
+void PortForwardManagerWidget::createRuleForHost(const QString &hostId)
+{
+    if (!selectHost(hostId)) {
+        // 主机刚在主机树里新建时，hostsChanged 已触发刷新；这里再兜底读一次数据库，
+        // 仍找不到才说明它不是可绑定规则的持久化主机。
+        reloadHosts();
+        if (!selectHost(hostId)) {
+            emit statusMessage(tr("This host cannot have port forwarding rules"));
+            return;
+        }
+    }
+    editRule();
+}
+
 void PortForwardManagerWidget::reloadHosts()
 {
     const QString previousHostId = m_hostCombo->currentData().toString();

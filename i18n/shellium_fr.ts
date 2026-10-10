@@ -550,6 +550,10 @@ L&apos;exécuter dans le terminal actuel ?</translation>
         <translation type="unfinished">Se connecter</translation>
     </message>
     <message>
+        <source>New Port Forwarding…</source>
+        <translation>Nouvelle redirection de port…</translation>
+    </message>
+    <message>
         <source>Connect in Workspace</source>
         <translation type="unfinished">Se connecter dans un espace de travail</translation>
     </message>
@@ -2005,6 +2009,10 @@ Confirmer que la clé a changé, remplacer l&apos;ancien enregistrement dans kno
     <message>
         <source>Select a rule to edit</source>
         <translation type="unfinished">Sélectionner une règle à modifier</translation>
+    </message>
+    <message>
+        <source>This host cannot have port forwarding rules</source>
+        <translation>Impossible d&apos;ajouter des règles de redirection de port à cet hôte</translation>
     </message>
     <message>
         <source>Failed to read port forwarding hosts: %1</source>
@@ -4537,6 +4545,10 @@ Clé publique : %3</translation>
     <message>
         <source>Failed to cancel remote listener %1:%2: %3</source>
         <translation type="unfinished">Échec de l&apos;annulation de l&apos;écouteur distant %1:%2 : %3</translation>
+    </message>
+    <message>
+        <source>the server has probably reached its MaxSessions limit (default 10). Each forwarded connection uses one SSH session because this server disables TCP forwarding; set AllowTcpForwarding yes or raise MaxSessions in sshd_config</source>
+        <translation>le serveur a probablement atteint sa limite MaxSessions (10 par défaut). Ce serveur désactive la redirection TCP, chaque connexion redirigée utilise donc une session SSH ; définissez AllowTcpForwarding yes ou augmentez MaxSessions dans sshd_config</translation>
     </message>
 </context>
 <context>

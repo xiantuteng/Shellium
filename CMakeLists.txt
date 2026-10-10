@@ -1051,6 +1051,13 @@ if(BUILD_TESTING)
     target_link_libraries(ShelliumKeepAliveTests PRIVATE Qt6::Core Qt6::Test ShelliumDependencies::libssh)
     add_test(NAME ShelliumKeepAliveTests COMMAND ShelliumKeepAliveTests)
 
+    # exec 中继打开 session 通道失败时的诊断文案同样是内联纯逻辑：MaxSessions 用尽时 OpenSSH
+    # 只回 "error (2) open failed"，提示是否追加只取决于错误字符串。
+    qt_add_executable(ShelliumRelayDiagnosticsTests tests/RelayDiagnosticsTest.cpp)
+    target_include_directories(ShelliumRelayDiagnosticsTests PRIVATE src)
+    target_link_libraries(ShelliumRelayDiagnosticsTests PRIVATE Qt6::Core Qt6::Test ShelliumDependencies::libssh)
+    add_test(NAME ShelliumRelayDiagnosticsTests COMMAND ShelliumRelayDiagnosticsTests)
+
     # SFTP 递归传输的纯逻辑（路径越界防护、遍历顺序、跳过判定、失败聚合、进度计算）全部以
     # 内联形式放在 SftpService.h，因此这里不需要 libssh 会话、隧道或 SFTP 服务器就能覆盖。
     # 单独成一个目标是因为 ShelliumCoreTests 已经有一个 QTEST_MAIN，同一个可执行文件里不能

@@ -90,6 +90,31 @@ struct LayerIdleState {
 
 } // namespace SshKeepAlive
 
+namespace SshRelayDiagnostics {
+
+/**
+ * @brief 为 exec 中继“打开 session 通道”这一步的失败补充可操作的原因。
+ * @param libsshError libssh 原始错误，形如 "Channel opening failure: channel 81 error (2) open failed"。
+ * @return 原始错误；若是 SSH_OPEN_CONNECT_FAILED，则在后面追加 MaxSessions 提示。
+ *
+ * 中继模式下每条转发连接都要占一个 session 通道，与终端 Shell、SFTP、后台命令共用 sshd
+ * 的 MaxSessions 配额（默认 10）。OpenSSH 配额用尽时只回 "error (2) open failed"，不带任何
+ * 原因，用户极易误判为网络或目标服务故障。此阶段尚未触及目标地址，因此 error (2) 几乎只可能
+ * 是会话数上限。
+ */
+inline QString describeSessionOpenFailure(const QString &libsshError)
+{
+    if (!libsshError.contains(QStringLiteral("error (2)"))) {
+        return libsshError;
+    }
+    return libsshError + QStringLiteral(" — ")
+        + QCoreApplication::translate(
+            "SshSessionNode",
+            "the server has probably reached its MaxSessions limit (default 10). Each forwarded connection uses one SSH session because this server disables TCP forwarding; set AllowTcpForwarding yes or raise MaxSessions in sshd_config");
+}
+
+} // namespace SshRelayDiagnostics
+
 /**
  * @brief 连接链中的一层：一个 libssh 会话及其交互式 Shell 与 direct-tcpip 转发通道。
  *

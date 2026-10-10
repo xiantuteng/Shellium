@@ -264,6 +264,13 @@ private:
      */
     void showSidebarPage(int pageIndex);
 
+    /**
+     * @brief 让端口转发页的主机选择器跟随当前终端标签所连的持久化主机。
+     *
+     * 本地 Shell、临时连接或主机已删除时不改动选择器，保留用户上次手动挑选的主机。
+     */
+    void syncForwardingHostToActiveTerminal();
+
     /** @brief 侧栏各页的标题文案，随当前语言实时求值（不能缓存进 static）。 */
     QString sidebarPageTitle(int pageIndex) const;
 

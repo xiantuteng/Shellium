@@ -550,6 +550,10 @@ Run it in the current terminal?</source>
         <translation type="unfinished">اتصال</translation>
     </message>
     <message>
+        <source>New Port Forwarding…</source>
+        <translation>إعادة توجيه منافذ جديدة…</translation>
+    </message>
+    <message>
         <source>Connect in Workspace</source>
         <translation type="unfinished">الاتصال في مساحة العمل</translation>
     </message>
@@ -2005,6 +2009,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>Select a rule to edit</source>
         <translation type="unfinished">اختر قاعدة لتعديلها</translation>
+    </message>
+    <message>
+        <source>This host cannot have port forwarding rules</source>
+        <translation>لا يمكن إضافة قواعد إعادة توجيه المنافذ لهذا المضيف</translation>
     </message>
     <message>
         <source>Failed to read port forwarding hosts: %1</source>
@@ -4537,6 +4545,10 @@ Public key: %3</source>
     <message>
         <source>Failed to cancel remote listener %1:%2: %3</source>
         <translation type="unfinished">تعذّر إلغاء المستمِع البعيد %1:%2: %3</translation>
+    </message>
+    <message>
+        <source>the server has probably reached its MaxSessions limit (default 10). Each forwarded connection uses one SSH session because this server disables TCP forwarding; set AllowTcpForwarding yes or raise MaxSessions in sshd_config</source>
+        <translation>ربما بلغ الخادم حد MaxSessions (الافتراضي 10). يعطّل هذا الخادم إعادة توجيه TCP، لذا يستهلك كل اتصال مُعاد توجيهه جلسة SSH واحدة؛ اضبط AllowTcpForwarding yes أو ارفع MaxSessions في sshd_config</translation>
     </message>
 </context>
 <context>

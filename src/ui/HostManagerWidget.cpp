@@ -3921,6 +3921,16 @@ void HostManagerWidget::populateContextMenu(QMenu *menu, QTreeWidgetItem *item)
             openHostChainConnectDialog(targetHostId);
         });
 
+        // 规则按 hostId 归属主机；从主机节点直接新建省去切页后再在下拉框里重新找这台主机。
+        QAction *newForwardAction = menu->addAction(
+            UiIcons::symbol(this,
+                            UiIcons::Symbol::Forwarding,
+                            this->palette().color(QPalette::WindowText)),
+            tr("New Port Forwarding…"));
+        connect(newForwardAction, &QAction::triggered, this, [this, targetHostId]() {
+            emit newPortForwardRequested(targetHostId);
+        });
+
         menu->addSeparator();
     }
 

@@ -1097,7 +1097,7 @@ bool SshSessionNode::advanceRelayForward(PendingForward &pending,
             return false;
         }
         if (result != SSH_OK) {
-            return fail(lastError());
+            return fail(SshRelayDiagnostics::describeSessionOpenFailure(lastError()));
         }
         pending.relayStage = RelayStage::RequestingExec;
         return false;

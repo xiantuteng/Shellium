@@ -550,6 +550,10 @@ O execuți în terminalul curent?</translation>
         <translation type="unfinished">Conectează</translation>
     </message>
     <message>
+        <source>New Port Forwarding…</source>
+        <translation>Redirecționare nouă a porturilor…</translation>
+    </message>
+    <message>
         <source>Connect in Workspace</source>
         <translation type="unfinished">Conectare într-un spațiu de lucru</translation>
     </message>
@@ -2005,6 +2009,10 @@ Confirmi că cheia s-a schimbat, înlocuiești vechea înregistrare din known_ho
     <message>
         <source>Select a rule to edit</source>
         <translation type="unfinished">Selectează o regulă de modificat</translation>
+    </message>
+    <message>
+        <source>This host cannot have port forwarding rules</source>
+        <translation>Nu se pot adăuga reguli de redirecționare a porturilor pentru această gazdă</translation>
     </message>
     <message>
         <source>Failed to read port forwarding hosts: %1</source>
@@ -4537,6 +4545,10 @@ Cheie publică: %3</translation>
     <message>
         <source>Failed to cancel remote listener %1:%2: %3</source>
         <translation type="unfinished">Nu s-a putut anula ascultătorul la distanță %1:%2: %3</translation>
+    </message>
+    <message>
+        <source>the server has probably reached its MaxSessions limit (default 10). Each forwarded connection uses one SSH session because this server disables TCP forwarding; set AllowTcpForwarding yes or raise MaxSessions in sshd_config</source>
+        <translation>probabil serverul a atins limita MaxSessions (implicit 10). Acest server dezactivează redirecționarea TCP, deci fiecare conexiune redirecționată folosește o sesiune SSH; setați AllowTcpForwarding yes sau măriți MaxSessions în sshd_config</translation>
     </message>
 </context>
 <context>

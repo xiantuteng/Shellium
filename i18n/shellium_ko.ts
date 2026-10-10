@@ -550,6 +550,10 @@ Run it in the current terminal?</source>
         <translation type="unfinished">연결</translation>
     </message>
     <message>
+        <source>New Port Forwarding…</source>
+        <translation>새 포트 포워딩…</translation>
+    </message>
+    <message>
         <source>Connect in Workspace</source>
         <translation type="unfinished">워크스페이스에서 연결</translation>
     </message>
@@ -2005,6 +2009,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>Select a rule to edit</source>
         <translation type="unfinished">편집할 규칙 선택</translation>
+    </message>
+    <message>
+        <source>This host cannot have port forwarding rules</source>
+        <translation>이 호스트에는 포트 포워딩 규칙을 추가할 수 없습니다</translation>
     </message>
     <message>
         <source>Failed to read port forwarding hosts: %1</source>
@@ -4537,6 +4545,10 @@ Public key: %3</source>
     <message>
         <source>Failed to cancel remote listener %1:%2: %3</source>
         <translation type="unfinished">원격 리스너 %1:%2을(를) 취소할 수 없습니다: %3</translation>
+    </message>
+    <message>
+        <source>the server has probably reached its MaxSessions limit (default 10). Each forwarded connection uses one SSH session because this server disables TCP forwarding; set AllowTcpForwarding yes or raise MaxSessions in sshd_config</source>
+        <translation>서버가 MaxSessions 한도(기본값 10)에 도달했을 수 있습니다. 이 서버는 TCP 포워딩을 비활성화하여 포워딩되는 연결마다 SSH 세션을 하나씩 사용합니다. sshd_config에서 AllowTcpForwarding yes로 설정하거나 MaxSessions를 늘리세요</translation>
     </message>
 </context>
 <context>

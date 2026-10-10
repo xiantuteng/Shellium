@@ -143,6 +143,12 @@ signals:
      */
     void hostGroupConnectionRequested(const QString &groupId, const QString &groupName);
 
+    /**
+     * @brief 用户在主机右键菜单中要求为该主机新增一条端口转发规则。
+     * @param hostId 右键命中的主机稳定 id；分组节点不会发出本信号。
+     */
+    void newPortForwardRequested(const QString &hostId);
+
 private:
     /** @brief 从数据库递归加载某个分组的直接子节点。 */
     bool appendChildren(QTreeWidgetItem *parentItem,

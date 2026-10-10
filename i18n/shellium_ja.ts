@@ -550,6 +550,10 @@ Run it in the current terminal?</source>
         <translation type="unfinished">接続</translation>
     </message>
     <message>
+        <source>New Port Forwarding…</source>
+        <translation>新しいポート転送…</translation>
+    </message>
+    <message>
         <source>Connect in Workspace</source>
         <translation type="unfinished">ワークスペースで接続</translation>
     </message>
@@ -2005,6 +2009,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>Select a rule to edit</source>
         <translation type="unfinished">編集するルールを選択</translation>
+    </message>
+    <message>
+        <source>This host cannot have port forwarding rules</source>
+        <translation>このホストにはポート転送ルールを追加できません</translation>
     </message>
     <message>
         <source>Failed to read port forwarding hosts: %1</source>
@@ -4537,6 +4545,10 @@ Public key: %3</source>
     <message>
         <source>Failed to cancel remote listener %1:%2: %3</source>
         <translation type="unfinished">リモートリスナー %1:%2 をキャンセルできませんでした: %3</translation>
+    </message>
+    <message>
+        <source>the server has probably reached its MaxSessions limit (default 10). Each forwarded connection uses one SSH session because this server disables TCP forwarding; set AllowTcpForwarding yes or raise MaxSessions in sshd_config</source>
+        <translation>サーバーが MaxSessions の上限（既定 10）に達している可能性があります。このサーバーは TCP 転送を無効にしているため、転送する接続ごとに SSH セッションを 1 つ使用します。sshd_config で AllowTcpForwarding yes を設定するか、MaxSessions を増やしてください</translation>
     </message>
 </context>
 <context>

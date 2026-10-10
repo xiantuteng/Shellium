@@ -52,6 +52,24 @@ public:
     /** @brief 主机树外部修改后重新读取主机选择器与当前规则。 */
     void refresh();
 
+    /**
+     * @brief 把主机选择器切到指定主机并重新加载其规则。
+     * @param hostId 持久化主机 id；临时连接或已删除的 id 不在选择器中。
+     * @return 选择器中存在该主机时返回 true；否则保持原选择不变并返回 false。
+     *
+     * 供主窗口在激活本页或切换终端标签时跟随当前终端，也供“新增端口转发”入口先定位主机。
+     * 找不到时不清空选择，避免本地 Shell 标签把用户手动挑选的主机冲掉。
+     */
+    bool selectHost(const QString &hostId);
+
+    /**
+     * @brief 为指定主机打开“新建端口转发”对话框。
+     * @param hostId 持久化主机 id，通常来自主机树右键菜单。
+     *
+     * 先切换选择器再复用 editRule()，保证新规则归属、保存后的数量刷新与工具栏“新建”完全一致。
+     */
+    void createRuleForHost(const QString &hostId);
+
 signals:
     /** @brief 非致命启动、停止、数据库错误，供主窗口顶部提示区展示。 */
     void statusMessage(const QString &message);

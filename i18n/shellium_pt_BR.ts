@@ -550,6 +550,10 @@ Executá-lo no terminal atual?</translation>
         <translation type="unfinished">Conectar</translation>
     </message>
     <message>
+        <source>New Port Forwarding…</source>
+        <translation>Novo encaminhamento de portas…</translation>
+    </message>
+    <message>
         <source>Connect in Workspace</source>
         <translation type="unfinished">Conectar em um espaço de trabalho</translation>
     </message>
@@ -2005,6 +2009,10 @@ Confirmar que a chave mudou, substituir o registro antigo em known_hosts e conti
     <message>
         <source>Select a rule to edit</source>
         <translation type="unfinished">Selecionar uma regra para editar</translation>
+    </message>
+    <message>
+        <source>This host cannot have port forwarding rules</source>
+        <translation>Não é possível adicionar regras de encaminhamento de portas a este host</translation>
     </message>
     <message>
         <source>Failed to read port forwarding hosts: %1</source>
@@ -4537,6 +4545,10 @@ Chave pública: %3</translation>
     <message>
         <source>Failed to cancel remote listener %1:%2: %3</source>
         <translation type="unfinished">Falha ao cancelar o listener remoto %1:%2: %3</translation>
+    </message>
+    <message>
+        <source>the server has probably reached its MaxSessions limit (default 10). Each forwarded connection uses one SSH session because this server disables TCP forwarding; set AllowTcpForwarding yes or raise MaxSessions in sshd_config</source>
+        <translation>o servidor provavelmente atingiu o limite de MaxSessions (padrão 10). Este servidor desativa o encaminhamento TCP, então cada conexão encaminhada usa uma sessão SSH; defina AllowTcpForwarding yes ou aumente MaxSessions no sshd_config</translation>
     </message>
 </context>
 <context>

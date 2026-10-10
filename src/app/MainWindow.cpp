@@ -1349,6 +1349,9 @@ MainWindow::MainWindow(ApplicationDatabase *database,
         }
         refreshWorkspaceSidebar();
         refreshProductivityTargets();
+        if (m_activeSidebarPage == ForwardingPage) {
+            syncForwardingHostToActiveTerminal();
+        }
     });
     connect(toggleFilesAction, &QAction::triggered, this, [this]() {
         TerminalWorkspace *workspace = activeWorkspace();
@@ -1378,6 +1381,14 @@ MainWindow::MainWindow(ApplicationDatabase *database,
             &HostManagerWidget::hostsChanged,
             m_portForwardManager,
             &PortForwardManagerWidget::refresh);
+    connect(m_hostManager,
+            &HostManagerWidget::newPortForwardRequested,
+            this,
+            [this](const QString &hostId) {
+                // 先切页（会按当前终端同步一次主机），再以右键命中的主机为准打开新建对话框。
+                showSidebarPage(ForwardingPage);
+                m_portForwardManager->createRuleForHost(hostId);
+            });
     connect(m_portForwardManager,
             &PortForwardManagerWidget::statusMessage,
             this,
@@ -1992,6 +2003,22 @@ void MainWindow::setSidebarVisible(const bool visible)
     }
 }
 
+void MainWindow::syncForwardingHostToActiveTerminal()
+{
+    TerminalWorkspace *workspace = activeWorkspace();
+    TerminalPane *pane = workspace == nullptr ? nullptr : workspace->activePane();
+    if (pane == nullptr || m_portForwardManager == nullptr) {
+        return;
+    }
+    // 用连接计划的最终目标而不是 targets()：计划在拨号前就已确定，连接中、断线待重连的
+    // 标签同样能定位主机；它也正是 rootConnectionSucceeded 登记转发会话所用的 hostId。
+    const QList<ConnectionTarget> plan = pane->connectionPlan();
+    if (plan.isEmpty()) {
+        return;
+    }
+    m_portForwardManager->selectHost(plan.constLast().id);
+}
+
 QString MainWindow::sidebarPageTitle(const int pageIndex) const
 {
     const QStringList pageTitles = {
@@ -2022,6 +2049,9 @@ void MainWindow::showSidebarPage(const int pageIndex)
     }
     if (m_productivityHeaderActions != nullptr) {
         m_productivityHeaderActions->setVisible(pageIndex == ProductivityPage);
+    }
+    if (pageIndex == ForwardingPage) {
+        syncForwardingHostToActiveTerminal();
     }
 
     // 四个侧栏页面共用同一条标题栏和外边距——AI 助手不再自带独立顶栏，题图要求的正是
@@ -4262,6 +4292,11 @@ TerminalWorkspace *MainWindow::createWorkspaceTab(const QString &title)
                     // 管理器即使收到也不会找到任何持久化规则。
                     m_portForwardManager->registerSession(target.id,
                                                           pane->forwardingSessionStack());
+                }
+                // 在转发页上新开标签时，切标签那一刻连接计划还没写入面板；连上后再跟随一次。
+                if (m_activeSidebarPage == ForwardingPage && activeWorkspace() == workspace
+                    && workspace->activePane() == pane) {
+                    syncForwardingHostToActiveTerminal();
                 }
             });
     connect(pane,

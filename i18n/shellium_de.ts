@@ -550,6 +550,10 @@ Im aktuellen Terminal ausführen?</translation>
         <translation type="unfinished">Verbinden</translation>
     </message>
     <message>
+        <source>New Port Forwarding…</source>
+        <translation>Neue Portweiterleitung…</translation>
+    </message>
+    <message>
         <source>Connect in Workspace</source>
         <translation type="unfinished">In Arbeitsbereich verbinden</translation>
     </message>
@@ -2005,6 +2009,10 @@ Bestätigen Sie, dass sich der Schlüssel geändert hat, ersetzen Sie den alten 
     <message>
         <source>Select a rule to edit</source>
         <translation type="unfinished">Zu bearbeitende Regel auswählen</translation>
+    </message>
+    <message>
+        <source>This host cannot have port forwarding rules</source>
+        <translation>Für diesen Host können keine Portweiterleitungsregeln angelegt werden</translation>
     </message>
     <message>
         <source>Failed to read port forwarding hosts: %1</source>
@@ -4537,6 +4545,10 @@ Privater Schlüssel: %2
     <message>
         <source>Failed to cancel remote listener %1:%2: %3</source>
         <translation type="unfinished">Abbrechen des Remote-Listeners %1:%2 fehlgeschlagen: %3</translation>
+    </message>
+    <message>
+        <source>the server has probably reached its MaxSessions limit (default 10). Each forwarded connection uses one SSH session because this server disables TCP forwarding; set AllowTcpForwarding yes or raise MaxSessions in sshd_config</source>
+        <translation>der Server hat vermutlich sein MaxSessions-Limit erreicht (Standard 10). Dieser Server deaktiviert TCP-Weiterleitung, daher belegt jede weitergeleitete Verbindung eine SSH-Sitzung; setzen Sie AllowTcpForwarding yes oder erhöhen Sie MaxSessions in sshd_config</translation>
     </message>
 </context>
 <context>
