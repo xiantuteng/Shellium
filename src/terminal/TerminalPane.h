@@ -5,6 +5,7 @@
 
 #include <QColor>
 #include <QHash>
+#include <QKeySequence>
 #include <QSet>
 #include <QVector>
 #include <QStringList>
@@ -186,6 +187,18 @@ public:
      * 再调用本方法，确保按钮状态、分隔器状态和快捷键行为保持一致。
      */
     void setFileManagerEnabled(bool enabled);
+
+    /**
+     * @brief 设置"显示/隐藏远程文件管理"的快捷键，并刷新所有已存在终端面板的按钮提示。
+     * @param shortcut 用户在设置中配置的快捷键；为空表示未绑定，提示里不再显示快捷键。
+     *
+     * 快捷键由主窗口统一绑定、可在设置中修改，按钮提示必须与之一致；写死在译文里的
+     * "Ctrl+Shift+O" 在 macOS 上是错的（实际是 ⇧⌘O），改键后也不会跟着变。
+     */
+    static void setFileManagerShortcut(const QKeySequence &shortcut);
+
+    /** @brief 当前用于按钮提示的文件管理快捷键。 */
+    [[nodiscard]] static QKeySequence fileManagerShortcut();
 
     /**
      * @brief 会话状态栏最右侧的外挂动作容器（在文件管理按钮之后）。
@@ -492,6 +505,14 @@ private:
      * 用户无法判断点击后会发生什么。
      */
     void updateFileManagerButtonIcon();
+
+    /**
+     * @brief 按显隐状态和当前快捷键重建文件管理按钮提示。
+     *
+     * 快捷键用 QKeySequence::NativeText 渲染：macOS 显示 ⇧⌘O，Windows/Linux 显示
+     * Ctrl+Shift+O，且随界面语言本地化修饰键名称。
+     */
+    void refreshFileManagerToolTip();
 
     TerminalView *m_terminalView = nullptr;
     SshSessionStack *m_sessionStack = nullptr;

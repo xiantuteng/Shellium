@@ -4640,10 +4640,6 @@ Chiave pubblica: %3</translation>
         <translation type="unfinished">Non connesso</translation>
     </message>
     <message>
-        <source>Show the remote file manager for the current session (Ctrl+Shift+O)</source>
-        <translation type="unfinished">Mostra il gestore file remoto per la sessione corrente (Ctrl+Maiusc+O)</translation>
-    </message>
-    <message>
         <source>Remote file manager</source>
         <translation type="unfinished">Gestore file remoto</translation>
     </message>
@@ -4816,8 +4812,20 @@ Confermare che la chiave è cambiata e sostituire il vecchio record in known_hos
         <translation type="unfinished">Stabilendo una connessione annidata a %1 tramite il server corrente…</translation>
     </message>
     <message>
-        <source>Hide the remote file manager for the current session (Ctrl+Shift+O)</source>
-        <translation type="unfinished">Nascondi il gestore file remoto per la sessione corrente (Ctrl+Maiusc+O)</translation>
+        <source>Hide the remote file manager for the current session</source>
+        <translation type="unfinished">Nascondi il gestore file remoto per la sessione corrente</translation>
+    </message>
+    <message>
+        <source>Show the remote file manager for the current session</source>
+        <translation type="unfinished">Mostra il gestore file remoto per la sessione corrente</translation>
+    </message>
+    <message>
+        <source>Hide the remote file manager for the current session (%1)</source>
+        <translation type="unfinished">Nascondi il gestore file remoto per la sessione corrente (%1)</translation>
+    </message>
+    <message>
+        <source>Show the remote file manager for the current session (%1)</source>
+        <translation type="unfinished">Mostra il gestore file remoto per la sessione corrente (%1)</translation>
     </message>
     <message>
         <source>Uploading %1</source>

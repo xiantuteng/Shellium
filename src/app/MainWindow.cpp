@@ -1035,6 +1035,11 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     QMenu *viewMenu = applicationMenuBar->addMenu(QString());
     registerTranslatable(viewMenu, QT_TRANSLATE_NOOP("MainWindow", "View"));
     viewMenu->addAction(m_sidebarToggleAction);
+    // 快捷键只对挂在可见控件（菜单栏）上的 QAction 生效。此动作曾只创建不挂载，结果
+    // ⇧⌘O / Ctrl+Shift+O 按下毫无反应；挂进菜单栏后在 macOS 上还是应用级快捷键，焦点在
+    // 终端里也不会被终端视图吞掉。
+    toggleFilesAction->setObjectName(QStringLiteral("ToggleFileManagerAction"));
+    viewMenu->addAction(toggleFilesAction);
     // 互斥动作明确展示当前密度；沿用统一翻译注册，语言热切换无需重建菜单。
     auto *densityMenu = viewMenu->addMenu(QString());
     registerTranslatable(densityMenu, QT_TRANSLATE_NOOP("MainWindow", "Sidebar density"));
@@ -4711,6 +4716,9 @@ void MainWindow::applyConfiguredShortcuts()
             iterator.value()->setShortcut(m_settingsService->shortcut(iterator.key()));
         }
     }
+    // 终端顶部文件管理按钮的提示里展示的快捷键必须与真正绑定的一致，改键后同步刷新。
+    TerminalPane::setFileManagerShortcut(
+        m_settingsService->shortcut(QStringLiteral("files.toggle")));
 }
 
 void MainWindow::openCommandPalette()

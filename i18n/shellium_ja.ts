@@ -4640,10 +4640,6 @@ Public key: %3</source>
         <translation type="unfinished">未接続</translation>
     </message>
     <message>
-        <source>Show the remote file manager for the current session (Ctrl+Shift+O)</source>
-        <translation type="unfinished">現在のセッションのリモートファイルマネージャーを表示 (Ctrl+Shift+O)</translation>
-    </message>
-    <message>
         <source>Remote file manager</source>
         <translation type="unfinished">リモートファイルマネージャー</translation>
     </message>
@@ -4816,8 +4812,20 @@ Confirm the key has changed and replace the old record in known_hosts?</source>
         <translation type="unfinished">現在のサーバーを経由して %1 へのネスト接続を確立中…</translation>
     </message>
     <message>
-        <source>Hide the remote file manager for the current session (Ctrl+Shift+O)</source>
-        <translation type="unfinished">現在のセッションのリモートファイルマネージャーを非表示 (Ctrl+Shift+O)</translation>
+        <source>Hide the remote file manager for the current session</source>
+        <translation type="unfinished">現在のセッションのリモートファイルマネージャーを非表示</translation>
+    </message>
+    <message>
+        <source>Show the remote file manager for the current session</source>
+        <translation type="unfinished">現在のセッションのリモートファイルマネージャーを表示</translation>
+    </message>
+    <message>
+        <source>Hide the remote file manager for the current session (%1)</source>
+        <translation type="unfinished">現在のセッションのリモートファイルマネージャーを非表示 (%1)</translation>
+    </message>
+    <message>
+        <source>Show the remote file manager for the current session (%1)</source>
+        <translation type="unfinished">現在のセッションのリモートファイルマネージャーを表示 (%1)</translation>
     </message>
     <message>
         <source>Uploading %1</source>

@@ -4640,10 +4640,6 @@ Privater Schlüssel: %2
         <translation type="unfinished">Nicht verbunden</translation>
     </message>
     <message>
-        <source>Show the remote file manager for the current session (Ctrl+Shift+O)</source>
-        <translation type="unfinished">Den Remote-Dateimanager für die aktuelle Sitzung anzeigen (Strg+Umschalt+O)</translation>
-    </message>
-    <message>
         <source>Remote file manager</source>
         <translation type="unfinished">Remote-Dateimanager</translation>
     </message>
@@ -4816,8 +4812,20 @@ Bestätigen Sie, dass sich der Schlüssel geändert hat, und ersetzen Sie den al
         <translation type="unfinished">Eine verschachtelte Verbindung zu %1 über den aktuellen Server wird hergestellt …</translation>
     </message>
     <message>
-        <source>Hide the remote file manager for the current session (Ctrl+Shift+O)</source>
-        <translation type="unfinished">Den Remote-Dateimanager für die aktuelle Sitzung verbergen (Strg+Umschalt+O)</translation>
+        <source>Hide the remote file manager for the current session</source>
+        <translation type="unfinished">Den Remote-Dateimanager für die aktuelle Sitzung verbergen</translation>
+    </message>
+    <message>
+        <source>Show the remote file manager for the current session</source>
+        <translation type="unfinished">Den Remote-Dateimanager für die aktuelle Sitzung anzeigen</translation>
+    </message>
+    <message>
+        <source>Hide the remote file manager for the current session (%1)</source>
+        <translation type="unfinished">Den Remote-Dateimanager für die aktuelle Sitzung verbergen (%1)</translation>
+    </message>
+    <message>
+        <source>Show the remote file manager for the current session (%1)</source>
+        <translation type="unfinished">Den Remote-Dateimanager für die aktuelle Sitzung anzeigen (%1)</translation>
     </message>
     <message>
         <source>Uploading %1</source>

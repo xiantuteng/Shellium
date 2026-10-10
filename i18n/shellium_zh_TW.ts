@@ -4642,10 +4642,6 @@ Public key: %3</source>
         <translation>未連線</translation>
     </message>
     <message>
-        <source>Show the remote file manager for the current session (Ctrl+Shift+O)</source>
-        <translation>顯示當前會話的遠端檔案管理（Ctrl+Shift+O）</translation>
-    </message>
-    <message>
         <source>Remote file manager</source>
         <translation>遠端檔案管理</translation>
     </message>
@@ -4818,8 +4814,20 @@ Confirm the key has changed and replace the old record in known_hosts?</source>
         <translation>正在經當前伺服器建立到 %1 的巢狀連線…</translation>
     </message>
     <message>
-        <source>Hide the remote file manager for the current session (Ctrl+Shift+O)</source>
-        <translation>隱藏當前會話的遠端檔案管理（Ctrl+Shift+O）</translation>
+        <source>Hide the remote file manager for the current session</source>
+        <translation>隱藏當前會話的遠端檔案管理</translation>
+    </message>
+    <message>
+        <source>Show the remote file manager for the current session</source>
+        <translation>顯示當前會話的遠端檔案管理</translation>
+    </message>
+    <message>
+        <source>Hide the remote file manager for the current session (%1)</source>
+        <translation>隱藏當前會話的遠端檔案管理（%1）</translation>
+    </message>
+    <message>
+        <source>Show the remote file manager for the current session (%1)</source>
+        <translation>顯示當前會話的遠端檔案管理（%1）</translation>
     </message>
     <message>
         <source>Uploading %1</source>

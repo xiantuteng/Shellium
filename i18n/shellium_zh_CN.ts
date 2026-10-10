@@ -4642,10 +4642,6 @@ Public key: %3</source>
         <translation>未连接</translation>
     </message>
     <message>
-        <source>Show the remote file manager for the current session (Ctrl+Shift+O)</source>
-        <translation>显示当前会话的远程文件管理（Ctrl+Shift+O）</translation>
-    </message>
-    <message>
         <source>Remote file manager</source>
         <translation>远程文件管理</translation>
     </message>
@@ -4818,8 +4814,20 @@ Confirm the key has changed and replace the old record in known_hosts?</source>
         <translation>正在经当前服务器建立到 %1 的嵌套连接…</translation>
     </message>
     <message>
-        <source>Hide the remote file manager for the current session (Ctrl+Shift+O)</source>
-        <translation>隐藏当前会话的远程文件管理（Ctrl+Shift+O）</translation>
+        <source>Hide the remote file manager for the current session</source>
+        <translation>隐藏当前会话的远程文件管理</translation>
+    </message>
+    <message>
+        <source>Show the remote file manager for the current session</source>
+        <translation>显示当前会话的远程文件管理</translation>
+    </message>
+    <message>
+        <source>Hide the remote file manager for the current session (%1)</source>
+        <translation>隐藏当前会话的远程文件管理（%1）</translation>
+    </message>
+    <message>
+        <source>Show the remote file manager for the current session (%1)</source>
+        <translation>显示当前会话的远程文件管理（%1）</translation>
     </message>
     <message>
         <source>Uploading %1</source>

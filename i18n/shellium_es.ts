@@ -4640,10 +4640,6 @@ Clave pública: %3</translation>
         <translation type="unfinished">No conectado</translation>
     </message>
     <message>
-        <source>Show the remote file manager for the current session (Ctrl+Shift+O)</source>
-        <translation type="unfinished">Mostrar el gestor de archivos remoto de la sesión actual (Ctrl+Mayús+O)</translation>
-    </message>
-    <message>
         <source>Remote file manager</source>
         <translation type="unfinished">Gestor de archivos remoto</translation>
     </message>
@@ -4816,8 +4812,20 @@ Puede ser una reinstalación del servidor o una rotación de clave, o un ataque 
         <translation type="unfinished">Estableciendo una conexión anidada a %1 a través del servidor actual…</translation>
     </message>
     <message>
-        <source>Hide the remote file manager for the current session (Ctrl+Shift+O)</source>
-        <translation type="unfinished">Ocultar el gestor de archivos remoto de la sesión actual (Ctrl+Mayús+O)</translation>
+        <source>Hide the remote file manager for the current session</source>
+        <translation type="unfinished">Ocultar el gestor de archivos remoto de la sesión actual</translation>
+    </message>
+    <message>
+        <source>Show the remote file manager for the current session</source>
+        <translation type="unfinished">Mostrar el gestor de archivos remoto de la sesión actual</translation>
+    </message>
+    <message>
+        <source>Hide the remote file manager for the current session (%1)</source>
+        <translation type="unfinished">Ocultar el gestor de archivos remoto de la sesión actual (%1)</translation>
+    </message>
+    <message>
+        <source>Show the remote file manager for the current session (%1)</source>
+        <translation type="unfinished">Mostrar el gestor de archivos remoto de la sesión actual (%1)</translation>
     </message>
     <message>
         <source>Uploading %1</source>

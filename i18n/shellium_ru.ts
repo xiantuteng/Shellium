@@ -4640,10 +4640,6 @@ Public key: %3</source>
         <translation type="unfinished">Не подключено</translation>
     </message>
     <message>
-        <source>Show the remote file manager for the current session (Ctrl+Shift+O)</source>
-        <translation type="unfinished">Показать удалённый файловый менеджер для текущего сеанса (Ctrl+Shift+O)</translation>
-    </message>
-    <message>
         <source>Remote file manager</source>
         <translation type="unfinished">Удалённый файловый менеджер</translation>
     </message>
@@ -4816,8 +4812,20 @@ Confirm the key has changed and replace the old record in known_hosts?</source>
         <translation type="unfinished">Установка вложенного подключения к %1 через текущий сервер…</translation>
     </message>
     <message>
-        <source>Hide the remote file manager for the current session (Ctrl+Shift+O)</source>
-        <translation type="unfinished">Скрыть удалённый файловый менеджер для текущего сеанса (Ctrl+Shift+O)</translation>
+        <source>Hide the remote file manager for the current session</source>
+        <translation type="unfinished">Скрыть удалённый файловый менеджер для текущего сеанса</translation>
+    </message>
+    <message>
+        <source>Show the remote file manager for the current session</source>
+        <translation type="unfinished">Показать удалённый файловый менеджер для текущего сеанса</translation>
+    </message>
+    <message>
+        <source>Hide the remote file manager for the current session (%1)</source>
+        <translation type="unfinished">Скрыть удалённый файловый менеджер для текущего сеанса (%1)</translation>
+    </message>
+    <message>
+        <source>Show the remote file manager for the current session (%1)</source>
+        <translation type="unfinished">Показать удалённый файловый менеджер для текущего сеанса (%1)</translation>
     </message>
     <message>
         <source>Uploading %1</source>

@@ -4640,10 +4640,6 @@ Chave pública: %3</translation>
         <translation type="unfinished">Não conectado</translation>
     </message>
     <message>
-        <source>Show the remote file manager for the current session (Ctrl+Shift+O)</source>
-        <translation type="unfinished">Mostrar o gerenciador de arquivos remoto da sessão atual (Ctrl+Shift+O)</translation>
-    </message>
-    <message>
         <source>Remote file manager</source>
         <translation type="unfinished">Gerenciador de arquivos remoto</translation>
     </message>
@@ -4816,8 +4812,20 @@ Confirmar que a chave mudou e substituir o registro antigo em known_hosts?</tran
         <translation type="unfinished">Estabelecendo uma conexão aninhada a %1 pelo servidor atual…</translation>
     </message>
     <message>
-        <source>Hide the remote file manager for the current session (Ctrl+Shift+O)</source>
-        <translation type="unfinished">Ocultar o gerenciador de arquivos remoto da sessão atual (Ctrl+Shift+O)</translation>
+        <source>Hide the remote file manager for the current session</source>
+        <translation type="unfinished">Ocultar o gerenciador de arquivos remoto da sessão atual</translation>
+    </message>
+    <message>
+        <source>Show the remote file manager for the current session</source>
+        <translation type="unfinished">Mostrar o gerenciador de arquivos remoto da sessão atual</translation>
+    </message>
+    <message>
+        <source>Hide the remote file manager for the current session (%1)</source>
+        <translation type="unfinished">Ocultar o gerenciador de arquivos remoto da sessão atual (%1)</translation>
+    </message>
+    <message>
+        <source>Show the remote file manager for the current session (%1)</source>
+        <translation type="unfinished">Mostrar o gerenciador de arquivos remoto da sessão atual (%1)</translation>
     </message>
     <message>
         <source>Uploading %1</source>

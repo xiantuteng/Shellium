@@ -84,7 +84,7 @@ TerminalPane::TerminalPane(QWidget *parent)
     m_fileManagerButton->setIconSize(QSize(16, 16));
     m_fileManagerButton->setCursor(Qt::PointingHandCursor);
     m_fileManagerButton->setStyleSheet(UiIcons::sessionActionStyleSheet());
-    m_fileManagerButton->setToolTip(tr("Show the remote file manager for the current session (Ctrl+Shift+O)"));
+    refreshFileManagerToolTip();
     m_fileManagerButton->setAccessibleName(tr("Remote file manager"));
     updateFileManagerButtonIcon();
     // 会话状态栏最右侧的外挂动作容器：单终端标签为空、零占位；工作空间给成员挂上
@@ -237,8 +237,7 @@ TerminalPane::TerminalPane(QWidget *parent)
     // 语言切换时重设终端标题栏的固定文案。已连接会话的标题是 host:port（与语言无关），
     // 由 refreshHeaderLabel() 兜底；连接中/失败等瞬时提示会在下一次状态变化时转为新语言。
     i18n::onRetranslate(this, [this] {
-        m_fileManagerButton->setToolTip(
-            tr("Show the remote file manager for the current session (Ctrl+Shift+O)"));
+        refreshFileManagerToolTip();
         m_fileManagerButton->setAccessibleName(tr("Remote file manager"));
         refreshHeaderLabel();
     });
@@ -891,12 +890,53 @@ void TerminalPane::setFileManagerVisible(const bool visible)
     // 状态。虽然 QWidget::setVisible 本身幂等，阻断往返信号仍能避免未来接入动画后重复执行。
     const QSignalBlocker blocker(m_fileManagerButton);
     m_fileManagerButton->setChecked(visible);
-    m_fileManagerButton->setToolTip(
-        visible
-            ? tr("Hide the remote file manager for the current session (Ctrl+Shift+O)")
-            : tr("Show the remote file manager for the current session (Ctrl+Shift+O)"));
+    refreshFileManagerToolTip();
     // 阻断 toggled 的同时也阻断了图标刷新，这里必须显式补上。
     updateFileManagerButtonIcon();
+}
+
+namespace {
+/** @brief 所有终端面板共用的文件管理快捷键；默认值与设置里的默认绑定一致。 */
+QKeySequence &sharedFileManagerShortcut()
+{
+    static QKeySequence shortcut =
+        TerminalSettings::defaultShortcuts().value(QStringLiteral("files.toggle"));
+    return shortcut;
+}
+} // namespace
+
+void TerminalPane::setFileManagerShortcut(const QKeySequence &shortcut)
+{
+    sharedFileManagerShortcut() = shortcut;
+    // 面板分散在各标签页、工作空间分组里，按控件树逐个刷新比让调用方维护列表更可靠。
+    const QList<QWidget *> widgets = QApplication::allWidgets();
+    for (QWidget *widget : widgets) {
+        if (auto *pane = qobject_cast<TerminalPane *>(widget)) {
+            pane->refreshFileManagerToolTip();
+        }
+    }
+}
+
+QKeySequence TerminalPane::fileManagerShortcut()
+{
+    return sharedFileManagerShortcut();
+}
+
+void TerminalPane::refreshFileManagerToolTip()
+{
+    const bool visible = m_fileManagerButton->isChecked();
+    const QString shortcut =
+        sharedFileManagerShortcut().toString(QKeySequence::NativeText);
+    QString toolTip;
+    if (shortcut.isEmpty()) {
+        toolTip = visible ? tr("Hide the remote file manager for the current session")
+                          : tr("Show the remote file manager for the current session");
+    } else {
+        toolTip = visible
+            ? tr("Hide the remote file manager for the current session (%1)").arg(shortcut)
+            : tr("Show the remote file manager for the current session (%1)").arg(shortcut);
+    }
+    m_fileManagerButton->setToolTip(toolTip);
 }
 
 void TerminalPane::setFileManagerEnabled(const bool enabled)
@@ -908,10 +948,7 @@ void TerminalPane::setFileManagerEnabled(const bool enabled)
         return;
     }
     // 恢复可用时根据真实勾选态重建提示。
-    m_fileManagerButton->setToolTip(
-        m_fileManagerButton->isChecked()
-            ? tr("Hide the remote file manager for the current session (Ctrl+Shift+O)")
-            : tr("Show the remote file manager for the current session (Ctrl+Shift+O)"));
+    refreshFileManagerToolTip();
     m_fileManagerButton->setAccessibleName(tr("Remote file manager"));
 }
 

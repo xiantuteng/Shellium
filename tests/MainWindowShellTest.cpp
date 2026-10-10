@@ -72,6 +72,12 @@ class MainWindowShellTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    /**
+     * @brief 焦点在终端里按"显示/隐藏远程文件管理"快捷键必须切换当前标签的文件管理。
+     *
+     * 动作曾只创建不挂到任何控件上，Qt 不会为它注册快捷键，按下毫无反应。
+     */
+    void toggleFileManagerShortcutWorksFromTerminal();
     /** @brief 真实窗口应用主题时不得输出未知样式属性警告，且所有按钮仍保持手型。 */
     void themeStylesDoNotWarnAboutUnknownProperties();
     /** @brief 各语言的连接提示之后，下一段输出必须从行首开始。 */
@@ -617,6 +623,38 @@ void MainWindowShellTest::terminalSearchBarPrefillsSingleLineSelection()
     view->setTextCursor(selection);
     pane.showSearchBar();
     QCOMPARE(input->text(), QStringLiteral("beta"));
+}
+
+void MainWindowShellTest::toggleFileManagerShortcutWorksFromTerminal()
+{
+    MainWindow window(m_database, m_vault);
+    window.resize(1200, 800);
+    window.show();
+    window.activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(&window));
+    auto *tabs = window.findChild<QTabWidget *>(QStringLiteral("TerminalPages"));
+    auto *newTabButton = window.findChild<QToolButton *>(QStringLiteral("TitleNewTabButton"));
+    QTest::mouseClick(newTabButton, Qt::LeftButton);
+    auto *workspace = qobject_cast<TerminalWorkspace *>(tabs->widget(0));
+    QVERIFY(workspace != nullptr);
+
+    auto *action = window.findChild<QAction *>(QStringLiteral("ToggleFileManagerAction"));
+    QVERIFY(action != nullptr);
+    QVERIFY2(!action->associatedObjects().isEmpty(),
+             "快捷键动作必须挂到菜单等控件上，否则 Qt 根本不会注册它的快捷键");
+
+    auto *view = workspace->activePane()->findChild<TerminalView *>();
+    QVERIFY(view != nullptr);
+    view->setFocus();
+    QTRY_VERIFY(view->hasFocus());
+    QVERIFY(!workspace->isFileManagerVisible());
+
+    // Qt::ControlModifier 在 macOS 上就是 Command，与默认绑定 Ctrl+Shift+O（⇧⌘O）一致。
+    QTest::keyClick(view, Qt::Key_O, Qt::ControlModifier | Qt::ShiftModifier);
+    QTRY_VERIFY2(workspace->isFileManagerVisible(), "按快捷键后文件管理未展开");
+
+    QTest::keyClick(view, Qt::Key_O, Qt::ControlModifier | Qt::ShiftModifier);
+    QTRY_VERIFY2(!workspace->isFileManagerVisible(), "再次按快捷键后文件管理未收起");
 }
 
 void MainWindowShellTest::searchActionOpensEmbeddedBarInsteadOfDialog()

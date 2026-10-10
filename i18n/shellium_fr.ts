@@ -4640,10 +4640,6 @@ Clé publique : %3</translation>
         <translation type="unfinished">Non connecté</translation>
     </message>
     <message>
-        <source>Show the remote file manager for the current session (Ctrl+Shift+O)</source>
-        <translation type="unfinished">Afficher le gestionnaire de fichiers distant pour la session actuelle (Ctrl+Maj+O)</translation>
-    </message>
-    <message>
         <source>Remote file manager</source>
         <translation type="unfinished">Gestionnaire de fichiers distant</translation>
     </message>
@@ -4816,8 +4812,20 @@ Confirmer que la clé a changé et remplacer l&apos;ancien enregistrement dans k
         <translation type="unfinished">Établissement d&apos;une connexion imbriquée à %1 via le serveur actuel…</translation>
     </message>
     <message>
-        <source>Hide the remote file manager for the current session (Ctrl+Shift+O)</source>
-        <translation type="unfinished">Masquer le gestionnaire de fichiers distant pour la session actuelle (Ctrl+Maj+O)</translation>
+        <source>Hide the remote file manager for the current session</source>
+        <translation type="unfinished">Masquer le gestionnaire de fichiers distant pour la session actuelle</translation>
+    </message>
+    <message>
+        <source>Show the remote file manager for the current session</source>
+        <translation type="unfinished">Afficher le gestionnaire de fichiers distant pour la session actuelle</translation>
+    </message>
+    <message>
+        <source>Hide the remote file manager for the current session (%1)</source>
+        <translation type="unfinished">Masquer le gestionnaire de fichiers distant pour la session actuelle (%1)</translation>
+    </message>
+    <message>
+        <source>Show the remote file manager for the current session (%1)</source>
+        <translation type="unfinished">Afficher le gestionnaire de fichiers distant pour la session actuelle (%1)</translation>
     </message>
     <message>
         <source>Uploading %1</source>

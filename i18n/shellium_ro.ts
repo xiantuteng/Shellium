@@ -4640,10 +4640,6 @@ Cheie publică: %3</translation>
         <translation type="unfinished">Neconectat</translation>
     </message>
     <message>
-        <source>Show the remote file manager for the current session (Ctrl+Shift+O)</source>
-        <translation type="unfinished">Afișează managerul de fișiere la distanță pentru sesiunea curentă (Ctrl+Shift+O)</translation>
-    </message>
-    <message>
         <source>Remote file manager</source>
         <translation type="unfinished">Manager de fișiere la distanță</translation>
     </message>
@@ -4816,8 +4812,20 @@ Confirmi că cheia s-a schimbat și înlocuiești vechea înregistrare din known
         <translation type="unfinished">Se stabilește conexiunea imbricată la %1 prin serverul curent…</translation>
     </message>
     <message>
-        <source>Hide the remote file manager for the current session (Ctrl+Shift+O)</source>
-        <translation type="unfinished">Ascunde managerul de fișiere la distanță pentru sesiunea curentă (Ctrl+Shift+O)</translation>
+        <source>Hide the remote file manager for the current session</source>
+        <translation type="unfinished">Ascunde managerul de fișiere la distanță pentru sesiunea curentă</translation>
+    </message>
+    <message>
+        <source>Show the remote file manager for the current session</source>
+        <translation type="unfinished">Afișează managerul de fișiere la distanță pentru sesiunea curentă</translation>
+    </message>
+    <message>
+        <source>Hide the remote file manager for the current session (%1)</source>
+        <translation type="unfinished">Ascunde managerul de fișiere la distanță pentru sesiunea curentă (%1)</translation>
+    </message>
+    <message>
+        <source>Show the remote file manager for the current session (%1)</source>
+        <translation type="unfinished">Afișează managerul de fișiere la distanță pentru sesiunea curentă (%1)</translation>
     </message>
     <message>
         <source>Uploading %1</source>

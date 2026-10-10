@@ -14,6 +14,8 @@
 #include <QDialog>
 #include <QFormLayout>
 #include <QLabel>
+#include <QKeySequence>
+#include <QScopeGuard>
 #include <QProgressBar>
 #include <QLineEdit>
 #include <QListWidget>
@@ -99,6 +101,13 @@ private slots:
      * 拖到终端时文件管理面板通常是收起的，面板里的进度条用户根本看不见。
      */
     void terminalPaneShowsDropUploadProgressInHeader();
+
+    /**
+     * @brief 文件管理按钮提示里的快捷键必须是当前绑定的、按平台原生写法渲染的那一个。
+     *
+     * 曾经把 "Ctrl+Shift+O" 写死在译文里：macOS 上实际是 ⇧⌘O，用户改键后也不会跟着变。
+     */
+    void terminalPaneFileManagerToolTipShowsConfiguredShortcut();
 
     /** @brief 终端状态栏不应再创建“推测嵌套目标”徽章，以免重复展示内部判定。 */
     void terminalPaneDoesNotExposeInferredTargetBadge();
@@ -531,6 +540,38 @@ void ProductivityTest::terminalPaneShowsDropUploadProgressInHeader()
 
     pane.setUploadProgress(false, QString(), -1);
     QVERIFY2(progress->isHidden(), "上传全部结束后进度区必须收起");
+}
+
+void ProductivityTest::terminalPaneFileManagerToolTipShowsConfiguredShortcut()
+{
+    const QKeySequence original = TerminalPane::fileManagerShortcut();
+    const auto restore = qScopeGuard([original] { TerminalPane::setFileManagerShortcut(original); });
+
+    TerminalPane pane;
+    auto *button = pane.findChild<QToolButton *>(QStringLiteral("terminalFileManagerToggle"));
+    QVERIFY(button != nullptr);
+
+    const QKeySequence defaultShortcut(QStringLiteral("Ctrl+Shift+O"));
+    TerminalPane::setFileManagerShortcut(defaultShortcut);
+    const QString nativeText = defaultShortcut.toString(QKeySequence::NativeText);
+    QVERIFY2(button->toolTip().contains(nativeText),
+             qPrintable(QStringLiteral("提示 %1 未包含原生快捷键 %2").arg(button->toolTip(), nativeText)));
+#if defined(Q_OS_MACOS)
+    QVERIFY2(!button->toolTip().contains(QStringLiteral("Ctrl")),
+             "macOS 上必须显示 ⇧⌘O，而不是 Ctrl+Shift+O");
+#endif
+
+    // 已存在的面板也要跟随设置里的改键立即刷新，展开状态下的"隐藏"提示同样如此。
+    pane.setFileManagerVisible(true);
+    const QKeySequence custom(QStringLiteral("Ctrl+Alt+M"));
+    TerminalPane::setFileManagerShortcut(custom);
+    QVERIFY(button->toolTip().contains(custom.toString(QKeySequence::NativeText)));
+    QVERIFY(button->toolTip().startsWith(QStringLiteral("Hide")));
+
+    // 解除绑定后不能留下一对空括号。
+    TerminalPane::setFileManagerShortcut(QKeySequence());
+    QCOMPARE(button->toolTip(),
+             QStringLiteral("Hide the remote file manager for the current session"));
 }
 
 void ProductivityTest::terminalPaneDoesNotExposeInferredTargetBadge()

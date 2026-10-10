@@ -4640,10 +4640,6 @@ Public key: %3</source>
         <translation type="unfinished">연결되지 않음</translation>
     </message>
     <message>
-        <source>Show the remote file manager for the current session (Ctrl+Shift+O)</source>
-        <translation type="unfinished">현재 세션의 원격 파일 관리자 표시 (Ctrl+Shift+O)</translation>
-    </message>
-    <message>
         <source>Remote file manager</source>
         <translation type="unfinished">원격 파일 관리자</translation>
     </message>
@@ -4816,8 +4812,20 @@ Confirm the key has changed and replace the old record in known_hosts?</source>
         <translation type="unfinished">현재 서버를 통해 %1에 대한 중첩 연결을 설정하는 중…</translation>
     </message>
     <message>
-        <source>Hide the remote file manager for the current session (Ctrl+Shift+O)</source>
-        <translation type="unfinished">현재 세션의 원격 파일 관리자 숨기기 (Ctrl+Shift+O)</translation>
+        <source>Hide the remote file manager for the current session</source>
+        <translation type="unfinished">현재 세션의 원격 파일 관리자 숨기기</translation>
+    </message>
+    <message>
+        <source>Show the remote file manager for the current session</source>
+        <translation type="unfinished">현재 세션의 원격 파일 관리자 표시</translation>
+    </message>
+    <message>
+        <source>Hide the remote file manager for the current session (%1)</source>
+        <translation type="unfinished">현재 세션의 원격 파일 관리자 숨기기 (%1)</translation>
+    </message>
+    <message>
+        <source>Show the remote file manager for the current session (%1)</source>
+        <translation type="unfinished">현재 세션의 원격 파일 관리자 표시 (%1)</translation>
     </message>
     <message>
         <source>Uploading %1</source>

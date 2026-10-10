@@ -4640,10 +4640,6 @@ Public key: %3</source>
         <translation type="unfinished">غير متصل</translation>
     </message>
     <message>
-        <source>Show the remote file manager for the current session (Ctrl+Shift+O)</source>
-        <translation type="unfinished">عرض مدير الملفات البعيد للجلسة الحالية (Ctrl+Shift+O)</translation>
-    </message>
-    <message>
         <source>Remote file manager</source>
         <translation type="unfinished">مدير الملفات البعيد</translation>
     </message>
@@ -4816,8 +4812,20 @@ Confirm the key has changed and replace the old record in known_hosts?</source>
         <translation type="unfinished">جارٍ إنشاء الاتصال المتداخل بـ %1 عبر الخادم الحالي…</translation>
     </message>
     <message>
-        <source>Hide the remote file manager for the current session (Ctrl+Shift+O)</source>
-        <translation type="unfinished">إخفاء مدير الملفات البعيد للجلسة الحالية (Ctrl+Shift+O)</translation>
+        <source>Hide the remote file manager for the current session</source>
+        <translation type="unfinished">إخفاء مدير الملفات البعيد للجلسة الحالية</translation>
+    </message>
+    <message>
+        <source>Show the remote file manager for the current session</source>
+        <translation type="unfinished">عرض مدير الملفات البعيد للجلسة الحالية</translation>
+    </message>
+    <message>
+        <source>Hide the remote file manager for the current session (%1)</source>
+        <translation type="unfinished">إخفاء مدير الملفات البعيد للجلسة الحالية (%1)</translation>
+    </message>
+    <message>
+        <source>Show the remote file manager for the current session (%1)</source>
+        <translation type="unfinished">عرض مدير الملفات البعيد للجلسة الحالية (%1)</translation>
     </message>
     <message>
         <source>Uploading %1</source>
