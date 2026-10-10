@@ -1,5 +1,8 @@
 #pragma once
 
+#include "core/ConnectionTarget.h"
+
+#include <QStringList>
 #include <QWidget>
 
 class QSplitter;
@@ -97,8 +100,32 @@ private:
      * “当前活动层”严格取自 TerminalPane::activeTarget()/activeWorkingDirectory()，因此
      * 嵌套第 2 层、第 N 层拖入时会落到该层自己的目录，而不是根连接的目录；未连接、本地
      * 终端或尚未获取到 cwd 时只提示，不弹出确认框。
+     *
+     * 已知 Shell 进程号时先异步查询终端前台进程的真实目录（见 TerminalDropTarget），结果
+     * 回来后才弹确认框：用户经 su -、sudo -i 进入子 Shell 后缓存的 cwd 已经过时，直接用它
+     * 会把文件传进文件管理器跟随的旧目录，而不是终端里看到的目录。
      */
     void handleFilesDropped(const QStringList &localPaths);
+
+    /**
+     * @brief 目标目录确定后弹出确认框，用户同意才交给文件管理器上传。
+     * @param remoteDirectory 为空时只提示无法确定目录，不弹确认框。
+     * @param foregroundUnreadable 目录为空的原因是终端正运行读不到目录的子 Shell。
+     */
+    void confirmDropUpload(const ConnectionTarget &target,
+                           const QString &remoteDirectory,
+                           bool foregroundUnreadable,
+                           const QStringList &localPaths);
+
+    /** @brief 正在等待前台目录查询结果的一次拖拽；新的拖拽会直接取代旧的。 */
+    struct PendingDrop {
+        quint64 requestId = 0;
+        ConnectionTarget target;
+        qint64 shellPid = 0;
+        QString cachedDirectory;
+        QStringList localPaths;
+    };
+    PendingDrop m_pendingDrop;
 
     QSplitter *m_pageSplitter = nullptr;
     /** @brief 文件管理裁剪容器，隔离内部表单最小宽度，保证动画可连续缩到零。 */

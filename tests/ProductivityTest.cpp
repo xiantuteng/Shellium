@@ -14,6 +14,7 @@
 #include <QDialog>
 #include <QFormLayout>
 #include <QLabel>
+#include <QProgressBar>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QPushButton>
@@ -91,6 +92,13 @@ private slots:
      * 上一次传输结果的图标污染。
      */
     void terminalPaneShowsIconForTransferResultAndClearsOnPlainStatus();
+
+    /**
+     * @brief 拖入终端的上传进度必须画在会话状态栏上，结束后收起。
+     *
+     * 拖到终端时文件管理面板通常是收起的，面板里的进度条用户根本看不见。
+     */
+    void terminalPaneShowsDropUploadProgressInHeader();
 
     /** @brief 终端状态栏不应再创建“推测嵌套目标”徽章，以免重复展示内部判定。 */
     void terminalPaneDoesNotExposeInferredTargetBadge();
@@ -498,6 +506,31 @@ void ProductivityTest::terminalPaneShowsIconForTransferResultAndClearsOnPlainSta
     pane.showTransientStatus(QStringLiteral("Reading home directory…"));
     QVERIFY2(statusIcon->pixmap().isNull() && statusIcon->isHidden(),
              "切换回普通提示后必须清空上一次传输结果的图标");
+}
+
+void ProductivityTest::terminalPaneShowsDropUploadProgressInHeader()
+{
+    TerminalPane pane;
+    auto *progress = pane.findChild<QWidget *>(QStringLiteral("terminalSessionUploadProgress"));
+    auto *text = pane.findChild<QLabel *>(QStringLiteral("terminalSessionUploadText"));
+    auto *bar = pane.findChild<QProgressBar *>(QStringLiteral("terminalSessionUploadBar"));
+    QVERIFY2(progress != nullptr && text != nullptr && bar != nullptr,
+             "会话状态栏必须带有拖入上传进度区（文字 + 进度条）");
+    QVERIFY2(progress->isHidden(), "没有上传时进度区不应占位");
+
+    // 尚未开始传字节（如目录冲突探测中）时显示为不确定进度，而不是停在 0%。
+    pane.setUploadProgress(true, QStringLiteral("release.tar.gz"), -1);
+    QVERIFY(!progress->isHidden());
+    QVERIFY(text->text().contains(QStringLiteral("release.tar.gz")));
+    QCOMPARE(bar->maximum(), 0);
+
+    pane.setUploadProgress(true, QStringLiteral("release.tar.gz"), 42);
+    QVERIFY2(text->text().contains(QStringLiteral("42%")), "进度文字必须带上百分比");
+    QCOMPARE(bar->maximum(), 100);
+    QCOMPARE(bar->value(), 42);
+
+    pane.setUploadProgress(false, QString(), -1);
+    QVERIFY2(progress->isHidden(), "上传全部结束后进度区必须收起");
 }
 
 void ProductivityTest::terminalPaneDoesNotExposeInferredTargetBadge()

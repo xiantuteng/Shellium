@@ -166,6 +166,9 @@ private slots:
     /** @brief 注入脚本必须为 bash 和 zsh 分别挂好去重的 cwd 上报钩子。 */
     void shellShimRegistersCwdHookForBothShells();
 
+    /** @brief 钩子必须随 cwd 一起上报 Shell 进程号，且解析出 Kind::ShellPid。 */
+    void shellShimReportsShellPid();
+
     /** @brief -i 指向远端私钥，绝不能被本机 libssh 当作本地路径使用。 */
     void neverUsesRemoteIdentityFileLocally();
 
@@ -1247,6 +1250,22 @@ void SshCommandParserTest::shellShimParsesCwdEvent()
     const ShellShim::Event empty = ShellShim::parseEvent(QByteArrayLiteral("cwd;"));
     QCOMPARE(empty.kind, ShellShim::Event::Kind::None);
 }
+
+void SshCommandParserTest::shellShimReportsShellPid()
+{
+    const QByteArray script = ShellShim::scriptBody();
+    QVERIFY(script.contains(QByteArrayLiteral("]6773;pid;%s\\007")));
+    QVERIFY(script.contains(QByteArrayLiteral("\"$$\" \"$PWD\"")));
+
+    const ShellShim::Event event = ShellShim::parseEvent(QByteArrayLiteral("pid;12345"));
+    QCOMPARE(event.kind, ShellShim::Event::Kind::ShellPid);
+    QCOMPARE(event.processId, qint64(12345));
+
+    QCOMPARE(ShellShim::parseEvent(QByteArrayLiteral("pid;")).kind, ShellShim::Event::Kind::None);
+    QCOMPARE(ShellShim::parseEvent(QByteArrayLiteral("pid;0")).kind, ShellShim::Event::Kind::None);
+    QCOMPARE(ShellShim::parseEvent(QByteArrayLiteral("pid;12a")).kind, ShellShim::Event::Kind::None);
+}
+
 
 void SshCommandParserTest::shellShimRegistersCwdHookForBothShells()
 {

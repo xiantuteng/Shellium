@@ -4820,6 +4820,10 @@ Confirmer que la clé a changé et remplacer l&apos;ancien enregistrement dans k
         <translation type="unfinished">Masquer le gestionnaire de fichiers distant pour la session actuelle (Ctrl+Maj+O)</translation>
     </message>
     <message>
+        <source>Uploading %1</source>
+        <translation type="unfinished">Envoi de %1</translation>
+    </message>
+    <message>
         <source>Press r to reconnect to %1, press x to close this tab</source>
         <translation type="unfinished">Appuyez sur r pour vous reconnecter à %1, sur x pour fermer cet onglet</translation>
     </message>
@@ -5046,8 +5050,16 @@ Reconnexion manuelle…<byte value="xd"/>
         <translation type="unfinished">Ceci est un terminal local ; les fichiers déposés ne peuvent pas être téléversés.</translation>
     </message>
     <message>
+        <source>Looking up the terminal&apos;s current directory…</source>
+        <translation type="unfinished">Recherche du répertoire courant du terminal…</translation>
+    </message>
+    <message>
         <source>Remote path unknown</source>
         <translation type="unfinished">Chemin distant inconnu</translation>
+    </message>
+    <message>
+        <source>The terminal is running a sub-shell (such as su - or sudo -i) whose current directory cannot be read. Exit the sub-shell, or upload through the remote file manager.</source>
+        <translation type="unfinished">Le terminal exécute un sous-shell (par exemple su - ou sudo -i) dont le répertoire courant ne peut pas être lu. Quittez le sous-shell ou effectuez l’envoi via le gestionnaire de fichiers distant.</translation>
     </message>
     <message>
         <source>The current directory is not known yet; press Enter once in the terminal, then drop the files.</source>

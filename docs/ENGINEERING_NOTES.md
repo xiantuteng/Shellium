@@ -312,6 +312,15 @@ exec 中继在 `ssh_channel_request_exec()` 成功后还会保留一个短暂确
 `/dev/tcp`、`nc`、`socat` 或命令立即退出时，错误会作为转发失败返回，而不是先交付一个
 随后立刻 EOF 的伪成功 socket；交付后的异步 stderr 则写入 `shellium.ssh` 日志分类。
 
+**cwd 缓存只代表挂钩子的那一个 Shell。** 钩子（`PROMPT_COMMAND`/`precmd`）只在登录后被 source
+的交互 Shell 里触发；用户 `su -`、`sudo -i`、`bash` 进入子 Shell 后，子 Shell 里的 `cd` 不会
+上报，`TerminalPane::activeWorkingDirectory()` 停在进入前的目录——而文件管理器跟随的也是它，
+所以拿缓存当"终端当前目录"会把拖进终端的文件传进文件管理器的目录。`su -`/`sudo -i` 清空
+环境，导出钩子也带不进去。因此钩子每次提示符同时上报 `$$`（`pid;` 事件），拖拽上传时经 SFTP
+连接的 exec 通道查该 Shell 所在终端的前台进程组（tpgid）的 `/proc/<pid>/cwd`，判定规则见
+`TerminalDropTarget::resolve`：前台是读不到目录的子 Shell（非 root 登录后 `sudo -i`）时必须
+拒绝，不能退回缓存。回归用例：`dropTargetFollowsSubShellDirectory`（真实服务器）。
+
 ---
 
 ## 十一、端口转发的 fd 所有权

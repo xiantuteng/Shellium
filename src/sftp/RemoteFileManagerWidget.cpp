@@ -33,6 +33,7 @@
 #include <QPixmap>
 #include <QRegularExpression>
 #include <QResizeEvent>
+#include <QScopeGuard>
 #include <QSizePolicy>
 #include <QSplitter>
 #include <QTimer>
@@ -1353,6 +1354,13 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
                 // 百分比无法回答“还要多久”“是不是卡住了”。字节、速度与剩余时间放在
                 // 进度条正下方的独立摘要标签，避免把长文本硬塞进只有 6px 高的轨道。
                 updateTransferProgressText(completed, total);
+                if (m_activeQueuedTransfer.has_value() && m_activeQueuedTransfer->fromTerminalDrop) {
+                    // 拖到终端时面板多半是收起的，进度必须同时送到终端会话状态栏。
+                    m_terminalDropProgressShown = true;
+                    m_terminalDropProgressQueueId = m_activeQueuedTransfer->queueId;
+                    emit terminalDropUploadProgress(
+                        true, QFileInfo(m_activeQueuedTransfer->sourcePath).fileName(), percent);
+                }
             });
     connect(m_service,
             &SftpService::recursiveTransferProgress,
@@ -1377,6 +1385,16 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
             this,
             &RemoteFileManagerWidget::handleRecursiveTransferFinished);
     connect(m_service,
+            &SftpService::foregroundStateReady,
+            this,
+            [this](const quint64 requestId,
+                   const ConnectionTarget &,
+                   const TerminalDropTarget::ForegroundState &state) {
+                if (m_pendingForegroundQueries.remove(requestId)) {
+                    emit terminalForegroundStateReady(requestId, state, true);
+                }
+            });
+    connect(m_service,
             &SftpService::pathStatReady,
             this,
             [this](const quint64 requestId,
@@ -1390,6 +1408,8 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
                 }
                 const PendingDirectoryUpload upload = pending.value();
                 m_pendingDirectoryChecks.erase(pending);
+                // 用户在冲突框里取消时不会再入队，终端状态栏的等待提示必须随之撤掉。
+                const auto republish = qScopeGuard([this] { publishTerminalDropProgress(); });
 
                 if (!exists) {
                     // 远端还没有同名目录，没有冲突可言，直接按普通写入入队。
@@ -1960,11 +1980,13 @@ void RemoteFileManagerWidget::rebuildTransferQueueView()
     m_transferControlSeparator->setVisible(hasActive || hasAnyTransfer);
     m_transferQueueList->setVisible(hasAnyTransfer);
     m_transferPanel->setVisible(hasAnyTransfer || m_progressBar->isVisible());
+    publishTerminalDropProgress();
 }
 
 void RemoteFileManagerWidget::uploadLocalPaths(const ConnectionTarget &target,
                                                const QStringList &localPaths,
-                                               const QString &remoteDirectory)
+                                               const QString &remoteDirectory,
+                                               const bool fromTerminalDrop)
 {
     if (!target.isValid()) {
         QMessageBox::information(this, tr("Not connected yet"), tr("Connect to and select a remote server first."));
@@ -2001,7 +2023,8 @@ void RemoteFileManagerWidget::uploadLocalPaths(const ConnectionTarget &target,
     for (const QFileInfo &info : std::as_const(acceptedEntries)) {
         if (info.isDir()) {
             // 目录要先问清楚"合并还是替换"，因此不能在这里直接入队；探测结果回来后才决定。
-            requestDirectoryUpload(target, info.absoluteFilePath(), remoteDirectory);
+            requestDirectoryUpload(target, info.absoluteFilePath(), remoteDirectory,
+                                   fromTerminalDrop);
             continue;
         }
         QueuedTransfer transfer;
@@ -2012,6 +2035,7 @@ void RemoteFileManagerWidget::uploadLocalPaths(const ConnectionTarget &target,
         transfer.policy = policy;
         transfer.description = tr("Upload %1 → %2")
                                    .arg(info.fileName(), remoteDirectory);
+        transfer.fromTerminalDrop = fromTerminalDrop;
         enqueueTransfer(std::move(transfer));
         ++queuedNow;
     }
@@ -2022,7 +2046,8 @@ void RemoteFileManagerWidget::uploadLocalPaths(const ConnectionTarget &target,
 
 void RemoteFileManagerWidget::requestDirectoryUpload(const ConnectionTarget &target,
                                                      const QString &localDirectory,
-                                                     const QString &remoteParentDirectory)
+                                                     const QString &remoteParentDirectory,
+                                                     const bool fromTerminalDrop)
 {
     PendingDirectoryUpload pending;
     pending.target = target;
@@ -2030,9 +2055,13 @@ void RemoteFileManagerWidget::requestDirectoryUpload(const ConnectionTarget &tar
     pending.remoteParentDirectory = remoteParentDirectory;
     pending.remoteRoot = joinRemotePath(remoteParentDirectory, QDir(localDirectory).dirName());
     pending.policy = selectedTransferPolicy();
+    pending.fromTerminalDrop = fromTerminalDrop;
 
     const quint64 requestId = m_service->statPath(target, pending.remoteRoot);
     m_pendingDirectoryChecks.insert(requestId, pending);
+    // 冲突探测期间终端状态栏就要出现"等待中"的进度，否则拖入目录后到确认框弹出前
+    // 用户看不到任何反馈。
+    publishTerminalDropProgress();
 }
 
 void RemoteFileManagerWidget::enqueueDirectoryUpload(
@@ -2047,6 +2076,7 @@ void RemoteFileManagerWidget::enqueueDirectoryUpload(
     transfer.destinationPath = pending.remoteParentDirectory;
     transfer.policy = pending.policy;
     transfer.conflictPolicy = conflictPolicy;
+    transfer.fromTerminalDrop = pending.fromTerminalDrop;
     transfer.description = conflictPolicy == SftpTransfer::DirectoryConflictPolicy::Replace
         ? tr("Replace upload %1 → %2").arg(QDir(pending.localDirectory).dirName(),
                                      pending.remoteParentDirectory)
@@ -2188,7 +2218,62 @@ void RemoteFileManagerWidget::uploadFilesToDirectory(const ConnectionTarget &tar
     // 直接复用 uploadLocalPaths 的路径校验、符号链接过滤和队列逻辑；target 完全来自调用方
     // （拖拽发生时的终端活动层），不读取面板自身的 selectedTarget()/m_pathEdit，因此面板
     // 隐藏、未展开或选中了另一台服务器都不影响这次上传落到正确的层。
-    uploadLocalPaths(target, localPaths, remoteDirectory);
+    uploadLocalPaths(target, localPaths, remoteDirectory, true);
+}
+
+quint64 RemoteFileManagerWidget::queryTerminalForegroundState(const ConnectionTarget &target,
+                                                              const qint64 shellPid)
+{
+    const quint64 requestId = m_service->queryForegroundState(target, shellPid);
+    m_pendingForegroundQueries.insert(requestId);
+    return requestId;
+}
+
+void RemoteFileManagerWidget::publishTerminalDropProgress()
+{
+    const QueuedTransfer *current = nullptr;
+    bool waiting = false;
+    if (m_activeQueuedTransfer.has_value() && m_activeQueuedTransfer->fromTerminalDrop) {
+        current = &*m_activeQueuedTransfer;
+    } else {
+        for (const QueuedTransfer &transfer : std::as_const(m_pendingTransfers)) {
+            if (transfer.fromTerminalDrop) {
+                current = &transfer;
+                waiting = true;
+                break;
+            }
+        }
+    }
+    QString name;
+    if (current != nullptr) {
+        name = QFileInfo(current->sourcePath).fileName();
+    } else {
+        for (const PendingDirectoryUpload &pending : std::as_const(m_pendingDirectoryChecks)) {
+            if (pending.fromTerminalDrop) {
+                name = QDir(pending.localDirectory).dirName();
+                waiting = true;
+                break;
+            }
+        }
+    }
+
+    if (name.isEmpty()) {
+        if (m_terminalDropProgressShown) {
+            m_terminalDropProgressShown = false;
+            m_terminalDropProgressQueueId = 0;
+            emit terminalDropUploadProgress(false, QString(), -1);
+        }
+        return;
+    }
+    const quint64 queueId = waiting ? 0 : current->queueId;
+    if (m_terminalDropProgressShown && !waiting && queueId == m_terminalDropProgressQueueId) {
+        // 同一项的暂停/继续、队列里其他项变化都会走到这里；保留已经展示的百分比，
+        // 不要把进度条打回不确定状态。
+        return;
+    }
+    m_terminalDropProgressShown = true;
+    m_terminalDropProgressQueueId = queueId;
+    emit terminalDropUploadProgress(true, name, -1);
 }
 
 void RemoteFileManagerWidget::uploadSelectedDirectory()
@@ -2529,7 +2614,13 @@ void RemoteFileManagerWidget::handleOperationFailure(const quint64 requestId,
 
     // 目录冲突探测失败时对应的待决目录上传不会再有结果回来，必须一并清掉，否则它会一直
     // 挂在等待表里，而用户看到的是一个"点了上传却什么都没发生"的目录。
-    m_pendingDirectoryChecks.remove(requestId);
+    if (m_pendingDirectoryChecks.remove(requestId) > 0) {
+        publishTerminalDropProgress();
+    }
+    if (m_pendingForegroundQueries.remove(requestId)) {
+        // 连接或认证失败照常由下面的流程报告；调用方只需知道这次查询没有结果。
+        emit terminalForegroundStateReady(requestId, {}, false);
+    }
 
     // 单文件失败以及递归传输在连接/根目录阶段的失败都走本信号。先释放活动队列项，再让
     // 事件循环启动下一项；后续认证或错误对话框仍可完整展示，不会卡死整个队列。

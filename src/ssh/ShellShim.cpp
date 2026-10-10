@@ -75,6 +75,11 @@ QByteArray ShellShim::scriptBody()
     //     是覆盖：用户自己的 PROMPT_COMMAND/precmd 钩子必须继续生效。刻意不对 $PWD 做
     //     shell 转义/编码——多数路径不含会打断 OSC 帧的控制字符，换取实现和调用方解析都
     //     保持简单；真出现异常路径，后果只是这一次 cwd 上报被丢弃，不影响其余功能。
+    //   * 同一钩子先报一次 Shell 自身的 $$。cwd 只来自挂了钩子的这一个 Shell：用户执行
+    //     su -、sudo -i、bash 进入子 Shell 后钩子不再触发，缓存的 cwd 就停在进子 Shell 之前。
+    //     有了进程号，拖拽上传时才能经 exec 通道查出终端前台进程的真实目录，而不是把文件
+    //     传进早已过时的目录。每次提示符都重报而不是只报一次：嵌套层刚建立时这条上报可能
+    //     早于层切换到达而记到外层名下，下一次提示符即可自愈，与 cwd 的处理方式一致。
     return QByteArrayLiteral(
         "if [ -n \"${BASH_VERSION-}${ZSH_VERSION-}\" ]; then"
         " if [ -n \"${BASH_VERSION-}\" ]; then"
@@ -102,7 +107,8 @@ QByteArray ShellShim::scriptBody()
         " unset _shellium_r; command ssh \"$@\";"
         " };"
         " _shellium_report_cwd() { printf '\\033]") + kOscNumber + QByteArrayLiteral(
-        ";cwd;%s\\007' \"$PWD\" > /dev/tty 2>/dev/null; };"
+        ";pid;%s\\007\\033]") + kOscNumber + QByteArrayLiteral(
+        ";cwd;%s\\007' \"$$\" \"$PWD\" > /dev/tty 2>/dev/null; };"
         " if [ -n \"${BASH_VERSION-}\" ]; then"
         " case \";${PROMPT_COMMAND-};\" in"
         " *\";_shellium_report_cwd;\"*) ;;"
@@ -175,6 +181,17 @@ ShellShim::Event ShellShim::parseEvent(const QByteArray &payload)
         }
         event.workingDirectory = QString::fromUtf8(path);
         event.kind = Event::Kind::Cwd;
+        return event;
+    }
+
+    if (kind == QByteArrayLiteral("pid")) {
+        bool ok = false;
+        const qint64 processId = payload.mid(separator + 1).toLongLong(&ok);
+        if (!ok || processId <= 0) {
+            return event;
+        }
+        event.processId = processId;
+        event.kind = Event::Kind::ShellPid;
         return event;
     }
 

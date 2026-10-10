@@ -1,5 +1,6 @@
 #include "sftp/SftpService.h"
 
+#include <QProcess>
 #include <QTest>
 
 /**
@@ -13,6 +14,15 @@ class SftpRecursiveTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    /** @brief 前台进程查询的输出解析：格式不符一律视为失败，异常目录视为读不到。 */
+    void dropTargetParsesForegroundQueryOutput();
+
+    /** @brief 实时目录优先；前台是读不到目录的子 Shell 时绝不退回已过时的缓存。 */
+    void dropTargetResolvesUploadDirectory();
+
+    /** @brief 查询命令必须能被 POSIX sh 执行，进程不存在时给出可解析的空结果。 */
+    void dropTargetQueryCommandRunsInPosixShell();
+
     /** @brief 权限的符号形式必须与 ls -l 一致，包括 setuid/setgid/sticky 位的大小写切换。 */
     void formatsPermissionsAsSymbolicTextLikeLs_data();
     void formatsPermissionsAsSymbolicTextLikeLs();
@@ -482,5 +492,65 @@ void SftpRecursiveTest::decidesWhenToFollowTerminalWorkingDirectory()
              expected);
 }
 
+void SftpRecursiveTest::dropTargetParsesForegroundQueryOutput()
+{
+    using TerminalDropTarget::parseForegroundQueryOutput;
+    const auto ok = parseForegroundQueryOutput(QByteArrayLiteral("fg=4321\ncwd=/var/log\n"));
+    QCOMPARE(ok.foregroundPid, qint64(4321));
+    QCOMPARE(ok.directory, QStringLiteral("/var/log"));
+
+    // 读不到目录（如 sudo -i 后的 root Shell）：进程号有效，目录为空。
+    const auto unreadable = parseForegroundQueryOutput(QByteArrayLiteral("fg=4321\ncwd=\n"));
+    QCOMPARE(unreadable.foregroundPid, qint64(4321));
+    QVERIFY(unreadable.directory.isEmpty());
+
+    // 已删除的目录和相对路径都不能作为上传目标。
+    QVERIFY(parseForegroundQueryOutput(QByteArrayLiteral("fg=1\ncwd=/tmp/x (deleted)\n"))
+                .directory.isEmpty());
+    QVERIFY(parseForegroundQueryOutput(QByteArrayLiteral("fg=1\ncwd=tmp\n")).directory.isEmpty());
+
+    // 命令没跑起来、输出被截断或混入别的内容时，一律视为查询失败。
+    QCOMPARE(parseForegroundQueryOutput(QByteArray()).foregroundPid, qint64(0));
+    QCOMPARE(parseForegroundQueryOutput(QByteArrayLiteral("fg=12\n")).foregroundPid, qint64(0));
+    QCOMPARE(parseForegroundQueryOutput(QByteArrayLiteral("fg=x\ncwd=/\n")).foregroundPid, qint64(0));
+}
+
+void SftpRecursiveTest::dropTargetResolvesUploadDirectory()
+{
+    using TerminalDropTarget::ForegroundState;
+    using TerminalDropTarget::resolve;
+    const QString cached = QStringLiteral("/home/ops");
+
+    // 查询不可用（无进程号、中继模式、超时）时沿用缓存。
+    QCOMPARE(resolve(cached, 0, ForegroundState{}).directory, cached);
+    QCOMPARE(resolve(cached, 100, ForegroundState{}).directory, cached);
+
+    // 子 Shell 里 cd 过：实时目录优先于过时的缓存。
+    QCOMPARE(resolve(cached, 100, ForegroundState{200, QStringLiteral("/etc")}).directory,
+             QStringLiteral("/etc"));
+
+    // 前台就是钩子 Shell 本身，读不到 /proc（如 macOS 无 lsof）时缓存可信。
+    QCOMPARE(resolve(cached, 100, ForegroundState{100, QString()}).directory, cached);
+
+    // 前台是读不到目录的子 Shell：缓存此刻恰恰是错的，必须拒绝而不是退回缓存。
+    const auto refused = resolve(cached, 100, ForegroundState{200, QString()});
+    QVERIFY(refused.directory.isEmpty());
+    QVERIFY(refused.foregroundUnreadable);
+}
+
+void SftpRecursiveTest::dropTargetQueryCommandRunsInPosixShell()
+{
+    // 选一个几乎不可能存在的进程号：ps 与 /proc 都查不到时应退回 Shell 自身并给出空目录。
+    const QByteArray command = TerminalDropTarget::buildForegroundQueryCommand(2147480000);
+    QProcess sh;
+    sh.start(QStringLiteral("/bin/sh"), {QStringLiteral("-c"), QString::fromUtf8(command)});
+    QVERIFY(sh.waitForFinished(10000));
+    QCOMPARE(sh.exitCode(), 0);
+    const auto state = TerminalDropTarget::parseForegroundQueryOutput(sh.readAllStandardOutput());
+    QCOMPARE(state.foregroundPid, qint64(2147480000));
+    QVERIFY(state.directory.isEmpty());
+}
+
 QTEST_MAIN(SftpRecursiveTest)
+
 #include "SftpRecursiveTest.moc"

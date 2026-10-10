@@ -4820,6 +4820,10 @@ Confirm the key has changed and replace the old record in known_hosts?</source>
         <translation type="unfinished">現在のセッションのリモートファイルマネージャーを非表示 (Ctrl+Shift+O)</translation>
     </message>
     <message>
+        <source>Uploading %1</source>
+        <translation type="unfinished">%1 をアップロード中</translation>
+    </message>
+    <message>
         <source>Press r to reconnect to %1, press x to close this tab</source>
         <translation type="unfinished">r を押して %1 に再接続、x を押してこのタブを閉じる</translation>
     </message>
@@ -5046,8 +5050,16 @@ Reconnecting manually…<byte value="xd"/>
         <translation type="unfinished">これはローカルターミナルです。ドラッグしたファイルは送信できません。</translation>
     </message>
     <message>
+        <source>Looking up the terminal&apos;s current directory…</source>
+        <translation type="unfinished">ターミナルの現在のディレクトリを確認しています…</translation>
+    </message>
+    <message>
         <source>Remote path unknown</source>
         <translation type="unfinished">リモートパスが不明です</translation>
+    </message>
+    <message>
+        <source>The terminal is running a sub-shell (such as su - or sudo -i) whose current directory cannot be read. Exit the sub-shell, or upload through the remote file manager.</source>
+        <translation type="unfinished">ターミナルで現在のディレクトリを読み取れないサブシェル（su - や sudo -i など）が実行中です。サブシェルを終了するか、リモートファイルマネージャーからアップロードしてください。</translation>
     </message>
     <message>
         <source>The current directory is not known yet; press Enter once in the terminal, then drop the files.</source>

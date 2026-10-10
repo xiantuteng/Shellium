@@ -4820,6 +4820,10 @@ Confirm the key has changed and replace the old record in known_hosts?</source>
         <translation type="unfinished">현재 세션의 원격 파일 관리자 숨기기 (Ctrl+Shift+O)</translation>
     </message>
     <message>
+        <source>Uploading %1</source>
+        <translation type="unfinished">%1 업로드 중</translation>
+    </message>
+    <message>
         <source>Press r to reconnect to %1, press x to close this tab</source>
         <translation type="unfinished">r을 눌러 %1에 재연결, x를 눌러 이 탭 닫기</translation>
     </message>
@@ -5046,8 +5050,16 @@ Reconnecting manually…<byte value="xd"/>
         <translation type="unfinished">이것은 로컬 터미널입니다. 드래그한 파일을 보낼 수 없습니다.</translation>
     </message>
     <message>
+        <source>Looking up the terminal&apos;s current directory…</source>
+        <translation type="unfinished">터미널의 현재 디렉터리를 확인하는 중…</translation>
+    </message>
+    <message>
         <source>Remote path unknown</source>
         <translation type="unfinished">원격 경로를 알 수 없습니다</translation>
+    </message>
+    <message>
+        <source>The terminal is running a sub-shell (such as su - or sudo -i) whose current directory cannot be read. Exit the sub-shell, or upload through the remote file manager.</source>
+        <translation type="unfinished">터미널에서 현재 디렉터리를 읽을 수 없는 하위 셸(su - 또는 sudo -i 등)이 실행 중입니다. 하위 셸을 종료하거나 원격 파일 관리자로 업로드하세요.</translation>
     </message>
     <message>
         <source>The current directory is not known yet; press Enter once in the terminal, then drop the files.</source>

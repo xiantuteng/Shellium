@@ -4820,6 +4820,10 @@ Confirm the key has changed and replace the old record in known_hosts?</source>
         <translation type="unfinished">إخفاء مدير الملفات البعيد للجلسة الحالية (Ctrl+Shift+O)</translation>
     </message>
     <message>
+        <source>Uploading %1</source>
+        <translation type="unfinished">جارٍ رفع %1</translation>
+    </message>
+    <message>
         <source>Press r to reconnect to %1, press x to close this tab</source>
         <translation type="unfinished">اضغط r لإعادة الاتصال بـ %1، وx لإغلاق علامة التبويب هذه</translation>
     </message>
@@ -5046,8 +5050,16 @@ Reconnecting manually…<byte value="xd"/>
         <translation type="unfinished">هذه طرفية محلية؛ لا يمكن إرسال الملفات المسحوبة.</translation>
     </message>
     <message>
+        <source>Looking up the terminal&apos;s current directory…</source>
+        <translation type="unfinished">جارٍ تحديد الدليل الحالي للطرفية…</translation>
+    </message>
+    <message>
         <source>Remote path unknown</source>
         <translation type="unfinished">المسار البعيد غير معروف</translation>
+    </message>
+    <message>
+        <source>The terminal is running a sub-shell (such as su - or sudo -i) whose current directory cannot be read. Exit the sub-shell, or upload through the remote file manager.</source>
+        <translation type="unfinished">تشغّل الطرفية صدفة فرعية (مثل su - أو sudo -i) يتعذر قراءة دليلها الحالي. اخرج من الصدفة الفرعية، أو ارفع الملفات عبر مدير الملفات البعيد.</translation>
     </message>
     <message>
         <source>The current directory is not known yet; press Enter once in the terminal, then drop the files.</source>

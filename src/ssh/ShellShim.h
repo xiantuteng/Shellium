@@ -29,7 +29,9 @@ public:
             /** @brief 用户执行了 ssh，请求 Shellium 接管这一层。 */
             Connect,
             /** @brief 远端 Shell 的工作目录发生了变化（提示符刷新时上报）。 */
-            Cwd
+            Cwd,
+            /** @brief 远端交互 Shell 自身的进程号（随每次 cwd 一并上报）。 */
+            ShellPid
         };
 
         Kind kind = Kind::None;
@@ -37,6 +39,8 @@ public:
         QStringList arguments;
         /** @brief 远端 Shell 上报的当前工作目录绝对路径；仅 Cwd 事件有效。 */
         QString workingDirectory;
+        /** @brief 远端交互 Shell 的进程号（$$）；仅 ShellPid 事件有效，恒为正数。 */
+        qint64 processId = 0;
     };
 
     /**

@@ -4822,6 +4822,10 @@ Confirm the key has changed and replace the old record in known_hosts?</source>
         <translation>隐藏当前会话的远程文件管理（Ctrl+Shift+O）</translation>
     </message>
     <message>
+        <source>Uploading %1</source>
+        <translation>正在上传 %1</translation>
+    </message>
+    <message>
         <source>Press r to reconnect to %1, press x to close this tab</source>
         <translation>按 r 重新连接 %1，按 x 关闭该标签页</translation>
     </message>
@@ -5048,8 +5052,16 @@ Reconnecting manually…<byte value="xd"/>
         <translation>当前是本地终端，无法上传拖入的文件。</translation>
     </message>
     <message>
+        <source>Looking up the terminal&apos;s current directory…</source>
+        <translation>正在查询终端当前所在目录…</translation>
+    </message>
+    <message>
         <source>Remote path unknown</source>
         <translation>远程路径未知</translation>
+    </message>
+    <message>
+        <source>The terminal is running a sub-shell (such as su - or sudo -i) whose current directory cannot be read. Exit the sub-shell, or upload through the remote file manager.</source>
+        <translation>终端正在运行无法读取当前目录的子 Shell（例如 su - 或 sudo -i）。请先退出子 Shell，或改用远程文件管理上传。</translation>
     </message>
     <message>
         <source>The current directory is not known yet; press Enter once in the terminal, then drop the files.</source>

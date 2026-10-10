@@ -16,6 +16,7 @@
 #include <QListWidget>
 #include <QMimeData>
 #include <QProgressBar>
+#include <QRandomGenerator>
 #include <QRegularExpression>
 #include <QResizeEvent>
 #include <QSignalSpy>
@@ -167,6 +168,14 @@ private slots:
      * SHELLIUM_IT_* 环境变量时自动跳过。
      */
     void queuedUploadEmitsSuccessfulTransferResult();
+
+    /**
+     * @brief 终端拖入的上传必须经 terminalDropUploadProgress 报告"开始 → 百分比 → 结束"。
+     *
+     * 终端标题栏的进度完全依赖这条信号；漏发"结束"会让进度区永远挂在标题栏上。连接真实
+     * 集成测试服务器，缺少 SHELLIUM_IT_* 环境变量时自动跳过，理由同上一个用例。
+     */
+    void terminalDropUploadReportsProgress();
 
     /**
      * @brief 语言切换时上传菜单里的 QAction 文案必须一起重译。
@@ -575,6 +584,56 @@ void RemoteFileManagerWidgetTest::queuedUploadEmitsSuccessfulTransferResult()
     QCOMPARE(resultSpy.constFirst().at(0).toBool(), true);
     QVERIFY2(!resultSpy.constFirst().at(1).toString().isEmpty(),
              "成功结果也必须带上可读文字，而不是空字符串");
+}
+
+void RemoteFileManagerWidgetTest::terminalDropUploadReportsProgress()
+{
+    const QByteArray host = qgetenv("SHELLIUM_IT_HOST");
+    const QByteArray user = qgetenv("SHELLIUM_IT_USER");
+    const QByteArray password = qgetenv("SHELLIUM_IT_PASSWORD");
+    if (host.isEmpty() || user.isEmpty() || password.isEmpty()) {
+        QSKIP("未设置 SHELLIUM_IT_HOST / SHELLIUM_IT_USER / SHELLIUM_IT_PASSWORD，跳过真实上传进度回归");
+    }
+
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    QFile payload(tempDir.filePath(QStringLiteral("shellium-drop-progress-test.bin")));
+    QVERIFY(payload.open(QIODevice::WriteOnly));
+    // 足够大才会有中间进度；每次内容不同，避免续传账本把它判成"已完整"直接跳过。
+    QByteArray chunk(1024 * 1024, '\0');
+    for (int index = 0; index < 4; ++index) {
+        chunk.fill(static_cast<char>(QRandomGenerator::global()->bounded(256)));
+        payload.write(chunk);
+    }
+    payload.close();
+
+    ConnectionTarget target;
+    target.id = QStringLiteral("integration-layer-1");
+    target.host = QString::fromUtf8(host);
+    target.username = QString::fromUtf8(user);
+    target.password = QString::fromUtf8(password);
+    const uint port = qgetenv("SHELLIUM_IT_PORT").toUInt();
+    target.port = port == 0 ? 22 : static_cast<quint16>(port);
+
+    RemoteFileManagerWidget widget;
+    QSignalSpy progressSpy(&widget, &RemoteFileManagerWidget::terminalDropUploadProgress);
+    QSignalSpy resultSpy(&widget, &RemoteFileManagerWidget::transferResultAvailable);
+    widget.uploadFilesToDirectory(target, QStringLiteral("/tmp"), {payload.fileName()});
+
+    QVERIFY2(!progressSpy.isEmpty(), "入队那一刻就必须通知终端标题栏开始展示");
+    QCOMPARE(progressSpy.constFirst().at(0).toBool(), true);
+    QCOMPARE(progressSpy.constFirst().at(1).toString(),
+             QStringLiteral("shellium-drop-progress-test.bin"));
+
+    QVERIFY2(resultSpy.wait(60000), "真实上传结束时未发出 transferResultAvailable");
+    QCOMPARE(resultSpy.constFirst().at(0).toBool(), true);
+    QTRY_VERIFY_WITH_TIMEOUT(!progressSpy.constLast().at(0).toBool(), 5000);
+
+    bool sawPercent = false;
+    for (const QList<QVariant> &arguments : std::as_const(progressSpy)) {
+        sawPercent = sawPercent || (arguments.at(0).toBool() && arguments.at(2).toInt() >= 0);
+    }
+    QVERIFY2(sawPercent, "上传过程中必须至少报告一次具体百分比");
 }
 
 void RemoteFileManagerWidgetTest::pathEditsSelectAllExistingTextWhenFocused()

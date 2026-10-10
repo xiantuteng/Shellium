@@ -4820,6 +4820,10 @@ Confirmi că cheia s-a schimbat și înlocuiești vechea înregistrare din known
         <translation type="unfinished">Ascunde managerul de fișiere la distanță pentru sesiunea curentă (Ctrl+Shift+O)</translation>
     </message>
     <message>
+        <source>Uploading %1</source>
+        <translation type="unfinished">Se încarcă %1</translation>
+    </message>
+    <message>
         <source>Press r to reconnect to %1, press x to close this tab</source>
         <translation type="unfinished">Apasă r pentru a te reconecta la %1, x pentru a închide această filă</translation>
     </message>
@@ -5046,8 +5050,16 @@ Reconectare manuală…<byte value="xd"/>
         <translation type="unfinished">Acesta este un terminal local; fișierele glisate nu pot fi trimise.</translation>
     </message>
     <message>
+        <source>Looking up the terminal&apos;s current directory…</source>
+        <translation type="unfinished">Se determină directorul curent al terminalului…</translation>
+    </message>
+    <message>
         <source>Remote path unknown</source>
         <translation type="unfinished">Calea la distanță este necunoscută</translation>
+    </message>
+    <message>
+        <source>The terminal is running a sub-shell (such as su - or sudo -i) whose current directory cannot be read. Exit the sub-shell, or upload through the remote file manager.</source>
+        <translation type="unfinished">Terminalul rulează un sub-shell (de exemplu su - sau sudo -i) al cărui director curent nu poate fi citit. Ieșiți din sub-shell sau încărcați prin managerul de fișiere la distanță.</translation>
     </message>
     <message>
         <source>The current directory is not known yet; press Enter once in the terminal, then drop the files.</source>

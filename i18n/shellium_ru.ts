@@ -4820,6 +4820,10 @@ Confirm the key has changed and replace the old record in known_hosts?</source>
         <translation type="unfinished">Скрыть удалённый файловый менеджер для текущего сеанса (Ctrl+Shift+O)</translation>
     </message>
     <message>
+        <source>Uploading %1</source>
+        <translation type="unfinished">Загрузка %1</translation>
+    </message>
+    <message>
         <source>Press r to reconnect to %1, press x to close this tab</source>
         <translation type="unfinished">Нажмите r, чтобы переподключиться к %1, x, чтобы закрыть эту вкладку</translation>
     </message>
@@ -5046,8 +5050,16 @@ Reconnecting manually…<byte value="xd"/>
         <translation type="unfinished">Это локальный терминал; перетащенные файлы отправить нельзя.</translation>
     </message>
     <message>
+        <source>Looking up the terminal&apos;s current directory…</source>
+        <translation type="unfinished">Определение текущего каталога терминала…</translation>
+    </message>
+    <message>
         <source>Remote path unknown</source>
         <translation type="unfinished">Удалённый путь неизвестен</translation>
+    </message>
+    <message>
+        <source>The terminal is running a sub-shell (such as su - or sudo -i) whose current directory cannot be read. Exit the sub-shell, or upload through the remote file manager.</source>
+        <translation type="unfinished">В терминале запущена вложенная оболочка (например, su - или sudo -i), текущий каталог которой нельзя прочитать. Выйдите из вложенной оболочки или загрузите файлы через удалённый файловый менеджер.</translation>
     </message>
     <message>
         <source>The current directory is not known yet; press Enter once in the terminal, then drop the files.</source>

@@ -139,6 +139,14 @@ private slots:
      */
     void activeWorkingDirectoryTracksInnermostLayerAfterNestedPush();
 
+    /**
+     * @brief 进入 bash / su - 子 Shell 后，拖拽上传的目标目录必须跟随终端里真实的目录。
+     *
+     * 钩子只挂在登录 Shell 上，子 Shell 里 cd 不会更新缓存——缓存仍停在进入前的位置，而
+     * 那正是文件管理器跟随的目录。实时查询前台进程 cwd 必须给出子 Shell 自己的目录。
+     */
+    void dropTargetFollowsSubShellDirectory();
+
 private:
     /** @brief 从环境变量装配第一层目标。 */
     [[nodiscard]] static ConnectionTarget firstLayerTarget();
@@ -1262,5 +1270,59 @@ void SshSessionStackIntegrationTest::detectsRemoteDistributionOnFirstLogin()
 }
 
 QTEST_MAIN(SshSessionStackIntegrationTest)
+
+void SshSessionStackIntegrationTest::dropTargetFollowsSubShellDirectory()
+{
+    TerminalPane pane;
+    pane.resize(900, 500);
+    pane.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&pane));
+
+    pane.connectToHost(firstLayerTarget());
+    QVERIFY2(waitFor([&]() { return pane.isConnected(); }, 40000), "第一层连接失败");
+    QVERIFY(waitFor([&]() { return pane.targets().size() == 1; }, 20000));
+
+    pane.executeCommand(QStringLiteral("cd /tmp"));
+    QVERIFY2(waitFor([&]() { return pane.activeWorkingDirectory() == QStringLiteral("/tmp"); }, 15000),
+             "第一层 cd 后 activeWorkingDirectory 未跟上");
+    QVERIFY2(pane.activeShellProcessId() > 0, "Shell 集成未上报交互 Shell 的进程号");
+
+    SftpService service;
+    const auto resolveNow = [&]() -> QString {
+        QSignalSpy ready(&service, &SftpService::foregroundStateReady);
+        QSignalSpy failed(&service, &SftpService::operationFailed);
+        service.queryForegroundState(firstLayerTarget(), pane.activeShellProcessId());
+        if (!waitFor([&]() { return ready.count() > 0 || failed.count() > 0; }, 30000)
+            || ready.isEmpty()) {
+            return QStringLiteral("<query-failed>");
+        }
+        const auto state = ready.at(0).at(2).value<TerminalDropTarget::ForegroundState>();
+        return TerminalDropTarget::resolve(pane.activeWorkingDirectory(),
+                                           pane.activeShellProcessId(),
+                                           state).directory;
+    };
+
+    // 停在提示符时前台就是登录 Shell，结果与缓存一致。
+    QCOMPARE(resolveNow(), QStringLiteral("/tmp"));
+
+    // 子 Shell 里的 cd 不会触发钩子；断言缓存确实停在旧目录，锁住"为什么需要实时查询"。
+    pane.executeCommand(QStringLiteral("bash"));
+    QTest::qWait(1500);
+    pane.executeCommand(QStringLiteral("cd /var"));
+    QTest::qWait(1500);
+    QCOMPARE(pane.activeWorkingDirectory(), QStringLiteral("/tmp"));
+    QCOMPARE(resolveNow(), QStringLiteral("/var"));
+
+    pane.executeCommand(QStringLiteral("exit"));
+    QVERIFY(waitFor([&]() { return resolveNow() == QStringLiteral("/tmp"); }, 15000));
+
+    // su - 会清空环境，钩子无论如何都带不进去；运维最常见的就是这条路径。
+    pane.executeCommand(QStringLiteral("su -"));
+    QTest::qWait(1500);
+    pane.executeCommand(QStringLiteral("cd /etc"));
+    QTest::qWait(1500);
+    QCOMPARE(resolveNow(), QStringLiteral("/etc"));
+    pane.executeCommand(QStringLiteral("exit"));
+}
 
 #include "SshSessionStackIntegrationTest.moc"

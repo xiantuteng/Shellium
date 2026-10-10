@@ -27,6 +27,114 @@ namespace SftpRemoteRelay {
 } // namespace SftpRemoteRelay
 
 /**
+ * @brief 拖拽上传到终端时，确定"终端此刻所在目录"的纯逻辑。
+ *
+ * Shell 集成钩子只挂在登录后的那一个交互 Shell 上。用户经 su -、sudo -i、bash 进入子 Shell
+ * 后钩子不再触发，缓存的 cwd 就停在进子 Shell 之前——而文件管理器跟随的也正是这个缓存，
+ * 于是拖进终端的文件会落到文件管理器的目录而不是终端里看到的目录。为此在上传前经 exec
+ * 通道查询终端前台进程（tpgid）的真实 cwd，再按下面的规则决定目标目录。
+ */
+namespace TerminalDropTarget {
+
+/**
+ * @brief 构造查询"该 Shell 所在终端的前台进程组及其 cwd"的只读远端命令。
+ * @param shellPid Shell 集成上报的交互 Shell 进程号，必须为正数。
+ * @return 输出两行 `fg=<前台进程号>` 与 `cwd=<目录>` 的 POSIX sh 命令；目录读不到时为空。
+ *
+ * 先用 ps 取 tpgid，busybox 等不支持时退回 /proc/<pid>/stat；cwd 先读 /proc/<pid>/cwd，
+ * 再退回 lsof（macOS/BSD 服务器）。参数只有一个整数，不存在注入面。
+ */
+[[nodiscard]] inline QByteArray buildForegroundQueryCommand(const qint64 shellPid)
+{
+    // tpgid 为 -1（无控制终端）或解析失败时都退回 Shell 自身；ps 不认识 tpgid 时（busybox）
+    // 从 /proc/<pid>/stat 的第 8 字段取，先剥掉可能含空格的 "(comm) " 再数字段。
+    return "p=" + QByteArray::number(shellPid) + ";"
+        " f=$(ps -o tpgid= -p \"$p\" 2>/dev/null | tr -d ' ');"
+        " case \"$f\" in ''|*[!0-9]*)"
+        " f=$(sed 's/.*) //' \"/proc/$p/stat\" 2>/dev/null | cut -d' ' -f6);; esac;"
+        " case \"$f\" in ''|0|*[!0-9]*) f=$p;; esac;"
+        " d=$(readlink \"/proc/$f/cwd\" 2>/dev/null);"
+        " [ -n \"$d\" ] || d=$(lsof -a -d cwd -p \"$f\" -Fn 2>/dev/null | sed -n 's/^n//p' | head -n 1);"
+        " printf 'fg=%s\\ncwd=%s\\n' \"$f\" \"$d\"";
+}
+
+/** @brief 远端前台进程查询结果；foregroundPid 为 0 表示查询不可用或失败。 */
+struct ForegroundState {
+    qint64 foregroundPid = 0;
+    /** @brief 前台进程的绝对 cwd；无权读取（如 sudo -i 后的 root Shell）时为空。 */
+    QString directory;
+};
+
+/** @brief 解析 buildForegroundQueryCommand 的输出；格式不符一律视为查询失败。 */
+[[nodiscard]] inline ForegroundState parseForegroundQueryOutput(const QByteArray &output)
+{
+    ForegroundState state;
+    qint64 foregroundPid = 0;
+    QString directory;
+    bool sawCwd = false;
+    for (const QByteArray &line : output.split('\n')) {
+        if (line.startsWith("fg=")) {
+            bool ok = false;
+            foregroundPid = line.mid(3).trimmed().toLongLong(&ok);
+            if (!ok) {
+                foregroundPid = 0;
+            }
+        } else if (line.startsWith("cwd=")) {
+            sawCwd = true;
+            directory = QString::fromUtf8(line.mid(4));
+        }
+    }
+    if (foregroundPid <= 0 || !sawCwd) {
+        return state;
+    }
+    state.foregroundPid = foregroundPid;
+    // 只接受绝对路径；readlink 对已删除目录返回的 "(deleted)" 后缀等异常形式同样拒收，
+    // 宁可当作读不到，也不要把文件传进一个并不存在的位置。
+    if (directory.startsWith(QLatin1Char('/')) && !directory.endsWith(QStringLiteral(" (deleted)"))) {
+        state.directory = directory;
+    }
+    return state;
+}
+
+/** @brief 拖拽上传最终采用的目录。 */
+struct Resolution {
+    /** @brief 上传目标目录；为空表示无法确定，调用方必须提示而不是猜一个目录。 */
+    QString directory;
+    /** @brief true 表示终端正运行无法读取目录的子 Shell，提示文案要说明原因。 */
+    bool foregroundUnreadable = false;
+};
+
+/**
+ * @brief 结合 Shell 集成缓存与远端实时查询结果，决定拖拽上传的目标目录。
+ * @param cachedDirectory 钩子最近一次上报的 cwd，可能已过时或为空。
+ * @param shellPid 钩子所在 Shell 的进程号；0 表示未知。
+ * @param live 远端实时查询结果；foregroundPid 为 0 表示没查到。
+ *
+ * 实时目录优先；前台就是钩子 Shell 本身时缓存可信；前台是读不到目录的子 Shell 时宁可
+ * 拒绝，也不退回缓存——缓存此刻恰恰是错的。查询本身不可用时退回缓存（旧行为）。
+ */
+[[nodiscard]] inline Resolution resolve(const QString &cachedDirectory,
+                                        const qint64 shellPid,
+                                        const ForegroundState &live)
+{
+    if (shellPid <= 0 || live.foregroundPid <= 0) {
+        return {cachedDirectory, false};
+    }
+    if (!live.directory.isEmpty()) {
+        return {live.directory, false};
+    }
+    if (live.foregroundPid == shellPid) {
+        // 前台正是挂着钩子的 Shell：它停在提示符上，缓存就是它最近一次上报的位置。
+        return {cachedDirectory, false};
+    }
+    return {QString(), true};
+}
+
+} // namespace TerminalDropTarget
+
+Q_DECLARE_METATYPE(TerminalDropTarget::ForegroundState)
+
+/**
  * @brief 远程目录中的一个文件或文件夹条目。
  *
  * path 始终保存完整远端路径，避免界面切换目录后对旧选择执行到错误位置。
@@ -825,6 +933,15 @@ public:
      */
     quint64 statPath(const ConnectionTarget &target, const QString &remotePath);
 
+    /**
+     * @brief 异步查询远端某个交互 Shell 所在终端的前台进程及其工作目录。
+     * @param shellPid Shell 集成上报的进程号。
+     *
+     * 只读、短超时，结果由 foregroundStateReady 返回。经外层 OpenSSH 中继的连接上 exec
+     * 会落到外层服务器，因此直接返回"不可用"（foregroundPid 为 0）而不是执行。
+     */
+    quint64 queryForegroundState(const ConnectionTarget &target, qint64 shellPid);
+
     /** @brief 异步删除文件或空目录；目录类型由界面明确传入。 */
     quint64 removePath(const ConnectionTarget &target,
                        const QString &path,
@@ -867,6 +984,11 @@ signals:
                        const QString &remotePath,
                        bool exists,
                        bool isDirectory);
+
+    /** @brief queryForegroundState 的结果；查询不可用时 state.foregroundPid 为 0。 */
+    void foregroundStateReady(quint64 requestId,
+                              const ConnectionTarget &target,
+                              const TerminalDropTarget::ForegroundState &state);
 
     /** @brief 请求失败，并携带可用于恢复判断的结构化错误类别。 */
     void operationFailed(quint64 requestId,

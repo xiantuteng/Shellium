@@ -206,6 +206,23 @@ public:
     }
 
     /**
+     * @brief 查询某个交互 Shell 所在终端的前台进程及其 cwd，供拖拽上传确定目标目录。
+     * @return 命令原始输出；经外层 OpenSSH 中继时返回空，调用方据此视为"不可用"。
+     *
+     * 与 remoteSha256 同理：中继模式下 m_session 连的是外层服务器，在那里按进程号查询会
+     * 读到一个完全不相干的进程。
+     */
+    [[nodiscard]] QByteArray queryForegroundState(const qint64 shellPid)
+    {
+        if (m_session == nullptr || m_remoteSftpChannel != nullptr || shellPid <= 0) {
+            return {};
+        }
+        // 拖拽后用户在等确认框，几秒拿不到就退回缓存，不能像摘要计算那样等一分钟。
+        return runRemoteCommand(TerminalDropTarget::buildForegroundQueryCommand(shellPid),
+                                kForegroundQueryTimeoutMs);
+    }
+
+    /**
      * @brief 连接是否仍可用于下一次操作。
      *
      * 池化连接可能因服务器空闲超时、网络中断或承载它的隧道随标签页关闭而失效。复用前必须
@@ -540,7 +557,8 @@ private:
      * 调用方必须已持有该连接的 mutex：libssh 会话不是线程安全的。命令固定为只读的摘要
      * 计算，不接受来自界面的任意命令，参数一律经过单引号编码。
      */
-    [[nodiscard]] QByteArray runRemoteCommand(const QByteArray &command)
+    [[nodiscard]] QByteArray runRemoteCommand(const QByteArray &command,
+                                              const qint64 timeoutMs = kRemoteCommandTimeoutMs)
     {
         ssh_channel channel = ssh_channel_new(m_session);
         if (channel == nullptr) {
@@ -560,7 +578,7 @@ private:
         QElapsedTimer timer;
         timer.start();
         char buffer[512];
-        while (output.size() < 4096 && timer.elapsed() < kRemoteCommandTimeoutMs) {
+        while (output.size() < 4096 && timer.elapsed() < timeoutMs) {
             const int count = ssh_channel_read_timeout(channel, buffer, sizeof(buffer), 0, 500);
             if (count < 0) {
                 break;
@@ -607,6 +625,9 @@ private:
 
     /** @brief 远端摘要命令的等待上限；超时只会退化为重传，不影响正确性。 */
     static constexpr qint64 kRemoteCommandTimeoutMs = 60000;
+
+    /** @brief 前台进程查询的等待上限；超时只会退回 Shell 集成缓存的目录。 */
+    static constexpr qint64 kForegroundQueryTimeoutMs = 8000;
 
     ssh_session m_session = nullptr;
     sftp_session m_sftp = nullptr;
@@ -1934,6 +1955,7 @@ SftpService::SftpService(QObject *parent)
     qRegisterMetaType<QList<RemoteFileInfo>>();
     qRegisterMetaType<SftpService::ErrorKind>();
     qRegisterMetaType<SftpRecursive::TransferSummary>();
+    qRegisterMetaType<TerminalDropTarget::ForegroundState>();
 }
 
 SftpService::~SftpService()
@@ -2664,6 +2686,36 @@ quint64 SftpService::removePath(const ConnectionTarget &target,
                 if (service != nullptr) {
                     emit service->operationSucceeded(
                         requestId, QObject::tr("Deleted %1").arg(path));
+                }
+            }, Qt::QueuedConnection);
+        }
+    });
+    return requestId;
+}
+
+quint64 SftpService::queryForegroundState(const ConnectionTarget &target, const qint64 shellPid)
+{
+    const quint64 requestId = nextRequestId();
+    const bool allowUnknown = takeTemporarilyTrusted(target);
+    const QPointer<SftpService> service(this);
+
+    (void)QtConcurrent::run([service, pool = m_pool, requestId, target, shellPid, allowUnknown]() {
+        // 与 statPath 相同走浏览通道：用户正盯着拖拽确认，不能排在大文件传输后面。
+        const QString poolKey = browsePoolKey(target);
+        const QSharedPointer<PooledConnection> entry = pool->acquire(poolKey);
+        QMutexLocker locker(&entry->mutex);
+        SftpConnection *connection = ensureConnected(
+            entry.data(), poolKey, target, allowUnknown, service, requestId, pool.get());
+        if (connection == nullptr) {
+            return;
+        }
+        const TerminalDropTarget::ForegroundState state =
+            TerminalDropTarget::parseForegroundQueryOutput(
+                connection->queryForegroundState(shellPid));
+        if (service != nullptr) {
+            QMetaObject::invokeMethod(service, [service, requestId, target, state]() {
+                if (service != nullptr) {
+                    emit service->foregroundStateReady(requestId, target, state);
                 }
             }, Qt::QueuedConnection);
         }

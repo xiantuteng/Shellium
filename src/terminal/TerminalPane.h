@@ -12,6 +12,7 @@
 
 class ApplicationDatabase;
 class QLabel;
+class QProgressBar;
 class LocalShellWorker;
 class SshSessionStack;
 class TerminalSearchBar;
@@ -90,6 +91,16 @@ public:
      * 任意时刻同步查询"此刻在哪"的场景，不必先订阅信号再等待下一次提示符刷新。
      */
     [[nodiscard]] QString activeWorkingDirectory() const;
+
+    /**
+     * @brief 返回当前活动层挂着 Shell 集成钩子的那个交互 Shell 的远端进程号。
+     * @return 该层尚未上报过（shim 未就绪、推测层）时返回 0。
+     *
+     * activeWorkingDirectory() 只反映这一个 Shell 最近一次提示符时的位置；用户经 su -、
+     * sudo -i、bash 进入子 Shell 后它就不再更新。拖拽上传据此进程号向远端查询终端前台
+     * 进程的真实目录，避免把文件传进过时的目录。
+     */
+    [[nodiscard]] qint64 activeShellProcessId() const;
 
     /**
      * @brief 返回当前会话赖以建立的受管连接计划；本地 Shell 或尚未连接时为空。
@@ -210,6 +221,18 @@ public:
      * 因此三者的自动消失时机天然保持一致，不需要分别维护。
      */
     void showTransientTransferResult(bool success, const QString &message);
+
+    /**
+     * @brief 在会话状态栏展示或收起"拖入终端的文件正在上传"的进度。
+     * @param active false 立即收起进度区；结果由 showTransientTransferResult 另行展示。
+     * @param name 当前上传的文件或目录名。
+     * @param percent 0–100；-1 表示尚未开始或总量未知，进度条显示为不确定状态。
+     *
+     * 拖到终端上传时右侧文件管理面板通常是收起的，用户看不到面板里的进度条；进度必须
+     * 出现在用户正看着的这个会话的标题栏上。与瞬时提示分开放置：后者 8 秒后自动清空，
+     * 而一次大文件上传可能持续数分钟。
+     */
+    void setUploadProgress(bool active, const QString &name, int percent);
 
 public slots:
     /**
@@ -436,6 +459,15 @@ private:
     /** @brief 清空 m_statusMessageLabel/m_statusMessageIcon 的定时器；每次新消息到达都会重新启动。 */
     QTimer *m_statusMessageTimer = nullptr;
 
+    /** @brief 拖入上传进度区容器（文字 + 细进度条），平时隐藏不占位。 */
+    QWidget *m_uploadProgress = nullptr;
+
+    /** @brief 进度区文字，如"正在上传 a.tar 42%"；文件名过长时省略中间部分。 */
+    QLabel *m_uploadProgressLabel = nullptr;
+
+    /** @brief 进度区的细进度条；总量未知时切换为不确定（忙碌）状态。 */
+    QProgressBar *m_uploadProgressBar = nullptr;
+
     /** @brief 嵌在状态栏与终端正文之间的查找栏，默认隐藏。 */
     TerminalSearchBar *m_searchBar = nullptr;
 
@@ -494,6 +526,9 @@ private:
      * 仍可复用上一次上报的位置，直到下一次提示符刷新覆盖它。
      */
     QHash<QString, QString> m_lastKnownCwd;
+
+    /** @brief 按服务器稳定键缓存的交互 Shell 进程号，键与 m_lastKnownCwd 一致。 */
+    QHash<QString, qint64> m_shellProcessIds;
 
     /**
      * @brief 当前 SSH 工作线程是否至少成功建立过一次交互式 Shell。

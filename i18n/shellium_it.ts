@@ -4820,6 +4820,10 @@ Confermare che la chiave è cambiata e sostituire il vecchio record in known_hos
         <translation type="unfinished">Nascondi il gestore file remoto per la sessione corrente (Ctrl+Maiusc+O)</translation>
     </message>
     <message>
+        <source>Uploading %1</source>
+        <translation type="unfinished">Caricamento di %1</translation>
+    </message>
+    <message>
         <source>Press r to reconnect to %1, press x to close this tab</source>
         <translation type="unfinished">Premi r per riconnetterti a %1, x per chiudere questa scheda</translation>
     </message>
@@ -5046,8 +5050,16 @@ Riconnessione manuale…<byte value="xd"/>
         <translation type="unfinished">Questo è un terminale locale; i file rilasciati non possono essere caricati.</translation>
     </message>
     <message>
+        <source>Looking up the terminal&apos;s current directory…</source>
+        <translation type="unfinished">Ricerca della directory corrente del terminale…</translation>
+    </message>
+    <message>
         <source>Remote path unknown</source>
         <translation type="unfinished">Percorso remoto sconosciuto</translation>
+    </message>
+    <message>
+        <source>The terminal is running a sub-shell (such as su - or sudo -i) whose current directory cannot be read. Exit the sub-shell, or upload through the remote file manager.</source>
+        <translation type="unfinished">Il terminale sta eseguendo una sotto-shell (ad esempio su - o sudo -i) di cui non è possibile leggere la directory corrente. Esci dalla sotto-shell oppure carica tramite il gestore file remoto.</translation>
     </message>
     <message>
         <source>The current directory is not known yet; press Enter once in the terminal, then drop the files.</source>

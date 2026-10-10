@@ -17,6 +17,7 @@
 #include <QLoggingCategory>
 #include <QLabel>
 #include <QMessageBox>
+#include <QProgressBar>
 #include <QScopeGuard>
 #include <QSignalBlocker>
 #include <QTimer>
@@ -38,6 +39,9 @@ TerminalPane::TerminalPane(QWidget *parent)
     , m_statusMessageLabel(new QLabel(this))
     , m_statusMessageIcon(new QLabel(this))
     , m_statusMessageTimer(new QTimer(this))
+    , m_uploadProgress(new QWidget(this))
+    , m_uploadProgressLabel(new QLabel(m_uploadProgress))
+    , m_uploadProgressBar(new QProgressBar(m_uploadProgress))
     , m_fileManagerButton(new QToolButton(this))
     , m_headerExtras(new QWidget(this))
     , m_searchBar(new TerminalSearchBar(this))
@@ -91,9 +95,25 @@ TerminalPane::TerminalPane(QWidget *parent)
     headerExtrasLayout->setSpacing(2);
     m_headerExtras->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
 
+    // 拖入上传进度：文字在左、细进度条在右，整体排在瞬时提示之后、文件管理按钮之前。
+    // 宽度有上限，长文件名在文字里省略，不能挤占右侧按钮。
+    m_uploadProgress->setObjectName(QStringLiteral("terminalSessionUploadProgress"));
+    auto *uploadLayout = new QHBoxLayout(m_uploadProgress);
+    uploadLayout->setContentsMargins(0, 0, 0, 0);
+    uploadLayout->setSpacing(6);
+    m_uploadProgressLabel->setObjectName(QStringLiteral("terminalSessionUploadText"));
+    m_uploadProgressBar->setObjectName(QStringLiteral("terminalSessionUploadBar"));
+    m_uploadProgressBar->setTextVisible(false);
+    m_uploadProgressBar->setFixedSize(72, 4);
+    uploadLayout->addWidget(m_uploadProgressLabel);
+    uploadLayout->addWidget(m_uploadProgressBar, 0, Qt::AlignVCenter);
+    m_uploadProgress->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Preferred);
+    m_uploadProgress->setVisible(false);
+
     headerLayout->addWidget(m_headerLabel, 1);
     headerLayout->addWidget(m_statusMessageIcon);
     headerLayout->addWidget(m_statusMessageLabel);
+    headerLayout->addWidget(m_uploadProgress);
     headerLayout->addWidget(m_fileManagerButton);
     headerLayout->addWidget(m_headerExtras, 0, Qt::AlignRight);
     layout->addWidget(m_headerBar);
@@ -755,6 +775,11 @@ QString TerminalPane::activeWorkingDirectory() const
     return m_lastKnownCwd.value(activeTarget().stableKey());
 }
 
+qint64 TerminalPane::activeShellProcessId() const
+{
+    return m_shellProcessIds.value(activeTarget().stableKey());
+}
+
 void TerminalPane::connectNestedHost(const ConnectionTarget &target,
                                      const bool outerShimSuspended)
 {
@@ -841,9 +866,17 @@ void TerminalPane::applyTerminalSettings(const TerminalSettings &settings)
             "QWidget#terminalSessionStatusBar { background: %1; color: %2; }"
             "QLabel#terminalSessionServer { color: %2; font-weight: 600; }"
             "QLabel#terminalSessionTransientStatus { color: %2; }"
+            "QLabel#terminalSessionUploadText { color: %2; }"
+            "QProgressBar#terminalSessionUploadBar { background: %3; border: 0; border-radius: 2px; }"
+            "QProgressBar#terminalSessionUploadBar::chunk { background: #3fb950; border-radius: 2px; }"
             "QLabel#terminalSessionMeta { color: %2; }")
             .arg(headerBackground.name(),
-                 palette.foreground.name()));
+                 palette.foreground.name(),
+                 // 轨道取前景色的淡化版本，深浅两种主题下都能看出"还剩多少"。
+                 QColor(palette.foreground.red(),
+                        palette.foreground.green(),
+                        palette.foreground.blue(),
+                        60).name(QColor::HexArgb)));
 
     // 自绘图标的线条色不受样式表 color 影响，必须随主题显式重绘，否则深色配色下会残留
     // 上一套主题的浅色线条。
@@ -934,6 +967,30 @@ void TerminalPane::showTransientTransferResult(const bool success, const QString
     m_statusMessageLabel->setToolTip(message);
     m_statusMessageTimer->stop();
     m_statusMessageTimer->start(8000);
+}
+
+void TerminalPane::setUploadProgress(const bool active, const QString &name, const int percent)
+{
+    if (!active) {
+        m_uploadProgress->setVisible(false);
+        m_uploadProgressLabel->clear();
+        m_uploadProgressBar->setRange(0, 100);
+        m_uploadProgressBar->setValue(0);
+        return;
+    }
+    const QString elidedName =
+        m_uploadProgressLabel->fontMetrics().elidedText(name, Qt::ElideMiddle, 180);
+    QString text = tr("Uploading %1").arg(elidedName);
+    if (percent >= 0) {
+        text += QStringLiteral(" %1%").arg(qBound(0, percent, 100));
+        m_uploadProgressBar->setRange(0, 100);
+        m_uploadProgressBar->setValue(qBound(0, percent, 100));
+    } else {
+        m_uploadProgressBar->setRange(0, 0);
+    }
+    m_uploadProgressLabel->setText(text);
+    m_uploadProgress->setToolTip(tr("Uploading %1").arg(name));
+    m_uploadProgress->setVisible(true);
 }
 
 void TerminalPane::updateFileManagerButtonIcon()
@@ -1312,6 +1369,10 @@ void TerminalPane::inspectSubmittedCommand(const QString &command)
 void TerminalPane::handleShellIntegrationEvent(const QByteArray &payload)
 {
     const ShellShim::Event event = ShellShim::parseEvent(payload);
+    if (event.kind == ShellShim::Event::Kind::ShellPid) {
+        m_shellProcessIds.insert(activeTarget().stableKey(), event.processId);
+        return;
+    }
     if (event.kind == ShellShim::Event::Kind::Cwd) {
         // cwd 上报钩子挂在 PROMPT_COMMAND/precmd 上，每次远端 Shell 即将重画提示符前都会
         // 触发一次——也就是上一条命令刚刚退出的那一刻。`tail`/`cat` 一个二进制文件把

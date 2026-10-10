@@ -4820,6 +4820,10 @@ Bestätigen Sie, dass sich der Schlüssel geändert hat, und ersetzen Sie den al
         <translation type="unfinished">Den Remote-Dateimanager für die aktuelle Sitzung verbergen (Strg+Umschalt+O)</translation>
     </message>
     <message>
+        <source>Uploading %1</source>
+        <translation type="unfinished">%1 wird hochgeladen</translation>
+    </message>
+    <message>
         <source>Press r to reconnect to %1, press x to close this tab</source>
         <translation type="unfinished">Drücken Sie r, um sich erneut mit %1 zu verbinden, x, um diesen Tab zu schließen</translation>
     </message>
@@ -5046,8 +5050,16 @@ Manuelle Neuverbindung …<byte value="xd"/>
         <translation type="unfinished">Dies ist ein lokales Terminal; abgelegte Dateien können nicht hochgeladen werden.</translation>
     </message>
     <message>
+        <source>Looking up the terminal&apos;s current directory…</source>
+        <translation type="unfinished">Aktuelles Verzeichnis des Terminals wird ermittelt …</translation>
+    </message>
+    <message>
         <source>Remote path unknown</source>
         <translation type="unfinished">Remote-Pfad unbekannt</translation>
+    </message>
+    <message>
+        <source>The terminal is running a sub-shell (such as su - or sudo -i) whose current directory cannot be read. Exit the sub-shell, or upload through the remote file manager.</source>
+        <translation type="unfinished">Im Terminal läuft eine Sub-Shell (z. B. su - oder sudo -i), deren aktuelles Verzeichnis nicht gelesen werden kann. Beenden Sie die Sub-Shell oder laden Sie über den Remote-Dateimanager hoch.</translation>
     </message>
     <message>
         <source>The current directory is not known yet; press Enter once in the terminal, then drop the files.</source>

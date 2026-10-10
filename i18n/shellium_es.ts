@@ -4820,6 +4820,10 @@ Puede ser una reinstalación del servidor o una rotación de clave, o un ataque 
         <translation type="unfinished">Ocultar el gestor de archivos remoto de la sesión actual (Ctrl+Mayús+O)</translation>
     </message>
     <message>
+        <source>Uploading %1</source>
+        <translation type="unfinished">Subiendo %1</translation>
+    </message>
+    <message>
         <source>Press r to reconnect to %1, press x to close this tab</source>
         <translation type="unfinished">Pulsa r para reconectar a %1, x para cerrar esta pestaña</translation>
     </message>
@@ -5046,8 +5050,16 @@ Reconectando manualmente…<byte value="xd"/>
         <translation type="unfinished">Este es un terminal local; los archivos soltados no se pueden subir.</translation>
     </message>
     <message>
+        <source>Looking up the terminal&apos;s current directory…</source>
+        <translation type="unfinished">Buscando el directorio actual del terminal…</translation>
+    </message>
+    <message>
         <source>Remote path unknown</source>
         <translation type="unfinished">Ruta remota desconocida</translation>
+    </message>
+    <message>
+        <source>The terminal is running a sub-shell (such as su - or sudo -i) whose current directory cannot be read. Exit the sub-shell, or upload through the remote file manager.</source>
+        <translation type="unfinished">El terminal está ejecutando una subshell (como su - o sudo -i) cuyo directorio actual no se puede leer. Sal de la subshell o sube los archivos con el gestor de archivos remoto.</translation>
     </message>
     <message>
         <source>The current directory is not known yet; press Enter once in the terminal, then drop the files.</source>

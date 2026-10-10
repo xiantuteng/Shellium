@@ -4820,6 +4820,10 @@ Confirm the key has changed and replace the old record in known_hosts?</source>
         <translation type="unfinished">Сховати віддалений файловий менеджер для поточного сеансу (Ctrl+Shift+O)</translation>
     </message>
     <message>
+        <source>Uploading %1</source>
+        <translation type="unfinished">Вивантаження %1</translation>
+    </message>
+    <message>
         <source>Press r to reconnect to %1, press x to close this tab</source>
         <translation type="unfinished">Натисніть r, щоб перепідключитися до %1, x, щоб закрити цю вкладку</translation>
     </message>
@@ -5046,8 +5050,16 @@ Reconnecting manually…<byte value="xd"/>
         <translation type="unfinished">Це локальний термінал; перетягнуті файли відправити не можна.</translation>
     </message>
     <message>
+        <source>Looking up the terminal&apos;s current directory…</source>
+        <translation type="unfinished">Визначення поточного каталогу термінала…</translation>
+    </message>
+    <message>
         <source>Remote path unknown</source>
         <translation type="unfinished">Віддалений шлях невідомий</translation>
+    </message>
+    <message>
+        <source>The terminal is running a sub-shell (such as su - or sudo -i) whose current directory cannot be read. Exit the sub-shell, or upload through the remote file manager.</source>
+        <translation type="unfinished">У терміналі запущено вкладену оболонку (наприклад, su - або sudo -i), поточний каталог якої неможливо прочитати. Вийдіть із вкладеної оболонки або вивантажте файли через віддалений файловий менеджер.</translation>
     </message>
     <message>
         <source>The current directory is not known yet; press Enter once in the terminal, then drop the files.</source>

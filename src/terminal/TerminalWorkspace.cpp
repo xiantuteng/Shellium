@@ -10,6 +10,8 @@
 #include <QResizeEvent>
 #include <QVariantAnimation>
 
+#include <utility>
+
 namespace {
 /** @brief 右侧滑入面板的裁剪区域；内容宽度固定，左边缘随分隔条移动，关闭时向右滑出。 */
 class FileSlideViewport final : public QWidget {
@@ -84,6 +86,33 @@ TerminalWorkspace::TerminalWorkspace(QWidget *parent)
             &RemoteFileManagerWidget::transferResultAvailable,
             m_pane,
             &TerminalPane::showTransientTransferResult);
+    // 拖入终端的上传多半发生在文件管理收起时，进度直接画在本会话标题栏上。
+    connect(m_fileManager,
+            &RemoteFileManagerWidget::terminalDropUploadProgress,
+            m_pane,
+            &TerminalPane::setUploadProgress);
+    connect(m_fileManager,
+            &RemoteFileManagerWidget::terminalForegroundStateReady,
+            this,
+            [this](const quint64 requestId,
+                   const TerminalDropTarget::ForegroundState &state,
+                   const bool succeeded) {
+                if (requestId == 0 || requestId != m_pendingDrop.requestId) {
+                    return;
+                }
+                const PendingDrop pending = std::exchange(m_pendingDrop, PendingDrop{});
+                m_pane->showTransientStatus(QString());
+                if (!succeeded) {
+                    // 连接或认证失败已由文件管理器报告；同一连接上的上传也不会成功。
+                    return;
+                }
+                const TerminalDropTarget::Resolution resolution =
+                    TerminalDropTarget::resolve(pending.cachedDirectory, pending.shellPid, state);
+                confirmDropUpload(pending.target,
+                                  resolution.directory,
+                                  resolution.foregroundUnreadable,
+                                  pending.localPaths);
+            });
     // 全屏时让终端整体让出空间，由分隔器把宽度全部交给文件管理；终端进程和滚动缓冲
     // 都不受影响，退出全屏即原样恢复。
     connect(m_fileManager,
@@ -310,13 +339,40 @@ void TerminalWorkspace::handleFilesDropped(const QStringList &localPaths)
         emit statusMessage(tr("This is a local terminal; dropped files cannot be uploaded."));
         return;
     }
-    const QString remoteDirectory = m_pane->activeWorkingDirectory();
+    const QString cachedDirectory = m_pane->activeWorkingDirectory();
+    const qint64 shellPid = m_pane->activeShellProcessId();
+    if (shellPid <= 0) {
+        // 没有 Shell 集成（推测层、shim 未就绪）就无从实时查询，只能沿用缓存。
+        confirmDropUpload(target, cachedDirectory, false, localPaths);
+        return;
+    }
+    // 不能直接信任缓存：钩子只挂在登录 Shell 上，用户进入 su -、sudo -i、bash 等子 Shell
+    // 后缓存就停在了进子 Shell 之前，那正是文件管理器跟随的目录，而不是终端里看到的目录。
+    m_pendingDrop = PendingDrop{
+        m_fileManager->queryTerminalForegroundState(target, shellPid),
+        target,
+        shellPid,
+        cachedDirectory,
+        localPaths,
+    };
+    m_pane->showTransientStatus(tr("Looking up the terminal's current directory…"));
+}
+
+void TerminalWorkspace::confirmDropUpload(const ConnectionTarget &target,
+                                          const QString &remoteDirectory,
+                                          const bool foregroundUnreadable,
+                                          const QStringList &localPaths)
+{
     if (remoteDirectory.isEmpty()) {
         // cwd 缓存来自 Shell 集成上报，连接刚建立、提示符还没刷新过一次时可能仍是空的；
-        // 此时没有可信目标目录，宁可让用户重试也不要猜一个根目录。
-        QMessageBox::warning(this,
-                             tr("Remote path unknown"),
-                             tr("The current directory is not known yet; press Enter once in the terminal, then drop the files."));
+        // 终端前台是读不到目录的子 Shell 时同样没有可信目标。宁可让用户重试也不要猜一个
+        // 目录——猜错的后果是文件落到用户没看见的地方。
+        QMessageBox::warning(
+            this,
+            tr("Remote path unknown"),
+            foregroundUnreadable
+                ? tr("The terminal is running a sub-shell (such as su - or sudo -i) whose current directory cannot be read. Exit the sub-shell, or upload through the remote file manager.")
+                : tr("The current directory is not known yet; press Enter once in the terminal, then drop the files."));
         return;
     }
 
@@ -330,8 +386,7 @@ void TerminalWorkspace::handleFilesDropped(const QStringList &localPaths)
         this,
         tr("Upload to the current directory?"),
         tr("Upload the %1 dropped local files to the current directory of %2:\n%3")
-            .arg(localPaths.size())
-            .arg(serverDescription, remoteDirectory),
+            .arg(QString::number(localPaths.size()), serverDescription, remoteDirectory),
         QMessageBox::Yes | QMessageBox::No,
         QMessageBox::No);
     if (choice != QMessageBox::Yes) {

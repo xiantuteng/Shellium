@@ -4820,6 +4820,10 @@ Confirmar que a chave mudou e substituir o registro antigo em known_hosts?</tran
         <translation type="unfinished">Ocultar o gerenciador de arquivos remoto da sessão atual (Ctrl+Shift+O)</translation>
     </message>
     <message>
+        <source>Uploading %1</source>
+        <translation type="unfinished">Enviando %1</translation>
+    </message>
+    <message>
         <source>Press r to reconnect to %1, press x to close this tab</source>
         <translation type="unfinished">Pressione r para reconectar a %1, x para fechar esta aba</translation>
     </message>
@@ -5046,8 +5050,16 @@ Reconectando manualmente…<byte value="xd"/>
         <translation type="unfinished">Este é um terminal local; os arquivos soltos não podem ser enviados.</translation>
     </message>
     <message>
+        <source>Looking up the terminal&apos;s current directory…</source>
+        <translation type="unfinished">Consultando o diretório atual do terminal…</translation>
+    </message>
+    <message>
         <source>Remote path unknown</source>
         <translation type="unfinished">Caminho remoto desconhecido</translation>
+    </message>
+    <message>
+        <source>The terminal is running a sub-shell (such as su - or sudo -i) whose current directory cannot be read. Exit the sub-shell, or upload through the remote file manager.</source>
+        <translation type="unfinished">O terminal está executando um subshell (como su - ou sudo -i) cujo diretório atual não pode ser lido. Saia do subshell ou envie pelo gerenciador de arquivos remoto.</translation>
     </message>
     <message>
         <source>The current directory is not known yet; press Enter once in the terminal, then drop the files.</source>

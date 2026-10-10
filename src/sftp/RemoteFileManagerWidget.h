@@ -5,6 +5,7 @@
 
 #include <QElapsedTimer>
 #include <QHash>
+#include <QSet>
 #include <QWidget>
 
 #include <optional>
@@ -66,6 +67,17 @@ public:
                                 const QStringList &localPaths);
 
     /**
+     * @brief 查询终端里那个交互 Shell 的前台进程及其真实工作目录。
+     * @param target 终端当前活动层。
+     * @param shellPid Shell 集成上报的进程号。
+     * @return 请求编号；结果经 terminalForegroundStateReady 返回。
+     *
+     * 供拖拽上传在弹出确认前确定目标目录：缓存的 cwd 在用户进入 su -、sudo -i 等子 Shell
+     * 后会过时。查询复用本面板的 SFTP 连接池，连接失败照常由本面板报告。
+     */
+    quint64 queryTerminalForegroundState(const ConnectionTarget &target, qint64 shellPid);
+
+    /**
      * @brief 终端自持层上报了工作目录变化，按需跟随。
      * @param stableKey 上报该 cwd 的服务器稳定键。
      * @param workingDirectory 远端 Shell 当前的绝对路径。
@@ -96,6 +108,25 @@ signals:
      * 本信号——那些没有明确的"传输成功"语义，硬套图标反而会让人误以为发生了文件搬运。
      */
     void transferResultAvailable(bool success, const QString &message);
+
+    /**
+     * @brief queryTerminalForegroundState 的结果。
+     * @param succeeded false 表示连接或认证失败，错误已由本面板展示，调用方应放弃本次上传。
+     */
+    void terminalForegroundStateReady(quint64 requestId,
+                                      const TerminalDropTarget::ForegroundState &state,
+                                      bool succeeded);
+
+    /**
+     * @brief 从终端拖入的上传任务进度变化，供终端会话状态栏展示。
+     * @param active false 表示终端拖入的任务已全部结束（结果另由 transferResultAvailable 给出）。
+     * @param name 当前正在上传（或排队等待）的文件/目录名。
+     * @param percent 0–100；-1 表示尚未开始或总量未知，应显示为不确定进度。
+     *
+     * 只覆盖经 uploadFilesToDirectory 进入队列的任务：拖到终端时文件管理面板通常是收起的，
+     * 用户看不到面板里的进度条；面板自身按钮发起的传输进度仍只显示在面板里。
+     */
+    void terminalDropUploadProgress(bool active, const QString &name, int percent);
 
     /**
      * @brief 用户切换了全屏。
@@ -203,6 +234,9 @@ private:
 
         /** @brief 可直接显示在队列中的简短说明，不包含凭据。 */
         QString description;
+
+        /** @brief 是否由拖入终端发起；决定进度是否同步到终端会话状态栏。 */
+        bool fromTerminalDrop = false;
     };
 
     /**
@@ -220,6 +254,9 @@ private:
         /** @brief 发起探测那一刻的续传策略；期间用户改动复选框不得影响这次传输。 */
         SftpTransfer::ExistingFilePolicy policy =
             SftpTransfer::ExistingFilePolicy::ResumeWhenPossible;
+
+        /** @brief 是否由拖入终端发起，入队时原样带给 QueuedTransfer。 */
+        bool fromTerminalDrop = false;
     };
 
     /**
@@ -230,7 +267,8 @@ private:
      */
     void requestDirectoryUpload(const ConnectionTarget &target,
                                 const QString &localDirectory,
-                                const QString &remoteParentDirectory);
+                                const QString &remoteParentDirectory,
+                                bool fromTerminalDrop = false);
 
     /** @brief 把一个已确定冲突策略的目录上传放进队列。 */
     void enqueueDirectoryUpload(const PendingDirectoryUpload &pending,
@@ -265,11 +303,21 @@ private:
      *
      * 目录复用递归上传且同一时间只允许一个；普通文件可批量提交。target 由调用方显式传入
      * 而不是内部读取 selectedTarget()，这样终端拖拽等外部入口才能精确路由到当前层，不受
-     * 面板自身选中状态或是否可见影响。
+     * 面板自身选中状态或是否可见影响。fromTerminalDrop 为 true 时任务进度会同步到终端
+     * 会话状态栏，见 terminalDropUploadProgress。
      */
     void uploadLocalPaths(const ConnectionTarget &target,
                          const QStringList &localPaths,
-                         const QString &remoteDirectory);
+                         const QString &remoteDirectory,
+                         bool fromTerminalDrop = false);
+
+    /**
+     * @brief 按当前队列重新计算终端拖入任务的进度展示状态，必要时发出 terminalDropUploadProgress。
+     *
+     * 队列、活动任务或目录冲突探测任何一处变化后都要调用；进度百分比本身由传输进度信号
+     * 直接转发，这里只负责"开始/切换到下一项/全部结束"三种状态边界。
+     */
+    void publishTerminalDropProgress();
 
     /**
      * @brief 把远程条目拖拽下载到指定本地目录。
@@ -462,6 +510,15 @@ private:
 
     /** @brief 等待远端冲突探测结果的目录上传，按 statPath 请求编号索引。 */
     QHash<quint64, PendingDirectoryUpload> m_pendingDirectoryChecks;
+
+    /** @brief 尚未返回的终端前台进程查询编号。 */
+    QSet<quint64> m_pendingForegroundQueries;
+
+    /** @brief 终端状态栏当前是否在展示拖入上传进度。 */
+    bool m_terminalDropProgressShown = false;
+
+    /** @brief 终端状态栏正在展示的队列项编号；0 表示展示的是等待中的项目。 */
+    quint64 m_terminalDropProgressQueueId = 0;
 
     /**
      * @brief 上次选择的目录冲突处理方式，作为下一次对话框的默认项。
