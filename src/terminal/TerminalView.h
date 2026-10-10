@@ -585,6 +585,17 @@ private:
     /** @brief 隐藏期间是否欠着一次渲染；切回前台或 flushPendingRender() 时补上。 */
     bool m_renderOwed = false;
 
+    /**
+     * @brief 用户是否希望视图跟随输出末尾。
+     *
+     * 意图必须单独保存，不能每帧用滚动条现算：视口高度变化、Qt 重算文档尺寸都会让滚动范围
+     * 变大而滚动值不动，现算会把这种漂移误判成用户上翻，新输出从此停在视口之外。
+     */
+    bool m_followOutputTail = true;
+
+    /** @brief 程序化滚动期间为真，此时的滚动值变化不代表用户意图。 */
+    bool m_scrollIntentLocked = false;
+
     /** @brief 定期释放视口外排版缓存的计时器，见 releaseOffscreenLayouts()。 */
     QTimer *m_layoutReleaseTimer = nullptr;
 
@@ -721,8 +732,25 @@ private:
      */
     void renderPreservingScroll(bool followBottom, int previousValue);
 
-    /** @brief 判断当前是否停在文档底部，作为重建后是否继续贴底的依据。 */
+    /** @brief 判断滚动条此刻是否停在文档底部（几何事实，不代表用户意图）。 */
     [[nodiscard]] bool isScrolledToBottom() const;
+
+    /**
+     * @brief 滚动值变化后更新"是否跟随输出末尾"的意图。
+     *
+     * 只有用户自己滚动（滚轮、拖滚动条、查找跳转、拖选自动滚动）才应改变意图；渲染、
+     * 停放文本光标等程序化滚动期间 m_scrollIntentLocked 为真，直接跳过。
+     */
+    void noteScrollIntent();
+
+    /**
+     * @brief 滚动范围变化时，若用户本在跟随末尾，就把视图钉回新的底部。
+     *
+     * QPlainTextEdit 在视口变矮、文档尺寸重算时只保持"首段"不动，范围变大而滚动值不变，
+     * 视图就悄悄离开了底部；若仍按"max - value <= 1"在下一帧现场判定，这次漂移会被当成
+     * "用户上翻了"，之后的输出全部画在视口下方。
+     */
+    void keepFollowingOutputTail();
 
     /**
      * @brief 把视图拉回输出末尾，使随后的重建继续贴底。

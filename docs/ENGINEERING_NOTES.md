@@ -580,6 +580,24 @@ zsh 回车是两次写入：先 `\r\r\n` 与 PROMPT_SP 的 `\r \r`，约 20ms �
 里过滤横向增量：程序化滚动不走滚轮。回归用例
 `TerminalAltScreenTest::fullWidthOutputNeverScrollsHorizontally`。
 
+### 15.11 "跟随输出末尾"是保存下来的意图，不能每帧现算
+
+现象：`ll` 之后列表只显示到第一行 `total ...`，滚动条看起来已在最底下，按一次回车才出现
+完整内容。文档里其实早已是完整输出（全选复制得到的就是完整列表），只是视图停在了旧位置。
+
+原因：曾经每次渲染前用 `max - value <= 1` 现场判断"用户是否贴底"。而 QPlainTextEdit 在
+视口变矮（展开查找栏、窗口布局变化）或重算文档尺寸时只保持**首段**不动——滚动范围变大、
+滚动值不变，视图悄悄离开了底部。下一帧的现场判断把这次漂移当成"用户上翻了"，此后的输出
+全部画在视口下方；10000 行历史里差的那十几行在滚动条上几乎看不出来。回车能恢复，是因为
+`sendUserInput()` 会无条件拉回末尾。
+
+做法：`TerminalView::m_followOutputTail` 单独保存意图。只有用户触发的滚动值变化才改它
+（`noteScrollIntent()`：滚轮、拖滚动条、查找跳转、拖选自动滚动）；渲染与停放文本光标期间
+`m_scrollIntentLocked` 为真，程序化滚动不算数。滚动范围变化时若意图是跟随，就立即钉回新底部
+（`keepFollowingOutputTail()`，挂在 `rangeChanged` 上）。新增"会让视图滚动的程序化操作"时，
+记得用 `QScopedValueRollback` 锁住意图。回归用例
+`TerminalAltScreenTest::outputKeepsFollowingTailAfterViewportShrinks`。
+
 ---
 
 ## 十六、Qt 拖拽：非 item-view 的 QAbstractScrollArea 要注册 viewport

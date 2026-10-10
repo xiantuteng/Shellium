@@ -11,6 +11,7 @@
 #include <QInputMethodEvent>
 #include <QKeyEvent>
 #include <QResizeEvent>
+#include <QScopedValueRollback>
 #include <QShowEvent>
 #include <QLoggingCategory>
 #include <QRegularExpression>
@@ -560,6 +561,10 @@ TerminalView::TerminalView(QWidget *parent)
     // 其他窗口挡住、处于后台时 repaint 不会发生）。只靠 paintEvent 登记会漏掉这些段。
     connect(verticalScrollBar(), &QScrollBar::valueChanged, this, [this]() {
         markViewportLayoutCandidates();
+        noteScrollIntent();
+    });
+    connect(verticalScrollBar(), &QScrollBar::rangeChanged, this, [this]() {
+        keepFollowingOutputTail();
     });
     m_renderCoalesceTimer->setSingleShot(true);
     m_renderCoalesceTimer->setInterval(kRenderCoalesceMilliseconds);
@@ -787,8 +792,30 @@ bool TerminalView::isScrolledToBottom() const
     return bar->maximum() - bar->value() <= 1;
 }
 
+void TerminalView::noteScrollIntent()
+{
+    // 备用屏里滚动条固定贴顶，滚轮也被翻译成方向键，滚动值与"跟随输出"无关。
+    if (m_scrollIntentLocked || m_vtermBridge->isAlternateScreen()) {
+        return;
+    }
+    m_followOutputTail = isScrolledToBottom();
+}
+
+void TerminalView::keepFollowingOutputTail()
+{
+    // 渲染过程中的范围变化由 renderPreservingScroll 收尾时统一定位，这里不必每次都跟。
+    if (m_scrollIntentLocked || !m_followOutputTail || m_vtermBridge->isAlternateScreen()) {
+        return;
+    }
+    QScrollBar *bar = verticalScrollBar();
+    // 这一下会同步触发 QPlainTextEdit 的 setTopLine，首段随之落到新底部；紧接着 Qt 在
+    // adjustScrollbars 里按首段回填的滚动值因此也正是新的最大值，不会把视图拽回去。
+    bar->setValue(bar->maximum());
+}
+
 void TerminalView::scrollToOutputTail()
 {
+    m_followOutputTail = true;
     if (m_vtermBridge->isAlternateScreen()) {
         // 备用屏由 renderPreservingScroll 固定贴顶，这里贴底会把第 0 行推出视口。
         return;
@@ -799,8 +826,8 @@ void TerminalView::scrollToOutputTail()
 
 void TerminalView::sendUserInput(const QByteArray &bytes)
 {
-    // 先贴底再发字节：随后的回显与输出经 renderPreservingScroll 重建时，isScrolledToBottom()
-    // 已经为真，会继续跟随末尾，用户敲的每个字符都留在视口内。
+    // 先贴底再发字节：随后的回显与输出经 renderPreservingScroll 重建时，跟随意图已经为真，
+    // 会继续跟随末尾，用户敲的每个字符都留在视口内。
     scrollToOutputTail();
     notePromptAnchor();
     emit inputBytes(bytes);
@@ -863,7 +890,7 @@ QString TerminalView::submittedCommandLine() const
 
 void TerminalView::renderPreservingScroll()
 {
-    renderPreservingScroll(isScrolledToBottom(), verticalScrollBar()->value());
+    renderPreservingScroll(m_followOutputTail, verticalScrollBar()->value());
 }
 
 void TerminalView::scheduleRender()
@@ -905,6 +932,8 @@ void TerminalView::renderPreservingScroll(const bool followBottom, const int pre
     // 已经落到这里就不再欠一次渲染，否则合帧定时器还会多跑一轮空转。
     m_renderCoalesceTimer->stop();
     m_renderOwed = false;
+    // 跟随意图已经作为参数传进来；文档编辑、重建清空引起的滚动值变化都不是用户操作。
+    const QScopedValueRollback<bool> intentLock(m_scrollIntentLocked, true);
 
     // 增量同步不会动到滚动历史那些段，QTextCursor 会随文档编辑自行调整，选区天然保留。
     // 但整体重建（改字号、改配色、切备用屏）仍会清空文档，选区必须按偏移救回来——否则
@@ -939,6 +968,10 @@ void TerminalView::renderPreservingScroll(const bool followBottom, const int pre
     }
     bar->setValue(followBottom ? bar->maximum()
                                : std::clamp(previousValue, bar->minimum(), bar->maximum()));
+    // 原位置被文档缩短夹到了底部：用户此刻看到的就是末尾，后续输出理应继续跟随。
+    if (!followBottom && isScrolledToBottom()) {
+        m_followOutputTail = true;
+    }
 }
 
 namespace {
@@ -1108,7 +1141,7 @@ void TerminalView::commitTerminalGeometry()
 {
     // libvterm resize 可能回流屏幕或改变滚动历史长度，必须在重排前采样滚动意图，再在
     // 文档整体重建后恢复。这样防抖修复不会引入拖动结束后跳回顶部的新问题。
-    const bool followBottom = isScrolledToBottom();
+    const bool followBottom = m_followOutputTail;
     const int previousValue = verticalScrollBar()->value();
     recalculateTerminalGeometry();
     renderPreservingScroll(followBottom, previousValue);
@@ -1179,6 +1212,7 @@ void TerminalView::clearTerminalSearch()
     }
     // 与 releaseOffscreenLayouts 同理把光标停回文档末尾；setTextCursor 会尝试让光标可见，
     // 滚动位置要原样放回，关闭查找栏不能把用户带离正在看的历史。
+    const QScopedValueRollback<bool> intentLock(m_scrollIntentLocked, true);
     QScrollBar *bar = verticalScrollBar();
     const int scrollValue = bar->value();
     QTextCursor parked(document());
@@ -1942,6 +1976,7 @@ void TerminalView::releaseOffscreenLayouts()
     const int page = std::max(1, viewport()->height() / std::max(1, fontMetrics().height()));
     const qint64 documentFirst = m_vtermBridge->documentFirstLineNumber();
     if (!textCursor().atEnd()) {
+        const QScopedValueRollback<bool> intentLock(m_scrollIntentLocked, true);
         QScrollBar *bar = verticalScrollBar();
         const int scrollValue = bar->value();
         QTextCursor parked(document());

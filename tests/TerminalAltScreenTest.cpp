@@ -207,6 +207,7 @@ private slots:
     void scrollReturnsToBottomAfterLeavingFullScreenApplication();
     /** @brief 上翻到顶部后，任何用户输入都必须把视图拉回输出末尾。 */
     void typingWhileScrolledUpJumpsBackToOutputTail();
+    void outputKeepsFollowingTailAfterViewportShrinks();
     void columnCountStaysReportedAfterScrollbarTogglesOnAltScreenEntry();
     void realCapturedVimByteStreamShowsStatusLine();
     void realChunkedSshByteStreamShowsStatusLine();
@@ -858,7 +859,7 @@ void TerminalAltScreenTest::reportedRowsMatchDisplayableRows()
     // computeCellHeight() 按最坏情况（探测中文/符号的真实行高）预算，纯 ASCII 内容下会
     // 比实际能塞下的行数更保守，少报几行是安全的，多报一行都不行。
     for (int height = 380; height <= 460; height += 8) {
-        view.resize(640, height);
+        view.resize(1000, height);
         QTest::qWait(160);
         const int displayableRows = view.document()->blockCount()
             - view.verticalScrollBar()->maximum();
@@ -1129,7 +1130,7 @@ void TerminalAltScreenTest::lastRowStaysVisibleInsideFullScreenApplication()
     fillScrollback(view, view.terminalRows() * 3);
 
     for (int height = 380; height <= 460; height += 8) {
-        view.resize(640, height);
+        view.resize(1000, height);
         QTest::qWait(160);
         const int rows = view.terminalRows();
         QVERIFY(rows > 1);
@@ -1217,6 +1218,53 @@ void TerminalAltScreenTest::typingWhileScrolledUpJumpsBackToOutputTail()
     QCOMPARE(bar->value(), 0);
     QTest::keyClick(&view, Qt::Key_J);
     QCOMPARE(bar->value(), 0);
+}
+
+void TerminalAltScreenTest::outputKeepsFollowingTailAfterViewportShrinks()
+{
+    TerminalView view;
+    TerminalSettings settings;
+    settings.scrollbackLines = 100;
+    view.applySettings(settings);
+    QVERIFY(showAndSettle(view));
+    // 历史填满上限，与用户现场一致：之后每进一行历史就从头部淘汰一行。
+    fillScrollback(view, 300);
+    QTest::qWait(300);
+    QScrollBar *bar = view.verticalScrollBar();
+    QCOMPARE(bar->value(), bar->maximum());
+
+    // 展开查找栏之类的布局变化让终端矮了几行。QPlainTextEdit 只保持首段不动，滚动范围
+    // 变大而滚动值不变——这不是用户上翻，视图必须仍然贴着输出末尾。
+    view.resize(view.width(), view.height() - 3 * view.fontMetrics().lineSpacing());
+    QTest::qWait(10);
+
+    // 执行 ll：首行立即渲染，余下部分紧随其后、走合帧定时器补画；最后是新的提示符。
+    view.appendTerminalOutput(QByteArrayLiteral("[root@tidb01 hotline-statics]# ll\r\n"
+                                                "total 1404272\r\n"));
+    QByteArray listing;
+    for (int index = 0; index < 20; ++index) {
+        listing += QByteArray("-rw-r--r-- 1 root root 110697324 Aug 21 23:15 "
+                              "hotline-statistic-server.jar08")
+            + QByteArray::number(10 + index) + "_1756\r\n";
+    }
+    listing += "[root@tidb01 hotline-statics]# ";
+    view.appendTerminalOutput(listing);
+    QTest::qWait(400);
+
+    QCOMPARE(bar->value(), bar->maximum());
+    QTextCursor tail(view.document());
+    tail.movePosition(QTextCursor::End);
+    QVERIFY(tail.block().text().startsWith(QStringLiteral("[root@tidb01 hotline-statics]#")));
+    QVERIFY2(view.viewport()->rect().contains(view.cursorRect(tail).center()),
+             "新提示符落在视口下方：输出没有跟随末尾，要按一次回车才看得到");
+
+    // 用户真的上翻之后，新输出不能再把他拽回底部。
+    bar->setValue(bar->maximum() - 10);
+    const int readingPosition = bar->value();
+    view.appendTerminalOutput(QByteArrayLiteral("\r\nmore output"));
+    QTest::qWait(300);
+    QVERIFY(bar->value() < bar->maximum());
+    QVERIFY(bar->value() <= readingPosition);
 }
 
 void TerminalAltScreenTest::columnCountStaysReportedAfterScrollbarTogglesOnAltScreenEntry()
