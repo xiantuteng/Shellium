@@ -194,14 +194,16 @@ jobs:
           Stop-Process -Id $process.Id -Force
           Write-Host "Smoke test passed."
 
+      # ARM64 镜像预装了 NSIS，x64 镜像没有。NSIS 安装器是 x86 程序，ARM64 Windows 经转译运行。
+      # choco 偶发下载失败，脚本按 makensis.exe 是否存在判断并重试。
+      - name: Ensure NSIS
+        shell: bash
+        run: bash scripts/ensure_nsis.sh "$(cygpath -u "$(printenv 'ProgramFiles(x86)')")/NSIS"
+
       - name: Package
         shell: pwsh
         run: |
-          # ARM64 镜像预装了 NSIS，x64 镜像没有。NSIS 安装器是 x86 程序，ARM64 Windows 经转译运行。
           $nsisDir = Join-Path ${env:ProgramFiles(x86)} 'NSIS'
-          if (-not (Test-Path (Join-Path $nsisDir 'makensis.exe'))) {
-            choco install nsis -y --no-progress
-          }
           $env:PATH = "$nsisDir;$env:PATH"
           # 抛出的异常不进管道，Tee-Object 记不到；catch 里单独写入日志供失败注解使用。
           try {

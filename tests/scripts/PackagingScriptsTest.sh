@@ -354,6 +354,42 @@ else
     printf 'SKIP Bundle 依赖检查（非 macOS 或未安装 clang）\n'
 fi
 
+# 用例 14：x64 Windows 镜像要用 Chocolatey 装 NSIS，社区源偶发失败时 choco 的退出码曾被
+# pwsh 吞掉，直到打包脚本找不到 makensis.exe 才失败。假 choco 前两次失败、第三次才真正
+# 安装，验证会重试；另一个假 choco 总是返回成功却不装文件，验证以 makensis.exe 为准。
+nsis_tools="${WORK_ROOT}/nsis-tools"
+mkdir -p "${nsis_tools}"
+cat > "${nsis_tools}/choco" <<'EOF'
+#!/usr/bin/env bash
+count=$(( $(cat "${FAKE_CHOCO_COUNT}" 2>/dev/null || echo 0) + 1 ))
+printf '%s\n' "${count}" > "${FAKE_CHOCO_COUNT}"
+if [[ "${FAKE_CHOCO_MODE}" == "flaky" && "${count}" -ge 3 ]]; then
+    mkdir -p "${FAKE_NSIS_DIR}" && : > "${FAKE_NSIS_DIR}/makensis.exe"
+    exit 0
+fi
+[[ "${FAKE_CHOCO_MODE}" == "lying" ]]
+EOF
+chmod +x "${nsis_tools}/choco"
+run_ensure_nsis() {
+    local mode="$1"
+    export FAKE_NSIS_DIR="${WORK_ROOT}/nsis-${mode}/NSIS" FAKE_CHOCO_MODE="${mode}"
+    export FAKE_CHOCO_COUNT="${WORK_ROOT}/nsis-${mode}.count"
+    PATH="${nsis_tools}:${PATH}" NSIS_RETRY_DELAY=0 \
+        bash "${SCRIPTS_DIR}/ensure_nsis.sh" "${FAKE_NSIS_DIR}" > "${WORK_ROOT}/nsis-${mode}.txt" 2>&1
+}
+if run_ensure_nsis flaky && [[ -f "${FAKE_NSIS_DIR}/makensis.exe" && "$(cat "${FAKE_CHOCO_COUNT}")" == 3 ]]; then
+    pass_case "choco 前两次失败时重试并装好 NSIS"
+else
+    fail_case "choco 前两次失败时重试并装好 NSIS：$(cat "${WORK_ROOT}/nsis-flaky.txt")"
+fi
+if run_ensure_nsis lying; then
+    fail_case "choco 返回成功但没有 makensis.exe 时必须失败，但脚本成功了"
+elif grep -q 'makensis.exe' "${WORK_ROOT}/nsis-lying.txt"; then
+    pass_case "没有 makensis.exe 时明确报错"
+else
+    fail_case "缺少 makensis.exe 的报错没有指出文件：$(cat "${WORK_ROOT}/nsis-lying.txt")"
+fi
+
 if [[ "${failures}" -gt 0 ]]; then
     printf '%d 个用例失败\n' "${failures}" >&2
     exit 1
