@@ -448,6 +448,16 @@ if(WIN32)
     # Windows staging 根目录直接放 EXE，Qt 插件目录与 qt.conf 可在部署阶段按标准结构加入。
     install(TARGETS Shellium RUNTIME DESTINATION .)
     if(DEFINED shellium_qt_deploy_script)
+        # Qt 部署目录默认取 CMAKE_INSTALL_BINDIR（bin）与 Qt 自身的安装布局（MSYS2 下插件在
+        # share/qt6/plugins），而 Shellium.exe 安装在根目录：Qt DLL 进了 bin/，加载器在 EXE 旁边
+        # 找不到，程序无法启动。部署支持脚本只在变量未设置时才填默认值，这里先固定为扁平布局，
+        # 与 packaging/windows/qt.conf 一致。
+        install(CODE [[
+            set(QT_DEPLOY_BIN_DIR ".")
+            set(QT_DEPLOY_PLUGINS_DIR "plugins")
+            set(QT_DEPLOY_QML_DIR "qml")
+            set(QT_DEPLOY_TRANSLATIONS_DIR "translations")
+        ]])
         # 部署脚本必须排在 install(TARGETS) 之后执行，否则 staging 中尚无主程序可供分析。
         install(SCRIPT "${shellium_qt_deploy_script}")
     endif()
