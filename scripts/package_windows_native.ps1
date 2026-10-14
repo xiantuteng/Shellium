@@ -68,7 +68,10 @@ try {
 }
 
 $makensis = Get-Command makensis.exe -ErrorAction Stop
+# Shellium.nsi 是无 BOM 的 UTF-8。不指定输入字符集时 makensis 按系统 ANSI 代码页解析，
+# “卸载 Shellium”等中文快捷方式名会变成乱码。
 $nsisArguments = @(
+    "/INPUTCHARSET", "UTF8",
     "/DSTAGING_DIR=$staging",
     "/DSHELLIUM_VERSION=$version",
     "/DOUTPUT_FILE=$setupPath",

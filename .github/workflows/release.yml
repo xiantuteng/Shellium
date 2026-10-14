@@ -164,8 +164,19 @@ jobs:
           $msys = '${{ steps.msys2.outputs.msys2-location }}'
           $prefix = '${{ matrix.msystem }}'.ToLowerInvariant()
           $env:PATH = "$msys\$prefix\bin;$msys\ucrt64\bin;$env:PATH"
-          ./scripts/package_windows_native.ps1 -BuildDirectory build-win `
-            -Architecture ${{ matrix.arch }} -UseExistingStaging
+          # 抛出的异常不进管道，Tee-Object 记不到；catch 里单独写入日志供失败注解使用。
+          try {
+            ./scripts/package_windows_native.ps1 -BuildDirectory build-win `
+              -Architecture ${{ matrix.arch }} -UseExistingStaging *>&1 | Tee-Object -FilePath package.log
+          } catch {
+            $_ | Out-String | Add-Content -Path package.log
+            throw
+          }
+
+      - name: Report package log
+        if: failure()
+        shell: msys2 {0}
+        run: bash scripts/ci_report_log_tail.sh package.log
 
       - uses: actions/upload-artifact@v4
         with:
