@@ -120,7 +120,19 @@ else
     fail_case "TLS 插件带上 libssl：$(cat "${CASE_DIR}/output.txt")"
 fi
 
-# 用例 6：启动后立即退出的程序必须判为失败；持续运行的程序判为通过，并且等待时间有上限。
+# 用例 6：只保留 SQLite 驱动；其他驱动的客户端库不存在，留着会让依赖检查失败。
+new_case sqldrivers
+make_pe "${STAGING}/Shellium.exe" kernel32.dll
+make_pe "${STAGING}/plugins/sqldrivers/qsqlite.dll" kernel32.dll
+make_pe "${STAGING}/plugins/sqldrivers/qsqlpsql.dll" libpq.dll
+if run_bundle && [[ -f "${STAGING}/plugins/sqldrivers/qsqlite.dll" \
+        && ! -e "${STAGING}/plugins/sqldrivers/qsqlpsql.dll" ]]; then
+    pass_case "只保留 SQLite 驱动"
+else
+    fail_case "只保留 SQLite 驱动：$(cat "${CASE_DIR}/output.txt")"
+fi
+
+# 用例 7：启动后立即退出的程序必须判为失败；持续运行的程序判为通过，并且等待时间有上限。
 if bash "${SCRIPTS_DIR}/smoke_launch.sh" 2 false > "${WORK_ROOT}/smoke-exit.txt" 2>&1; then
     fail_case "启动即退出必须失败"
 else

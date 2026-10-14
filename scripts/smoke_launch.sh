@@ -12,7 +12,11 @@ set -euo pipefail
 wait_seconds="$1"
 shift
 
-"$@" &
+# 程序输出单独记下来：启动失败时 Qt 会打印缺哪个插件或库，这正是要看的原因。
+app_log="$(mktemp "${TMPDIR:-/tmp}/shellium-smoke.XXXXXX")"
+trap 'rm -f -- "${app_log}"' EXIT
+
+"$@" > "${app_log}" 2>&1 &
 app_pid=$!
 
 for _ in $(seq "${wait_seconds}"); do
@@ -23,6 +27,13 @@ for _ in $(seq "${wait_seconds}"); do
         exit_code=$?
         set -e
         printf '冒烟测试失败：%s 启动后 %s 秒内退出，退出码 %s\n' "$1" "${wait_seconds}" "${exit_code}" >&2
+        printf '程序输出：\n' >&2
+        tail -n 40 "${app_log}" >&2
+        # CI 上把程序输出也作为注解发出，未登录也能看到（见 ci_report_log_tail.sh）。
+        if [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then
+            printf '退出码 %s\n' "${exit_code}" >> "${app_log}"
+            bash "$(dirname "${BASH_SOURCE[0]}")/ci_report_log_tail.sh" "${app_log}"
+        fi
         exit 1
     fi
 done

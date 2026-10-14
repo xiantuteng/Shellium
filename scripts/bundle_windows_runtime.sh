@@ -30,6 +30,16 @@ find_case_insensitive() {
   find "$1" -maxdepth 1 -type f -iname "$2" -print -quit
 }
 
+# 应用只用 QSQLITE。windeployqt 会把 Qt 自带的全部 SQL 驱动都部署进来，其中 Firebird、MySQL、
+# PostgreSQL 驱动依赖 MSYS2 里也没有的客户端 DLL，留着只会让依赖检查失败，而且是死代码。
+for driver in "$staging"/plugins/sqldrivers/*.dll; do
+  [[ -e "$driver" ]] || continue
+  case "$(basename "$driver")" in
+    qsqlite.dll) ;;
+    *) rm -f -- "$driver" ;;
+  esac
+done
+
 # Qt 的 OpenSSL TLS 插件在运行时用 LoadLibrary 加载 libssl，导入表里看不到。只靠导入表扫描会
 # 漏掉它，HTTPS 请求就退回或直接失败，所以插件存在时显式带上 libssl。
 if [[ -n "$(find "$staging" -type f -iname 'qopensslbackend*.dll' -print -quit)" ]]; then
