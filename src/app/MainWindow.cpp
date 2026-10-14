@@ -25,6 +25,7 @@
 #include "ui/SettingsWidgets.h"
 #include "ui/SshKeyManagerDialog.h"
 #include "ui/UiIcons.h"
+#include "ui/SidebarSelection.h"
 #include "ui/VaultDialog.h"
 
 #include <QAbstractItemView>
@@ -2098,8 +2099,8 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
                                                     : QStringLiteral("#e1e7eb");
     // 主机树位于接近白色的侧栏上，通用 RAISED 只比背景深几个灰阶，鼠标移入时几乎不可见。
     // 为高频主机选择单独提供更深的悬停色，避免加深全局按钮、标签页和其他列表的悬停状态。
-    const QString hostTreeHoverBackground = dark ? QStringLiteral("#30394f")
-                                                 : QStringLiteral("#e1e7eb");
+    const QString hostTreeHoverBackground = dark ? QStringLiteral("#384259")
+                                                 : QStringLiteral("#d6dee3");
     const QString borderColor = dark ? QStringLiteral("#30384f")
                                      : QStringLiteral("#d9e0e4");
     const QString textColor = dark ? QStringLiteral("#f0f3fa")
@@ -2125,6 +2126,15 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
     // 一档，而不是退回普通悬停色，否则鼠标移上去反倒像取消了选中。
     const QString prominentSelectionHoverBackground = dark ? QStringLiteral("#397565")
                                                             : QStringLiteral("#9fdcc0");
+    // 左侧导航栏底色本身就带灰（浅色 #e8edf0），PROMINENT_SELECTION 落在上面仍显得发白，
+    // 用户认不出当前在哪一页；导航按钮单独再加深一档。通用 RAISED 甚至比导航栏底色更浅，
+    // 悬停反而像“变亮消失”，因此悬停也单独给一个比底色深的灰。
+    const QString navigationSelectionBackground = dark ? QStringLiteral("#357a63")
+                                                        : QStringLiteral("#86d4ae");
+    const QString navigationSelectionHoverBackground = dark ? QStringLiteral("#3f8c73")
+                                                             : QStringLiteral("#6fca9f");
+    const QString navigationHoverBackground = dark ? QStringLiteral("#384259")
+                                                    : QStringLiteral("#cfd8dd");
 
     // Qt 样式表不支持 CSS 的 cursor 属性，写入会在每个按钮初始化时反复报警。
     // 手型统一由 main() 安装的 ButtonCursorPolicy 设置，主题只负责视觉外观。
@@ -2229,13 +2239,13 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
             padding: 10px;
         }
         QToolButton[navButton="true"]:hover {
-            background: @RAISED@;
+            background: @NAV_HOVER@;
         }
         QToolButton[navButton="true"]:checked {
-            background: @PROMINENT_SELECTION@;
+            background: @NAV_SELECTION@;
         }
         QToolButton[navButton="true"]:checked:hover {
-            background: @PROMINENT_SELECTION_HOVER@;
+            background: @NAV_SELECTION_HOVER@;
         }
         QToolButton[compactIconButton="true"] {
             color: @TEXT@;
@@ -2764,6 +2774,9 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
             border-radius: 8px;
             min-height: 28px;
             padding: 4px 11px;
+            /* 关掉 Fusion 在键盘导航后画在文字外的灰色填充焦点框；对话框里持焦点的按钮
+               同时就是默认按钮，已由下方 :default 的强调色描边标出。 */
+            outline: 0;
         }
         QPushButton:hover {
             background: @RAISED@;
@@ -2777,6 +2790,18 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
         QPushButton:disabled {
             color: @MUTED@;
             background: @SIDEBAR@;
+        }
+        /* 对话框默认按钮（回车触发的那个，如 QMessageBox 的 defaultButton）：加粗强调色描边。
+           描边从 1px 加到 2px，内边距同步各减 1px，保证与相邻按钮尺寸一致、不抖动。
+           Tab 切换焦点时 autoDefault 按钮会接过默认状态，高亮随之移动。须写在
+           primaryAction/destructiveAction 之前，让这些专用按钮保持自己的外观。 */
+        QPushButton:default {
+            border: 2px solid @ACCENT@;
+            padding: 3px 10px;
+            font-weight: 600;
+        }
+        QPushButton:default:hover {
+            border-color: @ACCENT@;
         }
         QPushButton[primaryAction="true"] {
             color: #0c2f24;
@@ -2897,8 +2922,8 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
             background: transparent;
             color: @TEXT@;
         }
-        /* 效率工具的两个列表复刻主机树的行卡片：悬停用主机树专用的加深灰，选中为 13% 品牌绿
-           底 + 42% 品牌绿描边、9px 圆角，与 HostItemDelegate::paintInteractionBackground 同值。
+        /* 效率工具的两个列表复刻主机树的行卡片：悬停用主机树专用的加深灰，选中为品牌绿
+           半透明底 + 描边、9px 圆角，透明度取自 SidebarSelection.h，与主机树委托同值。
            这两个列表没有缩进区，用 QSS 即可画出同款卡片，无需自定义委托。 */
         QTabWidget#productivityTabs QTabBar {
             background: transparent;
@@ -2958,8 +2983,8 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
         QListWidget#productivityHistoryList::item:selected:!active,
         QListWidget#productivityHistoryList::item:selected:hover {
             color: @TEXT@;
-            background: rgba(43, 217, 129, 33);
-            border: 1px solid rgba(43, 217, 129, 107);
+            background: @SIDEBAR_SELECTION_FILL@;
+            border: 1px solid @SIDEBAR_SELECTION_BORDER@;
         }
     )QSS");
 
@@ -3200,6 +3225,9 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
     )QSS");
     styleSheet.replace(QStringLiteral("@WORKSPACE@"), workspaceBackground);
     styleSheet.replace(QStringLiteral("@NAVIGATION@"), navigationBackground);
+    styleSheet.replace(QStringLiteral("@NAV_SELECTION_HOVER@"), navigationSelectionHoverBackground);
+    styleSheet.replace(QStringLiteral("@NAV_SELECTION@"), navigationSelectionBackground);
+    styleSheet.replace(QStringLiteral("@NAV_HOVER@"), navigationHoverBackground);
     styleSheet.replace(QStringLiteral("@SIDEBAR@"), sidebarBackground);
     styleSheet.replace(QStringLiteral("@SURFACE@"), surfaceBackground);
     styleSheet.replace(QStringLiteral("@RAISED@"), raisedBackground);
@@ -3223,6 +3251,15 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
     styleSheet.replace(QStringLiteral("@PROMINENT_SELECTION@"),
                        prominentSelectionBackground);
     styleSheet.replace(QStringLiteral("@SELECTION@"), selectionBackground);
+    const auto accentWithAlpha = [&accentColor](const float alpha) {
+        QColor color(accentColor);
+        color.setAlphaF(alpha);
+        return color.name(QColor::HexArgb);
+    };
+    styleSheet.replace(QStringLiteral("@SIDEBAR_SELECTION_FILL@"),
+                       accentWithAlpha(ShelliumUi::kSidebarSelectionFillAlpha));
+    styleSheet.replace(QStringLiteral("@SIDEBAR_SELECTION_BORDER@"),
+                       accentWithAlpha(ShelliumUi::kSidebarSelectionBorderAlpha));
     // 保险库既可能在启动阶段使用独立样式，也可能在主窗口运行期间再次弹出。这里复用同一
     // 片段，确保应用自选主题与系统主题不一致时仍以应用主题绘制安全徽标、警示框和错误态。
     styleSheet += ShelliumUi::vaultDialogStyleSheet(dark);

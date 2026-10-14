@@ -5,6 +5,7 @@
 #include "i18n/Retranslate.h"
 #include "ssh/SshSessionStack.h"
 #include "storage/ApplicationDatabase.h"
+#include "ui/SidebarSelection.h"
 #include "ui/UiIcons.h"
 
 #include <QAction>
@@ -179,14 +180,14 @@ private:
         QColor border;
         if (selected) {
             fill = forwardingAccentColor();
-            fill.setAlphaF(0.13F);
+            fill.setAlphaF(ShelliumUi::kSidebarSelectionFillAlpha);
             border = forwardingAccentColor();
-            border.setAlphaF(0.42F);
+            border.setAlphaF(ShelliumUi::kSidebarSelectionBorderAlpha);
         } else if (widget != nullptr) {
             fill = QColor(widget->property("hostHoverBackgroundColor").toString());
         }
         if (!fill.isValid()) {
-            fill = QColor(QStringLiteral("#e1e7eb"));
+            fill = QColor(QStringLiteral("#d6dee3"));
         }
         painter->setPen(selected ? QPen(border, 1) : Qt::NoPen);
         painter->setBrush(fill);
@@ -424,7 +425,7 @@ public:
         m_tree->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
         m_tree->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
         m_tree->setProperty("hostIconSurfaceColor", QStringLiteral("#ffffff"));
-        m_tree->setProperty("hostHoverBackgroundColor", QStringLiteral("#e1e7eb"));
+        m_tree->setProperty("hostHoverBackgroundColor", QStringLiteral("#d6dee3"));
         auto *treeDelegate = new PortForwardHostDelegate(m_tree);
         treeDelegate->onToggleRequested = [this](const QModelIndex &index) {
             m_tree->setExpanded(index, !m_tree->isExpanded(index));

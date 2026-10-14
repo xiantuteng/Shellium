@@ -52,10 +52,16 @@
 #include <QTabBar>
 #include <QTabWidget>
 #include <QColor>
+#include <QMessageBox>
+#include <QPushButton>
+#include <QStyleFactory>
+#include <QScopeGuard>
+#include <QStyle>
 #include <QTest>
 #include <QToolButton>
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
+#include <QTreeWidgetItemIterator>
 #include <QVariantAnimation>
 
 #include <algorithm>
@@ -144,6 +150,9 @@ private slots:
     void forwardingPageFollowsActiveTerminalHost();
     /** @brief 组合搜索栏内部输入框获得焦点时，外框必须换成强调色描边，与普通输入框一致。 */
     void compositeSearchBarsHighlightBorderOnFocus();
+    void messageBoxDefaultButtonIsHighlighted();
+    void sidebarSelectionAndHoverStandOutFromBackground();
+    void navigationRailSelectionAndHoverStandOut();
 
     /**
      * @brief 浅色主题下效率工具"片段/历史"标签的选中态必须一眼可辨。
@@ -1807,6 +1816,176 @@ void MainWindowShellTest::compositeSearchBarsHighlightBorderOnFocus()
     productivityEdit->setFocus();
     QVERIFY2(colorDistance(leftBorderColor(productivityBar), accent) < 60,
              "效率工具搜索框获得焦点后外框没有高亮");
+}
+
+void MainWindowShellTest::messageBoxDefaultButtonIsHighlighted()
+{
+    // 全局样式表把所有 QPushButton 画成同一种描边，若不单独给 :default 规则，确认框里
+    // 回车会触发哪个按钮完全看不出来（拖拽上传的“是/否”就是这样）。
+    // 与 main.cpp 一致使用 Fusion，焦点框是它画的；结束时还原，避免影响其他用例。
+    const QString previousStyle = QApplication::style()->name();
+    QApplication::setStyle(QStyleFactory::create(QStringLiteral("Fusion")));
+    const auto restoreStyle = qScopeGuard(
+        [previousStyle] { QApplication::setStyle(QStyleFactory::create(previousStyle)); });
+    MainWindow window(m_database, m_vault);
+    window.resize(1200, 800);
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+    const QColor accent(QStringLiteral("#2bd981"));
+
+    QMessageBox box(QMessageBox::Question, QStringLiteral("Upload"), QStringLiteral("Upload?"),
+                    QMessageBox::Yes | QMessageBox::No, &window);
+    box.setDefaultButton(QMessageBox::No);
+    box.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&box));
+    auto *yes = qobject_cast<QPushButton *>(box.button(QMessageBox::Yes));
+    auto *no = qobject_cast<QPushButton *>(box.button(QMessageBox::No));
+    QVERIFY(yes != nullptr && no != nullptr);
+    QVERIFY(no->isDefault());
+
+    QVERIFY2(colorDistance(leftBorderColor(no), accent) < 60, "默认按钮没有强调色描边");
+    QVERIFY2(colorDistance(leftBorderColor(yes), accent) > 100, "非默认按钮也被高亮了");
+    // 描边加粗时内边距同步收缩，两个按钮必须保持同样高度，避免焦点移动时按钮跳动。
+    QCOMPARE(no->sizeHint().height(), yes->sizeHint().height());
+
+    // 程序全局用 Fusion：它会在持焦点按钮的文字外画一个灰色填充的焦点框，叠在强调色描边
+    // 里面很难看。全局样式表用 outline: 0 关掉它，持焦点与否按钮外观必须完全一致。
+    box.activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(&box));
+    // Fusion 只在键盘导航过（Tab / 方向键切换焦点）之后才画焦点框，这里直接置上该标记。
+    box.setAttribute(Qt::WA_KeyboardFocusChange);
+    no->setFocus(Qt::TabFocusReason);
+    QTRY_VERIFY(no->hasFocus());
+    const QImage focused = no->grab().toImage();
+    yes->setFocus(Qt::TabFocusReason);
+    QTRY_VERIFY(!no->hasFocus());
+    box.setDefaultButton(QMessageBox::No);
+    QVERIFY(no->isDefault());
+    QVERIFY2(no->grab().toImage() == focused, "持焦点的按钮多画了一层焦点框");
+}
+
+void MainWindowShellTest::sidebarSelectionAndHoverStandOutFromBackground()
+{
+    // 侧栏选中卡片曾是 13% 品牌绿，浅色侧栏上与背景的色差只有 ~30，用户认不出当前项；
+    // 悬停灰同样过浅。两种主题下都要求与侧栏底色拉开足够距离。
+    for (const QString &theme : {QStringLiteral("light"), QStringLiteral("dark")}) {
+        ApplicationDatabase database(ApplicationDatabase::inMemoryPath());
+        QString error;
+        QVERIFY2(database.initialize(&error), qPrintable(error));
+        QVERIFY2(database.setSetting(QStringLiteral("appearance/theme"), theme, &error),
+                 qPrintable(error));
+        HostRecord host;
+        host.id = QStringLiteral("selection-contrast-host");
+        host.kind = HostNodeKind::Host;
+        host.name = QStringLiteral("h");
+        host.host = QStringLiteral("127.0.0.1");
+        host.port = quint16{1};
+        host.username = QStringLiteral("test");
+        QVERIFY2(database.saveHost(host, &error), qPrintable(error));
+        CredentialVault vault(database);
+        MainWindow window(&database, &vault);
+        window.resize(1200, 800);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+        auto *tree = window.findChild<QTreeWidget *>(QStringLiteral("HostTree"));
+        QVERIFY(tree != nullptr);
+        QTreeWidgetItem *item = nullptr;
+        for (QTreeWidgetItemIterator it(tree); *it != nullptr; ++it) {
+            if ((*it)->text(0) == host.name || (*it)->data(0, Qt::UserRole).toString() == host.id) {
+                item = *it;
+                break;
+            }
+        }
+        if (item == nullptr) {
+            // 文本列可能为空（委托自绘），退回第一个可选中的行。
+            for (QTreeWidgetItemIterator it(tree, QTreeWidgetItemIterator::Selectable);
+                 *it != nullptr; ++it) {
+                item = *it;
+                break;
+            }
+        }
+        QVERIFY2(item != nullptr, qPrintable(theme));
+        tree->clearSelection();
+        tree->viewport()->update();
+        QCoreApplication::processEvents();
+        const QRect rect = tree->visualItemRect(item);
+        QVERIFY(rect.isValid());
+        // 卡片顶部内侧、避开右上圆角：只会是卡片底色，不会碰到图标和文字。
+        // 必须截整窗：单独截 viewport 底是透明的，半透明选中色不会与侧栏底色混合。
+        const QPoint probe = tree->viewport()->mapTo(&window,
+                                                     QPoint(rect.right() - 14, rect.top() + 4));
+        const auto sample = [&window, probe] {
+            const QImage image = window.grab().toImage();
+            return image.pixelColor(probe * image.devicePixelRatio());
+        };
+        const QColor background = sample();
+        item->setSelected(true);
+        tree->viewport()->repaint();
+        const QColor selected = sample();
+        QVERIFY2(colorDistance(selected, background) > 40,
+                 qPrintable(theme + QStringLiteral(" selected ") + selected.name()
+                            + QStringLiteral(" vs ") + background.name()));
+
+        const QColor hover(tree->property("hostHoverBackgroundColor").toString());
+        QVERIFY2(colorDistance(hover, background) > 40,
+                 qPrintable(theme + QStringLiteral(" hover ") + hover.name()
+                            + QStringLiteral(" vs ") + background.name()));
+    }
+}
+
+void MainWindowShellTest::navigationRailSelectionAndHoverStandOut()
+{
+    // 左侧导航栏底色本身带灰，选中图标的底色曾只比它深一点，认不出当前页；通用悬停色甚至比
+    // 导航栏底色更浅。两种主题下都要求选中色、悬停色与导航栏底色明显拉开。
+    for (const QString &theme : {QStringLiteral("light"), QStringLiteral("dark")}) {
+        ApplicationDatabase database(ApplicationDatabase::inMemoryPath());
+        QString error;
+        QVERIFY2(database.initialize(&error), qPrintable(error));
+        QVERIFY2(database.setSetting(QStringLiteral("appearance/theme"), theme, &error),
+                 qPrintable(error));
+        CredentialVault vault(database);
+        MainWindow window(&database, &vault);
+        window.resize(1200, 800);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+        auto *rail = window.findChild<QWidget *>(QStringLiteral("NavigationRail"));
+        QVERIFY(rail != nullptr);
+        QToolButton *checked = nullptr;
+        QToolButton *unchecked = nullptr;
+        for (QToolButton *button : rail->findChildren<QToolButton *>()) {
+            if (!button->isCheckable() || !button->isVisible()) {
+                continue;
+            }
+            if (button->isChecked() && checked == nullptr) {
+                checked = button;
+            } else if (!button->isChecked() && unchecked == nullptr) {
+                unchecked = button;
+            }
+        }
+        QVERIFY(checked != nullptr && unchecked != nullptr);
+
+        const auto sample = [&window](QWidget *widget, const QPoint &local) {
+            const QImage image = window.grab().toImage();
+            return image.pixelColor(widget->mapTo(&window, local) * image.devicePixelRatio());
+        };
+        // 导航栏底色取栏内最下方空白处；按钮底色取按钮上沿居中处，避开圆角与图标。
+        const QColor railBackground = sample(rail, QPoint(rail->width() / 2, rail->height() - 4));
+        const QPoint buttonProbe(checked->width() / 2, 3);
+        const QColor selected = sample(checked, buttonProbe);
+        QVERIFY2(colorDistance(selected, railBackground) > 100,
+                 qPrintable(theme + QStringLiteral(" selected ") + selected.name()
+                            + QStringLiteral(" vs ") + railBackground.name()));
+
+        QTest::mouseMove(unchecked, unchecked->rect().center());
+        QTRY_VERIFY(unchecked->underMouse());
+        unchecked->repaint();
+        const QColor hovered = sample(unchecked, buttonProbe);
+        QVERIFY2(colorDistance(hovered, railBackground) > 30,
+                 qPrintable(theme + QStringLiteral(" hover ") + hovered.name()
+                            + QStringLiteral(" vs ") + railBackground.name()));
+    }
 }
 
 void MainWindowShellTest::forwardingPageFollowsActiveTerminalHost()

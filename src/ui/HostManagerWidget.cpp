@@ -10,6 +10,7 @@
 #include "ui/FocusWithin.h"
 #include "ui/HostDistributionIcon.h"
 #include "ui/UiIcons.h"
+#include "ui/SidebarSelection.h"
 #include "ui/VaultDialog.h"
 
 #include <QAction>
@@ -874,15 +875,15 @@ private:
         QColor border;
         if (selected) {
             fill = ShelliumUi::accentColor();
-            fill.setAlphaF(0.13F);
+            fill.setAlphaF(ShelliumUi::kSidebarSelectionFillAlpha);
             border = ShelliumUi::accentColor();
-            border.setAlphaF(0.42F);
+            border.setAlphaF(ShelliumUi::kSidebarSelectionBorderAlpha);
         } else {
             if (widget != nullptr) {
                 fill = QColor(widget->property("hostHoverBackgroundColor").toString());
             }
             if (!fill.isValid()) {
-                fill = QColor(QStringLiteral("#e1e7eb"));
+                fill = QColor(QStringLiteral("#d6dee3"));
             }
         }
 
@@ -3740,7 +3741,7 @@ HostManagerWidget::HostManagerWidget(ApplicationDatabase *database,
     // MainWindow::applyModernAppearance() 会按实际应用主题覆盖该属性。不能直接读取
     // QPalette::Base：用户可在深色 macOS 上选择应用浅色主题，两套明暗状态并不保证一致。
     m_tree->setProperty("hostIconSurfaceColor", QStringLiteral("#ffffff"));
-    m_tree->setProperty("hostHoverBackgroundColor", QStringLiteral("#e1e7eb"));
+    m_tree->setProperty("hostHoverBackgroundColor", QStringLiteral("#d6dee3"));
     m_tree->setHeaderHidden(true);
     m_tree->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
     // 展开箭头改由 HostItemDelegate 画在分组行左侧，Qt 自带的分支装饰列必须关掉，否则
