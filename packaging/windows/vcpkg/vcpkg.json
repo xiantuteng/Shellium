@@ -1,0 +1,18 @@
+{
+  "name": "shellium-windows",
+  "version-string": "0",
+  "description": "Shellium 在 Windows MSVC 下除 Qt 以外的第三方依赖；Qt 使用官方 MSVC 二进制。",
+  "builtin-baseline": "e456309491fd875487bf02b8a0dca76c1b1b00cc",
+  "dependencies": [
+    {
+      "name": "libssh",
+      "default-features": false,
+      "features": ["zlib"]
+    },
+    "libsodium",
+    "libvterm",
+    "minizip",
+    "spdlog",
+    "zlib"
+  ]
+}

@@ -30,6 +30,8 @@ find_package(sodium 1.0.18 CONFIG QUIET)
 find_package(unofficial-sodium CONFIG QUIET)
 find_package(unofficial-libvterm CONFIG QUIET)
 find_package(spdlog 1.12 CONFIG QUIET)
+# vcpkg 的 minizip 只提供 CMake Config（MINIZIP::minizip），Windows 上没有 pkg-config 可回退。
+find_package(minizip CONFIG QUIET)
 
 find_package(PkgConfig QUIET)
 
@@ -70,7 +72,7 @@ shellium_resolve_dependency(spdlog spdlog 1.12
 # 通过与其他三方库相同的 Config/pkg-config 双路径解析，macOS、Linux 和 vcpkg Windows 环境
 # 都可以使用同一个稳定的 ShelliumDependencies::minizip 目标。
 shellium_resolve_dependency(minizip minizip 1.2.8
-    minizip::minizip MINIZIP::MINIZIP unofficial::minizip minizip)
+    minizip::minizip MINIZIP::minizip MINIZIP::MINIZIP unofficial::minizip minizip)
 # 某些 Linux/Windows 构建会把 minizip 编译为静态库，此时其 pkg-config 的私有依赖 zlib
 # 不一定会自动传递给最终可执行文件；显式挂接可以避免“动态库环境能过、静态发布包链接失败”。
 find_package(ZLIB REQUIRED)
@@ -395,10 +397,18 @@ if(WIN32)
     if(NOT CMAKE_CROSSCOMPILING)
         # 原生 Windows 构建使用 Qt 官方部署脚本收集 DLL 与插件。交叉构建刻意不走此分支，
         # 因为 Linux 主机无法运行目标平台 windeployqt，必须由发布镜像递归扫描 PE imports。
+        # MSVC 下 windeployqt 的“编译器运行时”是把 vc_redist 安装程序整个拷进包里（二十多 MB，
+        # 还要用户再装一遍）。改为由 scripts/bundle_windows_runtime.sh 把 vcruntime/msvcp 等 DLL
+        # 以 app-local 方式放到 EXE 旁边。MinGW 仍让 windeployqt 复制 libgcc/libstdc++。
+        set(shellium_deploy_runtime_option "")
+        if(MSVC)
+            set(shellium_deploy_runtime_option NO_COMPILER_RUNTIME)
+        endif()
         qt_generate_deploy_app_script(
             TARGET Shellium
             OUTPUT_SCRIPT shellium_qt_deploy_script
             NO_UNSUPPORTED_PLATFORM_ERROR
+            ${shellium_deploy_runtime_option}
         )
     endif()
 endif()

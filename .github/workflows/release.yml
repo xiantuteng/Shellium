@@ -3,8 +3,8 @@
 # 推送 v* 标签时构建全部 6 个安装包，并创建一个草稿 Release 等人工确认后发布；在 Actions
 # 页面手动触发或推送 ci/release-* 分支时只构建并上传 artifact，不创建 Release，用于演练。
 #
-# 每个架构都在对应架构的原生 runner 上编译，不做交叉编译：Homebrew、MSYS2 和 apt 的依赖都
-# 只提供本机架构，交叉编译会在部署阶段混入错误架构的库。
+# 每个架构都在对应架构的原生 runner 上编译，不做交叉编译：Homebrew、vcpkg 和 apt 的依赖都
+# 按本机架构构建，交叉编译会在部署阶段混入错误架构的库。Windows 使用 MSVC。
 name: Release
 
 on:
@@ -99,53 +99,95 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # MINGW64 环境没有 libvterm 包，x64 必须用 UCRT64。
+          # MSVC 原生编译：Qt 用官方 MSVC 2022 二进制，其余依赖由 vcpkg 按
+          # packaging/windows/vcpkg/vcpkg.json 构建（libvterm 无官方 port，用仓库内 overlay）。
           - arch: x64
             runner: windows-2025
-            msystem: UCRT64
+            msvc_arch: x64
+            qt_host: windows
+            qt_arch: win64_msvc2022_64
+            triplet: x64-windows
           - arch: arm64
             runner: windows-11-arm
-            msystem: CLANGARM64
+            msvc_arch: arm64
+            qt_host: windows_arm64
+            qt_arch: win64_msvc2022_arm64
+            triplet: arm64-windows
+    env:
+      VCPKG_BINARY_CACHE_DIR: ${{ github.workspace }}/../vcpkg-binary-cache
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up MSYS2
-        id: msys2
-        uses: msys2/setup-msys2@v2
+      - name: Set up MSVC
+        uses: ilammy/msvc-dev-cmd@v1
         with:
-          msystem: ${{ matrix.msystem }}
-          update: true
-          # CLANGARM64 没有 NSIS 包。makensis 只在打包时运行，生成的安装器是 x86 程序，
-          # 在 ARM64 Windows 上靠系统自带转译运行，因此两种架构都用 UCRT64 的 NSIS。
-          install: mingw-w64-ucrt-x86_64-nsis
-          pacboy: >-
-            toolchain:p cmake:p ninja:p pkgconf:p
-            qt6-base:p qt6-svg:p qt6-tools:p
-            libssh:p libvterm:p libsodium:p spdlog:p minizip:p zlib:p
+          arch: ${{ matrix.msvc_arch }}
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.3'
+          host: ${{ matrix.qt_host }}
+          target: desktop
+          arch: ${{ matrix.qt_arch }}
+          cache: true
+
+      # 第三方依赖每次从源码编译要十几分钟；按清单与 overlay 内容缓存 vcpkg 的二进制包。
+      - name: Cache vcpkg binaries
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.VCPKG_BINARY_CACHE_DIR }}
+          key: vcpkg-${{ matrix.triplet }}-${{ hashFiles('packaging/windows/vcpkg/**') }}
+          restore-keys: vcpkg-${{ matrix.triplet }}-
+
+      # 不用 runner 预装的 vcpkg：它的提交随镜像更新而变。按清单里的 builtin-baseline 检出，
+      # 依赖版本只随清单改变。
+      - name: Set up vcpkg
+        shell: pwsh
+        run: |
+          $baseline = (Get-Content packaging/windows/vcpkg/vcpkg.json -Raw | ConvertFrom-Json).'builtin-baseline'
+          $root = Join-Path $env:RUNNER_TEMP 'vcpkg'
+          git clone --filter=blob:none https://github.com/microsoft/vcpkg $root
+          git -C $root checkout $baseline
+          & (Join-Path $root 'bootstrap-vcpkg.bat') -disableMetrics
+          New-Item -ItemType Directory -Force -Path $env:VCPKG_BINARY_CACHE_DIR | Out-Null
+          "VCPKG_ROOT=$root" >> $env:GITHUB_ENV
+          "VCPKG_BINARY_SOURCES=clear;files,$env:VCPKG_BINARY_CACHE_DIR,readwrite" >> $env:GITHUB_ENV
 
       - name: Build and stage
-        shell: msys2 {0}
+        shell: pwsh
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          & {
+            cmake -S . -B build-win -G Ninja `
+              -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF `
+              "-DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" `
+              -DVCPKG_MANIFEST_DIR=packaging/windows/vcpkg `
+              -DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }} `
+              "-DCMAKE_PREFIX_PATH=$env:QT_ROOT_DIR"
+            cmake --build build-win --parallel
+            cmake --install build-win --prefix build-win/windows-staging
+          } *>&1 | Tee-Object -FilePath build.log
+
+      # windeployqt 只带 Qt 自己的 DLL；vcpkg 的库（含 OpenSSL）与 MSVC 运行库在这里补齐。
+      - name: Bundle runtime DLLs
+        shell: bash
         run: |
           set -o pipefail
-          # MSYS2 的 vterm.pc 没有 prefix= 行，includedir 写死为 /ucrt64/include。pkgconf 只能重定位
-          # ${prefix} 形式的路径，于是原样交给原生 Windows CMake，配置时报“路径不存在”。
-          vterm_pc="$MINGW_PREFIX/lib/pkgconfig/vterm.pc"
-          if ! grep -q '^prefix=' "$vterm_pc"; then
-            sed -i -e "1i prefix=$MINGW_PREFIX" -e "s|=$MINGW_PREFIX/|=\${prefix}/|" "$vterm_pc"
-          fi
-          {
-            cmake -S . -B build-win -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF &&
-            cmake --build build-win --parallel &&
-            cmake --install build-win --prefix build-win/windows-staging &&
-            bash scripts/bundle_windows_runtime.sh build-win/windows-staging "$MINGW_PREFIX/bin"
-          } 2>&1 | tee build.log
+          crt_dir="$(find "$(cygpath -u "$VCToolsRedistDir")/${{ matrix.msvc_arch }}" -maxdepth 1 -type d -name 'Microsoft.VC*.CRT' | head -n 1)"
+          [[ -n "$crt_dir" ]] || { echo "找不到 MSVC 运行库目录" >&2; exit 1; }
+          OBJDUMP="$PWD/scripts/dumpbin_as_objdump.sh" bash scripts/bundle_windows_runtime.sh \
+            build-win/windows-staging \
+            "build-win/vcpkg_installed/${{ matrix.triplet }}/bin" \
+            "$(cygpath -u "$QT_ROOT_DIR")/bin" \
+            "$crt_dir" 2>&1 | tee -a build.log
 
       - name: Report build log
         if: failure()
-        shell: msys2 {0}
+        shell: bash
         run: bash scripts/ci_report_log_tail.sh build.log
 
-      # 这一步的 PATH 里没有 MSYS2，才能证明 staging 自带了全部 DLL。
+      # 这一步只有系统 PATH，证明 staging 自带了全部 DLL。
       - name: Smoke test
         shell: pwsh
         run: |
@@ -161,9 +203,12 @@ jobs:
       - name: Package
         shell: pwsh
         run: |
-          $msys = '${{ steps.msys2.outputs.msys2-location }}'
-          $prefix = '${{ matrix.msystem }}'.ToLowerInvariant()
-          $env:PATH = "$msys\$prefix\bin;$msys\ucrt64\bin;$env:PATH"
+          # ARM64 镜像预装了 NSIS，x64 镜像没有。NSIS 安装器是 x86 程序，ARM64 Windows 经转译运行。
+          $nsisDir = Join-Path ${env:ProgramFiles(x86)} 'NSIS'
+          if (-not (Test-Path (Join-Path $nsisDir 'makensis.exe'))) {
+            choco install nsis -y --no-progress
+          }
+          $env:PATH = "$nsisDir;$env:PATH"
           # 抛出的异常不进管道，Tee-Object 记不到；catch 里单独写入日志供失败注解使用。
           try {
             ./scripts/package_windows_native.ps1 -BuildDirectory build-win `
@@ -175,7 +220,7 @@ jobs:
 
       - name: Report package log
         if: failure()
-        shell: msys2 {0}
+        shell: bash
         run: bash scripts/ci_report_log_tail.sh package.log
 
       - uses: actions/upload-artifact@v4

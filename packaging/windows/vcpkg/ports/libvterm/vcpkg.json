@@ -1,0 +1,17 @@
+{
+  "name": "libvterm",
+  "version": "0.3.3",
+  "description": "Abstract VT220/Xterm/ECMA-48 terminal emulation library（vcpkg 官方仓库没有此 port）",
+  "homepage": "https://www.leonerd.org.uk/code/libvterm/",
+  "license": "MIT",
+  "dependencies": [
+    {
+      "name": "vcpkg-cmake",
+      "host": true
+    },
+    {
+      "name": "vcpkg-cmake-config",
+      "host": true
+    }
+  ]
+}

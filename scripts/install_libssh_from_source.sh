@@ -4,7 +4,7 @@ set -euo pipefail
 # 从源码编译安装固定版本的 libssh。
 #
 # Shellium 用到 sftp_aio、SSH_OPTIONS_PROXYJUMP、ssh_channel_get_exit_state 等 0.11 才有的接口，
-# 而 Ubuntu 24.04 仓库只有 0.10.6。Homebrew 和 MSYS2 已是 0.11+，只有 Linux 构建机需要本脚本。
+# 而 Ubuntu 24.04 仓库只有 0.10.6。Homebrew 与 vcpkg 已是 0.11+，只有 Linux 构建机需要本脚本。
 # 版本与 SHA-256 一起固定，上游文件被替换时直接失败，而不是编进一个来历不明的库。
 #
 # 用法：install_libssh_from_source.sh <安装前缀，如 /usr/local>
