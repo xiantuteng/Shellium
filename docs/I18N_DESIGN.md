@@ -59,6 +59,8 @@ i18n/
 编译出的 `shellium_<lang>.qm` 通过 `qt_add_resources` 打进 `:/i18n/`（与字体、品牌资源同样内嵌，避免随包丢失）。
 Qt 自身文案（标准按钮 “OK/Cancel”、`QFileDialog`、`QLineEdit` 右键菜单等）用 Qt 官方 `qtbase_<lang>.qm`，从 `QLibraryInfo::path(QLibraryInfo::TranslationsPath)` 加载；macOS/Windows 打包时需把用到的 `qtbase_*.qm` 一并拷入 bundle（`macdeployqt` 默认带部分，打包后需校验）。
 
+> 实际情况：Homebrew 的 qtbase 不带 `translations/` 目录，打包也未必携带 `qtbase_*.qm`，导致 QMessageBox 标准按钮始终是 Yes/No。因此标准按钮文案（上下文 `QPlatformTheme`，以及 macOS 的 `QCocoaTheme` “Don't Save”）已用 `QT_TRANSLATE_NOOP` 登记在 `LocalizationService.cpp` 的 `kQtStandardButtonTexts`，随本程序 `.ts` 一起翻译，不再依赖 qtbase 翻译。新增依赖 Qt 自带文案的控件时同理处理。
+
 ### 4.2 `LocalizationService`（新增，`src/i18n/`）
 
 单一职责组件，`main()` 创建、生命周期覆盖 `MainWindow`：

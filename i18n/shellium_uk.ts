@@ -2515,6 +2515,13 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     </message>
 </context>
 <context>
+    <name>QCocoaTheme</name>
+    <message>
+        <source>Don&apos;t Save</source>
+        <translation>Не зберігати</translation>
+    </message>
+</context>
+<context>
     <name>QObject</name>
     <message>
         <source>Start with the given UI language (e.g. zh_CN, en, or system).</source>
@@ -3049,6 +3056,81 @@ To avoid overwriting existing credentials, Shellium does not create a new vault 
     <message>
         <source>Reset terminal</source>
         <translation type="unfinished">Скинути термінал</translation>
+    </message>
+</context>
+<context>
+    <name>QPlatformTheme</name>
+    <message>
+        <source>OK</source>
+        <translation>OK</translation>
+    </message>
+    <message>
+        <source>Save</source>
+        <translation>Зберегти</translation>
+    </message>
+    <message>
+        <source>Save All</source>
+        <translation>Зберегти все</translation>
+    </message>
+    <message>
+        <source>Open</source>
+        <translation>Відкрити</translation>
+    </message>
+    <message>
+        <source>&amp;Yes</source>
+        <translation>&amp;Так</translation>
+    </message>
+    <message>
+        <source>Yes to &amp;All</source>
+        <translation>Так для &amp;всіх</translation>
+    </message>
+    <message>
+        <source>&amp;No</source>
+        <translation>&amp;Ні</translation>
+    </message>
+    <message>
+        <source>N&amp;o to All</source>
+        <translation>Н&amp;і для всіх</translation>
+    </message>
+    <message>
+        <source>Abort</source>
+        <translation>Перервати</translation>
+    </message>
+    <message>
+        <source>Retry</source>
+        <translation>Повторити</translation>
+    </message>
+    <message>
+        <source>Ignore</source>
+        <translation>Ігнорувати</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>Закрити</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>Скасувати</translation>
+    </message>
+    <message>
+        <source>Discard</source>
+        <translation>Відкинути</translation>
+    </message>
+    <message>
+        <source>Help</source>
+        <translation>Довідка</translation>
+    </message>
+    <message>
+        <source>Apply</source>
+        <translation>Застосувати</translation>
+    </message>
+    <message>
+        <source>Reset</source>
+        <translation>Скинути</translation>
+    </message>
+    <message>
+        <source>Restore Defaults</source>
+        <translation>Відновити типові</translation>
     </message>
 </context>
 <context>

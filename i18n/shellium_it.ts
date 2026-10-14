@@ -2515,6 +2515,13 @@ Confermare che la chiave è cambiata, sostituire il vecchio record in known_host
     </message>
 </context>
 <context>
+    <name>QCocoaTheme</name>
+    <message>
+        <source>Don&apos;t Save</source>
+        <translation>Non salvare</translation>
+    </message>
+</context>
+<context>
     <name>QObject</name>
     <message>
         <source>Start with the given UI language (e.g. zh_CN, en, or system).</source>
@@ -3049,6 +3056,81 @@ Per non sovrascrivere credenziali esistenti, Shellium non crea automaticamente u
     <message>
         <source>Reset terminal</source>
         <translation type="unfinished">Reimposta il terminale</translation>
+    </message>
+</context>
+<context>
+    <name>QPlatformTheme</name>
+    <message>
+        <source>OK</source>
+        <translation>OK</translation>
+    </message>
+    <message>
+        <source>Save</source>
+        <translation>Salva</translation>
+    </message>
+    <message>
+        <source>Save All</source>
+        <translation>Salva tutto</translation>
+    </message>
+    <message>
+        <source>Open</source>
+        <translation>Apri</translation>
+    </message>
+    <message>
+        <source>&amp;Yes</source>
+        <translation>&amp;Sì</translation>
+    </message>
+    <message>
+        <source>Yes to &amp;All</source>
+        <translation>Sì a &amp;tutti</translation>
+    </message>
+    <message>
+        <source>&amp;No</source>
+        <translation>&amp;No</translation>
+    </message>
+    <message>
+        <source>N&amp;o to All</source>
+        <translation>N&amp;o a tutti</translation>
+    </message>
+    <message>
+        <source>Abort</source>
+        <translation>Interrompi</translation>
+    </message>
+    <message>
+        <source>Retry</source>
+        <translation>Riprova</translation>
+    </message>
+    <message>
+        <source>Ignore</source>
+        <translation>Ignora</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>Chiudi</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>Annulla</translation>
+    </message>
+    <message>
+        <source>Discard</source>
+        <translation>Scarta</translation>
+    </message>
+    <message>
+        <source>Help</source>
+        <translation>Aiuto</translation>
+    </message>
+    <message>
+        <source>Apply</source>
+        <translation>Applica</translation>
+    </message>
+    <message>
+        <source>Reset</source>
+        <translation>Reimposta</translation>
+    </message>
+    <message>
+        <source>Restore Defaults</source>
+        <translation>Ripristina predefiniti</translation>
     </message>
 </context>
 <context>

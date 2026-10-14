@@ -2515,6 +2515,13 @@ Confirmi că cheia s-a schimbat, înlocuiești vechea înregistrare din known_ho
     </message>
 </context>
 <context>
+    <name>QCocoaTheme</name>
+    <message>
+        <source>Don&apos;t Save</source>
+        <translation>Nu salva</translation>
+    </message>
+</context>
+<context>
     <name>QObject</name>
     <message>
         <source>Start with the given UI language (e.g. zh_CN, en, or system).</source>
@@ -3049,6 +3056,81 @@ Pentru a nu suprascrie datele de autentificare existente, Shellium nu creează a
     <message>
         <source>Reset terminal</source>
         <translation type="unfinished">Resetează terminalul</translation>
+    </message>
+</context>
+<context>
+    <name>QPlatformTheme</name>
+    <message>
+        <source>OK</source>
+        <translation>OK</translation>
+    </message>
+    <message>
+        <source>Save</source>
+        <translation>Salvează</translation>
+    </message>
+    <message>
+        <source>Save All</source>
+        <translation>Salvează tot</translation>
+    </message>
+    <message>
+        <source>Open</source>
+        <translation>Deschide</translation>
+    </message>
+    <message>
+        <source>&amp;Yes</source>
+        <translation>&amp;Da</translation>
+    </message>
+    <message>
+        <source>Yes to &amp;All</source>
+        <translation>Da la &amp;tot</translation>
+    </message>
+    <message>
+        <source>&amp;No</source>
+        <translation>&amp;Nu</translation>
+    </message>
+    <message>
+        <source>N&amp;o to All</source>
+        <translation>N&amp;u la tot</translation>
+    </message>
+    <message>
+        <source>Abort</source>
+        <translation>Abandonează</translation>
+    </message>
+    <message>
+        <source>Retry</source>
+        <translation>Reîncearcă</translation>
+    </message>
+    <message>
+        <source>Ignore</source>
+        <translation>Ignoră</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>Închide</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>Anulează</translation>
+    </message>
+    <message>
+        <source>Discard</source>
+        <translation>Renunță</translation>
+    </message>
+    <message>
+        <source>Help</source>
+        <translation>Ajutor</translation>
+    </message>
+    <message>
+        <source>Apply</source>
+        <translation>Aplică</translation>
+    </message>
+    <message>
+        <source>Reset</source>
+        <translation>Resetează</translation>
+    </message>
+    <message>
+        <source>Restore Defaults</source>
+        <translation>Restabilește valorile implicite</translation>
     </message>
 </context>
 <context>

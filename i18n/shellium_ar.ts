@@ -2515,6 +2515,13 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     </message>
 </context>
 <context>
+    <name>QCocoaTheme</name>
+    <message>
+        <source>Don&apos;t Save</source>
+        <translation>عدم الحفظ</translation>
+    </message>
+</context>
+<context>
     <name>QObject</name>
     <message>
         <source>Start with the given UI language (e.g. zh_CN, en, or system).</source>
@@ -3049,6 +3056,81 @@ To avoid overwriting existing credentials, Shellium does not create a new vault 
     <message>
         <source>Reset terminal</source>
         <translation type="unfinished">إعادة تعيين الطرفية</translation>
+    </message>
+</context>
+<context>
+    <name>QPlatformTheme</name>
+    <message>
+        <source>OK</source>
+        <translation>موافق</translation>
+    </message>
+    <message>
+        <source>Save</source>
+        <translation>حفظ</translation>
+    </message>
+    <message>
+        <source>Save All</source>
+        <translation>حفظ الكل</translation>
+    </message>
+    <message>
+        <source>Open</source>
+        <translation>فتح</translation>
+    </message>
+    <message>
+        <source>&amp;Yes</source>
+        <translation>&amp;نعم</translation>
+    </message>
+    <message>
+        <source>Yes to &amp;All</source>
+        <translation>نعم لل&amp;كل</translation>
+    </message>
+    <message>
+        <source>&amp;No</source>
+        <translation>&amp;لا</translation>
+    </message>
+    <message>
+        <source>N&amp;o to All</source>
+        <translation>لا للك&amp;ل</translation>
+    </message>
+    <message>
+        <source>Abort</source>
+        <translation>إحباط</translation>
+    </message>
+    <message>
+        <source>Retry</source>
+        <translation>إعادة المحاولة</translation>
+    </message>
+    <message>
+        <source>Ignore</source>
+        <translation>تجاهل</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>إغلاق</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>إلغاء</translation>
+    </message>
+    <message>
+        <source>Discard</source>
+        <translation>إهمال التغييرات</translation>
+    </message>
+    <message>
+        <source>Help</source>
+        <translation>مساعدة</translation>
+    </message>
+    <message>
+        <source>Apply</source>
+        <translation>تطبيق</translation>
+    </message>
+    <message>
+        <source>Reset</source>
+        <translation>إعادة تعيين</translation>
+    </message>
+    <message>
+        <source>Restore Defaults</source>
+        <translation>استعادة الإعدادات الافتراضية</translation>
     </message>
 </context>
 <context>

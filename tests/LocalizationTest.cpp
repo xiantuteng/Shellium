@@ -3,6 +3,8 @@
 
 #include <QApplication>
 #include <QLocale>
+#include <QMessageBox>
+#include <QPushButton>
 #include <QSignalSpy>
 #include <QTest>
 
@@ -25,6 +27,7 @@ private slots:
     void applySourceLanguageUninstallsCatalog();
     void untranslatedLanguageStillAppliesAndFallsBackToEnglish();
     void arabicSetsRightToLeftLayout();
+    void standardButtonsFollowAppLanguage();
     void applyRejectsUnsupportedLanguage();
     void settingsNormalizesLanguageTag();
 };
@@ -154,6 +157,42 @@ void LocalizationTest::arabicSetsRightToLeftLayout()
     QCOMPARE(qApp->layoutDirection(), Qt::RightToLeft);
     QVERIFY(service.apply(QStringLiteral("en")));
     QCOMPARE(qApp->layoutDirection(), Qt::LeftToRight);
+}
+
+void LocalizationTest::standardButtonsFollowAppLanguage()
+{
+    // QMessageBox 的标准按钮文案来自 Qt 的 QPlatformTheme 上下文。Homebrew/打包后的 Qt 往往
+    // 没有 qtbase_*.qm，所以本程序自己的 .qm 必须收录这些条目，否则不管选什么语言都是 Yes/No。
+    LocalizationService service;
+    QVERIFY(service.apply(QStringLiteral("zh_CN")));
+    {
+        QMessageBox box(QMessageBox::Question, QStringLiteral("t"), QStringLiteral("m"),
+                        QMessageBox::Yes | QMessageBox::No | QMessageBox::Cancel);
+        QCOMPARE(box.button(QMessageBox::Yes)->text(), QString::fromUtf8("是(&Y)"));
+        QCOMPARE(box.button(QMessageBox::No)->text(), QString::fromUtf8("否(&N)"));
+        QCOMPARE(box.button(QMessageBox::Cancel)->text(), QString::fromUtf8("取消"));
+    }
+
+    // 每门受支持语言都要有译文；这三条在所有语言里都与英文原文不同，可以直接判断是否命中。
+    for (const QString &language : LocalizationService::supportedLanguages()) {
+        if (language == LocalizationService::sourceLanguage()) {
+            continue;
+        }
+        QVERIFY(service.apply(language));
+        for (const char *source : {"&Yes", "Cancel", "Restore Defaults"}) {
+            QVERIFY2(QCoreApplication::translate("QPlatformTheme", source)
+                         != QLatin1String(source),
+                     qPrintable(language + QStringLiteral(": ") + QLatin1String(source)));
+        }
+        QVERIFY2(QCoreApplication::translate("QCocoaTheme", "Don't Save")
+                     != QLatin1String("Don't Save"),
+                 qPrintable(language));
+    }
+
+    QVERIFY(service.apply(QStringLiteral("en")));
+    QMessageBox box(QMessageBox::Question, QStringLiteral("t"), QStringLiteral("m"),
+                    QMessageBox::Yes);
+    QCOMPARE(box.button(QMessageBox::Yes)->text(), QStringLiteral("&Yes"));
 }
 
 void LocalizationTest::applyRejectsUnsupportedLanguage()

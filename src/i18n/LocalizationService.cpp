@@ -14,6 +14,38 @@ const QString kResourcePrefix = QStringLiteral(":/i18n/");
 /** @brief 应用 .qm 文件名前缀，对应 qt_add_translations 的 TS 文件基名。 */
 const QString kAppCatalog = QStringLiteral("shellium_");
 
+/**
+ * @brief Qt 标准按钮（QMessageBox / QDialogButtonBox）的源文案，原样登记给 lupdate。
+ *
+ * 这些文案本应由 qtbase_*.qm 翻译，但 Homebrew 的 qtbase 不带 translations 目录、打包也
+ * 未必携带，于是不管选什么语言 QMessageBox 都是 Yes/No。把它们以 Qt 自身的上下文名收进
+ * 本程序的 .ts，按钮就能跟随应用语言；上下文与原文必须和 QPlatformTheme::
+ * defaultStandardButtonText()、QCocoaTheme::standardButtonText() 逐字一致，否则查不到。
+ * 没有这份登记，lupdate 的 -no-obsolete 会把 .ts 里的这些条目当作废弃删掉。
+ */
+[[maybe_unused]] const char *const kQtStandardButtonTexts[] = {
+    QT_TRANSLATE_NOOP("QPlatformTheme", "OK"),
+    QT_TRANSLATE_NOOP("QPlatformTheme", "Save"),
+    QT_TRANSLATE_NOOP("QPlatformTheme", "Save All"),
+    QT_TRANSLATE_NOOP("QPlatformTheme", "Open"),
+    QT_TRANSLATE_NOOP("QPlatformTheme", "&Yes"),
+    QT_TRANSLATE_NOOP("QPlatformTheme", "Yes to &All"),
+    QT_TRANSLATE_NOOP("QPlatformTheme", "&No"),
+    QT_TRANSLATE_NOOP("QPlatformTheme", "N&o to All"),
+    QT_TRANSLATE_NOOP("QPlatformTheme", "Abort"),
+    QT_TRANSLATE_NOOP("QPlatformTheme", "Retry"),
+    QT_TRANSLATE_NOOP("QPlatformTheme", "Ignore"),
+    QT_TRANSLATE_NOOP("QPlatformTheme", "Close"),
+    QT_TRANSLATE_NOOP("QPlatformTheme", "Cancel"),
+    QT_TRANSLATE_NOOP("QPlatformTheme", "Discard"),
+    QT_TRANSLATE_NOOP("QPlatformTheme", "Help"),
+    QT_TRANSLATE_NOOP("QPlatformTheme", "Apply"),
+    QT_TRANSLATE_NOOP("QPlatformTheme", "Reset"),
+    QT_TRANSLATE_NOOP("QPlatformTheme", "Restore Defaults"),
+    // macOS 的 Cocoa 主题把 Discard 换成了 “Don't Save”。
+    QT_TRANSLATE_NOOP("QCocoaTheme", "Don't Save"),
+};
+
 } // namespace
 
 LocalizationService::LocalizationService(QObject *parent)
