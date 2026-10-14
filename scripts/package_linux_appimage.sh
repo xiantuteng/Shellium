@@ -101,6 +101,21 @@ if [[ "${#EXCLUDED_SQL_DRIVERS[@]}" -gt 0 ]]; then
     export LINUXDEPLOY_EXCLUDED_LIBRARIES
 fi
 
+# linuxdeploy 按运行时规则（LD_LIBRARY_PATH，再 ldconfig 缓存）解析 soname。源码安装到
+# /usr/local 的 libssh 0.11 与发行版的 0.10 同为 libssh.so.4；aarch64 上 ldconfig 的
+# aarch64-linux-gnu.conf 排在提供 /usr/local/lib 的 libc.conf 之前，系统旧版会被打进包，
+# 启动即报 LIBSSH_4_10_0 符号版本缺失。把各依赖 pkg-config 给出的 libdir 放到最前，
+# 确保收集的就是编译时链接的那一份。
+# 按列表顺序拼接（libssh 在最前）：其余依赖多在系统目录，若排在前面又会先命中系统旧版 libssh。
+dependency_libdirs=""
+for package in libssh vterm libsodium spdlog minizip; do
+    package_libdir="$(pkg-config --variable=libdir "${package}" 2>/dev/null || true)"
+    if [[ -n "${package_libdir}" && -d "${package_libdir}" ]]; then
+        dependency_libdirs="${dependency_libdirs:+${dependency_libdirs}:}${package_libdir}"
+    fi
+done
+export LD_LIBRARY_PATH="${dependency_libdirs}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+
 mkdir -p "${DIST_DIR}"
 OUTPUT_APPIMAGE="${DIST_DIR}/Shellium-${PROJECT_VERSION}-linux-${TARGET_ARCH}.AppImage"
 export LDAI_OUTPUT="${OUTPUT_APPIMAGE}"
