@@ -146,6 +146,26 @@ else
     fail_case "持续运行判为通过并按时结束：$(cat "${WORK_ROOT}/smoke-alive.txt")"
 fi
 
+# 用例 9：NSIS 安装脚本能编译。它只在 Windows 发版时运行，曾因 SetShellVarContext 写在
+# Section/Function 之外而从未成功生成过安装器。本机没装 makensis 时跳过。
+if command -v makensis >/dev/null 2>&1; then
+    nsis_stage="${WORK_ROOT}/nsis-stage"
+    mkdir -p "${nsis_stage}/plugins/platforms"
+    : > "${nsis_stage}/Shellium.exe"
+    : > "${nsis_stage}/plugins/platforms/qwindows.dll"
+    if makensis -INPUTCHARSET UTF8 -WX \
+            "-DSTAGING_DIR=${nsis_stage}" -DSHELLIUM_VERSION=0.0.0 \
+            "-DOUTPUT_FILE=${WORK_ROOT}/Shellium-0.0.0-setup-x64.exe" \
+            "${SCRIPTS_DIR}/../packaging/windows/Shellium.nsi" > "${WORK_ROOT}/nsis.txt" 2>&1 \
+            && [[ -s "${WORK_ROOT}/Shellium-0.0.0-setup-x64.exe" ]]; then
+        pass_case "NSIS 安装脚本可编译"
+    else
+        fail_case "NSIS 安装脚本可编译：$(grep -i -E 'error|warning' "${WORK_ROOT}/nsis.txt")"
+    fi
+else
+    printf 'SKIP NSIS 安装脚本可编译（未安装 makensis）\n'
+fi
+
 if [[ "${failures}" -gt 0 ]]; then
     printf '%d 个用例失败\n' "${failures}" >&2
     exit 1

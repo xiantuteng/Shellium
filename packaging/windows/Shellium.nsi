@@ -16,9 +16,18 @@ Name "Shellium"
 OutFile "${OUTPUT_FILE}"
 InstallDir "$LOCALAPPDATA\Programs\Shellium"
 InstallDirRegKey HKCU "Software\Shellium" "InstallLocation"
-SetShellVarContext current
 ShowInstDetails show
 ShowUninstDetails show
+
+; SetShellVarContext 只能出现在 Section/Function 内。安装与卸载各自在初始化时固定为当前用户，
+; 开始菜单快捷方式才会落在 $SMPROGRAMS 的用户目录而不是所有用户目录。
+Function .onInit
+  SetShellVarContext current
+FunctionEnd
+
+Function un.onInit
+  SetShellVarContext current
+FunctionEnd
 
 Page directory
 Page instfiles
