@@ -13,3 +13,6 @@
 # 部分开发者的全局 excludesFile 会忽略所有点目录（.*/），GitHub Actions 工作流必须显式放行，
 # 否则 .github/workflows 永远不会被提交，CI 也就不会运行。
 !/.github/
+
+# ctest 在源码根目录运行时生成的耗时缓存。
+/Testing/

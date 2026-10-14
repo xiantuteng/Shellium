@@ -57,7 +57,7 @@ i18n/
 ```
 
 编译出的 `shellium_<lang>.qm` 通过 `qt_add_resources` 打进 `:/i18n/`（与字体、品牌资源同样内嵌，避免随包丢失）。
-Qt 自身文案（标准按钮 “OK/Cancel”、`QFileDialog`、`QLineEdit` 右键菜单等）用 Qt 官方 `qtbase_<lang>.qm`，从 `QLibraryInfo::path(QLibraryInfo::TranslationsPath)` 加载；macOS/Windows 打包时需把用到的 `qtbase_*.qm` 一并拷入 bundle（`macdeployqt` 默认带部分，需在 `RELEASE_CHECKLIST.md` 增加校验项）。
+Qt 自身文案（标准按钮 “OK/Cancel”、`QFileDialog`、`QLineEdit` 右键菜单等）用 Qt 官方 `qtbase_<lang>.qm`，从 `QLibraryInfo::path(QLibraryInfo::TranslationsPath)` 加载；macOS/Windows 打包时需把用到的 `qtbase_*.qm` 一并拷入 bundle（`macdeployqt` 默认带部分，打包后需校验）。
 
 ### 4.2 `LocalizationService`（新增，`src/i18n/`）
 
@@ -156,7 +156,7 @@ qt_add_translations(Shellium
 - CI 增加一步：`update_translations` 后 `git diff --exit-code i18n/` 失败即提示“有新文案未提取”（软门禁，或仅告警）。
 - 源语言 `zh_CN`：可不建 `.ts`（`tr()` 直接回落字面量），或建一份用于统一校对/修正错别字。
 
-打包校验（补进 `docs/RELEASE_CHECKLIST.md` 与 `MACOS_DMG_RELEASE.md`）：
+打包校验（发布前人工确认，可补进 `MACOS_DMG_RELEASE.md`）：
 - `:/i18n/shellium_en.qm` 在包内；
 - 需要的 `qtbase_*.qm` 随 `macdeployqt` / windeployqt 落地；
 - 启动时 `--lang en` 冒烟截图。
