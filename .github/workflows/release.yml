@@ -66,7 +66,11 @@ jobs:
           SHELLIUM_DEPLOYMENT_TARGET: ${{ matrix.deployment_target }}
           SHELLIUM_BUILD_JOBS: '4'
         # 尚未配置 Developer ID 证书与公证凭据，先产出 ad-hoc 签名包；Release 因此保持草稿。
-        run: ./scripts/package_macos_dmg.sh --adhoc
+        run: ./scripts/package_macos_dmg.sh --adhoc 2>&1 | tee build.log
+
+      - name: Report build log
+        if: failure()
+        run: ./scripts/ci_report_log_tail.sh build.log
 
       - name: Smoke test
         run: |
@@ -116,10 +120,18 @@ jobs:
       - name: Build and stage
         shell: msys2 {0}
         run: |
-          cmake -S . -B build-win -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
-          cmake --build build-win --parallel
-          cmake --install build-win --prefix build-win/windows-staging
-          bash scripts/bundle_windows_runtime.sh build-win/windows-staging "$MINGW_PREFIX/bin"
+          set -o pipefail
+          {
+            cmake -S . -B build-win -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF &&
+            cmake --build build-win --parallel &&
+            cmake --install build-win --prefix build-win/windows-staging &&
+            bash scripts/bundle_windows_runtime.sh build-win/windows-staging "$MINGW_PREFIX/bin"
+          } 2>&1 | tee build.log
+
+      - name: Report build log
+        if: failure()
+        shell: msys2 {0}
+        run: bash scripts/ci_report_log_tail.sh build.log
 
       # 这一步的 PATH 里没有 MSYS2，才能证明 staging 自带了全部 DLL。
       - name: Smoke test
@@ -193,7 +205,11 @@ jobs:
             xvfb xauth
 
       - name: Build and package
-        run: ./scripts/package_linux_appimage.sh
+        run: ./scripts/package_linux_appimage.sh 2>&1 | tee build.log
+
+      - name: Report build log
+        if: failure()
+        run: ./scripts/ci_report_log_tail.sh build.log
 
       - name: Smoke test
         env:
