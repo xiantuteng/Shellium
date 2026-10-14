@@ -57,7 +57,7 @@ cmake -S . -B build-win -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF 
   -DVCPKG_MANIFEST_DIR=packaging/windows/vcpkg -DVCPKG_TARGET_TRIPLET=x64-windows `
   -DCMAKE_PREFIX_PATH=C:/Qt/6.8.3/msvc2022_64
 cmake --build build-win --parallel
-cmake --install build-win --prefix build-win/windows-staging
+cmake --install build-win --prefix "$PWD/build-win/windows-staging"  # Qt 部署脚本要求绝对路径
 ```
 
 ```bash

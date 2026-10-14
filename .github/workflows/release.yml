@@ -166,7 +166,8 @@ jobs:
               -DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }} `
               "-DCMAKE_PREFIX_PATH=$env:QT_ROOT_DIR"
             cmake --build build-win --parallel
-            cmake --install build-win --prefix build-win/windows-staging
+            # Qt 6.8 的部署脚本要求绝对路径，相对 prefix 会在生成 qt.conf 时报错。
+            cmake --install build-win --prefix "$PWD/build-win/windows-staging"
           } *>&1 | Tee-Object -FilePath build.log
 
       # windeployqt 只带 Qt 自己的 DLL；vcpkg 的库（含 OpenSSL）与 MSVC 运行库在这里补齐。
