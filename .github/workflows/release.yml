@@ -37,6 +37,10 @@ jobs:
             runner: macos-15-intel
             deployment_target: '15.0'
             brew_qt: false
+    # 未声明 shell 时 GitHub 用 bash -e 而不带 pipefail，`| tee build.log` 会吞掉构建失败。
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
 
@@ -121,6 +125,12 @@ jobs:
         shell: msys2 {0}
         run: |
           set -o pipefail
+          # MSYS2 的 vterm.pc 没有 prefix= 行，includedir 写死为 /ucrt64/include。pkgconf 只能重定位
+          # ${prefix} 形式的路径，于是原样交给原生 Windows CMake，配置时报“路径不存在”。
+          vterm_pc="$MINGW_PREFIX/lib/pkgconfig/vterm.pc"
+          if ! grep -q '^prefix=' "$vterm_pc"; then
+            sed -i -e "1i prefix=$MINGW_PREFIX" -e "s|=$MINGW_PREFIX/|=\${prefix}/|" "$vterm_pc"
+          fi
           {
             cmake -S . -B build-win -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF &&
             cmake --build build-win --parallel &&
@@ -180,6 +190,10 @@ jobs:
             runner: ubuntu-24.04-arm
             qt_host: linux_arm64
             qt_arch: linux_gcc_arm64
+    # 未声明 shell 时 GitHub 用 bash -e 而不带 pipefail，`| tee build.log` 会吞掉构建失败。
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
 
