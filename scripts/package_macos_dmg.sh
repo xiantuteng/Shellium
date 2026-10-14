@@ -214,84 +214,6 @@ preflight() {
     printf '目标架构：%s\n' "${TARGET_ARCH}"
 }
 
-# 判断指定文件是否为 Mach-O 二进制。参数 1 是文件路径；返回 0 表示 Mach-O，返回 1 表示
-# 普通资源文件。使用 file 而非扩展名是因为 Qt Framework 主二进制通常没有文件扩展名。
-is_macho_file() {
-    local candidate_path="$1"
-    file -b "${candidate_path}" 2>/dev/null | grep -q 'Mach-O'
-}
-
-# 验证 App Bundle 内所有原生代码都包含目标架构，并检查其动态库引用不再指向 Homebrew、
-# /usr/local 或源码目录。参数 1 是 App 路径；该检查防止在开发机正常、换到用户机器立即崩溃。
-verify_bundle_architecture_and_dependencies() {
-    local app_path="$1"
-    local candidate_path
-    local candidate_directory
-    local architecture_list
-    local dependency_path
-    local dependency_index
-    local resolved_dependency_path
-    local is_shared_library
-    local found_macho="false"
-
-    while IFS= read -r -d '' candidate_path; do
-        if ! is_macho_file "${candidate_path}"; then
-            continue
-        fi
-        found_macho="true"
-        architecture_list="$(lipo -archs "${candidate_path}")"
-        [[ " ${architecture_list} " == *" ${TARGET_ARCH} "* ]] \
-            || fail "Bundle 中存在非 ${TARGET_ARCH} 原生代码：${candidate_path}（${architecture_list}）"
-
-        candidate_directory="$(dirname "${candidate_path}")"
-        dependency_index=0
-        is_shared_library="false"
-        if file -b "${candidate_path}" | grep -q 'dynamically linked shared library'; then
-            is_shared_library="true"
-        fi
-
-        while IFS= read -r dependency_path; do
-            dependency_index=$((dependency_index + 1))
-
-            # otool 会把 dylib/framework 自身的 LC_ID_DYLIB 作为第一项显示。该值用于其他
-            # 二进制建立链接标识，不代表运行时还要从开发机加载另一个文件，因此不能按外部
-            # 依赖处理；可执行文件和插件没有该 ID，第一项仍然必须正常校验。
-            if [[ "${is_shared_library}" == "true" && "${dependency_index}" -eq 1 ]]; then
-                continue
-            fi
-
-            case "${dependency_path}" in
-                /usr/lib/*|/System/*)
-                    ;;
-                /*)
-                    # 除系统库外的任何绝对路径都只存在于构建机：Homebrew、/usr/local、源码目录，
-                    # 以及 CI 上官方 Qt 安装器解压出的任意目录。
-                    fail "发现未部署的开发机动态库引用：${candidate_path} -> ${dependency_path}"
-                    ;;
-                @rpath/*)
-                    # macdeployqt 为 App 和 Qt 插件配置的运行时搜索根均指向 Contents/Frameworks。
-                    # 仅检查字符串已变成 @rpath 不够；目标 Framework 或 dylib 也必须真实存在。
-                    resolved_dependency_path="${app_path}/Contents/Frameworks/${dependency_path#@rpath/}"
-                    [[ -e "${resolved_dependency_path}" ]] \
-                        || fail "Bundle 缺少 @rpath 依赖：${candidate_path} -> ${dependency_path}"
-                    ;;
-                @loader_path/*)
-                    resolved_dependency_path="${candidate_directory}/${dependency_path#@loader_path/}"
-                    [[ -e "${resolved_dependency_path}" ]] \
-                        || fail "Bundle 缺少 @loader_path 依赖：${candidate_path} -> ${dependency_path}"
-                    ;;
-                @executable_path/*)
-                    resolved_dependency_path="${app_path}/Contents/MacOS/${dependency_path#@executable_path/}"
-                    [[ -e "${resolved_dependency_path}" ]] \
-                        || fail "Bundle 缺少 @executable_path 依赖：${candidate_path} -> ${dependency_path}"
-                    ;;
-            esac
-        done < <(otool -L "${candidate_path}" | tail -n +2 | awk '{print $1}')
-    done < <(find "${app_path}" -type f -print0)
-
-    [[ "${found_macho}" == "true" ]] || fail "App Bundle 内没有找到 Mach-O 可执行文件。"
-}
-
 # 配置并编译 Release App。脚本显式固定目标架构和最低系统版本，避免复用旧 CMake Cache 时
 # 意外生成另一架构、Universal Binary 或带 Debug 行为的安装包。
 build_release_app() {
@@ -372,7 +294,7 @@ repair_qt_svg_deployment() {
                     "@rpath/${bundled_dependency_path}" "${bundled_binary}"
                 ;;
         esac
-    done < <(otool -L "${bundled_binary}" | tail -n +3 | awk '{print $1}')
+    done < <(otool -arch "${TARGET_ARCH}" -L "${bundled_binary}" | tail -n +3 | awk '{print $1}')
 
     sign_repaired_macho "${bundled_binary}"
     resign_outer_app "${app_path}"
@@ -462,7 +384,8 @@ verify_app_signature() {
     local signature_details
 
     log "验证 App Bundle 架构、依赖与签名"
-    verify_bundle_architecture_and_dependencies "${app_path}"
+    "${SCRIPT_DIR}/verify_macos_bundle_dependencies.sh" "${app_path}" "${TARGET_ARCH}" \
+        || fail "Bundle 内有架构不符或未部署的动态库引用，见上方错误。"
     "${SCRIPT_DIR}/verify_macos_min_version.sh" "${app_path}" "${DEPLOYMENT_TARGET}" "${TARGET_ARCH}" \
         || fail "Bundle 内有库要求高于 macOS ${DEPLOYMENT_TARGET} 的系统，见上方列表。"
     codesign --verify --deep --strict --verbose=2 "${app_path}"

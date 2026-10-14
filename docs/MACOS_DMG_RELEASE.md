@@ -46,7 +46,8 @@ xcrun notarytool store-credentials "Shellium-notary" \
 
 若要支持更早版本的 Apple Silicon macOS，必须先用目标 deployment target 重新编译全部
 第三方依赖，再通过 `PKG_CONFIG_PATH` 和 `CMAKE_PREFIX_PATH` 让构建使用这套依赖。发布脚本会
-检查 Bundle 内的架构和开发机绝对路径，并用 `scripts/verify_macos_min_version.sh` 逐个检查
+用 `scripts/verify_macos_bundle_dependencies.sh` 检查 Bundle 内的架构和开发机绝对路径（只读取
+目标架构切片，官方 Qt 的 universal 库不会被重复解析），并用 `scripts/verify_macos_min_version.sh` 逐个检查
 所有 Mach-O 的最低系统（LC_BUILD_VERSION 的 minos），任何一个高于 `SHELLIUM_DEPLOYMENT_TARGET`
 都会中止打包；但最低系统兼容性仍应在对应真实系统上做启动测试。
 

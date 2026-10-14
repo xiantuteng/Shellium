@@ -308,6 +308,52 @@ else
     fail_case "EXE 图标资源缺失或 Shellium.ico 无 256 像素图像（头：${ico_header}）"
 fi
 
+# 用例 13：官方 Qt 的库是 universal 二进制，不带 -arch 的 otool -L 按架构重复输出整段依赖，
+# 第二段里插件自身的 LC_ID_DYLIB（macdeployqt 留下的 Bundle 内绝对路径）曾被当成未部署的
+# 开发机依赖，arm64 打包因此失败。单架构的 Homebrew 库只有一段，看不出这个问题，所以用
+# 真实的双架构 dylib 验证；同时保留一个确实引用外部绝对路径的插件，确认检查没有被放松。
+if [[ "$(uname -s)" == "Darwin" ]] && command -v clang >/dev/null 2>&1; then
+    deps_arch="$(uname -m)"
+    deps_app="${WORK_ROOT}/Deps.app"
+    mkdir -p "${deps_app}/Contents/MacOS" "${deps_app}/Contents/Frameworks" \
+        "${deps_app}/Contents/PlugIns/platforms" "${WORK_ROOT}/outside"
+    printf 'int main(void) { return 0; }\n' > "${WORK_ROOT}/deps_main.c"
+    printf 'int shellium_core(void) { return 1; }\n' > "${WORK_ROOT}/deps_core.c"
+    printf 'int shellium_core(void);\nint shellium_plugin(void) { return shellium_core(); }\n' \
+        > "${WORK_ROOT}/deps_plugin.c"
+    universal=(-arch arm64 -arch x86_64)
+    clang "${universal[@]}" -dynamiclib -install_name @rpath/libcore.dylib \
+        -o "${deps_app}/Contents/Frameworks/libcore.dylib" "${WORK_ROOT}/deps_core.c"
+    clang "${universal[@]}" -o "${deps_app}/Contents/MacOS/Deps" "${WORK_ROOT}/deps_main.c"
+    deps_plugin="${deps_app}/Contents/PlugIns/platforms/libqcocoa.dylib"
+    clang "${universal[@]}" -dynamiclib -install_name "${deps_plugin}" \
+        -o "${deps_plugin}" "${WORK_ROOT}/deps_plugin.c" "${deps_app}/Contents/Frameworks/libcore.dylib"
+    check_deps() {
+        bash "${SCRIPTS_DIR}/verify_macos_bundle_dependencies.sh" "${deps_app}" "${deps_arch}" \
+            > "${WORK_ROOT}/deps.txt" 2>&1
+    }
+    if check_deps; then
+        pass_case "universal 插件自身的 install id 不算外部依赖"
+    else
+        fail_case "universal 插件自身的 install id 不算外部依赖：$(cat "${WORK_ROOT}/deps.txt")"
+    fi
+
+    clang "${universal[@]}" -dynamiclib -install_name "${WORK_ROOT}/outside/libleak.dylib" \
+        -o "${WORK_ROOT}/outside/libleak.dylib" "${WORK_ROOT}/deps_core.c"
+    clang "${universal[@]}" -dynamiclib -install_name @rpath/libleaky.dylib \
+        -o "${deps_app}/Contents/PlugIns/platforms/libleaky.dylib" "${WORK_ROOT}/deps_plugin.c" \
+        "${WORK_ROOT}/outside/libleak.dylib"
+    if check_deps; then
+        fail_case "引用 Bundle 外绝对路径的插件必须失败，但脚本成功了"
+    elif grep -q 'libleaky.dylib -> .*outside/libleak.dylib' "${WORK_ROOT}/deps.txt"; then
+        pass_case "引用 Bundle 外绝对路径的插件导致失败"
+    else
+        fail_case "外部依赖报错没有指出 libleak.dylib：$(cat "${WORK_ROOT}/deps.txt")"
+    fi
+else
+    printf 'SKIP Bundle 依赖检查（非 macOS 或未安装 clang）\n'
+fi
+
 if [[ "${failures}" -gt 0 ]]; then
     printf '%d 个用例失败\n' "${failures}" >&2
     exit 1
