@@ -72,6 +72,25 @@ Apple Silicon 站外发布使用 Developer ID 签名、公证与 DMG 一键脚�
 Windows 10 1809+ / Windows 11 x64 的原生构建、交叉工具链、NSIS 与发布验收说明见
 [Windows 构建与发布指南](packaging/windows/README.md)。
 
+Linux AppImage 由 `scripts/package_linux_appimage.sh` 生成（x86_64 / aarch64，要求构建机
+Ubuntu 24.04 及以上，产物要求目标系统 glibc ≥ 2.39）。
+
+### 自动发版（GitHub Actions）
+
+[.github/workflows/release.yml](.github/workflows/release.yml) 在各自架构的原生 runner 上构建
+6 个安装包：macOS arm64/x86_64 DMG、Windows x64/arm64 ZIP 与 NSIS 安装器、Linux
+x86_64/aarch64 AppImage，每个包都会做一次启动冒烟测试。
+
+~~~bash
+# 先把 CMakeLists.txt 的 project(VERSION) 改成新版本并提交，标签必须与之一致
+git tag v0.3.3
+git push Shellium v0.3.3
+~~~
+
+推送标签后生成**草稿** Release 并附 SHA256SUMS.txt，人工确认后再发布；在 Actions 页面手动
+运行只构建 artifact、不创建 Release。目前 macOS 包为 ad-hoc 签名、Windows 包未做
+Authenticode 签名，配置好证书前不要把草稿转为正式发布。
+
 ## 首次使用
 
 1. 首次启动可直接使用；如需主密码保护和查看已保存密码，可在“设置 → 连接与安全 →
@@ -100,7 +119,8 @@ ShelliumSshIntegrationTests 通过 SHELLIUM_IT_* 环境变量连接受控测试�
 
 ## 当前边界
 
-- macOS arm64 已完成本机构建与测试；Linux 继续使用原有 POSIX 路径，尚需 CI 实机验证；
+- macOS arm64 已完成本机构建与测试；macOS x86_64、Windows arm64 与 Linux 由 CI 构建并做启动冒烟，
+  尚未做完整的实机功能验收；
 - Windows x64 已具备 ConPTY、原生 socket、私钥 ACL、CMake/NSIS 构建基线；正式发布仍需
   在干净 Windows 10 1809+/11 VM 完成 GUI、安装器、句柄泄漏和 Authenticode 验收；
 - 终端鼠标报告、终端感知块选择、URL 点击与自动会话日志尚未实现；

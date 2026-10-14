@@ -6,6 +6,10 @@
 
 # macOS 发布脚本生成的 Release 中间目录和 DMG 属于本机可再生产物。忽略它们可以避免把
 # 大体积二进制、签名信息或公证票据误提交到源码仓库；正式文件应通过发布渠道单独交付。
-/build-release-arm64/**
+/build-release-*/**
 /build-windows-msvc/**
 /dist/**
+
+# 部分开发者的全局 excludesFile 会忽略所有点目录（.*/），GitHub Actions 工作流必须显式放行，
+# 否则 .github/workflows 永远不会被提交，CI 也就不会运行。
+!/.github/

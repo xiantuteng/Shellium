@@ -501,6 +501,16 @@ if(BUILD_TESTING)
         Qt6::Core Qt6::Test ShelliumPlatform)
     add_test(NAME ShelliumNativeSocketTests COMMAND ShelliumNativeSocketTests)
 
+    # 发布流水线脚本（Windows DLL 补齐、启动冒烟判定）只在 CI 发版时真正运行，这里用假导入表
+    # 离线回归，改脚本后本地 ctest 即可发现问题。原生 Windows 没有 POSIX shell，跳过。
+    if(NOT WIN32)
+        find_program(SHELLIUM_BASH bash)
+        if(SHELLIUM_BASH)
+            add_test(NAME ShelliumPackagingScriptsTests
+                COMMAND "${SHELLIUM_BASH}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/scripts/PackagingScriptsTest.sh")
+        endif()
+    endif()
+
     qt_add_executable(ShelliumCoreTests
         tests/SshCommandParserTest.cpp
         src/core/ConnectionTarget.cpp

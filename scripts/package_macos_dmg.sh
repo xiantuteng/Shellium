@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 
-# Shellium macOS Apple Silicon 一键发布脚本。
+# Shellium macOS 一键发布脚本，支持 Apple Silicon（arm64）与 Intel（x86_64）。
+#
+# 目标架构始终等于本机原生架构：Homebrew 依赖只提供本机架构的单架构库，交叉编译出的 App
+# 会在部署阶段混入另一架构的动态库。需要两种架构时，分别在两类机器（或 CI runner）上执行。
 #
 # 正式模式会执行“Release 编译 → 运行时依赖部署 → Developer ID 签名 → DMG 制作 →
 # Apple 公证 → 公证票据装订 → Gatekeeper 验证”的完整链路。脚本遵循失败即停止原则：任何
@@ -18,7 +21,8 @@ PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 # 以下配置均允许通过同名环境变量覆盖。默认值适合当前仓库的一键构建，同时保留发布者替换
 # Bundle Identifier、最低系统版本、签名身份和公证钥匙串配置的能力。
-BUILD_DIR="${SHELLIUM_BUILD_DIR:-${PROJECT_ROOT}/build-release-arm64}"
+TARGET_ARCH="$(uname -m)"
+BUILD_DIR="${SHELLIUM_BUILD_DIR:-${PROJECT_ROOT}/build-release-${TARGET_ARCH}}"
 DIST_DIR="${SHELLIUM_DIST_DIR:-${PROJECT_ROOT}/dist}"
 BUNDLE_IDENTIFIER="${SHELLIUM_BUNDLE_IDENTIFIER:-com.shellium.Shellium}"
 NOTARY_PROFILE="${SHELLIUM_NOTARY_PROFILE:-Shellium-notary}"
@@ -61,7 +65,7 @@ usage() {
   ./scripts/package_macos_dmg.sh [--check] [--adhoc] [--skip-notarization]
 
 模式：
-  无参数                 构建、Developer ID 签名、公证并验证正式 arm64 DMG
+  无参数                 构建、Developer ID 签名、公证并验证本机架构（arm64/x86_64）的正式 DMG
   --check                只检查本机工具、证书和公证凭据，不生成文件
   --adhoc                生成仅供本机测试的临时签名 DMG，不能对外发布
   --skip-notarization    生成已签名但未公证的 DMG，仅用于受控测试
@@ -157,10 +161,15 @@ validate_notary_profile() {
 # 执行不产生构建文件的前置检查。此函数验证平台、工具链、版本配置、签名身份与公证凭据；
 # 正式模式的任何关键条件缺失都会失败，而 adhoc 模式只跳过外部发布凭据检查。
 preflight() {
-    log "检查 Apple Silicon 发布环境"
+    log "检查 macOS ${TARGET_ARCH} 发布环境"
 
     [[ "$(uname -s)" == "Darwin" ]] || fail "该脚本只能在 macOS 上运行。"
-    [[ "$(uname -m)" == "arm64" ]] || fail "必须在 Apple Silicon 原生 arm64 终端中运行。"
+    [[ "${TARGET_ARCH}" == "arm64" || "${TARGET_ARCH}" == "x86_64" ]] \
+        || fail "不支持的架构：${TARGET_ARCH}"
+    # Rosetta 终端里 uname -m 报 x86_64，但 /opt/homebrew 下的依赖仍是 arm64，链接或部署会
+    # 混入错误架构。只有真实 Intel 机器才能产出 x86_64 包。
+    [[ "$(sysctl -n sysctl.proc_translated 2>/dev/null || echo 0)" == "0" ]] \
+        || fail "当前终端运行在 Rosetta 转译下，请在原生终端中运行。"
     [[ -n "${PROJECT_VERSION}" ]] || fail "无法从 CMakeLists.txt 读取项目版本。"
     [[ "${BUNDLE_IDENTIFIER}" =~ ^[A-Za-z0-9][A-Za-z0-9.-]+$ ]] \
         || fail "Bundle Identifier 格式无效：${BUNDLE_IDENTIFIER}"
@@ -202,7 +211,7 @@ preflight() {
 
     printf 'Bundle ID：%s\n' "${BUNDLE_IDENTIFIER}"
     printf '最低系统：macOS %s\n' "${DEPLOYMENT_TARGET}"
-    printf '目标架构：arm64\n'
+    printf '目标架构：%s\n' "${TARGET_ARCH}"
 }
 
 # 判断指定文件是否为 Mach-O 二进制。参数 1 是文件路径；返回 0 表示 Mach-O，返回 1 表示
@@ -212,7 +221,7 @@ is_macho_file() {
     file -b "${candidate_path}" 2>/dev/null | grep -q 'Mach-O'
 }
 
-# 验证 App Bundle 内所有原生代码都包含 arm64 架构，并检查其动态库引用不再指向 Homebrew、
+# 验证 App Bundle 内所有原生代码都包含目标架构，并检查其动态库引用不再指向 Homebrew、
 # /usr/local 或源码目录。参数 1 是 App 路径；该检查防止在开发机正常、换到用户机器立即崩溃。
 verify_bundle_architecture_and_dependencies() {
     local app_path="$1"
@@ -231,8 +240,8 @@ verify_bundle_architecture_and_dependencies() {
         fi
         found_macho="true"
         architecture_list="$(lipo -archs "${candidate_path}")"
-        [[ " ${architecture_list} " == *" arm64 "* ]] \
-            || fail "Bundle 中存在非 arm64 原生代码：${candidate_path}（${architecture_list}）"
+        [[ " ${architecture_list} " == *" ${TARGET_ARCH} "* ]] \
+            || fail "Bundle 中存在非 ${TARGET_ARCH} 原生代码：${candidate_path}（${architecture_list}）"
 
         candidate_directory="$(dirname "${candidate_path}")"
         dependency_index=0
@@ -252,7 +261,11 @@ verify_bundle_architecture_and_dependencies() {
             fi
 
             case "${dependency_path}" in
-                /opt/homebrew/*|/usr/local/*|"${PROJECT_ROOT}"/*)
+                /usr/lib/*|/System/*)
+                    ;;
+                /*)
+                    # 除系统库外的任何绝对路径都只存在于构建机：Homebrew、/usr/local、源码目录，
+                    # 以及 CI 上官方 Qt 安装器解压出的任意目录。
                     fail "发现未部署的开发机动态库引用：${candidate_path} -> ${dependency_path}"
                     ;;
                 @rpath/*)
@@ -279,14 +292,14 @@ verify_bundle_architecture_and_dependencies() {
     [[ "${found_macho}" == "true" ]] || fail "App Bundle 内没有找到 Mach-O 可执行文件。"
 }
 
-# 配置并编译 Release App。脚本显式固定 arm64 和最低系统版本，避免复用旧 CMake Cache 时
-# 意外生成 x86_64、Universal Binary 或带 Debug 行为的安装包。
+# 配置并编译 Release App。脚本显式固定目标架构和最低系统版本，避免复用旧 CMake Cache 时
+# 意外生成另一架构、Universal Binary 或带 Debug 行为的安装包。
 build_release_app() {
-    log "配置 arm64 Release 工程"
+    log "配置 ${TARGET_ARCH} Release 工程"
     cmake -S "${PROJECT_ROOT}" -B "${BUILD_DIR}" -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
         -DBUILD_TESTING=OFF \
-        -DCMAKE_OSX_ARCHITECTURES=arm64 \
+        -DCMAKE_OSX_ARCHITECTURES="${TARGET_ARCH}" \
         -DCMAKE_OSX_DEPLOYMENT_TARGET="${DEPLOYMENT_TARGET}" \
         -DSHELLIUM_BUNDLE_IDENTIFIER="${BUNDLE_IDENTIFIER}"
 
@@ -547,11 +560,11 @@ STAGED_APP=""
 mkdir -p "${DIST_DIR}"
 
 if [[ "${MODE}" == "release" ]]; then
-    OUTPUT_DMG="${DIST_DIR}/Shellium-${PROJECT_VERSION}-macos-arm64.dmg"
-    WORK_DMG="${TEMP_ROOT}/Shellium-${PROJECT_VERSION}-macos-arm64.dmg"
+    OUTPUT_DMG="${DIST_DIR}/Shellium-${PROJECT_VERSION}-macos-${TARGET_ARCH}.dmg"
+    WORK_DMG="${TEMP_ROOT}/Shellium-${PROJECT_VERSION}-macos-${TARGET_ARCH}.dmg"
 else
-    OUTPUT_DMG="${DIST_DIR}/Shellium-${PROJECT_VERSION}-macos-arm64-adhoc.dmg"
-    WORK_DMG="${TEMP_ROOT}/Shellium-${PROJECT_VERSION}-macos-arm64-adhoc.dmg"
+    OUTPUT_DMG="${DIST_DIR}/Shellium-${PROJECT_VERSION}-macos-${TARGET_ARCH}-adhoc.dmg"
+    WORK_DMG="${TEMP_ROOT}/Shellium-${PROJECT_VERSION}-macos-${TARGET_ARCH}-adhoc.dmg"
 fi
 
 build_release_app

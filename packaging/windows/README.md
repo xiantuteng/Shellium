@@ -34,3 +34,28 @@ package_windows_native.ps1 会生成便携 ZIP、单用户 NSIS 安装器和 SHA
 锁定的交叉依赖包需要包含 host 与 target 两个目录。配置 URL 和校验和后，可在 macOS/Linux
 执行 bash scripts/build_windows_docker.sh；脚本固定构建 linux/amd64 容器，并在生成 ZIP/NSIS
 前递归验证全部 PE 导入依赖。
+
+## MSYS2 原生构建（CI 使用）
+
+`.github/workflows/release.yml` 在 GitHub 的 Windows runner 上用 MSYS2 构建两种架构：x64 用
+UCRT64（MINGW64 环境没有 libvterm 包），ARM64 用 CLANGARM64。CLANGARM64 没有 NSIS 包，两种
+架构都使用 UCRT64 的 makensis；生成的安装器是 x86 程序，在 ARM64 Windows 上经系统转译运行。
+
+windeployqt 只收集 Qt 自身的 DLL，libssh、OpenSSL 与 MinGW/LLVM 运行时由
+`scripts/bundle_windows_runtime.sh` 递归扫描 staging 内全部 PE 导入表后从 MSYS2 前缀补齐，
+仍找不到的非系统 DLL 会让构建失败。之后以 `-UseExistingStaging` 调用打包脚本，避免清空补齐结果：
+
+```bash
+# MSYS2 UCRT64 / CLANGARM64 shell
+cmake -S . -B build-win -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
+cmake --build build-win --parallel
+cmake --install build-win --prefix build-win/windows-staging
+bash scripts/bundle_windows_runtime.sh build-win/windows-staging "$MINGW_PREFIX/bin"
+```
+
+```powershell
+.\scripts\package_windows_native.ps1 -BuildDirectory build-win -Architecture arm64 -UseExistingStaging
+```
+
+`-Architecture` 只影响文件名：x64 保持 `Shellium-<版本>-win64.zip` / `Shellium-<版本>-setup-x64.exe`，
+arm64 为 `Shellium-<版本>-win-arm64.zip` / `Shellium-<版本>-setup-arm64.exe`。

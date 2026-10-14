@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Shellium
+Comment=SSH, SFTP and local terminal client
+Exec=Shellium
+Icon=shellium
+Terminal=false
+Categories=System;TerminalEmulator;Network;

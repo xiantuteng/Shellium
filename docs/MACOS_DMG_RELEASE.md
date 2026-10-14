@@ -1,4 +1,8 @@
-# Shellium Apple Silicon DMG 发布指南
+# Shellium macOS DMG 发布指南
+
+> 脚本按本机原生架构构建：Apple Silicon 产出 `macos-arm64`，Intel Mac 产出 `macos-x86_64`，
+> 不支持交叉编译或在 Rosetta 终端中运行。下文以 arm64 为例；CI 上的 Intel 构建改用官方 Qt
+> 安装器并设置 `SHELLIUM_DEPLOYMENT_TARGET=15.0`，见 `.github/workflows/release.yml`。
 
 本文说明 Shellium 在不通过 Mac App Store 上架的情况下，如何生成可供其他用户直接安装的
 Apple Silicon DMG。正式发布采用 Apple 推荐的站外分发链路：Developer ID Application
@@ -69,8 +73,8 @@ dist/Shellium-0.2.4-macos-arm64.dmg
 
 脚本只有在下列检查全部通过后才会报告完成：
 
-1. 主程序及 Bundle 内所有 Mach-O 文件均包含 arm64 架构；
-2. 动态库引用不包含 `/opt/homebrew`、`/usr/local` 或项目源码绝对路径；
+1. 主程序及 Bundle 内所有 Mach-O 文件均包含目标架构（arm64 或 x86_64）；
+2. 除 `/usr/lib`、`/System` 系统库外，动态库引用不包含任何绝对路径（Homebrew、`/usr/local`、源码目录、CI 上的 Qt 安装目录等）；
 3. App 的嵌套签名、Developer ID Authority 和 Hardened Runtime 均有效；
 4. DMG 完整性及 Developer ID 签名有效；
 5. Apple 公证状态为 `Accepted`；

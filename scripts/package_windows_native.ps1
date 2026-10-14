@@ -1,7 +1,13 @@
 param(
     [Parameter(Mandatory = $true)]
     [string]$BuildDirectory,
-    [string]$Configuration = "Release"
+    [string]$Configuration = "Release",
+    # 只决定产物文件名；真正的目标架构由构建所用工具链决定，两者必须由调用者保持一致。
+    [ValidateSet("x64", "arm64")]
+    [string]$Architecture = "x64",
+    # CI 在 MSYS2 中先执行 cmake --install 并补齐 MinGW 运行时 DLL，再调用本脚本打包。
+    # 此时 staging 已经过 PE 依赖校验，不能再清空重装，否则补齐的 DLL 会丢失。
+    [switch]$UseExistingStaging
 )
 
 $ErrorActionPreference = "Stop"
@@ -17,17 +23,20 @@ if (-not $staging.StartsWith($resolvedBuild + [System.IO.Path]::DirectorySeparat
     throw "Refusing to clean a staging path outside the build directory: $staging"
 }
 
-if (Test-Path -LiteralPath $staging) {
-    Remove-Item -LiteralPath $staging -Recurse -Force
-}
-New-Item -ItemType Directory -Path $staging -Force | Out-Null
 New-Item -ItemType Directory -Path $artifactDirectory -Force | Out-Null
 
-# cmake --install 会在原生 Windows 构建中执行 Qt 官方部署脚本，收集 qwindows、qsqlite、
-# TLS 后端和运行库。任何一步失败都由 PowerShell 的 Stop 策略立即终止，不生成残缺安装器。
-cmake --install $resolvedBuild --config $Configuration --prefix $staging
-if ($LASTEXITCODE -ne 0) {
-    throw "cmake --install failed with exit code $LASTEXITCODE."
+if (-not $UseExistingStaging) {
+    if (Test-Path -LiteralPath $staging) {
+        Remove-Item -LiteralPath $staging -Recurse -Force
+    }
+    New-Item -ItemType Directory -Path $staging -Force | Out-Null
+
+    # cmake --install 会在原生 Windows 构建中执行 Qt 官方部署脚本，收集 qwindows、qsqlite、
+    # TLS 后端和运行库。任何一步失败都由 PowerShell 的 Stop 策略立即终止，不生成残缺安装器。
+    cmake --install $resolvedBuild --config $Configuration --prefix $staging
+    if ($LASTEXITCODE -ne 0) {
+        throw "cmake --install failed with exit code $LASTEXITCODE."
+    }
 }
 if (-not (Test-Path -LiteralPath (Join-Path $staging "Shellium.exe"))) {
     throw "Shellium.exe is missing from the staging directory."
@@ -38,8 +47,10 @@ if ($null -eq $versionLine) {
     throw "Cannot read the project version from CMakeLists.txt."
 }
 $version = $versionLine.Matches[0].Groups[1].Value
-$zipPath = Join-Path $artifactDirectory "Shellium-$version-win64.zip"
-$setupPath = Join-Path $artifactDirectory "Shellium-$version-setup-x64.exe"
+# x64 沿用历史文件名，已有下载链接和发布说明不受影响。
+$portableSuffix = if ($Architecture -eq "x64") { "win64" } else { "win-$Architecture" }
+$zipPath = Join-Path $artifactDirectory "Shellium-$version-$portableSuffix.zip"
+$setupPath = Join-Path $artifactDirectory "Shellium-$version-setup-$Architecture.exe"
 
 if (Test-Path -LiteralPath $zipPath) {
     Remove-Item -LiteralPath $zipPath -Force
