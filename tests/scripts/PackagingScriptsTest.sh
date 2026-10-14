@@ -354,40 +354,52 @@ else
     printf 'SKIP Bundle 依赖检查（非 macOS 或未安装 clang）\n'
 fi
 
-# 用例 14：x64 Windows 镜像要用 Chocolatey 装 NSIS，社区源偶发失败时 choco 的退出码曾被
-# pwsh 吞掉，直到打包脚本找不到 makensis.exe 才失败。假 choco 前两次失败、第三次才真正
-# 安装，验证会重试；另一个假 choco 总是返回成功却不装文件，验证以 makensis.exe 为准。
+# 用例 14：x64 Windows 镜像要装 NSIS。Chocolatey 社区源限流时 choco 连续失败，退出码还曾被
+# pwsh 吞掉，直到打包脚本找不到 makensis.exe 才报错。验证三条路径：choco 成功时不下载；
+# choco 失败（或谎报成功）时改用便携 ZIP 并保留 Bin 目录结构；ZIP 校验值不符时必须失败。
 nsis_tools="${WORK_ROOT}/nsis-tools"
-mkdir -p "${nsis_tools}"
+mkdir -p "${nsis_tools}" "${WORK_ROOT}/nsis-zip/nsis-3.13/Bin"
 cat > "${nsis_tools}/choco" <<'EOF'
 #!/usr/bin/env bash
-count=$(( $(cat "${FAKE_CHOCO_COUNT}" 2>/dev/null || echo 0) + 1 ))
-printf '%s\n' "${count}" > "${FAKE_CHOCO_COUNT}"
-if [[ "${FAKE_CHOCO_MODE}" == "flaky" && "${count}" -ge 3 ]]; then
+if [[ "${FAKE_CHOCO_MODE}" == "ok" ]]; then
     mkdir -p "${FAKE_NSIS_DIR}" && : > "${FAKE_NSIS_DIR}/makensis.exe"
     exit 0
 fi
+# lying：返回成功却没有装任何文件。
 [[ "${FAKE_CHOCO_MODE}" == "lying" ]]
 EOF
 chmod +x "${nsis_tools}/choco"
+: > "${WORK_ROOT}/nsis-zip/nsis-3.13/makensis.exe"
+: > "${WORK_ROOT}/nsis-zip/nsis-3.13/Bin/makensis.exe"
+(cd "${WORK_ROOT}/nsis-zip" && zip -q -r "${WORK_ROOT}/nsis-portable.zip" nsis-3.13)
+nsis_zip_sha256="$(shasum -a 256 "${WORK_ROOT}/nsis-portable.zip" | awk '{print $1}')"
 run_ensure_nsis() {
-    local mode="$1"
-    export FAKE_NSIS_DIR="${WORK_ROOT}/nsis-${mode}/NSIS" FAKE_CHOCO_MODE="${mode}"
-    export FAKE_CHOCO_COUNT="${WORK_ROOT}/nsis-${mode}.count"
+    local name="$1" mode="$2" sha256="$3"
+    export FAKE_NSIS_DIR="${WORK_ROOT}/nsis-${name}/NSIS" FAKE_CHOCO_MODE="${mode}"
     PATH="${nsis_tools}:${PATH}" NSIS_RETRY_DELAY=0 \
-        bash "${SCRIPTS_DIR}/ensure_nsis.sh" "${FAKE_NSIS_DIR}" > "${WORK_ROOT}/nsis-${mode}.txt" 2>&1
+        NSIS_ZIP_URL="file://${WORK_ROOT}/nsis-portable.zip" NSIS_ZIP_SHA256="${sha256}" \
+        bash "${SCRIPTS_DIR}/ensure_nsis.sh" "${FAKE_NSIS_DIR}" > "${WORK_ROOT}/nsis-${name}.txt" 2>&1
 }
-if run_ensure_nsis flaky && [[ -f "${FAKE_NSIS_DIR}/makensis.exe" && "$(cat "${FAKE_CHOCO_COUNT}")" == 3 ]]; then
-    pass_case "choco 前两次失败时重试并装好 NSIS"
+if run_ensure_nsis choco-ok ok 0000 && [[ -f "${FAKE_NSIS_DIR}/makensis.exe" ]] \
+        && ! grep -q '直接下载' "${WORK_ROOT}/nsis-choco-ok.txt"; then
+    pass_case "choco 成功时直接使用，不下载便携包"
 else
-    fail_case "choco 前两次失败时重试并装好 NSIS：$(cat "${WORK_ROOT}/nsis-flaky.txt")"
+    fail_case "choco 成功时直接使用，不下载便携包：$(cat "${WORK_ROOT}/nsis-choco-ok.txt")"
 fi
-if run_ensure_nsis lying; then
-    fail_case "choco 返回成功但没有 makensis.exe 时必须失败，但脚本成功了"
-elif grep -q 'makensis.exe' "${WORK_ROOT}/nsis-lying.txt"; then
-    pass_case "没有 makensis.exe 时明确报错"
+for mode in failing lying; do
+    if run_ensure_nsis "fallback-${mode}" "${mode}" "${nsis_zip_sha256}" \
+            && [[ -f "${FAKE_NSIS_DIR}/makensis.exe" && -f "${FAKE_NSIS_DIR}/Bin/makensis.exe" ]]; then
+        pass_case "choco ${mode} 时改用便携包安装 NSIS"
+    else
+        fail_case "choco ${mode} 时改用便携包安装 NSIS：$(cat "${WORK_ROOT}/nsis-fallback-${mode}.txt")"
+    fi
+done
+if run_ensure_nsis bad-sha failing 0000; then
+    fail_case "便携包 SHA256 不符必须失败，但脚本成功了"
+elif grep -q 'SHA256 不符' "${WORK_ROOT}/nsis-bad-sha.txt" && [[ ! -e "${FAKE_NSIS_DIR}/makensis.exe" ]]; then
+    pass_case "便携包 SHA256 不符时拒绝安装"
 else
-    fail_case "缺少 makensis.exe 的报错没有指出文件：$(cat "${WORK_ROOT}/nsis-lying.txt")"
+    fail_case "便携包 SHA256 不符的处理不对：$(cat "${WORK_ROOT}/nsis-bad-sha.txt")"
 fi
 
 if [[ "${failures}" -gt 0 ]]; then

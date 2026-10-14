@@ -195,10 +195,17 @@ jobs:
           Write-Host "Smoke test passed."
 
       # ARM64 镜像预装了 NSIS，x64 镜像没有。NSIS 安装器是 x86 程序，ARM64 Windows 经转译运行。
-      # choco 偶发下载失败，脚本按 makensis.exe 是否存在判断并重试。
+      # Chocolatey 社区源会限流 runner，失败时脚本改为下载校验过的官方便携包。
       - name: Ensure NSIS
         shell: bash
-        run: bash scripts/ensure_nsis.sh "$(cygpath -u "$(printenv 'ProgramFiles(x86)')")/NSIS"
+        run: |
+          bash scripts/ensure_nsis.sh "$(cygpath -u "$(printenv 'ProgramFiles(x86)')")/NSIS" 2>&1 \
+            | tee nsis.log
+
+      - name: Report NSIS log
+        if: failure()
+        shell: bash
+        run: bash scripts/ci_report_log_tail.sh nsis.log
 
       - name: Package
         shell: pwsh
