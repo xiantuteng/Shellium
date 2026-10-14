@@ -10,6 +10,7 @@ Run `ssh` inside a session and the SFTP pane moves to the server you're actually
 
 [![Release](https://img.shields.io/github/v/release/xiantuteng/Shellium?include_prereleases&sort=semver)](https://github.com/xiantuteng/Shellium/releases)
 [![Build](https://github.com/xiantuteng/Shellium/actions/workflows/release.yml/badge.svg)](https://github.com/xiantuteng/Shellium/actions/workflows/release.yml)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 ![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)
 ![Qt](https://img.shields.io/badge/Qt-6.8%2B-41CD52?logo=qt&logoColor=white)
 ![C++20](https://img.shields.io/badge/C%2B%2B-20-00599C?logo=cplusplus&logoColor=white)
@@ -187,3 +188,7 @@ Shellium is built on [Qt](https://www.qt.io/), [libssh](https://www.libssh.org/)
 ## License
 
 Copyright © 2026 Shellium contributors.
+
+Shellium is licensed under the [Apache License, Version 2.0](LICENSE). You may use, modify, and redistribute it, including commercially, under the terms of that licence. It is provided "AS IS", without warranties or conditions of any kind.
+
+Third-party components bundled with Shellium keep their own licences, listed in [`resources/licenses/`](resources/licenses).
