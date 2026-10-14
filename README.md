@@ -92,7 +92,7 @@ Download the latest build from **[Releases](https://github.com/xiantuteng/Shelli
 
 | Platform | Architectures | Package | Minimum OS |
 | --- | --- | --- | --- |
-| macOS | Apple Silicon, Intel | `.dmg` | macOS 26 (arm64), macOS 15 (x86_64) |
+| macOS | Apple Silicon, Intel | `.dmg` | macOS 14 (arm64), macOS 15 (x86_64) |
 | Windows | x64, ARM64 | NSIS installer, `.zip` | Windows 10 1809 / Windows 11 |
 | Linux | x86_64, aarch64 | AppImage | glibc 2.39 (e.g. Ubuntu 24.04+) |
 

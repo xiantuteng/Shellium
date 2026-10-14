@@ -26,17 +26,17 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Apple Silicon 沿用本地发布方式：Homebrew 的 Qt 与依赖，最低系统跟随 Homebrew 瓶子。
+          # Homebrew 瓶子按构建机系统标注最低系统，包的最低系统因此等于 runner 的系统版本，
+          # 要支持旧系统就得在旧系统的 runner 上构建。Homebrew 已不再给 macOS 14 出 libssh、
+          # openssl@3 等瓶子，这些包会在 runner 上从源码编译，产物同样以 14.0 为最低系统。
+          # Qt 用官方安装器（universal，最低 macOS 12），避免 Homebrew 的 Qt 在旧系统上源码编译。
           - arch: arm64
-            runner: macos-26
-            deployment_target: '26.0'
-            brew_qt: true
-          # GitHub 最后一代 Intel 镜像。Homebrew 对 Intel 只剩 Tier 3 支持，Qt 这种大包的瓶子
-          # 可能缺失而触发数小时的源码编译，所以 Qt 改用官方安装器，其余小依赖仍走 Homebrew。
+            runner: macos-14
+            deployment_target: '14.0'
+          # GitHub 最后一代 Intel 镜像，因此 Intel 包最低只能到 macOS 15。
           - arch: x86_64
             runner: macos-15-intel
             deployment_target: '15.0'
-            brew_qt: false
     # 未声明 shell 时 GitHub 用 bash -e 而不带 pipefail，`| tee build.log` 会吞掉构建失败。
     defaults:
       run:
@@ -45,7 +45,6 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install Qt (official)
-        if: ${{ !matrix.brew_qt }}
         uses: jurplel/install-qt-action@v4
         with:
           version: '6.8.3'
@@ -59,13 +58,7 @@ jobs:
           HOMEBREW_NO_AUTO_UPDATE: '1'
           HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: '1'
         run: |
-          packages=(libssh libvterm libsodium spdlog minizip ninja pkg-config)
-          if [[ "${{ matrix.brew_qt }}" == "true" ]]; then
-            # 只装用到的模块。qt 元公式会带上 QtPdf、QtVirtualKeyboard 等全部模块，macdeployqt
-            # 随之部署它们的插件却解析不到对应 Framework，部署报错、依赖检查失败。
-            packages+=(qtbase qtsvg qttools)
-          fi
-          brew install "${packages[@]}"
+          brew install libssh libvterm libsodium spdlog minizip ninja pkg-config
 
       - name: Build and package
         env:

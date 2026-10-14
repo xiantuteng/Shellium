@@ -92,7 +92,7 @@ Shellium 为每个标签页维护一条从外到内的完整服务器链：
 
 | 平台 | 架构 | 安装包 | 最低系统 |
 | --- | --- | --- | --- |
-| macOS | Apple Silicon、Intel | `.dmg` | macOS 26（arm64）、macOS 15（x86_64） |
+| macOS | Apple Silicon、Intel | `.dmg` | macOS 14（arm64）、macOS 15（x86_64） |
 | Windows | x64、ARM64 | NSIS 安装器、`.zip` | Windows 10 1809 / Windows 11 |
 | Linux | x86_64、aarch64 | AppImage | glibc 2.39（如 Ubuntu 24.04+） |
 

@@ -463,6 +463,8 @@ verify_app_signature() {
 
     log "验证 App Bundle 架构、依赖与签名"
     verify_bundle_architecture_and_dependencies "${app_path}"
+    "${SCRIPT_DIR}/verify_macos_min_version.sh" "${app_path}" "${DEPLOYMENT_TARGET}" "${TARGET_ARCH}" \
+        || fail "Bundle 内有库要求高于 macOS ${DEPLOYMENT_TARGET} 的系统，见上方列表。"
     codesign --verify --deep --strict --verbose=2 "${app_path}"
 
     if [[ "${MODE}" == "release" ]]; then

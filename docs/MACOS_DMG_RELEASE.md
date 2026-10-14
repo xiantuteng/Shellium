@@ -1,8 +1,9 @@
 # Shellium macOS DMG 发布指南
 
 > 脚本按本机原生架构构建：Apple Silicon 产出 `macos-arm64`，Intel Mac 产出 `macos-x86_64`，
-> 不支持交叉编译或在 Rosetta 终端中运行。下文以 arm64 为例；CI 上的 Intel 构建改用官方 Qt
-> 安装器并设置 `SHELLIUM_DEPLOYMENT_TARGET=15.0`，见 `.github/workflows/release.yml`。
+> 不支持交叉编译或在 Rosetta 终端中运行。下文以 arm64 为例；CI 上两种架构都改用官方 Qt
+> 安装器，arm64 在 `macos-14` runner 上以 `SHELLIUM_DEPLOYMENT_TARGET=14.0` 构建，Intel 在
+> `macos-15-intel` 上以 15.0 构建，见 `.github/workflows/release.yml`。
 
 本文说明 Shellium 在不通过 Mac App Store 上架的情况下，如何生成可供其他用户直接安装的
 Apple Silicon DMG。正式发布采用 Apple 推荐的站外分发链路：Developer ID Application
@@ -45,7 +46,13 @@ xcrun notarytool store-credentials "Shellium-notary" \
 
 若要支持更早版本的 Apple Silicon macOS，必须先用目标 deployment target 重新编译全部
 第三方依赖，再通过 `PKG_CONFIG_PATH` 和 `CMAKE_PREFIX_PATH` 让构建使用这套依赖。发布脚本会
-检查 Bundle 内的架构和开发机绝对路径，但最低系统兼容性仍应在对应真实系统上做启动测试。
+检查 Bundle 内的架构和开发机绝对路径，并用 `scripts/verify_macos_min_version.sh` 逐个检查
+所有 Mach-O 的最低系统（LC_BUILD_VERSION 的 minos），任何一个高于 `SHELLIUM_DEPLOYMENT_TARGET`
+都会中止打包；但最低系统兼容性仍应在对应真实系统上做启动测试。
+
+CI 采用更简单的做法：在目标最低系统的 runner 上构建。Homebrew 瓶子按构建机系统标注最低系统，
+缺瓶子时在 runner 上源码编译的结果同样以该系统为最低目标，因此 `macos-14` 产出的包能在
+macOS 14 及以上运行。
 
 ## 三、正式一键发布
 

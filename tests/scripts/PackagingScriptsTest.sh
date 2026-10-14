@@ -212,6 +212,41 @@ else
     printf 'SKIP NSIS 安装脚本可编译（未安装 makensis）\n'
 fi
 
+# 用例 11：Bundle 里任何一个 Mach-O 的最低系统高于发布目标都必须失败，并报出文件名。
+# Homebrew 瓶子按构建机系统标注最低系统，只改 deployment target 时 Shellium 本体合格、
+# 依赖库却不合格，所以要用两个不同最低系统的真实 Mach-O 验证逐个检查。没有 clang 时跳过。
+if [[ "$(uname -s)" == "Darwin" ]] && command -v clang >/dev/null 2>&1; then
+    min_os_arch="$(uname -m)"
+    min_os_app="${WORK_ROOT}/MinOs.app/Contents"
+    mkdir -p "${min_os_app}/MacOS" "${min_os_app}/Frameworks"
+    printf 'int main(void) { return 0; }\n' > "${WORK_ROOT}/min_os_main.c"
+    printf 'int shellium_dep(void) { return 1; }\n' > "${WORK_ROOT}/min_os_dep.c"
+    printf 'not a binary\n' > "${min_os_app}/Info.plist"
+    clang -arch "${min_os_arch}" -mmacosx-version-min=14.0 \
+        -o "${min_os_app}/MacOS/MinOs" "${WORK_ROOT}/min_os_main.c"
+    clang -arch "${min_os_arch}" -mmacosx-version-min=15.0 -dynamiclib \
+        -o "${min_os_app}/Frameworks/libdep.dylib" "${WORK_ROOT}/min_os_dep.c"
+    check_min_os() {
+        bash "${SCRIPTS_DIR}/verify_macos_min_version.sh" "${WORK_ROOT}/MinOs.app" "$1" "${min_os_arch}" \
+            > "${WORK_ROOT}/min-os.txt" 2>&1
+    }
+    if check_min_os 15.0 && check_min_os 15; then
+        pass_case "最低系统不高于目标时通过"
+    else
+        fail_case "最低系统不高于目标时通过：$(cat "${WORK_ROOT}/min-os.txt")"
+    fi
+    if check_min_os 14.0; then
+        fail_case "依赖库最低系统高于目标必须失败，但脚本成功了"
+    elif grep -q 'libdep.dylib' "${WORK_ROOT}/min-os.txt" \
+            && ! grep -q 'MacOS/MinOs' "${WORK_ROOT}/min-os.txt"; then
+        pass_case "依赖库最低系统高于目标导致失败"
+    else
+        fail_case "最低系统报错没有准确指出 libdep.dylib：$(cat "${WORK_ROOT}/min-os.txt")"
+    fi
+else
+    printf 'SKIP 最低系统检查（非 macOS 或未安装 clang）\n'
+fi
+
 if [[ "${failures}" -gt 0 ]]; then
     printf '%d 个用例失败\n' "${failures}" >&2
     exit 1
