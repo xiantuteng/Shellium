@@ -53,7 +53,7 @@ RUN find /opt/shellium-cross/target/bin -maxdepth 1 -type f -iname '*.dll' \
 RUN mkdir -p /work/artifacts \
     && cd /work/staging \
     && cmake -E tar cf /work/artifacts/Shellium-$SHELLIUM_VERSION-win64.zip --format=zip -- . \
-    && makensis -DSTAGING_DIR=/work/staging -DSHELLIUM_VERSION=$SHELLIUM_VERSION \
+    && makensis -INPUTCHARSET UTF8 -DSTAGING_DIR=/work/staging -DSHELLIUM_VERSION=$SHELLIUM_VERSION \
        -DOUTPUT_FILE=/work/artifacts/Shellium-$SHELLIUM_VERSION-setup-x64.exe \
        /work/source/packaging/windows/Shellium.nsi \
     && cd /work/artifacts \

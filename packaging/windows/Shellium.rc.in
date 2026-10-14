@@ -1,7 +1,16 @@
+#pragma code_page(65001)
 // Shellium Windows 版本资源。版本号由 CMake 配置，避免安装器、属性页与程序版本漂移。
+//
+// 第一行的 code_page 必须在任何非 ASCII 字节之前：rc.exe 默认按构建机 ANSI 代码页解析源文件
+// （GitHub runner 是 1252），UTF-8 中文被逐字节当成 Latin-1，任务管理器里的 FileDescription
+// 曾因此显示乱码。资源字符串仍保持纯 ASCII，不依赖各家资源编译器对该 pragma 的支持程度。
 #include <windows.h>
 
 1 RT_MANIFEST "@CMAKE_CURRENT_SOURCE_DIR@/packaging/windows/Shellium.manifest"
+
+// Explorer、任务栏分组、任务管理器和快捷方式都只读 EXE 里的图标资源。名字必须是 IDI_ICON1：
+// Qt 注册窗口类时用这个名字加载默认图标，且它是 EXE 里的第一个图标组，Explorer 会选它。
+IDI_ICON1 ICON "@CMAKE_CURRENT_SOURCE_DIR@/packaging/windows/Shellium.ico"
 
 VS_VERSION_INFO VERSIONINFO
  FILEVERSION @PROJECT_VERSION_MAJOR@,@PROJECT_VERSION_MINOR@,@PROJECT_VERSION_PATCH@,0
@@ -18,10 +27,10 @@ VS_VERSION_INFO VERSIONINFO
 BEGIN
     BLOCK "StringFileInfo"
     BEGIN
-        BLOCK "080404B0"
+        BLOCK "040904B0"
         BEGIN
             VALUE "CompanyName", "Shellium contributors\0"
-            VALUE "FileDescription", "Shellium SSH 终端与远程文件管理器\0"
+            VALUE "FileDescription", "Shellium\0"
             VALUE "FileVersion", "@PROJECT_VERSION@\0"
             VALUE "InternalName", "Shellium\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 Shellium contributors\0"
@@ -32,6 +41,6 @@ BEGIN
     END
     BLOCK "VarFileInfo"
     BEGIN
-        VALUE "Translation", 0x0804, 1200
+        VALUE "Translation", 0x0409, 1200
     END
 END

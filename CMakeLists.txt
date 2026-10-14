@@ -393,6 +393,9 @@ if(WIN32)
     configure_file(packaging/windows/Shellium.rc.in
                    "${CMAKE_CURRENT_BINARY_DIR}/Shellium.rc" @ONLY)
     target_sources(Shellium PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/Shellium.rc")
+    # RC 引用的图标与清单不在 CMake 的依赖扫描范围内，显式声明后替换图标才会触发重新编译资源。
+    set_source_files_properties("${CMAKE_CURRENT_BINARY_DIR}/Shellium.rc" PROPERTIES
+        OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/packaging/windows/Shellium.ico;${CMAKE_CURRENT_SOURCE_DIR}/packaging/windows/Shellium.manifest")
 
     if(NOT CMAKE_CROSSCOMPILING)
         # 原生 Windows 构建使用 Qt 官方部署脚本收集 DLL 与插件。交叉构建刻意不走此分支，

@@ -74,3 +74,15 @@ OBJDUMP="$PWD/scripts/dumpbin_as_objdump.sh" bash scripts/bundle_windows_runtime
 `-Architecture` 只影响文件名：x64 保持 `Shellium-<版本>-win64.zip` / `Shellium-<版本>-setup-x64.exe`，
 arm64 为 `Shellium-<版本>-win-arm64.zip` / `Shellium-<版本>-setup-arm64.exe`。NSIS 安装器本身是
 x86 程序，在 ARM64 Windows 上经系统转译运行。
+
+## EXE 资源与安装器
+
+- `Shellium.rc.in` 首行的 `#pragma code_page(65001)` 不能移走，`VALUE` 字符串保持纯 ASCII：
+  rc.exe 默认按构建机 ANSI 代码页（GitHub runner 为 1252）解析，UTF-8 中文的 FileDescription
+  会在任务管理器里显示成乱码。
+- 应用图标是 `Shellium.ico`（16–256 px，由 `resources/icons/shellium-app-icon.png` 生成），以
+  `IDI_ICON1` 嵌入 EXE；资源管理器、任务栏分组、任务管理器和快捷方式只读这份资源，
+  运行时的 `setWindowIcon` 代替不了它。换图标时同时替换这个 .ico。
+- `Shellium.nsi` 使用 MUI2：欢迎、许可、目录、组件（开始菜单 / 桌面快捷方式）、安装、完成
+  （可直接启动），按系统语言自动选择简体中文或英文。脚本内资源路径相对 .nsi 所在目录并用 `/`。
+- `tests/scripts/PackagingScriptsTest.sh` 离线检查以上几点（需要本机装有 makensis）。

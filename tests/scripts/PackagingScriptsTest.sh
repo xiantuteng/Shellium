@@ -205,6 +205,35 @@ if command -v makensis >/dev/null 2>&1; then
             "${SCRIPTS_DIR}/../packaging/windows/Shellium.nsi" > "${WORK_ROOT}/nsis.txt" 2>&1 \
             && [[ -s "${WORK_ROOT}/Shellium-0.0.0-setup-x64.exe" ]]; then
         pass_case "NSIS 安装脚本可编译"
+        # 安装器曾只有“选目录 + 安装”两页，用户无从选择快捷方式，安装器和快捷方式也都是默认图标。
+        # 页数取 makensis 的统计行：欢迎、许可、目录、组件、安装、完成共 6 页；组件为程序（必选）、
+        # 开始菜单、桌面 3 个。
+        if grep -q -E '^Install: 6 pages .* 3 sections \(1 required\)' "${WORK_ROOT}/nsis.txt"; then
+            pass_case "NSIS 安装器提供组件选择与完成页"
+        else
+            fail_case "NSIS 安装器页面或组件不符：$(grep -E '^Install:' "${WORK_ROOT}/nsis.txt")"
+        fi
+        if command -v python3 >/dev/null 2>&1; then
+            # ICO 里每个尺寸的图像数据都必须原样出现在安装器 EXE 的图标资源中。
+            if python3 -I - "${SCRIPTS_DIR}/../packaging/windows/Shellium.ico" \
+                    "${WORK_ROOT}/Shellium-0.0.0-setup-x64.exe" <<'EOF'
+import struct, sys
+ico = open(sys.argv[1], 'rb').read()
+exe = open(sys.argv[2], 'rb').read()
+count = struct.unpack('<H', ico[4:6])[0]
+for i in range(count):
+    size, offset = struct.unpack('<II', ico[14 + 16 * i:22 + 16 * i])
+    if ico[offset:offset + size] not in exe:
+        sys.exit(1)
+EOF
+            then
+                pass_case "NSIS 安装器使用 Shellium 图标"
+            else
+                fail_case "NSIS 安装器没有嵌入 Shellium.ico"
+            fi
+        else
+            printf 'SKIP NSIS 安装器图标（未安装 python3）\n'
+        fi
     else
         fail_case "NSIS 安装脚本可编译：$(grep -i -E 'error|warning' "${WORK_ROOT}/nsis.txt")"
     fi
@@ -245,6 +274,38 @@ if [[ "$(uname -s)" == "Darwin" ]] && command -v clang >/dev/null 2>&1; then
     fi
 else
     printf 'SKIP 最低系统检查（非 macOS 或未安装 clang）\n'
+fi
+
+# 用例 12：Windows EXE 资源。没有 ICON 资源时资源管理器、任务栏和快捷方式都是默认图标；
+# rc.exe 按构建机 ANSI 代码页（CI 为 1252）读源文件，UTF-8 中文 FileDescription 在任务管理器
+# 里显示为乱码。只在 Windows 上编译，所以这里静态检查模板与图标文件。
+rc_template="${SCRIPTS_DIR}/../packaging/windows/Shellium.rc.in"
+app_icon="${SCRIPTS_DIR}/../packaging/windows/Shellium.ico"
+if [[ "$(head -n 1 "${rc_template}")" == '#pragma code_page(65001)' ]]; then
+    pass_case "RC 模板首行声明 UTF-8 代码页"
+else
+    fail_case "RC 模板首行必须是 #pragma code_page(65001)"
+fi
+non_ascii_values="$(grep -E '^[[:space:]]*VALUE ' "${rc_template}" | LC_ALL=C grep -E '[^ -~]' || true)"
+if [[ -z "${non_ascii_values}" ]]; then
+    pass_case "RC 版本信息字符串为纯 ASCII"
+else
+    fail_case "RC 版本信息含非 ASCII 字符：${non_ascii_values}"
+fi
+# ICO 头：保留字 0、类型 1、条目数；条目第一个字节是宽度，0 表示 256 像素。
+# 图标文件缺失时 od 失败，不能让 pipefail 直接终止整个测试，而要落到下面的 FAIL 分支。
+ico_header="$(od -A n -t u1 -N 6 "${app_icon}" 2>/dev/null | tr -s ' ' | sed 's/^ //;s/ $//' || true)"
+ico_count="$(od -A n -t u2 -j 4 -N 2 "${app_icon}" 2>/dev/null | tr -d ' ' || true)"
+has_256=0
+for (( i = 0; i < ${ico_count:-0}; i++ )); do
+    width="$(od -A n -t u1 -j $(( 6 + 16 * i )) -N 1 "${app_icon}" | tr -d ' ')"
+    [[ "${width}" == 0 ]] && has_256=1
+done
+if grep -q -E '^IDI_ICON1 ICON "@CMAKE_CURRENT_SOURCE_DIR@/packaging/windows/Shellium\.ico"' "${rc_template}" \
+        && [[ "${ico_header}" == "0 0 1 0 "* && "${has_256}" == 1 ]]; then
+    pass_case "EXE 嵌入含 256 像素的应用图标"
+else
+    fail_case "EXE 图标资源缺失或 Shellium.ico 无 256 像素图像（头：${ico_header}）"
 fi
 
 if [[ "${failures}" -gt 0 ]]; then
