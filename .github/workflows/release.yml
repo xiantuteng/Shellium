@@ -61,7 +61,9 @@ jobs:
         run: |
           packages=(libssh libvterm libsodium spdlog minizip ninja pkg-config)
           if [[ "${{ matrix.brew_qt }}" == "true" ]]; then
-            packages+=(qt)
+            # 只装用到的模块。qt 元公式会带上 QtPdf、QtVirtualKeyboard 等全部模块，macdeployqt
+            # 随之部署它们的插件却解析不到对应 Framework，部署报错、依赖检查失败。
+            packages+=(qtbase qtsvg qttools)
           fi
           brew install "${packages[@]}"
 
