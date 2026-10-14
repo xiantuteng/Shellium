@@ -41,7 +41,7 @@ Shellium 是基于 Qt 6、libssh 和 libvterm 的桌面 SSH 终端与远程文�
 
 - CMake 3.21+；
 - Qt 6.8+：Core、Widgets、Concurrent、Network、Sql、Test；
-- libssh 0.10+；
+- libssh 0.11+（Ubuntu 24.04 仓库只有 0.10，可用 `scripts/install_libssh_from_source.sh` 编译安装）；
 - libvterm 0.3+；
 - libsodium 1.0.18+；
 - spdlog 1.12+；

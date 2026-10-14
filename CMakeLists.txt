@@ -22,7 +22,9 @@ find_package(Qt6 6.8 REQUIRED COMPONENTS Core Widgets Concurrent Network Sql Svg
 # 业务目标只链接项目内部的稳定依赖名。Windows/vcpkg 通常提供 CMake Config Package，
 # macOS Homebrew 与 Linux 发行版则普遍提供 pkg-config；先尝试前者、再统一回退到后者，
 # 可以让三平台共用其余 CMake 而不在每个测试目标中散落平台判断。
-find_package(libssh 0.10 CONFIG QUIET)
+# libssh 下限是 0.11：代码用到 sftp_aio、SSH_OPTIONS_PROXYJUMP、ssh_channel_get_exit_state、
+# ssh_channel_request_pty_size_modes 与 ssh_pki_export_privkey_base64_format，0.10 只会在编译期报错。
+find_package(libssh 0.11 CONFIG QUIET)
 find_package(libvterm 0.3 CONFIG QUIET)
 find_package(sodium 1.0.18 CONFIG QUIET)
 find_package(unofficial-sodium CONFIG QUIET)
@@ -55,7 +57,7 @@ function(shellium_resolve_dependency stable_name package_name minimum_version)
         PROPERTY INTERFACE_LINK_LIBRARIES "PkgConfig::${pkg_prefix}")
 endfunction()
 
-shellium_resolve_dependency(libssh libssh 0.10 libssh::libssh ssh)
+shellium_resolve_dependency(libssh libssh 0.11 libssh::libssh ssh)
 shellium_resolve_dependency(libvterm vterm 0.3
     libvterm::libvterm vterm::vterm unofficial::libvterm vterm)
 shellium_resolve_dependency(libsodium libsodium 1.0.18

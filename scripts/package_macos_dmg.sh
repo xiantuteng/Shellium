@@ -193,7 +193,7 @@ preflight() {
 
     # CMake 会执行更精确的版本检查；这里先确认所有 pkg-config 包存在，使缺失依赖时的报错
     # 更聚焦，用户无需从很长的 CMake 配置日志中反推具体缺少哪个包。
-    pkg-config --exists 'libssh >= 0.10' || fail "缺少 libssh 0.10 或更高版本。"
+    pkg-config --exists 'libssh >= 0.11' || fail "缺少 libssh 0.11 或更高版本。"
     pkg-config --exists 'vterm >= 0.3' || fail "缺少 libvterm 0.3 或更高版本。"
     pkg-config --exists 'libsodium >= 1.0.18' || fail "缺少 libsodium 1.0.18 或更高版本。"
     pkg-config --exists 'spdlog >= 1.12' || fail "缺少 spdlog 1.12 或更高版本。"
@@ -378,6 +378,29 @@ repair_qt_svg_deployment() {
     resign_outer_app "${app_path}"
 }
 
+# 删除应用用不到的 Qt SQL 驱动。参数 1 是 App 路径。应用只用 QSQLITE；官方 Qt 安装器自带的
+# ODBC、PostgreSQL、Mimer 驱动链接着构建机上不存在的客户端库，macdeployqt 只报 ERROR 不失败，
+# 留下的驱动仍引用 /usr/local 等绝对路径，后续依赖检查会拒绝整个包。删除后重新密封外层签名。
+prune_unused_sql_drivers() {
+    local app_path="$1"
+    local drivers_dir="${app_path}/Contents/PlugIns/sqldrivers"
+    local driver_path
+    local removed="false"
+
+    [[ -d "${drivers_dir}" ]] || return 0
+    for driver_path in "${drivers_dir}"/*.dylib; do
+        [[ -e "${driver_path}" ]] || continue
+        if [[ "$(basename "${driver_path}")" != "libqsqlite.dylib" ]]; then
+            rm -f -- "${driver_path}"
+            removed="true"
+        fi
+    done
+    [[ -f "${drivers_dir}/libqsqlite.dylib" ]] || fail "部署结果缺少 SQLite 驱动 libqsqlite.dylib。"
+    if [[ "${removed}" == "true" ]]; then
+        resign_outer_app "${app_path}"
+    fi
+}
+
 # 把 App 安装到临时暂存目录并调用 macdeployqt 收集 Qt Framework、插件和第三方动态库。
 # 参数 1 是暂存根目录，返回值通过全局 STAGED_APP 传递，避免使用命令替换吞掉部署日志。
 deploy_runtime_dependencies() {
@@ -417,8 +440,9 @@ deploy_runtime_dependencies() {
         # Framework、插件、动态库和最外层 App，优于仅对外层 Bundle 使用 codesign --deep。
         deploy_arguments+=("-sign-for-notarization=${SIGNING_IDENTITY}")
     else
-        # 不传 codesign 选项时 macdeployqt 默认执行 ad-hoc 签名，可修复部署工具改写 Mach-O
-        # 安装名后失效的链接器签名，保证 Apple Silicon 本机能够启动验证。
+        # 显式要求 ad-hoc 签名全部代码。Apple Silicon 的链接器会自动 ad-hoc 签名，不传该选项
+        # 也能过校验；Intel 上 Homebrew 的 dylib 根本没有签名，必须由 macdeployqt 统一补签。
+        deploy_arguments+=("-codesign=-")
         printf '%s\n' "正在执行 ad-hoc 签名；该签名不具备发布信任链。"
     fi
 
@@ -428,6 +452,7 @@ deploy_runtime_dependencies() {
     # macdeployqt 在 Homebrew 分包 Qt 环境下会输出一次 QtSvg 无法解析的诊断，但仍返回成功。
     # 修复函数必须紧接部署执行，后续严格依赖检查会再次确认 Framework 已存在且无绝对路径。
     repair_qt_svg_deployment "${STAGED_APP}" "${qt_libdir}" "${qt_plugins_dir}"
+    prune_unused_sql_drivers "${STAGED_APP}"
 }
 
 # 验证最外层 App 及所有嵌套代码签名。参数 1 是 App 路径；正式模式额外检查 Hardened Runtime

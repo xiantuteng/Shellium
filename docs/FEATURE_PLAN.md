@@ -84,7 +84,7 @@ Shellium 面向需要在跳板机、内网多层服务器与 SFTP 之间频繁�
 |---|---|
 | GUI | Qt Widgets 6.8+ |
 | 语言 / 构建 | C++20、CMake 3.21+、Ninja |
-| SSH / SFTP | libssh 0.10+ |
+| SSH / SFTP | libssh 0.11+ |
 | 终端 | libvterm 0.3+ + Qt 文本文档渲染 |
 | 本地终端 | POSIX PTY；Linux 额外链接 libutil |
 | 存储 | SQLite + Qt SQL，事务与 WAL |

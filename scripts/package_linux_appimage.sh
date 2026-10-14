@@ -6,7 +6,8 @@
 # 目标架构等于本机架构，和 macOS 脚本一样不做交叉编译：发行版的 -dev 包只提供本机架构。
 #
 # AppImage 只携带 glibc 以外的依赖，因此能运行的最低发行版由构建机的 glibc 决定。依赖版本
-# 要求（libssh 0.10、libvterm 0.3、spdlog 1.12）把构建机下限卡在 Ubuntu 24.04 一代。
+# 要求（libvterm 0.3、spdlog 1.12）把构建机下限卡在 Ubuntu 24.04 一代；该代发行版的 libssh
+# 只有 0.10，需先用 install_libssh_from_source.sh 装 0.11。
 #
 # 依赖：cmake、ninja、pkg-config、Qt 6.8+（qmake 在 PATH 或通过 QMAKE 指定）、curl。
 
