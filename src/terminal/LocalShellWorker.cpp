@@ -7,6 +7,7 @@
 #include <QStandardPaths>
 
 #include <algorithm>
+#include <vector>
 #if defined(Q_OS_WIN)
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -163,6 +164,30 @@ void LocalShellWorker::requestStop()
 {
     QMutexLocker locker(&m_mutex);
     m_stopRequested = true;
+}
+
+QList<QByteArray> LocalShellWorker::posixLaunchArguments(const QString &shellPath,
+                                                         const QString &homeDirectory,
+                                                         const bool insideFlatpak)
+{
+    const QByteArray encodedShell = QFile::encodeName(shellPath);
+    if (insideFlatpak) {
+        // --watch-bus：应用崩溃、D-Bus 连接断开时宿主上的 Shell 跟着结束，不会留下孤儿进程。
+        return {QByteArrayLiteral("/usr/bin/flatpak-spawn"),
+                QByteArrayLiteral("--host"),
+                QByteArrayLiteral("--watch-bus"),
+                QByteArrayLiteral("--directory=") + QFile::encodeName(homeDirectory),
+                QByteArrayLiteral("--env=TERM=xterm-256color"),
+                QByteArrayLiteral("--env=COLORTERM=truecolor"),
+                encodedShell,
+                QByteArrayLiteral("-l")};
+    }
+    // 通过 env 设置终端变量，避免 fork 后调用可能持锁的 setenv。
+    return {QByteArrayLiteral("/usr/bin/env"),
+            QByteArrayLiteral("TERM=xterm-256color"),
+            QByteArrayLiteral("COLORTERM=truecolor"),
+            encodedShell,
+            QByteArrayLiteral("-l")};
 }
 
 void LocalShellWorker::run()
@@ -410,7 +435,10 @@ void LocalShellWorker::run()
     cleanup();
     emit shellFinished(static_cast<int>(exitCode));
 #else
-    if (!QFile::exists(m_shellPath)) {
+    // 沙箱里看不到宿主的 Shell，存在性只能交给宿主判断：不存在时 flatpak-spawn 以非零码退出，
+    // 照常经 shellFinished 报告。
+    const bool insideFlatpak = QFile::exists(QStringLiteral("/.flatpak-info"));
+    if (!insideFlatpak && !QFile::exists(m_shellPath)) {
         emit shellError(tr("The local shell does not exist: %1").arg(m_shellPath));
         return;
     }
@@ -424,10 +452,16 @@ void LocalShellWorker::run()
     }
 
     // 在 fork 前完成 Qt 字符串转换，避免子进程触碰其他线程可能持有的内存分配锁。
-    const QByteArray encodedShell = QFile::encodeName(m_shellPath);
     const QByteArray encodedHomeDirectory = QFile::encodeName(QDir::homePath());
-    const char *shellPath = encodedShell.constData();
     const char *homeDirectory = encodedHomeDirectory.constData();
+    const QList<QByteArray> launchArguments =
+        posixLaunchArguments(m_shellPath, QDir::homePath(), insideFlatpak);
+    std::vector<char *> launchArgv;
+    launchArgv.reserve(static_cast<size_t>(launchArguments.size()) + 1);
+    for (const QByteArray &argument : launchArguments) {
+        launchArgv.push_back(const_cast<char *>(argument.constData()));
+    }
+    launchArgv.push_back(nullptr);
     int masterFd = -1;
     const pid_t childPid = forkpty(&masterFd, nullptr, nullptr, &initialSize);
     if (childPid < 0) {
@@ -441,14 +475,8 @@ void LocalShellWorker::run()
         if (chdir(homeDirectory) != 0) {
             _exit(126);
         }
-        // fork 后仅使用异步信号安全调用。通过 env 设置终端变量，避免调用可能持锁的 setenv。
-        execl("/usr/bin/env",
-              "env",
-              "TERM=xterm-256color",
-              "COLORTERM=truecolor",
-              shellPath,
-              "-l",
-              static_cast<char *>(nullptr));
+        // fork 后仅使用异步信号安全调用；参数数组已在 fork 前备好。
+        execv(launchArgv.front(), launchArgv.data());
         _exit(127);
     }
 

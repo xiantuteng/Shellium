@@ -50,6 +50,10 @@ private slots:
     void firstBellRingsImmediately();
     /** @brief GUI 线程不回执时，PTY 读取端必须自行停下而不是无限灌数据。 */
     void unconsumedOutputStopsPtyReader();
+    /** @brief 普通环境直接经 env 启动登录 Shell。 */
+    void nativeLaunchRunsShellThroughEnv();
+    /** @brief Flatpak 沙箱内必须经 flatpak-spawn 在宿主上启动 Shell。 */
+    void flatpakLaunchRunsShellOnHost();
 };
 
 void TerminalFloodTest::shrinkingGridWithScreenFillingLineSurvives()
@@ -246,6 +250,36 @@ void TerminalFloodTest::unconsumedOutputStopsPtyReader()
              qPrintable(QStringLiteral("GUI 线程一次都没回执，读取端却已经发出 %1 字节"
                                        "（上限 %2）——背压失效，事件队列会被无限堆积")
                             .arg(flooded).arg(kBound)));
+}
+
+void TerminalFloodTest::nativeLaunchRunsShellThroughEnv()
+{
+    const QList<QByteArray> arguments = LocalShellWorker::posixLaunchArguments(
+        QStringLiteral("/bin/zsh"), QStringLiteral("/home/user"), false);
+    const QList<QByteArray> expected {QByteArrayLiteral("/usr/bin/env"),
+                                      QByteArrayLiteral("TERM=xterm-256color"),
+                                      QByteArrayLiteral("COLORTERM=truecolor"),
+                                      QByteArrayLiteral("/bin/zsh"),
+                                      QByteArrayLiteral("-l")};
+    QCOMPARE(arguments, expected);
+}
+
+void TerminalFloodTest::flatpakLaunchRunsShellOnHost()
+{
+    // 回归目标：沙箱里直接 exec 只能拿到运行时自带的 /bin，用户的 zsh 与配置一概看不到；
+    // 沙箱环境变量也不会传到宿主，TERM 和起始目录必须作为 flatpak-spawn 参数带过去。
+    const QList<QByteArray> arguments = LocalShellWorker::posixLaunchArguments(
+        QStringLiteral("/bin/zsh"), QStringLiteral("/home/user"), true);
+    QVERIFY2(!arguments.isEmpty(), "参数列表为空");
+    QCOMPARE(arguments.first(), QByteArrayLiteral("/usr/bin/flatpak-spawn"));
+    QVERIFY(arguments.contains(QByteArrayLiteral("--host")));
+    QVERIFY(arguments.contains(QByteArrayLiteral("--watch-bus")));
+    QVERIFY(arguments.contains(QByteArrayLiteral("--directory=/home/user")));
+    QVERIFY(arguments.contains(QByteArrayLiteral("--env=TERM=xterm-256color")));
+    QVERIFY(arguments.contains(QByteArrayLiteral("--env=COLORTERM=truecolor")));
+    // flatpak-spawn 把第一个非选项参数当作宿主命令，Shell 与 -l 必须排在所有选项之后。
+    QCOMPARE(arguments.mid(arguments.size() - 2),
+             (QList<QByteArray> {QByteArrayLiteral("/bin/zsh"), QByteArrayLiteral("-l")}));
 }
 
 QTEST_MAIN(TerminalFloodTest)

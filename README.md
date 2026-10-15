@@ -40,6 +40,11 @@ local ──ssh──▶ bastion ──ssh──▶ app-server ──ssh──�
 
 ## Features
 
+**Native and lightweight**
+- Written in C++20 on Qt 6 and compiled natively for each platform: no Electron, no bundled Chromium, no JavaScript runtime
+- Starts fast and stays responsive; keystrokes go straight to the terminal instead of through a web view
+- Low memory footprint: one process with no per-window renderer, and each extra tab costs only its own terminal buffer and scrollback
+
 **Terminal**
 - libvterm-based VT/xterm emulation: 256 colours and true colour, alternate screen, wide (CJK) characters, configurable scrollback
 - Local shell via PTY (macOS/Linux) or ConPTY (Windows), multiple tabs, broadcast input across a workspace
@@ -94,7 +99,8 @@ Download the latest build from **[Releases](https://github.com/xiantuteng/Shelli
 | --- | --- | --- | --- |
 | macOS | Apple Silicon, Intel | `.dmg` | macOS 14 (arm64), macOS 15 (x86_64) |
 | Windows | x64, ARM64 | NSIS installer, `.zip` | Windows 10 1809 / Windows 11 |
-| Linux | x86_64, aarch64 | AppImage, `.deb`, `.rpm` | glibc 2.39 (e.g. Ubuntu 24.04+, Debian 13+, Fedora 40+) |
+| Linux | x86_64, aarch64 | AppImage, `.deb`, `.rpm` | glibc 2.35 (e.g. Ubuntu 22.04+, Debian 12+, Fedora 36+) |
+| Linux | x86_64, aarch64 | `.flatpak` | Any distribution with Flatpak (KDE 6.11 runtime from Flathub) |
 
 > [!NOTE]
 > Release builds are not yet code-signed. CI builds for macOS are ad-hoc signed, so Gatekeeper will block the first launch: right-click the app and choose **Open**, or run `xattr -dr com.apple.quarantine /Applications/Shellium.app`. On Windows, SmartScreen may ask for confirmation. Each release ships with a `SHA256SUMS.txt` you can check the download against.
@@ -158,6 +164,7 @@ The macOS app bundle ends up at `build/Shellium.app`.
 | Windows NSIS / ZIP | [`scripts/package_windows_native.ps1`](scripts/package_windows_native.ps1), see [the guide](packaging/windows/README.md) |
 | Linux AppImage | [`scripts/package_linux_appimage.sh`](scripts/package_linux_appimage.sh) |
 | Linux deb / rpm (run after the AppImage script) | [`scripts/package_linux_deb_rpm.sh`](scripts/package_linux_deb_rpm.sh) |
+| Linux Flatpak | [`scripts/package_linux_flatpak.sh`](scripts/package_linux_flatpak.sh) |
 
 The [release workflow](.github/workflows/release.yml) builds every package on native runners and smoke-tests each one at launch; the Linux deb/rpm packages are also installed, launched and removed in clean Ubuntu, Debian and Fedora containers. Pushing a `v*` tag that matches `project(VERSION)` in `CMakeLists.txt` creates a **draft** release with `SHA256SUMS.txt`.
 

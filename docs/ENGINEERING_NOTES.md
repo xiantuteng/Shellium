@@ -721,3 +721,9 @@ linuxdeploy 按 AppImage 排除清单跳过 libGL/libEGL/libGLX/libOpenGL 等图
 - deb/rpm（`scripts/package_linux_deb_rpm.sh`）直接把同一个 AppDir 装到 `/opt/shellium`，经 AppRun
   启动，因此上述 hook 同样生效。包的依赖只声明 AppDir 没带的库：deb 在构建机上 `dpkg -S` 反查包名，
   rpm 用 `soname()(64bit)`。依赖声明是否完整只能在干净容器里验证（release.yml 的 `linux-packages`）。
+- 最低支持 Ubuntu 22.04：AppImage/deb/rpm 在 `ubuntu:22.04` 容器里构建（glibc 2.35）。官方 Qt 的
+  aarch64 二进制在 Ubuntu 24.04 上构建、要求 GLIBC_2.38，因此 aarch64 用 `scripts/build_qt_from_source.sh`
+  自行编译 Qt 并按脚本内容缓存；x86_64 的官方二进制在 RHEL 8 上构建，可直接用。换 Qt 版本时两边都要改。
+- Flatpak（`packaging/flatpak/`）用 KDE 运行时自带的 Qt。沙箱里看不到宿主的 Shell，本地终端经
+  `flatpak-spawn --host` 在宿主上启动（`LocalShellWorker::posixLaunchArguments`），清单为此申请了
+  `org.freedesktop.Flatpak` 总线名；去掉这项权限，本地终端会直接失败。

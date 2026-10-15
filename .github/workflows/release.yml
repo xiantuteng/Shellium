@@ -1,7 +1,7 @@
 # 三平台 × 两架构的安装包构建与发布。
 #
-# 推送 v* 标签时构建全部安装包（macOS、Windows 各两个架构，Linux 每个架构 AppImage/deb/rpm
-# 三种），并创建一个草稿 Release 等人工确认后发布；在 Actions
+# 推送 v* 标签时构建全部安装包（macOS、Windows 各两个架构，Linux 每个架构 AppImage/deb/rpm/
+# Flatpak 四种），并创建一个草稿 Release 等人工确认后发布；在 Actions
 # 页面手动触发或推送 ci/release-* 分支时只构建并上传 artifact，不创建 Release，用于演练。
 #
 # 每个架构都在对应架构的原生 runner 上编译，不做交叉编译：Homebrew、vcpkg 和 apt 的依赖都
@@ -238,52 +238,79 @@ jobs:
   linux:
     name: Linux ${{ matrix.arch }}
     runs-on: ${{ matrix.runner }}
+    # AppImage/deb/rpm 能运行的最低发行版由构建机的 glibc 决定，因此在 Ubuntu 22.04 容器里构建
+    # （glibc 2.35）。该版本仓库里的 libssh 0.9、libvterm 0.1、spdlog 1.9 都不够新，从源码编译；
+    # 默认的 GCC 11 对 C++20 支持不全，改用仓库里的 GCC 12，它的 libstdc++ 仍是系统自带那份。
+    container: ubuntu:22.04
     strategy:
       fail-fast: false
       matrix:
         include:
-          # Ubuntu 24.04 是满足 libvterm 0.3 / spdlog 1.12 的最老 LTS，生成的 AppImage 因此
-          # 要求目标系统 glibc ≥ 2.39。libssh 仓库版只有 0.10，另行从源码编译 0.11。
+          # 官方 Qt 的 x86_64 二进制在 RHEL 8（glibc 2.28）上构建，可直接使用。
           - arch: x86_64
             runner: ubuntu-24.04
-            qt_host: linux
-            qt_arch: linux_gcc_64
+            qt_prefix: /opt/qt/6.8.3/gcc_64
+          # 官方 Qt 的 aarch64 二进制在 Ubuntu 24.04 上构建，要求 GLIBC_2.38，只能自行编译。
           - arch: aarch64
             runner: ubuntu-24.04-arm
-            qt_host: linux_arm64
-            qt_arch: linux_gcc_arm64
+            qt_prefix: /opt/qt/6.8.3/source
     # 未声明 shell 时 GitHub 用 bash -e 而不带 pipefail，`| tee build.log` 会吞掉构建失败。
     defaults:
       run:
         shell: bash
+    env:
+      DEBIAN_FRONTEND: noninteractive
+      CC: gcc-12
+      CXX: g++-12
     steps:
-      - uses: actions/checkout@v4
-
-      # 发行版自带的 Qt 是 6.4，低于工程要求的 6.8。
-      - name: Install Qt
-        uses: jurplel/install-qt-action@v4
-        with:
-          version: '6.8.3'
-          host: ${{ matrix.qt_host }}
-          target: desktop
-          arch: ${{ matrix.qt_arch }}
-          cache: true
-
+      # 容器里没有 git，先装上再 checkout，否则 checkout 退化成下载源码包。
       - name: Install dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            ninja-build pkg-config file \
-            libssl-dev libvterm-dev libsodium-dev libspdlog-dev libminizip-dev zlib1g-dev \
-            libgl1-mesa-dev libegl1 libxkbcommon-x11-0 libfontconfig1 libdbus-1-3 \
-            libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 \
-            libxcb-xinerama0 libxcb-shape0 libxcb-xkb1 \
-            xvfb xauth rpm binutils
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            git ca-certificates curl xz-utils file binutils \
+            build-essential gcc-12 g++-12 cmake ninja-build pkg-config perl libtool-bin \
+            python3 python3-pip \
+            libssl-dev libsodium-dev libminizip-dev zlib1g-dev \
+            libgl1-mesa-dev libegl1-mesa-dev libopengl-dev \
+            libxkbcommon-dev libxkbcommon-x11-dev libfontconfig1-dev libfreetype-dev libdbus-1-dev \
+            libx11-dev libx11-xcb-dev libxcb1-dev libxcb-cursor-dev libxcb-glx0-dev \
+            libxcb-icccm4-dev libxcb-image0-dev libxcb-keysyms1-dev libxcb-randr0-dev \
+            libxcb-render-util0-dev libxcb-render0-dev libxcb-shape0-dev libxcb-shm0-dev \
+            libxcb-sync-dev libxcb-util-dev libxcb-xfixes0-dev libxcb-xinerama0-dev \
+            libxcb-xinput-dev libxcb-xkb-dev \
+            xvfb xauth rpm
 
-      - name: Install libssh 0.11
+      - uses: actions/checkout@v4
+
+      - name: Install official Qt
+        if: matrix.arch == 'x86_64'
         run: |
-          sudo ./scripts/install_libssh_from_source.sh /usr/local
-          sudo ldconfig
+          python3 -m pip install 'aqtinstall==3.3.0'
+          python3 -m aqt install-qt linux desktop 6.8.3 linux_gcc_64 --outputdir /opt/qt
+
+      - name: Restore Qt built from source
+        if: matrix.arch == 'aarch64'
+        id: qt-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ matrix.qt_prefix }}
+          key: qt-6.8.3-ubuntu22.04-aarch64-${{ hashFiles('scripts/build_qt_from_source.sh', 'scripts/fetch_verified_source.sh') }}
+
+      - name: Build Qt from source
+        if: matrix.arch == 'aarch64' && steps.qt-cache.outputs.cache-hit != 'true'
+        run: ./scripts/build_qt_from_source.sh "${{ matrix.qt_prefix }}" 2>&1 | tee qt-build.log
+
+      - name: Report Qt build log
+        if: failure() && matrix.arch == 'aarch64' && steps.qt-cache.outputs.cache-hit != 'true'
+        run: ./scripts/ci_report_log_tail.sh qt-build.log
+
+      - name: Install libraries from source
+        run: |
+          ./scripts/install_libssh_from_source.sh /usr/local
+          ./scripts/install_linux_deps_from_source.sh /usr/local
+          ldconfig
+          echo "${{ matrix.qt_prefix }}/bin" >> "$GITHUB_PATH"
 
       # deb/rpm 复用 AppImage 打包留下的 AppDir，必须排在它之后。
       - name: Build and package
@@ -300,10 +327,10 @@ jobs:
         run: |
           appimage="$(ls dist/Shellium-*-linux-${{ matrix.arch }}.AppImage)"
           xvfb-run -a ./scripts/smoke_launch.sh 15 "$appimage"
-          # 桌面版 Ubuntu 默认不装 libopengl0，runner 上则被 libgl1-mesa-dev 带了进来，0.3.3 因此
+          # 桌面版 Ubuntu 默认不装 libopengl0，构建环境里则被 libgl1-mesa-dev 等带了进来，0.3.3 因此
           # 漏过了“启动即报 libOpenGL.so.0 缺失”。卸掉后再跑一次，覆盖包内备份那条路径。
-          sudo dpkg --remove --force-depends libopengl0
-          sudo ldconfig
+          dpkg --remove --force-depends libopengl0 libopengl-dev
+          ldconfig
           if /sbin/ldconfig -p | grep -q 'libOpenGL\.so\.0 '; then
             echo "::error::卸载 libopengl0 后系统仍能找到 libOpenGL.so.0，该测试无效"
             exit 1
@@ -319,9 +346,9 @@ jobs:
             dist/Shellium-*-linux-${{ matrix.arch }}.rpm
           if-no-files-found: error
 
-  # deb/rpm 的依赖声明只有在干净系统里装一遍才能验证：构建 runner 上什么库都装过，漏声明的依赖
-  # 在那里永远测不出来。Ubuntu 24.04 是支持的最老版本；Debian 13 验证 24.04 上反查出的 t64 包名
-  # 在 Debian 同样可解析；Fedora 验证 rpm 的 soname 依赖。
+  # deb/rpm 的依赖声明只有在干净系统里装一遍才能验证：构建环境里什么库都装过，漏声明的依赖
+  # 在那里永远测不出来。Ubuntu 22.04 是支持的最老版本；Ubuntu 26.04 与 Debian 13 验证 22.04 上
+  # 反查出的包名在 t64 改名之后仍可解析；Fedora 验证 rpm 的 soname 依赖。
   linux-packages:
     name: Linux ${{ matrix.arch }} on ${{ matrix.image }}
     needs: linux
@@ -331,7 +358,7 @@ jobs:
       fail-fast: false
       matrix:
         arch: [x86_64, aarch64]
-        image: ['ubuntu:24.04', 'debian:13', 'fedora:44']
+        image: ['ubuntu:22.04', 'ubuntu:26.04', 'debian:13', 'fedora:44']
     defaults:
       run:
         shell: bash
@@ -385,10 +412,51 @@ jobs:
             fi
           done
 
+  # Flatpak 自带 KDE 运行时，与宿主发行版的库版本无关，直接在 runner 上构建。
+  linux-flatpak:
+    name: Linux ${{ matrix.arch }} Flatpak
+    runs-on: ${{ matrix.arch == 'aarch64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x86_64, aarch64]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Flatpak tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends flatpak flatpak-builder xvfb xauth
+          # Ubuntu 24.04 默认禁止非特权进程创建 user namespace，flatpak-builder 用的 bwrap 依赖它。
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
+      - name: Build Flatpak
+        run: ./scripts/package_linux_flatpak.sh 2>&1 | tee build.log
+
+      - name: Report build log
+        if: failure()
+        run: ./scripts/ci_report_log_tail.sh build.log
+
+      # 从导出的 bundle 安装，验证的是用户拿到的那个文件，而不是构建目录里的半成品。
+      - name: Smoke test
+        run: |
+          bundle="$(ls dist/Shellium-*-linux-${{ matrix.arch }}.flatpak)"
+          flatpak install --user -y --noninteractive "$bundle"
+          dbus-run-session -- xvfb-run -a ./scripts/smoke_launch.sh 15 flatpak run net.shellium.Shellium
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: shellium-linux-flatpak-${{ matrix.arch }}
+          path: dist/Shellium-*-linux-${{ matrix.arch }}.flatpak
+          if-no-files-found: error
+
   release:
     name: Draft release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [macos, windows, linux, linux-packages]
+    needs: [macos, windows, linux, linux-packages, linux-flatpak]
     runs-on: ubuntu-latest
     permissions:
       contents: write

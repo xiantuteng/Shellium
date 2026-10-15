@@ -1,0 +1,119 @@
+# Shellium Flatpak 清单，由 scripts/package_linux_flatpak.sh 构建为单文件 .flatpak。
+#
+# Qt 来自 KDE 运行时（与开发环境同为 6.11，满足工程的 6.8+ 要求）；运行时没有的依赖在下面逐个
+# 从源码编译，版本与 SHA-256 和其他平台的构建脚本保持一致。
+#
+# 沙箱权限按功能逐项给出：
+# - talk-name=org.freedesktop.Flatpak：本地终端经 flatpak-spawn --host 在宿主上启动 Shell，
+#   否则只能拿到运行时自带的 /bin，见 LocalShellWorker::posixLaunchArguments。
+# - filesystem=home：读取 ~/.ssh 下的密钥与配置，以及 SFTP 上传下载的本地文件。
+# - socket=ssh-auth：使用宿主的 ssh-agent。
+# - 只给 x11 不给 wayland：与 AppImage 一样走 xcb 平台插件，终端渲染只在 xcb 下验证过。
+app-id: net.shellium.Shellium
+runtime: org.kde.Platform
+runtime-version: '6.11'
+sdk: org.kde.Sdk
+command: Shellium
+finish-args:
+  - --share=ipc
+  - --share=network
+  - --socket=x11
+  - --device=dri
+  - --filesystem=home
+  - --socket=ssh-auth
+  - --talk-name=org.freedesktop.Flatpak
+
+cleanup:
+  - /include
+  - /lib/pkgconfig
+  - /lib/cmake
+  - '*.a'
+  - '*.la'
+
+modules:
+  - name: libsodium
+    buildsystem: autotools
+    config-opts:
+      - --disable-static
+    sources:
+      - type: archive
+        url: https://download.libsodium.org/libsodium/releases/libsodium-1.0.20.tar.gz
+        sha256: ebb65ef6ca439333c2bb41a0c1990587288da07f6c7fd07cb3a18cc18d30ce19
+
+  - name: libssh
+    buildsystem: cmake-ninja
+    config-opts:
+      - -DCMAKE_BUILD_TYPE=Release
+      - -DCMAKE_INSTALL_LIBDIR=lib
+      - -DWITH_EXAMPLES=OFF
+      - -DUNIT_TESTING=OFF
+      - -DCLIENT_TESTING=OFF
+      - -DWITH_GSSAPI=OFF
+    sources:
+      - type: archive
+        url: https://www.libssh.org/files/0.11/libssh-0.11.5.tar.xz
+        sha256: 6898ba9dd836d618b71dc7a4bb786a502c173cef5cafbf20fe5e0567ba4ea30c
+
+  - name: libvterm
+    buildsystem: simple
+    build-commands:
+      - make PREFIX=/app -j "${FLATPAK_BUILDER_N_JOBS}"
+      - make PREFIX=/app install
+    sources:
+      - type: archive
+        url: https://www.leonerd.org.uk/code/libvterm/libvterm-0.3.3.tar.gz
+        sha256: 09156f43dd2128bd347cbeebe50d9a571d32c64e0cf18d211197946aff7226e0
+
+  - name: spdlog
+    buildsystem: cmake-ninja
+    config-opts:
+      - -DCMAKE_BUILD_TYPE=Release
+      - -DCMAKE_INSTALL_LIBDIR=lib
+      - -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+      - -DSPDLOG_BUILD_SHARED=OFF
+      - -DSPDLOG_BUILD_EXAMPLE=OFF
+      - -DSPDLOG_BUILD_TESTS=OFF
+      - -DSPDLOG_BUILD_BENCH=OFF
+    sources:
+      - type: archive
+        url: https://github.com/gabime/spdlog/archive/refs/tags/v1.15.3.tar.gz
+        sha256: 15a04e69c222eb6c01094b5c7ff8a249b36bb22788d72519646fb85feb267e67
+
+  # minizip 是 zlib 源码里 contrib/minizip 的那一份，与 Debian/Ubuntu 的 libminizip 同源。
+  - name: minizip
+    buildsystem: simple
+    subdir: contrib/minizip
+    build-commands:
+      - autoreconf -fi
+      - ./configure --prefix=/app --disable-static
+      - make -j "${FLATPAK_BUILDER_N_JOBS}"
+      - make install
+    sources:
+      - type: archive
+        url: https://github.com/madler/zlib/releases/download/v1.3.1/zlib-1.3.1.tar.gz
+        sha256: 9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23
+
+  - name: shellium
+    buildsystem: cmake-ninja
+    builddir: true
+    config-opts:
+      - -DCMAKE_BUILD_TYPE=Release
+      - -DBUILD_TESTING=OFF
+    post-install:
+      - install -d /app/share/applications
+      - sed -e 's/^Icon=.*/Icon=net.shellium.Shellium/' "${FLATPAK_BUILDER_BUILDDIR}/packaging/linux/shellium.desktop" > /app/share/applications/net.shellium.Shellium.desktop
+      - install -Dm644 "${FLATPAK_BUILDER_BUILDDIR}/packaging/linux/shellium.png" /app/share/icons/hicolor/256x256/apps/net.shellium.Shellium.png
+    sources:
+      # 源码目录里的本地构建产物不能拷进沙箱构建目录，否则 CMake 会撞上旧缓存。
+      - type: dir
+        path: ../..
+        skip:
+          - .git
+          - .flatpak-builder
+          - build
+          - build-release-arm64
+          - build-release-linux-x86_64
+          - build-release-linux-aarch64
+          - build-flatpak
+          - dist
+          - Testing

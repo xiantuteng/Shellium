@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QByteArray>
+#include <QList>
 #include <QMutex>
 #include <QThread>
 
@@ -38,6 +39,20 @@ public:
      * 消费方必须无条件回执——即使这批字节因为会话代次不符而被丢弃。
      */
     void notifyOutputConsumed(qint64 bytes);
+
+    /**
+     * @brief 生成 POSIX 下启动本地登录 Shell 的 execv 参数，首项即程序路径。
+     * @param shellPath 要启动的 Shell。
+     * @param homeDirectory Shell 的起始目录。
+     * @param insideFlatpak 是否运行在 Flatpak 沙箱内。
+     *
+     * Flatpak 沙箱里的 /bin、/usr 来自运行时，看不到用户机器上的 Shell 和它的配置，必须经
+     * flatpak-spawn --host 在宿主上启动；PTY 从机作为标准输入输出一并转交。沙箱内的环境变量
+     * 不会传到宿主，终端变量和起始目录都要用参数显式带过去。
+     */
+    [[nodiscard]] static QList<QByteArray> posixLaunchArguments(const QString &shellPath,
+                                                                const QString &homeDirectory,
+                                                                bool insideFlatpak);
 
 signals:
     /** @brief 本地 PTY 产生可供终端渲染的原始字节。 */
