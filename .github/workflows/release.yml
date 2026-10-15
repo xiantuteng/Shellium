@@ -289,10 +289,12 @@ jobs:
           python3 -m pip install 'aqtinstall==3.3.0'
           python3 -m aqt install-qt linux desktop 6.8.3 linux_gcc_64 --outputdir /opt/qt
 
+      # restore/save 分开写：actions/cache 只在整个 job 成功后才保存，后面打包一失败，一小时的
+      # Qt 编译就白做了。编译完立即保存。
       - name: Restore Qt built from source
         if: matrix.arch == 'aarch64'
         id: qt-cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: ${{ matrix.qt_prefix }}
           key: qt-6.8.3-ubuntu22.04-aarch64-${{ hashFiles('scripts/build_qt_from_source.sh', 'scripts/fetch_verified_source.sh') }}
@@ -300,6 +302,13 @@ jobs:
       - name: Build Qt from source
         if: matrix.arch == 'aarch64' && steps.qt-cache.outputs.cache-hit != 'true'
         run: ./scripts/build_qt_from_source.sh "${{ matrix.qt_prefix }}" 2>&1 | tee qt-build.log
+
+      - name: Save Qt built from source
+        if: matrix.arch == 'aarch64' && steps.qt-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ matrix.qt_prefix }}
+          key: ${{ steps.qt-cache.outputs.cache-primary-key }}
 
       - name: Report Qt build log
         if: failure() && matrix.arch == 'aarch64' && steps.qt-cache.outputs.cache-hit != 'true'
@@ -429,7 +438,8 @@ jobs:
       - name: Install Flatpak tooling
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends flatpak flatpak-builder xvfb xauth
+          # elfutils 提供 flatpak-builder 拆分调试符号用的 eu-strip。
+          sudo apt-get install -y --no-install-recommends flatpak flatpak-builder elfutils xvfb xauth
           # Ubuntu 24.04 默认禁止非特权进程创建 user namespace，flatpak-builder 用的 bwrap 依赖它。
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
 

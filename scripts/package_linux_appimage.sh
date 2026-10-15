@@ -126,6 +126,10 @@ for package in libssh vterm libsodium spdlog minizip; do
         dependency_libdirs="${dependency_libdirs:+${dependency_libdirs}:}${package_libdir}"
     fi
 done
+# Qt 装在自定义前缀（aqt 下载或源码编译），不在 ldconfig 缓存里；linuxdeploy 先于 Qt 插件解析
+# 主程序依赖，找不到 libQt6*.so.6 就直接失败。
+QT_LIBDIR="$("${QMAKE}" -query QT_INSTALL_LIBS)"
+dependency_libdirs="${dependency_libdirs:+${dependency_libdirs}:}${QT_LIBDIR}"
 export LD_LIBRARY_PATH="${dependency_libdirs}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
 
 mkdir -p "${DIST_DIR}"
