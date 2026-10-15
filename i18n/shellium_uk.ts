@@ -1409,8 +1409,8 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">Локальний термінал</translation>
     </message>
     <message>
-        <source>Start a local login zsh in the current terminal pane</source>
-        <translation type="unfinished">Запустити локальний вхід у систему zsh у поточній панелі термінала</translation>
+        <source>Start a local login shell in the current terminal pane</source>
+        <translation type="unfinished">Запустити локальну оболонку входу в поточній панелі термінала</translation>
     </message>
     <message>
         <source>New tab</source>

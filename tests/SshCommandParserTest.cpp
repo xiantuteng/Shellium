@@ -17,6 +17,7 @@
 #include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QFile>
+#include <QFileInfo>
 #include <QLabel>
 #include <QLineEdit>
 #include <QGuiApplication>
@@ -1584,9 +1585,29 @@ void SshCommandParserTest::localShellStartsInHomeDirectory()
 #endif
 }
 
+namespace {
+
+/** @brief 本地 zsh 用例要启动的程序：Windows 交给平台默认 Shell，POSIX 固定为 zsh。 */
+QString localZshPath()
+{
+#if defined(Q_OS_WIN)
+    return {};
+#else
+    return QStringLiteral("/bin/zsh");
+#endif
+}
+
+} // namespace
+
 void SshCommandParserTest::localZshExecutesInteractiveCommand()
 {
-    LocalShellWorker worker;
+#if !defined(Q_OS_WIN)
+    if (!QFileInfo(localZshPath()).isExecutable()) {
+        QSKIP("本机未安装 /bin/zsh");
+    }
+#endif
+    // 默认程序跟随用户的登录 Shell；这里用到 zsh 专有语法，必须显式指定 zsh。
+    LocalShellWorker worker(localZshPath());
     QSignalSpy startedSpy(&worker, &LocalShellWorker::shellStarted);
     QSignalSpy outputSpy(&worker, &LocalShellWorker::outputReady);
     QSignalSpy finishedSpy(&worker, &LocalShellWorker::shellFinished);
@@ -1623,7 +1644,13 @@ void SshCommandParserTest::localZshExecutesInteractiveCommand()
 
 void SshCommandParserTest::localZshInterruptsForegroundCommand()
 {
-    LocalShellWorker worker;
+#if !defined(Q_OS_WIN)
+    if (!QFileInfo(localZshPath()).isExecutable()) {
+        QSKIP("本机未安装 /bin/zsh");
+    }
+#endif
+    // 默认程序跟随用户的登录 Shell；这里用到 zsh 专有语法，必须显式指定 zsh。
+    LocalShellWorker worker(localZshPath());
     QSignalSpy startedSpy(&worker, &LocalShellWorker::shellStarted);
     QSignalSpy outputSpy(&worker, &LocalShellWorker::outputReady);
     QSignalSpy finishedSpy(&worker, &LocalShellWorker::shellFinished);

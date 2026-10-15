@@ -1409,8 +1409,8 @@ Puede ser una reinstalación del servidor o una rotación de clave, o un ataque 
         <translation type="unfinished">Terminal local</translation>
     </message>
     <message>
-        <source>Start a local login zsh in the current terminal pane</source>
-        <translation type="unfinished">Iniciar un zsh de inicio de sesión local en el panel de terminal actual</translation>
+        <source>Start a local login shell in the current terminal pane</source>
+        <translation type="unfinished">Iniciar un shell de inicio de sesión local en el panel de terminal actual</translation>
     </message>
     <message>
         <source>New tab</source>

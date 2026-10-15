@@ -1409,8 +1409,8 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">طرفية محلية</translation>
     </message>
     <message>
-        <source>Start a local login zsh in the current terminal pane</source>
-        <translation type="unfinished">بدء تسجيل دخول zsh محلي في لوحة الطرفية الحالية</translation>
+        <source>Start a local login shell in the current terminal pane</source>
+        <translation type="unfinished">بدء صدفة تسجيل دخول محلية في لوحة الطرفية الحالية</translation>
     </message>
     <message>
         <source>New tab</source>

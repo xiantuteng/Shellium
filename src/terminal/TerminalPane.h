@@ -73,7 +73,7 @@ public:
 
     /**
      * @brief 在当前面板中启动平台默认本地 Shell，用于本地运维和终端功能测试。
-     * @param shellPath 可选显式程序路径；为空时 Windows 选择 PowerShell/cmd，POSIX 选择 zsh。
+     * @param shellPath 可选显式程序路径；为空时 Windows 选择 PowerShell/cmd，POSIX 选择用户的登录 Shell。
      */
     void openLocalShell(const QString &shellPath = {});
 

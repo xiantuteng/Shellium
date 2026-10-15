@@ -19,6 +19,7 @@
 #include <cstring>
 #include <fcntl.h>
 #include <poll.h>
+#include <pwd.h>
 #include <signal.h>
 #include <sys/ioctl.h>
 #include <sys/types.h>
@@ -60,13 +61,33 @@ constexpr qint64 kOutputBacklogHighWaterBytes = 1 << 20;
  */
 constexpr int kOutputBacklogRetryMilliseconds = 5;
 
+#if !defined(Q_OS_WIN)
+/** @brief 读取当前用户 passwd 记录里登记的登录 Shell，查不到时返回空串。 */
+QString accountShellPath()
+{
+    long bufferSize = sysconf(_SC_GETPW_R_SIZE_MAX);
+    if (bufferSize <= 0) {
+        bufferSize = 16384;
+    }
+    std::vector<char> buffer(static_cast<size_t>(bufferSize));
+    struct passwd entry {};
+    struct passwd *result = nullptr;
+    if (getpwuid_r(getuid(), &entry, buffer.data(), buffer.size(), &result) != 0
+        || result == nullptr || result->pw_shell == nullptr) {
+        return {};
+    }
+    return QFile::decodeName(result->pw_shell);
+}
+#endif
+
 /**
  * @brief 解析当前平台的默认交互式 Shell。
  * @param requestedPath 用户或测试显式指定的路径；非空时原样保留。
  * @return 可供当前平台启动的程序路径。
  *
  * Windows 优先 PowerShell 7，其次系统 Windows PowerShell，最后退回 ComSpec/cmd；POSIX
- * 保持项目原有 zsh 默认值。这里只探测可执行文件，不伪造 Windows Terminal 环境变量。
+ * 启动用户的登录 Shell，规则见 LocalShellWorker::resolvePosixShell。这里只探测可执行文件，
+ * 不伪造 Windows Terminal 环境变量。
  */
 QString resolveShellPath(const QString &requestedPath)
 {
@@ -86,7 +107,9 @@ QString resolveShellPath(const QString &requestedPath)
     const QString comSpec = qEnvironmentVariable("ComSpec");
     return comSpec.isEmpty() ? QStringLiteral("cmd.exe") : comSpec;
 #else
-    return QStringLiteral("/bin/zsh");
+    return LocalShellWorker::resolvePosixShell(qEnvironmentVariable("SHELL"),
+                                               accountShellPath(),
+                                               QFile::exists(QStringLiteral("/.flatpak-info")));
 #endif
 }
 
@@ -188,6 +211,35 @@ QList<QByteArray> LocalShellWorker::posixLaunchArguments(const QString &shellPat
             QByteArrayLiteral("COLORTERM=truecolor"),
             encodedShell,
             QByteArrayLiteral("-l")};
+}
+
+QString LocalShellWorker::resolvePosixShell(const QString &environmentShell,
+                                           const QString &accountShell,
+                                           const bool insideFlatpak)
+{
+    if (insideFlatpak) {
+        return QDir::isAbsolutePath(environmentShell) ? environmentShell
+                                                      : QStringLiteral("/bin/bash");
+    }
+    const auto usable = [](const QString &path) {
+        if (!QDir::isAbsolutePath(path)) {
+            return false;
+        }
+        const QFileInfo info(path);
+        const QString name = info.fileName();
+        // /usr/sbin/nologin、/bin/false 可执行但只会立刻退出，选中它们等于终端打开即关闭。
+        return info.isFile() && info.isExecutable() && name != QLatin1String("nologin")
+            && name != QLatin1String("false");
+    };
+    for (const QString &candidate : {environmentShell,
+                                     accountShell,
+                                     QStringLiteral("/bin/bash"),
+                                     QStringLiteral("/usr/bin/bash")}) {
+        if (usable(candidate)) {
+            return candidate;
+        }
+    }
+    return QStringLiteral("/bin/sh");
 }
 
 void LocalShellWorker::run()

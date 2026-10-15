@@ -1409,8 +1409,8 @@ Confirmar que a chave mudou, substituir o registro antigo em known_hosts e conti
         <translation type="unfinished">Terminal local</translation>
     </message>
     <message>
-        <source>Start a local login zsh in the current terminal pane</source>
-        <translation type="unfinished">Iniciar um zsh de login local no painel de terminal atual</translation>
+        <source>Start a local login shell in the current terminal pane</source>
+        <translation type="unfinished">Iniciar um shell de login local no painel de terminal atual</translation>
     </message>
     <message>
         <source>New tab</source>

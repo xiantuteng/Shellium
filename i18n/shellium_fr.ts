@@ -1409,8 +1409,8 @@ Confirmer que la clé a changé, remplacer l&apos;ancien enregistrement dans kno
         <translation type="unfinished">Terminal local</translation>
     </message>
     <message>
-        <source>Start a local login zsh in the current terminal pane</source>
-        <translation type="unfinished">Démarrer un zsh de connexion local dans le volet de terminal actuel</translation>
+        <source>Start a local login shell in the current terminal pane</source>
+        <translation type="unfinished">Démarrer un shell de connexion local dans le volet de terminal actuel</translation>
     </message>
     <message>
         <source>New tab</source>

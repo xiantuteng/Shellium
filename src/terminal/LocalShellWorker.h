@@ -54,6 +54,22 @@ public:
                                                                 const QString &homeDirectory,
                                                                 bool insideFlatpak);
 
+    /**
+     * @brief 选出 POSIX 下未显式指定程序时要启动的登录 Shell。
+     * @param environmentShell 环境变量 $SHELL 的值。
+     * @param accountShell 用户账户记录（passwd）里登记的 Shell。
+     * @param insideFlatpak 是否运行在 Flatpak 沙箱内。
+     *
+     * 依次尝试 $SHELL、账户 Shell、/bin/bash（及 /usr/bin/bash），取第一个可执行的，都不行
+     * 才用 /bin/sh。不能写死 zsh：大多数 Linux 发行版默认没有安装它。nologin/false 这类
+     * 拒绝登录的占位程序不算数。
+     * Flatpak 沙箱里看不到宿主文件，无法检查存在性：只要 $SHELL 是绝对路径就交给宿主，
+     * 否则退回桌面发行版普遍具备的 /bin/bash。
+     */
+    [[nodiscard]] static QString resolvePosixShell(const QString &environmentShell,
+                                                   const QString &accountShell,
+                                                   bool insideFlatpak);
+
 signals:
     /** @brief 本地 PTY 产生可供终端渲染的原始字节。 */
     void outputReady(const QByteArray &bytes);

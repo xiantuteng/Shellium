@@ -1409,8 +1409,8 @@ Bestätigen Sie, dass sich der Schlüssel geändert hat, ersetzen Sie den alten 
         <translation type="unfinished">Lokales Terminal</translation>
     </message>
     <message>
-        <source>Start a local login zsh in the current terminal pane</source>
-        <translation type="unfinished">Eine lokale Login-zsh im aktuellen Terminalbereich starten</translation>
+        <source>Start a local login shell in the current terminal pane</source>
+        <translation type="unfinished">Eine lokale Login-Shell im aktuellen Terminalbereich starten</translation>
     </message>
     <message>
         <source>New tab</source>

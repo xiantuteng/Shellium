@@ -729,11 +729,11 @@ MainWindow::MainWindow(ApplicationDatabase *database,
                          QT_TRANSLATE_NOOP("MainWindow",
                              "Connects to an internal host through the current server. The app maintains the layers itself, so the file manager can switch accurately between them."));
 
-    // 菜单使用平台中立名称：Windows 会启动 PowerShell/cmd，macOS 与 Linux 默认启动 zsh。
+    // 菜单使用平台中立名称：Windows 会启动 PowerShell/cmd，macOS 与 Linux 启动用户的登录 Shell。
     auto *localShellAction = new QAction(this);
     registerTranslatable(localShellAction,
                          QT_TRANSLATE_NOOP("MainWindow", "Local terminal"),
-                         QT_TRANSLATE_NOOP("MainWindow", "Start a local login zsh in the current terminal pane"));
+                         QT_TRANSLATE_NOOP("MainWindow", "Start a local login shell in the current terminal pane"));
     localShellAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+L")));
 
     auto *newTabAction = new QAction(this);

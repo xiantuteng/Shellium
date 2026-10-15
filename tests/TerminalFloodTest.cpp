@@ -2,6 +2,7 @@
 #include <QByteArray>
 #include <QElapsedTimer>
 #include <QSignalSpy>
+#include <QTemporaryDir>
 #include <QTextDocument>
 #include <QtTest>
 
@@ -54,6 +55,10 @@ private slots:
     void nativeLaunchRunsShellThroughEnv();
     /** @brief Flatpak 沙箱内必须经 flatpak-spawn 在宿主上启动 Shell。 */
     void flatpakLaunchRunsShellOnHost();
+    /** @brief 未指定程序时启动用户的登录 Shell，而不是写死在多数 Linux 上并不存在的 zsh。 */
+    void defaultShellFollowsUserLoginShell();
+    /** @brief Flatpak 内无法检查宿主文件，$SHELL 原样交给宿主，缺失时退回 bash。 */
+    void flatpakDefaultShellTrustsHostShellVariable();
 };
 
 void TerminalFloodTest::shrinkingGridWithScreenFillingLineSurvives()
@@ -280,6 +285,61 @@ void TerminalFloodTest::flatpakLaunchRunsShellOnHost()
     // flatpak-spawn 把第一个非选项参数当作宿主命令，Shell 与 -l 必须排在所有选项之后。
     QCOMPARE(arguments.mid(arguments.size() - 2),
              (QList<QByteArray> {QByteArrayLiteral("/bin/zsh"), QByteArrayLiteral("-l")}));
+}
+
+void TerminalFloodTest::defaultShellFollowsUserLoginShell()
+{
+#if defined(Q_OS_WIN)
+    QSKIP("POSIX 专用");
+#else
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const auto makeExecutable = [&directory](const QString &name) {
+        const QString path = directory.filePath(name);
+        QFile file(path);
+        if (!file.open(QIODevice::WriteOnly)) {
+            return QString();
+        }
+        file.write("#!/bin/sh\n");
+        file.close();
+        file.setPermissions(QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
+        return path;
+    };
+    const QString fish = makeExecutable(QStringLiteral("fish"));
+    const QString accountBash = makeExecutable(QStringLiteral("bash"));
+    const QString nologin = makeExecutable(QStringLiteral("nologin"));
+    QVERIFY(!fish.isEmpty() && !accountBash.isEmpty() && !nologin.isEmpty());
+    const QString missing = directory.filePath(QStringLiteral("missing/zsh"));
+
+    // $SHELL 优先，哪怕账户里登记的是另一个。
+    QCOMPARE(LocalShellWorker::resolvePosixShell(fish, accountBash, false), fish);
+    // $SHELL 指向不存在的程序（例如 macOS 迁移来的配置写着 zsh）时改用账户 Shell。
+    QCOMPARE(LocalShellWorker::resolvePosixShell(missing, accountBash, false), accountBash);
+    // 相对路径、nologin 都不能被选中：前者 exec 不到，后者终端一开就关。
+    QCOMPARE(LocalShellWorker::resolvePosixShell(QStringLiteral("fish"), accountBash, false),
+             accountBash);
+    QCOMPARE(LocalShellWorker::resolvePosixShell(nologin, accountBash, false), accountBash);
+
+    // 回归目标：两项都缺失时旧实现固定返回 /bin/zsh，在 Debian/Ubuntu/Fedora 默认安装下
+    // 并不存在，点"+"只会报"本地 Shell 不存在"。兜底必须是一个真实存在的可执行 Shell。
+    const QString fallback = LocalShellWorker::resolvePosixShell({}, missing, false);
+    QVERIFY2(QFileInfo(fallback).isExecutable(), qPrintable(fallback));
+    const QStringList expectedFallbacks {QStringLiteral("/bin/bash"),
+                                         QStringLiteral("/usr/bin/bash"),
+                                         QStringLiteral("/bin/sh")};
+    QVERIFY2(expectedFallbacks.contains(fallback), qPrintable(fallback));
+#endif
+}
+
+void TerminalFloodTest::flatpakDefaultShellTrustsHostShellVariable()
+{
+    // 沙箱里的 /bin 来自运行时，宿主的 /usr/bin/fish 在这里看不到，也不能因此丢弃。
+    QCOMPARE(LocalShellWorker::resolvePosixShell(QStringLiteral("/usr/bin/fish"),
+                                                 QStringLiteral("/bin/sh"),
+                                                 true),
+             QStringLiteral("/usr/bin/fish"));
+    QCOMPARE(LocalShellWorker::resolvePosixShell({}, QStringLiteral("/bin/sh"), true),
+             QStringLiteral("/bin/bash"));
 }
 
 QTEST_MAIN(TerminalFloodTest)

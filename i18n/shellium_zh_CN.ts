@@ -1409,8 +1409,8 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation>本地终端</translation>
     </message>
     <message>
-        <source>Start a local login zsh in the current terminal pane</source>
-        <translation>在当前终端面板中启动本地登录式 zsh</translation>
+        <source>Start a local login shell in the current terminal pane</source>
+        <translation>在当前终端面板中启动本地登录 Shell</translation>
     </message>
     <message>
         <source>New tab</source>

@@ -1409,8 +1409,8 @@ Confermare che la chiave è cambiata, sostituire il vecchio record in known_host
         <translation type="unfinished">Terminale locale</translation>
     </message>
     <message>
-        <source>Start a local login zsh in the current terminal pane</source>
-        <translation type="unfinished">Avvia uno zsh di login locale nel riquadro del terminale corrente</translation>
+        <source>Start a local login shell in the current terminal pane</source>
+        <translation type="unfinished">Avvia una shell di login locale nel riquadro del terminale corrente</translation>
     </message>
     <message>
         <source>New tab</source>

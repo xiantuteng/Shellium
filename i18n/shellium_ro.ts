@@ -1409,8 +1409,8 @@ Confirmi că cheia s-a schimbat, înlocuiești vechea înregistrare din known_ho
         <translation type="unfinished">Terminal local</translation>
     </message>
     <message>
-        <source>Start a local login zsh in the current terminal pane</source>
-        <translation type="unfinished">Pornește o autentificare locală zsh în panoul de terminal curent</translation>
+        <source>Start a local login shell in the current terminal pane</source>
+        <translation type="unfinished">Pornește un shell de autentificare local în panoul de terminal curent</translation>
     </message>
     <message>
         <source>New tab</source>
