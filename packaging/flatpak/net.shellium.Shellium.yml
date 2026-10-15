@@ -40,8 +40,10 @@ modules:
         url: https://download.libsodium.org/libsodium/releases/libsodium-1.0.20.tar.gz
         sha256: ebb65ef6ca439333c2bb41a0c1990587288da07f6c7fd07cb3a18cc18d30ce19
 
+  # libssh 拒绝在源码目录里配置（MacroEnsureOutOfSourceBuild），必须 builddir: true。
   - name: libssh
     buildsystem: cmake-ninja
+    builddir: true
     config-opts:
       - -DCMAKE_BUILD_TYPE=Release
       - -DCMAKE_INSTALL_LIBDIR=lib
@@ -66,6 +68,7 @@ modules:
 
   - name: spdlog
     buildsystem: cmake-ninja
+    builddir: true
     config-opts:
       - -DCMAKE_BUILD_TYPE=Release
       - -DCMAKE_INSTALL_LIBDIR=lib
