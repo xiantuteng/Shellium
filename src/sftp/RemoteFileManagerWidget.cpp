@@ -878,68 +878,47 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     auto *operationRow = new QHBoxLayout(operationBar);
     operationRow->setContentsMargins(14, 10, 14, 10);
     operationRow->setSpacing(5);
-    auto *uploadButton = new QToolButton(operationBar);
-    uploadButton->setObjectName(QStringLiteral("SftpUploadButton"));
+    // 底栏只保留三个传输动作：上传文件、上传目录、下载。预览、权限、重命名、删除等针对
+    // 单个条目的操作统一收进右键菜单，避免窄栏里一排难以分辨的小图标。
+    auto *uploadFileButton = new QToolButton(operationBar);
+    uploadFileButton->setObjectName(QStringLiteral("SftpUploadFileButton"));
+    auto *uploadDirectoryButton = new QToolButton(operationBar);
+    uploadDirectoryButton->setObjectName(QStringLiteral("SftpUploadDirectoryButton"));
     auto *downloadButton = new QToolButton(operationBar);
     downloadButton->setObjectName(QStringLiteral("SftpDownloadButton"));
-    auto *previewButton = new QToolButton(operationBar);
-    previewButton->setObjectName(QStringLiteral("SftpPreviewButton"));
-    auto *chmodButton = new QToolButton(operationBar);
-    chmodButton->setObjectName(QStringLiteral("SftpChmodButton"));
-    auto *renameButton = new QToolButton(operationBar);
-    renameButton->setObjectName(QStringLiteral("SftpRenameButton"));
-    auto *deleteButton = new QToolButton(operationBar);
-    deleteButton->setObjectName(QStringLiteral("SftpDeleteButton"));
+    const QColor actionIconColor = this->palette().color(QPalette::WindowText);
     configureResponsiveFileAction(
-        uploadButton,
-        UiIcons::symbol(this, UiIcons::Symbol::Upload, this->palette().color(QPalette::WindowText)),
-        tr("Upload"),
+        uploadFileButton,
+        UiIcons::symbol(this, UiIcons::Symbol::UploadFile, actionIconColor),
+        tr("Upload Files…"),
         QStringLiteral("transfer"));
-    // 文件与目录合成一个按钮。系统文件选择器无法在一次会话里同时接受文件和目录，因此按钮
-    // 展开一个二选一菜单，而不是让用户在两个外观相近的图标之间猜。
-    auto *uploadMenu = new QMenu(uploadButton);
-    UiIcons::modernizePopup(uploadMenu);
-    QAction *uploadFilesAction = uploadMenu->addAction(
-        UiIcons::symbol(this, UiIcons::Symbol::Send, this->palette().color(QPalette::WindowText)),
-        tr("Upload Files…"));
+    configureResponsiveFileAction(
+        uploadDirectoryButton,
+        UiIcons::symbol(this, UiIcons::Symbol::UploadFolder, actionIconColor),
+        tr("Upload Directory…"),
+        QStringLiteral("transfer"));
+    configureResponsiveFileAction(
+        downloadButton,
+        UiIcons::symbol(this, UiIcons::Symbol::DownloadTray, actionIconColor),
+        tr("Download"),
+        QStringLiteral("transfer"));
+    // 两个上传动作同时以 QAction 形式挂在控件上：命令面板通过 findChildren<QAction*>
+    // 收录它们，按钮只是这两个动作的可视入口。
+    auto *uploadFilesAction = new QAction(
+        UiIcons::symbol(this, UiIcons::Symbol::UploadFile, actionIconColor),
+        tr("Upload Files…"), this);
     uploadFilesAction->setObjectName(QStringLiteral("SftpUploadFilesAction"));
-    QAction *uploadDirectoryAction = uploadMenu->addAction(
-        UiIcons::symbol(this, UiIcons::Symbol::Folder, this->palette().color(QPalette::WindowText)),
-        tr("Upload Directory…"));
+    auto *uploadDirectoryAction = new QAction(
+        UiIcons::symbol(this, UiIcons::Symbol::UploadFolder, actionIconColor),
+        tr("Upload Directory…"), this);
     uploadDirectoryAction->setObjectName(QStringLiteral("SftpUploadDirectoryAction"));
     connect(uploadFilesAction, &QAction::triggered,
             this, &RemoteFileManagerWidget::uploadSelectedFile);
     connect(uploadDirectoryAction, &QAction::triggered,
             this, &RemoteFileManagerWidget::uploadSelectedDirectory);
-    uploadButton->setMenu(uploadMenu);
-    uploadButton->setPopupMode(QToolButton::InstantPopup);
-    configureResponsiveFileAction(
-        downloadButton,
-        UiIcons::symbol(this, UiIcons::Symbol::Download, this->palette().color(QPalette::WindowText)),
-        tr("Download"),
-        QStringLiteral("transfer"));
-    configureResponsiveFileAction(
-        previewButton,
-        UiIcons::symbol(this, UiIcons::Symbol::Eye, this->palette().color(QPalette::WindowText)),
-        tr("Preview"),
-        QStringLiteral("file"));
-    configureResponsiveFileAction(
-        chmodButton,
-        UiIcons::symbol(this, UiIcons::Symbol::Info, this->palette().color(QPalette::WindowText)),
-        tr("Permissions"),
-        QStringLiteral("file"));
-    configureResponsiveFileAction(
-        renameButton,
-        UiIcons::symbol(this, UiIcons::Symbol::Edit, this->palette().color(QPalette::WindowText)),
-        tr("Rename"),
-        QStringLiteral("file"));
-    configureResponsiveFileAction(
-        deleteButton,
-        UiIcons::symbol(this,
-                        UiIcons::Symbol::Trash,
-                        QColor(QStringLiteral("#d84a41"))),
-        tr("Delete"),
-        QStringLiteral("danger"));
+    connect(uploadFileButton, &QToolButton::clicked, uploadFilesAction, &QAction::trigger);
+    connect(uploadDirectoryButton, &QToolButton::clicked,
+            uploadDirectoryAction, &QAction::trigger);
     configureCompactFileButton(
         m_pauseButton,
         UiIcons::symbol(this, UiIcons::Symbol::Pause, this->palette().color(QPalette::WindowText)),
@@ -959,15 +938,10 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     m_resumeTransfersCheck->setText(tr("Resumable transfer"));
     m_resumeTransfersCheck->setToolTip(
         tr("On: files whose content is truly identical are skipped, and partial fragments left by an interruption continue after verification;\nOff: everything is re-uploaded in full regardless of whether content matches."));
-    // 操作行按"传输""文件操作""传输控制"三组用竖线隔开，从左到右符合从常用到不常用
-    // 的操作频率，用户不用逐个图标猜边界。
-    operationRow->addWidget(uploadButton);
+    // 操作行左侧是三个传输动作，右侧是续传开关与传输控制，两组之间由弹性空白隔开。
+    operationRow->addWidget(uploadFileButton);
+    operationRow->addWidget(uploadDirectoryButton);
     operationRow->addWidget(downloadButton);
-    operationRow->addWidget(createOperationRowSeparator(operationBar));
-    operationRow->addWidget(previewButton);
-    operationRow->addWidget(chmodButton);
-    operationRow->addWidget(renameButton);
-    operationRow->addWidget(deleteButton);
     operationRow->addStretch(1);
     operationRow->addWidget(m_resumeTransfersCheck);
     m_transferControlSeparator = createOperationRowSeparator(operationBar);
@@ -1189,10 +1163,6 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
             this,
             &RemoteFileManagerWidget::toggleActiveTransferPause);
     connect(downloadButton, &QToolButton::clicked, this, &RemoteFileManagerWidget::downloadSelectedFile);
-    connect(previewButton, &QToolButton::clicked, this, &RemoteFileManagerWidget::previewSelectedFile);
-    connect(chmodButton, &QToolButton::clicked, this, &RemoteFileManagerWidget::chmodSelectedPath);
-    connect(renameButton, &QToolButton::clicked, this, &RemoteFileManagerWidget::renameSelectedPath);
-    connect(deleteButton, &QToolButton::clicked, this, &RemoteFileManagerWidget::deleteSelectedPath);
     connect(m_transferQueueList,
             &QWidget::customContextMenuRequested,
             this,
@@ -1526,22 +1496,27 @@ RemoteFileManagerWidget::RemoteFileManagerWidget(QWidget *parent)
     // 常驻文件管理面板：语言切换时重设列头、工具栏按钮提示与固定文案。传输状态文案
     // （m_statusLabel / m_pauseButton）是动态内容，随下一次传输事件转为新语言。
     i18n::onRetranslate(this,
-                        [this, uploadButton, downloadButton, previewButton, chmodButton,
-                         renameButton, deleteButton, uploadFilesAction, uploadDirectoryAction] {
+                        [this, uploadFileButton, uploadDirectoryButton, downloadButton,
+                         uploadFilesAction, uploadDirectoryAction] {
         const QStringList headers{tr("Name"), tr("Size"), tr("Modified"),
                                   tr("Permissions"), tr("Owner")};
         m_localTree->setHeaderLabels(headers);
         m_fileTree->setHeaderLabels(headers);
-        // 上传菜单里的这两个 QAction 只在构造期设过一次文案，且会被命令面板通过
-        // findChildren<QAction*> 收录；不在此处重设，切换语言后面板里会残留上一次语言。
+        // 这两个 QAction 会被命令面板通过 findChildren<QAction*> 收录；不在此处重设，
+        // 切换语言后面板里会残留上一次语言。
         uploadFilesAction->setText(tr("Upload Files…"));
         uploadDirectoryAction->setText(tr("Upload Directory…"));
-        uploadButton->setToolTip(tr("Upload"));
-        downloadButton->setToolTip(tr("Download"));
-        previewButton->setToolTip(tr("Preview"));
-        chmodButton->setToolTip(tr("Permissions"));
-        renameButton->setToolTip(tr("Rename"));
-        deleteButton->setToolTip(tr("Delete"));
+        // 按钮文字在宽态直接可见，Tooltip 与 AccessibleName 在窄态承担说明，三者一起刷新。
+        const QList<QPair<QToolButton *, QString>> actionTexts{
+            {uploadFileButton, tr("Upload Files…")},
+            {uploadDirectoryButton, tr("Upload Directory…")},
+            {downloadButton, tr("Download")},
+        };
+        for (const auto &[button, text] : actionTexts) {
+            button->setText(text);
+            button->setToolTip(text);
+            button->setAccessibleName(text);
+        }
         m_resumeTransfersCheck->setText(tr("Resumable transfer"));
         m_closeButton->setToolTip(
             tr("Close the remote file manager and give all the width back to the terminal"));
@@ -1585,9 +1560,9 @@ void RemoteFileManagerWidget::updateRemoteNameColumnWidth()
 
 void RemoteFileManagerWidget::updateResponsiveActionButtons()
 {
-    // 760px 能容纳六个文字动作、续传复选框和右侧控制按钮；低于该阈值时保留图标与完整
+    // 600px 能容纳三个文字动作、续传复选框和右侧控制按钮；低于该阈值时保留图标与完整
     // Tooltip。使用控件实际宽度而不是全屏布尔值，可正确处理用户拖动外层分隔器的场景。
-    const bool showText = width() >= 760;
+    const bool showText = width() >= 600;
     const QList<QToolButton *> actionButtons = findChildren<QToolButton *>();
     for (QToolButton *button : actionButtons) {
         if (!button->property("sftpResponsiveAction").toBool()) {

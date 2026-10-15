@@ -1,5 +1,6 @@
 #include "sftp/RemoteFileManagerWidget.h"
 #include "ssh/SshTunnelBroker.h"
+#include "ui/UiIcons.h"
 
 #include <QCheckBox>
 #include <QDir>
@@ -11,6 +12,7 @@
 #include <QFrame>
 #include <QHeaderView>
 #include <QHBoxLayout>
+#include <QImage>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
@@ -141,6 +143,9 @@ private slots:
 
     /** @brief 进度、状态和队列必须归入同一底部信息带，并在空闲时整体隐藏。 */
     void transferWidgetsShareOneHiddenInformationBand();
+
+    /** @brief 底部操作栏只保留上传文件、上传目录、下载三个按钮，且各自使用专属图标。 */
+    void operationBarKeepsOnlyThreeTransferButtons();
 
     /** @brief 远端 SFTP 中继命令必须保留端口和用户名，并阻断 Shell 参数注入。 */
     void remoteSftpRelayCommandQuotesEveryUntrustedArgument();
@@ -692,12 +697,9 @@ void RemoteFileManagerWidgetTest::actionBarRespondsToAvailableWidth()
 {
     RemoteFileManagerWidget widget;
     const QStringList actionObjectNames = {
-        QStringLiteral("SftpUploadButton"),
+        QStringLiteral("SftpUploadFileButton"),
+        QStringLiteral("SftpUploadDirectoryButton"),
         QStringLiteral("SftpDownloadButton"),
-        QStringLiteral("SftpPreviewButton"),
-        QStringLiteral("SftpChmodButton"),
-        QStringLiteral("SftpRenameButton"),
-        QStringLiteral("SftpDeleteButton"),
     };
 
     const QSize originalSize = widget.size();
@@ -716,7 +718,7 @@ void RemoteFileManagerWidgetTest::actionBarRespondsToAvailableWidth()
     }
 
     const QSize wideSize = widget.size();
-    widget.resize(620, 620);
+    widget.resize(480, 620);
     QResizeEvent narrowResizeEvent(widget.size(), wideSize);
     QCoreApplication::sendEvent(&widget, &narrowResizeEvent);
     QCoreApplication::processEvents();
@@ -727,6 +729,46 @@ void RemoteFileManagerWidgetTest::actionBarRespondsToAvailableWidth()
         QVERIFY2(!button->toolTip().isEmpty(), "紧凑态不能只剩一个无解释图标");
         QCOMPARE(button->width(), 34);
     }
+}
+
+void RemoteFileManagerWidgetTest::operationBarKeepsOnlyThreeTransferButtons()
+{
+    RemoteFileManagerWidget widget;
+    QStringList actionNames;
+    const QList<QToolButton *> buttons = widget.findChildren<QToolButton *>();
+    for (QToolButton *button : buttons) {
+        if (button->property("sftpResponsiveAction").toBool()) {
+            actionNames.append(button->objectName());
+        }
+    }
+    actionNames.sort();
+    QCOMPARE(actionNames,
+             (QStringList{QStringLiteral("SftpDownloadButton"),
+                          QStringLiteral("SftpUploadDirectoryButton"),
+                          QStringLiteral("SftpUploadFileButton")}));
+
+    const QColor iconColor = widget.palette().color(QPalette::WindowText);
+    const auto expectIcon = [&](const QString &objectName, const UiIcons::Symbol symbol) {
+        auto *button = widget.findChild<QToolButton *>(objectName);
+        QVERIFY(button != nullptr);
+        QVERIFY2(button->menu() == nullptr, "上传文件与上传目录是独立按钮，不再弹出二选一菜单");
+        const QImage actual = button->icon().pixmap(QSize(24, 24), 1.0).toImage();
+        const QImage expected =
+            UiIcons::symbol(&widget, symbol, iconColor).pixmap(QSize(24, 24), 1.0).toImage();
+        QVERIFY2(actual == expected,
+                 qPrintable(QStringLiteral("%1 未使用专属图标").arg(objectName)));
+    };
+    expectIcon(QStringLiteral("SftpUploadFileButton"), UiIcons::Symbol::UploadFile);
+    expectIcon(QStringLiteral("SftpUploadDirectoryButton"), UiIcons::Symbol::UploadFolder);
+    expectIcon(QStringLiteral("SftpDownloadButton"), UiIcons::Symbol::DownloadTray);
+
+    // 三个新图标必须互不相同，也不能与旧的通用上传/下载箭头重合。
+    const auto render = [&](const UiIcons::Symbol symbol) {
+        return UiIcons::symbol(&widget, symbol, iconColor).pixmap(QSize(24, 24), 1.0).toImage();
+    };
+    QVERIFY(render(UiIcons::Symbol::UploadFile) != render(UiIcons::Symbol::UploadFolder));
+    QVERIFY(render(UiIcons::Symbol::UploadFile) != render(UiIcons::Symbol::Upload));
+    QVERIFY(render(UiIcons::Symbol::DownloadTray) != render(UiIcons::Symbol::Download));
 }
 
 void RemoteFileManagerWidgetTest::transferWidgetsShareOneHiddenInformationBand()

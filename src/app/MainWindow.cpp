@@ -2529,14 +2529,6 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
             background: @RAISED@;
             border-color: @BORDER@;
         }
-        QToolButton[sftpActionRole="danger"] {
-            color: @DANGER@;
-        }
-        QToolButton[sftpActionRole="danger"]:hover {
-            color: @DANGER@;
-            background: @DANGER_TINT@;
-            border-color: transparent;
-        }
         QCheckBox#SftpResumeCheck {
             color: @MUTED@;
             spacing: 7px;

@@ -93,6 +93,12 @@ enum class Symbol {
     Send,
     Upload,
     Download,
+    /** @brief 文件轮廓内一个向上箭头，表示“上传文件”，与 UploadFolder 成对出现。 */
+    UploadFile,
+    /** @brief 文件夹轮廓内一个向上箭头，表示“上传目录”。 */
+    UploadFolder,
+    /** @brief 箭头落入敞口托盘，表示“下载到本地”；托盘与上传图标的容器轮廓同重。 */
+    DownloadTray,
     Eye,
     /** @brief 带斜线的眼睛，表示当前密码可见，点击后将恢复隐藏。 */
     EyeHidden,
@@ -431,6 +437,59 @@ enum class Symbol {
         painter.drawLine(QPointF(17.0, 12.0), QPointF(12.0, 17.0));
         painter.drawLine(QPointF(5.0, 19.0), QPointF(19.0, 19.0));
         break;
+    case Symbol::UploadFile: {
+        // 文件主体比 Symbol::File 略宽，给内部箭头留出呼吸空间；箭头与折角保持距离，
+        // 缩到 16px 时两者不会粘成一团。
+        QPainterPath file;
+        file.moveTo(5.5, 3.5);
+        file.lineTo(14.0, 3.5);
+        file.lineTo(18.5, 8.0);
+        file.lineTo(18.5, 20.5);
+        file.lineTo(5.5, 20.5);
+        file.closeSubpath();
+        painter.drawPath(file);
+        painter.drawLine(QPointF(14.0, 3.5), QPointF(14.0, 8.0));
+        painter.drawLine(QPointF(14.0, 8.0), QPointF(18.5, 8.0));
+        painter.drawLine(QPointF(12.0, 17.5), QPointF(12.0, 11.0));
+        painter.drawLine(QPointF(9.2, 13.8), QPointF(12.0, 11.0));
+        painter.drawLine(QPointF(14.8, 13.8), QPointF(12.0, 11.0));
+        break;
+    }
+    case Symbol::UploadFolder: {
+        // 轮廓与 Symbol::Folder 完全一致，用户在文件列表里看到的目录形状与按钮一一对应。
+        QPainterPath folder;
+        folder.moveTo(3.0, 7.0);
+        folder.lineTo(3.0, 18.5);
+        folder.quadTo(3.0, 20.5, 5.0, 20.5);
+        folder.lineTo(19.0, 20.5);
+        folder.quadTo(21.0, 20.5, 21.0, 18.5);
+        folder.lineTo(21.0, 8.5);
+        folder.quadTo(21.0, 6.5, 19.0, 6.5);
+        folder.lineTo(12.0, 6.5);
+        folder.lineTo(9.5, 3.8);
+        folder.lineTo(5.0, 3.8);
+        folder.quadTo(3.0, 3.8, 3.0, 5.8);
+        folder.closeSubpath();
+        painter.drawPath(folder);
+        painter.drawLine(QPointF(12.0, 17.5), QPointF(12.0, 10.5));
+        painter.drawLine(QPointF(9.2, 13.3), QPointF(12.0, 10.5));
+        painter.drawLine(QPointF(14.8, 13.3), QPointF(12.0, 10.5));
+        break;
+    }
+    case Symbol::DownloadTray: {
+        QPainterPath tray;
+        tray.moveTo(4.0, 14.0);
+        tray.lineTo(4.0, 18.5);
+        tray.quadTo(4.0, 20.5, 6.0, 20.5);
+        tray.lineTo(18.0, 20.5);
+        tray.quadTo(20.0, 20.5, 20.0, 18.5);
+        tray.lineTo(20.0, 14.0);
+        painter.drawPath(tray);
+        painter.drawLine(QPointF(12.0, 3.5), QPointF(12.0, 15.0));
+        painter.drawLine(QPointF(7.5, 10.5), QPointF(12.0, 15.0));
+        painter.drawLine(QPointF(16.5, 10.5), QPointF(12.0, 15.0));
+        break;
+    }
     case Symbol::Eye:
     case Symbol::EyeHidden: {
         QPainterPath eye;
