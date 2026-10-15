@@ -727,3 +727,13 @@ linuxdeploy 按 AppImage 排除清单跳过 libGL/libEGL/libGLX/libOpenGL 等图
 - Flatpak（`packaging/flatpak/`）用 KDE 运行时自带的 Qt。沙箱里看不到宿主的 Shell，本地终端经
   `flatpak-spawn --host` 在宿主上启动（`LocalShellWorker::posixLaunchArguments`），清单为此申请了
   `org.freedesktop.Flatpak` 总线名；去掉这项权限，本地终端会直接失败。
+
+## 二十一、悬停提示：位置与字号由应用级策略接管
+
+- Qt 把提示放在光标下方“平台光标高度”处。macOS 报告的光标尺寸远大于可见箭头，实测提示落在
+  热点下方约 63px，看起来与鼠标脱节；平台主题给提示的字体也只有 11pt，比 13pt 的界面正文小。
+- `src/ui/ToolTipPolicy.h` 在 `main.cpp` 中安装：把 `QToolTip::font()` 设为正文字号，并在 Qt 内部
+  提示标签（objectName `qtooltip_label`）Show 或 Move 时把它移到光标右下 (2, 20) 处，底部放不下时翻到
+  光标上方。必须同时处理 Move：提示已显示时换文字（如在主机树里换行悬停），Qt 只 move() 复用标签。
+- 不要再用 `QToolTip::showText` 的 pos 参数去“预先减掉偏移”，偏移量取决于平台光标尺寸，无法用公开
+  API 得到。主题样式表里的 `QToolTip` 规则不要写 font-size，否则会覆盖这里的字号。

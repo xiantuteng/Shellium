@@ -6,6 +6,7 @@
 #include "ui/VaultDialog.h"
 #include "ui/ButtonCursorPolicy.h"
 #include "ui/ScrollBarPolicy.h"
+#include "ui/ToolTipPolicy.h"
 
 #include <QApplication>
 #include <QCommandLineOption>
@@ -177,6 +178,8 @@ int main(int argc, char *argv[])
     new ButtonCursorPolicy(application);
     // 启动时统一接管滚动条绘制，动态创建的对话框和终端同样遵循空闲隐藏规则。
     new ScrollBarPolicy(application);
+    // 悬停提示紧贴光标并使用正文字号；Qt 默认按 macOS 报告的超大光标尺寸偏移，离鼠标过远。
+    new ToolTipPolicy(application);
     QCoreApplication::setApplicationName(QStringLiteral("Shellium"));
     // 版本号由 CMake 从 project(VERSION) 注入，与 Info.plist、Windows 版本资源和安装包同源。
     QCoreApplication::setApplicationVersion(QStringLiteral(SHELLIUM_VERSION));
