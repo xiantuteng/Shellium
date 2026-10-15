@@ -25,6 +25,7 @@ constexpr int kDigitRole = Qt::UserRole + 2;    ///< 数字角标 1..9；0 表�
 constexpr int kIndexRole = Qt::UserRole + 3;    ///< 行在 showEntries() 入参中的下标。
 constexpr int kShortcutRole = Qt::UserRole + 4; ///< 行尾右对齐显示的快捷键文字。
 constexpr int kCurrentRole = Qt::UserRole + 5;  ///< 行是否为当前对象（如活动标签）。
+constexpr int kTrailingDetailRole = Qt::UserRole + 6; ///< 次要说明贴行尾右对齐（历史的主机名）。
 
 constexpr int kRowHeight = 36;
 constexpr int kSearchHeight = 36; ///< 搜索栏固定高度，与参考设计一致，避免随字体撑高。
@@ -111,6 +112,25 @@ public:
                                      shortcutWidth, textRect.height()),
                               Qt::AlignVCenter | Qt::AlignRight, shortcut);
             textRect.setRight(textRect.right() - shortcutWidth - 16.0);
+        }
+        if (!detail.isEmpty() && index.data(kTrailingDetailRole).toBool()) {
+            // 主机名贴右成列，与快捷键同一套占位方式：紧跟在命令后面时，长短不一的命令把
+            // 主机名推得忽左忽右，扫一眼分不清哪些命令出自同一台机器。主机名最多占三分之一，
+            // 其余宽度留给命令本身。
+            const int hostWidth = std::min(titleMetrics.horizontalAdvance(detail) + 4,
+                                            int(textRect.width() / 3));
+            painter->setPen(kMutedColor);
+            painter->drawText(QRectF(textRect.right() - hostWidth, textRect.top(),
+                                     hostWidth, textRect.height()),
+                              Qt::AlignVCenter | Qt::AlignRight,
+                              titleMetrics.elidedText(detail, Qt::ElideRight, hostWidth));
+            textRect.setRight(textRect.right() - hostWidth - 16.0);
+            painter->setPen(index.data(kCurrentRole).toBool() ? kCurrentColor : kTextColor);
+            painter->drawText(textRect, Qt::AlignVCenter | Qt::AlignLeft,
+                              titleMetrics.elidedText(title, Qt::ElideRight,
+                                                      int(textRect.width())));
+            painter->restore();
+            return;
         }
         const int titleWidth = detail.isEmpty()
             ? int(textRect.width())
@@ -268,47 +288,39 @@ void QuickCommandPopup::showEntries(const Mode mode,
                                     const QString &shortcutHint,
                                     QWidget *anchor)
 {
+    m_scopedHistory = false;
+    m_historyScope = HistoryScope::AllHosts;
+    present(mode, entries, int(entries.size()), shortcutHint, anchor);
+}
+
+void QuickCommandPopup::showHistory(const QList<Entry> &allHosts,
+                                    const QList<Entry> &currentHost,
+                                    const QString &hostName,
+                                    const QString &shortcutHint,
+                                    QWidget *anchor)
+{
+    m_scopedHistory = true;
+    m_historyScope = HistoryScope::AllHosts;
+    m_allHostEntries = allHosts;
+    m_currentHostEntries = currentHost;
+    m_hostName = hostName;
+    // 高度按两个范围中较长的一个计算：Tab 切换时面板不跟着伸缩，搜索框也不会在手边跳动。
+    const int rows = int(std::max(allHosts.size(), currentHost.size()));
+    present(Mode::History, allHosts, rows, shortcutHint, anchor);
+}
+
+void QuickCommandPopup::present(const Mode mode,
+                                const QList<Entry> &entries,
+                                const int rowsForHeight,
+                                const QString &shortcutHint,
+                                QWidget *anchor)
+{
     m_mode = mode;
-    m_entries = entries;
-    if (mode == Mode::Actions) {
-        m_chipLabel->setText(tr("Commands"));
-        m_searchEdit->setPlaceholderText(tr("Search commands"));
-        m_sectionLabel->setText(tr("Available commands"));
-        m_emptyLabel->setText(tr("No commands are available right now."));
-    } else if (mode == Mode::Tabs) {
-        m_chipLabel->setText(tr("Tabs"));
-        m_searchEdit->setPlaceholderText(tr("Search tabs"));
-        m_sectionLabel->setText(tr("Open tabs"));
-        m_emptyLabel->setText(tr("No open tabs."));
-    } else if (mode == Mode::Snippets) {
-        m_chipLabel->setText(tr("Snippets"));
-        m_searchEdit->setPlaceholderText(tr("Search snippets"));
-        m_sectionLabel->setText(tr("Snippets"));
-        m_emptyLabel->setText(tr("No snippets yet. Add them in the Snippets sidebar."));
-    } else {
-        m_chipLabel->setText(tr("History"));
-        m_searchEdit->setPlaceholderText(tr("Search command history"));
-        m_sectionLabel->setText(tr("Recent commands"));
-        m_emptyLabel->setText(tr("No command history for this session yet."));
-    }
-    // 与角标同源："⌘1–9"（macOS）或 "Ctrl+1–9"。
-    const QString digitKeys = digitShortcutText(1) + QStringLiteral("–9");
-    m_footerLabel->setText(mode == Mode::Tabs
-                               ? tr("%1 switch · Enter switch to selected · Esc close").arg(digitKeys)
-                               : tr("%1 run · Enter run selected · Esc close").arg(digitKeys));
+    updateModeTexts();
     m_shortcutLabel->setText(shortcutHint);
     m_shortcutLabel->setVisible(!shortcutHint.isEmpty());
 
-    m_list->clear();
-    for (const Entry &entry : entries) {
-        auto *item = new QListWidgetItem(entry.title, m_list);
-        item->setData(kCommandRole, entry.command);
-        item->setData(kDetailRole, entry.detail);
-        item->setData(kShortcutRole, entry.shortcut);
-        item->setData(kIndexRole, int(m_list->count() - 1));
-        item->setData(kCurrentRole, entry.current);
-        item->setToolTip(entry.command.isEmpty() ? entry.title : entry.command);
-    }
+    populate(entries);
     {
         // 清空搜索框会触发 applyFilter；这里随后再显式调用一次，保证文本本来就为空时也刷新。
         const QSignalBlocker blocker(m_searchEdit);
@@ -328,7 +340,7 @@ void QuickCommandPopup::showEntries(const Mode mode,
     // 宽度取窗口可用宽度的 70%，上下限同比例收窄（原 420..760）：面板只需容纳一行名称与
     // 命令预览，过宽会让视线在角标和命令之间来回横跳。
     const int width = std::clamp(int((area.width() - 120) * 0.7), 294, 532);
-    const int rows = std::clamp(int(entries.size()), 2, kMaxVisibleRows);
+    const int rows = std::clamp(rowsForHeight, 2, kMaxVisibleRows);
     m_list->setFixedHeight(rows * kRowHeight + 4);
     adjustSize();
     resize(width, sizeHint().height());
@@ -338,6 +350,74 @@ void QuickCommandPopup::showEntries(const Mode mode,
     raise();
     activateWindow();
     m_searchEdit->setFocus(Qt::PopupFocusReason);
+}
+
+void QuickCommandPopup::updateModeTexts()
+{
+    if (m_mode == Mode::Actions) {
+        m_chipLabel->setText(tr("Commands"));
+        m_searchEdit->setPlaceholderText(tr("Search commands"));
+        m_sectionLabel->setText(tr("Available commands"));
+        m_emptyLabel->setText(tr("No commands are available right now."));
+    } else if (m_mode == Mode::Tabs) {
+        m_chipLabel->setText(tr("Tabs"));
+        m_searchEdit->setPlaceholderText(tr("Search tabs"));
+        m_sectionLabel->setText(tr("Open tabs"));
+        m_emptyLabel->setText(tr("No open tabs."));
+    } else if (m_mode == Mode::Snippets) {
+        m_chipLabel->setText(tr("Snippets"));
+        m_searchEdit->setPlaceholderText(tr("Search snippets"));
+        m_sectionLabel->setText(tr("Snippets"));
+        m_emptyLabel->setText(tr("No snippets yet. Add them in the Snippets sidebar."));
+    } else {
+        m_chipLabel->setText(tr("History"));
+        m_searchEdit->setPlaceholderText(tr("Search command history"));
+        if (m_scopedHistory && m_historyScope == HistoryScope::AllHosts) {
+            m_sectionLabel->setText(tr("Recent commands on all hosts"));
+            m_emptyLabel->setText(tr("No command history yet."));
+        } else if (m_scopedHistory) {
+            m_sectionLabel->setText(tr("Recent commands on %1").arg(m_hostName));
+            m_emptyLabel->setText(tr("No command history for this session yet."));
+        } else {
+            m_sectionLabel->setText(tr("Recent commands"));
+            m_emptyLabel->setText(tr("No command history for this session yet."));
+        }
+    }
+    // 与角标同源："⌘1–9"（macOS）或 "Ctrl+1–9"。
+    const QString digitKeys = digitShortcutText(1) + QStringLiteral("–9");
+    if (m_mode == Mode::Tabs) {
+        m_footerLabel->setText(tr("%1 switch · Enter switch to selected · Esc close").arg(digitKeys));
+    } else if (m_scopedHistory) {
+        m_footerLabel->setText(
+            tr("%1 run · Enter run selected · Tab all/current host · Esc close").arg(digitKeys));
+    } else {
+        m_footerLabel->setText(tr("%1 run · Enter run selected · Esc close").arg(digitKeys));
+    }
+}
+
+void QuickCommandPopup::populate(const QList<Entry> &entries)
+{
+    m_entries = entries;
+    m_list->clear();
+    for (const Entry &entry : entries) {
+        auto *item = new QListWidgetItem(entry.title, m_list);
+        item->setData(kCommandRole, entry.command);
+        item->setData(kDetailRole, entry.detail);
+        item->setData(kShortcutRole, entry.shortcut);
+        item->setData(kIndexRole, int(m_list->count() - 1));
+        item->setData(kCurrentRole, entry.current);
+        item->setData(kTrailingDetailRole, m_mode == Mode::History);
+        item->setToolTip(entry.command.isEmpty() ? entry.title : entry.command);
+    }
+}
+
+void QuickCommandPopup::toggleHistoryScope()
+{
+    m_historyScope = m_historyScope == HistoryScope::AllHosts ? HistoryScope::CurrentHost
+                                                              : HistoryScope::AllHosts;
+    updateModeTexts();
+    populate(m_historyScope == HistoryScope::AllHosts ? m_allHostEntries : m_currentHostEntries);
+    applyFilter();
 }
 
 QString QuickCommandPopup::digitShortcutText(const int digit)
@@ -434,6 +514,14 @@ bool QuickCommandPopup::handleKey(QKeyEvent *event)
         return true;
     }
     switch (event->key()) {
+    case Qt::Key_Tab:
+    case Qt::Key_Backtab:
+        // 只有带两个范围的历史面板才拦截 Tab；其余模式交还默认处理，行为与改动前一致。
+        if (m_mode != Mode::History || !m_scopedHistory) {
+            return false;
+        }
+        toggleHistoryScope();
+        return true;
     case Qt::Key_Escape:
         hide();
         return true;

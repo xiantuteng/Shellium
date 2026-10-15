@@ -3188,6 +3188,18 @@ To avoid overwriting existing credentials, Shellium does not create a new vault 
         <translation type="unfinished">Пошук в історії команд</translation>
     </message>
     <message>
+        <source>Recent commands on all hosts</source>
+        <translation type="unfinished">Нещодавні команди на всіх хостах</translation>
+    </message>
+    <message>
+        <source>No command history yet.</source>
+        <translation type="unfinished">Історія команд поки порожня.</translation>
+    </message>
+    <message>
+        <source>Recent commands on %1</source>
+        <translation type="unfinished">Нещодавні команди на %1</translation>
+    </message>
+    <message>
         <source>Recent commands</source>
         <translation type="unfinished">Нещодавні команди</translation>
     </message>
@@ -3198,6 +3210,10 @@ To avoid overwriting existing credentials, Shellium does not create a new vault 
     <message>
         <source>%1 switch · Enter switch to selected · Esc close</source>
         <translation>%1 перейти · Enter перейти до вибраної · Esc закрити</translation>
+    </message>
+    <message>
+        <source>%1 run · Enter run selected · Tab all/current host · Esc close</source>
+        <translation type="unfinished">%1 виконати · Enter виконати вибране · Tab усі хости/поточний хост · Esc закрити</translation>
     </message>
     <message>
         <source>%1 run · Enter run selected · Esc close</source>
@@ -3293,10 +3309,6 @@ To avoid overwriting existing credentials, Shellium does not create a new vault 
     <message>
         <source>Exit full screen and collapse local files</source>
         <translation type="unfinished">Вийти з повноекранного режиму та згорнути локальні файли</translation>
-    </message>
-    <message>
-        <source>Upload</source>
-        <translation type="unfinished">Відправити</translation>
     </message>
     <message>
         <source>Upload Files…</source>
@@ -4006,6 +4018,10 @@ This algorithm is obsolete; upgrading the server&apos;s SSH configuration is rec
         <translation> МБ</translation>
     </message>
     <message>
+        <source> chars</source>
+        <translation type="unfinished"> символів</translation>
+    </message>
+    <message>
         <source>Session</source>
         <translation type="unfinished">Сеанс</translation>
     </message>
@@ -4040,6 +4056,14 @@ This algorithm is obsolete; upgrading the server&apos;s SSH configuration is rec
     <message>
         <source>After you type at least two characters, suggestions are shown automatically from the current host&apos;s command history; off by default.</source>
         <translation type="unfinished">Після введення принаймні двох символів підказки автоматично показуються з історії команд поточного хоста; за замовчуванням вимкнено.</translation>
+    </message>
+    <message>
+        <source>History minimum length</source>
+        <translation type="unfinished">Мінімальна довжина для історії</translation>
+    </message>
+    <message>
+        <source>Only commands at least this long are saved to command history; shorter ones such as ls or cd are skipped. 0 saves every command.</source>
+        <translation type="unfinished">До історії команд зберігаються лише команди, не коротші за цю довжину; коротші, як-от ls чи cd, пропускаються. 0 — зберігати всі команди.</translation>
     </message>
     <message>
         <source>Multi-line paste confirmation</source>

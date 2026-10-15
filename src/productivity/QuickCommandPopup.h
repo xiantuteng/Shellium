@@ -18,7 +18,8 @@ class QListWidgetItem;
  * 也不读数据库，因此同一个控件既服务片段又服务历史，测试也无需真实会话。
  *
  * 按键约定：Cmd+1..9（其他平台 Ctrl+1..9）直接执行当前可见列表中的第 1..9 项；裸数字照常
- * 输入搜索框；上下方向键移动选中项，回车执行选中项；Esc 或点击面板外关闭。
+ * 输入搜索框；上下方向键移动选中项，回车执行选中项；Esc 或点击面板外关闭。经 showHistory()
+ * 打开的历史面板还可按 Tab 在"全部主机"与"当前主机"两个范围之间切换。
  *
  * 使用 Qt::Popup 顶层窗口：点击外部自动关闭、键盘被面板独占，终端不会在面板打开期间
  * 收到误按的数字。
@@ -30,7 +31,7 @@ public:
     /** @brief 面板展示的数据种类，决定标签、占位文字和空列表提示。 */
     enum class Mode {
         Snippets, ///< 命令片段（Cmd+K）。
-        History,  ///< 当前主机的命令历史（Cmd+J）。
+        History,  ///< 命令历史（Cmd+J）；范围见 HistoryScope。
         Actions,  ///< 应用动作的命令面板（Cmd+Shift+P）；条目没有命令文本，只发 entryChosen。
         Tabs,     ///< 全部会话标签；条目没有命令文本，只发 entryChosen，初始选中当前标签。
     };
@@ -38,10 +39,16 @@ public:
     /** @brief 列表中的一行。 */
     struct Entry {
         QString title;   ///< 主标题；片段为名称，历史为命令本身。
-        QString detail;  ///< 次要说明；片段为命令预览，历史留空。
+        QString detail;  ///< 次要说明；片段为命令预览，跨主机历史为主机名（贴行尾右对齐）。
         QString command; ///< 选中后交给终端执行的完整命令；Actions 模式为空。
         QString shortcut = {}; ///< 行尾右对齐显示的快捷键，可为空。
         bool current = false;  ///< 当前对象（如活动标签）：标题高亮，未搜索时初始选中该行。
+    };
+
+    /** @brief 历史面板当前展示的范围。 */
+    enum class HistoryScope {
+        AllHosts,    ///< 跨主机（含本地 Shell）的历史，面板打开时的默认范围。
+        CurrentHost, ///< 只看当前终端所在主机的历史。
     };
 
     /** @brief Cmd+数字可直接执行的最大行数（1..9）。 */
@@ -66,6 +73,22 @@ public:
                      QWidget *anchor);
 
     /**
+     * @brief 以历史模式弹出，默认展示全部主机，按 Tab 在两个范围之间切换。
+     * @param allHosts 跨主机历史条目，按最近使用排序；detail 通常为命令所在主机名。
+     * @param currentHost 当前主机的历史条目。
+     * @param hostName 当前主机的显示名，用于范围标题。
+     * @param shortcutHint 同 showEntries()。
+     * @param anchor 同 showEntries()。
+     *
+     * 切换范围时保留搜索词，便于用户在两个范围里对比同一关键字。
+     */
+    void showHistory(const QList<Entry> &allHosts,
+                     const QList<Entry> &currentHost,
+                     const QString &hostName,
+                     const QString &shortcutHint,
+                     QWidget *anchor);
+
+    /**
      * @brief 第 digit 行执行快捷键的显示文字，角标与底部提示共用。
      * @param digit 1..9；越界返回空字符串。
      * @return macOS 为 "⌘1"，其他平台为 "Ctrl+1"。
@@ -74,6 +97,9 @@ public:
 
     /** @brief 当前展示模式，主要供测试与上层判断。 */
     [[nodiscard]] Mode mode() const { return m_mode; }
+
+    /** @brief 历史面板当前范围；只对 showHistory() 打开的面板有意义。 */
+    [[nodiscard]] HistoryScope historyScope() const { return m_historyScope; }
 
     /**
      * @brief 第 position 个可见条目的命令；position 从 0 开始。
@@ -110,6 +136,22 @@ protected:
     void keyPressEvent(QKeyEvent *event) override;
 
 private:
+    /** @brief showEntries() 与 showHistory() 共用的填充与定位流程。 */
+    void present(Mode mode,
+                 const QList<Entry> &entries,
+                 int rowsForHeight,
+                 const QString &shortcutHint,
+                 QWidget *anchor);
+
+    /** @brief 按当前模式（及历史范围）刷新标签、占位文字、空列表提示与底部提示。 */
+    void updateModeTexts();
+
+    /** @brief 用 entries 重建列表行；不改变搜索框内容。 */
+    void populate(const QList<Entry> &entries);
+
+    /** @brief 在全部主机与当前主机之间切换历史范围，保留搜索词。 */
+    void toggleHistoryScope();
+
     /** @brief 按搜索框内容隐藏不匹配的行，并刷新每行的数字角标。 */
     void applyFilter();
 
@@ -133,6 +175,11 @@ private:
 
     Mode m_mode = Mode::Snippets;
     QList<Entry> m_entries;
+    bool m_scopedHistory = false; ///< 是否由 showHistory() 打开，Tab 仅此时切换范围。
+    HistoryScope m_historyScope = HistoryScope::AllHosts;
+    QList<Entry> m_allHostEntries;
+    QList<Entry> m_currentHostEntries;
+    QString m_hostName;
     QLabel *m_chipLabel = nullptr;
     QLineEdit *m_searchEdit = nullptr;
     QLabel *m_shortcutLabel = nullptr;

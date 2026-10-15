@@ -4880,53 +4880,91 @@ void MainWindow::openQuickCommandPopup(const bool snippets)
         return;
     }
 
-    QList<QuickCommandPopup::Entry> entries;
-    if (snippets) {
-        bool ok = false;
-        const QList<SnippetRecord> records = m_productivityModel->snippetsInGroup(QString(), &ok);
-        if (!ok) {
-            return; // 模型已经通过 errorOccurred 报告了具体原因。
-        }
-        for (const SnippetRecord &record : records) {
-            if (record.kind != SnippetNodeKind::Snippet || record.command.isEmpty()) {
-                continue;
-            }
-            entries.append({record.name, record.command, record.command});
-        }
-    } else {
-        const ConnectionTarget target = pane->activeTarget();
-        const QString hostId = target.isValid() ? target.id : QString();
-        bool ok = false;
-        const QList<CommandHistoryEntry> history =
-            m_productivityModel->recentHistory(hostId, 500, &ok);
-        if (!ok) {
-            return;
-        }
-        // 同一命令只保留最近一次；数字键要对准"最近用过的不同命令"，重复项会把它们挤出前 9 行。
-        QSet<QString> seen;
-        for (const CommandHistoryEntry &entry : history) {
-            if (entry.command.isEmpty() || seen.contains(entry.command)) {
-                continue;
-            }
-            seen.insert(entry.command);
-            entries.append({entry.command, QString(), entry.command});
-            if (entries.size() >= 100) {
-                break;
-            }
-        }
-    }
-
-    ensureQuickCommandPopup();
-    m_quickCommandPane = pane;
     const QString actionId = snippets ? QStringLiteral("snippets.quick")
                                       : QStringLiteral("history.quick");
     const QAction *action = m_configurableActions.value(actionId);
     const QString hint = action == nullptr
         ? QString()
         : action->shortcut().toString(QKeySequence::NativeText);
-    m_quickCommandPopup->showEntries(snippets ? QuickCommandPopup::Mode::Snippets
-                                              : QuickCommandPopup::Mode::History,
-                                     entries, hint, pane);
+
+    if (snippets) {
+        bool ok = false;
+        const QList<SnippetRecord> records = m_productivityModel->snippetsInGroup(QString(), &ok);
+        if (!ok) {
+            return; // 模型已经通过 errorOccurred 报告了具体原因。
+        }
+        QList<QuickCommandPopup::Entry> entries;
+        for (const SnippetRecord &record : records) {
+            if (record.kind != SnippetNodeKind::Snippet || record.command.isEmpty()) {
+                continue;
+            }
+            entries.append({record.name, record.command, record.command});
+        }
+        ensureQuickCommandPopup();
+        m_quickCommandPane = pane;
+        m_quickCommandPopup->showEntries(QuickCommandPopup::Mode::Snippets, entries, hint, pane);
+        return;
+    }
+
+    const ConnectionTarget target = pane->activeTarget();
+    const QString hostId = target.isValid() ? target.id : QString();
+    const QString hostName = !target.isValid() ? tr("Local terminal")
+        : !target.displayName.isEmpty()        ? target.displayName
+                                               : target.host;
+
+    // 跨主机列表的次要说明显示命令出自哪台主机：同名命令在不同机器上含义可能完全不同。
+    // 推测层的 id 是临时 UUID，查不到名称时留空，而不是把 UUID 摆给用户看。
+    QHash<QString, QString> hostNames{{hostId, hostName}, {QString(), tr("Local terminal")}};
+    const auto hostLabel = [this, &hostNames](const QString &id) {
+        if (const auto found = hostNames.constFind(id); found != hostNames.constEnd()) {
+            return found.value();
+        }
+        const std::optional<HostRecord> record =
+            m_database == nullptr ? std::nullopt : m_database->findHost(id);
+        const QString name = record.has_value() ? record->name : QString();
+        hostNames.insert(id, name);
+        return name;
+    };
+
+    // 同一命令只保留最近一次；数字键要对准"最近用过的不同命令"，重复项会把它们挤出前 9 行。
+    const auto toEntries = [](const QList<CommandHistoryEntry> &history, const auto &detailFor) {
+        QList<QuickCommandPopup::Entry> entries;
+        QSet<QString> seen;
+        for (const CommandHistoryEntry &entry : history) {
+            if (entry.command.isEmpty() || seen.contains(entry.command)) {
+                continue;
+            }
+            seen.insert(entry.command);
+            entries.append({entry.command, detailFor(entry), entry.command});
+            if (entries.size() >= 100) {
+                break;
+            }
+        }
+        return entries;
+    };
+
+    bool ok = false;
+    const QList<CommandHistoryEntry> allHistory =
+        m_productivityModel->recentHistoryAcrossHosts(500, &ok);
+    if (!ok) {
+        return; // 模型已经通过 errorOccurred 报告了具体原因。
+    }
+    const QList<CommandHistoryEntry> hostHistory =
+        m_productivityModel->recentHistory(hostId, 500, &ok);
+    if (!ok) {
+        return;
+    }
+
+    const QList<QuickCommandPopup::Entry> allEntries = toEntries(
+        allHistory, [&hostLabel](const CommandHistoryEntry &entry) {
+            return hostLabel(entry.hostId);
+        });
+    const QList<QuickCommandPopup::Entry> hostEntries = toEntries(
+        hostHistory, [](const CommandHistoryEntry &) { return QString(); });
+
+    ensureQuickCommandPopup();
+    m_quickCommandPane = pane;
+    m_quickCommandPopup->showHistory(allEntries, hostEntries, hostName, hint, pane);
 }
 
 void MainWindow::searchCurrentTerminal()

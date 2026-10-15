@@ -3188,6 +3188,18 @@ To avoid overwriting existing credentials, Shellium does not create a new vault 
         <translation type="unfinished">コマンド履歴を検索</translation>
     </message>
     <message>
+        <source>Recent commands on all hosts</source>
+        <translation type="unfinished">すべてのホストの最近のコマンド</translation>
+    </message>
+    <message>
+        <source>No command history yet.</source>
+        <translation type="unfinished">コマンド履歴はまだありません。</translation>
+    </message>
+    <message>
+        <source>Recent commands on %1</source>
+        <translation type="unfinished">%1 の最近のコマンド</translation>
+    </message>
+    <message>
         <source>Recent commands</source>
         <translation type="unfinished">最近のコマンド</translation>
     </message>
@@ -3198,6 +3210,10 @@ To avoid overwriting existing credentials, Shellium does not create a new vault 
     <message>
         <source>%1 switch · Enter switch to selected · Esc close</source>
         <translation>%1 で切り替え · Enter で選択項目に切り替え · Esc で閉じる</translation>
+    </message>
+    <message>
+        <source>%1 run · Enter run selected · Tab all/current host · Esc close</source>
+        <translation type="unfinished">%1 で実行 · Enter で選択項目を実行 · Tab ですべてのホスト/現在のホストを切り替え · Esc で閉じる</translation>
     </message>
     <message>
         <source>%1 run · Enter run selected · Esc close</source>
@@ -3293,10 +3309,6 @@ To avoid overwriting existing credentials, Shellium does not create a new vault 
     <message>
         <source>Exit full screen and collapse local files</source>
         <translation type="unfinished">全画面を終了してローカルファイルを折りたたむ</translation>
-    </message>
-    <message>
-        <source>Upload</source>
-        <translation type="unfinished">アップロード</translation>
     </message>
     <message>
         <source>Upload Files…</source>
@@ -4006,6 +4018,10 @@ This algorithm is obsolete; upgrading the server&apos;s SSH configuration is rec
         <translation> MB</translation>
     </message>
     <message>
+        <source> chars</source>
+        <translation type="unfinished"> 文字</translation>
+    </message>
+    <message>
         <source>Session</source>
         <translation type="unfinished">セッション</translation>
     </message>
@@ -4040,6 +4056,14 @@ This algorithm is obsolete; upgrading the server&apos;s SSH configuration is rec
     <message>
         <source>After you type at least two characters, suggestions are shown automatically from the current host&apos;s command history; off by default.</source>
         <translation type="unfinished">2 文字以上入力すると、現在のホストのコマンド履歴からサジェストが自動的に表示されます。既定では無効です。</translation>
+    </message>
+    <message>
+        <source>History minimum length</source>
+        <translation type="unfinished">履歴に保存する最小の長さ</translation>
+    </message>
+    <message>
+        <source>Only commands at least this long are saved to command history; shorter ones such as ls or cd are skipped. 0 saves every command.</source>
+        <translation type="unfinished">この長さ以上のコマンドだけがコマンド履歴に保存されます。ls や cd のような短いコマンドはスキップされます。0 にするとすべて保存します。</translation>
     </message>
     <message>
         <source>Multi-line paste confirmation</source>

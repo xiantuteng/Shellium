@@ -841,6 +841,7 @@ void TerminalPane::applyTerminalSettings(const TerminalSettings &settings)
     m_automaticReconnectEnabled = normalized.automaticReconnect;
     m_reconnectMaxAttempts = normalized.reconnectMaxAttempts;
     m_reconnectBaseDelaySeconds = normalized.reconnectBaseDelaySeconds;
+    m_historyMinCommandLength = normalized.historyMinCommandLength;
     if ((!m_automaticReconnectEnabled || m_reconnectMaxAttempts == 0)
         && m_reconnectCycleActive) {
         // 设置对话框可实时关闭自动重连。取消令牌后，已经安排但尚未触发的任务不会再连接；
@@ -1228,11 +1229,16 @@ void TerminalPane::recordSubmittedCommand(const QString &command)
         // 执行带令牌的临时命令，本应用不应把 Shell 刻意忽略的秘密重新写入自己的数据库。
         return;
     }
+    const QString trimmed = command.trimmed();
+    if (trimmed.size() < m_historyMinCommandLength) {
+        // ls、cd 这类短命令重打比翻历史快，记下来只会把长命令挤出快速面板的数字键范围。
+        return;
+    }
 
     CommandHistoryEntry entry;
     const ConnectionTarget target = activeTarget();
     entry.hostId = target.isValid() ? target.id : QString();
-    entry.command = command.trimmed();
+    entry.command = trimmed;
     QString error;
     if (!m_commandHistoryDatabase->appendCommandHistory(entry, &error).has_value()) {
         emit statusMessage(tr("Failed to write command history: %1").arg(error));

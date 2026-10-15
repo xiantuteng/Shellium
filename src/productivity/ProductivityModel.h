@@ -88,6 +88,14 @@ public:
                                                            bool *ok = nullptr) const;
 
     /**
+     * @brief 读取全部主机（含本地 Shell）的最近命令，按时间倒序。
+     * @param limit 最大返回数量。
+     * @param ok 可选出参，区分空历史和查询错误。
+     */
+    [[nodiscard]] QList<CommandHistoryEntry> recentHistoryAcrossHosts(int limit,
+                                                                      bool *ok = nullptr) const;
+
+    /**
      * @brief 从某主机历史生成按最近使用排序的前缀补全候选。
      * @param hostId 空表示本地 Shell。
      * @param prefix 当前已输入的命令前缀；匹配不区分大小写。

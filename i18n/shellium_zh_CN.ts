@@ -3188,6 +3188,18 @@ To avoid overwriting existing credentials, Shellium does not create a new vault 
         <translation type="unfinished">搜索命令历史</translation>
     </message>
     <message>
+        <source>Recent commands on all hosts</source>
+        <translation type="unfinished">所有主机的最近命令</translation>
+    </message>
+    <message>
+        <source>No command history yet.</source>
+        <translation type="unfinished">还没有命令历史。</translation>
+    </message>
+    <message>
+        <source>Recent commands on %1</source>
+        <translation type="unfinished">%1 上的最近命令</translation>
+    </message>
+    <message>
         <source>Recent commands</source>
         <translation type="unfinished">最近命令</translation>
     </message>
@@ -3198,6 +3210,10 @@ To avoid overwriting existing credentials, Shellium does not create a new vault 
     <message>
         <source>%1 switch · Enter switch to selected · Esc close</source>
         <translation>%1 切换 · 回车切换到选中项 · Esc 关闭</translation>
+    </message>
+    <message>
+        <source>%1 run · Enter run selected · Tab all/current host · Esc close</source>
+        <translation type="unfinished">%1 执行 · 回车执行选中项 · Tab 切换所有主机/当前主机 · Esc 关闭</translation>
     </message>
     <message>
         <source>%1 run · Enter run selected · Esc close</source>
@@ -3293,10 +3309,6 @@ To avoid overwriting existing credentials, Shellium does not create a new vault 
     <message>
         <source>Exit full screen and collapse local files</source>
         <translation>退出全屏并收起本地文件</translation>
-    </message>
-    <message>
-        <source>Upload</source>
-        <translation>上传</translation>
     </message>
     <message>
         <source>Upload Files…</source>
@@ -4008,6 +4020,10 @@ This algorithm is obsolete; upgrading the server&apos;s SSH configuration is rec
         <translation> MB</translation>
     </message>
     <message>
+        <source> chars</source>
+        <translation type="unfinished"> 字符</translation>
+    </message>
+    <message>
         <source>Session</source>
         <translation>会话</translation>
     </message>
@@ -4042,6 +4058,14 @@ This algorithm is obsolete; upgrading the server&apos;s SSH configuration is rec
     <message>
         <source>After you type at least two characters, suggestions are shown automatically from the current host&apos;s command history; off by default.</source>
         <translation>输入至少两个字符后，根据当前主机的命令历史自动显示候选；默认关闭。</translation>
+    </message>
+    <message>
+        <source>History minimum length</source>
+        <translation type="unfinished">历史命令最短长度</translation>
+    </message>
+    <message>
+        <source>Only commands at least this long are saved to command history; shorter ones such as ls or cd are skipped. 0 saves every command.</source>
+        <translation type="unfinished">只有不短于该长度的命令才会保存到命令历史，ls、cd 这类短命令会被跳过。0 表示保存所有命令。</translation>
     </message>
     <message>
         <source>Multi-line paste confirmation</source>

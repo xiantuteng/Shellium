@@ -269,6 +269,10 @@ public:
                                                             bool *ok = nullptr,
                                                             QString *errorMessage = nullptr) const;
 
+    /** @brief 按时间倒序取全部主机（含本地 Shell）最近 N 条命令。 */
+    [[nodiscard]] QList<CommandHistoryEntry> recentCommandsAcrossHosts(
+        int limit, bool *ok = nullptr, QString *errorMessage = nullptr) const;
+
     // ---------------------------------------------------------------- Snippets
 
     /**

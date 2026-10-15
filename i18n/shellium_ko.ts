@@ -3188,6 +3188,18 @@ To avoid overwriting existing credentials, Shellium does not create a new vault 
         <translation type="unfinished">명령 기록 검색</translation>
     </message>
     <message>
+        <source>Recent commands on all hosts</source>
+        <translation type="unfinished">모든 호스트의 최근 명령</translation>
+    </message>
+    <message>
+        <source>No command history yet.</source>
+        <translation type="unfinished">아직 명령 기록이 없습니다.</translation>
+    </message>
+    <message>
+        <source>Recent commands on %1</source>
+        <translation type="unfinished">%1의 최근 명령</translation>
+    </message>
+    <message>
         <source>Recent commands</source>
         <translation type="unfinished">최근 명령</translation>
     </message>
@@ -3198,6 +3210,10 @@ To avoid overwriting existing credentials, Shellium does not create a new vault 
     <message>
         <source>%1 switch · Enter switch to selected · Esc close</source>
         <translation>%1 전환 · Enter 선택 항목으로 전환 · Esc 닫기</translation>
+    </message>
+    <message>
+        <source>%1 run · Enter run selected · Tab all/current host · Esc close</source>
+        <translation type="unfinished">%1 실행 · Enter 선택 항목 실행 · Tab 모든 호스트/현재 호스트 전환 · Esc 닫기</translation>
     </message>
     <message>
         <source>%1 run · Enter run selected · Esc close</source>
@@ -3293,10 +3309,6 @@ To avoid overwriting existing credentials, Shellium does not create a new vault 
     <message>
         <source>Exit full screen and collapse local files</source>
         <translation type="unfinished">전체 화면을 종료하고 로컬 파일 접기</translation>
-    </message>
-    <message>
-        <source>Upload</source>
-        <translation type="unfinished">업로드</translation>
     </message>
     <message>
         <source>Upload Files…</source>
@@ -4006,6 +4018,10 @@ This algorithm is obsolete; upgrading the server&apos;s SSH configuration is rec
         <translation> MB</translation>
     </message>
     <message>
+        <source> chars</source>
+        <translation type="unfinished"> 자</translation>
+    </message>
+    <message>
         <source>Session</source>
         <translation type="unfinished">세션</translation>
     </message>
@@ -4040,6 +4056,14 @@ This algorithm is obsolete; upgrading the server&apos;s SSH configuration is rec
     <message>
         <source>After you type at least two characters, suggestions are shown automatically from the current host&apos;s command history; off by default.</source>
         <translation type="unfinished">두 자 이상 입력하면 현재 호스트의 명령 기록에서 제안이 자동으로 표시됩니다. 기본적으로 비활성화되어 있습니다.</translation>
+    </message>
+    <message>
+        <source>History minimum length</source>
+        <translation type="unfinished">기록 최소 길이</translation>
+    </message>
+    <message>
+        <source>Only commands at least this long are saved to command history; shorter ones such as ls or cd are skipped. 0 saves every command.</source>
+        <translation type="unfinished">이 길이 이상의 명령만 명령 기록에 저장되며, ls나 cd 같은 짧은 명령은 건너뜁니다. 0이면 모든 명령을 저장합니다.</translation>
     </message>
     <message>
         <source>Multi-line paste confirmation</source>

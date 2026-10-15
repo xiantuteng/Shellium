@@ -1,6 +1,7 @@
 #include "productivity/ProductivityModel.h"
 #include "productivity/ProductivityWidget.h"
 #include "productivity/QuickCommandPopup.h"
+#include "settings/TerminalSettings.h"
 #include "ssh/SshSessionStack.h"
 #include "ssh/SshTunnelBroker.h"
 #include "storage/ApplicationDatabase.h"
@@ -59,6 +60,12 @@ private slots:
 
     /** @brief TerminalPane 收到提交信号后应直接调用数据库历史接口，且不能记录控制伪命令。 */
     void terminalPanePersistsSubmittedCommands();
+
+    /**
+     * @brief 去掉首尾空白后短于设置最短长度的命令不入历史；默认 8，0 表示全部保存，且
+     * 设置变更对已打开的终端即时生效。
+     */
+    void terminalPaneSkipsCommandsShorterThanMinimum();
 
     /**
      * @brief 界面层不再暴露分组功能，也不再提供多目标执行勾选框：Snippet 列表只显示扁平
@@ -162,6 +169,13 @@ private slots:
      * 不得发 commandChosen（否则会把动作名当成 Shell 命令送进终端）；快捷键文字也参与搜索。
      */
     void quickCommandPopupActionsModeEmitsEntryIndex();
+
+    /**
+     * @brief showHistory() 打开时默认展示全部主机；Tab / Shift+Tab 在全部主机与当前主机之间
+     * 切换，保留搜索词并按新范围重排数字键；Tab 不能把焦点移出搜索框。
+     */
+    void quickCommandPopupHistoryTabTogglesScope();
+    void quickCommandPopupHistoryHostIsRightAligned();
 
 private:
     /** @brief 在 Snippet 列表中按稳定 id 查找对应的行。 */
@@ -282,6 +296,10 @@ void ProductivityTest::terminalPanePersistsSubmittedCommands()
 {
     TerminalPane pane;
     pane.setCommandHistoryDatabase(m_database.get());
+    // 本用例验证的是记录通路本身；最短长度过滤由下一个用例单独覆盖。
+    TerminalSettings settings;
+    settings.historyMinCommandLength = 0;
+    pane.applyTerminalSettings(settings);
 
     // 直接调用私有槽模拟 TerminalView 的 commandSubmitted；即使当前还没有 worker，本地
     // 命令也必须按 host_id=NULL 持久化，历史能力不能依赖网络是否已经连接。
@@ -309,6 +327,50 @@ void ProductivityTest::terminalPanePersistsSubmittedCommands()
     QCOMPARE(history.size(), 2);
     QCOMPARE(history.at(0).command, QStringLiteral("pwd"));
     QCOMPARE(history.at(1).command, QStringLiteral("uptime"));
+}
+
+void ProductivityTest::terminalPaneSkipsCommandsShorterThanMinimum()
+{
+    QCOMPARE(TerminalSettings{}.normalized().historyMinCommandLength, 8);
+
+    TerminalPane pane;
+    pane.setCommandHistoryDatabase(m_database.get());
+    const auto submit = [&pane](const QString &command) {
+        QVERIFY(QMetaObject::invokeMethod(&pane,
+                                          "inspectSubmittedCommand",
+                                          Qt::DirectConnection,
+                                          Q_ARG(QString, command)));
+    };
+    const auto recorded = [this]() {
+        bool ok = false;
+        QStringList commands;
+        for (const CommandHistoryEntry &entry : m_database->recentCommands(QString(), 20, &ok)) {
+            commands.prepend(entry.command);
+        }
+        return commands;
+    };
+
+    // 未应用设置的终端也必须按默认 8 过滤，不能在设置广播到达前漏记一批短命令。
+    submit(QStringLiteral("uptime"));          // 6 字符，跳过
+    submit(QStringLiteral("git pull"));        // 恰好 8 字符，保存
+    submit(QStringLiteral("ls        "));      // 去掉结尾空白只剩 2 字符，跳过
+    submit(QStringLiteral("tail -f app.log")); // 保存
+    QCOMPARE(recorded(), QStringList({QStringLiteral("git pull"), QStringLiteral("tail -f app.log")}));
+
+    // 0 表示所有命令都保存。
+    TerminalSettings settings;
+    settings.historyMinCommandLength = 0;
+    pane.applyTerminalSettings(settings);
+    submit(QStringLiteral("ls"));
+    QCOMPARE(recorded().constLast(), QStringLiteral("ls"));
+
+    settings.historyMinCommandLength = 3;
+    pane.applyTerminalSettings(settings);
+    submit(QStringLiteral("cd"));
+    submit(QStringLiteral("pwd"));
+    QCOMPARE(recorded(),
+             QStringList({QStringLiteral("git pull"), QStringLiteral("tail -f app.log"),
+                          QStringLiteral("ls"), QStringLiteral("pwd")}));
 }
 
 void ProductivityTest::widgetHasNoGroupingNoBroadcastAndExecutesOnCurrentTerminal()
@@ -1072,6 +1134,105 @@ void ProductivityTest::quickCommandPopupActionsModeEmitsEntryIndex()
     QCOMPARE(entrySpy.count(), 1);
     QCOMPARE(entrySpy.takeFirst().at(0).toInt(), 1);
     QCOMPARE(commandSpy.count(), 0);
+}
+
+void ProductivityTest::quickCommandPopupHistoryTabTogglesScope()
+{
+    QuickCommandPopup popup;
+    QSignalSpy chosenSpy(&popup, &QuickCommandPopup::commandChosen);
+    auto *search = popup.findChild<QLineEdit *>(QStringLiteral("QuickCommandSearch"));
+    auto *section = popup.findChild<QLabel *>(QStringLiteral("QuickCommandSection"));
+    QVERIFY(search != nullptr && section != nullptr);
+
+    const QList<QuickCommandPopup::Entry> allHosts{
+        {QStringLiteral("docker ps -a"), QStringLiteral("web-01"), QStringLiteral("docker ps -a")},
+        {QStringLiteral("tail -f app.log"), QStringLiteral("app-01"), QStringLiteral("tail -f app.log")},
+        {QStringLiteral("docker logs api"), QStringLiteral("app-01"), QStringLiteral("docker logs api")},
+    };
+    const QList<QuickCommandPopup::Entry> currentHost{
+        {QStringLiteral("tail -f app.log"), QString(), QStringLiteral("tail -f app.log")},
+        {QStringLiteral("docker logs api"), QString(), QStringLiteral("docker logs api")},
+    };
+
+    popup.showHistory(allHosts, currentHost, QStringLiteral("app-01"), QString(), nullptr);
+    QTRY_VERIFY(search->hasFocus());
+    QCOMPARE(popup.mode(), QuickCommandPopup::Mode::History);
+    QCOMPARE(popup.historyScope(), QuickCommandPopup::HistoryScope::AllHosts);
+    QCOMPARE(popup.visibleCount(), 3);
+    QCOMPARE(popup.visibleCommandAt(0), QStringLiteral("docker ps -a"));
+    const QString allHostsTitle = section->text();
+
+    QTest::keyClick(search, Qt::Key_Tab);
+    QCOMPARE(popup.historyScope(), QuickCommandPopup::HistoryScope::CurrentHost);
+    QVERIFY2(search->hasFocus(), "Tab 只切换范围，不能把焦点移出搜索框");
+    QVERIFY(popup.isVisible());
+    QCOMPARE(popup.visibleCount(), 2);
+    QCOMPARE(popup.visibleCommandAt(0), QStringLiteral("tail -f app.log"));
+    QVERIFY(section->text() != allHostsTitle);
+    QVERIFY(section->text().contains(QStringLiteral("app-01")));
+
+    // 搜索词跨范围保留，数字键按新范围的可见顺序编号。
+    search->setText(QStringLiteral("docker"));
+    QCOMPARE(popup.visibleCount(), 1);
+    QTest::keyClick(search, Qt::Key_Backtab, Qt::ShiftModifier);
+    QCOMPARE(popup.historyScope(), QuickCommandPopup::HistoryScope::AllHosts);
+    QCOMPARE(search->text(), QStringLiteral("docker"));
+    QCOMPARE(popup.visibleCount(), 2);
+    QCOMPARE(section->text(), allHostsTitle);
+    QTest::keyClick(search, Qt::Key_2, Qt::ControlModifier);
+    QCOMPARE(chosenSpy.count(), 1);
+    QCOMPARE(chosenSpy.takeFirst().at(0).toString(), QStringLiteral("docker logs api"));
+
+    // 再次打开总是回到全部主机，而不是停在上次的范围。
+    popup.showHistory(allHosts, currentHost, QStringLiteral("app-01"), QString(), nullptr);
+    QTest::keyClick(search, Qt::Key_Tab);
+    QCOMPARE(popup.historyScope(), QuickCommandPopup::HistoryScope::CurrentHost);
+    popup.showHistory(allHosts, currentHost, QStringLiteral("app-01"), QString(), nullptr);
+    QCOMPARE(popup.historyScope(), QuickCommandPopup::HistoryScope::AllHosts);
+    QVERIFY(search->text().isEmpty());
+
+    // 单范围的历史与片段面板不拦截 Tab。
+    popup.showEntries(QuickCommandPopup::Mode::Snippets, numberedEntries(3), QString(), nullptr);
+    QTest::keyClick(search, Qt::Key_Tab);
+    QCOMPARE(popup.visibleCount(), 3);
+    QCOMPARE(popup.historyScope(), QuickCommandPopup::HistoryScope::AllHosts);
+    popup.hide();
+}
+
+void ProductivityTest::quickCommandPopupHistoryHostIsRightAligned()
+{
+    QuickCommandPopup popup;
+    auto *list = popup.findChild<QListWidget *>(QStringLiteral("QuickCommandList"));
+    QVERIFY(list != nullptr);
+
+    // 短命令 + 短主机名：左对齐时主机名紧跟在命令后面，整行右半边都是空白。
+    const QList<QuickCommandPopup::Entry> allHosts{
+        {QStringLiteral("ls"), QStringLiteral("web-01"), QStringLiteral("ls")},
+        {QStringLiteral("pwd"), QStringLiteral("db-01"), QStringLiteral("pwd")},
+    };
+    popup.showHistory(allHosts, {}, QStringLiteral("web-01"), QString(), nullptr);
+    QTRY_VERIFY(popup.isVisible());
+
+    // 第 2 行未选中，没有高亮底色，非背景像素只来自角标与文字。
+    const QRect row = list->visualItemRect(list->item(1));
+    const QImage image = list->viewport()->grab().toImage();
+    const int y0 = row.top() + 4;
+    const int y1 = row.bottom() - 4;
+    const QRgb background = image.pixel(row.left() + 2, row.center().y());
+    int rightmostInk = -1;
+    for (int y = y0; y <= y1; ++y) {
+        for (int x = row.left(); x <= row.right() && x < image.width(); ++x) {
+            if (image.pixel(x, y) != background) {
+                rightmostInk = std::max(rightmostInk, x);
+            }
+        }
+    }
+    QVERIFY2(rightmostInk >= 0, "第 2 行没有画出任何内容");
+    QVERIFY2(rightmostInk >= row.right() - 30,
+             qPrintable(QStringLiteral("主机名应贴行尾右对齐：最右像素 %1，行宽 %2")
+                            .arg(rightmostInk)
+                            .arg(row.right())));
+    popup.hide();
 }
 
 QTEST_MAIN(ProductivityTest)

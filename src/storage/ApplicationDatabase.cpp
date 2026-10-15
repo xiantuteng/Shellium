@@ -233,6 +233,32 @@ void setFlag(bool *flag, const bool value)
     }
 }
 
+/** @brief 执行已绑定好参数的命令历史查询并逐行转换为记录。 */
+QList<CommandHistoryEntry> readCommandHistory(QSqlQuery &query, bool *ok, QString *errorMessage)
+{
+    setFlag(ok, false);
+    if (!query.exec()) {
+        reportQueryError(query, errorMessage);
+        return {};
+    }
+
+    QList<CommandHistoryEntry> entries;
+    while (query.next()) {
+        CommandHistoryEntry entry;
+        entry.id = query.value(QStringLiteral("id")).toLongLong();
+        entry.hostId = query.value(QStringLiteral("host_id")).toString();
+        entry.command = query.value(QStringLiteral("command")).toString();
+        entry.executedAt = deserializeTime(query.value(QStringLiteral("executed_at")));
+        const QVariant exitCode = query.value(QStringLiteral("exit_code"));
+        if (!exitCode.isNull()) {
+            entry.exitCode = exitCode.toInt();
+        }
+        entries.append(entry);
+    }
+    setFlag(ok, true);
+    return entries;
+}
+
 } // namespace
 
 ApplicationDatabase::ApplicationDatabase(QString databasePath)
@@ -1508,26 +1534,24 @@ QList<CommandHistoryEntry> ApplicationDatabase::recentCommands(const QString &ho
         query.bindValue(QStringLiteral(":host_id"), hostId);
     }
     query.bindValue(QStringLiteral(":limit"), limit);
-    if (!query.exec()) {
-        reportQueryError(query, errorMessage);
+    return readCommandHistory(query, ok, errorMessage);
+}
+
+QList<CommandHistoryEntry> ApplicationDatabase::recentCommandsAcrossHosts(const int limit,
+                                                                          bool *ok,
+                                                                          QString *errorMessage) const
+{
+    setFlag(ok, false);
+    if (limit <= 0) {
+        setFlag(ok, true);
         return {};
     }
 
-    QList<CommandHistoryEntry> entries;
-    while (query.next()) {
-        CommandHistoryEntry entry;
-        entry.id = query.value(QStringLiteral("id")).toLongLong();
-        entry.hostId = query.value(QStringLiteral("host_id")).toString();
-        entry.command = query.value(QStringLiteral("command")).toString();
-        entry.executedAt = deserializeTime(query.value(QStringLiteral("executed_at")));
-        const QVariant exitCode = query.value(QStringLiteral("exit_code"));
-        if (!exitCode.isNull()) {
-            entry.exitCode = exitCode.toInt();
-        }
-        entries.append(entry);
-    }
-    setFlag(ok, true);
-    return entries;
+    QSqlQuery query(m_database);
+    query.prepare(QStringLiteral(
+        "SELECT * FROM command_history ORDER BY executed_at DESC, id DESC LIMIT :limit"));
+    query.bindValue(QStringLiteral(":limit"), limit);
+    return readCommandHistory(query, ok, errorMessage);
 }
 
 // -------------------------------------------------------------------- Snippets

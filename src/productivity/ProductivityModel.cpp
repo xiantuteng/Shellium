@@ -126,6 +126,24 @@ QList<CommandHistoryEntry> ProductivityModel::recentHistory(const QString &hostI
     return history;
 }
 
+QList<CommandHistoryEntry> ProductivityModel::recentHistoryAcrossHosts(const int limit,
+                                                                       bool *ok) const
+{
+    if (ok != nullptr) {
+        *ok = false;
+    }
+    if (!ensureDatabase()) {
+        return {};
+    }
+    QString error;
+    const QList<CommandHistoryEntry> history =
+        m_database->recentCommandsAcrossHosts(limit, ok, &error);
+    if (!error.isEmpty()) {
+        emit errorOccurred(tr("Failed to read command history: %1").arg(error));
+    }
+    return history;
+}
+
 QStringList ProductivityModel::completionCandidates(const QString &hostId,
                                                      const QString &prefix,
                                                      const int limit) const

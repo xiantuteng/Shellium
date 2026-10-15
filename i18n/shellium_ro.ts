@@ -3188,6 +3188,18 @@ Pentru a nu suprascrie datele de autentificare existente, Shellium nu creează a
         <translation type="unfinished">Căutați în istoricul comenzilor</translation>
     </message>
     <message>
+        <source>Recent commands on all hosts</source>
+        <translation type="unfinished">Comenzi recente pe toate gazdele</translation>
+    </message>
+    <message>
+        <source>No command history yet.</source>
+        <translation type="unfinished">Nu există încă istoric de comenzi.</translation>
+    </message>
+    <message>
+        <source>Recent commands on %1</source>
+        <translation type="unfinished">Comenzi recente pe %1</translation>
+    </message>
+    <message>
         <source>Recent commands</source>
         <translation type="unfinished">Comenzi recente</translation>
     </message>
@@ -3198,6 +3210,10 @@ Pentru a nu suprascrie datele de autentificare existente, Shellium nu creează a
     <message>
         <source>%1 switch · Enter switch to selected · Esc close</source>
         <translation>%1 comutare · Enter comută la selecție · Esc închide</translation>
+    </message>
+    <message>
+        <source>%1 run · Enter run selected · Tab all/current host · Esc close</source>
+        <translation type="unfinished">%1 rulare · Enter rulează selecția · Tab toate gazdele/gazda curentă · Esc închide</translation>
     </message>
     <message>
         <source>%1 run · Enter run selected · Esc close</source>
@@ -3293,10 +3309,6 @@ Pentru a nu suprascrie datele de autentificare existente, Shellium nu creează a
     <message>
         <source>Exit full screen and collapse local files</source>
         <translation type="unfinished">Ieși din ecranul complet și restrânge fișierele locale</translation>
-    </message>
-    <message>
-        <source>Upload</source>
-        <translation type="unfinished">Încarcă</translation>
     </message>
     <message>
         <source>Upload Files…</source>
@@ -4006,6 +4018,10 @@ Acest algoritm este învechit; se recomandă actualizarea configurației SSH a s
         <translation> MB</translation>
     </message>
     <message>
+        <source> chars</source>
+        <translation type="unfinished"> caractere</translation>
+    </message>
+    <message>
         <source>Session</source>
         <translation type="unfinished">Sesiune</translation>
     </message>
@@ -4040,6 +4056,14 @@ Acest algoritm este învechit; se recomandă actualizarea configurației SSH a s
     <message>
         <source>After you type at least two characters, suggestions are shown automatically from the current host&apos;s command history; off by default.</source>
         <translation type="unfinished">După introducerea a cel puțin două caractere, sugestiile sunt afișate automat din istoricul comenzilor gazdei curente; dezactivat implicit.</translation>
+    </message>
+    <message>
+        <source>History minimum length</source>
+        <translation type="unfinished">Lungimea minimă pentru istoric</translation>
+    </message>
+    <message>
+        <source>Only commands at least this long are saved to command history; shorter ones such as ls or cd are skipped. 0 saves every command.</source>
+        <translation type="unfinished">Doar comenzile cel puțin atât de lungi sunt salvate în istoricul comenzilor; cele mai scurte, precum ls sau cd, sunt omise. 0 salvează toate comenzile.</translation>
     </message>
     <message>
         <source>Multi-line paste confirmation</source>

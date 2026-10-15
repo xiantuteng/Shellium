@@ -722,6 +722,21 @@ void ApplicationDatabaseTest::commandHistoryIsScopedPerHost()
     QCOMPARE(localCommands.size(), 1);
     QCOMPARE(localCommands.at(0).command, QStringLiteral("ls"));
 
+    // 跨主机查询包含本地 Shell 与所有远端主机，按执行时间倒序，limit 照常生效。
+    const QList<CommandHistoryEntry> acrossHosts =
+        m_database->recentCommandsAcrossHosts(10, &ok, &error);
+    QVERIFY2(ok, qPrintable(error));
+    QCOMPARE(acrossHosts.size(), 4);
+    QCOMPARE(acrossHosts.at(0).command, QStringLiteral("ls"));
+    QVERIFY(acrossHosts.at(0).hostId.isEmpty());
+    QCOMPARE(acrossHosts.at(1).command, QStringLiteral("df -h"));
+    QCOMPARE(acrossHosts.at(1).hostId, QStringLiteral("host-2"));
+    QCOMPARE(acrossHosts.at(2).command, QStringLiteral("systemctl restart nginx"));
+    QCOMPARE(acrossHosts.at(3).command, QStringLiteral("uptime"));
+    QCOMPARE(*acrossHosts.at(3).exitCode, 0);
+    QCOMPARE(m_database->recentCommandsAcrossHosts(2, &ok, &error).size(), 2);
+    QVERIFY(ok);
+
     QVERIFY(!m_database->appendCommandHistory(CommandHistoryEntry{}, &error).has_value());
     QVERIFY(!error.isEmpty());
 }

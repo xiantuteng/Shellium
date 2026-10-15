@@ -578,6 +578,8 @@ private:
     int m_reconnectMaxAttempts = 3;
     /** @brief 指数退避首轮秒数。 */
     int m_reconnectBaseDelaySeconds = 1;
+    /** @brief 写入命令历史所需的最少字符数；0 表示全部记录。与设置默认值保持一致。 */
+    int m_historyMinCommandLength = 8;
     /** @brief 当前恢复周期已经发起/安排的尝试次数。 */
     int m_reconnectAttempts = 0;
     /** @brief 是否处于由一次已建立会话异常断线触发的恢复周期。 */

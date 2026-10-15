@@ -117,6 +117,7 @@ SettingsDialog::SettingsDialog(TerminalSettingsService *service,
     , m_scrollbackMaxMegabytesSpin(new QSpinBox(this))
     , m_audibleBellToggle(new ToggleSwitch(this))
     , m_commandAutoCompletionToggle(new ToggleSwitch(this))
+    , m_historyMinCommandLengthSpin(new QSpinBox(this))
     , m_multiLinePasteConfirmationToggle(new ToggleSwitch(this))
     , m_automaticReconnectToggle(new ToggleSwitch(this))
     , m_vaultPasswordEnabledToggle(new ToggleSwitch(this))
@@ -219,6 +220,8 @@ SettingsDialog::SettingsDialog(TerminalSettingsService *service,
             this, [this](double) { persistChanges(); });
     connect(m_scrollbackSpin, &QSpinBox::valueChanged, this, [this](int) { persistChanges(); });
     connect(m_scrollbackMaxMegabytesSpin, &QSpinBox::valueChanged,
+            this, [this](int) { persistChanges(); });
+    connect(m_historyMinCommandLengthSpin, &QSpinBox::valueChanged,
             this, [this](int) { persistChanges(); });
     connect(m_reconnectMaxAttemptsSpin, &QSpinBox::valueChanged,
             this, [this](int) { persistChanges(); });
@@ -586,6 +589,10 @@ QWidget *SettingsDialog::buildTerminalPage()
     m_scrollbackMaxMegabytesSpin->setRange(1, 512);
     m_scrollbackMaxMegabytesSpin->setSingleStep(1);
     m_scrollbackMaxMegabytesSpin->setMinimumWidth(120);
+    m_historyMinCommandLengthSpin->setObjectName(QStringLiteral("historyMinCommandLengthSpin"));
+    m_historyMinCommandLengthSpin->setRange(0, 256);
+    m_historyMinCommandLengthSpin->setSingleStep(1);
+    m_historyMinCommandLengthSpin->setMinimumWidth(120);
 
     // QSpinBox 的后缀是一次性 setSuffix，语言切换时不会自己更新；显式登记进热切换闭包，
     // 否则切到别的语言后数值旁仍残留上一次语言的“行 / px”。
@@ -593,6 +600,7 @@ QWidget *SettingsDialog::buildTerminalPage()
         m_letterSpacingSpin->setSuffix(tr(" px"));
         m_scrollbackSpin->setSuffix(tr(" lines"));
         m_scrollbackMaxMegabytesSpin->setSuffix(tr(" MB"));
+        m_historyMinCommandLengthSpin->setSuffix(tr(" chars"));
     });
     m_audibleBellToggle->setObjectName(QStringLiteral("audibleBellToggle"));
     m_commandAutoCompletionToggle->setObjectName(
@@ -614,6 +622,10 @@ QWidget *SettingsDialog::buildTerminalPage()
         [this] { return tr("Command-line autosuggestions"); },
         m_commandAutoCompletionToggle,
         [this] { return tr("After you type at least two characters, suggestions are shown automatically from the current host's command history; off by default."); });
+    sessionCard->addRow(
+        [this] { return tr("History minimum length"); },
+        new SettingsStepper(m_historyMinCommandLengthSpin, sessionCard),
+        [this] { return tr("Only commands at least this long are saved to command history; shorter ones such as ls or cd are skipped. 0 saves every command."); });
     sessionCard->addRow(
         [this] { return tr("Multi-line paste confirmation"); },
         m_multiLinePasteConfirmationToggle,
@@ -937,6 +949,7 @@ TerminalSettings SettingsDialog::editedSettings() const
     settings.scrollbackMaxMegabytes = m_scrollbackMaxMegabytesSpin->value();
     settings.audibleBell = m_audibleBellToggle->isChecked();
     settings.commandAutoCompletion = m_commandAutoCompletionToggle->isChecked();
+    settings.historyMinCommandLength = m_historyMinCommandLengthSpin->value();
     settings.multiLinePasteConfirmation = m_multiLinePasteConfirmationToggle->isChecked();
     settings.automaticReconnect = m_automaticReconnectToggle->isChecked();
     settings.vaultPasswordEnabled = m_vaultPasswordEnabledToggle->isChecked();
@@ -1080,6 +1093,7 @@ void SettingsDialog::populateControls(const TerminalSettings &settings)
     m_scrollbackMaxMegabytesSpin->setValue(normalized.scrollbackMaxMegabytes);
     m_audibleBellToggle->setChecked(normalized.audibleBell);
     m_commandAutoCompletionToggle->setChecked(normalized.commandAutoCompletion);
+    m_historyMinCommandLengthSpin->setValue(normalized.historyMinCommandLength);
     m_multiLinePasteConfirmationToggle->setChecked(normalized.multiLinePasteConfirmation);
     m_automaticReconnectToggle->setChecked(normalized.automaticReconnect);
     m_vaultPasswordEnabledToggle->setChecked(normalized.vaultPasswordEnabled);

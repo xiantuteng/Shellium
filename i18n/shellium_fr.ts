@@ -3188,6 +3188,18 @@ Pour éviter d&apos;écraser des identifiants existants, Shellium ne crée pas a
         <translation type="unfinished">Rechercher dans l’historique des commandes</translation>
     </message>
     <message>
+        <source>Recent commands on all hosts</source>
+        <translation type="unfinished">Commandes récentes sur tous les hôtes</translation>
+    </message>
+    <message>
+        <source>No command history yet.</source>
+        <translation type="unfinished">Aucun historique de commandes pour le moment.</translation>
+    </message>
+    <message>
+        <source>Recent commands on %1</source>
+        <translation type="unfinished">Commandes récentes sur %1</translation>
+    </message>
+    <message>
         <source>Recent commands</source>
         <translation type="unfinished">Commandes récentes</translation>
     </message>
@@ -3198,6 +3210,10 @@ Pour éviter d&apos;écraser des identifiants existants, Shellium ne crée pas a
     <message>
         <source>%1 switch · Enter switch to selected · Esc close</source>
         <translation>%1 basculer · Entrée basculer vers la sélection · Échap fermer</translation>
+    </message>
+    <message>
+        <source>%1 run · Enter run selected · Tab all/current host · Esc close</source>
+        <translation type="unfinished">%1 exécuter · Entrée exécuter la sélection · Tab tous les hôtes/hôte actuel · Échap fermer</translation>
     </message>
     <message>
         <source>%1 run · Enter run selected · Esc close</source>
@@ -3293,10 +3309,6 @@ Pour éviter d&apos;écraser des identifiants existants, Shellium ne crée pas a
     <message>
         <source>Exit full screen and collapse local files</source>
         <translation type="unfinished">Quitter le plein écran et réduire les fichiers locaux</translation>
-    </message>
-    <message>
-        <source>Upload</source>
-        <translation type="unfinished">Téléverser</translation>
     </message>
     <message>
         <source>Upload Files…</source>
@@ -4006,6 +4018,10 @@ Cet algorithme est obsolète ; il est recommandé de mettre à jour la configura
         <translation> Mo</translation>
     </message>
     <message>
+        <source> chars</source>
+        <translation type="unfinished"> caractères</translation>
+    </message>
+    <message>
         <source>Session</source>
         <translation type="unfinished">Session</translation>
     </message>
@@ -4040,6 +4056,14 @@ Cet algorithme est obsolète ; il est recommandé de mettre à jour la configura
     <message>
         <source>After you type at least two characters, suggestions are shown automatically from the current host&apos;s command history; off by default.</source>
         <translation type="unfinished">Après avoir saisi au moins deux caractères, des suggestions sont affichées automatiquement à partir de l&apos;historique des commandes de l&apos;hôte actuel ; désactivé par défaut.</translation>
+    </message>
+    <message>
+        <source>History minimum length</source>
+        <translation type="unfinished">Longueur minimale de l&apos;historique</translation>
+    </message>
+    <message>
+        <source>Only commands at least this long are saved to command history; shorter ones such as ls or cd are skipped. 0 saves every command.</source>
+        <translation type="unfinished">Seules les commandes d&apos;au moins cette longueur sont enregistrées dans l&apos;historique ; les plus courtes comme ls ou cd sont ignorées. 0 enregistre toutes les commandes.</translation>
     </message>
     <message>
         <source>Multi-line paste confirmation</source>

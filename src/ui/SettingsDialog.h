@@ -167,6 +167,8 @@ private:
     ToggleSwitch *m_audibleBellToggle = nullptr;
     /** @brief 是否在普通命令输入达到最小前缀长度后自动展示历史命令候选。 */
     ToggleSwitch *m_commandAutoCompletionToggle = nullptr;
+    /** @brief 命令写入历史所需的最少字符数；0 表示全部保存。 */
+    QSpinBox *m_historyMinCommandLengthSpin = nullptr;
     /** @brief 粘贴多行内容前是否先展示内容并要求确认。 */
     ToggleSwitch *m_multiLinePasteConfirmationToggle = nullptr;
     /** @brief 是否对已建立会话的异常网络断线启用有限自动重连。 */

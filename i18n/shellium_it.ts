@@ -3188,6 +3188,18 @@ Per non sovrascrivere credenziali esistenti, Shellium non crea automaticamente u
         <translation type="unfinished">Cerca nella cronologia comandi</translation>
     </message>
     <message>
+        <source>Recent commands on all hosts</source>
+        <translation type="unfinished">Comandi recenti su tutti gli host</translation>
+    </message>
+    <message>
+        <source>No command history yet.</source>
+        <translation type="unfinished">Nessuna cronologia comandi.</translation>
+    </message>
+    <message>
+        <source>Recent commands on %1</source>
+        <translation type="unfinished">Comandi recenti su %1</translation>
+    </message>
+    <message>
         <source>Recent commands</source>
         <translation type="unfinished">Comandi recenti</translation>
     </message>
@@ -3198,6 +3210,10 @@ Per non sovrascrivere credenziali esistenti, Shellium non crea automaticamente u
     <message>
         <source>%1 switch · Enter switch to selected · Esc close</source>
         <translation>%1 passa · Invio passa alla selezione · Esc chiudi</translation>
+    </message>
+    <message>
+        <source>%1 run · Enter run selected · Tab all/current host · Esc close</source>
+        <translation type="unfinished">%1 esegui · Invio esegui selezione · Tab tutti gli host/host corrente · Esc chiudi</translation>
     </message>
     <message>
         <source>%1 run · Enter run selected · Esc close</source>
@@ -3293,10 +3309,6 @@ Per non sovrascrivere credenziali esistenti, Shellium non crea automaticamente u
     <message>
         <source>Exit full screen and collapse local files</source>
         <translation type="unfinished">Esci dallo schermo intero e comprimi i file locali</translation>
-    </message>
-    <message>
-        <source>Upload</source>
-        <translation type="unfinished">Carica</translation>
     </message>
     <message>
         <source>Upload Files…</source>
@@ -4006,6 +4018,10 @@ Questo algoritmo è obsoleto; si consiglia di aggiornare la configurazione SSH d
         <translation> MB</translation>
     </message>
     <message>
+        <source> chars</source>
+        <translation type="unfinished"> caratteri</translation>
+    </message>
+    <message>
         <source>Session</source>
         <translation type="unfinished">Sessione</translation>
     </message>
@@ -4040,6 +4056,14 @@ Questo algoritmo è obsoleto; si consiglia di aggiornare la configurazione SSH d
     <message>
         <source>After you type at least two characters, suggestions are shown automatically from the current host&apos;s command history; off by default.</source>
         <translation type="unfinished">Dopo aver digitato almeno due caratteri, vengono mostrati automaticamente suggerimenti dalla cronologia comandi dell&apos;host corrente; disattivato per impostazione predefinita.</translation>
+    </message>
+    <message>
+        <source>History minimum length</source>
+        <translation type="unfinished">Lunghezza minima della cronologia</translation>
+    </message>
+    <message>
+        <source>Only commands at least this long are saved to command history; shorter ones such as ls or cd are skipped. 0 saves every command.</source>
+        <translation type="unfinished">Solo i comandi lunghi almeno così vengono salvati nella cronologia; quelli più brevi come ls o cd vengono ignorati. 0 salva tutti i comandi.</translation>
     </message>
     <message>
         <source>Multi-line paste confirmation</source>

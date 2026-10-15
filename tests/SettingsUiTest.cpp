@@ -135,6 +135,8 @@ private slots:
     void changesPersistImmediatelyAndCloseDoesNotRollback();
     /** @brief 滚动历史内存上限必须能在界面上修改、立即落盘，并在重新加载后保持。 */
     void scrollbackMemoryCapPersistsAndReloads();
+    /** @brief 历史最短命令长度默认 8，可在界面修改为 0（全部保存）并在重新加载后保持。 */
+    void historyMinCommandLengthPersistsAndReloads();
     /** @brief 恢复默认必须和普通单项修改一样自动持久化。 */
     void restoreDefaultsPersistsImmediately();
     void connectionDialogToggleRoundTripsLegacyHmac();
@@ -846,6 +848,35 @@ void SettingsUiTest::scrollbackMemoryCapPersistsAndReloads()
     QCOMPARE(outOfRange.normalized().scrollbackMaxMegabytes, 1);
     outOfRange.scrollbackMaxMegabytes = 100000;
     QCOMPARE(outOfRange.normalized().scrollbackMaxMegabytes, 512);
+}
+
+void SettingsUiTest::historyMinCommandLengthPersistsAndReloads()
+{
+    QCOMPARE(TerminalSettings{}.normalized().historyMinCommandLength, 8);
+
+    auto service = makeService();
+    SettingsDialog dialog(service.get());
+    auto *spin = dialog.findChild<QSpinBox *>(QStringLiteral("historyMinCommandLengthSpin"));
+    QVERIFY(spin != nullptr);
+    QCOMPARE(spin->value(), 8);
+    QCOMPARE(spin->minimum(), 0);
+
+    spin->setValue(0);
+    QCOMPARE(service->currentSettings().historyMinCommandLength, 0);
+    QCOMPARE(m_database->setting(QStringLiteral("terminal/history_min_command_length"))
+                 .value_or(QString()),
+             QStringLiteral("0"));
+
+    TerminalSettingsService reloaded(m_database.get());
+    QString error;
+    QVERIFY2(reloaded.load(&error), qPrintable(error));
+    QCOMPARE(reloaded.currentSettings().historyMinCommandLength, 0);
+
+    TerminalSettings outOfRange = reloaded.currentSettings();
+    outOfRange.historyMinCommandLength = -5;
+    QCOMPARE(outOfRange.normalized().historyMinCommandLength, 0);
+    outOfRange.historyMinCommandLength = 100000;
+    QCOMPARE(outOfRange.normalized().historyMinCommandLength, 256);
 }
 
 void SettingsUiTest::restoreDefaultsPersistsImmediately()

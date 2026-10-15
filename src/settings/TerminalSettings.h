@@ -173,6 +173,14 @@ struct TerminalSettings {
     bool commandAutoCompletion = false;
 
     /**
+     * @brief 命令写入历史所需的最少字符数（去掉首尾空白后），范围 0 到 256；默认 8。
+     *
+     * ls、cd、pwd 这类短命令重新输入比在历史里翻找更快，记下来只会把有价值的长命令挤出
+     * 快速历史面板的前 9 行。0 表示不过滤，所有命令都会保存。
+     */
+    int historyMinCommandLength = 8;
+
+    /**
      * @brief 粘贴多行内容时是否先弹出确认框，默认关闭。
      *
      * 关闭时多行内容直接送入终端，与其他终端模拟器的默认行为一致；开启后会先展示清理

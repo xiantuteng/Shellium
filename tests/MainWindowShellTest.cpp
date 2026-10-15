@@ -1732,6 +1732,11 @@ void MainWindowShellTest::quickSnippetAndHistoryShortcutsRunOnCurrentTerminal()
     QTest::keySequence(view, historyShortcut);
     QVERIFY2(popup->isVisible(), "历史快捷键没有弹出面板");
     QCOMPARE(popup->mode(), QuickCommandPopup::Mode::History);
+    // 默认展示跨主机历史，Tab 切到当前主机（本地 Shell）后刚执行的命令仍在第一行。
+    QCOMPARE(popup->historyScope(), QuickCommandPopup::HistoryScope::AllHosts);
+    QCOMPARE(popup->visibleCommandAt(0), command);
+    QTest::keyClick(search, Qt::Key_Tab);
+    QCOMPARE(popup->historyScope(), QuickCommandPopup::HistoryScope::CurrentHost);
     QCOMPARE(popup->visibleCommandAt(0), command);
     QTest::keyClick(search, Qt::Key_Escape);
     QVERIFY(!popup->isVisible());
