@@ -213,6 +213,8 @@ private slots:
 
     /** @brief 已识别发行版的主机必须换成对应发行版图标，并在悬停提示中给出具体版本。 */
     void detectedDistributionDrivesHostIconAndTooltip();
+    /** @brief 主机图标直接画在行上：未选中不画描边卡片，选中也不再铺品牌绿色方块。 */
+    void hostIconHasNoFramedContainer();
 
     /** @brief 国产发行版识别后使用专用图标，并在提示中保留规范化系统名称。 */
     void domesticDistributionKeepsLinuxIconInsteadOfGenericHost();
@@ -3306,6 +3308,57 @@ void HostManagerWidgetTest::groupComboOrderMatchesSidebarTreeOrder()
 
     QCOMPARE(observedOrder,
              QStringList({QStringLiteral("Ungrouped"), QStringLiteral("Zeta"), QStringLiteral("Alpha")}));
+}
+
+void HostManagerWidgetTest::hostIconHasNoFramedContainer()
+{
+    QString error;
+    QVERIFY2(seedGroupWithChildAndTopLevelHost(m_database.get(), &error), qPrintable(error));
+    HostManagerWidget widget(m_database.get(), m_vault.get());
+    widget.resize(400, 480);
+    widget.setSidebarDensity(SidebarDensity::Relaxed);
+    widget.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&widget));
+    auto *tree = widget.findChild<QTreeWidget *>(QStringLiteral("HostTree"));
+    auto *folder = findItem(widget, QStringLiteral("上饶E呼即办"));
+    auto *host = findItem(widget, QStringLiteral("中间件"));
+    QVERIFY(tree && folder && host);
+    folder->setExpanded(true);
+    // 鼠标移出视口，避免悬停底纹干扰未选中态的取样。
+    QTest::mouseMove(&widget, QPoint(widget.width() - 1, widget.height() - 1));
+
+    // 旧实现在 30px 占位区 (x=10, 垂直居中) 的四条边上画 1px 描边或整块绿色；图标现在
+    // 只占内缩 2px 后的区域，四边中点必须与占位区左侧 3px 处的行底色完全一致。
+    const auto assertNoFrame = [&](const char *state) {
+        const QRect rowRect = tree->visualItemRect(host);
+        QVERIFY(!rowRect.isEmpty());
+        const QImage row = tree->viewport()->grab(rowRect).toImage();
+        const qreal ratio = row.devicePixelRatio();
+        const auto pixelAt = [&](int x, int y) {
+            return row.pixelColor(qRound(x * ratio), qRound(y * ratio));
+        };
+        const QRect box(10, (rowRect.height() / 2) - 15, 30, 30);
+        const QColor rowBackground = pixelAt(box.left() - 3, box.center().y());
+        const QList<QPoint> edgeMidpoints{{box.center().x(), box.top()},
+                                          {box.center().x(), box.bottom()},
+                                          {box.left(), box.center().y()},
+                                          {box.right(), box.center().y()}};
+        for (const QPoint &point : edgeMidpoints) {
+            QVERIFY2(pixelAt(point.x(), point.y()) == rowBackground,
+                     qPrintable(QString::fromLatin1(state) + QStringLiteral("：图标外侧 (")
+                                + QString::number(point.x()) + QStringLiteral(",")
+                                + QString::number(point.y()) + QStringLiteral(") 仍有容器像素 ")
+                                + pixelAt(point.x(), point.y()).name(QColor::HexArgb)
+                                + QStringLiteral("，行底色 ")
+                                + rowBackground.name(QColor::HexArgb)));
+        }
+    };
+
+    tree->clearSelection();
+    tree->setCurrentItem(nullptr);
+    assertNoFrame("未选中");
+    host->setSelected(true);
+    assertNoFrame("选中");
 }
 
 void HostManagerWidgetTest::detectedDistributionDrivesHostIconAndTooltip()

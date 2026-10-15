@@ -459,22 +459,22 @@ constexpr int kFolderIconLeft = 29;
 /** @brief 分组名称相对行左缘的位置，使所有层级的文字基线形成稳定纵列。 */
 constexpr int kFolderTextLeft = 52;
 
-/** @brief 主机图标圆角容器相对主机行左缘的位置。 */
+/** @brief 主机图标占位区相对主机行左缘的位置。 */
 constexpr int kHostIconBoxLeft = 10;
 
 /** @brief 主机名称与连接副标题相对行左缘的位置，为放大的图标保留稳定间隔。 */
 constexpr int kHostTextLeft = 50;
 
-/** @brief 主机图标容器尺寸；30px 在 50px 行高中更醒目，仍保留上下各 10px 呼吸空间。 */
+/** @brief 主机图标占位区尺寸；30px 在 50px 行高中更醒目，仍保留上下各 10px 呼吸空间。 */
 constexpr int kHostIconBoxSize = 30;
 
 /**
- * @brief 图标内容相对圆角容器的内边距。
+ * @brief 图标相对占位区的内边距。
  *
- * 从原来的 6px 收紧为 5px，让通用服务器和发行版 Logo 的有效图形从约 14px 增至 20px；
- * 仅放大容器而不收紧内边距会让用户几乎看不出图标本身发生变化。
+ * 图标不再放进带边框的圆角容器，直接显示时只留 2px 余量，让发行版 Logo 接近占位区
+ * 全尺寸（26px），与名称、地址两行文字的高度相称。
  */
-constexpr int kHostIconContentInset = 5;
+constexpr int kHostIconContentInset = 2;
 
 /** @brief 分组、主机与“未分组”分区各自的固定行高。 */
 constexpr int kFolderRowHeight = 34;
@@ -595,36 +595,18 @@ protected:
         style->drawControl(QStyle::CE_ItemViewItem, &background, painter, widget);
         paintInteractionBackground(painter, option.rect, selected, hovered, widget);
 
-        // 主机图标先放进独立圆角容器：未选中时是白色/深色表面卡片，选中时改为品牌绿色。
-        // 这样图标不会漂浮在两行文字旁边，当前连接目标也能通过颜色块被快速定位。
+        // 主机图标直接绘制在行上，不再垫圆角表面卡片和描边：发行版 Logo 自带品牌配色，
+        // 额外的边框只会让列表显得拥挤；选中态已由整行圆角底纹表达，无需再给图标换底色。
         const QRect iconBox(option.rect.left() + metric(kHostIconBoxLeft, 7),
                             option.rect.center().y() - (metric(kHostIconBoxSize, 24) / 2),
                             metric(kHostIconBoxSize, 24),
                             metric(kHostIconBoxSize, 24));
-        QColor configuredSurface;
-        if (widget != nullptr) {
-            configuredSurface = QColor(widget->property("hostIconSurfaceColor").toString());
-        }
-        QColor iconBoxFill = selected
-            ? ShelliumUi::accentColor()
-            : (configuredSurface.isValid()
-                   ? configuredSurface
-                   : background.palette.color(QPalette::Base));
-        QColor iconBoxBorder = background.palette.color(QPalette::Text);
-        iconBoxBorder.setAlphaF(selected ? 0.0F : 0.12F);
+        const QRect hostSymbolRect = iconBox.adjusted(metric(kHostIconContentInset, 2),
+                                                      metric(kHostIconContentInset, 2),
+                                                      -metric(kHostIconContentInset, 2),
+                                                      -metric(kHostIconContentInset, 2));
         painter->save();
         painter->setRenderHint(QPainter::Antialiasing, true);
-        painter->setPen(selected ? Qt::NoPen : QPen(iconBoxBorder, 1));
-        painter->setBrush(iconBoxFill);
-        painter->drawRoundedRect(iconBox.adjusted(0, 0, -1, -1), 8, 8);
-
-        const QRect hostSymbolRect = iconBox.adjusted(metric(kHostIconContentInset, 4),
-                                                      metric(kHostIconContentInset, 4),
-                                                      -metric(kHostIconContentInset, 4),
-                                                      -metric(kHostIconContentInset, 4));
-        // 选中态也必须保留发行版图标。此前高亮时会统一替换成服务器轮廓，导致用户刚想
-        // 确认“这台是什么系统”时最关键的视觉线索反而消失；图标自身带有不透明圆底，能
-        // 在绿色选中底纹上保持辨识度，无需再强制换色。
         qvariant_cast<QIcon>(index.data(Qt::DecorationRole))
             .paint(painter, hostSymbolRect, Qt::AlignCenter);
         painter->restore();
@@ -3737,10 +3719,8 @@ HostManagerWidget::HostManagerWidget(ApplicationDatabase *database,
     hostTreePalette.setColor(QPalette::Active, QPalette::Highlight, Qt::transparent);
     hostTreePalette.setColor(QPalette::Inactive, QPalette::Highlight, Qt::transparent);
     m_tree->setPalette(hostTreePalette);
-    // HostManagerWidget 可在不含 MainWindow 的测试和独立容器中使用，因此先提供浅色表面回退；
-    // MainWindow::applyModernAppearance() 会按实际应用主题覆盖该属性。不能直接读取
-    // QPalette::Base：用户可在深色 macOS 上选择应用浅色主题，两套明暗状态并不保证一致。
-    m_tree->setProperty("hostIconSurfaceColor", QStringLiteral("#ffffff"));
+    // HostManagerWidget 可在不含 MainWindow 的测试和独立容器中使用，因此先提供浅色悬停回退；
+    // MainWindow::applyModernAppearance() 会按实际应用主题覆盖该属性。
     m_tree->setProperty("hostHoverBackgroundColor", QStringLiteral("#d6dee3"));
     m_tree->setHeaderHidden(true);
     m_tree->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);

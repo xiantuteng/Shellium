@@ -3266,10 +3266,9 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
     if (m_hostManager != nullptr) {
         if (auto *hostTree = m_hostManager->findChild<QAbstractItemView *>(
                 QStringLiteral("HostTree"))) {
-            // QSS 能绘制列表表面，却不会可靠地把应用自选主题回写到操作系统 QPalette::Base。
-            // 主机委托自绘图标卡片时通过动态属性读取同一 SURFACE 色，才能正确支持“系统深色
-            // + 应用浅色”及其反向组合；更新 viewport 让主题切换在当前帧立即生效。
-            hostTree->setProperty("hostIconSurfaceColor", surfaceBackground);
+            // QSS 不会可靠地把应用自选主题回写到操作系统 QPalette，主机委托通过动态属性读取
+            // 悬停底色，才能正确支持“系统深色 + 应用浅色”及其反向组合；更新 viewport 让主题
+            // 切换在当前帧立即生效。
             hostTree->setProperty("hostHoverBackgroundColor", hostTreeHoverBackground);
             hostTree->viewport()->update();
         }
