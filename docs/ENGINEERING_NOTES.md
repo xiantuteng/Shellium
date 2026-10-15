@@ -705,3 +705,19 @@ viewport()->setAcceptDrops(true);
 
 用例按像素取外框左边缘颜色断言（见 `compositeSearchBarsHighlightBorderOnFocus`），只断言属性
 值测不出样式表没写对规则。
+
+## 二十、Linux AppImage：被排除的系统库要按“目标机可能没有”来对待
+
+linuxdeploy 按 AppImage 排除清单跳过 libGL/libEGL/libGLX/libOpenGL 等图形驱动相关库，默认
+目标机自带。但官方 Qt 二进制的 libQt6Gui 直接依赖 GLVND 的 `libOpenGL.so.0`，而桌面版 Ubuntu
+默认不装 libopengl0：0.3.3 在 Ubuntu 26.04 上启动即报该库缺失。CI 没发现，是因为 runner 上的
+`libgl1-mesa-dev` 把它带了进来。
+
+- 现做法：打包脚本把构建机的 `libOpenGL.so.0` 放进不在 rpath 上的 `usr/lib/opengl-fallback/`，
+  `packaging/linux/apprun-hooks/shellium-opengl-fallback.sh` 只在系统 ldconfig 缓存里找不到同架构
+  的该库时才把目录加入 `LD_LIBRARY_PATH`。不能直接打进 `usr/lib`：它要和系统的 libGLdispatch 配套。
+- 冒烟测试先在有 libopengl0 时跑一次，再 `dpkg --remove --force-depends libopengl0` 后跑一次。
+  以后若再发现被排除的库在常见发行版上缺失，同样要在 CI 里先卸掉再冒烟，不能只信构建机环境。
+- deb/rpm（`scripts/package_linux_deb_rpm.sh`）直接把同一个 AppDir 装到 `/opt/shellium`，经 AppRun
+  启动，因此上述 hook 同样生效。包的依赖只声明 AppDir 没带的库：deb 在构建机上 `dpkg -S` 反查包名，
+  rpm 用 `soname()(64bit)`。依赖声明是否完整只能在干净容器里验证（release.yml 的 `linux-packages`）。

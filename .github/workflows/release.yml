@@ -1,6 +1,7 @@
 # 三平台 × 两架构的安装包构建与发布。
 #
-# 推送 v* 标签时构建全部 6 个安装包，并创建一个草稿 Release 等人工确认后发布；在 Actions
+# 推送 v* 标签时构建全部安装包（macOS、Windows 各两个架构，Linux 每个架构 AppImage/deb/rpm
+# 三种），并创建一个草稿 Release 等人工确认后发布；在 Actions
 # 页面手动触发或推送 ci/release-* 分支时只构建并上传 artifact，不创建 Release，用于演练。
 #
 # 每个架构都在对应架构的原生 runner 上编译，不做交叉编译：Homebrew、vcpkg 和 apt 的依赖都
@@ -277,15 +278,17 @@ jobs:
             libgl1-mesa-dev libegl1 libxkbcommon-x11-0 libfontconfig1 libdbus-1-3 \
             libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 \
             libxcb-xinerama0 libxcb-shape0 libxcb-xkb1 \
-            xvfb xauth
+            xvfb xauth rpm binutils
 
       - name: Install libssh 0.11
         run: |
           sudo ./scripts/install_libssh_from_source.sh /usr/local
           sudo ldconfig
 
+      # deb/rpm 复用 AppImage 打包留下的 AppDir，必须排在它之后。
       - name: Build and package
-        run: ./scripts/package_linux_appimage.sh 2>&1 | tee build.log
+        run: |
+          { ./scripts/package_linux_appimage.sh && ./scripts/package_linux_deb_rpm.sh; } 2>&1 | tee build.log
 
       - name: Report build log
         if: failure()
@@ -297,17 +300,95 @@ jobs:
         run: |
           appimage="$(ls dist/Shellium-*-linux-${{ matrix.arch }}.AppImage)"
           xvfb-run -a ./scripts/smoke_launch.sh 15 "$appimage"
+          # 桌面版 Ubuntu 默认不装 libopengl0，runner 上则被 libgl1-mesa-dev 带了进来，0.3.3 因此
+          # 漏过了“启动即报 libOpenGL.so.0 缺失”。卸掉后再跑一次，覆盖包内备份那条路径。
+          sudo dpkg --remove --force-depends libopengl0
+          sudo ldconfig
+          if /sbin/ldconfig -p | grep -q 'libOpenGL\.so\.0 '; then
+            echo "::error::卸载 libopengl0 后系统仍能找到 libOpenGL.so.0，该测试无效"
+            exit 1
+          fi
+          xvfb-run -a ./scripts/smoke_launch.sh 15 "$appimage"
 
       - uses: actions/upload-artifact@v4
         with:
           name: shellium-linux-${{ matrix.arch }}
-          path: dist/Shellium-*-linux-${{ matrix.arch }}.AppImage
+          path: |
+            dist/Shellium-*-linux-${{ matrix.arch }}.AppImage
+            dist/Shellium-*-linux-${{ matrix.arch }}.deb
+            dist/Shellium-*-linux-${{ matrix.arch }}.rpm
           if-no-files-found: error
+
+  # deb/rpm 的依赖声明只有在干净系统里装一遍才能验证：构建 runner 上什么库都装过，漏声明的依赖
+  # 在那里永远测不出来。Ubuntu 24.04 是支持的最老版本；Debian 13 验证 24.04 上反查出的 t64 包名
+  # 在 Debian 同样可解析；Fedora 验证 rpm 的 soname 依赖。
+  linux-packages:
+    name: Linux ${{ matrix.arch }} on ${{ matrix.image }}
+    needs: linux
+    runs-on: ${{ matrix.arch == 'aarch64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    container: ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x86_64, aarch64]
+        image: ['ubuntu:24.04', 'debian:13', 'fedora:44']
+    defaults:
+      run:
+        shell: bash
+    env:
+      DEBIAN_FRONTEND: noninteractive
+      APPIMAGE_EXTRACT_AND_RUN: '1'
+    steps:
+      - name: Install test tools
+        run: |
+          if command -v apt-get >/dev/null 2>&1; then
+            apt-get update
+            apt-get install -y --no-install-recommends xvfb xauth
+          else
+            dnf -y install tar xorg-x11-server-Xvfb xorg-x11-xauth util-linux
+          fi
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: shellium-linux-${{ matrix.arch }}
+          path: dist
+
+      - name: Install package and smoke test
+        run: |
+          if command -v apt-get >/dev/null 2>&1; then
+            apt-get install -y ./dist/Shellium-*-linux-${{ matrix.arch }}.deb
+          else
+            dnf -y install ./dist/Shellium-*-linux-${{ matrix.arch }}.rpm
+          fi
+          xvfb-run -a ./scripts/smoke_launch.sh 15 shellium
+
+      # 包的依赖装好后，系统就是一台“刚好够用”的桌面，顺带验证 AppImage 在 runner 之外也能启动。
+      - name: AppImage smoke test
+        run: |
+          appimage="$(ls dist/Shellium-*-linux-${{ matrix.arch }}.AppImage)"
+          chmod +x "$appimage"
+          xvfb-run -a ./scripts/smoke_launch.sh 15 "$appimage"
+
+      - name: Uninstall
+        run: |
+          if command -v apt-get >/dev/null 2>&1; then
+            apt-get purge -y shellium
+          else
+            dnf -y remove shellium
+          fi
+          for path in /opt/shellium /usr/bin/shellium /usr/share/applications/shellium.desktop; do
+            if [[ -e "$path" ]]; then
+              echo "::error::卸载后仍残留 $path"
+              exit 1
+            fi
+          done
 
   release:
     name: Draft release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [macos, windows, linux]
+    needs: [macos, windows, linux, linux-packages]
     runs-on: ubuntu-latest
     permissions:
       contents: write

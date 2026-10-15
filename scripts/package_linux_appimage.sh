@@ -65,6 +65,18 @@ log "安装到 AppDir"
 DESTDIR="${APPDIR}" cmake --install "${BUILD_DIR}"
 [[ -x "${APPDIR}/usr/bin/Shellium" ]] || fail "安装后未找到 ${APPDIR}/usr/bin/Shellium。"
 
+# 官方 Qt 的 libQt6Gui 依赖 libOpenGL.so.0，它在 linuxdeploy 排除清单里不会被收集，而桌面版
+# Ubuntu 默认不装 libopengl0。放一份到不在 rpath 上的备份目录，由 AppRun hook 仅在系统缺失时
+# 启用（原因见 hook 文件头）。hook 须在 linuxdeploy 运行前就位，它据此生成 AppRun 包装脚本。
+log "放置 libOpenGL 备份与 AppRun hook"
+system_libopengl="$( { /sbin/ldconfig -p || ldconfig -p; } 2>/dev/null \
+    | sed -nE 's/^[[:space:]]*libOpenGL\.so\.0 .*=> (.*)$/\1/p' | head -n 1)"
+[[ -n "${system_libopengl}" && -f "${system_libopengl}" ]] \
+    || fail "构建机上找不到 libOpenGL.so.0，请安装 libopengl0。"
+mkdir -p "${APPDIR}/usr/lib/opengl-fallback" "${APPDIR}/apprun-hooks"
+cp -L -- "${system_libopengl}" "${APPDIR}/usr/lib/opengl-fallback/libOpenGL.so.0"
+cp -- "${PROJECT_ROOT}/packaging/linux/apprun-hooks/shellium-opengl-fallback.sh" "${APPDIR}/apprun-hooks/"
+
 mkdir -p "${TOOLS_DIR}"
 fetch_tool() {
     local url="$1"

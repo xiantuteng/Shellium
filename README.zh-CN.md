@@ -94,7 +94,7 @@ Shellium 为每个标签页维护一条从外到内的完整服务器链：
 | --- | --- | --- | --- |
 | macOS | Apple Silicon、Intel | `.dmg` | macOS 14（arm64）、macOS 15（x86_64） |
 | Windows | x64、ARM64 | NSIS 安装器、`.zip` | Windows 10 1809 / Windows 11 |
-| Linux | x86_64、aarch64 | AppImage | glibc 2.39（如 Ubuntu 24.04+） |
+| Linux | x86_64、aarch64 | AppImage、`.deb`、`.rpm` | glibc 2.39（如 Ubuntu 24.04+、Debian 13+、Fedora 40+） |
 
 > [!NOTE]
 > 目前发布包尚未做代码签名。CI 构建的 macOS 包只有 ad-hoc 签名，首次启动会被 Gatekeeper 拦截：右键应用选择**打开**，或执行 `xattr -dr com.apple.quarantine /Applications/Shellium.app`。Windows 上 SmartScreen 可能要求确认。每个版本都附带 `SHA256SUMS.txt`，可用来校验下载文件。
@@ -157,8 +157,9 @@ macOS 应用包生成在 `build/Shellium.app`。
 | macOS DMG（Developer ID 签名 + 公证） | [`scripts/package_macos_dmg.sh`](scripts/package_macos_dmg.sh)，见[指南](docs/MACOS_DMG_RELEASE.md) |
 | Windows NSIS / ZIP | [`scripts/package_windows_native.ps1`](scripts/package_windows_native.ps1)，见[指南](packaging/windows/README.md) |
 | Linux AppImage | [`scripts/package_linux_appimage.sh`](scripts/package_linux_appimage.sh) |
+| Linux deb / rpm（在 AppImage 脚本之后运行） | [`scripts/package_linux_deb_rpm.sh`](scripts/package_linux_deb_rpm.sh) |
 
-[发版工作流](.github/workflows/release.yml)在各架构的原生 runner 上构建全部 6 个安装包，并逐个做启动冒烟测试。推送与 `CMakeLists.txt` 中 `project(VERSION)` 一致的 `v*` 标签后，会生成附带 `SHA256SUMS.txt` 的**草稿** Release。
+[发版工作流](.github/workflows/release.yml)在各架构的原生 runner 上构建全部安装包，并逐个做启动冒烟测试；Linux 的 deb/rpm 还会在干净的 Ubuntu、Debian、Fedora 容器里完成安装、启动与卸载。推送与 `CMakeLists.txt` 中 `project(VERSION)` 一致的 `v*` 标签后，会生成附带 `SHA256SUMS.txt` 的**草稿** Release。
 
 ## 路线图
 
