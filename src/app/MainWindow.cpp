@@ -76,6 +76,7 @@
 #include <QUuid>
 
 #include <algorithm>
+#include <functional>
 #include <optional>
 #include <utility>
 
@@ -1183,6 +1184,25 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     securityMenu->addAction(lockVaultAction);
     securityMenu->addSeparator();
     securityMenu->addAction(sshKeyManagerAction);
+
+#ifndef Q_OS_MACOS
+    // Qt 判定窗口级快捷键时要求动作至少关联一个可见控件；隐藏的菜单模型及其菜单都不满足，
+    // 只挂在那里的动作快捷键会全部失效。把每个菜单动作再挂到主窗口本身，快捷键随窗口生效。
+    const std::function<void(QMenu *)> attachMenuActions = [this, &attachMenuActions](QMenu *menu) {
+        for (QAction *action : menu->actions()) {
+            if (QMenu *subMenu = action->menu(); subMenu != nullptr) {
+                attachMenuActions(subMenu);
+            } else if (!action->isSeparator()) {
+                addAction(action);
+            }
+        }
+    };
+    for (QAction *menuAction : applicationMenuBar->actions()) {
+        if (QMenu *menu = menuAction->menu(); menu != nullptr) {
+            attachMenuActions(menu);
+        }
+    }
+#endif
 
     m_configurableActions = {
         {QStringLiteral("connection.new"), connectAction},

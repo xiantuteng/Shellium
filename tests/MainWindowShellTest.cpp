@@ -137,6 +137,7 @@ private slots:
      * 弹出时那个终端并写入历史"。
      */
     void quickSnippetAndHistoryShortcutsRunOnCurrentTerminal();
+    void menuActionShortcutsFireFromMainWindow();
 
     /**
      * @brief 命令面板改用与 Cmd+K 相同的浮层：快捷键打开、按名称筛选、回车触发对应动作。
@@ -1681,6 +1682,32 @@ void MainWindowShellTest::tabSwitcherAppearsOnOverflowAndSwitchesTabs()
         QTest::qWait(30);
     }
     QTRY_VERIFY2(switcherButton->isHidden(), "标签不再溢出后应隐藏标签列表按钮");
+}
+
+void MainWindowShellTest::menuActionShortcutsFireFromMainWindow()
+{
+    // Windows/Linux 的菜单模型是隐藏的 QMenuBar；动作若只挂在那里，Qt 会认为快捷键上下文
+    // 不成立而整组失效。这里直接按键验证菜单动作必须同时挂到主窗口。
+    MainWindow window(m_database, m_vault);
+    window.resize(1200, 800);
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+    window.activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(&window));
+
+    for (const QString &name : {QStringLiteral("CommandPaletteAction"),
+                                QStringLiteral("QuickHistoryAction")}) {
+        auto *action = window.findChild<QAction *>(name);
+        QVERIFY2(action != nullptr, qPrintable(name));
+        QVERIFY2(!action->shortcut().isEmpty(), qPrintable(name));
+        QSignalSpy triggered(action, &QAction::triggered);
+        QTest::keySequence(&window, action->shortcut());
+        QVERIFY2(triggered.count() == 1, qPrintable(name + QStringLiteral(" 快捷键未触发")));
+        while (QWidget *popup = QApplication::activePopupWidget()) {
+            popup->close();
+        }
+        QApplication::processEvents();
+    }
 }
 
 void MainWindowShellTest::quickSnippetAndHistoryShortcutsRunOnCurrentTerminal()
