@@ -137,6 +137,7 @@ private slots:
      * 弹出时那个终端并写入历史"。
      */
     void quickSnippetAndHistoryShortcutsRunOnCurrentTerminal();
+    void menuActionShortcutsFireFromMainWindow();
 
     /**
      * @brief 命令面板改用与 Cmd+K 相同的浮层：快捷键打开、按名称筛选、回车触发对应动作。
@@ -1683,6 +1684,32 @@ void MainWindowShellTest::tabSwitcherAppearsOnOverflowAndSwitchesTabs()
     QTRY_VERIFY2(switcherButton->isHidden(), "标签不再溢出后应隐藏标签列表按钮");
 }
 
+void MainWindowShellTest::menuActionShortcutsFireFromMainWindow()
+{
+    // Windows/Linux 的菜单模型是隐藏的 QMenuBar；动作若只挂在那里，Qt 会认为快捷键上下文
+    // 不成立而整组失效。这里直接按键验证菜单动作必须同时挂到主窗口。
+    MainWindow window(m_database, m_vault);
+    window.resize(1200, 800);
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+    window.activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(&window));
+
+    for (const QString &name : {QStringLiteral("CommandPaletteAction"),
+                                QStringLiteral("QuickHistoryAction")}) {
+        auto *action = window.findChild<QAction *>(name);
+        QVERIFY2(action != nullptr, qPrintable(name));
+        QVERIFY2(!action->shortcut().isEmpty(), qPrintable(name));
+        QSignalSpy triggered(action, &QAction::triggered);
+        QTest::keySequence(&window, action->shortcut());
+        QVERIFY2(triggered.count() == 1, qPrintable(name + QStringLiteral(" 快捷键未触发")));
+        while (QWidget *popup = QApplication::activePopupWidget()) {
+            popup->close();
+        }
+        QApplication::processEvents();
+    }
+}
+
 void MainWindowShellTest::quickSnippetAndHistoryShortcutsRunOnCurrentTerminal()
 {
     const QString command = QStringLiteral("echo shellium-quick-snippet-%1")
@@ -1721,6 +1748,9 @@ void MainWindowShellTest::quickSnippetAndHistoryShortcutsRunOnCurrentTerminal()
 #if defined(Q_OS_MACOS)
     QCOMPARE(snippetsShortcut, QKeySequence(QStringLiteral("Ctrl+K")));
     QCOMPARE(historyShortcut, QKeySequence(QStringLiteral("Ctrl+J")));
+#else
+    QCOMPARE(snippetsShortcut, QKeySequence(QStringLiteral("Ctrl+Shift+S")));
+    QCOMPARE(historyShortcut, QKeySequence(QStringLiteral("Ctrl+Shift+J")));
 #endif
 
     QTest::keySequence(view, snippetsShortcut);
@@ -2092,7 +2122,11 @@ void MainWindowShellTest::hostSearchShortcutSwitchesToHostsPageFromAnywhere()
 
     const QKeySequence hostSearchShortcut =
         TerminalSettings::defaultShortcuts().value(QStringLiteral("hosts.search"));
+#if defined(Q_OS_MACOS)
     QCOMPARE(hostSearchShortcut, QKeySequence(QStringLiteral("Ctrl+Shift+F")));
+#else
+    QCOMPARE(hostSearchShortcut, QKeySequence(QStringLiteral("Ctrl+Shift+H")));
+#endif
     QVERIFY2(TerminalSettings::defaultShortcuts().value(QStringLiteral("files.toggle"))
                  != hostSearchShortcut,
              "远程文件管理不能再占用搜索主机的快捷键");

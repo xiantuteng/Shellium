@@ -149,6 +149,8 @@ private slots:
     void legacyTermiusColorSchemeIdMigratesToShellium();
     /** @brief 旧库 files.toggle=Ctrl+Shift+F 时必须让位给搜索主机，且不得牵连其他自定义键。 */
     void legacyFilesToggleShortcutYieldsToHostSearch();
+    /** @brief Windows/Linux 上仍是旧默认值的快捷键迁到统一的 Ctrl+Shift 方案，自定义键保留。 */
+    void previousShortcutDefaultsMigrateToUnifiedScheme();
     void colorSchemeSwitchKeepsApplicationTextColors();
     void fontComboOffersRecommendedFamiliesAndKeepsMissingOne();
     /** @brief 内置字体必须真的注册进 QFontDatabase，并排在字体下拉框最前面。 */
@@ -1169,6 +1171,8 @@ void SettingsUiTest::legacyFilesToggleShortcutYieldsToHostSearch()
     const QString filesToggleKey = QStringLiteral("shortcut/files.toggle");
     const QString newTabKey = QStringLiteral("shortcut/tab.new");
     const QString lockKey = QStringLiteral("shortcut/vault.lock");
+    const QKeySequence hostSearchDefault =
+        TerminalSettings::defaultShortcuts().value(QStringLiteral("hosts.search"));
     auto service = makeService();
     QString error;
 
@@ -1177,8 +1181,7 @@ void SettingsUiTest::legacyFilesToggleShortcutYieldsToHostSearch()
     QVERIFY(m_database->setSetting(filesToggleKey, QStringLiteral("Ctrl+Shift+F"), &error));
     QVERIFY(m_database->setSetting(newTabKey, QStringLiteral("Ctrl+Alt+T"), &error));
     QVERIFY2(service->load(&error), qPrintable(error));
-    QCOMPARE(service->shortcut(QStringLiteral("hosts.search")),
-             QKeySequence(QStringLiteral("Ctrl+Shift+F")));
+    QCOMPARE(service->shortcut(QStringLiteral("hosts.search")), hostSearchDefault);
     QCOMPARE(service->shortcut(QStringLiteral("files.toggle")),
              QKeySequence(QStringLiteral("Ctrl+Shift+O")));
     QVERIFY2(service->shortcut(QStringLiteral("tab.new")) == QKeySequence(QStringLiteral("Ctrl+Alt+T")),
@@ -1194,19 +1197,65 @@ void SettingsUiTest::legacyFilesToggleShortcutYieldsToHostSearch()
              QKeySequence(QStringLiteral("Ctrl+Shift+O")));
     QCOMPARE(service->shortcut(QStringLiteral("tab.new")), QKeySequence(QStringLiteral("Ctrl+Alt+T")));
 
-    // 用户把 Ctrl+Shift+F 自定义给了别的动作：搜索主机留空，原有绑定保持不变。
+    // 用户把搜索主机的默认键自定义给了别的动作：搜索主机留空，原有绑定保持不变。
     QVERIFY(m_database->removeSetting(hostSearchKey, &error));
     QVERIFY(m_database->setSetting(filesToggleKey, QStringLiteral("Ctrl+Alt+F"), &error));
-    QVERIFY(m_database->setSetting(lockKey, QStringLiteral("Ctrl+Shift+F"), &error));
+    QVERIFY(m_database->setSetting(lockKey, hostSearchDefault.toString(QKeySequence::PortableText),
+                                   &error));
     QVERIFY2(service->load(&error), qPrintable(error));
     QVERIFY(service->shortcut(QStringLiteral("hosts.search")).isEmpty());
-    QCOMPARE(service->shortcut(QStringLiteral("vault.lock")),
-             QKeySequence(QStringLiteral("Ctrl+Shift+F")));
+    QCOMPARE(service->shortcut(QStringLiteral("vault.lock")), hostSearchDefault);
     QCOMPARE(service->shortcut(QStringLiteral("files.toggle")),
              QKeySequence(QStringLiteral("Ctrl+Alt+F")));
 
     // 后续用例共用同一个数据库，恢复默认设置。
     QVERIFY2(service->save(TerminalSettings{}.normalized(), &error), qPrintable(error));
+}
+
+void SettingsUiTest::previousShortcutDefaultsMigrateToUnifiedScheme()
+{
+#if defined(Q_OS_MACOS)
+    QSKIP("macOS 的 Command 快捷键不参与 Ctrl+Shift 统一方案");
+#else
+    const QString schemeKey = QStringLiteral("shortcut_scheme/version");
+    auto service = makeService();
+    QString error;
+    const auto store = [this, &error](const QString &id, const QString &sequence) {
+        return m_database->setSetting(QStringLiteral("shortcut/") + id, sequence, &error);
+    };
+
+    // 旧版本整表写入的旧默认值：裸 Ctrl 键与 Ctrl+Alt 键全部迁到 Ctrl+Shift。
+    QVERIFY2(service->save(TerminalSettings{}.normalized(), &error), qPrintable(error));
+    QVERIFY(m_database->removeSetting(schemeKey, &error));
+    QVERIFY(store(QStringLiteral("tab.new"), QStringLiteral("Ctrl+T")));
+    QVERIFY(store(QStringLiteral("tab.close"), QStringLiteral("Ctrl+W")));
+    QVERIFY(store(QStringLiteral("hosts.search"), QStringLiteral("Ctrl+Shift+F")));
+    QVERIFY(store(QStringLiteral("terminal.search"), QStringLiteral("Ctrl+F")));
+    QVERIFY(store(QStringLiteral("snippets.quick"), QStringLiteral("Ctrl+Alt+K")));
+    QVERIFY(store(QStringLiteral("history.quick"), QStringLiteral("Ctrl+Alt+J")));
+    QVERIFY2(service->load(&error), qPrintable(error));
+    QCOMPARE(service->currentSettings().shortcuts, TerminalSettings::defaultShortcuts());
+
+    // 用户自定义过的键原样保留；新键被自定义占用时该动作留空，不制造冲突。
+    QVERIFY(m_database->removeSetting(schemeKey, &error));
+    QVERIFY(store(QStringLiteral("tab.new"), QStringLiteral("Ctrl+Alt+T")));
+    QVERIFY(store(QStringLiteral("tab.close"), QStringLiteral("Ctrl+W")));
+    QVERIFY(store(QStringLiteral("vault.lock"), QStringLiteral("Ctrl+Shift+W")));
+    QVERIFY2(service->load(&error), qPrintable(error));
+    QCOMPARE(service->shortcut(QStringLiteral("tab.new")), QKeySequence(QStringLiteral("Ctrl+Alt+T")));
+    QVERIFY(service->shortcut(QStringLiteral("tab.close")).isEmpty());
+    QCOMPARE(service->shortcut(QStringLiteral("vault.lock")),
+             QKeySequence(QStringLiteral("Ctrl+Shift+W")));
+
+    // 保存写入方案版本后，用户再自选旧键位不会被改回。
+    TerminalSettings custom = TerminalSettings{}.normalized();
+    custom.shortcuts.insert(QStringLiteral("tab.close"), QKeySequence(QStringLiteral("Ctrl+W")));
+    QVERIFY2(service->save(custom, &error), qPrintable(error));
+    QVERIFY2(service->load(&error), qPrintable(error));
+    QCOMPARE(service->shortcut(QStringLiteral("tab.close")), QKeySequence(QStringLiteral("Ctrl+W")));
+
+    QVERIFY2(service->save(TerminalSettings{}.normalized(), &error), qPrintable(error));
+#endif
 }
 
 void SettingsUiTest::colorSchemeSwitchKeepsApplicationTextColors()
