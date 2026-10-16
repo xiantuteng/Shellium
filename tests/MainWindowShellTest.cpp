@@ -1748,6 +1748,9 @@ void MainWindowShellTest::quickSnippetAndHistoryShortcutsRunOnCurrentTerminal()
 #if defined(Q_OS_MACOS)
     QCOMPARE(snippetsShortcut, QKeySequence(QStringLiteral("Ctrl+K")));
     QCOMPARE(historyShortcut, QKeySequence(QStringLiteral("Ctrl+J")));
+#else
+    QCOMPARE(snippetsShortcut, QKeySequence(QStringLiteral("Ctrl+Shift+S")));
+    QCOMPARE(historyShortcut, QKeySequence(QStringLiteral("Ctrl+Shift+J")));
 #endif
 
     QTest::keySequence(view, snippetsShortcut);
@@ -2119,7 +2122,11 @@ void MainWindowShellTest::hostSearchShortcutSwitchesToHostsPageFromAnywhere()
 
     const QKeySequence hostSearchShortcut =
         TerminalSettings::defaultShortcuts().value(QStringLiteral("hosts.search"));
+#if defined(Q_OS_MACOS)
     QCOMPARE(hostSearchShortcut, QKeySequence(QStringLiteral("Ctrl+Shift+F")));
+#else
+    QCOMPARE(hostSearchShortcut, QKeySequence(QStringLiteral("Ctrl+Shift+H")));
+#endif
     QVERIFY2(TerminalSettings::defaultShortcuts().value(QStringLiteral("files.toggle"))
                  != hostSearchShortcut,
              "远程文件管理不能再占用搜索主机的快捷键");

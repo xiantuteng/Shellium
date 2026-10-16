@@ -47,6 +47,14 @@ const QString kVaultPasswordEnabledKey = QStringLiteral("security/vault_password
 const QString kReconnectMaxAttemptsKey = QStringLiteral("connection/reconnect_max_attempts");
 const QString kReconnectBaseDelayKey = QStringLiteral("connection/reconnect_base_delay_seconds");
 const QString kShortcutPrefix = QStringLiteral("shortcut/");
+/**
+ * @brief 已保存快捷键所对应的默认方案版本。
+ *
+ * 2 表示 Windows/Linux 统一为 Ctrl+Shift+字母的方案；缺失或更旧时加载会把仍是旧默认值的
+ * 快捷键迁移过去。每次保存都写入当前版本，用户此后再自选旧键位也不会被改回。
+ */
+const QString kShortcutSchemeKey = QStringLiteral("shortcut_scheme/version");
+const QString kCurrentShortcutScheme = QStringLiteral("2");
 
 /** @brief 把主题枚举序列化为不受本地化影响的稳定字符串。 */
 QString serializeTheme(const ThemeMode mode)
@@ -326,6 +334,46 @@ void migrateShortcutsWithoutHostSearch(QHash<QString, QKeySequence> *shortcuts,
                                                                     : hostSearchDefault);
 }
 
+#if !defined(Q_OS_MACOS)
+/**
+ * @brief 把 Windows/Linux 上仍停留在旧默认值的快捷键迁到统一的 Ctrl+Shift 方案。
+ * @param shortcuts 已按库中值覆盖默认值的快捷键表，原地修改。
+ *
+ * 保存设置会整表写库，旧版本用户库里存着的多半就是旧默认值。旧默认值与"用户恰好选了
+ * 同一个键"无法区分，按旧默认处理；用户自定义过的动作原样保留。迁移后的新键若被其他
+ * 动作占用，该动作留空交给用户在设置里指定，绝不牵连其他动作。
+ */
+void migrateShortcutsToUnifiedScheme(QHash<QString, QKeySequence> *shortcuts)
+{
+    const QHash<QString, QKeySequence> previousDefaults = {
+        {QStringLiteral("tab.new"), QKeySequence(QStringLiteral("Ctrl+T"))},
+        {QStringLiteral("tab.close"), QKeySequence(QStringLiteral("Ctrl+W"))},
+        {QStringLiteral("hosts.search"), QKeySequence(QStringLiteral("Ctrl+Shift+F"))},
+        {QStringLiteral("terminal.search"), QKeySequence(QStringLiteral("Ctrl+F"))},
+        {QStringLiteral("snippets.quick"), QKeySequence(QStringLiteral("Ctrl+Alt+K"))},
+        {QStringLiteral("history.quick"), QKeySequence(QStringLiteral("Ctrl+Alt+J"))},
+    };
+    const QHash<QString, QKeySequence> defaults = TerminalSettings::defaultShortcuts();
+    QStringList migratedIds;
+    for (auto iterator = previousDefaults.cbegin(); iterator != previousDefaults.cend(); ++iterator) {
+        if (shortcuts->value(iterator.key()) == iterator.value()) {
+            migratedIds.append(iterator.key());
+        }
+    }
+    // 先整体换上新默认值再查冲突：hosts.search 让出的 Ctrl+Shift+F 正是 terminal.search
+    // 的新键位，逐个替换会误判为冲突。
+    for (const QString &id : std::as_const(migratedIds)) {
+        shortcuts->insert(id, defaults.value(id));
+    }
+    for (const QString &id : std::as_const(migratedIds)) {
+        const QKeySequence sequence = shortcuts->value(id);
+        if (std::count(shortcuts->cbegin(), shortcuts->cend(), sequence) > 1) {
+            shortcuts->insert(id, QKeySequence{});
+        }
+    }
+}
+#endif
+
 } // namespace
 
 QHash<QString, QKeySequence> TerminalSettings::defaultShortcuts()
@@ -333,26 +381,33 @@ QHash<QString, QKeySequence> TerminalSettings::defaultShortcuts()
     return {
         {QStringLiteral("connection.new"), QKeySequence(QStringLiteral("Ctrl+Shift+N"))},
         {QStringLiteral("terminal.local"), QKeySequence(QStringLiteral("Ctrl+Shift+L"))},
+        {QStringLiteral("files.toggle"), QKeySequence(QStringLiteral("Ctrl+Shift+O"))},
+        {QStringLiteral("vault.lock"), QKeySequence(QStringLiteral("Ctrl+Shift+K"))},
+        {QStringLiteral("terminal.export"), QKeySequence(QStringLiteral("Ctrl+Shift+E"))},
+        {QStringLiteral("command.palette"), QKeySequence(QStringLiteral("Ctrl+Shift+P"))},
+        {QStringLiteral("settings.open"), QKeySequence(QStringLiteral("Ctrl+,"))},
+        // macOS 的 Ctrl 即 Command，Cmd+字母不会与终端按键冲突。其他平台的裸 Ctrl+字母都是
+        // Shell 的编辑键（Ctrl+W 删词、Ctrl+T 交换字符、Ctrl+F 前移、Ctrl+K 删到行尾、
+        // Ctrl+J 换行），被应用快捷键截走会破坏命令行编辑，因此统一用 Ctrl+Shift+字母，
+        // 与 Windows Terminal、GNOME Terminal 的习惯一致。
+#if defined(Q_OS_MACOS)
         {QStringLiteral("tab.new"), QKeySequence(QStringLiteral("Ctrl+T"))},
         {QStringLiteral("tab.close"), QKeySequence(QStringLiteral("Ctrl+W"))},
         // Shift+Cmd+F 让给全局"搜索主机"；远程文件管理改用 Shift+Cmd+O（Open files）。
         {QStringLiteral("hosts.search"), QKeySequence(QStringLiteral("Ctrl+Shift+F"))},
-        {QStringLiteral("files.toggle"), QKeySequence(QStringLiteral("Ctrl+Shift+O"))},
-        {QStringLiteral("vault.lock"), QKeySequence(QStringLiteral("Ctrl+Shift+K"))},
         {QStringLiteral("terminal.search"), QKeySequence::Find},
-        {QStringLiteral("terminal.export"), QKeySequence(QStringLiteral("Ctrl+Shift+E"))},
-        {QStringLiteral("command.palette"), QKeySequence(QStringLiteral("Ctrl+Shift+P"))},
-        // macOS 的 Ctrl 即 Command，Cmd+K / Cmd+J 不会与终端按键冲突；其他平台的裸 Ctrl+K
-        // 是 readline 的删到行尾、Ctrl+J 是换行，被应用快捷键截走会破坏 Shell 编辑，因此
-        // 改用 Ctrl+Alt 组合。
-#if defined(Q_OS_MACOS)
         {QStringLiteral("snippets.quick"), QKeySequence(QStringLiteral("Ctrl+K"))},
         {QStringLiteral("history.quick"), QKeySequence(QStringLiteral("Ctrl+J"))},
 #else
-        {QStringLiteral("snippets.quick"), QKeySequence(QStringLiteral("Ctrl+Alt+K"))},
-        {QStringLiteral("history.quick"), QKeySequence(QStringLiteral("Ctrl+Alt+J"))},
+        {QStringLiteral("tab.new"), QKeySequence(QStringLiteral("Ctrl+Shift+T"))},
+        {QStringLiteral("tab.close"), QKeySequence(QStringLiteral("Ctrl+Shift+W"))},
+        // 终端内搜索沿用终端程序通行的 Ctrl+Shift+F，搜索主机改用 Ctrl+Shift+H（Hosts）。
+        {QStringLiteral("hosts.search"), QKeySequence(QStringLiteral("Ctrl+Shift+H"))},
+        {QStringLiteral("terminal.search"), QKeySequence(QStringLiteral("Ctrl+Shift+F"))},
+        // Ctrl+Shift+K 已属于锁定凭据库，片段取 Snippets 的 S；历史沿用 macOS 的 J。
+        {QStringLiteral("snippets.quick"), QKeySequence(QStringLiteral("Ctrl+Shift+S"))},
+        {QStringLiteral("history.quick"), QKeySequence(QStringLiteral("Ctrl+Shift+J"))},
 #endif
-        {QStringLiteral("settings.open"), QKeySequence(QStringLiteral("Ctrl+,"))},
     };
 }
 
@@ -1500,10 +1555,18 @@ bool TerminalSettingsService::load(QString *errorMessage)
             loaded.shortcuts.insert(id, parsed);
         }
     }
+    const std::optional<QString> shortcutScheme = readValue(kShortcutSchemeKey, &queryFailed);
     if (queryFailed) {
         return false;
     }
     migrateShortcutsWithoutHostSearch(&loaded.shortcuts, storedShortcutIds);
+#if !defined(Q_OS_MACOS)
+    if (shortcutScheme.value_or(QString()) != kCurrentShortcutScheme) {
+        migrateShortcutsToUnifiedScheme(&loaded.shortcuts);
+    }
+#else
+    Q_UNUSED(shortcutScheme)
+#endif
 
     loaded = loaded.normalized();
     QString validationError;
@@ -1588,7 +1651,7 @@ bool TerminalSettingsService::save(const TerminalSettings &settings, QString *er
                     return false;
                 }
             }
-            return true;
+            return write(kShortcutSchemeKey, kCurrentShortcutScheme);
         },
         errorMessage);
     if (!saved) {

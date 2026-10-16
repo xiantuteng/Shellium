@@ -334,6 +334,9 @@ void LocalShellWorker::run()
     STARTUPINFOEXW startupInfo {};
     startupInfo.StartupInfo.cb = sizeof(startupInfo);
     startupInfo.lpAttributeList = attributes;
+    // 标准句柄显式置空：否则父进程的 stdout 被重定向时（从脚本或 CI 启动），子进程会沿用
+    // 那些句柄而绕过 ConPTY，终端里只剩一片空白。
+    startupInfo.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
     QString commandLine = QStringLiteral("\"") + QDir::toNativeSeparators(m_shellPath)
         + QStringLiteral("\"");
     const QString executableName = QFileInfo(m_shellPath).fileName().toLower();
