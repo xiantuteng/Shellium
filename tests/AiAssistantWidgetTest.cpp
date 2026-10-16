@@ -3,6 +3,8 @@
 #include "ai/AiClient.h"
 #include "ai/AiSettings.h"
 #include "ai/AiSettingsService.h"
+#include "ai/CommandRiskClassifier.h"
+#include "ai/LocalAgentCli.h"
 #include "i18n/LocalizationService.h"
 
 #include <QAction>
@@ -30,6 +32,10 @@
 #include <QFrame>
 #include <QGuiApplication>
 #include <QTest>
+#include <QDir>
+#include <QFile>
+#include <QMessageBox>
+#include <QTemporaryDir>
 
 #include <cmath>
 #include <QTextEdit>
@@ -63,6 +69,69 @@ QJsonArray requestMessages(const QByteArray &requestBody)
 {
     return QJsonDocument::fromJson(requestBody).object().value(QStringLiteral("messages")).toArray();
 }
+
+/**
+ * @brief 在临时目录里写一个可执行的 sh 脚本，冒充本机智能体 CLI。
+ * @return 脚本绝对路径；写入或授权失败时为空。
+ */
+QString writeFakeCli(const QTemporaryDir &dir, const QString &name, const QByteArray &body)
+{
+    const QString path = dir.filePath(name);
+    QFile file(path);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        return {};
+    }
+    file.write("#!/bin/sh\n" + body);
+    file.close();
+    if (!file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner
+                             | QFileDevice::ExeOwner)) {
+        return {};
+    }
+    return path;
+}
+
+QString readTextFile(const QString &path)
+{
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly)) {
+        return {};
+    }
+    return QString::fromUtf8(file.readAll());
+}
+
+/**
+ * @brief 测试期间自动处理弹出的模态框，防止确认框把用例永远挂住。
+ *
+ * accept 为 true 时点"是"，否则直接关闭（等价于取消）；sawModal 记录是否出现过模态框，
+ * 用来断言"全自动不应弹确认框"或"切到全自动必须先确认"。
+ */
+class ModalResponder final : public QObject {
+public:
+    explicit ModalResponder(const bool accept)
+        : m_accept(accept)
+    {
+        m_timer.setInterval(50);
+        connect(&m_timer, &QTimer::timeout, this, [this]() {
+            auto *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget());
+            if (box == nullptr) {
+                return;
+            }
+            sawModal = true;
+            if (m_accept && box->button(QMessageBox::Yes) != nullptr) {
+                box->button(QMessageBox::Yes)->click();
+            } else {
+                box->reject();
+            }
+        });
+        m_timer.start();
+    }
+
+    bool sawModal = false;
+
+private:
+    bool m_accept = false;
+    QTimer m_timer;
+};
 
 } // namespace
 
@@ -177,6 +246,34 @@ private slots:
     void panelFollowsApplicationThemeToDark();
     /** @brief 语言热切换后聊天区的固定文案（附件开关、系统提示气泡）必须跟随新语言。 */
     void chatChromeFollowsLanguageSwitch();
+
+    /**
+     * @brief 自动执行只放行"只读且会自行结束"的命令。
+     *
+     * 解释器、git、包管理器曾整体被当作只读；命令替换、跟随日志、需要密码的 sudo 也都
+     * 不能无人值守地跑。
+     */
+    void riskClassifierGatesAutoExecution();
+    /** @brief 只读自动模式下，只读命令不经点击即下发，并照常捕获输出、自动续问。 */
+    void autoReadOnlyRunsSafeCommandWithoutClick();
+    /** @brief 只读自动模式下，修改系统的命令仍停在卡片上等待用户确认。 */
+    void autoReadOnlyStillWaitsForWriteCommands();
+    /** @brief 全自动模式连高风险命令也直接下发，且不弹确认框。 */
+    void fullAutoRunsHighRiskCommandWithoutPrompt();
+    /** @brief 连续自动执行到上限后暂停，把控制权交还用户。 */
+    void autoExecutionPausesAtStepLimit();
+    /** @brief 面板上的执行模式菜单会持久化策略；切到全自动必须先通过确认框。 */
+    void executionModeMenuPersistsPolicy();
+    /** @brief 只在给定目录中识别受支持的 CLI，并能读出版本号。 */
+    void detectorFindsAgentsInGivenDirectories();
+    /** @brief 每个 CLI 都以关闭工具 / 只读模式启动，提示词走约定的通道。 */
+    void cliInvocationsStayReadOnly();
+    /** @brief CLI 输出里的 ANSI 与 Markdown 围栏被剥掉；多个 JSON 对象原样交给协议校验。 */
+    void cliReplyExtraction();
+    /** @brief 选择本地 CLI 作为模型来源后，对话经由 CLI 的标准输入完成一次决策。 */
+    void localCliBackendDrivesAgentLoop();
+    /** @brief CLI 非零退出时，把 stderr 中的原因展示给用户而不是静默失败。 */
+    void localCliFailureSurfacesStderr();
 };
 
 namespace {
@@ -238,6 +335,8 @@ void AiAssistantWidgetTest::executingCommandAutoCapturesOutputAndContinuesConver
     AiSettings settings;
     settings.endpointUrl = QStringLiteral("http://127.0.0.1:%1").arg(server.port());
     settings.model = QStringLiteral("test-model");
+    // 这些用例覆盖的是"用户点击执行"的手动路径，固定为逐条确认，不受自动执行默认值影响。
+    settings.executionPolicy = AiExecutionPolicy::Manual;
     QVERIFY(settingsService.save(settings));
 
     AiAssistantWidget widget(&settingsService);
@@ -358,6 +457,8 @@ void AiAssistantWidgetTest::newSessionClearsHistoryAndReadPosition()
     AiSettings settings;
     settings.endpointUrl = QStringLiteral("http://127.0.0.1:%1").arg(server.port());
     settings.model = QStringLiteral("test-model");
+    // 这些用例覆盖的是"用户点击执行"的手动路径，固定为逐条确认，不受自动执行默认值影响。
+    settings.executionPolicy = AiExecutionPolicy::Manual;
     QVERIFY(settingsService.save(settings));
 
     AiAssistantWidget widget(&settingsService);
@@ -415,6 +516,8 @@ void AiAssistantWidgetTest::assistantNarrativeRendersAsMarkdown()
     AiSettings settings;
     settings.endpointUrl = QStringLiteral("http://127.0.0.1:%1").arg(server.port());
     settings.model = QStringLiteral("test-model");
+    // 这些用例覆盖的是"用户点击执行"的手动路径，固定为逐条确认，不受自动执行默认值影响。
+    settings.executionPolicy = AiExecutionPolicy::Manual;
     QVERIFY(settingsService.save(settings));
 
     AiAssistantWidget widget(&settingsService);
@@ -460,6 +563,8 @@ void AiAssistantWidgetTest::multiStepResponseIsRejectedAndRepairedBeforeDisplay(
     AiSettings settings;
     settings.endpointUrl = QStringLiteral("http://127.0.0.1:%1").arg(server.port());
     settings.model = QStringLiteral("test-model");
+    // 这些用例覆盖的是"用户点击执行"的手动路径，固定为逐条确认，不受自动执行默认值影响。
+    settings.executionPolicy = AiExecutionPolicy::Manual;
     QVERIFY(settingsService.save(settings));
 
     AiAssistantWidget widget(&settingsService);
@@ -511,6 +616,8 @@ void AiAssistantWidgetTest::inputEditorSendsOnEnterAndGrowsToTenLines()
     AiSettings settings;
     settings.endpointUrl = QStringLiteral("http://127.0.0.1:%1").arg(server.port());
     settings.model = QStringLiteral("test-model");
+    // 这些用例覆盖的是"用户点击执行"的手动路径，固定为逐条确认，不受自动执行默认值影响。
+    settings.executionPolicy = AiExecutionPolicy::Manual;
     QVERIFY(settingsService.save(settings));
 
     AiAssistantWidget widget(&settingsService);
@@ -609,6 +716,8 @@ void AiAssistantWidgetTest::conversationHistoryRestoresPreviousSession()
     AiSettings settings;
     settings.endpointUrl = QStringLiteral("http://127.0.0.1:%1").arg(server.port());
     settings.model = QStringLiteral("test-model");
+    // 这些用例覆盖的是"用户点击执行"的手动路径，固定为逐条确认，不受自动执行默认值影响。
+    settings.executionPolicy = AiExecutionPolicy::Manual;
     QVERIFY(settingsService.save(settings));
 
     AiAssistantWidget widget(&settingsService);
@@ -691,6 +800,8 @@ void AiAssistantWidgetTest::commandEnterExecutesLatestPendingCommand()
     AiSettings settings;
     settings.endpointUrl = QStringLiteral("http://127.0.0.1:%1").arg(server.port());
     settings.model = QStringLiteral("test-model");
+    // 这些用例覆盖的是"用户点击执行"的手动路径，固定为逐条确认，不受自动执行默认值影响。
+    settings.executionPolicy = AiExecutionPolicy::Manual;
     QVERIFY(settingsService.save(settings));
 
     AiAssistantWidget widget(&settingsService);
@@ -753,6 +864,8 @@ void AiAssistantWidgetTest::commandCardInsertModifyAndCopyUseCorrectRoutes()
     AiSettings settings;
     settings.endpointUrl = QStringLiteral("http://127.0.0.1:%1").arg(server.port());
     settings.model = QStringLiteral("test-model");
+    // 这些用例覆盖的是"用户点击执行"的手动路径，固定为逐条确认，不受自动执行默认值影响。
+    settings.executionPolicy = AiExecutionPolicy::Manual;
     QVERIFY(settingsService.save(settings));
 
     AiAssistantWidget widget(&settingsService);
@@ -821,6 +934,8 @@ void AiAssistantWidgetTest::chatAutoScrollResumesAfterUserReturnsToBottom()
     AiSettings settings;
     settings.endpointUrl = QStringLiteral("http://127.0.0.1:%1").arg(server.port());
     settings.model = QStringLiteral("test-model");
+    // 这些用例覆盖的是"用户点击执行"的手动路径，固定为逐条确认，不受自动执行默认值影响。
+    settings.executionPolicy = AiExecutionPolicy::Manual;
     QVERIFY(settingsService.save(settings));
 
     AiAssistantWidget widget(&settingsService);
@@ -880,6 +995,8 @@ void AiAssistantWidgetTest::aiClientParsesStreamingResponseIncrementally()
     AiSettings settings;
     settings.endpointUrl = QStringLiteral("http://127.0.0.1:%1").arg(server.serverPort());
     settings.model = QStringLiteral("test-model");
+    // 这些用例覆盖的是"用户点击执行"的手动路径，固定为逐条确认，不受自动执行默认值影响。
+    settings.executionPolicy = AiExecutionPolicy::Manual;
 
     QSignalSpy chunkSpy(&client, &AiClient::replyChunkReceived);
     QSignalSpy finishedSpy(&client, &AiClient::replyFinished);
@@ -926,6 +1043,8 @@ void AiAssistantWidgetTest::stopButtonEndsLongRunningAnalysis()
     AiSettings settings;
     settings.endpointUrl = QStringLiteral("http://127.0.0.1:%1").arg(server.port());
     settings.model = QStringLiteral("test-model");
+    // 这些用例覆盖的是"用户点击执行"的手动路径，固定为逐条确认，不受自动执行默认值影响。
+    settings.executionPolicy = AiExecutionPolicy::Manual;
     QVERIFY(settingsService.save(settings));
 
     AiAssistantWidget widget(&settingsService);
@@ -988,6 +1107,8 @@ void AiAssistantWidgetTest::thinkingToggleControlsRequestField()
     AiSettings settings;
     settings.endpointUrl = QStringLiteral("http://127.0.0.1:%1").arg(server.port());
     settings.model = QStringLiteral("test-model");
+    // 这些用例覆盖的是"用户点击执行"的手动路径，固定为逐条确认，不受自动执行默认值影响。
+    settings.executionPolicy = AiExecutionPolicy::Manual;
 
     AiClient client;
     const QList<AiChatMessage> messages{
@@ -1059,6 +1180,8 @@ void AiAssistantWidgetTest::panelFollowsApplicationThemeToDark()
     AiSettings settings;
     settings.endpointUrl = QStringLiteral("http://127.0.0.1:%1").arg(server.port());
     settings.model = QStringLiteral("test-model");
+    // 这些用例覆盖的是"用户点击执行"的手动路径，固定为逐条确认，不受自动执行默认值影响。
+    settings.executionPolicy = AiExecutionPolicy::Manual;
     QVERIFY(settingsService.save(settings));
 
     const QPalette originalPalette = QGuiApplication::palette();
@@ -1109,6 +1232,8 @@ void AiAssistantWidgetTest::chatChromeFollowsLanguageSwitch()
     AiSettings settings;
     settings.endpointUrl = QStringLiteral("http://127.0.0.1:%1").arg(server.port());
     settings.model = QStringLiteral("test-model");
+    // 这些用例覆盖的是"用户点击执行"的手动路径，固定为逐条确认，不受自动执行默认值影响。
+    settings.executionPolicy = AiExecutionPolicy::Manual;
     QVERIFY(settingsService.save(settings));
 
     LocalizationService localization;
@@ -1145,6 +1270,459 @@ void AiAssistantWidgetTest::chatChromeFollowsLanguageSwitch()
     QCoreApplication::sendPostedEvents();
     QCoreApplication::processEvents();
     QCOMPARE(attachCheck->text(), QStringLiteral("Include new terminal output"));
+}
+
+
+void AiAssistantWidgetTest::riskClassifierGatesAutoExecution()
+{
+    const QStringList autoRunnable = {
+        QStringLiteral("df -h"),
+        QStringLiteral("systemctl status nginx"),
+        QStringLiteral("cat /etc/os-release"),
+        QStringLiteral("git log --oneline"),
+        QStringLiteral("python3 --version"),
+        QStringLiteral("dpkg -l nginx"),
+        QStringLiteral("ping -c 3 example.com"),
+        QStringLiteral("journalctl -u nginx --no-pager -n 50"),
+        QStringLiteral("top -b -n 1"),
+        QStringLiteral("mount"),
+    };
+    for (const QString &command : autoRunnable) {
+        QVERIFY2(CommandRiskClassifier::isSafeForAutoExecution(command), qPrintable(command));
+    }
+
+    const QStringList needsApproval = {
+        QStringLiteral("python3 -c \"import os; os.remove('x')\""),
+        QStringLiteral("git push origin main"),
+        QStringLiteral("git branch -D feature"),
+        QStringLiteral("dpkg -i package.deb"),
+        QStringLiteral("rpm -e nginx"),
+        QStringLiteral("nginx -s stop"),
+        QStringLiteral("mount /dev/sdb1 /mnt"),
+        QStringLiteral("echo $(rm -rf /tmp/data)"),
+        QStringLiteral("cat `which rm`"),
+        QStringLiteral("find /tmp -name '*.log' -delete"),
+        QStringLiteral("tail -f /var/log/syslog"),
+        QStringLiteral("journalctl -fu nginx"),
+        QStringLiteral("top"),
+        QStringLiteral("less /etc/hosts"),
+        QStringLiteral("ping example.com"),
+        QStringLiteral("sudo cat /etc/shadow"),
+        QStringLiteral("apt-get install -y nginx"),
+        QStringLiteral("echo hi > /etc/motd"),
+        QStringLiteral("rm -rf /"),
+    };
+    for (const QString &command : needsApproval) {
+        QVERIFY2(!CommandRiskClassifier::isSafeForAutoExecution(command), qPrintable(command));
+    }
+
+    QCOMPARE(CommandRiskClassifier::classify(QStringLiteral("git push")), CommandRiskLevel::Write);
+    QCOMPARE(CommandRiskClassifier::classify(QStringLiteral("python3 script.py")),
+             CommandRiskLevel::Write);
+    QCOMPARE(CommandRiskClassifier::classify(QStringLiteral("echo $(id)")), CommandRiskLevel::Write);
+    QCOMPARE(CommandRiskClassifier::classify(QStringLiteral("reboot")), CommandRiskLevel::HighRisk);
+    // 交互式命令本身仍是只读，只是不能无人值守地跑。
+    QCOMPARE(CommandRiskClassifier::classify(QStringLiteral("top")), CommandRiskLevel::ReadOnly);
+}
+
+void AiAssistantWidgetTest::autoReadOnlyRunsSafeCommandWithoutClick()
+{
+    MiniAiServer server;
+    QVERIFY(server.isListening());
+    server.responses.append(chatCompletionBody(QStringLiteral(
+        R"JSON({"state":"command","title":"查看磁盘","reason":"先读取磁盘占用。","command":"df -h"})JSON")));
+    server.responses.append(chatCompletionBody(QStringLiteral(
+        R"JSON({"state":"complete","message":"磁盘空间充足。"})JSON")));
+
+    AiSettingsService settingsService(nullptr, nullptr);
+    AiSettings settings;
+    settings.endpointUrl = QStringLiteral("http://127.0.0.1:%1").arg(server.port());
+    settings.model = QStringLiteral("test-model");
+    settings.executionPolicy = AiExecutionPolicy::AutoReadOnly;
+    QVERIFY(settingsService.save(settings));
+
+    AiAssistantWidget widget(&settingsService);
+    QString terminalText = QStringLiteral("[user@host ~]$ ");
+    widget.setTerminalContextProvider([&terminalText]() { return terminalText; });
+    QSignalSpy execSpy(&widget, &AiAssistantWidget::commandExecutionRequested);
+    connect(&widget, &AiAssistantWidget::commandExecutionRequested, &widget,
+            [&terminalText](const QString &command) {
+                terminalText += command + QStringLiteral("\n/dev/sda1  50G  10G  40G  20% /\n[user@host ~]$ ");
+            });
+
+    auto *inputEdit = widget.findChild<QTextEdit *>(QStringLiteral("aiInputEdit"));
+    auto *sendButton = widget.findChild<QPushButton *>(QStringLiteral("aiSendButton"));
+    inputEdit->setPlainText(QStringLiteral("看看磁盘"));
+    sendButton->click();
+
+    // 没有任何点击，命令就应当被下发。
+    QTRY_COMPARE_WITH_TIMEOUT(execSpy.count(), 1, 5000);
+    QCOMPARE(execSpy.first().at(0).toString(), QStringLiteral("df -h"));
+    auto *executeButton = widget.findChild<QPushButton *>(QStringLiteral("aiExecuteButton"));
+    QVERIFY(executeButton != nullptr);
+    QVERIFY(!executeButton->isEnabled());
+    bool sawAutoStatus = false;
+    for (QLabel *label : widget.findChildren<QLabel *>()) {
+        sawAutoStatus = sawAutoStatus || label->text() == QStringLiteral("Ran automatically");
+    }
+    QVERIFY2(sawAutoStatus, "自动执行的卡片应标明是自动下发的，而不是用户点的");
+
+    // 自动执行同样要等提示符回来再带着真实输出续问。
+    QTRY_COMPARE_WITH_TIMEOUT(server.capturedBodies.size(), 2, 5000);
+    const QString lastMessage = requestMessages(server.capturedBodies.at(1))
+                                    .last().toObject().value(QStringLiteral("content")).toString();
+    QVERIFY2(lastMessage.contains(QStringLiteral("/dev/sda1")), qPrintable(lastMessage));
+    QTRY_VERIFY_WITH_TIMEOUT(aiIsIdle(sendButton), 5000);
+    QCOMPARE(execSpy.count(), 1);
+}
+
+void AiAssistantWidgetTest::autoReadOnlyStillWaitsForWriteCommands()
+{
+    MiniAiServer server;
+    QVERIFY(server.isListening());
+    server.responses.append(chatCompletionBody(QStringLiteral(
+        R"JSON({"state":"command","title":"安装 Nginx","reason":"确认未安装后执行安装。","command":"apt-get install -y nginx"})JSON")));
+
+    AiSettingsService settingsService(nullptr, nullptr);
+    AiSettings settings;
+    settings.endpointUrl = QStringLiteral("http://127.0.0.1:%1").arg(server.port());
+    settings.model = QStringLiteral("test-model");
+    settings.executionPolicy = AiExecutionPolicy::AutoReadOnly;
+    QVERIFY(settingsService.save(settings));
+
+    AiAssistantWidget widget(&settingsService);
+    widget.setTerminalContextProvider([]() { return QStringLiteral("[user@host ~]$ "); });
+    QSignalSpy execSpy(&widget, &AiAssistantWidget::commandExecutionRequested);
+
+    auto *inputEdit = widget.findChild<QTextEdit *>(QStringLiteral("aiInputEdit"));
+    auto *sendButton = widget.findChild<QPushButton *>(QStringLiteral("aiSendButton"));
+    inputEdit->setPlainText(QStringLiteral("装一下 nginx"));
+    sendButton->click();
+
+    QTRY_VERIFY_WITH_TIMEOUT(
+        widget.findChild<QPushButton *>(QStringLiteral("aiExecuteButton")) != nullptr, 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(aiIsIdle(sendButton), 5000);
+    QTest::qWait(200);
+    QCOMPARE(execSpy.count(), 0);
+    QVERIFY(widget.findChild<QPushButton *>(QStringLiteral("aiExecuteButton"))->isEnabled());
+}
+
+void AiAssistantWidgetTest::fullAutoRunsHighRiskCommandWithoutPrompt()
+{
+    MiniAiServer server;
+    QVERIFY(server.isListening());
+    server.responses.append(chatCompletionBody(QStringLiteral(
+        R"JSON({"state":"command","title":"重启主机","reason":"内核更新后需要重启。","command":"reboot"})JSON")));
+
+    AiSettingsService settingsService(nullptr, nullptr);
+    AiSettings settings;
+    settings.endpointUrl = QStringLiteral("http://127.0.0.1:%1").arg(server.port());
+    settings.model = QStringLiteral("test-model");
+    settings.executionPolicy = AiExecutionPolicy::FullAuto;
+    QVERIFY(settingsService.save(settings));
+
+    AiAssistantWidget widget(&settingsService);
+    widget.setTerminalContextProvider([]() { return QStringLiteral("[user@host ~]$ "); });
+    QSignalSpy execSpy(&widget, &AiAssistantWidget::commandExecutionRequested);
+    ModalResponder responder(false);
+
+    auto *inputEdit = widget.findChild<QTextEdit *>(QStringLiteral("aiInputEdit"));
+    auto *sendButton = widget.findChild<QPushButton *>(QStringLiteral("aiSendButton"));
+    inputEdit->setPlainText(QStringLiteral("更新完内核后重启"));
+    sendButton->click();
+
+    QTRY_COMPARE_WITH_TIMEOUT(execSpy.count(), 1, 5000);
+    QCOMPARE(execSpy.first().at(0).toString(), QStringLiteral("reboot"));
+    QVERIFY2(!responder.sawModal, "全自动模式不应再弹高风险确认框");
+
+    // 自动批准只作用于那一次：手动点击历史卡片之外的新卡片仍走确认（这里按钮已锁定）。
+    auto *executeButton = widget.findChild<QPushButton *>(QStringLiteral("aiExecuteButton"));
+    QVERIFY(!executeButton->property("aiAutoApproved").toBool());
+}
+
+void AiAssistantWidgetTest::autoExecutionPausesAtStepLimit()
+{
+    constexpr int kLimit = 20;
+    MiniAiServer server;
+    QVERIFY(server.isListening());
+    for (int i = 0; i <= kLimit; ++i) {
+        server.responses.append(chatCompletionBody(QStringLiteral(
+            R"JSON({"state":"command","title":"再看一次","reason":"继续确认状态。","command":"uptime"})JSON")));
+    }
+
+    AiSettingsService settingsService(nullptr, nullptr);
+    AiSettings settings;
+    settings.endpointUrl = QStringLiteral("http://127.0.0.1:%1").arg(server.port());
+    settings.model = QStringLiteral("test-model");
+    settings.executionPolicy = AiExecutionPolicy::AutoReadOnly;
+    QVERIFY(settingsService.save(settings));
+
+    AiAssistantWidget widget(&settingsService);
+    QString terminalText = QStringLiteral("[user@host ~]$ ");
+    widget.setTerminalContextProvider([&terminalText]() { return terminalText; });
+    QSignalSpy execSpy(&widget, &AiAssistantWidget::commandExecutionRequested);
+    connect(&widget, &AiAssistantWidget::commandExecutionRequested, &widget,
+            [&terminalText](const QString &command) {
+                terminalText += command + QStringLiteral("\n up 3 days\n[user@host ~]$ ");
+            });
+
+    auto *inputEdit = widget.findChild<QTextEdit *>(QStringLiteral("aiInputEdit"));
+    auto *sendButton = widget.findChild<QPushButton *>(QStringLiteral("aiSendButton"));
+    inputEdit->setPlainText(QStringLiteral("一直检查"));
+    sendButton->click();
+
+    QTRY_COMPARE_WITH_TIMEOUT(server.capturedBodies.size(), kLimit + 1, 60000);
+    QTRY_VERIFY_WITH_TIMEOUT(aiIsIdle(sendButton), 5000);
+    QCOMPARE(execSpy.count(), kLimit);
+    bool sawPause = false;
+    for (QLabel *label : widget.findChildren<QLabel *>()) {
+        sawPause = sawPause || label->text().contains(QStringLiteral("Paused after 20 automatic steps"));
+    }
+    QVERIFY(sawPause);
+    // 最后一张卡片停在待确认状态，用户仍可手动继续。
+    QVERIFY(widget.findChildren<QPushButton *>(QStringLiteral("aiExecuteButton")).last()->isEnabled());
+}
+
+void AiAssistantWidgetTest::executionModeMenuPersistsPolicy()
+{
+    AiSettingsService settingsService(nullptr, nullptr);
+    QCOMPARE(settingsService.currentSettings().executionPolicy, AiExecutionPolicy::AutoReadOnly);
+    AiAssistantWidget widget(&settingsService);
+    auto *modeButton = widget.findChild<QToolButton *>(QStringLiteral("aiExecutionModeButton"));
+    auto *manual = widget.findChild<QAction *>(QStringLiteral("aiModeManual"));
+    auto *fullAuto = widget.findChild<QAction *>(QStringLiteral("aiModeFullAuto"));
+    QVERIFY(modeButton != nullptr && manual != nullptr && fullAuto != nullptr);
+    QVERIFY(modeButton->text().startsWith(QStringLiteral("Auto read-only")));
+
+    manual->trigger();
+    QCOMPARE(settingsService.currentSettings().executionPolicy, AiExecutionPolicy::Manual);
+    QVERIFY(modeButton->text().startsWith(QStringLiteral("Ask first")));
+    QVERIFY(manual->isChecked());
+
+    {
+        ModalResponder decline(false);
+        fullAuto->trigger();
+        QVERIFY2(decline.sawModal, "切到全自动前必须弹出风险确认");
+    }
+    QCOMPARE(settingsService.currentSettings().executionPolicy, AiExecutionPolicy::Manual);
+    QVERIFY(manual->isChecked());
+
+    {
+        ModalResponder accept(true);
+        fullAuto->trigger();
+        QVERIFY(accept.sawModal);
+    }
+    QCOMPARE(settingsService.currentSettings().executionPolicy, AiExecutionPolicy::FullAuto);
+    QVERIFY(modeButton->text().startsWith(QStringLiteral("Full auto")));
+    auto *disclaimer = widget.findChild<QLabel *>(QStringLiteral("aiDisclaimerLabel"));
+    QVERIFY(disclaimer != nullptr);
+    QVERIFY(disclaimer->text().startsWith(QStringLiteral("Full auto")));
+}
+
+void AiAssistantWidgetTest::detectorFindsAgentsInGivenDirectories()
+{
+    QTemporaryDir first;
+    QTemporaryDir second;
+    QVERIFY(first.isValid() && second.isValid());
+    const QString codex = writeFakeCli(first, QStringLiteral("codex"),
+                                       "echo 'codex-cli 9.9.9'\n");
+    const QString cursor = writeFakeCli(second, QStringLiteral("cursor-agent"), "echo 1.0\n");
+    // 同名但不可执行的文件不能被当成已安装。
+    QFile notExecutable(first.filePath(QStringLiteral("gemini")));
+    QVERIFY(notExecutable.open(QIODevice::WriteOnly));
+    notExecutable.write("#!/bin/sh\n");
+    notExecutable.close();
+    QVERIFY(!codex.isEmpty() && !cursor.isEmpty());
+
+    const QList<LocalAgentCli::DetectedAgent> agents =
+        LocalAgentCli::findAgents({first.path(), second.path()});
+    QCOMPARE(agents.size(), 2);
+    // 结果按 catalog() 顺序排列：codex 在 cursor-agent 之前。
+    QCOMPARE(agents.at(0).id, QStringLiteral("codex"));
+    QCOMPARE(QFileInfo(agents.at(0).executablePath).canonicalFilePath(),
+             QFileInfo(codex).canonicalFilePath());
+    QCOMPARE(agents.at(1).id, QStringLiteral("cursor-agent"));
+
+    // 空目录列表不能回落去搜当前进程 PATH，否则结果就不再由调用方控制。
+    QVERIFY(LocalAgentCli::findAgents({}).isEmpty());
+
+    const QString version = LocalAgentCli::probeVersion(
+        codex, LocalAgentCli::childEnvironment({first.path()}));
+    QCOMPARE(version, QStringLiteral("codex-cli 9.9.9"));
+
+    // 子进程 PATH 必须被替换成搜索目录，npm 安装的 CLI 才能找到 node。
+    const QProcessEnvironment environment =
+        LocalAgentCli::childEnvironment({first.path(), second.path()});
+    QCOMPARE(environment.value(QStringLiteral("PATH")),
+             first.path() + QDir::listSeparator() + second.path());
+
+    // 搜索目录合并登录 Shell PATH，去重并剔除不存在的目录。
+    const QStringList directories = LocalAgentCli::searchDirectories(
+        first.path() + QDir::listSeparator() + QStringLiteral("/definitely/missing")
+        + QDir::listSeparator() + first.path());
+    QCOMPARE(directories.first(), QDir::cleanPath(first.path()));
+    QCOMPARE(directories.count(QDir::cleanPath(first.path())), 1);
+    QVERIFY(!directories.contains(QStringLiteral("/definitely/missing")));
+}
+
+void AiAssistantWidgetTest::cliInvocationsStayReadOnly()
+{
+    const QString prompt = QStringLiteral("PROMPT");
+    const auto invocationFor = [&prompt](const QString &id) {
+        const std::optional<LocalAgentCli::AgentSpec> spec = LocalAgentCli::specById(id);
+        Q_ASSERT(spec.has_value());
+        return LocalAgentCli::buildInvocation(*spec, QStringLiteral("/bin/") + id,
+                                              QStringLiteral("some-model"), prompt,
+                                              QStringLiteral("/tmp/reply.txt"));
+    };
+
+    const LocalAgentCli::Invocation claude = invocationFor(QStringLiteral("claude"));
+    const int toolsIndex = claude.arguments.indexOf(QStringLiteral("--tools"));
+    QVERIFY(toolsIndex >= 0 && toolsIndex + 1 < claude.arguments.size());
+    QVERIFY2(claude.arguments.at(toolsIndex + 1).isEmpty(), "claude 必须以 --tools \"\" 关掉全部工具");
+    QVERIFY(claude.arguments.contains(QStringLiteral("-p")));
+    QVERIFY(!claude.arguments.contains(prompt));
+    QCOMPARE(claude.standardInput, prompt.toUtf8());
+
+    const LocalAgentCli::Invocation codex = invocationFor(QStringLiteral("codex"));
+    const int sandboxIndex = codex.arguments.indexOf(QStringLiteral("--sandbox"));
+    QVERIFY(sandboxIndex >= 0);
+    QCOMPARE(codex.arguments.at(sandboxIndex + 1), QStringLiteral("read-only"));
+    QCOMPARE(codex.arguments.last(), QStringLiteral("-"));
+    QCOMPARE(codex.outputFilePath, QStringLiteral("/tmp/reply.txt"));
+    QCOMPARE(codex.standardInput, prompt.toUtf8());
+
+    const LocalAgentCli::Invocation cursor = invocationFor(QStringLiteral("cursor-agent"));
+    const int modeIndex = cursor.arguments.indexOf(QStringLiteral("--mode"));
+    QVERIFY(modeIndex >= 0);
+    QCOMPARE(cursor.arguments.at(modeIndex + 1), QStringLiteral("ask"));
+    QCOMPARE(cursor.arguments.last(), prompt);
+
+    const LocalAgentCli::Invocation gemini = invocationFor(QStringLiteral("gemini"));
+    QCOMPARE(gemini.arguments.at(gemini.arguments.size() - 2), QStringLiteral("-p"));
+    QCOMPARE(gemini.arguments.last(), prompt);
+
+    for (const LocalAgentCli::AgentSpec &spec : LocalAgentCli::catalog()) {
+        const LocalAgentCli::Invocation invocation = invocationFor(spec.id);
+        const int modelIndex = invocation.arguments.indexOf(QStringLiteral("--model"));
+        QVERIFY2(modelIndex >= 0, qPrintable(spec.id));
+        QCOMPARE(invocation.arguments.at(modelIndex + 1), QStringLiteral("some-model"));
+        // 任何 CLI 都不能被带上"跳过审批 / 全权限"一类参数。
+        for (const QString &argument : invocation.arguments) {
+            QVERIFY2(!argument.contains(QStringLiteral("dangerously"))
+                         && argument != QStringLiteral("--force")
+                         && argument != QStringLiteral("--yolo")
+                         && argument != QStringLiteral("--full-auto"),
+                     qPrintable(spec.id + QStringLiteral(": ") + argument));
+        }
+    }
+
+    const QString transcript = LocalAgentCli::renderTranscript(
+        {AiChatMessage{AiChatRole::System, QStringLiteral("RULES")},
+         AiChatMessage{AiChatRole::User, QStringLiteral("TASK")}});
+    QVERIFY(transcript.indexOf(QStringLiteral("### SYSTEM\nRULES"))
+            < transcript.indexOf(QStringLiteral("### USER\nTASK")));
+    QVERIFY(transcript.endsWith(QStringLiteral("### ASSISTANT\n")));
+    QVERIFY(transcript.contains(QStringLiteral("Do NOT use any tools")));
+}
+
+void AiAssistantWidgetTest::cliReplyExtraction()
+{
+    const QString object = QStringLiteral(R"({"state":"complete","message":"a {b} \"c\""})");
+    QCOMPARE(LocalAgentCli::extractReply(object), object);
+    QCOMPARE(LocalAgentCli::extractReply(QStringLiteral("\x1b[32m") + object
+                                         + QStringLiteral("\x1b[0m\n")),
+             object);
+    QCOMPARE(LocalAgentCli::extractReply(QStringLiteral("Sure!\n```json\n") + object
+                                         + QStringLiteral("\n```\n")),
+             object);
+    QCOMPARE(LocalAgentCli::extractReply(QStringLiteral("Here you go: ") + object
+                                         + QStringLiteral(" hope it helps")),
+             object);
+    // 两个顶层对象意味着模型一次给了多步，不能替它挑一个。
+    const QString twoObjects = object + QLatin1Char('\n') + object;
+    QCOMPARE(LocalAgentCli::extractReply(twoObjects), twoObjects);
+}
+
+void AiAssistantWidgetTest::localCliBackendDrivesAgentLoop()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    // 冒充 claude：记录参数与标准输入，回答时故意带上颜色和 Markdown 围栏。
+    const QByteArray script =
+        "dir=$(dirname \"$0\")\n"
+        "printf '%s\\n' \"$@\" > \"$dir/args.txt\"\n"
+        "cat > \"$dir/stdin.txt\"\n"
+        "printf '\\033[32m```json\\n{\"state\":\"command\",\"title\":\"查看磁盘\","
+        "\"reason\":\"先确认剩余空间。\",\"command\":\"df -h\"}\\n```\\033[0m\\n'\n";
+    const QString fakeClaude = writeFakeCli(dir, QStringLiteral("claude"), script);
+    QVERIFY(!fakeClaude.isEmpty());
+
+    AiSettingsService settingsService(nullptr, nullptr);
+    AiSettings settings;
+    settings.backend = AiBackend::LocalCli;
+    settings.cliAgentId = QStringLiteral("claude");
+    settings.cliExecutablePath = fakeClaude;
+    settings.executionPolicy = AiExecutionPolicy::Manual;
+    QVERIFY(settings.isConfigured());
+    QVERIFY(settingsService.save(settings));
+
+    AiAssistantWidget widget(&settingsService);
+    auto *inputEdit = widget.findChild<QTextEdit *>(QStringLiteral("aiInputEdit"));
+    auto *sendButton = widget.findChild<QPushButton *>(QStringLiteral("aiSendButton"));
+    inputEdit->setPlainText(QStringLiteral("服务器磁盘还够吗"));
+    sendButton->click();
+
+    // 首次调用可能要先查询登录 Shell 的 PATH，给足时间。
+    QTRY_VERIFY_WITH_TIMEOUT(
+        widget.findChild<QPushButton *>(QStringLiteral("aiExecuteButton")) != nullptr, 20000);
+    QTRY_VERIFY_WITH_TIMEOUT(aiIsIdle(sendButton), 5000);
+
+    const QString stdinText = readTextFile(dir.filePath(QStringLiteral("stdin.txt")));
+    QVERIFY2(stdinText.contains(QStringLiteral("### SYSTEM")), qPrintable(stdinText.left(200)));
+    QVERIFY(stdinText.contains(QStringLiteral("单步")));
+    QVERIFY(stdinText.contains(QStringLiteral("服务器磁盘还够吗")));
+    const QStringList args = readTextFile(dir.filePath(QStringLiteral("args.txt")))
+                                 .split(QLatin1Char('\n'));
+    const int toolsIndex = args.indexOf(QStringLiteral("--tools"));
+    QVERIFY(toolsIndex >= 0);
+    QVERIFY(args.at(toolsIndex + 1).isEmpty());
+
+    bool sawReason = false;
+    for (QLabel *label : widget.findChildren<QLabel *>()) {
+        sawReason = sawReason || label->text().contains(QStringLiteral("先确认剩余空间"));
+    }
+    QVERIFY(sawReason);
+}
+
+void AiAssistantWidgetTest::localCliFailureSurfacesStderr()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString fakeCodex = writeFakeCli(
+        dir, QStringLiteral("codex"),
+        "cat > /dev/null\necho 'Not logged in. Run codex login first.' >&2\nexit 3\n");
+    QVERIFY(!fakeCodex.isEmpty());
+
+    AiSettingsService settingsService(nullptr, nullptr);
+    AiSettings settings;
+    settings.backend = AiBackend::LocalCli;
+    settings.cliAgentId = QStringLiteral("codex");
+    settings.cliExecutablePath = fakeCodex;
+    QVERIFY(settingsService.save(settings));
+
+    AiAssistantWidget widget(&settingsService);
+    QSignalSpy statusSpy(&widget, &AiAssistantWidget::statusMessage);
+    auto *inputEdit = widget.findChild<QTextEdit *>(QStringLiteral("aiInputEdit"));
+    auto *sendButton = widget.findChild<QPushButton *>(QStringLiteral("aiSendButton"));
+    inputEdit->setPlainText(QStringLiteral("看看负载"));
+    sendButton->click();
+
+    QTRY_VERIFY_WITH_TIMEOUT(!statusSpy.isEmpty(), 20000);
+    const QString message = statusSpy.last().at(0).toString();
+    QVERIFY2(message.contains(QStringLiteral("Not logged in")), qPrintable(message));
+    QVERIFY2(message.contains(QStringLiteral("3")), qPrintable(message));
+    QTRY_VERIFY_WITH_TIMEOUT(aiIsIdle(sendButton), 5000);
 }
 
 QTEST_MAIN(AiAssistantWidgetTest)

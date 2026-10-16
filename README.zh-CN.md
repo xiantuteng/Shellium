@@ -74,7 +74,7 @@ Shellium 为每个标签页维护一条从外到内的完整服务器链：
 - 命令片段（Snippet）、带补全的命令历史、多主机执行
 - 终端内快捷面板：<kbd>⌘K</kbd> 执行片段，<kbd>⌘J</kbd> 执行历史命令
 - 命令面板；工作区保存、校验、恢复
-- AI 助手（可选，需自备 OpenAI 兼容接口）。任何会改动系统的命令都必须由你逐条确认后才执行。
+- AI 助手（可选）：可自备 OpenAI 兼容接口，也可直接复用本机已安装的智能体 CLI（Claude Code、Codex、Cursor Agent、Gemini CLI、Qwen Code），自动检测。只读命令可自动执行；会改动系统的命令默认须由你逐条确认，也可以切换为全自动。
 
 **多语言**：界面支持 14 种语言：English、简体中文、繁體中文、Français、Deutsch、Italiano、Español、Português (Brasil)、Română、Русский、Українська、日本語、한국어、العربية。
 

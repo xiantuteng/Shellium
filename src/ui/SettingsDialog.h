@@ -5,6 +5,7 @@
 #include <QDialog>
 #include <QHash>
 #include <QList>
+#include <QPair>
 
 class QComboBox;
 class QToolButton;
@@ -24,6 +25,8 @@ class CredentialVault;
 class ThemeSwatchButton;
 class ToggleSwitch;
 class AiClient;
+class LocalAgentCliDetector;
+class SegmentedControl;
 class AiSettingsService;
 
 /**
@@ -111,6 +114,23 @@ private:
 
     /** @brief 把当前 AI 页各控件的值写入 AiSettingsService；失败时把原因显示在状态行。 */
     void persistAiSettings();
+
+    /** @brief 按模型来源分段控件的取值，只显示 HTTP 网关卡或本地 CLI 卡中的一个。 */
+    void updateAiBackendVisibility();
+
+    /**
+     * @brief 用最近一次检测结果重填 CLI 下拉框，保持当前选中项不变。
+     *
+     * 未检测到的 CLI 仍然列出（标注"未找到"）：用户可能刚装好还没重新检测，或者装在
+     * 检测不到的位置、打算手填路径，此时不能让它从列表里消失。
+     */
+    void populateCliAgentCombo();
+
+    /**
+     * @brief 切换执行策略并立即保存；切到全自动前要求用户确认。
+     * @param policyValue AiExecutionPolicy 的整数值。
+     */
+    void applyAiExecutionPolicy(int policyValue);
 
     /** @brief 把页面包进滚动区，保证小屏幕上底部按钮不会被卡片挤出窗口。 */
     QWidget *wrapInScrollArea(QWidget *page);
@@ -209,4 +229,26 @@ private:
     QPushButton *m_aiTestButton = nullptr;
     QPushButton *m_aiSaveButton = nullptr;
     QLabel *m_aiStatusLabel = nullptr;
+
+    /** @brief 模型来源：OpenAI 兼容 API 或本地智能体 CLI。 */
+    SegmentedControl *m_aiBackendSelector = nullptr;
+    /** @brief HTTP 网关配置卡与本地 CLI 配置卡，按模型来源二选一显示。 */
+    QWidget *m_aiHttpCard = nullptr;
+    QWidget *m_aiCliCard = nullptr;
+    /** @brief 本地 CLI 下拉框，itemData 为 LocalAgentCli 的 id。 */
+    QComboBox *m_aiCliAgentCombo = nullptr;
+    QLineEdit *m_aiCliPathEdit = nullptr;
+    QLineEdit *m_aiCliModelEdit = nullptr;
+    QPushButton *m_aiCliDetectButton = nullptr;
+    QPushButton *m_aiCliSaveButton = nullptr;
+    QLabel *m_aiCliStatusLabel = nullptr;
+    /** @brief 后台检测本机 CLI；结果存进 m_aiDetectedCliPaths。 */
+    LocalAgentCliDetector *m_aiCliDetector = nullptr;
+    /** @brief 最近一次检测结果：id → (路径, 版本)。 */
+    QHash<QString, QPair<QString, QString>> m_aiDetectedCli;
+    bool m_aiCliDetectedOnce = false;
+    /** @brief 命令自动执行策略分段控件。 */
+    SegmentedControl *m_aiExecutionPolicySelector = nullptr;
+    /** @brief 正在用已保存配置回填控件；为真时忽略控件变化信号，避免回填触发保存。 */
+    bool m_aiPopulating = false;
 };

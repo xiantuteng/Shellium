@@ -1,5 +1,6 @@
 #include "ai/AiSettings.h"
 #include "ai/AiSettingsService.h"
+#include "ai/LocalAgentCli.h"
 #include "settings/BundledFonts.h"
 #include "settings/TerminalSettings.h"
 #include "security/Vault.h"
@@ -158,6 +159,11 @@ private slots:
     void aiModelRefreshFillsComboWithoutDiscardingManualEntry();
     /** @brief 模型名和思考开关都要能存进 AiSettingsService 并在重开设置页时回显。 */
     void aiModelAndThinkingToggleRoundTrip();
+    /**
+     * @brief 模型来源切到本地 CLI 后只显示 CLI 卡，CLI 选择、路径、模型与执行策略都能
+     *        持久化并在重开时回显。
+     */
+    void aiLocalCliAndExecutionPolicyRoundTrip();
     /** @brief “关于”页必须展示应用版本、版权声明，并提供可在外部浏览器打开的官网链接。 */
     void aboutPageShowsVersionCopyrightAndWebsite();
     /**
@@ -1436,6 +1442,79 @@ void SettingsUiTest::aiModelAndThinkingToggleRoundTrip()
     QCOMPARE(reopened.findChild<QComboBox *>(QStringLiteral("aiModelCombo"))->currentText(),
              QStringLiteral("thinking-model"));
     QVERIFY(reopened.findChild<ToggleSwitch *>(QStringLiteral("aiThinkingToggle"))->isChecked());
+}
+
+void SettingsUiTest::aiLocalCliAndExecutionPolicyRoundTrip()
+{
+    auto service = makeService();
+    AiSettingsService aiService(m_database.get(), nullptr);
+    QString loadError;
+    QVERIFY2(aiService.load(&loadError), qPrintable(loadError));
+    // 老库里没有这些键：来源保持 HTTP，执行策略落在只读自动，绝不能默认成全自动。
+    QCOMPARE(aiService.currentSettings().backend, AiBackend::Http);
+    QCOMPARE(aiService.currentSettings().executionPolicy, AiExecutionPolicy::AutoReadOnly);
+
+    {
+        SettingsDialog dialog(service.get(), nullptr, &aiService, nullptr);
+        auto *backend = dialog.findChild<SegmentedControl *>(QStringLiteral("aiBackendSelector"));
+        auto *policy =
+            dialog.findChild<SegmentedControl *>(QStringLiteral("aiExecutionPolicySelector"));
+        auto *agentCombo = dialog.findChild<QComboBox *>(QStringLiteral("aiCliAgentCombo"));
+        auto *pathEdit = dialog.findChild<QLineEdit *>(QStringLiteral("aiCliPathEdit"));
+        auto *modelEdit = dialog.findChild<QLineEdit *>(QStringLiteral("aiCliModelEdit"));
+        auto *endpointEdit = dialog.findChild<QLineEdit *>(QStringLiteral("aiEndpointEdit"));
+        auto *cliSave = dialog.findChild<QAbstractButton *>(QStringLiteral("settingsAiCliSave"));
+        QVERIFY(backend && policy && agentCombo && pathEdit && modelEdit && endpointEdit && cliSave);
+
+        // AI 页不是当前页，isVisibleTo 恒为假；改看所在卡片自身是否被隐藏。
+        const auto cardHidden = [](QWidget *field) {
+            for (QWidget *widget = field; widget != nullptr; widget = widget->parentWidget()) {
+                if (widget->inherits("SettingsCard")) {
+                    return widget->isHidden();
+                }
+            }
+            return true;
+        };
+        // 每个受支持的 CLI 都要列出来，即便本机没装，用户也可以手填路径。
+        QCOMPARE(agentCombo->count(), LocalAgentCli::catalog().size());
+        QVERIFY(!cardHidden(endpointEdit));
+        QVERIFY(cardHidden(pathEdit));
+
+        backend->setCurrentData(static_cast<int>(AiBackend::LocalCli));
+        QVERIFY(cardHidden(endpointEdit));
+        QVERIFY(!cardHidden(pathEdit));
+
+        agentCombo->setCurrentIndex(agentCombo->findData(QStringLiteral("codex")));
+        pathEdit->setText(QStringLiteral("/opt/tools/codex"));
+        modelEdit->setText(QStringLiteral("gpt-5-codex"));
+        // 执行策略是即时保存的，不依赖点"保存"。
+        policy->setCurrentData(static_cast<int>(AiExecutionPolicy::Manual));
+        QCOMPARE(aiService.currentSettings().executionPolicy, AiExecutionPolicy::Manual);
+        // 即时保存只改策略，不能把尚未点保存的 CLI 字段顺带写进去。
+        QCOMPARE(aiService.currentSettings().backend, AiBackend::Http);
+        cliSave->click();
+    }
+
+    AiSettingsService reloaded(m_database.get(), nullptr);
+    QVERIFY2(reloaded.load(&loadError), qPrintable(loadError));
+    const AiSettings saved = reloaded.currentSettings();
+    QCOMPARE(saved.backend, AiBackend::LocalCli);
+    QCOMPARE(saved.cliAgentId, QStringLiteral("codex"));
+    QCOMPARE(saved.cliExecutablePath, QStringLiteral("/opt/tools/codex"));
+    QCOMPARE(saved.cliModel, QStringLiteral("gpt-5-codex"));
+    QCOMPARE(saved.executionPolicy, AiExecutionPolicy::Manual);
+    QVERIFY(saved.isConfigured());
+
+    SettingsDialog reopened(service.get(), nullptr, &reloaded, nullptr);
+    QCOMPARE(reopened.findChild<SegmentedControl *>(QStringLiteral("aiBackendSelector"))->currentData(),
+             static_cast<int>(AiBackend::LocalCli));
+    QCOMPARE(reopened.findChild<QComboBox *>(QStringLiteral("aiCliAgentCombo"))->currentData().toString(),
+             QStringLiteral("codex"));
+    QCOMPARE(reopened.findChild<QLineEdit *>(QStringLiteral("aiCliPathEdit"))->text(),
+             QStringLiteral("/opt/tools/codex"));
+    QCOMPARE(reopened.findChild<SegmentedControl *>(QStringLiteral("aiExecutionPolicySelector"))
+                 ->currentData(),
+             static_cast<int>(AiExecutionPolicy::Manual));
 }
 
 void SettingsUiTest::aboutPageShowsVersionCopyrightAndWebsite()

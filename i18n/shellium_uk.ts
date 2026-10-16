@@ -74,8 +74,72 @@
 %1</translation>
     </message>
     <message>
+        <source>Choose a local agent CLI in Settings → AI Assistant first</source>
+        <translation>Спочатку виберіть локальний CLI агента в розділі «Налаштування → ШІ-асистент»</translation>
+    </message>
+    <message>
         <source>Configure the LLM URL and model name in Settings → AI Assistant first</source>
         <translation type="unfinished">Спочатку вкажіть URL LLM та назву моделі в «Налаштування → Асистент ШІ»</translation>
+    </message>
+    <message>
+        <source>Paused after %1 automatic steps. Review the progress, then run the next command yourself or send a new message to continue.</source>
+        <translation>Пауза після %1 автоматичних кроків. Перевірте поступ, потім виконайте наступну команду вручну або надішліть нове повідомлення, щоб продовжити.</translation>
+    </message>
+    <message>
+        <source>Turn on full auto?</source>
+        <translation>Увімкнути повністю автоматичний режим?</translation>
+    </message>
+    <message>
+        <source>In full auto the AI runs every command it chooses in the current terminal without asking, including commands that modify the system or are high risk.
+
+Only use it on hosts where mistakes are acceptable. You can press Stop at any time to take over.</source>
+        <translation>У повністю автоматичному режимі ШІ без запитань виконує в поточному терміналі кожну обрану команду, зокрема ті, що змінюють систему або мають високий ризик.
+
+Використовуйте його лише на хостах, де помилки допустимі. Натисніть «Стоп» будь-коли, щоб узяти керування на себе.</translation>
+    </message>
+    <message>
+        <source>Failed to save the execution mode: %1</source>
+        <translation>Не вдалося зберегти режим виконання: %1</translation>
+    </message>
+    <message>
+        <source>Ask before every command</source>
+        <translation>Питати перед кожною командою</translation>
+    </message>
+    <message>
+        <source>Auto-run read-only commands</source>
+        <translation>Автоматично виконувати команди лише для читання</translation>
+    </message>
+    <message>
+        <source>Full auto (run everything)</source>
+        <translation>Повністю автоматично (виконувати все)</translation>
+    </message>
+    <message>
+        <source>Ask first</source>
+        <translation>Питати</translation>
+    </message>
+    <message>
+        <source>The AI can make mistakes. Every command waits for your confirmation before it runs.</source>
+        <translation>ШІ може помилятися. Кожна команда чекає на ваше підтвердження перед запуском.</translation>
+    </message>
+    <message>
+        <source>Auto read-only</source>
+        <translation>Авто: лише читання</translation>
+    </message>
+    <message>
+        <source>Full auto</source>
+        <translation>Повністю авто</translation>
+    </message>
+    <message>
+        <source>Full auto: the AI runs every command it chooses, including ones that change the system. Watch the terminal and press Stop to take over.</source>
+        <translation>Повністю автоматично: ШІ виконує кожну обрану команду, зокрема ті, що змінюють систему. Стежте за терміналом і натисніть «Стоп», щоб узяти керування.</translation>
+    </message>
+    <message>
+        <source>Choose which commands the AI may run without asking</source>
+        <translation>Виберіть, які команди ШІ може виконувати без запитань</translation>
+    </message>
+    <message>
+        <source>Execution mode</source>
+        <translation>Режим виконання</translation>
     </message>
     <message>
         <source>The AI did not return a result following the single-step interaction protocol; this round has been stopped. Retry or switch to a model that supports JSON instructions.</source>
@@ -156,6 +220,10 @@ Run it in the current terminal?</source>
 %1
 
 Виконати її в поточному терміналі?</translation>
+    </message>
+    <message>
+        <source>Ran automatically</source>
+        <translation>Виконано автоматично</translation>
     </message>
     <message>
         <source>Sent to the current terminal to run; the AI will wait for it to finish automatically</source>
@@ -1286,6 +1354,41 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>%1  (%2)</source>
         <translation type="unfinished">%1  (%2)</translation>
+    </message>
+</context>
+<context>
+    <name>LocalCliClient</name>
+    <message>
+        <source>%1 did not answer within %2 seconds and was stopped.</source>
+        <translation>%1 не відповів за %2 с і був зупинений.</translation>
+    </message>
+    <message>
+        <source>Unknown local agent CLI: %1</source>
+        <translation>Невідомий локальний CLI агента: %1</translation>
+    </message>
+    <message>
+        <source>The configured path for %1 is not an executable file: %2</source>
+        <translation>Шлях, указаний для %1, не є виконуваним файлом: %2</translation>
+    </message>
+    <message>
+        <source>%1 was not found on this computer. Install it, or set its path in Settings → AI Assistant.</source>
+        <translation>%1 не знайдено на цьому комп’ютері. Установіть його або вкажіть шлях у розділі «Налаштування → ШІ-асистент».</translation>
+    </message>
+    <message>
+        <source>Could not start %1: %2</source>
+        <translation>Не вдалося запустити %1: %2</translation>
+    </message>
+    <message>
+        <source>%1 exited with code %2.</source>
+        <translation>%1 завершився з кодом %2.</translation>
+    </message>
+    <message>
+        <source>%1 exited with code %2: %3</source>
+        <translation>%1 завершився з кодом %2: %3</translation>
+    </message>
+    <message>
+        <source>%1 returned an empty answer.</source>
+        <translation>%1 повернув порожню відповідь.</translation>
     </message>
 </context>
 <context>
@@ -4134,6 +4237,26 @@ This algorithm is obsolete; upgrading the server&apos;s SSH configuration is rec
         <translation type="unfinished">Якщо залишити порожнім, сполучення клавіш для цієї дії видаляється; одне й те саме сполучення не можна призначити двом діям.</translation>
     </message>
     <message>
+        <source>Model source</source>
+        <translation>Джерело моделі</translation>
+    </message>
+    <message>
+        <source>OpenAI-compatible API</source>
+        <translation>API, сумісний з OpenAI</translation>
+    </message>
+    <message>
+        <source>Local agent CLI</source>
+        <translation>Локальний CLI агента</translation>
+    </message>
+    <message>
+        <source>Source</source>
+        <translation>Джерело</translation>
+    </message>
+    <message>
+        <source>A local agent CLI reuses the subscription you are already signed in to (Claude Code, Codex, Cursor…). It only decides the next step; commands still run in Shellium&apos;s terminal under the execution mode below.</source>
+        <translation>Локальний CLI агента використовує підписку, у яку ви вже ввійшли (Claude Code, Codex, Cursor…). Він лише вирішує наступний крок; команди й далі виконуються в терміналі Shellium згідно з режимом виконання нижче.</translation>
+    </message>
+    <message>
         <source>LLM connection</source>
         <translation type="unfinished">Підключення до LLM</translation>
     </message>
@@ -4182,6 +4305,66 @@ This algorithm is obsolete; upgrading the server&apos;s SSH configuration is rec
         <translation type="unfinished">Просити модель міркувати перед відповіддю; відповіді надійніші, але повільніші. Діє лише на шлюзах, що підтримують режим роздумів; коли вимкнено, тіло запиту опускає це поле.</translation>
     </message>
     <message>
+        <source>Agent CLI</source>
+        <translation>CLI агента</translation>
+    </message>
+    <message>
+        <source>Shellium looks for supported CLIs in your login shell PATH and common install locations. Each one runs with its tools disabled or in read-only mode, in an empty folder.</source>
+        <translation>Shellium шукає підтримувані CLI у PATH вашої оболонки входу та в типових каталогах установлення. Кожен із них запускається в порожній теці з вимкненими інструментами або в режимі лише для читання.</translation>
+    </message>
+    <message>
+        <source>Detected automatically</source>
+        <translation>Визначається автоматично</translation>
+    </message>
+    <message>
+        <source>Executable path</source>
+        <translation>Шлях до виконуваного файлу</translation>
+    </message>
+    <message>
+        <source>Leave empty to use the detected location; fill it in only when the CLI is installed somewhere Shellium cannot find.</source>
+        <translation>Залиште порожнім, щоб використати знайдене розташування; заповнюйте, лише якщо CLI установлено там, де Shellium його не знаходить.</translation>
+    </message>
+    <message>
+        <source>CLI default</source>
+        <translation>Типово в CLI</translation>
+    </message>
+    <message>
+        <source>Model</source>
+        <translation>Модель</translation>
+    </message>
+    <message>
+        <source>Passed to the CLI as --model. Leave empty to use the model configured in the CLI itself.</source>
+        <translation>Передається в CLI як --model. Залиште порожнім, щоб використовувати модель, налаштовану в самому CLI.</translation>
+    </message>
+    <message>
+        <source>Command execution</source>
+        <translation>Виконання команд</translation>
+    </message>
+    <message>
+        <source>Ask first</source>
+        <translation>Питати</translation>
+    </message>
+    <message>
+        <source>Auto read-only</source>
+        <translation>Авто: лише читання</translation>
+    </message>
+    <message>
+        <source>Full auto</source>
+        <translation>Повністю авто</translation>
+    </message>
+    <message>
+        <source>Execution mode</source>
+        <translation>Режим виконання</translation>
+    </message>
+    <message>
+        <source>Auto read-only runs commands that Shellium&apos;s own rules classify as read-only and non-interactive (for example ls, df, systemctl status) without asking; anything that changes the system waits for your confirmation. Full auto runs every command, including high-risk ones.</source>
+        <translation>«Авто: лише читання» без запитань виконує команди, які власні правила Shellium відносять до лише читальних і неінтерактивних (наприклад, ls, df, systemctl status); усе, що змінює систему, чекає на ваше підтвердження. «Повністю авто» виконує будь-які команди, зокрема високого ризику.</translation>
+    </message>
+    <message>
+        <source>Risk is judged by local rules, never by the model&apos;s own claims. Automatic runs pause after 20 steps per task, and Stop in the AI panel always takes control back.</source>
+        <translation>Ризик оцінюють локальні правила, а не твердження моделі. Автоматичне виконання призупиняється після 20 кроків на завдання, а кнопка «Стоп» на панелі ШІ завжди повертає керування.</translation>
+    </message>
+    <message>
         <source>Test connection</source>
         <translation type="unfinished">Перевірити підключення</translation>
     </message>
@@ -4212,6 +4395,38 @@ This algorithm is obsolete; upgrading the server&apos;s SSH configuration is rec
     <message>
         <source>Save failed: %1</source>
         <translation type="unfinished">Помилка збереження: %1</translation>
+    </message>
+    <message>
+        <source>Detect again</source>
+        <translation>Виявити знову</translation>
+    </message>
+    <message>
+        <source>Detecting installed agent CLIs…</source>
+        <translation>Пошук установлених CLI агентів…</translation>
+    </message>
+    <message>
+        <source>No supported agent CLI was found. Install one (for example claude or codex), then click &apos;Detect again&apos;.</source>
+        <translation>Підтримуваних CLI агентів не знайдено. Установіть один із них (наприклад, claude або codex), потім натисніть «Виявити знову».</translation>
+    </message>
+    <message>
+        <source>Found %1 of %2 supported CLIs.</source>
+        <translation>Знайдено CLI: %1 із %2 підтримуваних.</translation>
+    </message>
+    <message>
+        <source>not found</source>
+        <translation>не знайдено</translation>
+    </message>
+    <message>
+        <source>Turn on full auto?</source>
+        <translation>Увімкнути повністю автоматичний режим?</translation>
+    </message>
+    <message>
+        <source>In full auto the AI runs every command it chooses in the current terminal without asking, including commands that modify the system or are high risk.
+
+Only use it on hosts where mistakes are acceptable. You can press Stop at any time to take over.</source>
+        <translation>У повністю автоматичному режимі ШІ без запитань виконує в поточному терміналі кожну обрану команду, зокрема ті, що змінюють систему або мають високий ризик.
+
+Використовуйте його лише на хостах, де помилки допустимі. Натисніть «Стоп» будь-коли, щоб узяти керування на себе.</translation>
     </message>
     <message>
         <source>The vault is unavailable</source>

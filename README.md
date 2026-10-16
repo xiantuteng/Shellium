@@ -74,7 +74,7 @@ local ──ssh──▶ bastion ──ssh──▶ app-server ──ssh──�
 - Snippets, command history with completion, multi-host execution
 - Quick palettes in the terminal: <kbd>⌘K</kbd> for snippets, <kbd>⌘J</kbd> for history
 - Command palette; save, validate and restore workspaces
-- AI assistant (optional, bring your own OpenAI-compatible endpoint). Every command that changes the system requires your explicit confirmation.
+- AI assistant (optional): bring your own OpenAI-compatible endpoint, or reuse a locally installed agent CLI (Claude Code, Codex, Cursor Agent, Gemini CLI, Qwen Code), detected automatically. Read-only commands can run automatically; anything that changes the system waits for your confirmation unless you switch on full auto.
 
 **Localisation**: 14 UI languages: English, 简体中文, 繁體中文, Français, Deutsch, Italiano, Español, Português (Brasil), Română, Русский, Українська, 日本語, 한국어 and العربية.
 

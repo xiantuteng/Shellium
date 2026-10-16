@@ -177,6 +177,10 @@ set(SHELLIUM_APP_SOURCES
     src/ai/AiSettingsService.h
     src/ai/CommandRiskClassifier.cpp
     src/ai/CommandRiskClassifier.h
+    src/ai/LocalAgentCli.cpp
+    src/ai/LocalAgentCli.h
+    src/ai/LocalCliClient.cpp
+    src/ai/LocalCliClient.h
     src/core/ActivityLog.cpp
     src/core/ActivityLog.h
     src/core/ConnectionTarget.cpp
@@ -1003,6 +1007,8 @@ if(BUILD_TESTING)
         tests/SettingsUiTest.cpp
         src/ai/AiClient.cpp
         src/ai/AiClient.h
+        src/ai/LocalAgentCli.cpp
+        src/ai/LocalAgentCli.h
         src/ai/AiSettings.h
         src/ai/AiSettingsService.cpp
         src/ai/AiSettingsService.h
@@ -1034,7 +1040,8 @@ if(BUILD_TESTING)
     shellium_add_license_notices(ShelliumSettingsUiTests)
     target_include_directories(ShelliumSettingsUiTests PRIVATE src)
     target_link_libraries(ShelliumSettingsUiTests PRIVATE
-        Qt6::Core Qt6::Gui Qt6::Network Qt6::Widgets Qt6::Sql Qt6::Test ShelliumDependencies::libsodium)
+        Qt6::Core Qt6::Gui Qt6::Network Qt6::Widgets Qt6::Sql Qt6::Test Qt6::Concurrent
+        ShelliumDependencies::libsodium)
     qt_add_translations(ShelliumSettingsUiTests
         TS_FILES i18n/shellium_zh_CN.ts
         RESOURCE_PREFIX "/i18n"
@@ -1059,6 +1066,10 @@ if(BUILD_TESTING)
         src/ai/AiSettingsService.h
         src/ai/CommandRiskClassifier.cpp
         src/ai/CommandRiskClassifier.h
+        src/ai/LocalAgentCli.cpp
+        src/ai/LocalAgentCli.h
+        src/ai/LocalCliClient.cpp
+        src/ai/LocalCliClient.h
         src/core/ConnectionTarget.cpp
         src/core/ConnectionTarget.h
         src/core/HostRecord.h
@@ -1072,7 +1083,8 @@ if(BUILD_TESTING)
     )
     target_include_directories(ShelliumAiAssistantTests PRIVATE src)
     target_link_libraries(ShelliumAiAssistantTests PRIVATE
-        Qt6::Core Qt6::Gui Qt6::Network Qt6::Widgets Qt6::Sql Qt6::Test ShelliumDependencies::libsodium)
+        Qt6::Core Qt6::Gui Qt6::Network Qt6::Widgets Qt6::Sql Qt6::Test Qt6::Concurrent
+        ShelliumDependencies::libsodium)
     qt_add_translations(ShelliumAiAssistantTests
         TS_FILES i18n/shellium_zh_CN.ts
         RESOURCE_PREFIX "/i18n"

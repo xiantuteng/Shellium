@@ -3,12 +3,15 @@
 #include "ai/AiClient.h"
 #include "ai/AiSettings.h"
 #include "ai/AiSettingsService.h"
+#include "ai/LocalAgentCli.h"
+#include "ai/LocalCliClient.h"
 #include "i18n/Retranslate.h"
 #include "ai/CommandRiskClassifier.h"
 #include "ui/FocusWithin.h"
 #include "ui/UiIcons.h"
 
 #include <QAction>
+#include <QActionGroup>
 #include <QCheckBox>
 #include <QAbstractTextDocumentLayout>
 #include <QEvent>
@@ -59,8 +62,8 @@ const QString kSystemPrompt = QStringLiteral(R"PROMPT(
    输出、预告或编号列出完整计划，也不能描述第二步及之后的命令。
 2. 如果需要执行命令，本轮只能给出一条命令。先用简洁中文说明“本步要确认/改变什么”以及
    “为什么现在需要执行它”，再给出命令。说明必须针对当前命令，不得包含后续步骤。
-3. 命令由用户点击执行，客户端随后会把真实新增终端输出作为观察结果再次发给你。在看到观察
-   结果前，不得假设命令成功，不得直接继续下一步，也不得编造退出码或输出。
+3. 命令由客户端下发到终端：只读命令可能被自动执行，其余命令须经用户确认（用户也可能开启
+   全自动）。客户端随后会把真实新增终端输出作为观察结果再次发给你。在看到观察结果前，不得假设命令成功，不得直接继续下一步，也不得编造退出码或输出。
 4. 收到真实观察后，重新判断：目标已完成则结束；尚未完成则只返回下一条命令；输出存在异常
    则只返回当前最合适的诊断或修复命令；需要密码、业务选择、不可从终端判断的信息或危险授权
    时暂停并询问用户。
@@ -86,6 +89,14 @@ const QString kSystemPrompt = QStringLiteral(R"PROMPT(
 硬性限制：state=command 时 title、reason、command 都必须非空；command 不能包含换行；任何响应
 最多只能出现一个 command 字段。不要输出 steps、plan、next、后续操作、完整方案或多个候选命令。
 )PROMPT");
+
+/**
+ * @brief 用户发出一次任务后，最多允许连续自动执行的命令条数。
+ *
+ * 自动执行让"模型给命令 → 执行 → 续问"在无人点击的情况下循环；模型陷入反复重试时，
+ * 这条上限保证回路最终停下来把控制权交还用户，而不是无限刷终端。
+ */
+constexpr int kMaxAutoExecutedSteps = 20;
 
 /** @brief 协议校验失败时最多自动纠正一次，避免网关模型持续违规造成无限请求循环。 */
 constexpr int kMaxAgentProtocolRepairs = 1;
@@ -345,6 +356,7 @@ AiAssistantWidget::AiAssistantWidget(AiSettingsService *settingsService, QWidget
     : QWidget(parent)
     , m_settingsService(settingsService)
     , m_client(new AiClient(this))
+    , m_cliClient(new LocalCliClient(this))
 {
     Q_ASSERT(m_settingsService != nullptr);
     // 空白新会话也预先分配稳定 id；只有产生了模型上下文后才会写入最近会话列表，避免用户
@@ -361,14 +373,16 @@ AiAssistantWidget::AiAssistantWidget(AiSettingsService *settingsService, QWidget
     connect(m_client, &AiClient::replyChunkReceived, this, [this](const QString &) {
         scrollToBottom();
     });
-    connect(m_client, &AiClient::replyFinished, this, [this](const QString &content) {
+    // HTTP 网关与本地 CLI 两条来源共用同一套收尾逻辑：协议校验、风险分级和自动执行
+    // 都只看回复文本，不关心它是从哪里来的。
+    const auto onReplyFinished = [this](const QString &content) {
         if (m_thinkingBubble != nullptr) {
             m_thinkingBubble->deleteLater();
             m_thinkingBubble = nullptr;
         }
         handleAgentReply(content);
-    });
-    connect(m_client, &AiClient::replyFailed, this, [this](const QString &message) {
+    };
+    const auto onReplyFailed = [this](const QString &message) {
         if (m_thinkingBubble != nullptr) {
             m_thinkingBubble->deleteLater();
             m_thinkingBubble = nullptr;
@@ -378,6 +392,13 @@ AiAssistantWidget::AiAssistantWidget(AiSettingsService *settingsService, QWidget
         setBusy(false);
         scrollToBottom();
         emit statusMessage(message);
+    };
+    connect(m_client, &AiClient::replyFinished, this, onReplyFinished);
+    connect(m_client, &AiClient::replyFailed, this, onReplyFailed);
+    connect(m_cliClient, &LocalCliClient::replyFinished, this, onReplyFinished);
+    connect(m_cliClient, &LocalCliClient::replyFailed, this, onReplyFailed);
+    connect(m_settingsService, &AiSettingsService::settingsChanged, this, [this]() {
+        updateExecutionModeUi();
     });
 }
 
@@ -657,6 +678,35 @@ void AiAssistantWidget::buildUi()
     m_attachContextCheck = new QCheckBox(tr("Include new terminal output"), attachRow);
     attachLayout->addWidget(m_attachContextCheck);
     attachLayout->addStretch(1);
+
+    // 执行模式紧挨发送按钮：它决定"发出去之后会不会有命令不经点击就跑起来"，必须在用户
+    // 每次按发送时都能直接看到，而不是藏在设置页里。
+    m_executionModeButton = new QToolButton(attachRow);
+    m_executionModeButton->setObjectName(QStringLiteral("aiExecutionModeButton"));
+    m_executionModeButton->setCursor(Qt::PointingHandCursor);
+    m_executionModeButton->setPopupMode(QToolButton::InstantPopup);
+    m_executionModeButton->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    m_executionModeMenu = new QMenu(m_executionModeButton);
+    m_executionModeMenu->setObjectName(QStringLiteral("aiExecutionModeMenu"));
+    auto *modeGroup = new QActionGroup(m_executionModeMenu);
+    modeGroup->setExclusive(true);
+    const auto addModeAction = [this, modeGroup](const QString &objectName,
+                                                 const AiExecutionPolicy policy) {
+        auto *action = new QAction(m_executionModeMenu);
+        action->setObjectName(objectName);
+        action->setCheckable(true);
+        action->setData(static_cast<int>(policy));
+        modeGroup->addAction(action);
+        m_executionModeMenu->addAction(action);
+        connect(action, &QAction::triggered, this, [this, policy]() {
+            setExecutionPolicy(policy);
+        });
+    };
+    addModeAction(QStringLiteral("aiModeManual"), AiExecutionPolicy::Manual);
+    addModeAction(QStringLiteral("aiModeAutoReadOnly"), AiExecutionPolicy::AutoReadOnly);
+    addModeAction(QStringLiteral("aiModeFullAuto"), AiExecutionPolicy::FullAuto);
+    m_executionModeButton->setMenu(m_executionModeMenu);
+    attachLayout->addWidget(m_executionModeButton);
     m_sendButton = new QPushButton(attachRow);
     m_sendButton->setObjectName(QStringLiteral("aiSendButton"));
     m_sendButton->setIcon(UiIcons::symbol(this, UiIcons::Symbol::ArrowUp, QColor(Qt::white)));
@@ -669,8 +719,9 @@ void AiAssistantWidget::buildUi()
     composerLayout->addWidget(attachRow);
     root->addWidget(composer);
 
-    auto *disclaimer = new QLabel(
-        tr("The AI can make mistakes. Every command that changes the system requires your explicit confirmation."), this);
+    auto *disclaimer = new QLabel(this);
+    m_disclaimerLabel = disclaimer;
+    disclaimer->setObjectName(QStringLiteral("aiDisclaimerLabel"));
     disclaimer->setAlignment(Qt::AlignCenter);
     disclaimer->setWordWrap(true);
     disclaimer->setStyleSheet(QStringLiteral("color: palette(mid); font-size: 10.5px;"));
@@ -721,8 +772,7 @@ void AiAssistantWidget::buildUi()
             tr("Describe what you want to accomplish on the current server…"));
         m_sendButton->setToolTip(tr("Send (Enter)"));
         m_attachContextCheck->setText(tr("Include new terminal output"));
-        disclaimer->setText(tr("The AI can make mistakes. Every command that changes the "
-                               "system requires your explicit confirmation."));
+        updateExecutionModeUi();
         // 重新套用当前目标：未连接时回到本地化占位，已连接时保持服务器名不变。
         setActiveTarget(m_activeTarget);
         // 聊天区里的系统提示（无配置、协议中断、命令卡片标题等）都是 tr() 文案，构造时
@@ -736,6 +786,7 @@ void AiAssistantWidget::buildUi()
 
     updateInputEditorHeight();
     updateSendButtonMode();
+    updateExecutionModeUi();
 }
 
 bool AiAssistantWidget::eventFilter(QObject *watched, QEvent *event)
@@ -1022,6 +1073,8 @@ void AiAssistantWidget::sendCurrentInput()
     }
     m_inputEdit->clear();
     appendUserBubble(text);
+    // 自动执行上限按"用户发起的一次任务"计数；用户亲自发话即重新授权一轮。
+    m_autoExecutedSteps = 0;
 
     QString ephemeralContext;
     if (m_attachContextCheck != nullptr && m_attachContextCheck->isChecked()) {
@@ -1053,7 +1106,10 @@ void AiAssistantWidget::sendMessageInternal(const QString &historyText,
     const AiSettings settings = m_settingsService->currentSettings();
     if (!settings.isConfigured()) {
         appendNoticeBubble(
-            tr("Configure the LLM URL and model name in Settings → AI Assistant first"), true);
+            settings.backend == AiBackend::LocalCli
+                ? tr("Choose a local agent CLI in Settings → AI Assistant first")
+                : tr("Configure the LLM URL and model name in Settings → AI Assistant first"),
+            true);
         scrollToBottom();
         return;
     }
@@ -1078,7 +1134,17 @@ void AiAssistantWidget::sendMessageInternal(const QString &historyText,
     m_chatLayout->insertWidget(m_chatLayout->count() - 1, m_thinkingBubble);
     scrollToBottom();
 
-    m_client->sendMessage(settings, outgoing);
+    dispatchAgentRequest(settings, outgoing);
+}
+
+void AiAssistantWidget::dispatchAgentRequest(const AiSettings &settings,
+                                             const QList<AiChatMessage> &messages)
+{
+    if (settings.backend == AiBackend::LocalCli) {
+        m_cliClient->sendMessage(settings, messages);
+    } else {
+        m_client->sendMessage(settings, messages);
+    }
 }
 
 void AiAssistantWidget::handleAgentReply(const QString &content)
@@ -1097,12 +1163,16 @@ void AiAssistantWidget::handleAgentReply(const QString &content)
     m_agentProtocolRepairCount = 0;
 
     switch (reply.state) {
-    case AgentReplyState::Command:
+    case AgentReplyState::Command: {
         // 效果图把智能体的判断与可审批工具卡片分成两个层级：先由助手说明“做什么、为什么”，
         // 再单独呈现命令和审批动作。这样用户即使暂不执行，也能直接理解当前一步的依据。
         appendAssistantBubble(tr("%1  %2").arg(reply.title, reply.reason));
-        appendCommandCard(reply.command);
-        break;
+        QPushButton *executeButton = appendCommandCard(reply.command);
+        setBusy(false);
+        scrollToBottom();
+        maybeAutoExecute(reply.command, executeButton);
+        return;
+    }
     case AgentReplyState::Complete:
     case AgentReplyState::Question:
         appendAssistantBubble(reply.message);
@@ -1111,6 +1181,130 @@ void AiAssistantWidget::handleAgentReply(const QString &content)
 
     setBusy(false);
     scrollToBottom();
+}
+
+bool AiAssistantWidget::shouldAutoExecute(const AiExecutionPolicy policy, const QString &command)
+{
+    switch (policy) {
+    case AiExecutionPolicy::Manual:
+        return false;
+    case AiExecutionPolicy::AutoReadOnly:
+        return CommandRiskClassifier::isSafeForAutoExecution(command);
+    case AiExecutionPolicy::FullAuto:
+        return true;
+    }
+    return false;
+}
+
+void AiAssistantWidget::maybeAutoExecute(const QString &command, QPushButton *executeButton)
+{
+    if (executeButton == nullptr || !executeButton->isEnabled() || m_captureInFlight) {
+        return;
+    }
+    const AiExecutionPolicy policy = m_settingsService->currentSettings().executionPolicy;
+    if (!shouldAutoExecute(policy, command)) {
+        return;
+    }
+    if (m_autoExecutedSteps >= kMaxAutoExecutedSteps) {
+        // 到达上限不是错误，只是把方向盘交还给用户：卡片仍可手动执行。
+        appendNoticeBubble(
+            tr("Paused after %1 automatic steps. Review the progress, then run the next command yourself or send a new message to continue.")
+                .arg(kMaxAutoExecutedSteps),
+            false);
+        scrollToBottom();
+        return;
+    }
+    ++m_autoExecutedSteps;
+    // 走与鼠标点击完全相同的执行路径（锁定按钮、拍终端基线、捕获输出、自动续问），只用
+    // 属性告诉它"这一次已由执行策略批准"，从而跳过高风险确认框。
+    executeButton->setProperty("aiAutoApproved", true);
+    executeButton->click();
+}
+
+void AiAssistantWidget::setExecutionPolicy(const AiExecutionPolicy policy)
+{
+    AiSettings settings = m_settingsService->currentSettings();
+    if (settings.executionPolicy == policy) {
+        updateExecutionModeUi();
+        return;
+    }
+    if (policy == AiExecutionPolicy::FullAuto) {
+        const auto choice = QMessageBox::warning(
+            this,
+            tr("Turn on full auto?"),
+            tr("In full auto the AI runs every command it chooses in the current terminal without asking, including commands that modify the system or are high risk.\n\nOnly use it on hosts where mistakes are acceptable. You can press Stop at any time to take over."),
+            QMessageBox::Yes | QMessageBox::Cancel,
+            QMessageBox::Cancel);
+        if (choice != QMessageBox::Yes) {
+            updateExecutionModeUi();
+            return;
+        }
+    }
+    settings.executionPolicy = policy;
+    QString errorMessage;
+    if (!m_settingsService->save(settings, &errorMessage)) {
+        emit statusMessage(tr("Failed to save the execution mode: %1").arg(errorMessage));
+    }
+    updateExecutionModeUi();
+}
+
+void AiAssistantWidget::updateExecutionModeUi()
+{
+    if (m_executionModeButton == nullptr || m_executionModeMenu == nullptr) {
+        return;
+    }
+    const AiExecutionPolicy policy = m_settingsService->currentSettings().executionPolicy;
+    for (QAction *action : m_executionModeMenu->actions()) {
+        const auto actionPolicy = static_cast<AiExecutionPolicy>(action->data().toInt());
+        switch (actionPolicy) {
+        case AiExecutionPolicy::Manual:
+            action->setText(tr("Ask before every command"));
+            break;
+        case AiExecutionPolicy::AutoReadOnly:
+            action->setText(tr("Auto-run read-only commands"));
+            break;
+        case AiExecutionPolicy::FullAuto:
+            action->setText(tr("Full auto (run everything)"));
+            break;
+        }
+        action->setChecked(actionPolicy == policy);
+    }
+
+    QString buttonText;
+    QString color = m_colors.muted;
+    QString disclaimer;
+    switch (policy) {
+    case AiExecutionPolicy::Manual:
+        buttonText = tr("Ask first");
+        disclaimer = tr("The AI can make mistakes. Every command waits for your confirmation before it runs.");
+        break;
+    case AiExecutionPolicy::AutoReadOnly:
+        buttonText = tr("Auto read-only");
+        disclaimer = tr("The AI can make mistakes. Every command that changes the system requires your explicit confirmation.");
+        break;
+    case AiExecutionPolicy::FullAuto:
+        buttonText = tr("Full auto");
+        color = m_colors.danger;
+        disclaimer = tr("Full auto: the AI runs every command it chooses, including ones that change the system. Watch the terminal and press Stop to take over.");
+        break;
+    }
+    m_executionModeButton->setText(buttonText + QStringLiteral(" ▾"));
+    m_executionModeButton->setToolTip(tr("Choose which commands the AI may run without asking"));
+    m_executionModeButton->setAccessibleName(tr("Execution mode"));
+    m_executionModeButton->setStyleSheet(QStringLiteral(
+        "QToolButton { color: %1; background: transparent; border: 1px solid %2;"
+        "border-radius: 8px; padding: 3px 8px; font-size: 11.5px; }"
+        "QToolButton:hover { background: %3; }"
+        "QToolButton::menu-indicator { image: none; width: 0; }")
+        .arg(color, policy == AiExecutionPolicy::FullAuto ? m_colors.danger : m_colors.border,
+             m_colors.hover));
+    if (m_disclaimerLabel != nullptr) {
+        m_disclaimerLabel->setText(disclaimer);
+        m_disclaimerLabel->setStyleSheet(
+            policy == AiExecutionPolicy::FullAuto
+                ? QStringLiteral("color: %1; font-size: 10.5px;").arg(m_colors.danger)
+                : QStringLiteral("color: palette(mid); font-size: 10.5px;"));
+    }
 }
 
 void AiAssistantWidget::requestAgentProtocolRepair(const QString &invalidContent,
@@ -1139,7 +1333,7 @@ void AiAssistantWidget::requestAgentProtocolRepair(const QString &invalidContent
     m_thinkingBubble = buildThinkingIndicator();
     m_chatLayout->insertWidget(m_chatLayout->count() - 1, m_thinkingBubble);
     scrollToBottom();
-    m_client->sendMessage(settings, repairMessages);
+    dispatchAgentRequest(settings, repairMessages);
 }
 
 void AiAssistantWidget::appendUserBubble(const QString &text)
@@ -1257,7 +1451,7 @@ void AiAssistantWidget::appendNoticeBubble(const QString &text, const bool isErr
     m_chatLayout->insertWidget(m_chatLayout->count() - 1, bubble);
 }
 
-void AiAssistantWidget::appendCommandCard(const QString &command,
+QPushButton *AiAssistantWidget::appendCommandCard(const QString &command,
                                           const QString &title,
                                           const QString &reason,
                                           const bool alreadyExecuted)
@@ -1404,7 +1598,10 @@ void AiAssistantWidget::appendCommandCard(const QString &command,
             emit statusMessage(tr("The previous command is still waiting for output; please wait before running another"));
             return;
         }
-        if (level == CommandRiskLevel::HighRisk) {
+        // 只认这一次的批准：属性读完立即清掉，之后用户再手动点击仍走正常审批。
+        const bool autoApproved = executeButton->property("aiAutoApproved").toBool();
+        executeButton->setProperty("aiAutoApproved", false);
+        if (level == CommandRiskLevel::HighRisk && !autoApproved) {
             const auto choice = QMessageBox::warning(
                 this,
                 tr("Confirm running a high-risk command"),
@@ -1418,7 +1615,7 @@ void AiAssistantWidget::appendCommandCard(const QString &command,
         }
         executeButton->setEnabled(false);
         executeButton->setText(tr("Executed"));
-        statusLabel->setText(tr("Executed"));
+        statusLabel->setText(autoApproved ? tr("Ran automatically") : tr("Executed"));
         // 必须先拍下终端基线再下发命令。executeOnTargets 是同步信号槽，极快命令可能在 emit
         // 返回前就已经产生回显；若下发后才记录位置，这部分真实输出会被误当成旧内容丢弃。
         beginOutputCapture(command, card, actions);
@@ -1428,6 +1625,7 @@ void AiAssistantWidget::appendCommandCard(const QString &command,
 
     cardRowLayout->addWidget(card, 1);
     m_chatLayout->insertWidget(m_chatLayout->count() - 1, cardRow);
+    return executeButton;
 }
 
 void AiAssistantWidget::setBusy(const bool busy)
@@ -1465,6 +1663,7 @@ void AiAssistantWidget::stopActiveWork()
         // 先落 UI 状态再中止：AiClient 在用户主动中止后不会再发任何信号，界面收尾只能
         // 由这里完成。
         m_client->abortActiveRequest();
+        m_cliClient->abortActiveRequest();
         if (m_thinkingBubble != nullptr) {
             m_thinkingBubble->deleteLater();
             m_thinkingBubble = nullptr;

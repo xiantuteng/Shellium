@@ -74,8 +74,72 @@
 %1</translation>
     </message>
     <message>
+        <source>Choose a local agent CLI in Settings → AI Assistant first</source>
+        <translation>Alegeți mai întâi un CLI de agent local în Setări → Asistent AI</translation>
+    </message>
+    <message>
         <source>Configure the LLM URL and model name in Settings → AI Assistant first</source>
         <translation type="unfinished">Configurează mai întâi URL-ul LLM și numele modelului în „Setări → Asistent IA”</translation>
+    </message>
+    <message>
+        <source>Paused after %1 automatic steps. Review the progress, then run the next command yourself or send a new message to continue.</source>
+        <translation>Întrerupt după %1 pași automați. Verificați progresul, apoi rulați singur comanda următoare sau trimiteți un mesaj nou pentru a continua.</translation>
+    </message>
+    <message>
+        <source>Turn on full auto?</source>
+        <translation>Activați modul complet automat?</translation>
+    </message>
+    <message>
+        <source>In full auto the AI runs every command it chooses in the current terminal without asking, including commands that modify the system or are high risk.
+
+Only use it on hosts where mistakes are acceptable. You can press Stop at any time to take over.</source>
+        <translation>În modul complet automat, AI rulează fără să întrebe fiecare comandă aleasă în terminalul curent, inclusiv comenzile care modifică sistemul sau au risc ridicat.
+
+Folosiți-l doar pe gazde unde greșelile sunt acceptabile. Puteți apăsa Oprire oricând pentru a prelua controlul.</translation>
+    </message>
+    <message>
+        <source>Failed to save the execution mode: %1</source>
+        <translation>Modul de execuție nu a putut fi salvat: %1</translation>
+    </message>
+    <message>
+        <source>Ask before every command</source>
+        <translation>Întreabă înainte de fiecare comandă</translation>
+    </message>
+    <message>
+        <source>Auto-run read-only commands</source>
+        <translation>Rulează automat comenzile doar-citire</translation>
+    </message>
+    <message>
+        <source>Full auto (run everything)</source>
+        <translation>Complet automat (rulează tot)</translation>
+    </message>
+    <message>
+        <source>Ask first</source>
+        <translation>Întreabă</translation>
+    </message>
+    <message>
+        <source>The AI can make mistakes. Every command waits for your confirmation before it runs.</source>
+        <translation>AI poate greși. Fiecare comandă așteaptă confirmarea dvs. înainte de a rula.</translation>
+    </message>
+    <message>
+        <source>Auto read-only</source>
+        <translation>Doar-citire automat</translation>
+    </message>
+    <message>
+        <source>Full auto</source>
+        <translation>Complet automat</translation>
+    </message>
+    <message>
+        <source>Full auto: the AI runs every command it chooses, including ones that change the system. Watch the terminal and press Stop to take over.</source>
+        <translation>Complet automat: AI rulează fiecare comandă aleasă, inclusiv cele care modifică sistemul. Urmăriți terminalul și apăsați Oprire pentru a prelua controlul.</translation>
+    </message>
+    <message>
+        <source>Choose which commands the AI may run without asking</source>
+        <translation>Alegeți ce comenzi poate rula AI fără să întrebe</translation>
+    </message>
+    <message>
+        <source>Execution mode</source>
+        <translation>Mod de execuție</translation>
     </message>
     <message>
         <source>The AI did not return a result following the single-step interaction protocol; this round has been stopped. Retry or switch to a model that supports JSON instructions.</source>
@@ -156,6 +220,10 @@ Run it in the current terminal?</source>
 %1
 
 O execuți în terminalul curent?</translation>
+    </message>
+    <message>
+        <source>Ran automatically</source>
+        <translation>Rulat automat</translation>
     </message>
     <message>
         <source>Sent to the current terminal to run; the AI will wait for it to finish automatically</source>
@@ -1286,6 +1354,41 @@ Confirmi că cheia s-a schimbat, înlocuiești vechea înregistrare din known_ho
     <message>
         <source>%1  (%2)</source>
         <translation type="unfinished">%1  (%2)</translation>
+    </message>
+</context>
+<context>
+    <name>LocalCliClient</name>
+    <message>
+        <source>%1 did not answer within %2 seconds and was stopped.</source>
+        <translation>%1 nu a răspuns în %2 secunde și a fost oprit.</translation>
+    </message>
+    <message>
+        <source>Unknown local agent CLI: %1</source>
+        <translation>CLI de agent local necunoscut: %1</translation>
+    </message>
+    <message>
+        <source>The configured path for %1 is not an executable file: %2</source>
+        <translation>Calea configurată pentru %1 nu este un fișier executabil: %2</translation>
+    </message>
+    <message>
+        <source>%1 was not found on this computer. Install it, or set its path in Settings → AI Assistant.</source>
+        <translation>%1 nu a fost găsit pe acest computer. Instalați-l sau setați calea în Setări → Asistent AI.</translation>
+    </message>
+    <message>
+        <source>Could not start %1: %2</source>
+        <translation>%1 nu a putut porni: %2</translation>
+    </message>
+    <message>
+        <source>%1 exited with code %2.</source>
+        <translation>%1 s-a încheiat cu codul %2.</translation>
+    </message>
+    <message>
+        <source>%1 exited with code %2: %3</source>
+        <translation>%1 s-a încheiat cu codul %2: %3</translation>
+    </message>
+    <message>
+        <source>%1 returned an empty answer.</source>
+        <translation>%1 a returnat un răspuns gol.</translation>
     </message>
 </context>
 <context>
@@ -4134,6 +4237,26 @@ Acest algoritm este învechit; se recomandă actualizarea configurației SSH a s
         <translation type="unfinished">Dacă lași gol, comanda rapidă pentru această acțiune este eliminată; aceeași comandă rapidă nu poate fi atribuită la două acțiuni.</translation>
     </message>
     <message>
+        <source>Model source</source>
+        <translation>Sursa modelului</translation>
+    </message>
+    <message>
+        <source>OpenAI-compatible API</source>
+        <translation>API compatibil OpenAI</translation>
+    </message>
+    <message>
+        <source>Local agent CLI</source>
+        <translation>CLI de agent local</translation>
+    </message>
+    <message>
+        <source>Source</source>
+        <translation>Sursă</translation>
+    </message>
+    <message>
+        <source>A local agent CLI reuses the subscription you are already signed in to (Claude Code, Codex, Cursor…). It only decides the next step; commands still run in Shellium&apos;s terminal under the execution mode below.</source>
+        <translation>Un CLI de agent local reutilizează abonamentul în care sunteți deja autentificat (Claude Code, Codex, Cursor…). El decide doar pasul următor; comenzile rulează în continuare în terminalul Shellium conform modului de execuție de mai jos.</translation>
+    </message>
+    <message>
         <source>LLM connection</source>
         <translation type="unfinished">Conexiune LLM</translation>
     </message>
@@ -4182,6 +4305,66 @@ Acest algoritm este învechit; se recomandă actualizarea configurației SSH a s
         <translation type="unfinished">Cere modelului să raționeze înainte de a răspunde; răspunsurile sunt mai fiabile, dar mai lente. Are efect doar pe gateway-urile care acceptă modul de raționament; când este dezactivat, corpul cererii omite acest câmp.</translation>
     </message>
     <message>
+        <source>Agent CLI</source>
+        <translation>CLI de agent</translation>
+    </message>
+    <message>
+        <source>Shellium looks for supported CLIs in your login shell PATH and common install locations. Each one runs with its tools disabled or in read-only mode, in an empty folder.</source>
+        <translation>Shellium caută CLI-urile acceptate în PATH-ul shell-ului de autentificare și în locațiile de instalare uzuale. Fiecare rulează într-un folder gol, cu instrumentele dezactivate sau în mod doar-citire.</translation>
+    </message>
+    <message>
+        <source>Detected automatically</source>
+        <translation>Detectat automat</translation>
+    </message>
+    <message>
+        <source>Executable path</source>
+        <translation>Calea executabilului</translation>
+    </message>
+    <message>
+        <source>Leave empty to use the detected location; fill it in only when the CLI is installed somewhere Shellium cannot find.</source>
+        <translation>Lăsați gol pentru a folosi locația detectată; completați doar dacă CLI-ul este instalat într-un loc pe care Shellium nu îl găsește.</translation>
+    </message>
+    <message>
+        <source>CLI default</source>
+        <translation>Implicit CLI</translation>
+    </message>
+    <message>
+        <source>Model</source>
+        <translation>Model</translation>
+    </message>
+    <message>
+        <source>Passed to the CLI as --model. Leave empty to use the model configured in the CLI itself.</source>
+        <translation>Transmis către CLI ca --model. Lăsați gol pentru a folosi modelul configurat în CLI.</translation>
+    </message>
+    <message>
+        <source>Command execution</source>
+        <translation>Execuția comenzilor</translation>
+    </message>
+    <message>
+        <source>Ask first</source>
+        <translation>Întreabă</translation>
+    </message>
+    <message>
+        <source>Auto read-only</source>
+        <translation>Doar-citire automat</translation>
+    </message>
+    <message>
+        <source>Full auto</source>
+        <translation>Complet automat</translation>
+    </message>
+    <message>
+        <source>Execution mode</source>
+        <translation>Mod de execuție</translation>
+    </message>
+    <message>
+        <source>Auto read-only runs commands that Shellium&apos;s own rules classify as read-only and non-interactive (for example ls, df, systemctl status) without asking; anything that changes the system waits for your confirmation. Full auto runs every command, including high-risk ones.</source>
+        <translation>„Doar-citire automat” rulează fără să întrebe comenzile pe care regulile proprii Shellium le clasifică drept doar-citire și neinteractive (de exemplu ls, df, systemctl status); orice modifică sistemul așteaptă confirmarea dvs. „Complet automat” rulează toate comenzile, inclusiv pe cele cu risc ridicat.</translation>
+    </message>
+    <message>
+        <source>Risk is judged by local rules, never by the model&apos;s own claims. Automatic runs pause after 20 steps per task, and Stop in the AI panel always takes control back.</source>
+        <translation>Riscul este evaluat după reguli locale, niciodată după afirmațiile modelului. Rulările automate se opresc după 20 de pași pe sarcină, iar Oprire din panoul AI preia oricând controlul.</translation>
+    </message>
+    <message>
         <source>Test connection</source>
         <translation type="unfinished">Testează conexiunea</translation>
     </message>
@@ -4212,6 +4395,38 @@ Acest algoritm este învechit; se recomandă actualizarea configurației SSH a s
     <message>
         <source>Save failed: %1</source>
         <translation type="unfinished">Salvare eșuată: %1</translation>
+    </message>
+    <message>
+        <source>Detect again</source>
+        <translation>Detectează din nou</translation>
+    </message>
+    <message>
+        <source>Detecting installed agent CLIs…</source>
+        <translation>Se detectează CLI-urile de agent instalate…</translation>
+    </message>
+    <message>
+        <source>No supported agent CLI was found. Install one (for example claude or codex), then click &apos;Detect again&apos;.</source>
+        <translation>Nu a fost găsit niciun CLI de agent acceptat. Instalați unul (de exemplu claude sau codex), apoi apăsați „Detectează din nou”.</translation>
+    </message>
+    <message>
+        <source>Found %1 of %2 supported CLIs.</source>
+        <translation>Au fost găsite %1 din %2 CLI-uri acceptate.</translation>
+    </message>
+    <message>
+        <source>not found</source>
+        <translation>negăsit</translation>
+    </message>
+    <message>
+        <source>Turn on full auto?</source>
+        <translation>Activați modul complet automat?</translation>
+    </message>
+    <message>
+        <source>In full auto the AI runs every command it chooses in the current terminal without asking, including commands that modify the system or are high risk.
+
+Only use it on hosts where mistakes are acceptable. You can press Stop at any time to take over.</source>
+        <translation>În modul complet automat, AI rulează fără să întrebe fiecare comandă aleasă în terminalul curent, inclusiv comenzile care modifică sistemul sau au risc ridicat.
+
+Folosiți-l doar pe gazde unde greșelile sunt acceptabile. Puteți apăsa Oprire oricând pentru a prelua controlul.</translation>
     </message>
     <message>
         <source>The vault is unavailable</source>

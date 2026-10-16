@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ai/AiChatTypes.h"
+#include "ai/AiSettings.h"
 #include "core/ConnectionTarget.h"
 
 #include <QElapsedTimer>
@@ -13,10 +14,11 @@
 
 class AiClient;
 class AiSettingsService;
-struct AiSettings;
+class LocalCliClient;
 class QCheckBox;
 class QFrame;
 class QLabel;
+class QMenu;
 class QPushButton;
 class QTextEdit;
 class QTimer;
@@ -32,8 +34,15 @@ class QEvent;
  * 浮动窗口中复用。每个终端标签页拥有一个独立实例，因此聊天、模型请求和终端读取进度不会
  * 跨标签串线；单个实例内部保留最近十次会话，可通过顶部历史菜单恢复。上下文条只反映当前
  * 实例绑定的终端，是否把该终端最新输出主动附加到普通提问由用户在输入框下方的
- * 勾选框显式决定——这是"最小上下文"默认值的直接体现；"只读/需审批"分级只影响建议命令卡片
- * 的展示与按钮颜色，不会有任何命令在用户点击"执行"之前被下发。
+ * 勾选框显式决定——这是"最小上下文"默认值的直接体现。
+ *
+ * 命令是否需要点击才下发由 AiExecutionPolicy 决定：Manual 下每条都要点击；AutoReadOnly
+ * 下只有 CommandRiskClassifier 判定为只读且不会卡在交互界面的命令自动执行；FullAuto 下
+ * 全部自动执行。风险判定只用本地静态规则，不采信模型自述；自动执行与手动点击走同一条
+ * 按钮路径，并受每轮任务 kMaxAutoExecutedSteps 条的上限约束。
+ *
+ * 模型来源可以是 OpenAI 兼容网关（AiClient），也可以是本机已安装的智能体 CLI
+ * （LocalCliClient），两者共用单步协议与执行审批。
  *
  * 对话流程是单步交互式的：模型每轮最多给出一条命令，用户点击"执行"后命令被发往当前终端，
  * 随后本控件轮询 terminalPlainText() 快照直到 Shell 提示符重新出现，把差量文本作为隐藏的
@@ -206,6 +215,31 @@ private:
     void requestAgentProtocolRepair(const QString &invalidContent,
                                     const QString &validationError);
 
+    /** @brief 按设置里的模型来源，把一次决策请求交给 HTTP 客户端或本地 CLI 客户端。 */
+    void dispatchAgentRequest(const AiSettings &settings, const QList<AiChatMessage> &messages);
+
+    /**
+     * @brief 判断在给定执行策略下，一条命令能否不经点击直接下发。
+     * @param policy 当前执行策略。
+     * @param command 模型给出的单条命令。
+     */
+    [[nodiscard]] static bool shouldAutoExecute(AiExecutionPolicy policy, const QString &command);
+
+    /**
+     * @brief 新命令卡片渲染完毕后，按执行策略决定是否立即替用户点击"执行"。
+     * @param command 卡片上的命令。
+     * @param executeButton 卡片的执行按钮；自动执行复用它的点击路径。
+     */
+    void maybeAutoExecute(const QString &command, QPushButton *executeButton);
+
+    /**
+     * @brief 切换并持久化执行策略；切到全自动前会弹出一次明确的风险确认。
+     */
+    void setExecutionPolicy(AiExecutionPolicy policy);
+
+    /** @brief 按当前执行策略刷新模式按钮、菜单勾选状态和底部提示文案。 */
+    void updateExecutionModeUi();
+
     /** @brief 把一条用户消息追加到聊天区。 */
     void appendUserBubble(const QString &text);
 
@@ -222,8 +256,9 @@ private:
      * @param reason 可选的执行原因说明；为空时不创建对应标签。
      * @param alreadyExecuted true 表示从历史恢复的命令已执行，执行按钮会保持禁用；false
      *        表示仍等待用户确认。
+     * @return 卡片的执行按钮，供自动执行复用同一条点击路径。
      */
-    void appendCommandCard(const QString &command,
+    QPushButton *appendCommandCard(const QString &command,
                            const QString &title = QString(),
                            const QString &reason = QString(),
                            bool alreadyExecuted = false);
@@ -327,6 +362,10 @@ private:
 
     AiSettingsService *m_settingsService = nullptr;
     AiClient *m_client = nullptr;
+    /** @brief 本地智能体 CLI 来源的客户端；与 m_client 二选一使用，由设置决定。 */
+    LocalCliClient *m_cliClient = nullptr;
+    /** @brief 本轮用户任务已自动执行的命令数，用户每次亲自发送消息时归零。 */
+    int m_autoExecutedSteps = 0;
     std::function<QString()> m_terminalContextProvider;
 
     ConnectionTarget m_activeTarget;
@@ -428,4 +467,9 @@ private:
     QTextEdit *m_inputEdit = nullptr;
     QPushButton *m_sendButton = nullptr;
     QPushButton *m_newSessionButton = nullptr;
+    /** @brief 输入区右下角的执行模式切换按钮。 */
+    QToolButton *m_executionModeButton = nullptr;
+    QMenu *m_executionModeMenu = nullptr;
+    /** @brief 面板底部随执行模式变化的风险提示。 */
+    QLabel *m_disclaimerLabel = nullptr;
 };

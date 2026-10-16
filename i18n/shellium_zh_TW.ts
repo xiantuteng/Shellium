@@ -74,8 +74,72 @@
 %1</translation>
     </message>
     <message>
+        <source>Choose a local agent CLI in Settings → AI Assistant first</source>
+        <translation>請先在設定 → AI 助理中選擇本機智慧體 CLI</translation>
+    </message>
+    <message>
         <source>Configure the LLM URL and model name in Settings → AI Assistant first</source>
         <translation>請先在設定 → AI 助手中配置大模型地址和模型名稱</translation>
+    </message>
+    <message>
+        <source>Paused after %1 automatic steps. Review the progress, then run the next command yourself or send a new message to continue.</source>
+        <translation>已連續自動執行 %1 步，現已暫停。請先檢視進度，再手動執行下一條命令，或傳送新訊息繼續。</translation>
+    </message>
+    <message>
+        <source>Turn on full auto?</source>
+        <translation>開啟全自動？</translation>
+    </message>
+    <message>
+        <source>In full auto the AI runs every command it chooses in the current terminal without asking, including commands that modify the system or are high risk.
+
+Only use it on hosts where mistakes are acceptable. You can press Stop at any time to take over.</source>
+        <translation>全自動模式下，AI 會在目前終端機中直接執行它選定的每一條命令而不再詢問，包括修改系統的命令和高風險命令。
+
+只在可以接受失誤的主機上使用。你隨時可以點選「停止」接手。</translation>
+    </message>
+    <message>
+        <source>Failed to save the execution mode: %1</source>
+        <translation>儲存執行模式失敗：%1</translation>
+    </message>
+    <message>
+        <source>Ask before every command</source>
+        <translation>每條命令都先詢問</translation>
+    </message>
+    <message>
+        <source>Auto-run read-only commands</source>
+        <translation>自動執行唯讀命令</translation>
+    </message>
+    <message>
+        <source>Full auto (run everything)</source>
+        <translation>全自動（全部執行）</translation>
+    </message>
+    <message>
+        <source>Ask first</source>
+        <translation>先詢問</translation>
+    </message>
+    <message>
+        <source>The AI can make mistakes. Every command waits for your confirmation before it runs.</source>
+        <translation>AI 可能出錯。每條命令都要等你確認後才會執行。</translation>
+    </message>
+    <message>
+        <source>Auto read-only</source>
+        <translation>自動唯讀</translation>
+    </message>
+    <message>
+        <source>Full auto</source>
+        <translation>全自動</translation>
+    </message>
+    <message>
+        <source>Full auto: the AI runs every command it chooses, including ones that change the system. Watch the terminal and press Stop to take over.</source>
+        <translation>全自動：AI 會直接執行它選定的每條命令，包括修改系統的命令。請留意終端機，可隨時點選「停止」接手。</translation>
+    </message>
+    <message>
+        <source>Choose which commands the AI may run without asking</source>
+        <translation>選擇 AI 可以不經詢問直接執行哪些命令</translation>
+    </message>
+    <message>
+        <source>Execution mode</source>
+        <translation>執行模式</translation>
     </message>
     <message>
         <source>The AI did not return a result following the single-step interaction protocol; this round has been stopped. Retry or switch to a model that supports JSON instructions.</source>
@@ -156,6 +220,10 @@ Run it in the current terminal?</source>
 %1
 
 確定要在當前終端執行嗎？</translation>
+    </message>
+    <message>
+        <source>Ran automatically</source>
+        <translation>已自動執行</translation>
     </message>
     <message>
         <source>Sent to the current terminal to run; the AI will wait for it to finish automatically</source>
@@ -1286,6 +1354,41 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>%1  (%2)</source>
         <translation>%1  (%2)</translation>
+    </message>
+</context>
+<context>
+    <name>LocalCliClient</name>
+    <message>
+        <source>%1 did not answer within %2 seconds and was stopped.</source>
+        <translation>%1 在 %2 秒內沒有回答，已被終止。</translation>
+    </message>
+    <message>
+        <source>Unknown local agent CLI: %1</source>
+        <translation>未知的本機智慧體 CLI：%1</translation>
+    </message>
+    <message>
+        <source>The configured path for %1 is not an executable file: %2</source>
+        <translation>為 %1 設定的路徑不是可執行檔：%2</translation>
+    </message>
+    <message>
+        <source>%1 was not found on this computer. Install it, or set its path in Settings → AI Assistant.</source>
+        <translation>在本機上沒有找到 %1。請先安裝，或在設定 → AI 助理中填寫它的路徑。</translation>
+    </message>
+    <message>
+        <source>Could not start %1: %2</source>
+        <translation>無法啟動 %1：%2</translation>
+    </message>
+    <message>
+        <source>%1 exited with code %2.</source>
+        <translation>%1 已結束，結束碼 %2。</translation>
+    </message>
+    <message>
+        <source>%1 exited with code %2: %3</source>
+        <translation>%1 已結束，結束碼 %2：%3</translation>
+    </message>
+    <message>
+        <source>%1 returned an empty answer.</source>
+        <translation>%1 回傳了空白回答。</translation>
     </message>
 </context>
 <context>
@@ -4136,6 +4239,26 @@ This algorithm is obsolete; upgrading the server&apos;s SSH configuration is rec
         <translation>留空表示取消該動作的快捷鍵；同一快捷鍵不能分配給兩個動作。</translation>
     </message>
     <message>
+        <source>Model source</source>
+        <translation>模型來源</translation>
+    </message>
+    <message>
+        <source>OpenAI-compatible API</source>
+        <translation>OpenAI 相容 API</translation>
+    </message>
+    <message>
+        <source>Local agent CLI</source>
+        <translation>本機智慧體 CLI</translation>
+    </message>
+    <message>
+        <source>Source</source>
+        <translation>來源</translation>
+    </message>
+    <message>
+        <source>A local agent CLI reuses the subscription you are already signed in to (Claude Code, Codex, Cursor…). It only decides the next step; commands still run in Shellium&apos;s terminal under the execution mode below.</source>
+        <translation>本機智慧體 CLI 會沿用你已登入的訂閱（Claude Code、Codex、Cursor 等）。它只負責決定下一步，命令仍依下方的執行模式在 Shellium 的終端機中執行。</translation>
+    </message>
+    <message>
         <source>LLM connection</source>
         <translation>大模型連線</translation>
     </message>
@@ -4184,6 +4307,66 @@ This algorithm is obsolete; upgrading the server&apos;s SSH configuration is rec
         <translation>請求模型先推理再作答，回答更穩但更慢；僅支援思考模式的閘道器有效，關閉時請求體不含該欄位。</translation>
     </message>
     <message>
+        <source>Agent CLI</source>
+        <translation>智慧體 CLI</translation>
+    </message>
+    <message>
+        <source>Shellium looks for supported CLIs in your login shell PATH and common install locations. Each one runs with its tools disabled or in read-only mode, in an empty folder.</source>
+        <translation>Shellium 會在登入 Shell 的 PATH 和常見安裝位置中尋找支援的 CLI。每個 CLI 都在空資料夾中以關閉工具或唯讀模式執行。</translation>
+    </message>
+    <message>
+        <source>Detected automatically</source>
+        <translation>自動偵測</translation>
+    </message>
+    <message>
+        <source>Executable path</source>
+        <translation>可執行檔路徑</translation>
+    </message>
+    <message>
+        <source>Leave empty to use the detected location; fill it in only when the CLI is installed somewhere Shellium cannot find.</source>
+        <translation>留空則使用偵測到的位置；只有當 CLI 裝在 Shellium 找不到的地方時才需要填寫。</translation>
+    </message>
+    <message>
+        <source>CLI default</source>
+        <translation>使用 CLI 預設值</translation>
+    </message>
+    <message>
+        <source>Model</source>
+        <translation>模型</translation>
+    </message>
+    <message>
+        <source>Passed to the CLI as --model. Leave empty to use the model configured in the CLI itself.</source>
+        <translation>以 --model 參數傳給 CLI。留空則使用 CLI 本身設定的模型。</translation>
+    </message>
+    <message>
+        <source>Command execution</source>
+        <translation>命令執行</translation>
+    </message>
+    <message>
+        <source>Ask first</source>
+        <translation>先詢問</translation>
+    </message>
+    <message>
+        <source>Auto read-only</source>
+        <translation>自動唯讀</translation>
+    </message>
+    <message>
+        <source>Full auto</source>
+        <translation>全自動</translation>
+    </message>
+    <message>
+        <source>Execution mode</source>
+        <translation>執行模式</translation>
+    </message>
+    <message>
+        <source>Auto read-only runs commands that Shellium&apos;s own rules classify as read-only and non-interactive (for example ls, df, systemctl status) without asking; anything that changes the system waits for your confirmation. Full auto runs every command, including high-risk ones.</source>
+        <translation>「自動唯讀」會直接執行被 Shellium 自身規則判定為唯讀且非互動的命令（如 ls、df、systemctl status），任何會修改系統的命令都會等待你確認。「全自動」會執行所有命令，包括高風險命令。</translation>
+    </message>
+    <message>
+        <source>Risk is judged by local rules, never by the model&apos;s own claims. Automatic runs pause after 20 steps per task, and Stop in the AI panel always takes control back.</source>
+        <translation>風險由本機規則判定，從不採信模型的自述。每個任務自動執行 20 步後會暫停，AI 面板中的「停止」隨時可以收回控制權。</translation>
+    </message>
+    <message>
         <source>Test connection</source>
         <translation>測試連線</translation>
     </message>
@@ -4214,6 +4397,38 @@ This algorithm is obsolete; upgrading the server&apos;s SSH configuration is rec
     <message>
         <source>Save failed: %1</source>
         <translation>儲存失敗：%1</translation>
+    </message>
+    <message>
+        <source>Detect again</source>
+        <translation>重新偵測</translation>
+    </message>
+    <message>
+        <source>Detecting installed agent CLIs…</source>
+        <translation>正在偵測已安裝的智慧體 CLI…</translation>
+    </message>
+    <message>
+        <source>No supported agent CLI was found. Install one (for example claude or codex), then click &apos;Detect again&apos;.</source>
+        <translation>沒有找到支援的智慧體 CLI。請先安裝一個（例如 claude 或 codex），再點選「重新偵測」。</translation>
+    </message>
+    <message>
+        <source>Found %1 of %2 supported CLIs.</source>
+        <translation>已找到 %2 個支援 CLI 中的 %1 個。</translation>
+    </message>
+    <message>
+        <source>not found</source>
+        <translation>未找到</translation>
+    </message>
+    <message>
+        <source>Turn on full auto?</source>
+        <translation>開啟全自動？</translation>
+    </message>
+    <message>
+        <source>In full auto the AI runs every command it chooses in the current terminal without asking, including commands that modify the system or are high risk.
+
+Only use it on hosts where mistakes are acceptable. You can press Stop at any time to take over.</source>
+        <translation>全自動模式下，AI 會在目前終端機中直接執行它選定的每一條命令而不再詢問，包括修改系統的命令和高風險命令。
+
+只在可以接受失誤的主機上使用。你隨時可以點選「停止」接手。</translation>
     </message>
     <message>
         <source>The vault is unavailable</source>

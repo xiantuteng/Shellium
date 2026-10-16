@@ -3,6 +3,7 @@
 #include "ai/AiClient.h"
 #include "ai/AiSettings.h"
 #include "ai/AiSettingsService.h"
+#include "ai/LocalAgentCli.h"
 #include "i18n/LocalizationService.h"
 #include "i18n/Retranslate.h"
 #include "settings/BundledFonts.h"
@@ -718,7 +719,22 @@ QWidget *SettingsDialog::buildAiPage()
     layout->setContentsMargins(24, 22, 24, 22);
     layout->setSpacing(16);
 
+    // 模型来源放在最上面：它决定下面显示哪一张配置卡。
+    auto *sourceCard = new SettingsCard([this] { return tr("Model source"); }, page);
+    m_aiBackendSelector = new SegmentedControl(sourceCard);
+    m_aiBackendSelector->setObjectName(QStringLiteral("aiBackendSelector"));
+    m_aiBackendSelector->addSegment([this] { return tr("OpenAI-compatible API"); },
+                                    static_cast<int>(AiBackend::Http));
+    m_aiBackendSelector->addSegment([this] { return tr("Local agent CLI"); },
+                                    static_cast<int>(AiBackend::LocalCli));
+    sourceCard->addRow(
+        [this] { return tr("Source"); },
+        m_aiBackendSelector,
+        [this] { return tr("A local agent CLI reuses the subscription you are already signed in to (Claude Code, Codex, Cursor…). It only decides the next step; commands still run in Shellium's terminal under the execution mode below."); });
+    layout->addWidget(sourceCard);
+
     auto *card = new SettingsCard([this] { return tr("LLM connection"); }, page);
+    m_aiHttpCard = card;
     m_aiEndpointEdit = new QLineEdit(card);
     m_aiEndpointEdit->setObjectName(QStringLiteral("aiEndpointEdit"));
     m_aiEndpointEdit->setPlaceholderText(QStringLiteral("https://your-gateway/v1"));
@@ -799,17 +815,87 @@ QWidget *SettingsDialog::buildAiPage()
     card->addFullWidthWidget(buttonRow);
     layout->addWidget(card);
 
-    // 这两个按钮不是 SettingsCard 的托管行，文案要自己登记热切换；刷新按钮的 Tooltip/
+    card->addNote(
+        [this] { return tr("Unlike other settings, changes to the address and key are not saved character by character; click 'Save', so that every keystroke does not trigger an encrypted write."); });
+
+    auto *cliCard = new SettingsCard([this] { return tr("Local agent CLI"); }, page);
+    m_aiCliCard = cliCard;
+    m_aiCliAgentCombo = new QComboBox(cliCard);
+    UiIcons::modernizePopup(m_aiCliAgentCombo);
+    m_aiCliAgentCombo->setObjectName(QStringLiteral("aiCliAgentCombo"));
+    m_aiCliAgentCombo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    cliCard->addWideRow(
+        [this] { return tr("Agent CLI"); },
+        m_aiCliAgentCombo,
+        [this] { return tr("Shellium looks for supported CLIs in your login shell PATH and common install locations. Each one runs with its tools disabled or in read-only mode, in an empty folder."); });
+
+    m_aiCliPathEdit = new QLineEdit(cliCard);
+    m_aiCliPathEdit->setObjectName(QStringLiteral("aiCliPathEdit"));
+    m_aiCliPathEdit->setPlaceholderText(tr("Detected automatically"));
+    cliCard->addWideRow(
+        [this] { return tr("Executable path"); },
+        m_aiCliPathEdit,
+        [this] { return tr("Leave empty to use the detected location; fill it in only when the CLI is installed somewhere Shellium cannot find."); });
+
+    m_aiCliModelEdit = new QLineEdit(cliCard);
+    m_aiCliModelEdit->setObjectName(QStringLiteral("aiCliModelEdit"));
+    m_aiCliModelEdit->setPlaceholderText(tr("CLI default"));
+    cliCard->addWideRow(
+        [this] { return tr("Model"); },
+        m_aiCliModelEdit,
+        [this] { return tr("Passed to the CLI as --model. Leave empty to use the model configured in the CLI itself."); });
+
+    m_aiCliStatusLabel = new QLabel(cliCard);
+    m_aiCliStatusLabel->setWordWrap(true);
+    m_aiCliStatusLabel->setObjectName(QStringLiteral("SettingsRowHint"));
+    cliCard->addFullWidthWidget(m_aiCliStatusLabel);
+
+    auto *cliButtonRow = new QWidget(cliCard);
+    auto *cliButtonLayout = new QHBoxLayout(cliButtonRow);
+    cliButtonLayout->setContentsMargins(0, 4, 0, 0);
+    m_aiCliDetectButton = new QPushButton(cliButtonRow);
+    m_aiCliDetectButton->setObjectName(QStringLiteral("settingsAiCliDetect"));
+    m_aiCliSaveButton = new QPushButton(cliButtonRow);
+    m_aiCliSaveButton->setObjectName(QStringLiteral("settingsAiCliSave"));
+    cliButtonLayout->addWidget(m_aiCliDetectButton);
+    cliButtonLayout->addWidget(m_aiCliSaveButton);
+    cliButtonLayout->addStretch(1);
+    cliCard->addFullWidthWidget(cliButtonRow);
+    layout->addWidget(cliCard);
+
+    auto *executionCard = new SettingsCard([this] { return tr("Command execution"); }, page);
+    m_aiExecutionPolicySelector = new SegmentedControl(executionCard);
+    m_aiExecutionPolicySelector->setObjectName(QStringLiteral("aiExecutionPolicySelector"));
+    m_aiExecutionPolicySelector->addSegment([this] { return tr("Ask first"); },
+                                            static_cast<int>(AiExecutionPolicy::Manual));
+    m_aiExecutionPolicySelector->addSegment([this] { return tr("Auto read-only"); },
+                                            static_cast<int>(AiExecutionPolicy::AutoReadOnly));
+    m_aiExecutionPolicySelector->addSegment([this] { return tr("Full auto"); },
+                                            static_cast<int>(AiExecutionPolicy::FullAuto));
+    executionCard->addRow(
+        [this] { return tr("Execution mode"); },
+        m_aiExecutionPolicySelector,
+        [this] { return tr("Auto read-only runs commands that Shellium's own rules classify as read-only and non-interactive (for example ls, df, systemctl status) without asking; anything that changes the system waits for your confirmation. Full auto runs every command, including high-risk ones."); });
+    executionCard->addNote(
+        [this] { return tr("Risk is judged by local rules, never by the model's own claims. Automatic runs pause after 20 steps per task, and Stop in the AI panel always takes control back."); });
+    layout->addWidget(executionCard);
+
+    m_aiCliDetector = new LocalAgentCliDetector(this);
+
+    // 这些按钮不是 SettingsCard 的托管行，文案要自己登记热切换；刷新按钮的 Tooltip/
     // 无障碍名同理。
     i18n::onRetranslate(this, [this] {
         m_aiTestButton->setText(tr("Test connection"));
         m_aiSaveButton->setText(tr("Save"));
+        m_aiCliDetectButton->setText(tr("Detect again"));
+        m_aiCliSaveButton->setText(tr("Save"));
+        m_aiCliPathEdit->setPlaceholderText(tr("Detected automatically"));
+        m_aiCliModelEdit->setPlaceholderText(tr("CLI default"));
+        populateCliAgentCombo();
         m_aiModelRefreshButton->setToolTip(tr("Fetch the model list from the server"));
         m_aiModelRefreshButton->setAccessibleName(tr("Refresh model list"));
     });
 
-    card->addNote(
-        [this] { return tr("Unlike other settings, changes to the address and key are not saved character by character; click 'Save', so that every keystroke does not trigger an encrypted write."); });
 
     const bool available = m_aiSettingsService != nullptr;
     for (QWidget *field : {static_cast<QWidget *>(m_aiEndpointEdit),
@@ -818,7 +904,14 @@ QWidget *SettingsDialog::buildAiPage()
                            static_cast<QWidget *>(m_aiModelRefreshButton),
                            static_cast<QWidget *>(m_aiThinkingToggle),
                            static_cast<QWidget *>(m_aiTestButton),
-                           static_cast<QWidget *>(m_aiSaveButton)}) {
+                           static_cast<QWidget *>(m_aiSaveButton),
+                           static_cast<QWidget *>(m_aiBackendSelector),
+                           static_cast<QWidget *>(m_aiCliAgentCombo),
+                           static_cast<QWidget *>(m_aiCliPathEdit),
+                           static_cast<QWidget *>(m_aiCliModelEdit),
+                           static_cast<QWidget *>(m_aiCliDetectButton),
+                           static_cast<QWidget *>(m_aiCliSaveButton),
+                           static_cast<QWidget *>(m_aiExecutionPolicySelector)}) {
         field->setEnabled(available);
     }
     if (available) {
@@ -829,6 +922,20 @@ QWidget *SettingsDialog::buildAiPage()
         // 保证打开设置页看到的就是正在生效的配置。
         m_aiModelCombo->setCurrentText(current.model);
         m_aiThinkingToggle->setChecked(current.thinkingEnabled);
+        m_aiPopulating = true;
+        m_aiBackendSelector->setCurrentData(static_cast<int>(current.backend));
+        m_aiExecutionPolicySelector->setCurrentData(static_cast<int>(current.executionPolicy));
+        m_aiCliPathEdit->setText(current.cliExecutablePath);
+        m_aiCliModelEdit->setText(current.cliModel);
+        populateCliAgentCombo();
+        const int agentIndex = m_aiCliAgentCombo->findData(current.cliAgentId);
+        if (agentIndex >= 0) {
+            m_aiCliAgentCombo->setCurrentIndex(agentIndex);
+        }
+        m_aiPopulating = false;
+        m_aiCliStatusLabel->setText(tr("Detecting installed agent CLIs…"));
+        m_aiCliDetectButton->setEnabled(false);
+        m_aiCliDetector->start();
     } else {
         m_aiStatusLabel->setText(tr("The AI assistant configuration service is unavailable"));
     }
@@ -884,9 +991,134 @@ QWidget *SettingsDialog::buildAiPage()
                 m_aiStatusLabel->setText(message);
             });
     connect(m_aiSaveButton, &QPushButton::clicked, this, &SettingsDialog::persistAiSettings);
+    connect(m_aiCliSaveButton, &QPushButton::clicked, this, &SettingsDialog::persistAiSettings);
+    connect(m_aiBackendSelector, &SegmentedControl::currentDataChanged, this, [this]() {
+        updateAiBackendVisibility();
+    });
+    connect(m_aiExecutionPolicySelector, &SegmentedControl::currentDataChanged, this,
+            [this](const int value) {
+                if (!m_aiPopulating) {
+                    applyAiExecutionPolicy(value);
+                }
+            });
+    connect(m_aiCliDetectButton, &QPushButton::clicked, this, [this]() {
+        m_aiCliDetectButton->setEnabled(false);
+        m_aiCliStatusLabel->setStyleSheet(QString());
+        m_aiCliStatusLabel->setText(tr("Detecting installed agent CLIs…"));
+        m_aiCliDetector->start(true);
+    });
+    connect(m_aiCliDetector, &LocalAgentCliDetector::finished, this,
+            [this](const QList<LocalAgentCli::DetectedAgent> &agents) {
+                m_aiDetectedCli.clear();
+                for (const LocalAgentCli::DetectedAgent &agent : agents) {
+                    m_aiDetectedCli.insert(agent.id, {agent.executablePath, agent.version});
+                }
+                m_aiCliDetectedOnce = true;
+                m_aiCliDetectButton->setEnabled(m_aiSettingsService != nullptr);
+                populateCliAgentCombo();
+                m_aiCliStatusLabel->setStyleSheet(
+                    agents.isEmpty() ? QStringLiteral("color: #d84a41;") : QString());
+                m_aiCliStatusLabel->setText(
+                    agents.isEmpty()
+                        ? tr("No supported agent CLI was found. Install one (for example claude or codex), then click 'Detect again'.")
+                        : tr("Found %1 of %2 supported CLIs.")
+                              .arg(QString::number(agents.size()),
+                                   QString::number(LocalAgentCli::catalog().size())));
+                // 用户还没选过 CLI 时，自动选中第一个检测到的，免得默认停在一个"未找到"的条目上。
+                if (m_aiSettingsService != nullptr
+                    && m_aiSettingsService->currentSettings().cliAgentId.isEmpty()
+                    && !agents.isEmpty()) {
+                    const int index = m_aiCliAgentCombo->findData(agents.first().id);
+                    if (index >= 0) {
+                        m_aiCliAgentCombo->setCurrentIndex(index);
+                    }
+                }
+            });
+    if (m_aiSettingsService != nullptr) {
+        // AI 面板里的执行模式按钮也会改策略；设置页开着时要同步显示，避免用户在这里
+        // 看到一个已经过期的选项并据此误判当前状态。
+        connect(m_aiSettingsService, &AiSettingsService::settingsChanged, this,
+                [this](const AiSettings &settings) {
+                    m_aiPopulating = true;
+                    m_aiExecutionPolicySelector->setCurrentData(
+                        static_cast<int>(settings.executionPolicy));
+                    m_aiPopulating = false;
+                });
+    }
+    updateAiBackendVisibility();
 
     layout->addStretch(1);
     return page;
+}
+
+void SettingsDialog::updateAiBackendVisibility()
+{
+    const bool cli = m_aiBackendSelector->currentData() == static_cast<int>(AiBackend::LocalCli);
+    m_aiHttpCard->setVisible(!cli);
+    m_aiCliCard->setVisible(cli);
+}
+
+void SettingsDialog::populateCliAgentCombo()
+{
+    if (m_aiCliAgentCombo == nullptr) {
+        return;
+    }
+    const QString selected = m_aiCliAgentCombo->currentData().toString();
+    m_aiCliAgentCombo->clear();
+    for (const LocalAgentCli::AgentSpec &spec : LocalAgentCli::catalog()) {
+        QString text = spec.displayName + QStringLiteral(" (") + spec.executableNames.first()
+            + QLatin1Char(')');
+        const auto detected = m_aiDetectedCli.constFind(spec.id);
+        if (detected != m_aiDetectedCli.constEnd()) {
+            if (!detected->second.isEmpty()) {
+                text += QStringLiteral(" — ") + detected->second;
+            }
+        } else if (m_aiCliDetectedOnce) {
+            text += QStringLiteral(" — ") + tr("not found");
+        }
+        m_aiCliAgentCombo->addItem(text, spec.id);
+        const int index = m_aiCliAgentCombo->count() - 1;
+        if (detected != m_aiDetectedCli.constEnd()) {
+            m_aiCliAgentCombo->setItemData(index, detected->first, Qt::ToolTipRole);
+        }
+    }
+    const int index = m_aiCliAgentCombo->findData(selected);
+    if (index >= 0) {
+        m_aiCliAgentCombo->setCurrentIndex(index);
+    }
+}
+
+void SettingsDialog::applyAiExecutionPolicy(const int policyValue)
+{
+    if (m_aiSettingsService == nullptr) {
+        return;
+    }
+    AiSettings settings = m_aiSettingsService->currentSettings();
+    const auto policy = static_cast<AiExecutionPolicy>(policyValue);
+    if (settings.executionPolicy == policy) {
+        return;
+    }
+    if (policy == AiExecutionPolicy::FullAuto) {
+        const auto choice = QMessageBox::warning(
+            this,
+            tr("Turn on full auto?"),
+            tr("In full auto the AI runs every command it chooses in the current terminal without asking, including commands that modify the system or are high risk.\n\nOnly use it on hosts where mistakes are acceptable. You can press Stop at any time to take over."),
+            QMessageBox::Yes | QMessageBox::Cancel,
+            QMessageBox::Cancel);
+        if (choice != QMessageBox::Yes) {
+            m_aiPopulating = true;
+            m_aiExecutionPolicySelector->setCurrentData(static_cast<int>(settings.executionPolicy));
+            m_aiPopulating = false;
+            return;
+        }
+    }
+    // 只改策略这一项：地址、密钥等字段可能正被编辑而尚未点保存，不能顺带写进去。
+    settings.executionPolicy = policy;
+    QString errorMessage;
+    if (!m_aiSettingsService->save(settings, &errorMessage)) {
+        m_aiStatusLabel->setStyleSheet(QStringLiteral("color: #d84a41;"));
+        m_aiStatusLabel->setText(tr("Save failed: %1").arg(errorMessage));
+    }
 }
 
 void SettingsDialog::persistAiSettings()
@@ -899,14 +1131,23 @@ void SettingsDialog::persistAiSettings()
     settings.apiKey = m_aiApiKeyEdit->text();
     settings.model = m_aiModelCombo->currentText().trimmed();
     settings.thinkingEnabled = m_aiThinkingToggle->isChecked();
+    settings.backend = static_cast<AiBackend>(m_aiBackendSelector->currentData());
+    settings.cliAgentId = m_aiCliAgentCombo->currentData().toString();
+    settings.cliExecutablePath = m_aiCliPathEdit->text().trimmed();
+    settings.cliModel = m_aiCliModelEdit->text().trimmed();
+    settings.executionPolicy =
+        static_cast<AiExecutionPolicy>(m_aiExecutionPolicySelector->currentData());
 
+    // 两张卡各有一个状态行；保存结果显示在当前可见的那一张上。
+    QLabel *statusLabel =
+        settings.backend == AiBackend::LocalCli ? m_aiCliStatusLabel : m_aiStatusLabel;
     QString errorMessage;
     if (m_aiSettingsService->save(settings, &errorMessage)) {
-        m_aiStatusLabel->setStyleSheet(QString());
-        m_aiStatusLabel->setText(tr("Saved"));
+        statusLabel->setStyleSheet(QString());
+        statusLabel->setText(tr("Saved"));
     } else {
-        m_aiStatusLabel->setStyleSheet(QStringLiteral("color: #d84a41;"));
-        m_aiStatusLabel->setText(tr("Save failed: %1").arg(errorMessage));
+        statusLabel->setStyleSheet(QStringLiteral("color: #d84a41;"));
+        statusLabel->setText(tr("Save failed: %1").arg(errorMessage));
     }
 }
 

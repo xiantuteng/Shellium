@@ -31,6 +31,17 @@ namespace CommandRiskClassifier {
  */
 [[nodiscard]] CommandRiskLevel classify(const QString &command);
 
+/**
+ * @brief 判断一条命令能否在无人值守的情况下自动下发。
+ * @param command 未经修改的完整命令文本。
+ * @return 仅当命令被判为 ReadOnly、不含命令替换，且不会停在交互界面或持续运行
+ *         （top、less、tail -f、未带 -c 的 ping、需要输密码的 sudo 等）时返回 true。
+ *
+ * 自动执行后客户端要等 Shell 提示符回来才会续问模型；一条只读但永不退出的命令会让整条
+ * 自动回路卡死在等待状态，所以"只读"本身不足以构成自动执行的条件。
+ */
+[[nodiscard]] bool isSafeForAutoExecution(const QString &command);
+
 /** @brief 返回分级对应的中文短标签，供界面徽标直接展示。 */
 [[nodiscard]] QString label(CommandRiskLevel level);
 

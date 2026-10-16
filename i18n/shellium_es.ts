@@ -74,8 +74,72 @@
 %1</translation>
     </message>
     <message>
+        <source>Choose a local agent CLI in Settings → AI Assistant first</source>
+        <translation>Elige primero una CLI de agente local en Ajustes → Asistente de IA</translation>
+    </message>
+    <message>
         <source>Configure the LLM URL and model name in Settings → AI Assistant first</source>
         <translation type="unfinished">Configura primero la URL del LLM y el nombre del modelo en Ajustes → Asistente de IA</translation>
+    </message>
+    <message>
+        <source>Paused after %1 automatic steps. Review the progress, then run the next command yourself or send a new message to continue.</source>
+        <translation>En pausa tras %1 pasos automáticos. Revisa el progreso y ejecuta tú el siguiente comando o envía un mensaje nuevo para continuar.</translation>
+    </message>
+    <message>
+        <source>Turn on full auto?</source>
+        <translation>¿Activar el modo totalmente automático?</translation>
+    </message>
+    <message>
+        <source>In full auto the AI runs every command it chooses in the current terminal without asking, including commands that modify the system or are high risk.
+
+Only use it on hosts where mistakes are acceptable. You can press Stop at any time to take over.</source>
+        <translation>En el modo totalmente automático, la IA ejecuta sin preguntar cada comando que elige en el terminal actual, incluidos los que modifican el sistema o son de alto riesgo.
+
+Úsalo solo en hosts donde los errores sean aceptables. Puedes pulsar Detener en cualquier momento para tomar el control.</translation>
+    </message>
+    <message>
+        <source>Failed to save the execution mode: %1</source>
+        <translation>No se pudo guardar el modo de ejecución: %1</translation>
+    </message>
+    <message>
+        <source>Ask before every command</source>
+        <translation>Preguntar antes de cada comando</translation>
+    </message>
+    <message>
+        <source>Auto-run read-only commands</source>
+        <translation>Ejecutar automáticamente los comandos de solo lectura</translation>
+    </message>
+    <message>
+        <source>Full auto (run everything)</source>
+        <translation>Totalmente automático (ejecutar todo)</translation>
+    </message>
+    <message>
+        <source>Ask first</source>
+        <translation>Preguntar</translation>
+    </message>
+    <message>
+        <source>The AI can make mistakes. Every command waits for your confirmation before it runs.</source>
+        <translation>La IA puede equivocarse. Cada comando espera tu confirmación antes de ejecutarse.</translation>
+    </message>
+    <message>
+        <source>Auto read-only</source>
+        <translation>Solo lectura automática</translation>
+    </message>
+    <message>
+        <source>Full auto</source>
+        <translation>Totalmente automático</translation>
+    </message>
+    <message>
+        <source>Full auto: the AI runs every command it chooses, including ones that change the system. Watch the terminal and press Stop to take over.</source>
+        <translation>Totalmente automático: la IA ejecuta cada comando que elige, incluidos los que cambian el sistema. Vigila el terminal y pulsa Detener para tomar el control.</translation>
+    </message>
+    <message>
+        <source>Choose which commands the AI may run without asking</source>
+        <translation>Elige qué comandos puede ejecutar la IA sin preguntar</translation>
+    </message>
+    <message>
+        <source>Execution mode</source>
+        <translation>Modo de ejecución</translation>
     </message>
     <message>
         <source>The AI did not return a result following the single-step interaction protocol; this round has been stopped. Retry or switch to a model that supports JSON instructions.</source>
@@ -156,6 +220,10 @@ Run it in the current terminal?</source>
 %1
 
 ¿Ejecutarlo en el terminal actual?</translation>
+    </message>
+    <message>
+        <source>Ran automatically</source>
+        <translation>Ejecutado automáticamente</translation>
     </message>
     <message>
         <source>Sent to the current terminal to run; the AI will wait for it to finish automatically</source>
@@ -1286,6 +1354,41 @@ Puede ser una reinstalación del servidor o una rotación de clave, o un ataque 
     <message>
         <source>%1  (%2)</source>
         <translation type="unfinished">%1  (%2)</translation>
+    </message>
+</context>
+<context>
+    <name>LocalCliClient</name>
+    <message>
+        <source>%1 did not answer within %2 seconds and was stopped.</source>
+        <translation>%1 no respondió en %2 segundos y se detuvo.</translation>
+    </message>
+    <message>
+        <source>Unknown local agent CLI: %1</source>
+        <translation>CLI de agente local desconocida: %1</translation>
+    </message>
+    <message>
+        <source>The configured path for %1 is not an executable file: %2</source>
+        <translation>La ruta configurada para %1 no es un archivo ejecutable: %2</translation>
+    </message>
+    <message>
+        <source>%1 was not found on this computer. Install it, or set its path in Settings → AI Assistant.</source>
+        <translation>No se encontró %1 en este equipo. Instálalo o indica su ruta en Ajustes → Asistente de IA.</translation>
+    </message>
+    <message>
+        <source>Could not start %1: %2</source>
+        <translation>No se pudo iniciar %1: %2</translation>
+    </message>
+    <message>
+        <source>%1 exited with code %2.</source>
+        <translation>%1 terminó con el código %2.</translation>
+    </message>
+    <message>
+        <source>%1 exited with code %2: %3</source>
+        <translation>%1 terminó con el código %2: %3</translation>
+    </message>
+    <message>
+        <source>%1 returned an empty answer.</source>
+        <translation>%1 devolvió una respuesta vacía.</translation>
     </message>
 </context>
 <context>
@@ -4134,6 +4237,26 @@ Este algoritmo está obsoleto; se recomienda actualizar la configuración SSH de
         <translation type="unfinished">Dejarlo vacío quita el atajo de esta acción; el mismo atajo no se puede asignar a dos acciones.</translation>
     </message>
     <message>
+        <source>Model source</source>
+        <translation>Origen del modelo</translation>
+    </message>
+    <message>
+        <source>OpenAI-compatible API</source>
+        <translation>API compatible con OpenAI</translation>
+    </message>
+    <message>
+        <source>Local agent CLI</source>
+        <translation>CLI de agente local</translation>
+    </message>
+    <message>
+        <source>Source</source>
+        <translation>Origen</translation>
+    </message>
+    <message>
+        <source>A local agent CLI reuses the subscription you are already signed in to (Claude Code, Codex, Cursor…). It only decides the next step; commands still run in Shellium&apos;s terminal under the execution mode below.</source>
+        <translation>Una CLI de agente local reutiliza la suscripción en la que ya has iniciado sesión (Claude Code, Codex, Cursor…). Solo decide el siguiente paso; los comandos se siguen ejecutando en el terminal de Shellium según el modo de ejecución de abajo.</translation>
+    </message>
+    <message>
         <source>LLM connection</source>
         <translation type="unfinished">Conexión al LLM</translation>
     </message>
@@ -4182,6 +4305,66 @@ Este algoritmo está obsoleto; se recomienda actualizar la configuración SSH de
         <translation type="unfinished">Pedir al modelo que razone antes de responder; las respuestas son más fiables pero más lentas. Solo es efectivo en pasarelas que admiten el modo de razonamiento; cuando está desactivado, el cuerpo de la solicitud omite este campo.</translation>
     </message>
     <message>
+        <source>Agent CLI</source>
+        <translation>CLI de agente</translation>
+    </message>
+    <message>
+        <source>Shellium looks for supported CLIs in your login shell PATH and common install locations. Each one runs with its tools disabled or in read-only mode, in an empty folder.</source>
+        <translation>Shellium busca las CLI compatibles en el PATH de tu shell de inicio de sesión y en las ubicaciones de instalación habituales. Cada una se ejecuta en una carpeta vacía con las herramientas desactivadas o en modo de solo lectura.</translation>
+    </message>
+    <message>
+        <source>Detected automatically</source>
+        <translation>Detectado automáticamente</translation>
+    </message>
+    <message>
+        <source>Executable path</source>
+        <translation>Ruta del ejecutable</translation>
+    </message>
+    <message>
+        <source>Leave empty to use the detected location; fill it in only when the CLI is installed somewhere Shellium cannot find.</source>
+        <translation>Déjalo vacío para usar la ubicación detectada; rellénalo solo si la CLI está instalada donde Shellium no la encuentra.</translation>
+    </message>
+    <message>
+        <source>CLI default</source>
+        <translation>Predeterminado de la CLI</translation>
+    </message>
+    <message>
+        <source>Model</source>
+        <translation>Modelo</translation>
+    </message>
+    <message>
+        <source>Passed to the CLI as --model. Leave empty to use the model configured in the CLI itself.</source>
+        <translation>Se pasa a la CLI como --model. Déjalo vacío para usar el modelo configurado en la propia CLI.</translation>
+    </message>
+    <message>
+        <source>Command execution</source>
+        <translation>Ejecución de comandos</translation>
+    </message>
+    <message>
+        <source>Ask first</source>
+        <translation>Preguntar</translation>
+    </message>
+    <message>
+        <source>Auto read-only</source>
+        <translation>Solo lectura automática</translation>
+    </message>
+    <message>
+        <source>Full auto</source>
+        <translation>Totalmente automático</translation>
+    </message>
+    <message>
+        <source>Execution mode</source>
+        <translation>Modo de ejecución</translation>
+    </message>
+    <message>
+        <source>Auto read-only runs commands that Shellium&apos;s own rules classify as read-only and non-interactive (for example ls, df, systemctl status) without asking; anything that changes the system waits for your confirmation. Full auto runs every command, including high-risk ones.</source>
+        <translation>«Solo lectura automática» ejecuta sin preguntar los comandos que las reglas propias de Shellium clasifican como de solo lectura y no interactivos (por ejemplo ls, df, systemctl status); todo lo que cambia el sistema espera tu confirmación. «Totalmente automático» ejecuta todos los comandos, incluidos los de alto riesgo.</translation>
+    </message>
+    <message>
+        <source>Risk is judged by local rules, never by the model&apos;s own claims. Automatic runs pause after 20 steps per task, and Stop in the AI panel always takes control back.</source>
+        <translation>El riesgo se evalúa con reglas locales, nunca según lo que afirme el modelo. Las ejecuciones automáticas se pausan tras 20 pasos por tarea y Detener en el panel de IA siempre recupera el control.</translation>
+    </message>
+    <message>
         <source>Test connection</source>
         <translation type="unfinished">Probar conexión</translation>
     </message>
@@ -4212,6 +4395,38 @@ Este algoritmo está obsoleto; se recomienda actualizar la configuración SSH de
     <message>
         <source>Save failed: %1</source>
         <translation type="unfinished">Error al guardar: %1</translation>
+    </message>
+    <message>
+        <source>Detect again</source>
+        <translation>Detectar de nuevo</translation>
+    </message>
+    <message>
+        <source>Detecting installed agent CLIs…</source>
+        <translation>Detectando las CLI de agente instaladas…</translation>
+    </message>
+    <message>
+        <source>No supported agent CLI was found. Install one (for example claude or codex), then click &apos;Detect again&apos;.</source>
+        <translation>No se encontró ninguna CLI de agente compatible. Instala una (por ejemplo claude o codex) y haz clic en «Detectar de nuevo».</translation>
+    </message>
+    <message>
+        <source>Found %1 of %2 supported CLIs.</source>
+        <translation>Se encontraron %1 de %2 CLI compatibles.</translation>
+    </message>
+    <message>
+        <source>not found</source>
+        <translation>no encontrado</translation>
+    </message>
+    <message>
+        <source>Turn on full auto?</source>
+        <translation>¿Activar el modo totalmente automático?</translation>
+    </message>
+    <message>
+        <source>In full auto the AI runs every command it chooses in the current terminal without asking, including commands that modify the system or are high risk.
+
+Only use it on hosts where mistakes are acceptable. You can press Stop at any time to take over.</source>
+        <translation>En el modo totalmente automático, la IA ejecuta sin preguntar cada comando que elige en el terminal actual, incluidos los que modifican el sistema o son de alto riesgo.
+
+Úsalo solo en hosts donde los errores sean aceptables. Puedes pulsar Detener en cualquier momento para tomar el control.</translation>
     </message>
     <message>
         <source>The vault is unavailable</source>

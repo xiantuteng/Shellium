@@ -74,8 +74,72 @@
 %1</translation>
     </message>
     <message>
+        <source>Choose a local agent CLI in Settings → AI Assistant first</source>
+        <translation>اختر أولاً واجهة سطر أوامر لوكيل محلي من الإعدادات ← مساعد الذكاء الاصطناعي</translation>
+    </message>
+    <message>
         <source>Configure the LLM URL and model name in Settings → AI Assistant first</source>
         <translation type="unfinished">اضبط أولاً عنوان URL لنموذج اللغة الكبير واسم النموذج في «الإعدادات ← مساعد الذكاء الاصطناعي»</translation>
+    </message>
+    <message>
+        <source>Paused after %1 automatic steps. Review the progress, then run the next command yourself or send a new message to continue.</source>
+        <translation>توقف مؤقتًا بعد %1 من الخطوات التلقائية. راجع التقدم، ثم نفّذ الأمر التالي بنفسك أو أرسل رسالة جديدة للمتابعة.</translation>
+    </message>
+    <message>
+        <source>Turn on full auto?</source>
+        <translation>هل تريد تشغيل الوضع التلقائي الكامل؟</translation>
+    </message>
+    <message>
+        <source>In full auto the AI runs every command it chooses in the current terminal without asking, including commands that modify the system or are high risk.
+
+Only use it on hosts where mistakes are acceptable. You can press Stop at any time to take over.</source>
+        <translation>في الوضع التلقائي الكامل ينفّذ الذكاء الاصطناعي كل أمر يختاره في الطرفية الحالية دون سؤال، بما في ذلك الأوامر التي تعدّل النظام أو العالية الخطورة.
+
+استخدمه فقط على مضيفات يمكن فيها تقبّل الأخطاء. يمكنك الضغط على إيقاف في أي وقت لتولي التحكم.</translation>
+    </message>
+    <message>
+        <source>Failed to save the execution mode: %1</source>
+        <translation>تعذّر حفظ وضع التنفيذ: %1</translation>
+    </message>
+    <message>
+        <source>Ask before every command</source>
+        <translation>السؤال قبل كل أمر</translation>
+    </message>
+    <message>
+        <source>Auto-run read-only commands</source>
+        <translation>تشغيل أوامر القراءة فقط تلقائيًا</translation>
+    </message>
+    <message>
+        <source>Full auto (run everything)</source>
+        <translation>تلقائي كامل (تشغيل كل شيء)</translation>
+    </message>
+    <message>
+        <source>Ask first</source>
+        <translation>اسأل أولاً</translation>
+    </message>
+    <message>
+        <source>The AI can make mistakes. Every command waits for your confirmation before it runs.</source>
+        <translation>قد يخطئ الذكاء الاصطناعي. ينتظر كل أمر تأكيدك قبل تشغيله.</translation>
+    </message>
+    <message>
+        <source>Auto read-only</source>
+        <translation>القراءة فقط تلقائيًا</translation>
+    </message>
+    <message>
+        <source>Full auto</source>
+        <translation>تلقائي كامل</translation>
+    </message>
+    <message>
+        <source>Full auto: the AI runs every command it chooses, including ones that change the system. Watch the terminal and press Stop to take over.</source>
+        <translation>تلقائي كامل: ينفّذ الذكاء الاصطناعي كل أمر يختاره، بما في ذلك الأوامر التي تغيّر النظام. راقب الطرفية واضغط إيقاف لتولي التحكم.</translation>
+    </message>
+    <message>
+        <source>Choose which commands the AI may run without asking</source>
+        <translation>اختر الأوامر التي يمكن للذكاء الاصطناعي تشغيلها دون سؤال</translation>
+    </message>
+    <message>
+        <source>Execution mode</source>
+        <translation>وضع التنفيذ</translation>
     </message>
     <message>
         <source>The AI did not return a result following the single-step interaction protocol; this round has been stopped. Retry or switch to a model that supports JSON instructions.</source>
@@ -156,6 +220,10 @@ Run it in the current terminal?</source>
 %1
 
 هل تريد تنفيذه في الطرفية الحالية؟</translation>
+    </message>
+    <message>
+        <source>Ran automatically</source>
+        <translation>نُفّذ تلقائيًا</translation>
     </message>
     <message>
         <source>Sent to the current terminal to run; the AI will wait for it to finish automatically</source>
@@ -1286,6 +1354,41 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>%1  (%2)</source>
         <translation type="unfinished">%1  (%2)</translation>
+    </message>
+</context>
+<context>
+    <name>LocalCliClient</name>
+    <message>
+        <source>%1 did not answer within %2 seconds and was stopped.</source>
+        <translation>لم يستجب %1 خلال %2 ثانية فتم إيقافه.</translation>
+    </message>
+    <message>
+        <source>Unknown local agent CLI: %1</source>
+        <translation>واجهة سطر أوامر وكيل محلي غير معروفة: %1</translation>
+    </message>
+    <message>
+        <source>The configured path for %1 is not an executable file: %2</source>
+        <translation>المسار المضبوط لـ %1 ليس ملفًا قابلاً للتنفيذ: %2</translation>
+    </message>
+    <message>
+        <source>%1 was not found on this computer. Install it, or set its path in Settings → AI Assistant.</source>
+        <translation>لم يُعثر على %1 في هذا الحاسوب. ثبّته أو حدّد مساره من الإعدادات ← مساعد الذكاء الاصطناعي.</translation>
+    </message>
+    <message>
+        <source>Could not start %1: %2</source>
+        <translation>تعذّر تشغيل %1: %2</translation>
+    </message>
+    <message>
+        <source>%1 exited with code %2.</source>
+        <translation>انتهى %1 بالرمز %2.</translation>
+    </message>
+    <message>
+        <source>%1 exited with code %2: %3</source>
+        <translation>انتهى %1 بالرمز %2: %3</translation>
+    </message>
+    <message>
+        <source>%1 returned an empty answer.</source>
+        <translation>أعاد %1 إجابة فارغة.</translation>
     </message>
 </context>
 <context>
@@ -4134,6 +4237,26 @@ This algorithm is obsolete; upgrading the server&apos;s SSH configuration is rec
         <translation type="unfinished">إذا تركته فارغًا، يُزال اختصار هذا الإجراء؛ ولا يمكن تخصيص الاختصار نفسه لإجراءين.</translation>
     </message>
     <message>
+        <source>Model source</source>
+        <translation>مصدر النموذج</translation>
+    </message>
+    <message>
+        <source>OpenAI-compatible API</source>
+        <translation>واجهة برمجة متوافقة مع OpenAI</translation>
+    </message>
+    <message>
+        <source>Local agent CLI</source>
+        <translation>واجهة سطر أوامر لوكيل محلي</translation>
+    </message>
+    <message>
+        <source>Source</source>
+        <translation>المصدر</translation>
+    </message>
+    <message>
+        <source>A local agent CLI reuses the subscription you are already signed in to (Claude Code, Codex, Cursor…). It only decides the next step; commands still run in Shellium&apos;s terminal under the execution mode below.</source>
+        <translation>تعيد واجهة سطر أوامر الوكيل المحلي استخدام الاشتراك الذي سجّلت الدخول إليه بالفعل (Claude Code وCodex وCursor…). فهي تقرر الخطوة التالية فقط، وتظل الأوامر تُشغَّل في طرفية Shellium وفق وضع التنفيذ أدناه.</translation>
+    </message>
+    <message>
         <source>LLM connection</source>
         <translation type="unfinished">اتصال نموذج اللغة الكبير</translation>
     </message>
@@ -4182,6 +4305,66 @@ This algorithm is obsolete; upgrading the server&apos;s SSH configuration is rec
         <translation type="unfinished">اطلب من النموذج التفكير قبل الرد؛ تكون الردود أكثر موثوقية لكن أبطأ. يسري فقط على البوابات التي تدعم وضع التفكير؛ وعند التعطيل، يحذف نص الطلب هذا الحقل.</translation>
     </message>
     <message>
+        <source>Agent CLI</source>
+        <translation>واجهة سطر أوامر الوكيل</translation>
+    </message>
+    <message>
+        <source>Shellium looks for supported CLIs in your login shell PATH and common install locations. Each one runs with its tools disabled or in read-only mode, in an empty folder.</source>
+        <translation>يبحث Shellium عن واجهات سطر الأوامر المدعومة في PATH الخاص بصدفة تسجيل الدخول وفي مواقع التثبيت الشائعة. ويُشغَّل كل منها في مجلد فارغ مع تعطيل الأدوات أو في وضع القراءة فقط.</translation>
+    </message>
+    <message>
+        <source>Detected automatically</source>
+        <translation>يُكتشف تلقائيًا</translation>
+    </message>
+    <message>
+        <source>Executable path</source>
+        <translation>مسار الملف التنفيذي</translation>
+    </message>
+    <message>
+        <source>Leave empty to use the detected location; fill it in only when the CLI is installed somewhere Shellium cannot find.</source>
+        <translation>اتركه فارغًا لاستخدام الموقع المكتشف؛ ولا تملأه إلا إذا كانت واجهة سطر الأوامر مثبّتة في مكان لا يجده Shellium.</translation>
+    </message>
+    <message>
+        <source>CLI default</source>
+        <translation>افتراضي واجهة سطر الأوامر</translation>
+    </message>
+    <message>
+        <source>Model</source>
+        <translation>النموذج</translation>
+    </message>
+    <message>
+        <source>Passed to the CLI as --model. Leave empty to use the model configured in the CLI itself.</source>
+        <translation>يُمرَّر إلى واجهة سطر الأوامر عبر ‎--model. اتركه فارغًا لاستخدام النموذج المضبوط في واجهة سطر الأوامر نفسها.</translation>
+    </message>
+    <message>
+        <source>Command execution</source>
+        <translation>تنفيذ الأوامر</translation>
+    </message>
+    <message>
+        <source>Ask first</source>
+        <translation>اسأل أولاً</translation>
+    </message>
+    <message>
+        <source>Auto read-only</source>
+        <translation>القراءة فقط تلقائيًا</translation>
+    </message>
+    <message>
+        <source>Full auto</source>
+        <translation>تلقائي كامل</translation>
+    </message>
+    <message>
+        <source>Execution mode</source>
+        <translation>وضع التنفيذ</translation>
+    </message>
+    <message>
+        <source>Auto read-only runs commands that Shellium&apos;s own rules classify as read-only and non-interactive (for example ls, df, systemctl status) without asking; anything that changes the system waits for your confirmation. Full auto runs every command, including high-risk ones.</source>
+        <translation>يشغّل وضع «القراءة فقط تلقائيًا» دون سؤال الأوامر التي تصنّفها قواعد Shellium الخاصة على أنها للقراءة فقط وغير تفاعلية (مثل ls وdf وsystemctl status)، وكل ما يغيّر النظام ينتظر تأكيدك. أما «تلقائي كامل» فيشغّل كل الأوامر، بما فيها العالية الخطورة.</translation>
+    </message>
+    <message>
+        <source>Risk is judged by local rules, never by the model&apos;s own claims. Automatic runs pause after 20 steps per task, and Stop in the AI panel always takes control back.</source>
+        <translation>تُقيَّم الخطورة بقواعد محلية، لا بادعاءات النموذج نفسه. يتوقف التشغيل التلقائي مؤقتًا بعد 20 خطوة لكل مهمة، ويستعيد زر إيقاف في لوحة الذكاء الاصطناعي التحكم دائمًا.</translation>
+    </message>
+    <message>
         <source>Test connection</source>
         <translation type="unfinished">اختبار الاتصال</translation>
     </message>
@@ -4212,6 +4395,38 @@ This algorithm is obsolete; upgrading the server&apos;s SSH configuration is rec
     <message>
         <source>Save failed: %1</source>
         <translation type="unfinished">فشل الحفظ: %1</translation>
+    </message>
+    <message>
+        <source>Detect again</source>
+        <translation>الكشف مجددًا</translation>
+    </message>
+    <message>
+        <source>Detecting installed agent CLIs…</source>
+        <translation>جارٍ اكتشاف واجهات سطر أوامر الوكلاء المثبّتة…</translation>
+    </message>
+    <message>
+        <source>No supported agent CLI was found. Install one (for example claude or codex), then click &apos;Detect again&apos;.</source>
+        <translation>لم يُعثر على أي واجهة سطر أوامر مدعومة لوكيل. ثبّت واحدة (مثل claude أو codex) ثم انقر «الكشف مجددًا».</translation>
+    </message>
+    <message>
+        <source>Found %1 of %2 supported CLIs.</source>
+        <translation>عُثر على %1 من أصل %2 من واجهات سطر الأوامر المدعومة.</translation>
+    </message>
+    <message>
+        <source>not found</source>
+        <translation>غير موجود</translation>
+    </message>
+    <message>
+        <source>Turn on full auto?</source>
+        <translation>هل تريد تشغيل الوضع التلقائي الكامل؟</translation>
+    </message>
+    <message>
+        <source>In full auto the AI runs every command it chooses in the current terminal without asking, including commands that modify the system or are high risk.
+
+Only use it on hosts where mistakes are acceptable. You can press Stop at any time to take over.</source>
+        <translation>في الوضع التلقائي الكامل ينفّذ الذكاء الاصطناعي كل أمر يختاره في الطرفية الحالية دون سؤال، بما في ذلك الأوامر التي تعدّل النظام أو العالية الخطورة.
+
+استخدمه فقط على مضيفات يمكن فيها تقبّل الأخطاء. يمكنك الضغط على إيقاف في أي وقت لتولي التحكم.</translation>
     </message>
     <message>
         <source>The vault is unavailable</source>

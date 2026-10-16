@@ -1,6 +1,7 @@
 #include "ai/CommandRiskClassifier.h"
 
 #include <QCoreApplication>
+#include <QHash>
 #include <QObject>
 #include <QRegularExpression>
 #include <QSet>
@@ -81,22 +82,64 @@ const QSet<QString> &readOnlyCommandNames()
         QStringLiteral("journalctl"), QStringLiteral("netstat"), QStringLiteral("ss"),
         QStringLiteral("lsof"), QStringLiteral("ping"), QStringLiteral("env"),
         QStringLiteral("printenv"), QStringLiteral("nproc"), QStringLiteral("lscpu"),
-        QStringLiteral("lsblk"), QStringLiteral("mount"), QStringLiteral("id"),
-        QStringLiteral("who"), QStringLiteral("w"), QStringLiteral("nginx"),
-        QStringLiteral("node"), QStringLiteral("python"), QStringLiteral("python3"),
-        QStringLiteral("java"), QStringLiteral("git"), QStringLiteral("dpkg"),
-        QStringLiteral("rpm"),
+        QStringLiteral("lsblk"), QStringLiteral("id"),
+        QStringLiteral("who"), QStringLiteral("w"), QStringLiteral("lsb_release"),
+        QStringLiteral("findmnt"), QStringLiteral("getconf"), QStringLiteral("arch"),
+        QStringLiteral("apt-cache"),
     };
     return names;
 }
 
-/** @brief 部分命令只有特定子命令是只读的（如 systemctl status、git log）。 */
+/**
+ * @brief 部分命令只有特定子命令或参数是只读的（如 systemctl status、git log、python3 --version）。
+ *
+ * 解释器、包管理器和 git 曾经整体列在只读名单里，`python3 -c "..."`、`git push`、`dpkg -i`
+ * 因此被标成"只读"；在引入自动执行后这会直接变成无人确认的写操作，所以这些命令只按
+ * 明确的只读参数放行。
+ */
 bool isReadOnlySubcommand(const QString &commandName, const QStringList &tokens)
 {
+    if (commandName == QStringLiteral("mount")) {
+        // 不带参数时只是列出挂载点；带任何参数都可能执行挂载。
+        return tokens.size() == 1;
+    }
     if (tokens.size() < 2) {
         return false;
     }
     const QString sub = tokens.at(1).toLower();
+    if (tokens.size() == 2) {
+        // 解释器与 nginx 只放行"查看版本 / 检查配置"这类单参数形态；`python -v` 是带
+        // 详细日志的交互解释器，`nginx -s stop` 会停服务，都不能按名字整体放行。
+        static const QHash<QString, QSet<QString>> versionOnly = {
+            {QStringLiteral("node"), {QStringLiteral("--version"), QStringLiteral("-v")}},
+            {QStringLiteral("python"), {QStringLiteral("--version"), QStringLiteral("-V")}},
+            {QStringLiteral("python3"), {QStringLiteral("--version"), QStringLiteral("-V")}},
+            {QStringLiteral("java"), {QStringLiteral("--version"), QStringLiteral("-version")}},
+            {QStringLiteral("nginx"),
+             {QStringLiteral("-v"), QStringLiteral("-V"), QStringLiteral("-t"), QStringLiteral("-T")}},
+        };
+        const auto it = versionOnly.constFind(commandName);
+        if (it != versionOnly.constEnd()) {
+            return it->contains(tokens.at(1));
+        }
+    }
+    if (commandName == QStringLiteral("dpkg")) {
+        static const QSet<QString> readOnlyFlags = {
+            QStringLiteral("-l"), QStringLiteral("-L"), QStringLiteral("-s"),
+            QStringLiteral("-S"), QStringLiteral("--list"), QStringLiteral("--listfiles"),
+            QStringLiteral("--status"), QStringLiteral("--search"),
+            QStringLiteral("--get-selections"), QStringLiteral("--print-architecture")};
+        return readOnlyFlags.contains(tokens.at(1));
+    }
+    if (commandName == QStringLiteral("rpm")) {
+        // rpm 的查询模式统一以 -q 开头（-q、-qa、-qi、-ql…）；安装、卸载、升级都不是。
+        return tokens.at(1).startsWith(QStringLiteral("-q")) || tokens.at(1) == QStringLiteral("--query");
+    }
+    if (commandName == QStringLiteral("find")) {
+        static const QRegularExpression mutatingAction(QStringLiteral(
+            "\\s-(delete|exec|execdir|ok|okdir|fprint0?|fprintf|fls)\\b"));
+        return !mutatingAction.match(tokens.join(QLatin1Char(' '))).hasMatch();
+    }
     if (commandName == QStringLiteral("systemctl")) {
         static const QSet<QString> readOnlySub = {
             QStringLiteral("status"), QStringLiteral("is-active"),
@@ -107,15 +150,118 @@ bool isReadOnlySubcommand(const QString &commandName, const QStringList &tokens)
     if (commandName == QStringLiteral("git")) {
         static const QSet<QString> readOnlySub = {
             QStringLiteral("status"), QStringLiteral("log"), QStringLiteral("diff"),
-            QStringLiteral("show"), QStringLiteral("branch"), QStringLiteral("remote"),
-            QStringLiteral("blame")};
-        return readOnlySub.contains(sub);
+            QStringLiteral("show"), QStringLiteral("blame")};
+        if (readOnlySub.contains(sub)) {
+            return true;
+        }
+        // branch/remote 只有"列出"形态是只读的；`git branch -D x`、`git remote add` 都会写仓库。
+        if (sub == QStringLiteral("branch") || sub == QStringLiteral("remote")) {
+            static const QSet<QString> listingFlags = {
+                QStringLiteral("-a"), QStringLiteral("-r"), QStringLiteral("-v"),
+                QStringLiteral("-vv"), QStringLiteral("--list"), QStringLiteral("--all")};
+            for (int i = 2; i < tokens.size(); ++i) {
+                if (!listingFlags.contains(tokens.at(i))) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        return false;
     }
     if (commandName == QStringLiteral("docker")) {
         static const QSet<QString> readOnlySub = {
             QStringLiteral("ps"), QStringLiteral("images"), QStringLiteral("logs"),
             QStringLiteral("inspect"), QStringLiteral("stats")};
         return readOnlySub.contains(sub);
+    }
+    return false;
+}
+
+/**
+ * @brief 命令替换与进程替换：`$(...)`、反引号、`<(...)`。
+ *
+ * 被替换的内层命令会先于外层执行，`echo $(rm -rf x)` 的外层虽是 echo，实际效果却是删除，
+ * 因此出现任何替换语法都不能再被判为只读。
+ */
+const QRegularExpression &commandSubstitutionPattern()
+{
+    static const QRegularExpression pattern(QStringLiteral("\\$\\(|`|[<>]\\("));
+    return pattern;
+}
+
+/**
+ * @brief 判断一个命令段是否会停在交互界面、等待输入或持续运行不退出。
+ * @param tokens 已按空白拆分的命令段。
+ */
+bool segmentNeedsInteraction(const QStringList &tokens)
+{
+    if (tokens.isEmpty()) {
+        return false;
+    }
+    QStringList lowered;
+    lowered.reserve(tokens.size());
+    for (const QString &token : tokens) {
+        lowered.append(token.toLower());
+    }
+    const QString first = lowered.first();
+    // sudo/su/doas 可能弹出密码提示；无人值守地把命令停在密码输入处，比不执行更糟。
+    static const QSet<QString> elevation = {
+        QStringLiteral("sudo"), QStringLiteral("su"), QStringLiteral("doas")};
+    if (elevation.contains(first)) {
+        return true;
+    }
+    QString name;
+    for (const QString &token : lowered) {
+        if (token.contains(QLatin1Char('=')) && !token.startsWith(QLatin1Char('-'))) {
+            continue;
+        }
+        if (token == QStringLiteral("env")) {
+            continue;
+        }
+        name = token;
+        break;
+    }
+    static const QSet<QString> fullScreen = {
+        QStringLiteral("less"), QStringLiteral("more"), QStringLiteral("most"),
+        QStringLiteral("vi"), QStringLiteral("vim"), QStringLiteral("nano"),
+        QStringLiteral("htop"), QStringLiteral("watch"), QStringLiteral("ssh")};
+    if (fullScreen.contains(name)) {
+        return true;
+    }
+    if (name == QStringLiteral("top")) {
+        // 批处理模式（top -b -n 1）会正常退出，其余形态都是全屏刷新。
+        return !lowered.contains(QStringLiteral("-b"));
+    }
+    const auto hasFollowFlag = [&lowered]() {
+        for (const QString &token : lowered) {
+            if (token == QStringLiteral("-f") || token == QStringLiteral("-F")
+                || token == QStringLiteral("--follow")
+                || (token.startsWith(QLatin1Char('-')) && !token.startsWith(QStringLiteral("--"))
+                    && token.contains(QLatin1Char('f')) && token.size() <= 4)) {
+                return true;
+            }
+        }
+        return false;
+    };
+    if (name == QStringLiteral("tail") || name == QStringLiteral("journalctl")) {
+        return hasFollowFlag();
+    }
+    if ((name == QStringLiteral("docker") || name == QStringLiteral("kubectl"))
+        && lowered.size() > 1 && lowered.at(1) == QStringLiteral("logs")) {
+        return hasFollowFlag();
+    }
+    if (name == QStringLiteral("docker") && lowered.size() > 1
+        && lowered.at(1) == QStringLiteral("stats")) {
+        return !lowered.contains(QStringLiteral("--no-stream"));
+    }
+    if (name == QStringLiteral("ping")) {
+        // Linux 下不带 -c 的 ping 永不退出。
+        for (const QString &token : lowered) {
+            if (token == QStringLiteral("-c") || token.startsWith(QStringLiteral("-c"))) {
+                return false;
+            }
+        }
+        return true;
     }
     return false;
 }
@@ -197,6 +343,10 @@ CommandRiskLevel classify(const QString &command)
         }
     }
 
+    if (commandSubstitutionPattern().match(trimmed).hasMatch()) {
+        return CommandRiskLevel::Write;
+    }
+
     bool allSegmentsReadOnly = true;
     for (const QString &segment : splitCommandSegments(trimmed)) {
         const QString trimmedSegment = segment.trimmed();
@@ -225,6 +375,21 @@ CommandRiskLevel classify(const QString &command)
     }
 
     return allSegmentsReadOnly ? CommandRiskLevel::ReadOnly : CommandRiskLevel::Write;
+}
+
+bool isSafeForAutoExecution(const QString &command)
+{
+    if (classify(command) != CommandRiskLevel::ReadOnly) {
+        return false;
+    }
+    for (const QString &segment : splitCommandSegments(command.trimmed())) {
+        const QStringList tokens = segment.trimmed().split(
+            QRegularExpression(QStringLiteral("\\s+")), Qt::SkipEmptyParts);
+        if (segmentNeedsInteraction(tokens)) {
+            return false;
+        }
+    }
+    return true;
 }
 
 QString label(const CommandRiskLevel level)

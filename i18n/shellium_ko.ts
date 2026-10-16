@@ -74,8 +74,72 @@
 %1</translation>
     </message>
     <message>
+        <source>Choose a local agent CLI in Settings → AI Assistant first</source>
+        <translation>먼저 설정 → AI 어시스턴트에서 로컬 에이전트 CLI를 선택하세요</translation>
+    </message>
+    <message>
         <source>Configure the LLM URL and model name in Settings → AI Assistant first</source>
         <translation type="unfinished">먼저 「설정 → AI 어시스턴트」에서 LLM URL과 모델 이름을 설정하세요</translation>
+    </message>
+    <message>
+        <source>Paused after %1 automatic steps. Review the progress, then run the next command yourself or send a new message to continue.</source>
+        <translation>자동 실행이 %1단계에 도달해 일시 중지되었습니다. 진행 상황을 확인한 뒤 다음 명령을 직접 실행하거나 새 메시지를 보내 계속하세요.</translation>
+    </message>
+    <message>
+        <source>Turn on full auto?</source>
+        <translation>완전 자동을 켤까요?</translation>
+    </message>
+    <message>
+        <source>In full auto the AI runs every command it chooses in the current terminal without asking, including commands that modify the system or are high risk.
+
+Only use it on hosts where mistakes are acceptable. You can press Stop at any time to take over.</source>
+        <translation>완전 자동에서는 시스템을 변경하거나 위험도가 높은 명령을 포함해 AI가 고른 모든 명령을 묻지 않고 현재 터미널에서 실행합니다.
+
+실수가 허용되는 호스트에서만 사용하세요. 언제든 중지를 눌러 직접 제어할 수 있습니다.</translation>
+    </message>
+    <message>
+        <source>Failed to save the execution mode: %1</source>
+        <translation>실행 모드를 저장하지 못했습니다: %1</translation>
+    </message>
+    <message>
+        <source>Ask before every command</source>
+        <translation>명령마다 먼저 묻기</translation>
+    </message>
+    <message>
+        <source>Auto-run read-only commands</source>
+        <translation>읽기 전용 명령 자동 실행</translation>
+    </message>
+    <message>
+        <source>Full auto (run everything)</source>
+        <translation>완전 자동(모두 실행)</translation>
+    </message>
+    <message>
+        <source>Ask first</source>
+        <translation>먼저 묻기</translation>
+    </message>
+    <message>
+        <source>The AI can make mistakes. Every command waits for your confirmation before it runs.</source>
+        <translation>AI는 실수할 수 있습니다. 모든 명령은 확인을 받은 뒤에 실행됩니다.</translation>
+    </message>
+    <message>
+        <source>Auto read-only</source>
+        <translation>읽기 전용 자동</translation>
+    </message>
+    <message>
+        <source>Full auto</source>
+        <translation>완전 자동</translation>
+    </message>
+    <message>
+        <source>Full auto: the AI runs every command it chooses, including ones that change the system. Watch the terminal and press Stop to take over.</source>
+        <translation>완전 자동: 시스템을 바꾸는 명령을 포함해 AI가 고른 모든 명령을 실행합니다. 터미널을 지켜보다가 중지를 눌러 직접 제어하세요.</translation>
+    </message>
+    <message>
+        <source>Choose which commands the AI may run without asking</source>
+        <translation>AI가 묻지 않고 실행할 수 있는 명령을 선택합니다</translation>
+    </message>
+    <message>
+        <source>Execution mode</source>
+        <translation>실행 모드</translation>
     </message>
     <message>
         <source>The AI did not return a result following the single-step interaction protocol; this round has been stopped. Retry or switch to a model that supports JSON instructions.</source>
@@ -156,6 +220,10 @@ Run it in the current terminal?</source>
 %1
 
 현재 터미널에서 실행하시겠습니까?</translation>
+    </message>
+    <message>
+        <source>Ran automatically</source>
+        <translation>자동 실행됨</translation>
     </message>
     <message>
         <source>Sent to the current terminal to run; the AI will wait for it to finish automatically</source>
@@ -1286,6 +1354,41 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>%1  (%2)</source>
         <translation type="unfinished">%1  (%2)</translation>
+    </message>
+</context>
+<context>
+    <name>LocalCliClient</name>
+    <message>
+        <source>%1 did not answer within %2 seconds and was stopped.</source>
+        <translation>%1이(가) %2초 안에 응답하지 않아 중지했습니다.</translation>
+    </message>
+    <message>
+        <source>Unknown local agent CLI: %1</source>
+        <translation>알 수 없는 로컬 에이전트 CLI: %1</translation>
+    </message>
+    <message>
+        <source>The configured path for %1 is not an executable file: %2</source>
+        <translation>%1에 설정된 경로가 실행 파일이 아닙니다: %2</translation>
+    </message>
+    <message>
+        <source>%1 was not found on this computer. Install it, or set its path in Settings → AI Assistant.</source>
+        <translation>이 컴퓨터에서 %1을(를) 찾지 못했습니다. 설치하거나 설정 → AI 어시스턴트에서 경로를 지정하세요.</translation>
+    </message>
+    <message>
+        <source>Could not start %1: %2</source>
+        <translation>%1을(를) 시작할 수 없습니다: %2</translation>
+    </message>
+    <message>
+        <source>%1 exited with code %2.</source>
+        <translation>%1이(가) 코드 %2(으)로 종료되었습니다.</translation>
+    </message>
+    <message>
+        <source>%1 exited with code %2: %3</source>
+        <translation>%1이(가) 코드 %2(으)로 종료되었습니다: %3</translation>
+    </message>
+    <message>
+        <source>%1 returned an empty answer.</source>
+        <translation>%1이(가) 빈 응답을 반환했습니다.</translation>
     </message>
 </context>
 <context>
@@ -4134,6 +4237,26 @@ This algorithm is obsolete; upgrading the server&apos;s SSH configuration is rec
         <translation type="unfinished">비워 두면 이 작업의 단축키가 제거됩니다. 같은 단축키를 두 작업에 할당할 수 없습니다.</translation>
     </message>
     <message>
+        <source>Model source</source>
+        <translation>모델 소스</translation>
+    </message>
+    <message>
+        <source>OpenAI-compatible API</source>
+        <translation>OpenAI 호환 API</translation>
+    </message>
+    <message>
+        <source>Local agent CLI</source>
+        <translation>로컬 에이전트 CLI</translation>
+    </message>
+    <message>
+        <source>Source</source>
+        <translation>소스</translation>
+    </message>
+    <message>
+        <source>A local agent CLI reuses the subscription you are already signed in to (Claude Code, Codex, Cursor…). It only decides the next step; commands still run in Shellium&apos;s terminal under the execution mode below.</source>
+        <translation>로컬 에이전트 CLI는 이미 로그인한 구독(Claude Code, Codex, Cursor 등)을 그대로 사용합니다. CLI는 다음 단계만 결정하며, 명령은 아래 실행 모드에 따라 계속 Shellium 터미널에서 실행됩니다.</translation>
+    </message>
+    <message>
         <source>LLM connection</source>
         <translation type="unfinished">LLM 연결</translation>
     </message>
@@ -4182,6 +4305,66 @@ This algorithm is obsolete; upgrading the server&apos;s SSH configuration is rec
         <translation type="unfinished">답변 전에 모델이 추론하도록 요청합니다. 답변은 더 신뢰할 수 있지만 느립니다. 사고 모드를 지원하는 게이트웨이에서만 적용됩니다. 비활성화하면 요청 본문에서 이 필드를 생략합니다.</translation>
     </message>
     <message>
+        <source>Agent CLI</source>
+        <translation>에이전트 CLI</translation>
+    </message>
+    <message>
+        <source>Shellium looks for supported CLIs in your login shell PATH and common install locations. Each one runs with its tools disabled or in read-only mode, in an empty folder.</source>
+        <translation>Shellium은 로그인 셸의 PATH와 일반적인 설치 위치에서 지원되는 CLI를 찾습니다. 각 CLI는 빈 폴더에서 도구를 끄거나 읽기 전용 모드로 실행됩니다.</translation>
+    </message>
+    <message>
+        <source>Detected automatically</source>
+        <translation>자동 감지</translation>
+    </message>
+    <message>
+        <source>Executable path</source>
+        <translation>실행 파일 경로</translation>
+    </message>
+    <message>
+        <source>Leave empty to use the detected location; fill it in only when the CLI is installed somewhere Shellium cannot find.</source>
+        <translation>비워 두면 감지된 위치를 사용합니다. Shellium이 찾지 못하는 곳에 CLI를 설치한 경우에만 입력하세요.</translation>
+    </message>
+    <message>
+        <source>CLI default</source>
+        <translation>CLI 기본값</translation>
+    </message>
+    <message>
+        <source>Model</source>
+        <translation>모델</translation>
+    </message>
+    <message>
+        <source>Passed to the CLI as --model. Leave empty to use the model configured in the CLI itself.</source>
+        <translation>--model로 CLI에 전달됩니다. 비워 두면 CLI 자체에 설정된 모델을 사용합니다.</translation>
+    </message>
+    <message>
+        <source>Command execution</source>
+        <translation>명령 실행</translation>
+    </message>
+    <message>
+        <source>Ask first</source>
+        <translation>먼저 묻기</translation>
+    </message>
+    <message>
+        <source>Auto read-only</source>
+        <translation>읽기 전용 자동</translation>
+    </message>
+    <message>
+        <source>Full auto</source>
+        <translation>완전 자동</translation>
+    </message>
+    <message>
+        <source>Execution mode</source>
+        <translation>실행 모드</translation>
+    </message>
+    <message>
+        <source>Auto read-only runs commands that Shellium&apos;s own rules classify as read-only and non-interactive (for example ls, df, systemctl status) without asking; anything that changes the system waits for your confirmation. Full auto runs every command, including high-risk ones.</source>
+        <translation>&apos;읽기 전용 자동&apos;은 Shellium 자체 규칙이 읽기 전용이자 비대화형으로 판정한 명령(예: ls, df, systemctl status)을 묻지 않고 실행하며, 시스템을 바꾸는 명령은 확인을 기다립니다. &apos;완전 자동&apos;은 위험도가 높은 명령을 포함해 모든 명령을 실행합니다.</translation>
+    </message>
+    <message>
+        <source>Risk is judged by local rules, never by the model&apos;s own claims. Automatic runs pause after 20 steps per task, and Stop in the AI panel always takes control back.</source>
+        <translation>위험도는 모델의 주장이 아니라 로컬 규칙으로 판정합니다. 자동 실행은 작업당 20단계 후 일시 중지되며, AI 패널의 중지로 언제든 제어를 되찾을 수 있습니다.</translation>
+    </message>
+    <message>
         <source>Test connection</source>
         <translation type="unfinished">연결 테스트</translation>
     </message>
@@ -4212,6 +4395,38 @@ This algorithm is obsolete; upgrading the server&apos;s SSH configuration is rec
     <message>
         <source>Save failed: %1</source>
         <translation type="unfinished">저장 실패: %1</translation>
+    </message>
+    <message>
+        <source>Detect again</source>
+        <translation>다시 감지</translation>
+    </message>
+    <message>
+        <source>Detecting installed agent CLIs…</source>
+        <translation>설치된 에이전트 CLI를 감지하는 중…</translation>
+    </message>
+    <message>
+        <source>No supported agent CLI was found. Install one (for example claude or codex), then click &apos;Detect again&apos;.</source>
+        <translation>지원되는 에이전트 CLI를 찾지 못했습니다. claude나 codex 등을 설치한 뒤 &apos;다시 감지&apos;를 클릭하세요.</translation>
+    </message>
+    <message>
+        <source>Found %1 of %2 supported CLIs.</source>
+        <translation>지원되는 CLI %2개 중 %1개를 찾았습니다.</translation>
+    </message>
+    <message>
+        <source>not found</source>
+        <translation>찾을 수 없음</translation>
+    </message>
+    <message>
+        <source>Turn on full auto?</source>
+        <translation>완전 자동을 켤까요?</translation>
+    </message>
+    <message>
+        <source>In full auto the AI runs every command it chooses in the current terminal without asking, including commands that modify the system or are high risk.
+
+Only use it on hosts where mistakes are acceptable. You can press Stop at any time to take over.</source>
+        <translation>완전 자동에서는 시스템을 변경하거나 위험도가 높은 명령을 포함해 AI가 고른 모든 명령을 묻지 않고 현재 터미널에서 실행합니다.
+
+실수가 허용되는 호스트에서만 사용하세요. 언제든 중지를 눌러 직접 제어할 수 있습니다.</translation>
     </message>
     <message>
         <source>The vault is unavailable</source>

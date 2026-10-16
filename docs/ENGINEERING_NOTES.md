@@ -748,3 +748,25 @@ linuxdeploy 按 AppImage 排除清单跳过 libGL/libEGL/libGLX/libOpenGL 等图
   `QT_VERSION >= 6.9` 宏把上述代码静默编译掉了，本地（Homebrew Qt 6.11）却一切正常，所以只在
   发布包里出现。现在 CMake 在 macOS 上直接拒绝 Qt < 6.9，CI 用官方 Qt 6.10（最低 macOS 13）。
 - 改 CI 的 Qt 版本时，本地测试通过不能说明发布包没问题：本地与 CI 用的不是同一份 Qt。
+
+## 二十三、AI 助手：本地智能体 CLI 与自动执行
+
+- **CLI 只当模型用，不让它动手。** claude / codex / cursor-agent / gemini / qwen 默认都能读写当前
+  目录、执行本地 Shell。`LocalAgentCli::buildInvocation()` 为每个 CLI 显式关工具或进只读模式
+  （`claude --tools ""`、`codex exec --sandbox read-only`、`cursor-agent --mode ask`），并在空的
+  临时目录里运行，避免读到某个项目的 CLAUDE.md / AGENTS.md 当指令。任何 CLI 都不得带
+  `--dangerously-*`、`--force`、`--yolo` 一类参数（有用例守着）。opencode 的 `run` 默认会自动批准
+  bash，无法确认能关掉，所以没有接入。
+- **GUI 进程看不到用户的 PATH。** 从 Finder/Dock 启动的 macOS 应用只有 launchd 的极简 PATH，
+  mise / nvm / volta 装的 CLI 一个都找不到；npm 装的 CLI 首行是 `#!/usr/bin/env node`，即使用
+  绝对路径启动也会因为找不到 node 失败。检测时用 `$SHELL -i -l -c` 取登录交互 Shell 的 PATH，
+  启动 CLI 时子进程 PATH 必须换成同一份（`childEnvironment()`）。终端里跑的测试继承的是完整
+  PATH，测不出这个问题，要用 `env -i HOME=… PATH=/usr/bin:/bin` 模拟。
+- **自动执行的门槛是"只读且会自己结束"。** `CommandRiskClassifier::isSafeForAutoExecution()` 在
+  `classify()==ReadOnly` 之外还排除命令替换（`$(…)`、反引号）、全屏/跟随类命令（top、less、
+  `tail -f`、不带 `-c` 的 ping）和 sudo（会停在密码提示）——自动回路要等提示符回来才续问，
+  永不退出的只读命令会把它卡死。解释器、git、dpkg/rpm 不能按命令名整体放行，只按明确的
+  只读参数放行。自动执行复用执行按钮的 click 路径，每轮用户任务最多 20 步；全自动必须经
+  确认框开启，未知持久化值一律回落到"只读自动"。
+- 设置页里登记 `i18n::onRetranslate` 的回调会立即执行一次：新增控件必须在登记之前创建，
+  否则没有 AI 服务的设置页（多数用例）会在构造时空指针崩溃。
