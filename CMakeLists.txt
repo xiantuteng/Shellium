@@ -19,6 +19,15 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(Qt6 6.8 REQUIRED COMPONENTS Core Widgets Concurrent Network Sql Svg LinguistTools)
 
+# macOS 的自定义标题行依赖 Qt 6.9 新增的 Qt::ExpandedClientAreaHint 才能伸进交通灯所在的
+# 标题区。用 6.8 构建不会报错，但窗口顶部会多出一条系统标题栏、标题行整体下移（0.3.3/0.3.4
+# 的 DMG 就是这样发出去的），所以在配置阶段直接拒绝。
+if(APPLE AND Qt6_VERSION VERSION_LESS 6.9)
+    message(FATAL_ERROR
+        "macOS builds need Qt >= 6.9 (found ${Qt6_VERSION}): the custom title bar relies on "
+        "Qt::ExpandedClientAreaHint to extend into the native title bar area.")
+endif()
+
 # 业务目标只链接项目内部的稳定依赖名。Windows/vcpkg 通常提供 CMake Config Package，
 # macOS Homebrew 与 Linux 发行版则普遍提供 pkg-config；先尝试前者、再统一回退到后者，
 # 可以让三平台共用其余 CMake 而不在每个测试目标中散落平台判断。

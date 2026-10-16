@@ -30,7 +30,8 @@ jobs:
           # Homebrew 瓶子按构建机系统标注最低系统，包的最低系统因此等于 runner 的系统版本，
           # 要支持旧系统就得在旧系统的 runner 上构建。Homebrew 已不再给 macOS 14 出 libssh、
           # openssl@3 等瓶子，这些包会在 runner 上从源码编译，产物同样以 14.0 为最低系统。
-          # Qt 用官方安装器（universal，最低 macOS 12），避免 Homebrew 的 Qt 在旧系统上源码编译。
+          # Qt 用官方安装器（universal，6.10 最低 macOS 13），避免 Homebrew 的 Qt 在旧系统上源码编译。
+          # 版本不能低于 6.9：标题行伸进交通灯区域依赖 Qt::ExpandedClientAreaHint，CMake 会拒绝 6.8。
           - arch: arm64
             runner: macos-14
             deployment_target: '14.0'
@@ -48,7 +49,7 @@ jobs:
       - name: Install Qt (official)
         uses: jurplel/install-qt-action@v4
         with:
-          version: '6.8.3'
+          version: '6.10.1'
           host: mac
           target: desktop
           arch: clang_64

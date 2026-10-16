@@ -737,3 +737,14 @@ linuxdeploy 按 AppImage 排除清单跳过 libGL/libEGL/libGLX/libOpenGL 等图
   光标上方。必须同时处理 Move：提示已显示时换文字（如在主机树里换行悬停），Qt 只 move() 复用标签。
 - 不要再用 `QToolTip::showText` 的 pos 参数去“预先减掉偏移”，偏移量取决于平台光标尺寸，无法用公开
   API 得到。主题样式表里的 `QToolTip` 规则不要写 font-size，否则会覆盖这里的字号。
+
+## 二十二、macOS 标题栏：发布包的 Qt 必须 ≥ 6.9
+
+- 标题行（侧栏开关、会话标签、"+"）要和交通灯同处一行，依赖 Qt 6.9 新增的
+  `Qt::ExpandedClientAreaHint` / `Qt::NoTitleBarBackgroundHint`，必须在原生窗口创建前设置。
+  只靠 `MacWindowChrome.mm` 里事后打开 `NSWindowStyleMaskFullSizeContentView` 不够：QMainWindow
+  已按旧安全区布局，顶部会多出一条系统标题栏，整个标题行掉到交通灯下方。
+- 0.3.3 为支持 macOS 14 把 arm64 打包从 Homebrew Qt 换成官方 Qt 6.8.3，原先的
+  `QT_VERSION >= 6.9` 宏把上述代码静默编译掉了，本地（Homebrew Qt 6.11）却一切正常，所以只在
+  发布包里出现。现在 CMake 在 macOS 上直接拒绝 Qt < 6.9，CI 用官方 Qt 6.10（最低 macOS 13）。
+- 改 CI 的 Qt 版本时，本地测试通过不能说明发布包没问题：本地与 CI 用的不是同一份 Qt。

@@ -104,6 +104,7 @@ private slots:
     void emptyStateKeepsNewTabButtonNextToTheTitleIdentity();
     /** @brief Windows/Linux 产品名、标签与自绘窗口按钮必须共用唯一的无边框标题行。 */
     void desktopPlatformsUseProductTitleAndCustomWindowControls();
+    void macTitleRowExtendsIntoNativeTitleBar();
     void sidebarWidthIsRestoredOnNextLaunch();
     /** @brief 侧边栏显隐使用连续尺寸动画，且收起后再次展开能恢复用户宽度。 */
     void sidebarToggleAnimatesAndRestoresWidth();
@@ -1291,6 +1292,23 @@ void MainWindowShellTest::workspaceSidebarListsMembersNumbersDuplicatesAndCloses
     delete a;
     delete b;
     delete c;
+}
+
+void MainWindowShellTest::macTitleRowExtendsIntoNativeTitleBar()
+{
+#ifdef Q_OS_MACOS
+    // 0.3.3/0.3.4 的 DMG 用 Qt 6.8.3 构建，这两个标志被版本宏静默跳过：系统标题栏重新出现，
+    // 侧栏开关与新建按钮整体掉到交通灯下方一行。标志必须在原生窗口创建前设置，构造后即可检查。
+    MainWindow window(m_database, m_vault);
+    QVERIFY2(window.windowFlags().testFlag(Qt::ExpandedClientAreaHint),
+             "macOS 客户区必须扩展到标题栏，标题行才能与交通灯同处一行");
+    QVERIFY2(window.windowFlags().testFlag(Qt::NoTitleBarBackgroundHint),
+             "macOS 必须去掉系统标题栏背景，否则顶部残留一条系统色带");
+    QVERIFY2(!window.testAttribute(Qt::WA_ContentsMarginsRespectsSafeArea),
+             "布局避让安全区会把标题行重新推到交通灯下方");
+#else
+    QSKIP("交通灯与原生标题栏只存在于 macOS");
+#endif
 }
 
 void MainWindowShellTest::desktopPlatformsUseProductTitleAndCustomWindowControls()

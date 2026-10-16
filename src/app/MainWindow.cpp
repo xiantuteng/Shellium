@@ -458,7 +458,9 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     // Qt 6.9 起 ExpandedClientAreaHint 会在平台窗口创建前通知 Cocoa：客户区需要覆盖标题栏，
     // NoTitleBarBackgroundHint 同时移除系统白色背景。只调用 AppKit 的 FullSizeContentView 太晚，
     // QMainWindow 已按旧安全区完成布局，正是此前截图中仍残留一条白色标题栏的根因。
-#if defined(Q_OS_MACOS) && QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
+    // CMakeLists.txt 在 macOS 上强制 Qt >= 6.9：曾经用 6.8.3 打包时这里被版本宏静默跳过，
+    // 自定义标题行整体掉到系统标题栏下方。
+#if defined(Q_OS_MACOS)
     setWindowFlag(Qt::ExpandedClientAreaHint, true);
     setWindowFlag(Qt::NoTitleBarBackgroundHint, true);
     // 默认 QWidget 布局会主动避让 QWindow::safeAreaMargins()。标题区已经在布局内部为交通灯
