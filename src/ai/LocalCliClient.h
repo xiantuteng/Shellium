@@ -2,6 +2,7 @@
 
 #include "ai/AiChatTypes.h"
 #include "ai/AiSettings.h"
+#include "ai/LocalAgentCli.h"
 
 #include <QByteArray>
 #include <QList>
@@ -23,7 +24,8 @@ class QFutureWatcher;
  *
  * 对外接口刻意与 AiClient 的对话部分保持一致（sendMessage / abortActiveRequest 加
  * replyFinished / replyFailed），AiAssistantWidget 可以按设置在两者之间切换而不改协议
- * 处理逻辑。CLI 没有流式文本可供预览，因此不提供 replyChunkReceived。
+ * 处理逻辑。以 stream-json 输出的 CLI（目前是 claude）还会像 AiClient 一样发出
+ * replyChunkReceived / reasoningChunkReceived 供界面实时展示；其余 CLI 只在结束时给出结果。
  *
  * 每次请求启动一个新进程，工作目录是一个专用的空临时目录，并按 LocalAgentCli::
  * buildInvocation() 关闭工具或进入只读模式——CLI 只负责给出下一步，执行永远发生在
@@ -60,6 +62,12 @@ public:
     void setTimeoutMs(int timeoutMs);
 
 signals:
+    /** @brief 正文增量到达；参数是到目前为止的完整正文，语义同 AiClient::replyChunkReceived。 */
+    void replyChunkReceived(const QString &accumulatedContent);
+
+    /** @brief 思考过程增量到达；语义同 AiClient::reasoningChunkReceived。 */
+    void reasoningChunkReceived(const QString &accumulatedReasoning);
+
     /** @brief CLI 正常退出并给出回答；content 已经过 LocalAgentCli::extractReply() 整理。 */
     void replyFinished(const QString &content);
 
@@ -69,6 +77,9 @@ signals:
 private:
     /** @brief 已知搜索目录后真正启动进程。 */
     void launch(const QStringList &searchDirectories);
+
+    /** @brief 消费一批标准输出：流式格式交给解析器并发出增量信号，纯文本格式原样累积。 */
+    void consumeStandardOutput(const QByteArray &bytes);
 
     /** @brief 进程结束后的统一收尾：读取输出、校验退出码并发出结果信号。 */
     void handleFinished(int exitCode, bool crashed);
@@ -86,6 +97,9 @@ private:
     QFutureWatcher<QStringList> *m_resolveWatcher = nullptr;
     std::unique_ptr<QTemporaryDir> m_outputDir;
     QString m_outputFilePath;
+    /** @brief 本次调用的标准输出格式；流式格式下 m_stdout 不累积，改由 m_streamParser 解析。 */
+    LocalAgentCli::OutputFormat m_outputFormat = LocalAgentCli::OutputFormat::PlainText;
+    LocalAgentCli::ClaudeStreamParser m_streamParser;
     QByteArray m_stdout;
     QByteArray m_stderr;
     QString m_displayName;

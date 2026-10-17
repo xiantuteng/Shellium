@@ -40,6 +40,10 @@
         <translation type="unfinished">Nessun comando in attesa di esecuzione</translation>
     </message>
     <message>
+        <source>%1 s</source>
+        <translation>%1 s</translation>
+    </message>
+    <message>
         <source>A request is in progress; wait before starting a new session</source>
         <translation type="unfinished">È in corso una richiesta; attendi prima di avviare una nuova sessione</translation>
     </message>

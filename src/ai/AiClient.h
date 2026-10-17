@@ -18,7 +18,7 @@ class QNetworkReply;
  * “大模型地址”覆盖官方 OpenAI、Azure OpenAI 兼容模式，以及绝大多数自建网关（vLLM、
  * Ollama 的 OpenAI 兼容层等），它们共同点是 POST {base}/chat/completions 提交
  * messages 数组、GET {base}/models 可用于不产生副作用的连通性探测。本类只覆盖这两个
- * 端点，不做流式 SSE——首版先保证请求可用，流式体验留待后续迭代。
+ * 端点；对话请求走 SSE 流式返回，正文与思考过程分别以增量信号交给界面实时展示。
  *
  * 每个实例同一时间只处理一个进行中的对话请求；调用方在收到上一次 finished/failed 信号
  * 前不应发起新的 sendMessage，测试连接请求另计，不与对话请求互相阻塞。
@@ -91,6 +91,17 @@ signals:
      */
     void replyChunkReceived(const QString &accumulatedContent);
 
+    /**
+     * @brief 推理型模型的思考过程每到一段新增量就触发一次。
+     * @param accumulatedReasoning 本次请求到目前为止拼接出的完整思考文本，语义与
+     *        replyChunkReceived 相同，调用方直接替换显示即可。
+     *
+     * 取自 delta.reasoning_content（DeepSeek、通义千问、vLLM 等）或 delta.reasoning
+     * （OpenRouter、Ollama）。它只用于界面实时展示分析过程，不计入 replyFinished 的
+     * 内容，也不写回对话历史；不返回思考过程的网关永远不会触发它。
+     */
+    void reasoningChunkReceived(const QString &accumulatedReasoning);
+
     /** @brief 对话请求成功，content 是模型返回的完整文本。 */
     void replyFinished(const QString &content);
 
@@ -124,4 +135,6 @@ private:
     QByteArray m_streamBuffer;
     /** @brief 当前请求已经从 SSE 增量里拼出的完整文本；非空即说明网关确实在走流式协议。 */
     QString m_streamAccumulatedContent;
+    /** @brief 当前请求已经从 SSE 增量里拼出的思考过程文本。 */
+    QString m_streamAccumulatedReasoning;
 };

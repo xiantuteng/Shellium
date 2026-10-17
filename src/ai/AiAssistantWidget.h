@@ -296,8 +296,36 @@ private:
      */
     [[nodiscard]] QString conversationTitle(const QList<AiChatMessage> &history) const;
 
-    /** @brief 构建"AI 图标闪烁 + 正在分析…"的等待指示器，图标透明度循环呼吸。 */
+    /**
+     * @brief 构建实时分析面板："AI 图标呼吸 + 正在分析… + 已用秒数"，下方依次预留思考过程
+     * 与回答草稿两块区域，有内容到达时才显示。
+     *
+     * 面板是一次请求的临时状态，不进入会话历史；请求结束（成功、失败或用户停止）后由
+     * dismissThinkingIndicator() 移除，由正式的助手说明和命令卡片接替。
+     */
     QWidget *buildThinkingIndicator();
+
+    /** @brief 在聊天区末尾插入一个新的实时分析面板并开始计时。 */
+    void showThinkingIndicator();
+
+    /** @brief 移除实时分析面板并停止计时；没有面板时无副作用。 */
+    void dismissThinkingIndicator();
+
+    /**
+     * @brief 用模型到目前为止的思考过程刷新面板。
+     * @param reasoning 累计的思考文本；只显示末尾一段，避免长推理把聊天区撑满。
+     */
+    void updateThinkingReasoning(const QString &reasoning);
+
+    /**
+     * @brief 用到目前为止的回答原文刷新面板里的草稿区。
+     * @param partialReply 尚未生成完的协议 JSON 原文。
+     *
+     * 原文不能直接展示：state、command 等字段属于协议内部结构。这里只取出 title、reason、
+     * message 已经到达的部分，展示成"模型正在写的结论"，命令本身仍等协议校验通过后以卡片
+     * 形式出现。
+     */
+    void updateThinkingDraft(const QString &partialReply);
 
     /**
      * @brief 返回终端自上次读取位置以来新增的纯文本，并把读取位置推进到当前末尾；不追加
@@ -408,6 +436,13 @@ private:
     QWidget *m_chatContainer = nullptr;
     QVBoxLayout *m_chatLayout = nullptr;
     QWidget *m_thinkingBubble = nullptr;
+    /** @brief 实时分析面板里的已用时间、思考过程与回答草稿标签，随面板一起销毁。 */
+    QPointer<QLabel> m_thinkingElapsedLabel;
+    QPointer<QLabel> m_thinkingReasoningLabel;
+    QPointer<QLabel> m_thinkingDraftLabel;
+    /** @brief 每秒刷新一次已用时间；即使模型或 CLI 没有任何增量，用户也能看到分析仍在进行。 */
+    QTimer *m_thinkingTicker = nullptr;
+    QElapsedTimer m_thinkingElapsed;
     class QScrollArea *m_chatScroll = nullptr;
     /**
      * @brief 用户此前是否停留在聊天区底部附近；由滚动条 valueChanged 持续更新。

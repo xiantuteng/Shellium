@@ -149,13 +149,16 @@ void LocalCliClient::launch(const QStringList &searchDirectories)
         *spec, executable, m_settings.cliModel,
         LocalAgentCli::renderTranscript(m_messages), m_outputFilePath);
 
+    m_outputFormat = invocation.outputFormat;
+    m_streamParser = LocalAgentCli::ClaudeStreamParser();
+
     auto *process = new QProcess(this);
     m_process = process;
     process->setProcessEnvironment(LocalAgentCli::childEnvironment(searchDirectories));
     process->setWorkingDirectory(workspaceDirectory());
     process->setProcessChannelMode(QProcess::SeparateChannels);
     connect(process, &QProcess::readyReadStandardOutput, this, [this, process]() {
-        m_stdout += process->readAllStandardOutput();
+        consumeStandardOutput(process->readAllStandardOutput());
     });
     connect(process, &QProcess::readyReadStandardError, this, [this, process]() {
         m_stderr += process->readAllStandardError();
@@ -185,14 +188,45 @@ void LocalCliClient::launch(const QStringList &searchDirectories)
     process->closeWriteChannel();
 }
 
+void LocalCliClient::consumeStandardOutput(const QByteArray &bytes)
+{
+    if (m_outputFormat != LocalAgentCli::OutputFormat::ClaudeStreamJson) {
+        m_stdout += bytes;
+        return;
+    }
+    const qsizetype textLength = m_streamParser.text().size();
+    const qsizetype thinkingLength = m_streamParser.thinking().size();
+    m_streamParser.feed(bytes);
+    // 新消息开始时解析器会清空旧文本，长度变短同样意味着需要刷新界面。
+    if (m_streamParser.thinking().size() != thinkingLength) {
+        emit reasoningChunkReceived(m_streamParser.thinking());
+    }
+    if (m_streamParser.text().size() != textLength) {
+        emit replyChunkReceived(m_streamParser.text());
+    }
+}
+
 void LocalCliClient::handleFinished(const int exitCode, const bool crashed)
 {
     if (!m_busy) {
         return;
     }
     if (m_process != nullptr) {
-        m_stdout += m_process->readAllStandardOutput();
+        consumeStandardOutput(m_process->readAllStandardOutput());
         m_stderr += m_process->readAllStandardError();
+    }
+    const bool streaming = m_outputFormat == LocalAgentCli::OutputFormat::ClaudeStreamJson;
+    if (streaming) {
+        m_streamParser.finish();
+    }
+    if (streaming && m_streamParser.hasResult() && m_streamParser.resultIsError()) {
+        // 未登录、额度用尽等错误写在 result 事件里，标准错误往往是空的。
+        const QString detail = m_streamParser.result().trimmed();
+        fail(detail.isEmpty()
+                 ? tr("%1 exited with code %2.").arg(m_displayName, QString::number(exitCode))
+                 : tr("%1 exited with code %2: %3")
+                       .arg(m_displayName, QString::number(exitCode), detail));
+        return;
     }
     if (crashed || exitCode != 0) {
         const QString tail = stderrTail(m_stderr.isEmpty() ? m_stdout : m_stderr);
@@ -204,13 +238,15 @@ void LocalCliClient::handleFinished(const int exitCode, const bool crashed)
     }
 
     QString raw;
-    if (!m_outputFilePath.isEmpty()) {
+    if (streaming) {
+        raw = m_streamParser.hasResult() ? m_streamParser.result() : m_streamParser.text();
+    } else if (!m_outputFilePath.isEmpty()) {
         QFile file(m_outputFilePath);
         if (file.open(QIODevice::ReadOnly)) {
             raw = QString::fromUtf8(file.readAll());
         }
     }
-    if (raw.trimmed().isEmpty()) {
+    if (!streaming && raw.trimmed().isEmpty()) {
         raw = QString::fromUtf8(m_stdout);
     }
     const QString reply = LocalAgentCli::extractReply(raw);
@@ -256,4 +292,5 @@ void LocalCliClient::cleanup()
     m_outputFilePath.clear();
     m_stdout.clear();
     m_stderr.clear();
+    m_streamParser = LocalAgentCli::ClaudeStreamParser();
 }

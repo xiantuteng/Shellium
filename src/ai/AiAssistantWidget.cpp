@@ -90,6 +90,118 @@ const QString kSystemPrompt = QStringLiteral(R"PROMPT(
 最多只能出现一个 command 字段。不要输出 steps、plan、next、后续操作、完整方案或多个候选命令。
 )PROMPT");
 
+/** @brief 实时分析面板最多显示的思考过程字符数，超出时只保留末尾。 */
+constexpr int kMaxVisibleReasoningCharacters = 600;
+
+/**
+ * @brief 从仍在生成、尚未闭合的协议 JSON 里取出 title、reason、message 已到达的部分。
+ * @param partial 到目前为止的回答原文。
+ * @return title 占第一行，reason 或 message 接在其后；一个字段都没到达时为空。
+ *
+ * 只认顶层字符串字段，嵌套对象和数组里的字符串一律跳过；写到一半的转义序列先丢掉，等
+ * 下一批增量补齐再显示。command 刻意不预览：它要等整条回复通过协议校验、经过风险分级后
+ * 才能以卡片形式出现。
+ */
+QString partialAgentNarrative(const QString &partial)
+{
+    const qsizetype start = partial.indexOf(QLatin1Char('{'));
+    if (start < 0) {
+        return QString();
+    }
+
+    // pos 指向开引号之后；返回已解码的内容，closed 表示是否读到了闭引号。
+    const auto readString = [&partial](qsizetype &pos, bool &closed) {
+        QString out;
+        closed = false;
+        while (pos < partial.size()) {
+            const QChar ch = partial.at(pos);
+            if (ch == QLatin1Char('"')) {
+                ++pos;
+                closed = true;
+                return out;
+            }
+            if (ch != QLatin1Char('\\')) {
+                out += ch;
+                ++pos;
+                continue;
+            }
+            if (pos + 1 >= partial.size()) {
+                break;
+            }
+            const QChar escaped = partial.at(pos + 1);
+            if (escaped == QLatin1Char('u')) {
+                if (pos + 6 > partial.size()) {
+                    break;
+                }
+                bool ok = false;
+                const ushort code = partial.mid(pos + 2, 4).toUShort(&ok, 16);
+                if (ok) {
+                    out += QChar(code);
+                }
+                pos += 6;
+                continue;
+            }
+            if (escaped == QLatin1Char('n')) {
+                out += QLatin1Char('\n');
+            } else if (escaped == QLatin1Char('t')) {
+                out += QLatin1Char('\t');
+            } else if (escaped != QLatin1Char('r') && escaped != QLatin1Char('b')
+                       && escaped != QLatin1Char('f')) {
+                out += escaped;
+            }
+            pos += 2;
+        }
+        pos = partial.size();
+        return out;
+    };
+
+    QString title;
+    QStringList narrative;
+    QString key;
+    bool haveKey = false;
+    int depth = 0;
+    for (qsizetype pos = start; pos < partial.size();) {
+        const QChar ch = partial.at(pos);
+        if (ch == QLatin1Char('"')) {
+            ++pos;
+            bool closed = false;
+            const QString value = readString(pos, closed);
+            if (depth != 1) {
+                continue;
+            }
+            if (!haveKey) {
+                key = value;
+                haveKey = closed;
+                continue;
+            }
+            haveKey = false;
+            const QString trimmed = value.trimmed();
+            if (trimmed.isEmpty()) {
+                continue;
+            }
+            if (key == QStringLiteral("title")) {
+                title = trimmed;
+            } else if (key == QStringLiteral("reason") || key == QStringLiteral("message")) {
+                narrative.append(trimmed);
+            }
+            continue;
+        }
+        if (ch == QLatin1Char('{') || ch == QLatin1Char('[')) {
+            ++depth;
+        } else if (ch == QLatin1Char('}') || ch == QLatin1Char(']')) {
+            --depth;
+        } else if (ch == QLatin1Char(',') && depth == 1) {
+            haveKey = false;
+        }
+        ++pos;
+    }
+
+    if (!title.isEmpty()) {
+        narrative.prepend(title);
+    }
+    return narrative.join(QLatin1Char('\n'));
+}
+
 /**
  * @brief 用户发出一次任务后，最多允许连续自动执行的命令条数。
  *
@@ -362,31 +474,38 @@ AiAssistantWidget::AiAssistantWidget(AiSettingsService *settingsService, QWidget
     // 空白新会话也预先分配稳定 id；只有产生了模型上下文后才会写入最近会话列表，避免用户
     // 连续点击“新会话”制造一串没有内容的历史项。
     m_activeConversationId = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    m_thinkingTicker = new QTimer(this);
+    m_thinkingTicker->setInterval(1000);
+    connect(m_thinkingTicker, &QTimer::timeout, this, [this]() {
+        if (m_thinkingElapsedLabel != nullptr) {
+            m_thinkingElapsedLabel->setText(
+                tr("%1 s").arg(m_thinkingElapsed.elapsed() / 1000));
+        }
+    });
+
     buildUi();
     if (qApp != nullptr) {
         qApp->installEventFilter(this);
     }
 
-    // 智能体使用机器可校验的 JSON 协议。流式过程中 JSON 必然是不完整的，直接预览会把
-    // state/command 等内部字段暴露给用户，也可能短暂显示后续违规内容，因此这里只维持
-    // “正在判断下一步”状态，等完整响应通过协议校验后再一次性渲染用户可见内容。
-    connect(m_client, &AiClient::replyChunkReceived, this, [this](const QString &) {
-        scrollToBottom();
-    });
+    // 智能体使用机器可校验的 JSON 协议。流式过程中 JSON 必然是不完整的，原文直接预览会把
+    // state/command 等内部字段暴露给用户，因此实时面板只展示思考过程和已经到达的
+    // title/reason/message 文字；命令卡片仍等完整响应通过协议校验后再渲染。
+    connect(m_client, &AiClient::replyChunkReceived, this, &AiAssistantWidget::updateThinkingDraft);
+    connect(m_client, &AiClient::reasoningChunkReceived,
+            this, &AiAssistantWidget::updateThinkingReasoning);
+    connect(m_cliClient, &LocalCliClient::replyChunkReceived,
+            this, &AiAssistantWidget::updateThinkingDraft);
+    connect(m_cliClient, &LocalCliClient::reasoningChunkReceived,
+            this, &AiAssistantWidget::updateThinkingReasoning);
     // HTTP 网关与本地 CLI 两条来源共用同一套收尾逻辑：协议校验、风险分级和自动执行
     // 都只看回复文本，不关心它是从哪里来的。
     const auto onReplyFinished = [this](const QString &content) {
-        if (m_thinkingBubble != nullptr) {
-            m_thinkingBubble->deleteLater();
-            m_thinkingBubble = nullptr;
-        }
+        dismissThinkingIndicator();
         handleAgentReply(content);
     };
     const auto onReplyFailed = [this](const QString &message) {
-        if (m_thinkingBubble != nullptr) {
-            m_thinkingBubble->deleteLater();
-            m_thinkingBubble = nullptr;
-        }
+        dismissThinkingIndicator();
         appendNoticeBubble(message, true);
         m_agentProtocolRepairCount = 0;
         setBusy(false);
@@ -890,8 +1009,8 @@ void AiAssistantWidget::startNewSession()
     m_lastAgentRequestMessages.clear();
     m_agentProtocolRepairCount = 0;
     m_lastReadPosition = 0;
+    dismissThinkingIndicator();
     clearChatContent();
-    m_thinkingBubble = nullptr;
     m_captureCardFrame.clear();
     m_captureCardActionsRow.clear();
     m_captureWaitingLabel.clear();
@@ -1130,9 +1249,7 @@ void AiAssistantWidget::sendMessageInternal(const QString &historyText,
     m_agentProtocolRepairCount = 0;
 
     setBusy(true);
-    m_thinkingBubble = buildThinkingIndicator();
-    m_chatLayout->insertWidget(m_chatLayout->count() - 1, m_thinkingBubble);
-    scrollToBottom();
+    showThinkingIndicator();
 
     dispatchAgentRequest(settings, outgoing);
 }
@@ -1330,9 +1447,7 @@ void AiAssistantWidget::requestAgentProtocolRepair(const QString &invalidContent
             .arg(validationError)});
 
     const AiSettings settings = m_settingsService->currentSettings();
-    m_thinkingBubble = buildThinkingIndicator();
-    m_chatLayout->insertWidget(m_chatLayout->count() - 1, m_thinkingBubble);
-    scrollToBottom();
+    showThinkingIndicator();
     dispatchAgentRequest(settings, repairMessages);
 }
 
@@ -1369,12 +1484,68 @@ void AiAssistantWidget::appendUserBubble(const QString &text)
     scrollToBottom();
 }
 
+void AiAssistantWidget::showThinkingIndicator()
+{
+    dismissThinkingIndicator();
+    m_thinkingBubble = buildThinkingIndicator();
+    m_chatLayout->insertWidget(m_chatLayout->count() - 1, m_thinkingBubble);
+    m_thinkingElapsed.start();
+    m_thinkingTicker->start();
+    scrollToBottom();
+}
+
+void AiAssistantWidget::dismissThinkingIndicator()
+{
+    m_thinkingTicker->stop();
+    if (m_thinkingBubble == nullptr) {
+        return;
+    }
+    // 先隐藏再延迟释放：deleteLater 之前的这一轮事件循环里，面板不能和接替它的回复重叠。
+    m_thinkingBubble->hide();
+    m_thinkingBubble->deleteLater();
+    m_thinkingBubble = nullptr;
+}
+
+void AiAssistantWidget::updateThinkingReasoning(const QString &reasoning)
+{
+    if (m_thinkingReasoningLabel == nullptr) {
+        return;
+    }
+    QString visible = reasoning.trimmed();
+    if (visible.isEmpty()) {
+        m_thinkingReasoningLabel->hide();
+        return;
+    }
+    if (visible.size() > kMaxVisibleReasoningCharacters) {
+        visible = QChar(0x2026) + visible.right(kMaxVisibleReasoningCharacters);
+    }
+    m_thinkingReasoningLabel->setText(visible);
+    m_thinkingReasoningLabel->show();
+    scrollToBottom();
+}
+
+void AiAssistantWidget::updateThinkingDraft(const QString &partialReply)
+{
+    if (m_thinkingDraftLabel == nullptr) {
+        return;
+    }
+    const QString narrative = partialAgentNarrative(partialReply);
+    if (narrative.isEmpty()) {
+        m_thinkingDraftLabel->hide();
+        return;
+    }
+    m_thinkingDraftLabel->setText(narrative);
+    m_thinkingDraftLabel->show();
+    scrollToBottom();
+}
+
 QWidget *AiAssistantWidget::buildThinkingIndicator()
 {
     auto *row = new QWidget(m_chatContainer);
+    row->setObjectName(QStringLiteral("aiThinkingIndicator"));
     auto *rowLayout = new QHBoxLayout(row);
     rowLayout->setContentsMargins(0, 0, 0, 0);
-    rowLayout->setSpacing(6);
+    rowLayout->setSpacing(10);
 
     auto *icon = new QLabel(row);
     icon->setFixedSize(30, 30);
@@ -1384,11 +1555,52 @@ QWidget *AiAssistantWidget::buildThinkingIndicator()
         devicePixelRatioF()));
     icon->setStyleSheet(
         QStringLiteral("background: %1; border-radius: 8px;").arg(m_colors.avatarTint));
-    rowLayout->addWidget(icon);
-    auto *text = new QLabel(tr("Analyzing…"), row);
-    text->setStyleSheet(QStringLiteral("color: palette(mid); font-style: italic;"));
-    rowLayout->addWidget(text);
-    rowLayout->addStretch(1);
+    rowLayout->addWidget(icon, 0, Qt::AlignTop);
+
+    auto *column = new QVBoxLayout();
+    column->setContentsMargins(0, 0, 0, 0);
+    column->setSpacing(6);
+    rowLayout->addLayout(column, 1);
+
+    // 标题行高度与头像一致，保证"正在分析…"和头像垂直居中对齐，下面的过程文字再往下排。
+    auto *header = new QWidget(row);
+    header->setFixedHeight(30);
+    auto *headerLayout = new QHBoxLayout(header);
+    headerLayout->setContentsMargins(0, 0, 0, 0);
+    headerLayout->setSpacing(8);
+    auto *text = new QLabel(tr("Analyzing…"), header);
+    text->setStyleSheet(QStringLiteral("color: %1; font-style: italic;").arg(m_colors.muted));
+    headerLayout->addWidget(text);
+    m_thinkingElapsedLabel = new QLabel(header);
+    m_thinkingElapsedLabel->setObjectName(QStringLiteral("aiThinkingElapsed"));
+    m_thinkingElapsedLabel->setStyleSheet(
+        QStringLiteral("color: %1; font-size: 12px;").arg(m_colors.muted));
+    headerLayout->addWidget(m_thinkingElapsedLabel);
+    headerLayout->addStretch(1);
+    column->addWidget(header);
+
+    // 思考过程用细竖线引出、较小的弱化文字，与下方正式结论在视觉上分层：这是模型的
+    // 草稿推理，不是给用户的答复。两块都按纯文本显示，模型输出里的 < 或 * 不会被解释。
+    m_thinkingReasoningLabel = new QLabel(row);
+    m_thinkingReasoningLabel->setObjectName(QStringLiteral("aiThinkingReasoning"));
+    m_thinkingReasoningLabel->setTextFormat(Qt::PlainText);
+    m_thinkingReasoningLabel->setWordWrap(true);
+    m_thinkingReasoningLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    m_thinkingReasoningLabel->setStyleSheet(QStringLiteral(
+        "color: %1; font-size: 12px; border-left: 2px solid %2; padding-left: 8px;")
+        .arg(m_colors.muted, m_colors.border));
+    m_thinkingReasoningLabel->hide();
+    column->addWidget(m_thinkingReasoningLabel);
+
+    m_thinkingDraftLabel = new QLabel(row);
+    m_thinkingDraftLabel->setObjectName(QStringLiteral("aiThinkingDraft"));
+    m_thinkingDraftLabel->setTextFormat(Qt::PlainText);
+    m_thinkingDraftLabel->setWordWrap(true);
+    m_thinkingDraftLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    m_thinkingDraftLabel->setStyleSheet(
+        QStringLiteral("color: %1; font-size: 14px;").arg(m_colors.text));
+    m_thinkingDraftLabel->hide();
+    column->addWidget(m_thinkingDraftLabel);
 
     // 图标透明度循环呼吸，给用户"模型正在动"的直观反馈——比一句静态文案更能传达"没卡住"。
     auto *effect = new QGraphicsOpacityEffect(icon);
@@ -1664,10 +1876,7 @@ void AiAssistantWidget::stopActiveWork()
         // 由这里完成。
         m_client->abortActiveRequest();
         m_cliClient->abortActiveRequest();
-        if (m_thinkingBubble != nullptr) {
-            m_thinkingBubble->deleteLater();
-            m_thinkingBubble = nullptr;
-        }
+        dismissThinkingIndicator();
         m_agentProtocolRepairCount = 0;
         setBusy(false);
         appendNoticeBubble(tr("This analysis has been stopped. Add more detail and send again."), false);

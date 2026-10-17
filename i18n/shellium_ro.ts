@@ -40,6 +40,10 @@
         <translation type="unfinished">Nicio comandă în așteptare de execuție</translation>
     </message>
     <message>
+        <source>%1 s</source>
+        <translation>%1 s</translation>
+    </message>
+    <message>
         <source>A request is in progress; wait before starting a new session</source>
         <translation type="unfinished">O cerere este în curs; așteaptă înainte de a începe o sesiune nouă</translation>
     </message>

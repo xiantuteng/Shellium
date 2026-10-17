@@ -40,6 +40,10 @@
         <translation type="unfinished">実行待ちのコマンドはありません</translation>
     </message>
     <message>
+        <source>%1 s</source>
+        <translation>%1 秒</translation>
+    </message>
+    <message>
         <source>A request is in progress; wait before starting a new session</source>
         <translation type="unfinished">リクエストを処理中です。新しいセッションを開始する前にお待ちください</translation>
     </message>

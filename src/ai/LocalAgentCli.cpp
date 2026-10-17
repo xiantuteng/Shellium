@@ -3,7 +3,9 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QFutureWatcher>
+#include <QJsonArray>
 #include <QJsonDocument>
+#include <QJsonObject>
 #include <QMutex>
 #include <QMutexLocker>
 #include <QProcess>
@@ -394,9 +396,14 @@ Invocation buildInvocation(const AgentSpec &spec,
     if (spec.id == QStringLiteral("claude")) {
         // --tools "" 关掉全部内置工具，模型只能回答文本；不持久化会话，免得每次提问都在
         // 用户的 Claude Code 历史里留下一条记录。
-        args << QStringLiteral("-p") << QStringLiteral("--output-format") << QStringLiteral("text")
+        // stream-json 必须配 --verbose 才被 -p 模式接受；--include-partial-messages 让正文
+        // 按增量事件到达，否则要等整条消息生成完才有一次输出，界面无从实时展示。
+        args << QStringLiteral("-p") << QStringLiteral("--output-format")
+             << QStringLiteral("stream-json") << QStringLiteral("--verbose")
+             << QStringLiteral("--include-partial-messages")
              << QStringLiteral("--tools") << QString()
              << QStringLiteral("--no-session-persistence");
+        invocation.outputFormat = OutputFormat::ClaudeStreamJson;
         if (!trimmedModel.isEmpty()) {
             args << QStringLiteral("--model") << trimmedModel;
         }
@@ -471,6 +478,79 @@ QString extractReply(const QString &rawOutput)
         }
     }
     return text;
+}
+
+void ClaudeStreamParser::feed(const QByteArray &bytes)
+{
+    m_pending.append(bytes);
+    while (true) {
+        const qsizetype newline = m_pending.indexOf('\n');
+        if (newline < 0) {
+            return;
+        }
+        const QByteArray line = m_pending.left(newline);
+        m_pending.remove(0, newline + 1);
+        parseLine(line);
+    }
+}
+
+void ClaudeStreamParser::finish()
+{
+    const QByteArray rest = m_pending;
+    m_pending.clear();
+    parseLine(rest);
+}
+
+void ClaudeStreamParser::parseLine(const QByteArray &line)
+{
+    const QByteArray trimmed = line.trimmed();
+    if (trimmed.isEmpty()) {
+        return;
+    }
+    const QJsonDocument document = QJsonDocument::fromJson(trimmed);
+    if (!document.isObject()) {
+        return;
+    }
+    const QJsonObject object = document.object();
+    const QString type = object.value(QStringLiteral("type")).toString();
+    if (type == QStringLiteral("result")) {
+        m_hasResult = true;
+        m_resultIsError = object.value(QStringLiteral("is_error")).toBool();
+        m_result = object.value(QStringLiteral("result")).toString();
+        if (m_result.isEmpty() && m_resultIsError) {
+            // 执行期错误不一定带 result 字段，原因放在 errors 数组里。
+            QStringList errors;
+            for (const QJsonValue &error : object.value(QStringLiteral("errors")).toArray()) {
+                if (error.isString()) {
+                    errors.append(error.toString());
+                }
+            }
+            m_result = errors.isEmpty() ? object.value(QStringLiteral("subtype")).toString()
+                                        : errors.join(QLatin1Char('\n'));
+        }
+        return;
+    }
+    if (type != QStringLiteral("stream_event")) {
+        return;
+    }
+    const QJsonObject event = object.value(QStringLiteral("event")).toObject();
+    const QString eventType = event.value(QStringLiteral("type")).toString();
+    if (eventType == QStringLiteral("message_start")) {
+        // 网关重试后会重新开始一条消息；预览只反映当前这一条，不能把半截旧文本拼在前面。
+        m_text.clear();
+        m_thinking.clear();
+        return;
+    }
+    if (eventType != QStringLiteral("content_block_delta")) {
+        return;
+    }
+    const QJsonObject delta = event.value(QStringLiteral("delta")).toObject();
+    const QString deltaType = delta.value(QStringLiteral("type")).toString();
+    if (deltaType == QStringLiteral("text_delta")) {
+        m_text += delta.value(QStringLiteral("text")).toString();
+    } else if (deltaType == QStringLiteral("thinking_delta")) {
+        m_thinking += delta.value(QStringLiteral("thinking")).toString();
+    }
 }
 
 } // namespace LocalAgentCli

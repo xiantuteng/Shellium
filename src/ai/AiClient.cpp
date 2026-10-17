@@ -166,6 +166,7 @@ void AiClient::sendMessage(const AiSettings &settings, const QList<AiChatMessage
 
     m_streamBuffer.clear();
     m_streamAccumulatedContent.clear();
+    m_streamAccumulatedReasoning.clear();
     m_chatAbortRequested = false;
 
     m_activeChatReply = m_network->post(request, QJsonDocument(body).toJson(QJsonDocument::Compact));
@@ -250,13 +251,22 @@ void AiClient::processStreamBuffer()
             if (choices.isEmpty()) {
                 continue;
             }
-            const QString delta = choices.first().toObject()
-                                       .value(QStringLiteral("delta")).toObject()
-                                       .value(QStringLiteral("content")).toString();
-            if (delta.isEmpty()) {
+            const QJsonObject delta = choices.first().toObject()
+                                          .value(QStringLiteral("delta")).toObject();
+            // 各家网关对思考过程的字段名不统一，两种写法都认；同一个增量里不会同时出现。
+            QString reasoning = delta.value(QStringLiteral("reasoning_content")).toString();
+            if (reasoning.isEmpty()) {
+                reasoning = delta.value(QStringLiteral("reasoning")).toString();
+            }
+            if (!reasoning.isEmpty()) {
+                m_streamAccumulatedReasoning += reasoning;
+                emit reasoningChunkReceived(m_streamAccumulatedReasoning);
+            }
+            const QString content = delta.value(QStringLiteral("content")).toString();
+            if (content.isEmpty()) {
                 continue;
             }
-            m_streamAccumulatedContent += delta;
+            m_streamAccumulatedContent += content;
             emit replyChunkReceived(m_streamAccumulatedContent);
         }
     }

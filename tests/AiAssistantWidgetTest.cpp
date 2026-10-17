@@ -238,6 +238,15 @@ private slots:
     void chatAutoScrollResumesAfterUserReturnsToBottom();
     void aiClientParsesStreamingResponseIncrementally();
     void stopButtonEndsLongRunningAnalysis();
+    /** @brief 推理型网关的 reasoning_content 单独成流，不混进最终回答。 */
+    void aiClientStreamsReasoningSeparately();
+    /**
+     * @brief 分析过程中实时展示思考过程与已到达的结论文字，协议字段和命令不外露；
+     * 完整回复到达后面板让位给正式回复。
+     */
+    void thinkingIndicatorShowsLiveAnalysis();
+    /** @brief claude stream-json 输出被任意切分时仍能拼出正文、思考过程与最终结果。 */
+    void claudeStreamParserHandlesSplitOutput();
     /** @brief 思考开关关闭时请求体不得出现相关字段，打开后才附加。 */
     void thinkingToggleControlsRequestField();
     /** @brief 模型列表拉取要从 /models 响应里解析出全部模型 id。 */
@@ -1097,6 +1106,160 @@ void AiAssistantWidgetTest::stopButtonEndsLongRunningAnalysis()
     QTRY_VERIFY(labelWithText(QStringLiteral("已重新确认集群状态")));
 }
 
+void AiAssistantWidgetTest::aiClientStreamsReasoningSeparately()
+{
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    QPointer<QTcpSocket> serverSide;
+    connect(&server, &QTcpServer::newConnection, &server, [&]() {
+        serverSide = server.nextPendingConnection();
+    });
+
+    AiClient client;
+    AiSettings settings;
+    settings.endpointUrl = QStringLiteral("http://127.0.0.1:%1").arg(server.serverPort());
+    settings.model = QStringLiteral("test-model");
+    QSignalSpy reasoningSpy(&client, &AiClient::reasoningChunkReceived);
+    QSignalSpy chunkSpy(&client, &AiClient::replyChunkReceived);
+    QSignalSpy finishedSpy(&client, &AiClient::replyFinished);
+    client.sendMessage(settings, {AiChatMessage{AiChatRole::User, QStringLiteral("hi")}});
+    QTRY_VERIFY_WITH_TIMEOUT(!serverSide.isNull(), 5000);
+
+    // DeepSeek / 千问用 reasoning_content，OpenRouter / Ollama 用 reasoning，两种都要认。
+    const QByteArray body =
+        "data: {\"choices\":[{\"delta\":{\"reasoning_content\":\"先看\"}}]}\n\n"
+        "data: {\"choices\":[{\"delta\":{\"reasoning\":\"内存\"}}]}\n\n"
+        "data: {\"choices\":[{\"delta\":{\"content\":\"答案\"}}]}\n\n"
+        "data: [DONE]\n\n";
+    serverSide->write("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: "
+                      + QByteArray::number(body.size()) + "\r\nConnection: close\r\n\r\n" + body);
+    serverSide->flush();
+    serverSide->disconnectFromHost();
+
+    QTRY_COMPARE_WITH_TIMEOUT(finishedSpy.count(), 1, 5000);
+    QCOMPARE(reasoningSpy.count(), 2);
+    QCOMPARE(reasoningSpy.last().at(0).toString(), QStringLiteral("先看内存"));
+    QCOMPARE(chunkSpy.count(), 1);
+    // 思考过程只用于展示，绝不能拼进交给协议校验的回答正文。
+    QCOMPARE(finishedSpy.at(0).at(0).toString(), QStringLiteral("答案"));
+}
+
+void AiAssistantWidgetTest::thinkingIndicatorShowsLiveAnalysis()
+{
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    QPointer<QTcpSocket> serverSide;
+    connect(&server, &QTcpServer::newConnection, &server, [&]() {
+        serverSide = server.nextPendingConnection();
+    });
+
+    AiSettingsService settingsService(nullptr, nullptr);
+    AiSettings settings;
+    settings.endpointUrl = QStringLiteral("http://127.0.0.1:%1").arg(server.serverPort());
+    settings.model = QStringLiteral("test-model");
+    settings.executionPolicy = AiExecutionPolicy::Manual;
+    QVERIFY(settingsService.save(settings));
+
+    AiAssistantWidget widget(&settingsService);
+    widget.resize(420, 640);
+    widget.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&widget));
+    auto *inputEdit = widget.findChild<QTextEdit *>(QStringLiteral("aiInputEdit"));
+    auto *sendButton = widget.findChild<QPushButton *>(QStringLiteral("aiSendButton"));
+    QVERIFY(inputEdit != nullptr && sendButton != nullptr);
+    const auto visibleText = [&widget](const QString &name) {
+        const QLabel *label = widget.findChild<QLabel *>(name);
+        return label != nullptr && label->isVisible() ? label->text() : QString();
+    };
+
+    inputEdit->setPlainText(QStringLiteral("看看内存都用在哪里"));
+    sendButton->click();
+    QTRY_VERIFY_WITH_TIMEOUT(!serverSide.isNull(), 5000);
+    QTRY_VERIFY(widget.findChild<QWidget *>(QStringLiteral("aiThinkingIndicator")) != nullptr);
+    // 还没有任何增量时只显示"正在分析…"，两块过程区域不能先空着占位。
+    QVERIFY(visibleText(QStringLiteral("aiThinkingReasoning")).isEmpty());
+    QVERIFY(visibleText(QStringLiteral("aiThinkingDraft")).isEmpty());
+
+    // 不带 Content-Length、分批写入，模拟模型边想边输出的真实流式响应。
+    serverSide->write("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\n"
+                      "data: {\"choices\":[{\"delta\":{\"reasoning_content\":\"free 已确认总量，"
+                      "下一步按进程排序\"}}]}\n\n");
+    serverSide->flush();
+    QTRY_VERIFY_WITH_TIMEOUT(
+        visibleText(QStringLiteral("aiThinkingReasoning")).contains(QStringLiteral("下一步按进程排序")),
+        5000);
+
+    // 回答写到 reason 中间、转义序列被切断：草稿只显示已到达的结论文字。
+    serverSide->write("data: {\"choices\":[{\"delta\":{\"content\":"
+                      "\"{\\\"state\\\":\\\"command\\\",\\\"title\\\":\\\"查看高占用进程\\\","
+                      "\\\"reason\\\":\\\"按常驻内存排序\\\\u30\"}}]}\n\n");
+    serverSide->flush();
+    QTRY_VERIFY_WITH_TIMEOUT(
+        visibleText(QStringLiteral("aiThinkingDraft")).contains(QStringLiteral("按常驻内存排序")),
+        5000);
+    const QString draft = visibleText(QStringLiteral("aiThinkingDraft"));
+    QVERIFY2(draft.startsWith(QStringLiteral("查看高占用进程")), qPrintable(draft));
+    QVERIFY2(!draft.contains(QStringLiteral("state")) && !draft.contains(QLatin1Char('{'))
+                 && !draft.contains(QLatin1Char('\\')),
+             qPrintable(draft));
+    QVERIFY(widget.findChild<QPushButton *>(QStringLiteral("aiExecuteButton")) == nullptr);
+
+    // 命令字段到达时也不提前预览，必须等整条回复通过协议校验后以卡片出现。
+    serverSide->write("data: {\"choices\":[{\"delta\":{\"content\":"
+                      "\"02\\\",\\\"command\\\":\\\"ps aux --sort=-rss\"}}]}\n\n");
+    serverSide->flush();
+    QTest::qWait(200);
+    QVERIFY(!visibleText(QStringLiteral("aiThinkingDraft")).contains(QStringLiteral("ps aux")));
+
+    serverSide->write("data: {\"choices\":[{\"delta\":{\"content\":\"\\\"}\"}}]}\n\n"
+                      "data: [DONE]\n\n");
+    serverSide->flush();
+    serverSide->disconnectFromHost();
+
+    QTRY_VERIFY_WITH_TIMEOUT(
+        widget.findChild<QPushButton *>(QStringLiteral("aiExecuteButton")) != nullptr, 5000);
+    QTRY_VERIFY(widget.findChild<QWidget *>(QStringLiteral("aiThinkingIndicator")) == nullptr);
+    QTRY_VERIFY_WITH_TIMEOUT(aiIsIdle(sendButton), 5000);
+}
+
+void AiAssistantWidgetTest::claudeStreamParserHandlesSplitOutput()
+{
+    const QByteArray output =
+        "{\"type\":\"system\",\"subtype\":\"init\"}\n"
+        "{\"type\":\"stream_event\",\"event\":{\"type\":\"message_start\"}}\n"
+        "{\"type\":\"stream_event\",\"event\":{\"type\":\"content_block_delta\","
+        "\"delta\":{\"type\":\"text_delta\",\"text\":\"被重试作废\"}}}\n"
+        "{\"type\":\"stream_event\",\"event\":{\"type\":\"message_start\"}}\n"
+        "{\"type\":\"stream_event\",\"event\":{\"type\":\"content_block_delta\","
+        "\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"想一想\"}}}\n"
+        "{\"type\":\"stream_event\",\"event\":{\"type\":\"content_block_delta\","
+        "\"delta\":{\"type\":\"text_delta\",\"text\":\"你好\"}}}\n"
+        "{\"type\":\"stream_event\",\"event\":{\"type\":\"content_block_delta\","
+        "\"delta\":{\"type\":\"text_delta\",\"text\":\"，世界\"}}}\n"
+        "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"result\":\"你好，世界\"}";
+
+    // 每 7 个字节切一刀，必然把行和多字节 UTF-8 字符都切断。
+    LocalAgentCli::ClaudeStreamParser parser;
+    for (qsizetype offset = 0; offset < output.size(); offset += 7) {
+        parser.feed(output.mid(offset, 7));
+    }
+    QCOMPARE(parser.text(), QStringLiteral("你好，世界"));
+    QCOMPARE(parser.thinking(), QStringLiteral("想一想"));
+    // 最后一行没有换行，只有 finish() 之后才算收到结果。
+    QVERIFY(!parser.hasResult());
+    parser.finish();
+    QVERIFY(parser.hasResult());
+    QVERIFY(!parser.resultIsError());
+    QCOMPARE(parser.result(), QStringLiteral("你好，世界"));
+
+    LocalAgentCli::ClaudeStreamParser failing;
+    failing.feed("{\"type\":\"result\",\"subtype\":\"error_during_execution\",\"is_error\":true,"
+                 "\"errors\":[\"Not logged in\"]}\n");
+    QVERIFY(failing.hasResult());
+    QVERIFY(failing.resultIsError());
+    QCOMPARE(failing.result(), QStringLiteral("Not logged in"));
+}
+
 void AiAssistantWidgetTest::thinkingToggleControlsRequestField()
 {
     MiniAiServer server;
@@ -1577,6 +1740,13 @@ void AiAssistantWidgetTest::cliInvocationsStayReadOnly()
     };
 
     const LocalAgentCli::Invocation claude = invocationFor(QStringLiteral("claude"));
+    // 实时展示分析过程依赖 claude 按增量事件输出；少了任何一个参数都只会在结束时吐一次。
+    const int formatIndex = claude.arguments.indexOf(QStringLiteral("--output-format"));
+    QVERIFY(formatIndex >= 0);
+    QCOMPARE(claude.arguments.at(formatIndex + 1), QStringLiteral("stream-json"));
+    QVERIFY(claude.arguments.contains(QStringLiteral("--verbose")));
+    QVERIFY(claude.arguments.contains(QStringLiteral("--include-partial-messages")));
+    QVERIFY(claude.outputFormat == LocalAgentCli::OutputFormat::ClaudeStreamJson);
     const int toolsIndex = claude.arguments.indexOf(QStringLiteral("--tools"));
     QVERIFY(toolsIndex >= 0 && toolsIndex + 1 < claude.arguments.size());
     QVERIFY2(claude.arguments.at(toolsIndex + 1).isEmpty(), "claude 必须以 --tools \"\" 关掉全部工具");
@@ -1648,13 +1818,24 @@ void AiAssistantWidgetTest::localCliBackendDrivesAgentLoop()
 {
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
-    // 冒充 claude：记录参数与标准输入，回答时故意带上颜色和 Markdown 围栏。
+    // 冒充 claude 的 stream-json 输出：记录参数与标准输入，先吐出思考过程和半截回答，
+    // 等测试放行（创建 go 文件）后再补齐，用来确认界面在进程结束前就在实时展示。最终结果
+    // 故意带上 Markdown 围栏，确认 result 事件同样经过 extractReply 整理。
     const QByteArray script =
         "dir=$(dirname \"$0\")\n"
         "printf '%s\\n' \"$@\" > \"$dir/args.txt\"\n"
         "cat > \"$dir/stdin.txt\"\n"
-        "printf '\\033[32m```json\\n{\"state\":\"command\",\"title\":\"查看磁盘\","
-        "\"reason\":\"先确认剩余空间。\",\"command\":\"df -h\"}\\n```\\033[0m\\n'\n";
+        "printf '%s\\n' '{\"type\":\"system\",\"subtype\":\"init\"}'\n"
+        "printf '%s\\n' '{\"type\":\"stream_event\",\"event\":{\"type\":\"message_start\"}}'\n"
+        "printf '%s\\n' '{\"type\":\"stream_event\",\"event\":{\"type\":\"content_block_delta\","
+        "\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"用户关心磁盘余量\"}}}'\n"
+        "printf '%s\\n' '{\"type\":\"stream_event\",\"event\":{\"type\":\"content_block_delta\","
+        "\"delta\":{\"type\":\"text_delta\",\"text\":\"{\\\"state\\\":\\\"command\\\","
+        "\\\"title\\\":\\\"查看磁盘\\\",\\\"reason\\\":\\\"先确认\"}}}'\n"
+        "while [ ! -f \"$dir/go\" ]; do sleep 0.05; done\n"
+        "printf '%s\\n' '{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,"
+        "\"result\":\"```json\\n{\\\"state\\\":\\\"command\\\",\\\"title\\\":\\\"查看磁盘\\\","
+        "\\\"reason\\\":\\\"先确认剩余空间。\\\",\\\"command\\\":\\\"df -h\\\"}\\n```\"}'\n";
     const QString fakeClaude = writeFakeCli(dir, QStringLiteral("claude"), script);
     QVERIFY(!fakeClaude.isEmpty());
 
@@ -1673,7 +1854,25 @@ void AiAssistantWidgetTest::localCliBackendDrivesAgentLoop()
     inputEdit->setPlainText(QStringLiteral("服务器磁盘还够吗"));
     sendButton->click();
 
-    // 首次调用可能要先查询登录 Shell 的 PATH，给足时间。
+    // 首次调用可能要先查询登录 Shell 的 PATH，给足时间。进程还没结束时，思考过程和
+    // 已到达的半截理由就必须出现在实时面板里。
+    const auto labelText = [&widget](const QString &name) {
+        const QLabel *label = widget.findChild<QLabel *>(name);
+        return label != nullptr && label->isVisible() ? label->text() : QString();
+    };
+    widget.resize(420, 640);
+    widget.show();
+    QTRY_VERIFY_WITH_TIMEOUT(
+        labelText(QStringLiteral("aiThinkingReasoning")).contains(QStringLiteral("用户关心磁盘余量")),
+        20000);
+    QTRY_VERIFY_WITH_TIMEOUT(
+        labelText(QStringLiteral("aiThinkingDraft")).contains(QStringLiteral("先确认")), 5000);
+    QVERIFY(labelText(QStringLiteral("aiThinkingDraft")).contains(QStringLiteral("查看磁盘")));
+    QVERIFY(widget.findChild<QPushButton *>(QStringLiteral("aiExecuteButton")) == nullptr);
+    QFile goFile(dir.filePath(QStringLiteral("go")));
+    QVERIFY(goFile.open(QIODevice::WriteOnly));
+    goFile.close();
+
     QTRY_VERIFY_WITH_TIMEOUT(
         widget.findChild<QPushButton *>(QStringLiteral("aiExecuteButton")) != nullptr, 20000);
     QTRY_VERIFY_WITH_TIMEOUT(aiIsIdle(sendButton), 5000);

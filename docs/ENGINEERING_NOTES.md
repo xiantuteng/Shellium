@@ -768,5 +768,13 @@ linuxdeploy 按 AppImage 排除清单跳过 libGL/libEGL/libGLX/libOpenGL 等图
   永不退出的只读命令会把它卡死。解释器、git、dpkg/rpm 不能按命令名整体放行，只按明确的
   只读参数放行。自动执行复用执行按钮的 click 路径，每轮用户任务最多 20 步；全自动必须经
   确认框开启，未知持久化值一律回落到"只读自动"。
+- **分析过程实时展示，但协议原文不外露。** "正在分析…"面板展示三样东西：已用秒数、思考过程
+  （HTTP 网关的 `delta.reasoning_content` / `delta.reasoning`，claude 的 `thinking_delta`）、以及从
+  未闭合的协议 JSON 里抠出的 title/reason/message（`partialAgentNarrative()`）。`state`、`command`
+  等字段不预览，命令仍要等整条回复通过协议校验和风险分级后才以卡片出现。思考过程只用于展示，
+  不进 `replyFinished` 的正文，也不写回历史。claude 因此改用
+  `--output-format stream-json --verbose --include-partial-messages`（少了 `--verbose` 会被 `-p` 拒绝），
+  最终回答取 `type=result` 事件，未登录等错误也在这个事件里而不是 stderr。codex 的 `--json`
+  事件流尚未接入（本机无法联网验证），仍只在结束时出结果、面板只显示计时。
 - 设置页里登记 `i18n::onRetranslate` 的回调会立即执行一次：新增控件必须在登记之前创建，
   否则没有 AI 服务的设置页（多数用例）会在构造时空指针崩溃。

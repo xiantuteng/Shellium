@@ -40,6 +40,10 @@
         <translation type="unfinished">لا يوجد أمر في انتظار التنفيذ</translation>
     </message>
     <message>
+        <source>%1 s</source>
+        <translation>%1 ث</translation>
+    </message>
+    <message>
         <source>A request is in progress; wait before starting a new session</source>
         <translation type="unfinished">هناك طلب قيد المعالجة؛ انتظر قبل بدء جلسة جديدة</translation>
     </message>

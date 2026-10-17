@@ -40,6 +40,10 @@
         <translation type="unfinished">Нет команды, ожидающей выполнения</translation>
     </message>
     <message>
+        <source>%1 s</source>
+        <translation>%1 с</translation>
+    </message>
+    <message>
         <source>A request is in progress; wait before starting a new session</source>
         <translation type="unfinished">Выполняется запрос; подождите, прежде чем начинать новый сеанс</translation>
     </message>

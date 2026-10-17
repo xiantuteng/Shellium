@@ -40,6 +40,10 @@
         <translation>当前没有等待执行的命令</translation>
     </message>
     <message>
+        <source>%1 s</source>
+        <translation>%1 秒</translation>
+    </message>
+    <message>
         <source>A request is in progress; wait before starting a new session</source>
         <translation>有请求正在进行，请稍候再开启新会话</translation>
     </message>

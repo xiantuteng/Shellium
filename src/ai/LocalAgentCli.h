@@ -55,6 +55,17 @@ struct DetectedAgent {
     QString version;
 };
 
+/** @brief CLI 标准输出的格式，决定能否在回答生成过程中实时展示进度。 */
+enum class OutputFormat {
+    /** @brief 进程结束时才给出完整回答（标准输出或 outputFilePath），过程中没有可展示的增量。 */
+    PlainText,
+    /**
+     * @brief claude 的 `--output-format stream-json`：每行一个 JSON 事件，正文与思考过程
+     * 以增量事件陆续到达，最终回答在 type=result 的事件里。由 ClaudeStreamParser 解析。
+     */
+    ClaudeStreamJson
+};
+
 /**
  * @brief 启动一次 CLI 所需的全部参数。
  *
@@ -67,6 +78,46 @@ struct Invocation {
     QByteArray standardInput;
     /** @brief CLI 把最终回答写到这个文件（codex -o）；为空表示从标准输出读取。 */
     QString outputFilePath;
+    /** @brief 标准输出的格式；ClaudeStreamJson 时标准输出不是回答本身，需要逐行解析。 */
+    OutputFormat outputFormat = OutputFormat::PlainText;
+};
+
+/**
+ * @brief 逐块解析 claude `--output-format stream-json --include-partial-messages` 的输出。
+ *
+ * 进程的标准输出按任意边界分批到达，一行事件可能被切成两半，因此未凑齐换行的尾部留在
+ * 缓冲区等下一批。只关心三类事件：text_delta 拼出正文、thinking_delta 拼出思考过程、
+ * result 给出最终回答或错误；init、rate_limit_event 等其他事件一律忽略。纯数据类，不依赖
+ * 进程，便于测试直接喂字节。
+ */
+class ClaudeStreamParser {
+public:
+    /** @brief 追加一批原始字节，解析其中所有已经完整的行。 */
+    void feed(const QByteArray &bytes);
+
+    /** @brief 进程结束后调用：把缓冲区里没有以换行结尾的最后一行也解析掉。 */
+    void finish();
+
+    /** @brief 当前消息到目前为止的正文增量拼接结果。 */
+    [[nodiscard]] const QString &text() const { return m_text; }
+    /** @brief 当前消息到目前为止的思考过程拼接结果；未开启扩展思考时始终为空。 */
+    [[nodiscard]] const QString &thinking() const { return m_thinking; }
+    /** @brief 是否已经收到 type=result 的收尾事件。 */
+    [[nodiscard]] bool hasResult() const { return m_hasResult; }
+    /** @brief result 事件携带的最终回答；出错时是错误说明。 */
+    [[nodiscard]] const QString &result() const { return m_result; }
+    /** @brief result 事件是否标记为错误（is_error）。 */
+    [[nodiscard]] bool resultIsError() const { return m_resultIsError; }
+
+private:
+    void parseLine(const QByteArray &line);
+
+    QByteArray m_pending;
+    QString m_text;
+    QString m_thinking;
+    QString m_result;
+    bool m_hasResult = false;
+    bool m_resultIsError = false;
 };
 
 /** @brief 全部受支持的 CLI，顺序即设置页下拉框的展示顺序。 */
@@ -149,7 +200,8 @@ struct Invocation {
  * @param outputFilePath 需要输出文件的 CLI（codex）把最终回答写到这里；其余 CLI 忽略。
  *
  * 每个 CLI 都显式关闭工具或进入只读模式：claude 用 `--tools ""`，codex 用只读沙箱，
- * cursor-agent 用 ask 模式。即便模型无视提示词想在本机动手，CLI 自身也会拒绝。
+ * cursor-agent 用 ask 模式。即便模型无视提示词想在本机动手，CLI 自身也会拒绝。claude 额外
+ * 以 stream-json 输出，使界面能在回答生成过程中实时展示分析进度。
  */
 [[nodiscard]] Invocation buildInvocation(const AgentSpec &spec,
                                          const QString &executablePath,

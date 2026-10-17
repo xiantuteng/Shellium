@@ -40,6 +40,10 @@
         <translation type="unfinished">Немає команди, що очікує на виконання</translation>
     </message>
     <message>
+        <source>%1 s</source>
+        <translation>%1 с</translation>
+    </message>
+    <message>
         <source>A request is in progress; wait before starting a new session</source>
         <translation type="unfinished">Виконується запит; зачекайте, перш ніж починати новий сеанс</translation>
     </message>

@@ -40,6 +40,10 @@
         <translation type="unfinished">실행 대기 중인 명령 없음</translation>
     </message>
     <message>
+        <source>%1 s</source>
+        <translation>%1초</translation>
+    </message>
+    <message>
         <source>A request is in progress; wait before starting a new session</source>
         <translation type="unfinished">요청을 처리 중입니다. 새 세션을 시작하기 전에 기다리세요</translation>
     </message>
