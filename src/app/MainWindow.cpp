@@ -2786,7 +2786,8 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
             background: @SURFACE@;
             border: 1px solid @BORDER@;
             border-radius: 8px;
-            min-height: 28px;
+            /* 总高 30px（内容 20 + 内边距 8 + 边框 2），与“新建主机”主操作按钮保持一致。 */
+            min-height: 20px;
             padding: 4px 11px;
             /* 关掉 Fusion 在键盘导航后画在文字外的灰色填充焦点框；对话框里持焦点的按钮
                同时就是默认按钮，已由下方 :default 的强调色描边标出。 */
@@ -2843,12 +2844,12 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
             border-color: @BORDER@;
         }
         QPushButton[hostPrimaryAction="true"] {
-            /* 固定按钮总高为 30px；内容高 20px + 上下内边距 6px + 边框 2px 留有余量，
-               不再因通用按钮的 28px 最小内容高与固定高度冲突而裁掉下圆角。 */
+            /* 总高 30px：内容 20px + 上下内边距 8px + 边框 2px，与通用按钮一致，
+               固定高度与样式最小尺寸相等，不会裁掉下圆角。 */
             min-height: 20px;
             max-height: 20px;
             border-radius: 8px;
-            padding: 3px 10px;
+            padding: 4px 10px;
             font-size: 13px;
             /* “新增主机”是高亮操作入口，但文字不使用粗体，避免按钮与目录标题形成重块。 */
             font-weight: 400;

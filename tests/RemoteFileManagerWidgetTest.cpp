@@ -728,6 +728,7 @@ void RemoteFileManagerWidgetTest::actionBarRespondsToAvailableWidth()
         QVERIFY2(!button->text().isEmpty(), "紧凑态也必须保留动作文本供辅助功能读取");
         QVERIFY2(!button->toolTip().isEmpty(), "紧凑态不能只剩一个无解释图标");
         QCOMPARE(button->width(), 34);
+        QCOMPARE(button->height(), 34);  // 紧凑态必须是正方形，不得被拉成长方形
     }
 }
 

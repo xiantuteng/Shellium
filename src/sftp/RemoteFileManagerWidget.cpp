@@ -248,7 +248,7 @@ void configureResponsiveFileAction(QToolButton *button,
     button->setIconSize(QSize(16, 16));
     button->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
     button->setAutoRaise(false);
-    button->setMinimumHeight(32);
+    button->setMinimumHeight(30);
     button->setProperty("sftpResponsiveAction", true);
     button->setProperty("sftpActionRole", role);
     button->setToolTip(text);
@@ -1575,8 +1575,11 @@ void RemoteFileManagerWidget::updateResponsiveActionButtons()
         if (showText) {
             button->setMinimumWidth(0);
             button->setMaximumWidth(QWIDGETSIZE_MAX);
+            button->setMinimumHeight(30);
+            button->setMaximumHeight(QWIDGETSIZE_MAX);
         } else {
-            button->setFixedWidth(34);
+            // 宽高同时锁定：只锁宽度时高度由 QSS padding 与 sizeHint 决定，图标按钮会被拉成长方形。
+            button->setFixedSize(34, 34);
         }
     }
 }

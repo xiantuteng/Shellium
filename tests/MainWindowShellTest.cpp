@@ -102,6 +102,7 @@ private slots:
     void manualRecoveryCloseKeyClosesTheTab();
     void destroyingWindowWithOpenTabsIsSafe();
     void emptyStateKeepsNewTabButtonNextToTheTitleIdentity();
+    void sidebarPushButtonsShareTheNewHostButtonHeight();
     /** @brief Windows/Linux 产品名、标签与自绘窗口按钮必须共用唯一的无边框标题行。 */
     void desktopPlatformsUseProductTitleAndCustomWindowControls();
     void macTitleRowExtendsIntoNativeTitleBar();
@@ -2644,3 +2645,27 @@ void MainWindowShellTest::languageChangeRetranslatesMenuBar()
 QTEST_MAIN(MainWindowShellTest)
 
 #include "MainWindowShellTest.moc"
+
+void MainWindowShellTest::sidebarPushButtonsShareTheNewHostButtonHeight()
+{
+    MainWindow window(m_database, m_vault);
+    window.resize(1200, 800);
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+    // “新建主机”固定 30px 是侧栏动作按钮的基准高度；端口转发的新建/启动/停止等通用
+    // QPushButton 以前由 QSS 撑成 38px，和它并排时明显更高。
+    int checked = 0;
+    for (QPushButton *button : window.findChildren<QPushButton *>()) {
+        if (button->property("compactAction").toBool()
+            || button->property("segmentButton").toBool()) {
+            continue;
+        }
+        ++checked;
+        QVERIFY2(button->sizeHint().height() == 30,
+                 qPrintable(QStringLiteral("%1 \"%2\" 的高度为 %3，应与新建主机一致为 30")
+                                .arg(button->objectName(), button->text())
+                                .arg(button->sizeHint().height())));
+    }
+    QVERIFY(checked > 0);
+}

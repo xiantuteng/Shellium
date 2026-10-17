@@ -3357,7 +3357,7 @@ public:
         auto *addButton = new QPushButton(tr("Add host"), body);
         addButton->setObjectName(QStringLiteral("hostChainAddButton"));
         addButton->setProperty("primaryAction", true);
-        addButton->setMinimumHeight(42);
+        addButton->setMinimumHeight(30);
         UiIcons::decorateButton(
             addButton,
             UiIcons::symbol(
