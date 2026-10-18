@@ -2497,10 +2497,6 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">Создать исполняемый фрагмент команды</translation>
     </message>
     <message>
-        <source>Delete the selected snippet</source>
-        <translation type="unfinished">Удалить выбранный фрагмент</translation>
-    </message>
-    <message>
         <source>Search name / command…</source>
         <translation type="unfinished">Поиск по имени / команде…</translation>
     </message>
@@ -2525,10 +2521,6 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">Фильтровать по префиксу команды</translation>
     </message>
     <message>
-        <source>Run on the selected host</source>
-        <translation type="unfinished">Выполнить на выбранном хосте</translation>
-    </message>
-    <message>
         <source>Re-run the command on the host selected in the history filter</source>
         <translation type="unfinished">Повторно выполнить команду на хосте, выбранном в фильтре истории</translation>
     </message>
@@ -2537,12 +2529,12 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">История команд</translation>
     </message>
     <message>
-        <source>Select a command history entry first</source>
-        <translation type="unfinished">Сначала выберите запись истории команд</translation>
-    </message>
-    <message>
         <source>Copy command</source>
         <translation type="unfinished">Копировать команду</translation>
+    </message>
+    <message>
+        <source>Save as snippet</source>
+        <translation>Сохранить как фрагмент</translation>
     </message>
     <message>
         <source>Name</source>
@@ -2567,6 +2559,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>Save changes to the current snippet</source>
         <translation type="unfinished">Сохранить изменения текущего фрагмента</translation>
+    </message>
+    <message>
+        <source>More actions</source>
+        <translation>Другие действия</translation>
     </message>
     <message>
         <source>The productivity model is not ready yet</source>
@@ -2615,6 +2611,18 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>Command copied to clipboard</source>
         <translation type="unfinished">Команда скопирована в буфер обмена</translation>
+    </message>
+    <message>
+        <source>Today</source>
+        <translation>Сегодня</translation>
+    </message>
+    <message>
+        <source>Yesterday</source>
+        <translation>Вчера</translation>
+    </message>
+    <message>
+        <source>Earlier</source>
+        <translation>Ранее</translation>
     </message>
     <message>
         <source>Local / current terminal</source>

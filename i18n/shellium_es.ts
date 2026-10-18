@@ -2497,10 +2497,6 @@ Puede ser una reinstalación del servidor o una rotación de clave, o un ataque 
         <translation type="unfinished">Crear un fragmento de comando ejecutable</translation>
     </message>
     <message>
-        <source>Delete the selected snippet</source>
-        <translation type="unfinished">Eliminar el fragmento seleccionado</translation>
-    </message>
-    <message>
         <source>Search name / command…</source>
         <translation type="unfinished">Buscar nombre / comando…</translation>
     </message>
@@ -2525,10 +2521,6 @@ Puede ser una reinstalación del servidor o una rotación de clave, o un ataque 
         <translation type="unfinished">Filtrar por prefijo de comando</translation>
     </message>
     <message>
-        <source>Run on the selected host</source>
-        <translation type="unfinished">Ejecutar en el host seleccionado</translation>
-    </message>
-    <message>
         <source>Re-run the command on the host selected in the history filter</source>
         <translation type="unfinished">Volver a ejecutar el comando en el host seleccionado en el filtro de historial</translation>
     </message>
@@ -2537,12 +2529,12 @@ Puede ser una reinstalación del servidor o una rotación de clave, o un ataque 
         <translation type="unfinished">Historial de comandos</translation>
     </message>
     <message>
-        <source>Select a command history entry first</source>
-        <translation type="unfinished">Selecciona primero una entrada del historial de comandos</translation>
-    </message>
-    <message>
         <source>Copy command</source>
         <translation type="unfinished">Copiar comando</translation>
+    </message>
+    <message>
+        <source>Save as snippet</source>
+        <translation>Guardar como fragmento</translation>
     </message>
     <message>
         <source>Name</source>
@@ -2567,6 +2559,10 @@ Puede ser una reinstalación del servidor o una rotación de clave, o un ataque 
     <message>
         <source>Save changes to the current snippet</source>
         <translation type="unfinished">Guardar los cambios del fragmento actual</translation>
+    </message>
+    <message>
+        <source>More actions</source>
+        <translation>Más acciones</translation>
     </message>
     <message>
         <source>The productivity model is not ready yet</source>
@@ -2615,6 +2611,18 @@ Puede ser una reinstalación del servidor o una rotación de clave, o un ataque 
     <message>
         <source>Command copied to clipboard</source>
         <translation type="unfinished">Comando copiado al portapapeles</translation>
+    </message>
+    <message>
+        <source>Today</source>
+        <translation>Hoy</translation>
+    </message>
+    <message>
+        <source>Yesterday</source>
+        <translation>Ayer</translation>
+    </message>
+    <message>
+        <source>Earlier</source>
+        <translation>Anteriores</translation>
     </message>
     <message>
         <source>Local / current terminal</source>

@@ -2497,10 +2497,6 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation>新建可执行命令片段</translation>
     </message>
     <message>
-        <source>Delete the selected snippet</source>
-        <translation>删除当前选中的片段</translation>
-    </message>
-    <message>
         <source>Search name / command…</source>
         <translation>搜索名称 / 命令…</translation>
     </message>
@@ -2525,10 +2521,6 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation>按命令前缀筛选</translation>
     </message>
     <message>
-        <source>Run on the selected host</source>
-        <translation>在所选主机执行</translation>
-    </message>
-    <message>
         <source>Re-run the command on the host selected in the history filter</source>
         <translation>在历史筛选器选中的主机上重新执行命令</translation>
     </message>
@@ -2537,12 +2529,12 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation>命令历史</translation>
     </message>
     <message>
-        <source>Select a command history entry first</source>
-        <translation>请先选择一条命令历史</translation>
-    </message>
-    <message>
         <source>Copy command</source>
         <translation>复制命令</translation>
+    </message>
+    <message>
+        <source>Save as snippet</source>
+        <translation>保存为片段</translation>
     </message>
     <message>
         <source>Name</source>
@@ -2567,6 +2559,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>Save changes to the current snippet</source>
         <translation>保存当前片段修改</translation>
+    </message>
+    <message>
+        <source>More actions</source>
+        <translation>更多操作</translation>
     </message>
     <message>
         <source>The productivity model is not ready yet</source>
@@ -2615,6 +2611,18 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>Command copied to clipboard</source>
         <translation>命令已复制到剪贴板</translation>
+    </message>
+    <message>
+        <source>Today</source>
+        <translation>今天</translation>
+    </message>
+    <message>
+        <source>Yesterday</source>
+        <translation>昨天</translation>
+    </message>
+    <message>
+        <source>Earlier</source>
+        <translation>更早</translation>
     </message>
     <message>
         <source>Local / current terminal</source>

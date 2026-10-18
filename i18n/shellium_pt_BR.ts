@@ -2497,10 +2497,6 @@ Confirmar que a chave mudou, substituir o registro antigo em known_hosts e conti
         <translation type="unfinished">Criar um snippet de comando executável</translation>
     </message>
     <message>
-        <source>Delete the selected snippet</source>
-        <translation type="unfinished">Excluir o snippet selecionado</translation>
-    </message>
-    <message>
         <source>Search name / command…</source>
         <translation type="unfinished">Pesquisar nome / comando…</translation>
     </message>
@@ -2525,10 +2521,6 @@ Confirmar que a chave mudou, substituir o registro antigo em known_hosts e conti
         <translation type="unfinished">Filtrar por prefixo de comando</translation>
     </message>
     <message>
-        <source>Run on the selected host</source>
-        <translation type="unfinished">Executar no host selecionado</translation>
-    </message>
-    <message>
         <source>Re-run the command on the host selected in the history filter</source>
         <translation type="unfinished">Reexecutar o comando no host selecionado no filtro de histórico</translation>
     </message>
@@ -2537,12 +2529,12 @@ Confirmar que a chave mudou, substituir o registro antigo em known_hosts e conti
         <translation type="unfinished">Histórico de comandos</translation>
     </message>
     <message>
-        <source>Select a command history entry first</source>
-        <translation type="unfinished">Selecione primeiro uma entrada do histórico de comandos</translation>
-    </message>
-    <message>
         <source>Copy command</source>
         <translation type="unfinished">Copiar comando</translation>
+    </message>
+    <message>
+        <source>Save as snippet</source>
+        <translation>Salvar como snippet</translation>
     </message>
     <message>
         <source>Name</source>
@@ -2567,6 +2559,10 @@ Confirmar que a chave mudou, substituir o registro antigo em known_hosts e conti
     <message>
         <source>Save changes to the current snippet</source>
         <translation type="unfinished">Salvar as alterações do snippet atual</translation>
+    </message>
+    <message>
+        <source>More actions</source>
+        <translation>Mais ações</translation>
     </message>
     <message>
         <source>The productivity model is not ready yet</source>
@@ -2615,6 +2611,18 @@ Confirmar que a chave mudou, substituir o registro antigo em known_hosts e conti
     <message>
         <source>Command copied to clipboard</source>
         <translation type="unfinished">Comando copiado para a área de transferência</translation>
+    </message>
+    <message>
+        <source>Today</source>
+        <translation>Hoje</translation>
+    </message>
+    <message>
+        <source>Yesterday</source>
+        <translation>Ontem</translation>
+    </message>
+    <message>
+        <source>Earlier</source>
+        <translation>Anteriores</translation>
     </message>
     <message>
         <source>Local / current terminal</source>

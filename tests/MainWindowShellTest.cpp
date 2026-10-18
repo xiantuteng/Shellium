@@ -158,12 +158,21 @@ private slots:
     void navigationRailSelectionAndHoverStandOut();
 
     /**
-     * @brief 浅色主题下效率工具"片段/历史"标签的选中态必须一眼可辨。
+     * @brief 浅色主题下效率工具标题右侧"片段/历史"图标按钮的选中态必须一眼可辨，且切换器
+     * 紧跟标题、位于"新建片段"左侧。
      *
-     * 通用 RAISED 选中底 (#f0f3f5) 与浅色侧栏 (#f5f7f8) 每通道只差几个灰阶，用户看不出
-     * 当前在哪一页；直接对渲染结果取样，比较选中与未选中标签的底色差。
+     * 直接对渲染结果取样比较选中与未选中按钮的底色差：只检查 isChecked 测不出样式表没把
+     * 选中底色画出来的情况。
      */
-    void productivityTabSelectionIsVisibleInLightTheme();
+    void productivityViewSwitcherSelectionIsVisibleInLightTheme();
+    /**
+     * @brief 片段行里的命令预览是纯等宽文字：不能再画底色块/边框，左缘与片段名对齐。
+     *
+     * 对整窗渲染结果取样：命令行尾的空白处必须与行底色一致。
+     */
+    void snippetCommandPreviewHasNoBox();
+    /** @brief "片段 / 历史"切换器底座不画描边：底座外缘像素必须与底座内部同色。 */
+    void productivityViewSwitcherHasNoBorder();
     void duplicateMenuItemOpensASecondCopyOfTheTab();
 
     /** @brief 把终端拖入此前选中的标签后必须原位合并为可重命名的工作空间标签；
@@ -2255,7 +2264,114 @@ void MainWindowShellTest::productivityHeaderActionsShareSidebarTitleRow()
     QVERIFY(!newSnippet->isVisible());
 }
 
-void MainWindowShellTest::productivityTabSelectionIsVisibleInLightTheme()
+void MainWindowShellTest::snippetCommandPreviewHasNoBox()
+{
+    SnippetRecord snippet;
+    snippet.id = QStringLiteral("preview-no-box-snippet");
+    snippet.kind = SnippetNodeKind::Snippet;
+    snippet.name = QStringLiteral("内存占用");
+    snippet.command = QStringLiteral("free -m");
+    snippet.sortOrder = -2000;
+    QString error;
+    QVERIFY2(m_database->saveSnippet(snippet, &error), qPrintable(error));
+
+    MainWindow window(m_database, m_vault);
+    window.resize(1200, 800);
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+    auto *service = window.findChild<TerminalSettingsService *>();
+    QVERIFY(service != nullptr);
+    TerminalSettings settings = service->currentSettings();
+    settings.themeMode = ThemeMode::Light;
+    QVERIFY2(service->save(settings, &error), qPrintable(error));
+
+    auto *rail = window.findChild<QWidget *>(QStringLiteral("NavigationRail"));
+    QVERIFY(rail != nullptr);
+    QToolButton *productivityButton = navigationButtonNamed(rail, QStringLiteral("Productivity"));
+    QVERIFY(productivityButton != nullptr);
+    QTest::mouseClick(productivityButton, Qt::LeftButton);
+    // 悬停会让行变色并亮出按钮，干扰取样。
+    QCursor::setPos(window.mapToGlobal(QPoint(window.width() - 10, window.height() - 10)));
+
+    QLabel *preview = nullptr;
+    QLabel *title = nullptr;
+    QTRY_VERIFY([&] {
+        for (QLabel *label : window.findChildren<QLabel *>(QStringLiteral("ProductivityCommandPreview"))) {
+            if (label->isVisible() && label->text() == snippet.command) {
+                preview = label;
+                title = label->parentWidget()->findChild<QLabel *>(QStringLiteral("ProductivityRowTitle"));
+                return true;
+            }
+        }
+        return false;
+    }());
+    QVERIFY(title != nullptr);
+    QTest::qWait(50);
+
+    // 文字左缘与标题对齐（同一列），不再被内边距推进去。
+    QCOMPARE(preview->mapTo(&window, QPoint(0, 0)).x(), title->mapTo(&window, QPoint(0, 0)).x());
+    QCOMPARE(preview->contentsRect(), preview->rect());
+
+    const QImage image = window.grab().toImage();
+    const qreal ratio = image.devicePixelRatio();
+    const auto pixelAt = [&](const QPoint &local) {
+        const QPoint point = preview->mapTo(&window, local);
+        return image.pixelColor(qRound(point.x() * ratio), qRound(point.y() * ratio));
+    };
+    // 命令很短，标签右端是空白；它必须与标签上方行间距处的行底色一致。
+    const QColor inside = pixelAt(QPoint(preview->width() - 4, preview->height() / 2));
+    const QColor rowBackground = pixelAt(QPoint(preview->width() - 4, -2));
+    const int diff = qAbs(inside.red() - rowBackground.red())
+                     + qAbs(inside.green() - rowBackground.green())
+                     + qAbs(inside.blue() - rowBackground.blue());
+    QVERIFY2(diff <= 6, qPrintable(QStringLiteral("命令预览仍有底色块：") + inside.name()
+                                   + QStringLiteral(" vs ") + rowBackground.name()));
+}
+
+void MainWindowShellTest::productivityViewSwitcherHasNoBorder()
+{
+    MainWindow window(m_database, m_vault);
+    window.resize(1200, 800);
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+    auto *service = window.findChild<TerminalSettingsService *>();
+    QVERIFY(service != nullptr);
+    TerminalSettings settings = service->currentSettings();
+    settings.themeMode = ThemeMode::Light;
+    QString error;
+    QVERIFY2(service->save(settings, &error), qPrintable(error));
+
+    auto *rail = window.findChild<QWidget *>(QStringLiteral("NavigationRail"));
+    QVERIFY(rail != nullptr);
+    QToolButton *productivityButton = navigationButtonNamed(rail, QStringLiteral("Productivity"));
+    QVERIFY(productivityButton != nullptr);
+    QTest::mouseClick(productivityButton, Qt::LeftButton);
+    QCursor::setPos(window.mapToGlobal(QPoint(window.width() - 10, window.height() - 10)));
+
+    auto *switcher = window.findChild<QFrame *>(QStringLiteral("ProductivityViewSwitcher"));
+    QVERIFY(switcher != nullptr);
+    QTRY_VERIFY(switcher->isVisible());
+    QTest::qWait(50);
+
+    const QImage image = window.grab().toImage();
+    const qreal ratio = image.devicePixelRatio();
+    const auto pixelAt = [&](const QPoint &local) {
+        const QPoint point = switcher->mapTo(&window, local);
+        return image.pixelColor(qRound(point.x() * ratio), qRound(point.y() * ratio));
+    };
+    // 左缘竖直居中处避开圆角；内侧 2px 落在按钮外的底座边距里。
+    const int midY = switcher->height() / 2;
+    const QColor edge = pixelAt(QPoint(0, midY));
+    const QColor inner = pixelAt(QPoint(2, midY));
+    const int diff = qAbs(edge.red() - inner.red()) + qAbs(edge.green() - inner.green())
+                     + qAbs(edge.blue() - inner.blue());
+    QVERIFY2(diff <= 6, qPrintable(QStringLiteral("切换器仍有描边：") + edge.name()
+                                   + QStringLiteral(" vs ") + inner.name()));
+}
+
+void MainWindowShellTest::productivityViewSwitcherSelectionIsVisibleInLightTheme()
 {
     MainWindow window(m_database, m_vault);
     window.resize(1200, 800);
@@ -2276,34 +2392,49 @@ void MainWindowShellTest::productivityTabSelectionIsVisibleInLightTheme()
             QTest::mouseClick(button, Qt::LeftButton);
         }
     }
-    auto *tabs = window.findChild<QTabWidget *>(QStringLiteral("productivityTabs"));
-    QVERIFY(tabs != nullptr && tabs->isVisible());
-    QTabBar *bar = tabs->tabBar();
-    // 鼠标停在标签上会触发悬停底色，干扰对未选中态的取样。
+    auto *snippetsView = window.findChild<QToolButton *>(QStringLiteral("productivitySnippetsView"));
+    auto *historyView = window.findChild<QToolButton *>(QStringLiteral("productivityHistoryView"));
+    QVERIFY(snippetsView != nullptr && historyView != nullptr);
+    QVERIFY(snippetsView->isVisible() && historyView->isVisible());
+
+    // 切换器紧跟标题、位于"新建片段"左侧，同在标题行内。
+    auto *title = window.findChild<QLabel *>(QStringLiteral("SidebarHeader"));
+    auto *newSnippet = window.findChild<QAbstractButton *>(QStringLiteral("productivityNewSnippet"));
+    QVERIFY(title != nullptr && newSnippet != nullptr);
+    const QRect titleRect(title->mapTo(&window, QPoint(0, 0)), title->size());
+    const QPoint switcherPos = snippetsView->mapTo(&window, QPoint(0, 0));
+    const QPoint newSnippetPos = newSnippet->mapTo(&window, QPoint(0, 0));
+    QVERIFY2(switcherPos.x() > titleRect.right() && switcherPos.x() < titleRect.right() + 40,
+             "视图切换器必须紧跟在标题右侧");
+    QVERIFY(switcherPos.x() < newSnippetPos.x());
+    QVERIFY(qAbs((switcherPos.y() + snippetsView->height() / 2) - titleRect.center().y()) <= 6);
+
+    // 鼠标停在按钮上会触发悬停底色，干扰对未选中态的取样。
     QCursor::setPos(window.mapToGlobal(QPoint(window.width() - 10, window.height() - 10)));
     QTest::qWait(50);
 
-    const auto fillAt = [&window, bar](const int index) {
-        // 标签栏本身是透明的，单独 grab 会把未选中标签采成透明黑；必须连同侧栏底色一起
-        // 从整窗渲染结果里取样，才是用户实际看到的颜色。
+    const auto fillAt = [&window](QToolButton *button) {
+        // 必须从整窗渲染结果里取样，才是叠在侧栏底色上用户实际看到的颜色；取左上内侧，
+        // 避开居中的图标和圆角。
         const QImage image = window.grab().toImage();
         const qreal ratio = image.devicePixelRatio();
-        const QRect rect = bar->tabRect(index);
-        // 取标签左侧内边距区的竖直中点：避开圆角、描边和居中的文字。
-        const QPoint point = bar->mapTo(&window, QPoint(rect.left() + 8, rect.center().y()));
+        const QPoint point = button->mapTo(&window, QPoint(6, button->height() / 2));
         return image.pixelColor(qRound(point.x() * ratio), qRound(point.y() * ratio));
     };
     const auto distance = [](const QColor &a, const QColor &b) {
         return qAbs(a.red() - b.red()) + qAbs(a.green() - b.green()) + qAbs(a.blue() - b.blue());
     };
 
-    for (const int selected : {0, 1}) {
-        tabs->setCurrentIndex(selected);
+    for (QToolButton *selected : {historyView, snippetsView}) {
+        QTest::mouseClick(selected, Qt::LeftButton);
+        QCursor::setPos(window.mapToGlobal(QPoint(window.width() - 10, window.height() - 10)));
         QTest::qWait(20);
+        QToolButton *other = selected == snippetsView ? historyView : snippetsView;
+        QVERIFY(selected->isChecked() && !other->isChecked());
         const QColor selectedFill = fillAt(selected);
-        const QColor otherFill = fillAt(1 - selected);
-        QVERIFY2(distance(selectedFill, otherFill) >= 24,
-                 qPrintable(QStringLiteral("选中标签 %1 与未选中标签 %2 底色过于接近")
+        const QColor otherFill = fillAt(other);
+        QVERIFY2(distance(selectedFill, otherFill) >= 60,
+                 qPrintable(QStringLiteral("选中按钮 %1 与未选中按钮 %2 底色过于接近")
                                 .arg(selectedFill.name(), otherFill.name())));
     }
 }

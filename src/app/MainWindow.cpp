@@ -667,6 +667,11 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     m_productivityHeaderActions = m_productivityWidget->headerActionsWidget();
     m_productivityHeaderActions->setVisible(false);
     sidebarHeaderLayout->addWidget(m_productivityHeaderActions);
+    // 视图切换器紧跟标题（伸缩项之前），读作"效率工具 · 片段 / 历史"；动作条仍靠右。
+    m_productivityViewSwitcher = m_productivityWidget->headerViewSwitcherWidget();
+    m_productivityViewSwitcher->setVisible(false);
+    sidebarHeaderLayout->insertWidget(sidebarHeaderLayout->indexOf(m_hostCountLabel) + 1,
+                                      m_productivityViewSwitcher, 0, Qt::AlignVCenter);
 
     // 终端区保留最小操作宽度；侧栏不参与弹性扩张，只有用户拖动把手时才改变其宽度。
     // 初始尺寸中的较大第二项只是表达“剩余空间归终端”，QSplitter 会按窗口实际宽度缩放。
@@ -2078,6 +2083,9 @@ void MainWindow::showSidebarPage(const int pageIndex)
     if (m_productivityHeaderActions != nullptr) {
         m_productivityHeaderActions->setVisible(pageIndex == ProductivityPage);
     }
+    if (m_productivityViewSwitcher != nullptr) {
+        m_productivityViewSwitcher->setVisible(pageIndex == ProductivityPage);
+    }
     if (pageIndex == ForwardingPage) {
         syncForwardingHostToActiveTerminal();
     }
@@ -2315,7 +2323,6 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
             border: 0;
         }
         QTabWidget#TerminalPages::pane,
-        QTabWidget#productivityTabs::pane,
         QStackedWidget#SidebarStack,
         QStackedWidget#WorkspaceStack,
         QWidget#WorkspacePlaceholder {
@@ -2940,31 +2947,59 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
         /* 效率工具的两个列表复刻主机树的行卡片：悬停用主机树专用的加深灰，选中为品牌绿
            半透明底 + 描边、9px 圆角，透明度取自 SidebarSelection.h，与主机树委托同值。
            这两个列表没有缩进区，用 QSS 即可画出同款卡片，无需自定义委托。 */
-        QTabWidget#productivityTabs QTabBar {
+        /* 效率工具标题右侧的"片段 / 历史"切换器：浅底座里两枚图标按钮，选中项填充品牌绿
+           （图标由代码改成固定深色），未选中项透明、悬停加深，深浅主题下都能一眼认出当前页。 */
+        QFrame#ProductivityViewSwitcher {
+            background: @RAISED@;
+            border: 0;
+            border-radius: 10px;
+        }
+        QToolButton[productivityViewButton="true"] {
+            background: transparent;
+            border: 0;
+            border-radius: 8px;
+            padding: 0;
+        }
+        QToolButton[productivityViewButton="true"]:hover:!checked {
+            background: @HOST_TREE_HOVER@;
+        }
+        QToolButton[productivityViewButton="true"]:checked {
+            background: @ACCENT@;
+        }
+        /* 行首装饰图标块与行内文字层级。 */
+        QToolButton[productivityRowTile="true"] {
+            background: @SELECTION@;
+            border: 0;
+            border-radius: 8px;
+            padding: 0;
+        }
+        QLabel#ProductivityRowTitle {
+            color: @TEXT@;
             background: transparent;
         }
-        /* 效率工具的两个标签是"片段/历史"二选一的分段控件。通用规则的选中底色 RAISED 在浅色
-           侧栏上只比背景深一两个灰阶，几乎看不出选中了哪一页；这里改用与主机树/片段行选中态
-           同一套语言：SELECTION 淡绿底 + 42% 品牌绿描边 + 半粗体，深浅两套主题下都能一眼区分。
-           未选中项保留同宽透明描边，切换时文字位置不跳动。 */
-        QTabWidget#productivityTabs QTabBar::tab {
+        /* 命令预览靠等宽字体与标题区分，不再套底色块，左缘与标题对齐。 */
+        QLabel#ProductivityCommandPreview {
+            color: @TEXT@;
+            background: transparent;
+            padding: 0;
+        }
+        QLabel#ProductivityHistoryCommand {
+            color: @TEXT@;
+            background: transparent;
+        }
+        QLabel#ProductivityRowCaption,
+        QLabel[productivityCaption="true"] {
             color: @MUTED@;
             background: transparent;
-            border: 1px solid transparent;
-            border-radius: 8px;
-            min-height: 26px;
-            padding: 4px 11px;
-            margin: 1px 2px;
         }
-        QTabWidget#productivityTabs QTabBar::tab:selected {
-            color: @TEXT@;
-            background: @SELECTION@;
-            border: 1px solid rgba(43, 217, 129, 107);
-            font-weight: 600;
+        /* 行内"执行"是唯一的实心按钮，悬停/选中时才出现，主次一眼可辨。 */
+        QToolButton[compactIconButton="true"][productivityRunAction="true"] {
+            background: @ACCENT@;
+            border: 0;
+            border-radius: 14px;
         }
-        QTabWidget#productivityTabs QTabBar::tab:hover:!selected {
-            color: @TEXT@;
-            background: @HOST_TREE_HOVER@;
+        QToolButton[compactIconButton="true"][productivityRunAction="true"]:hover {
+            background: #45e394;
         }
         QListWidget#productivitySnippetList,
         QListWidget#productivityHistoryList {
@@ -2977,17 +3012,31 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
             border: 1px solid transparent;
             border-radius: 9px;
         }
+        /* 片段是卡片：平时白底细描边浮在侧栏灰底上；历史保持无框的紧凑行。 */
         QListWidget#productivitySnippetList::item {
             min-height: 0;
             padding: 0;
+            background: @SURFACE@;
+            border: 1px solid @BORDER@;
+            border-radius: 11px;
         }
         QListWidget#productivityHistoryList::item {
-            min-height: 30px;
-            padding: 2px 9px;
+            min-height: 0;
+            padding: 0;
         }
-        QListWidget#productivitySnippetList::item:hover:!selected,
+        /* 悬停只换描边、不换底色：卡片底若变成 RAISED，就和同色的命令预览底融成一片。 */
+        QListWidget#productivitySnippetList::item:hover:!selected {
+            background: @SURFACE@;
+            border: 1px solid rgba(43, 217, 129, 107);
+        }
         QListWidget#productivityHistoryList::item:hover:!selected {
             background: @HOST_TREE_HOVER@;
+        }
+        /* 分段标题行不可选，也不能有悬停底色，否则看起来像一条可点击的记录。 */
+        QListWidget#productivityHistoryList::item:disabled,
+        QListWidget#productivityHistoryList::item:disabled:hover {
+            background: transparent;
+            border: 1px solid transparent;
         }
         QListWidget#productivitySnippetList::item:selected,
         QListWidget#productivitySnippetList::item:selected:active,

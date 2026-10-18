@@ -117,7 +117,18 @@ enum class Symbol {
     /** @brief 附加终端输出等回形针式“附件”动作。 */
     Paperclip,
     /** @brief 标题栏“全部标签”入口：窗口轮廓内一个向下箭头，表示展开标签列表。 */
-    TabList
+    TabList,
+    /**
+     * @brief 效率工具"命令片段"视图：带 >_ 提示符的卡片，后面露出一张卡片的边角，
+     * 表示收藏起来的一叠命令。
+     */
+    SnippetStack,
+    /** @brief 效率工具"命令历史"视图：时钟加一段逆时针回绕箭头，表示回看执行过的命令。 */
+    HistoryRewind,
+    /** @brief 横排三个实心圆点，行内"更多操作"菜单入口。 */
+    More,
+    /** @brief 书签轮廓，表示"保存为片段"。 */
+    Bookmark
 };
 
 /**
@@ -629,6 +640,46 @@ enum class Symbol {
         painter.drawLine(QPointF(8.5, 12.5), QPointF(12.0, 16.0));
         painter.drawLine(QPointF(12.0, 16.0), QPointF(15.5, 12.5));
         break;
+    case Symbol::SnippetStack: {
+        // 后面那张卡片只画露出来的上沿和右沿，前后两层在 18px 下也能分辨。
+        QPainterPath back;
+        back.moveTo(7.0, 3.5);
+        back.lineTo(17.0, 3.5);
+        back.cubicTo(18.4, 3.5, 19.0, 4.1, 19.0, 5.5);
+        painter.drawPath(back);
+        painter.drawRoundedRect(QRectF(3.0, 7.0, 16.0, 13.5), 2.5, 2.5);
+        painter.drawLine(QPointF(7.0, 12.0), QPointF(9.5, 14.5));
+        painter.drawLine(QPointF(9.5, 14.5), QPointF(7.0, 17.0));
+        painter.drawLine(QPointF(12.0, 17.0), QPointF(15.5, 17.0));
+        break;
+    }
+    case Symbol::HistoryRewind: {
+        // 圆弧从左侧起笔顺时针绕到左上，留出缺口给箭头，读作"倒回去"。
+        painter.drawArc(QRectF(3.5, 3.5, 17.0, 17.0), 180 * 16, -300 * 16);
+        painter.drawLine(QPointF(3.5, 4.5), QPointF(3.5, 8.5));
+        painter.drawLine(QPointF(3.5, 8.5), QPointF(7.5, 8.5));
+        painter.drawLine(QPointF(12.0, 8.0), QPointF(12.0, 12.2));
+        painter.drawLine(QPointF(12.0, 12.2), QPointF(15.0, 14.0));
+        break;
+    }
+    case Symbol::More:
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(color);
+        for (const qreal x : {5.0, 12.0, 19.0}) {
+            painter.drawEllipse(QPointF(x, 12.0), 1.8, 1.8);
+        }
+        break;
+    case Symbol::Bookmark: {
+        QPainterPath mark;
+        mark.moveTo(6.0, 4.0);
+        mark.lineTo(18.0, 4.0);
+        mark.lineTo(18.0, 20.0);
+        mark.lineTo(12.0, 16.0);
+        mark.lineTo(6.0, 20.0);
+        mark.closeSubpath();
+        painter.drawPath(mark);
+        break;
+    }
     }
     painter.end();
     return pixmap;

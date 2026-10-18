@@ -8,9 +8,13 @@
 #include <QAbstractItemModel>
 #include <QAction>
 #include <QApplication>
+#include <QButtonGroup>
 #include <QClipboard>
 #include <QComboBox>
+#include <QDate>
 #include <QDialog>
+#include <QEvent>
+#include <QFontDatabase>
 #include <QFormLayout>
 #include <QFrame>
 #include <QHBoxLayout>
@@ -21,11 +25,11 @@
 #include <QLocale>
 #include <QMessageBox>
 #include <QMenu>
+#include <QPainter>
 #include <QPushButton>
 #include <QSet>
 #include <QSignalBlocker>
-#include <QTabBar>
-#include <QTabWidget>
+#include <QStackedWidget>
 #include <QTextEdit>
 #include <QToolButton>
 #include <QUuid>
@@ -120,6 +124,112 @@ void applyMutedPalette(QWidget *widget, const qreal alpha)
     widget->setPalette(palette);
 }
 
+/** @brief 行内操作按钮容器的 objectName；悬停或选中时显示，其余时间隐藏。 */
+const QString kRowActionsName = QStringLiteral("productivityRowActions");
+/** @brief 操作按钮出现时让位的尾部信息（历史行的执行时间）。 */
+const QString kRowTrailingName = QStringLiteral("productivityRowTrailing");
+/** @brief 标记"属于效率工具列表的行控件"，事件过滤器据此识别鼠标进出。 */
+const char *const kListRowProperty = "productivityListRow";
+
+/** @brief 历史分段：今天、昨天、更早。 */
+constexpr int kSectionToday = 0;
+constexpr int kSectionYesterday = 1;
+constexpr int kSectionEarlier = 2;
+
+/** @brief 选中的视图按钮底色是固定的品牌绿，图标与主按钮一样固定用深色保证对比度。 */
+const QColor kOnAccentColor(QStringLiteral("#0c2f24"));
+
+/**
+ * @brief 单行显示、超宽时以省略号结尾的标签。
+ *
+ * text() 始终保留完整原文：搜索、测试和无障碍读取到的都是真实命令，只有绘制时才截断。
+ * 多行命令在预览里折成一行，避免把卡片撑高。
+ */
+class ElidedLabel final : public QLabel {
+public:
+    using QLabel::QLabel;
+
+    [[nodiscard]] QSize sizeHint() const override
+    {
+        const QMargins margins = contentsMargins();
+        return {0, fontMetrics().height() + margins.top() + margins.bottom()};
+    }
+
+    [[nodiscard]] QSize minimumSizeHint() const override { return sizeHint(); }
+
+protected:
+    void paintEvent(QPaintEvent *event) override
+    {
+        // QFrame 负责画样式表里的底色、圆角与描边；文字由这里自己画，QLabel 原本的
+        // 绘制不再调用，否则完整文本会和省略后的文本叠在一起。
+        QFrame::paintEvent(event);
+        QPainter painter(this);
+        const QRect area = contentsRect();
+        const QString elided = fontMetrics().elidedText(
+            text().simplified(), Qt::ElideRight, area.width());
+        style()->drawItemText(&painter, area, Qt::AlignLeft | Qt::AlignVCenter, palette(),
+                              isEnabled(), elided, foregroundRole());
+    }
+};
+
+/** @brief 构造一个单行省略标签，横向不参与布局宽度竞争。 */
+ElidedLabel *createElidedLabel(const QString &text, const QString &objectName, QWidget *parent)
+{
+    auto *label = new ElidedLabel(text, parent);
+    label->setObjectName(objectName);
+    label->setAttribute(Qt::WA_TransparentForMouseEvents);
+    label->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
+    label->setToolTip(text);
+    return label;
+}
+
+/** @brief 等宽字体：命令预览必须一眼和名称、说明区分开。 */
+QFont monospaceFont(const QFont &base, const qreal pointSizeDelta)
+{
+    QFont font = QFontDatabase::systemFont(QFontDatabase::FixedFont);
+    font.setPointSizeF(std::max(7.0, base.pointSizeF() + pointSizeDelta));
+    return font;
+}
+
+/**
+ * @brief 行首的圆角图标块：只是装饰，不接收鼠标，点击穿透到列表以便选中与拖拽。
+ *
+ * 用 QToolButton 而不是 QLabel 承载图标，是为了用上随调色板重绘的图标引擎：深浅主题
+ * 切换后无需重建整张列表。
+ */
+QToolButton *createRowTile(QWidget *parent, const UiIcons::Symbol symbol, const int size,
+                           const int iconSize)
+{
+    auto *tile = new QToolButton(parent);
+    tile->setProperty("productivityRowTile", true);
+    tile->setAttribute(Qt::WA_TransparentForMouseEvents);
+    tile->setFocusPolicy(Qt::NoFocus);
+    tile->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    tile->setFixedSize(size, size);
+    tile->setIconSize(QSize(iconSize, iconSize));
+    tile->setIcon(UiIcons::symbol(tile, symbol, tile->palette().color(QPalette::WindowText)));
+    return tile;
+}
+
+/** @brief 行内"执行"按钮：品牌绿实心圆，与其余透明图标按钮区分出主次。 */
+void configureRowRunButton(QToolButton *button, const QString &toolTip)
+{
+    configureRowIconButton(button, UiIcons::Symbol::Play, toolTip);
+    button->setProperty("productivityRunAction", true);
+    button->setIcon(UiIcons::symbol(button, UiIcons::Symbol::Play, kOnAccentColor));
+}
+
+/** @brief 历史记录落在哪个分段。 */
+int historySectionFor(const QDateTime &executedAt)
+{
+    const QDate day = executedAt.toLocalTime().date();
+    const QDate today = QDate::currentDate();
+    if (day >= today) {
+        return kSectionToday;
+    }
+    return day == today.addDays(-1) ? kSectionYesterday : kSectionEarlier;
+}
+
 } // namespace
 
 ProductivityWidget::ProductivityWidget(ProductivityModel *model, QWidget *parent)
@@ -135,18 +245,43 @@ void ProductivityWidget::buildUi()
     auto *rootLayout = new QVBoxLayout(this);
     rootLayout->setContentsMargins(0, 0, 0, 0);
     rootLayout->setSpacing(0);
-    m_tabs = new QTabWidget(this);
-    m_tabs->setObjectName(QStringLiteral("productivityTabs"));
-    m_tabs->setDocumentMode(true);
-    // documentMode 下 macOS 会给标签栏画一条浅灰底座，在深色侧栏里很突兀；关掉底座并让
-    // 两个标签均分宽度，使其与下方通栏搜索框同宽对齐。
-    m_tabs->tabBar()->setDrawBase(false);
-    m_tabs->tabBar()->setExpanding(true);
-    rootLayout->addWidget(m_tabs);
+    m_pages = new QStackedWidget(this);
+    m_pages->setObjectName(QStringLiteral("productivityPages"));
+    rootLayout->addWidget(m_pages);
+
+    // ------------------------------------------------------------ 标题右侧视图切换器
+    // 两枚图标按钮取代原来占一整行的"片段 / 历史"标签栏：纵向空间全部留给列表，切换入口
+    // 紧挨着页面标题，读起来就是"效率工具 · 当前看的是哪一类"。
+    m_viewSwitcher = new QFrame(this);
+    m_viewSwitcher->setObjectName(QStringLiteral("ProductivityViewSwitcher"));
+    auto *switcherLayout = new QHBoxLayout(m_viewSwitcher);
+    switcherLayout->setContentsMargins(3, 3, 3, 3);
+    switcherLayout->setSpacing(2);
+    auto *viewGroup = new QButtonGroup(m_viewSwitcher);
+    viewGroup->setExclusive(true);
+    const auto createViewButton = [this, switcherLayout, viewGroup](const QString &objectName) {
+        auto *button = new QToolButton(m_viewSwitcher);
+        button->setObjectName(objectName);
+        button->setProperty("productivityViewButton", true);
+        button->setCheckable(true);
+        button->setToolButtonStyle(Qt::ToolButtonIconOnly);
+        button->setFixedSize(30, 30);
+        button->setIconSize(QSize(18, 18));
+        button->setCursor(Qt::PointingHandCursor);
+        viewGroup->addButton(button);
+        switcherLayout->addWidget(button);
+        return button;
+    };
+    m_snippetsViewButton = createViewButton(QStringLiteral("productivitySnippetsView"));
+    m_historyViewButton = createViewButton(QStringLiteral("productivityHistoryView"));
+    connect(m_snippetsViewButton, &QToolButton::clicked,
+            this, [this]() { setCurrentView(View::Snippets); });
+    connect(m_historyViewButton, &QToolButton::clicked,
+            this, [this]() { setCurrentView(View::History); });
 
     // ------------------------------------------------------------ 标题行动作条
-    // 与"主机"侧栏一致：绿色文字主按钮 + 竖分隔线 + 次要图标按钮，整体由 MainWindow 摆进
-    // 共享标题行。页面内部因此不再需要一条单独的工具栏，纵向空间全部留给列表。
+    // 与"主机"侧栏一致：绿色文字主按钮，整体由 MainWindow 摆进共享标题行右侧。删除不再
+    // 占标题行的位置：它只作用于某一条片段，放在该行的"更多"菜单和右键菜单里更不易误删。
     m_headerActions = new QWidget(this);
     m_headerActions->setObjectName(QStringLiteral("productivityHeaderActions"));
     auto *newSnippetButton = new QPushButton(tr("New snippet"), m_headerActions);
@@ -158,31 +293,18 @@ void ProductivityWidget::buildUi()
     // 主操作底色在深浅主题下都是固定的高亮绿，图标同主机页一样固定用深色保证对比度。
     UiIcons::decorateButton(
         newSnippetButton,
-        UiIcons::symbol(this, UiIcons::Symbol::Plus, QColor(QStringLiteral("#0c2f24"))),
+        UiIcons::symbol(this, UiIcons::Symbol::Plus, kOnAccentColor),
         tr("Create an executable command snippet"));
-    auto *removeButton = new QToolButton(m_headerActions);
-    removeButton->setObjectName(QStringLiteral("productivityRemoveSnippet"));
-    removeButton->setText(tr("Delete"));
-    UiIcons::decorateButton(
-        removeButton,
-        UiIcons::symbol(this, UiIcons::Symbol::Trash, this->palette().color(QPalette::WindowText)),
-        tr("Delete the selected snippet"));
-    configureProductivityIconButton(removeButton, tr("Delete the selected snippet"));
-    auto *actionDivider = new QFrame(m_headerActions);
-    actionDivider->setObjectName(QStringLiteral("HostHeaderActionDivider"));
-    actionDivider->setFrameShape(QFrame::VLine);
-    actionDivider->setFixedSize(1, 20);
     auto *headerLayout = new QHBoxLayout(m_headerActions);
     headerLayout->setContentsMargins(0, 0, 0, 0);
     headerLayout->setSpacing(6);
     headerLayout->addWidget(newSnippetButton);
-    headerLayout->addWidget(actionDivider, 0, Qt::AlignVCenter);
-    headerLayout->addWidget(removeButton);
 
-    // -------------------------------------------------------------- Snippets 标签
-    auto *snippetPage = new QWidget(m_tabs);
+    // -------------------------------------------------------------- 片段页
+    auto *snippetPage = new QWidget(m_pages);
+    snippetPage->setObjectName(QStringLiteral("productivitySnippetPage"));
     auto *snippetPageLayout = new QVBoxLayout(snippetPage);
-    snippetPageLayout->setContentsMargins(0, 10, 0, 0);
+    snippetPageLayout->setContentsMargins(0, 2, 0, 0);
     snippetPageLayout->setSpacing(10);
 
     m_snippetSearchEdit = new QLineEdit(snippetPage);
@@ -199,36 +321,16 @@ void ProductivityWidget::buildUi()
     m_snippetList->setDefaultDropAction(Qt::MoveAction);
     m_snippetList->setContextMenuPolicy(Qt::CustomContextMenu);
     m_snippetList->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
-    m_snippetList->setSpacing(1);
+    m_snippetList->setSpacing(3);
     m_snippetList->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_snippetList->setMouseTracking(true);
     snippetPageLayout->addWidget(m_snippetList, 1);
-    const int snippetTabIndex = m_tabs->addTab(snippetPage, tr("Command snippets"));
-    i18n::onRetranslate(this, [this, snippetTabIndex, newSnippetButton, removeButton] {
-        m_tabs->setTabText(snippetTabIndex, tr("Command snippets"));
-        m_snippetSearchEdit->setPlaceholderText(tr("Search name / command…"));
-        newSnippetButton->setText(tr("New snippet"));
-        newSnippetButton->setToolTip(tr("Create an executable command snippet"));
-        removeButton->setText(tr("Delete"));
-        removeButton->setToolTip(tr("Delete the selected snippet"));
-        removeButton->setAccessibleName(tr("Delete the selected snippet"));
-        // 行内“执行/复制”按钮的提示在 createSnippetRowWidget 里一次性写死，语言切换时
-        // 不会自己更新；整表重建是让每一行都回到当前语言最省心的做法（右键菜单是按需
-        // 构造的，下次弹出即为新语言，无需在此处理）。
-        reloadSnippets();
-    });
+    m_pages->addWidget(snippetPage);
 
-    // 删除只对片段页有意义；切到历史页时置灰，免得用户以为它能删历史记录。只置灰不隐藏，
-    // 否则标题行宽度变化会让"新建片段"按钮随标签切换左右跳动。
-    connect(m_tabs, &QTabWidget::currentChanged, this,
-            [snippetTabIndex, removeButton](const int index) {
-                removeButton->setEnabled(index == snippetTabIndex);
-            });
-    connect(newSnippetButton, &QPushButton::clicked, this, [this, snippetTabIndex]() {
-        m_tabs->setCurrentIndex(snippetTabIndex);
+    connect(newSnippetButton, &QPushButton::clicked, this, [this]() {
+        setCurrentView(View::Snippets);
         openSnippetEditor(QString());
     });
-    connect(removeButton, &QToolButton::clicked,
-            this, &ProductivityWidget::removeSelectedRecord);
     connect(m_snippetSearchEdit, &QLineEdit::textChanged,
             this, &ProductivityWidget::applySnippetFilter);
     connect(m_snippetList, &QListWidget::itemDoubleClicked, this,
@@ -237,6 +339,8 @@ void ProductivityWidget::buildUi()
                     openSnippetEditor(item->data(kIdRole).toString());
                 }
             });
+    connect(m_snippetList, &QListWidget::itemSelectionChanged,
+            this, [this]() { updateRowActionVisibility(m_snippetList); });
     // 拖拽结束后 QListWidget 的内部模型会发出 rowsMoved；据此把新的可见顺序回写为
     // sortOrder，而不是尝试在拖拽过程中追踪每一次中间态。
     connect(m_snippetList->model(), &QAbstractItemModel::rowsMoved,
@@ -249,40 +353,8 @@ void ProductivityWidget::buildUi()
                 if (item != nullptr) {
                     m_snippetList->setCurrentItem(item);
                 }
-                QMenu menu(this);
-                UiIcons::modernizePopup(&menu);
-                QAction *newSnippetAction = menu.addAction(
-                    UiIcons::symbol(this, UiIcons::Symbol::Plus, this->palette().color(QPalette::WindowText)),
-                    tr("New snippet"));
-                connect(newSnippetAction, &QAction::triggered,
-                        this, [this]() { openSnippetEditor(QString()); });
-                if (item != nullptr) {
-                    menu.addSeparator();
-                    const QString id = item->data(kIdRole).toString();
-                    QAction *executeAction = menu.addAction(
-                        UiIcons::symbol(this, UiIcons::Symbol::Play, this->palette().color(QPalette::WindowText)),
-                        tr("Run"));
-                    QAction *copyAction = menu.addAction(
-                        UiIcons::symbol(this, UiIcons::Symbol::Copy, this->palette().color(QPalette::WindowText)),
-                        tr("Copy"));
-                    QAction *editAction = menu.addAction(
-                        UiIcons::symbol(this, UiIcons::Symbol::Edit, this->palette().color(QPalette::WindowText)),
-                        tr("Edit"));
-                    QAction *deleteAction = menu.addAction(
-                        UiIcons::symbol(this, UiIcons::Symbol::Trash, this->palette().color(QPalette::WindowText)),
-                        tr("Delete"));
-                    connect(executeAction, &QAction::triggered,
-                            this, [this, id]() { executeSnippetForId(id); });
-                    connect(copyAction, &QAction::triggered,
-                            this, [this, id]() { copySnippetForId(id); });
-                    connect(editAction, &QAction::triggered,
-                            this, [this, id]() { openSnippetEditor(id); });
-                    connect(deleteAction,
-                            &QAction::triggered,
-                            this,
-                            &ProductivityWidget::removeSelectedRecord);
-                }
-                menu.exec(m_snippetList->viewport()->mapToGlobal(position));
+                showSnippetMenu(item != nullptr ? item->data(kIdRole).toString() : QString(),
+                                m_snippetList->viewport()->mapToGlobal(position));
             });
 
     // 侧栏不再提供 Ctrl+1..Ctrl+0 数字快捷键：按序号执行片段统一由终端里的 Cmd+K 快速面板
@@ -290,101 +362,103 @@ void ProductivityWidget::buildUi()
 
     buildEditorDialog();
 
-    // --------------------------------------------------------------- 历史标签
-    auto *historyPage = new QWidget(m_tabs);
+    // --------------------------------------------------------------- 历史页
+    auto *historyPage = new QWidget(m_pages);
     historyPage->setObjectName(QStringLiteral("productivityHistoryPage"));
     auto *historyLayout = new QVBoxLayout(historyPage);
-    historyLayout->setContentsMargins(0, 10, 0, 0);
+    historyLayout->setContentsMargins(0, 2, 0, 0);
     historyLayout->setSpacing(10);
     m_historyHostCombo = new QComboBox(historyPage);
     UiIcons::modernizePopup(m_historyHostCombo);
     m_historyHostCombo->setObjectName(QStringLiteral("productivityHistoryHost"));
+    // 主机名通常不长，下拉框按内容收窄、搜索框占余下宽度，两者并排成一行筛选栏，比上下
+    // 堆叠少占一行；主机名过长时由下拉框自身省略，不挤掉搜索框。
+    m_historyHostCombo->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+    m_historyHostCombo->setMaximumWidth(190);
     m_historyPrefixEdit = new QLineEdit(historyPage);
     m_historyPrefixEdit->setObjectName(QStringLiteral("productivityHistoryPrefix"));
     m_historyPrefixEdit->setPlaceholderText(tr("Filter by command prefix"));
-    // 主机与前缀筛选在窄侧栏内上下堆叠；并排布局会让两个输入框都只剩百余像素，主机名
-    // 和长前缀同时被截断。前缀输入框套用与主机页相同的搜索框外观。
-    historyLayout->addWidget(m_historyHostCombo);
-    historyLayout->addWidget(createSearchBar(m_historyPrefixEdit, historyPage));
+    auto *historyFilterRow = new QHBoxLayout;
+    historyFilterRow->setContentsMargins(0, 0, 0, 0);
+    historyFilterRow->setSpacing(8);
+    historyFilterRow->addWidget(m_historyHostCombo);
+    QFrame *historySearchBar = createSearchBar(m_historyPrefixEdit, historyPage);
+    historySearchBar->setMinimumWidth(110);
+    historyFilterRow->addWidget(historySearchBar, 1);
+    historyLayout->addLayout(historyFilterRow);
     m_historyList = new QListWidget(historyPage);
     m_historyList->setObjectName(QStringLiteral("productivityHistoryList"));
     m_historyList->setSpacing(1);
     m_historyList->setContextMenuPolicy(Qt::CustomContextMenu);
     m_historyList->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
+    m_historyList->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_historyList->setMouseTracking(true);
     historyLayout->addWidget(m_historyList, 1);
-    auto *historyExecuteButton = new QPushButton(tr("Run on the selected host"), historyPage);
-    historyExecuteButton->setObjectName(QStringLiteral("productivityHistoryExecute"));
-    // 侧栏里唯一的绿色主按钮留给标题行的"新建片段"，与主机页只有"新增主机"高亮一致；
-    // 历史重跑是次要动作，使用普通描边按钮。
-    UiIcons::decorateButton(
-        historyExecuteButton,
-        UiIcons::symbol(this, UiIcons::Symbol::Play, this->palette().color(QPalette::WindowText)),
-        tr("Re-run the command on the host selected in the history filter"));
-    historyLayout->addWidget(historyExecuteButton);
-    const int historyTabIndex = m_tabs->addTab(historyPage, tr("Command history"));
-    i18n::onRetranslate(this, [this, historyTabIndex, historyExecuteButton] {
-        m_tabs->setTabText(historyTabIndex, tr("Command history"));
+    m_pages->addWidget(historyPage);
+
+    i18n::onRetranslate(this, [this, newSnippetButton] {
+        m_snippetSearchEdit->setPlaceholderText(tr("Search name / command…"));
         m_historyPrefixEdit->setPlaceholderText(tr("Filter by command prefix"));
-        historyExecuteButton->setText(tr("Run on the selected host"));
-        historyExecuteButton->setToolTip(
-            tr("Re-run the command on the host selected in the history filter"));
+        newSnippetButton->setText(tr("New snippet"));
+        newSnippetButton->setToolTip(tr("Create an executable command snippet"));
+        for (const auto &[button, text] :
+             {std::pair{m_snippetsViewButton, tr("Command snippets")},
+              std::pair{m_historyViewButton, tr("Command history")}}) {
+            button->setToolTip(text);
+            button->setAccessibleName(text);
+        }
+        // 行内按钮的提示和历史分段标题在建行时一次性写死，语言切换时不会自己更新；整表
+        // 重建是让每一行都回到当前语言最省心的做法（右键菜单按需构造，无需在此处理）。
+        reloadSnippets();
+        reloadHistory();
     });
 
     connect(m_historyHostCombo, &QComboBox::currentIndexChanged,
             this, &ProductivityWidget::reloadHistory);
     connect(m_historyPrefixEdit, &QLineEdit::textChanged,
             this, &ProductivityWidget::reloadHistory);
-    connect(historyExecuteButton, &QPushButton::clicked, this, [this]() {
-        const QListWidgetItem *item = m_historyList->currentItem();
-        if (item == nullptr) {
-            emit statusMessage(tr("Select a command history entry first"));
-            return;
-        }
-        const QString hostId = m_historyHostCombo->currentData().toString();
-        emit commandExecutionRequested(item->data(Qt::UserRole).toString(),
-                                       hostId.isEmpty() ? QStringList{} : QStringList{hostId});
-    });
+    connect(m_historyList, &QListWidget::itemSelectionChanged,
+            this, [this]() { updateRowActionVisibility(m_historyList); });
     connect(m_historyList, &QListWidget::itemDoubleClicked, this,
-            [this](QListWidgetItem *) {
-                const QListWidgetItem *item = m_historyList->currentItem();
-                if (item == nullptr) {
-                    return;
+            [this](QListWidgetItem *item) {
+                if (item != nullptr) {
+                    executeHistoryCommand(item->data(Qt::UserRole).toString());
                 }
-                const QString hostId = m_historyHostCombo->currentData().toString();
-                emit commandExecutionRequested(item->data(Qt::UserRole).toString(),
-                                               hostId.isEmpty() ? QStringList{}
-                                                                : QStringList{hostId});
             });
     connect(m_historyList,
             &QWidget::customContextMenuRequested,
             this,
             [this](const QPoint &position) {
                 QListWidgetItem *item = m_historyList->itemAt(position);
-                if (item == nullptr) {
+                const QString command =
+                    item != nullptr ? item->data(Qt::UserRole).toString() : QString();
+                if (command.isEmpty()) {
                     return;
                 }
                 m_historyList->setCurrentItem(item);
-                const QString command = item->data(Qt::UserRole).toString();
                 QMenu menu(this);
                 UiIcons::modernizePopup(&menu);
+                const QColor iconColor = this->palette().color(QPalette::WindowText);
                 QAction *executeAction = menu.addAction(
-                    UiIcons::symbol(this, UiIcons::Symbol::Play, this->palette().color(QPalette::WindowText)),
-                    tr("Run"));
+                    UiIcons::symbol(this, UiIcons::Symbol::Play, iconColor), tr("Run"));
                 QAction *copyAction = menu.addAction(
-                    UiIcons::symbol(this, UiIcons::Symbol::Copy, this->palette().color(QPalette::WindowText)),
-                    tr("Copy command"));
-                connect(executeAction, &QAction::triggered, this, [this, command]() {
-                    const QString hostId = m_historyHostCombo->currentData().toString();
-                    emit commandExecutionRequested(
-                        command, hostId.isEmpty() ? QStringList{} : QStringList{hostId});
-                });
+                    UiIcons::symbol(this, UiIcons::Symbol::Copy, iconColor), tr("Copy command"));
+                QAction *saveAction = menu.addAction(
+                    UiIcons::symbol(this, UiIcons::Symbol::Bookmark, iconColor),
+                    tr("Save as snippet"));
+                connect(executeAction, &QAction::triggered,
+                        this, [this, command]() { executeHistoryCommand(command); });
                 connect(copyAction, &QAction::triggered, this, [command]() {
                     if (QApplication::clipboard() != nullptr) {
                         QApplication::clipboard()->setText(command);
                     }
                 });
+                connect(saveAction, &QAction::triggered,
+                        this, [this, command]() { saveHistoryCommandAsSnippet(command); });
                 menu.exec(m_historyList->viewport()->mapToGlobal(position));
             });
+
+    updateViewSwitcher();
 }
 
 void ProductivityWidget::buildEditorDialog()
@@ -442,6 +516,101 @@ QWidget *ProductivityWidget::headerActionsWidget() const
     return m_headerActions;
 }
 
+QWidget *ProductivityWidget::headerViewSwitcherWidget() const
+{
+    return m_viewSwitcher;
+}
+
+void ProductivityWidget::setCurrentView(const View view)
+{
+    m_pages->setCurrentIndex(static_cast<int>(view));
+    updateViewSwitcher();
+}
+
+ProductivityWidget::View ProductivityWidget::currentView() const
+{
+    return static_cast<View>(m_pages->currentIndex());
+}
+
+void ProductivityWidget::updateViewSwitcher()
+{
+    const bool snippets = currentView() == View::Snippets;
+    const QColor idleColor = palette().color(QPalette::WindowText);
+    for (const auto &[button, symbol, active] :
+         {std::tuple{m_snippetsViewButton, UiIcons::Symbol::SnippetStack, snippets},
+          std::tuple{m_historyViewButton, UiIcons::Symbol::HistoryRewind, !snippets}}) {
+        button->setChecked(active);
+        // 选中项的绿底是固定品牌色，图标用固定深色；未选中项跟随主题文字色。
+        button->setIcon(UiIcons::symbol(button, symbol, active ? kOnAccentColor : idleColor));
+    }
+}
+
+void ProductivityWidget::changeEvent(QEvent *event)
+{
+    QWidget::changeEvent(event);
+    if (event->type() == QEvent::PaletteChange && m_snippetsViewButton != nullptr) {
+        updateViewSwitcher();
+    }
+}
+
+bool ProductivityWidget::eventFilter(QObject *watched, QEvent *event)
+{
+    if (event->type() == QEvent::LayoutRequest) {
+        // 列表项高度是建行时按当时的 sizeHint 记下的。主窗口样式表往往在行建好之后才生效，
+        // 给命令预览补上内边距、换掉字号；不重新同步，行会被压回旧高度、文字被截掉上下
+        // 一截。行内布局失效时会收到 LayoutRequest，借此把最新高度写回对应列表项。
+        auto *row = qobject_cast<QWidget *>(watched);
+        if (row != nullptr && row->property(kListRowProperty).toBool()) {
+            for (QListWidget *list : {m_snippetList, m_historyList}) {
+                for (int index = 0; index < list->count(); ++index) {
+                    QListWidgetItem *item = list->item(index);
+                    if (list->itemWidget(item) == row) {
+                        if (item->sizeHint() != row->sizeHint()) {
+                            item->setSizeHint(row->sizeHint());
+                        }
+                        return QWidget::eventFilter(watched, event);
+                    }
+                }
+            }
+        }
+    }
+    if (event->type() == QEvent::Enter || event->type() == QEvent::Leave) {
+        auto *row = qobject_cast<QWidget *>(watched);
+        if (row != nullptr && row->property(kListRowProperty).toBool()) {
+            if (event->type() == QEvent::Enter) {
+                m_hoveredRow = row;
+            } else if (m_hoveredRow == row) {
+                m_hoveredRow.clear();
+            }
+            auto *list = qobject_cast<QListWidget *>(row->parentWidget() != nullptr
+                                                         ? row->parentWidget()->parentWidget()
+                                                         : nullptr);
+            if (list != nullptr) {
+                updateRowActionVisibility(list);
+            }
+        }
+    }
+    return QWidget::eventFilter(watched, event);
+}
+
+void ProductivityWidget::updateRowActionVisibility(QListWidget *list)
+{
+    for (int row = 0; row < list->count(); ++row) {
+        QListWidgetItem *item = list->item(row);
+        QWidget *rowWidget = list->itemWidget(item);
+        if (rowWidget == nullptr) {
+            continue;
+        }
+        const bool active = item->isSelected() || rowWidget == m_hoveredRow;
+        if (auto *actions = rowWidget->findChild<QWidget *>(kRowActionsName)) {
+            actions->setVisible(active);
+        }
+        if (auto *trailing = rowWidget->findChild<QWidget *>(kRowTrailingName)) {
+            trailing->setVisible(!active);
+        }
+    }
+}
+
 void ProductivityWidget::setModel(ProductivityModel *model)
 {
     if (m_model != nullptr) {
@@ -477,6 +646,7 @@ void ProductivityWidget::refresh()
 
 void ProductivityWidget::reloadSnippets()
 {
+    m_hoveredRow.clear();
     m_snippetList->clear();
     if (m_model == nullptr) {
         return;
@@ -524,9 +694,13 @@ void ProductivityWidget::applySnippetFilter()
 QWidget *ProductivityWidget::createSnippetRowWidget(const SnippetRecord &record)
 {
     auto *row = new QWidget(m_snippetList);
+    row->setProperty(kListRowProperty, true);
+    row->installEventFilter(this);
     auto *rowLayout = new QHBoxLayout(row);
-    rowLayout->setContentsMargins(10, 7, 6, 7);
-    rowLayout->setSpacing(4);
+    rowLayout->setContentsMargins(10, 9, 8, 9);
+    rowLayout->setSpacing(10);
+
+    rowLayout->addWidget(createRowTile(row, UiIcons::Symbol::Terminal, 32, 16), 0, Qt::AlignTop);
 
     // 文字区域设为鼠标事件透明，点击会穿透到下方的列表视口，这样用户仍可以直接在名称/
     // 说明区域按住拖拽排序，而不必找一个额外的拖拽手柄；右侧按钮区域保持正常可点击。
@@ -534,51 +708,185 @@ QWidget *ProductivityWidget::createSnippetRowWidget(const SnippetRecord &record)
     textArea->setAttribute(Qt::WA_TransparentForMouseEvents);
     auto *textLayout = new QVBoxLayout(textArea);
     textLayout->setContentsMargins(0, 0, 0, 0);
-    textLayout->setSpacing(1);
+    textLayout->setSpacing(5);
 
-    auto *nameLabel = new QLabel(record.name, textArea);
-    nameLabel->setAttribute(Qt::WA_TransparentForMouseEvents);
+    auto *nameLabel = createElidedLabel(record.name, QStringLiteral("ProductivityRowTitle"), textArea);
     QFont nameFont = nameLabel->font();
     nameFont.setWeight(QFont::DemiBold);
     nameLabel->setFont(nameFont);
-
-    const QString preview = record.description.isEmpty() ? record.command : record.description;
-    auto *previewLabel = new QLabel(preview, textArea);
-    previewLabel->setAttribute(Qt::WA_TransparentForMouseEvents);
-    QFont previewFont = previewLabel->font();
-    previewFont.setPointSizeF(std::max(7.0, previewFont.pointSizeF() - 1.5));
-    previewLabel->setFont(previewFont);
-    applyMutedPalette(previewLabel, 0.62);
-
-    // 长命令不能把行撑宽：横向忽略文字的理想宽度，超出部分直接裁掉，右侧按钮始终可见。
-    for (QLabel *label : {nameLabel, previewLabel}) {
-        label->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
-    }
     textLayout->addWidget(nameLabel);
-    textLayout->addWidget(previewLabel);
+
+    // 命令始终以等宽小字预览：名称说明"做什么"，预览让人确认"实际会敲什么"。
+    auto *commandLabel = createElidedLabel(
+        record.command, QStringLiteral("ProductivityCommandPreview"), textArea);
+    commandLabel->setFont(monospaceFont(commandLabel->font(), -1.5));
+    textLayout->addWidget(commandLabel);
+
+    if (!record.description.trimmed().isEmpty()) {
+        auto *descriptionLabel = createElidedLabel(
+            record.description, QStringLiteral("ProductivityRowCaption"), textArea);
+        QFont captionFont = descriptionLabel->font();
+        captionFont.setPointSizeF(std::max(7.0, captionFont.pointSizeF() - 1.5));
+        descriptionLabel->setFont(captionFont);
+        textLayout->addWidget(descriptionLabel);
+    }
     rowLayout->addWidget(textArea, 1);
 
-    // 执行/复制收成两枚透明图标按钮，与主机树行内只有文字、交互靠悬停卡片表达的风格
-    // 保持一致。
-    const QString runToolTip = tr("Run");
+    // 操作按钮只在悬停或选中时出现（updateRowActionVisibility），长列表平时只有文字。
+    auto *actions = new QWidget(row);
+    actions->setObjectName(kRowActionsName);
+    auto *actionsLayout = new QHBoxLayout(actions);
+    actionsLayout->setContentsMargins(0, 0, 0, 0);
+    actionsLayout->setSpacing(4);
 
-    auto *executeButton = new QToolButton(row);
+    auto *executeButton = new QToolButton(actions);
     executeButton->setObjectName(QStringLiteral("productivitySnippetExecute"));
-    configureRowIconButton(executeButton, UiIcons::Symbol::Play, runToolTip);
-    rowLayout->addWidget(executeButton, 0, Qt::AlignVCenter);
+    configureRowRunButton(executeButton, tr("Run"));
+    actionsLayout->addWidget(executeButton);
 
-    auto *copyButton = new QToolButton(row);
+    auto *copyButton = new QToolButton(actions);
     copyButton->setObjectName(QStringLiteral("productivitySnippetCopy"));
     configureRowIconButton(copyButton, UiIcons::Symbol::Copy, tr("Copy command"));
-    rowLayout->addWidget(copyButton, 0, Qt::AlignVCenter);
+    actionsLayout->addWidget(copyButton);
+
+    auto *moreButton = new QToolButton(actions);
+    moreButton->setObjectName(QStringLiteral("productivitySnippetMore"));
+    configureRowIconButton(moreButton, UiIcons::Symbol::More, tr("More actions"));
+    actionsLayout->addWidget(moreButton);
+    actions->setVisible(false);
+    rowLayout->addWidget(actions, 0, Qt::AlignVCenter);
 
     const QString id = record.id;
     connect(executeButton, &QToolButton::clicked,
             this, [this, id]() { executeSnippetForId(id); });
     connect(copyButton, &QToolButton::clicked,
             this, [this, id]() { copySnippetForId(id); });
+    connect(moreButton, &QToolButton::clicked, this, [this, id, moreButton]() {
+        for (int index = 0; index < m_snippetList->count(); ++index) {
+            if (m_snippetList->item(index)->data(kIdRole).toString() == id) {
+                m_snippetList->setCurrentRow(index);
+                break;
+            }
+        }
+        showSnippetMenu(id, moreButton->mapToGlobal(QPoint(0, moreButton->height())));
+    });
 
     return row;
+}
+
+void ProductivityWidget::showSnippetMenu(const QString &id, const QPoint &globalPosition)
+{
+    QMenu menu(this);
+    UiIcons::modernizePopup(&menu);
+    const QColor iconColor = this->palette().color(QPalette::WindowText);
+    QAction *newSnippetAction = menu.addAction(
+        UiIcons::symbol(this, UiIcons::Symbol::Plus, iconColor), tr("New snippet"));
+    connect(newSnippetAction, &QAction::triggered,
+            this, [this]() { openSnippetEditor(QString()); });
+    if (!id.isEmpty()) {
+        menu.addSeparator();
+        QAction *executeAction = menu.addAction(
+            UiIcons::symbol(this, UiIcons::Symbol::Play, iconColor), tr("Run"));
+        QAction *copyAction = menu.addAction(
+            UiIcons::symbol(this, UiIcons::Symbol::Copy, iconColor), tr("Copy"));
+        QAction *editAction = menu.addAction(
+            UiIcons::symbol(this, UiIcons::Symbol::Edit, iconColor), tr("Edit"));
+        menu.addSeparator();
+        QAction *deleteAction = menu.addAction(
+            UiIcons::symbol(this, UiIcons::Symbol::Trash, iconColor), tr("Delete"));
+        connect(executeAction, &QAction::triggered,
+                this, [this, id]() { executeSnippetForId(id); });
+        connect(copyAction, &QAction::triggered,
+                this, [this, id]() { copySnippetForId(id); });
+        connect(editAction, &QAction::triggered,
+                this, [this, id]() { openSnippetEditor(id); });
+        connect(deleteAction, &QAction::triggered,
+                this, &ProductivityWidget::removeSelectedRecord);
+    }
+    menu.exec(globalPosition);
+}
+
+QWidget *ProductivityWidget::createHistoryRowWidget(const CommandHistoryEntry &entry,
+                                                    const int sectionDay)
+{
+    auto *row = new QWidget(m_historyList);
+    row->setProperty(kListRowProperty, true);
+    row->installEventFilter(this);
+    auto *rowLayout = new QHBoxLayout(row);
+    rowLayout->setContentsMargins(8, 6, 6, 6);
+    rowLayout->setSpacing(10);
+
+    rowLayout->addWidget(createRowTile(row, UiIcons::Symbol::Terminal, 24, 13), 0, Qt::AlignVCenter);
+
+    auto *commandLabel = createElidedLabel(
+        entry.command, QStringLiteral("ProductivityHistoryCommand"), row);
+    commandLabel->setFont(monospaceFont(commandLabel->font(), -0.5));
+    rowLayout->addWidget(commandLabel, 1);
+
+    // 今天和昨天已经由分段标题表达，时间只需精确到分钟；更早的记录改显示日期。
+    const QDateTime local = entry.executedAt.toLocalTime();
+    const QString timeText = sectionDay == kSectionEarlier
+        ? QLocale().toString(local.date(), QLocale::ShortFormat)
+        : QLocale().toString(local.time(), QLocale::ShortFormat);
+    auto *timeLabel = new QLabel(timeText, row);
+    timeLabel->setObjectName(kRowTrailingName);
+    timeLabel->setProperty("productivityCaption", true);
+    timeLabel->setAttribute(Qt::WA_TransparentForMouseEvents);
+    QFont timeFont = timeLabel->font();
+    timeFont.setPointSizeF(std::max(7.0, timeFont.pointSizeF() - 1.5));
+    timeLabel->setFont(timeFont);
+    rowLayout->addWidget(timeLabel, 0, Qt::AlignVCenter);
+
+    auto *actions = new QWidget(row);
+    actions->setObjectName(kRowActionsName);
+    auto *actionsLayout = new QHBoxLayout(actions);
+    actionsLayout->setContentsMargins(0, 0, 0, 0);
+    actionsLayout->setSpacing(4);
+    auto *runButton = new QToolButton(actions);
+    runButton->setObjectName(QStringLiteral("productivityHistoryRun"));
+    configureRowRunButton(runButton, tr("Re-run the command on the host selected in the history filter"));
+    auto *copyButton = new QToolButton(actions);
+    copyButton->setObjectName(QStringLiteral("productivityHistoryCopy"));
+    configureRowIconButton(copyButton, UiIcons::Symbol::Copy, tr("Copy command"));
+    auto *saveButton = new QToolButton(actions);
+    saveButton->setObjectName(QStringLiteral("productivityHistorySaveSnippet"));
+    configureRowIconButton(saveButton, UiIcons::Symbol::Bookmark, tr("Save as snippet"));
+    for (QToolButton *button : {runButton, copyButton, saveButton}) {
+        actionsLayout->addWidget(button);
+    }
+    actions->setVisible(false);
+    rowLayout->addWidget(actions, 0, Qt::AlignVCenter);
+
+    const QString command = entry.command;
+    connect(runButton, &QToolButton::clicked,
+            this, [this, command]() { executeHistoryCommand(command); });
+    connect(copyButton, &QToolButton::clicked, this, [this, command]() {
+        if (QApplication::clipboard() != nullptr) {
+            QApplication::clipboard()->setText(command);
+        }
+        emit statusMessage(tr("Command copied to clipboard"));
+    });
+    connect(saveButton, &QToolButton::clicked,
+            this, [this, command]() { saveHistoryCommandAsSnippet(command); });
+    return row;
+}
+
+void ProductivityWidget::executeHistoryCommand(const QString &command)
+{
+    if (command.isEmpty()) {
+        return;
+    }
+    const QString hostId = m_historyHostCombo->currentData().toString();
+    emit commandExecutionRequested(command,
+                                   hostId.isEmpty() ? QStringList{} : QStringList{hostId});
+}
+
+void ProductivityWidget::saveHistoryCommandAsSnippet(const QString &command)
+{
+    // 先切回片段页再弹编辑框：保存后用户要能立刻看到新片段落在列表里。
+    setCurrentView(View::Snippets);
+    openSnippetEditor(QString());
+    m_editorCommandEdit->setPlainText(command);
 }
 
 void ProductivityWidget::openSnippetEditor(const QString &id)
@@ -729,6 +1037,7 @@ void ProductivityWidget::persistSnippetOrder()
 
 void ProductivityWidget::reloadHistory()
 {
+    m_hoveredRow.clear();
     m_historyList->clear();
     if (m_model == nullptr || m_historyHostCombo->count() == 0) {
         return;
@@ -741,16 +1050,37 @@ void ProductivityWidget::reloadHistory()
     }
     const QString prefix = m_historyPrefixEdit->text();
     QSet<QString> shown;
+    int currentSection = -1;
     for (const CommandHistoryEntry &entry : history) {
         if (!entry.command.startsWith(prefix, Qt::CaseInsensitive) || shown.contains(entry.command)) {
             continue;
         }
         shown.insert(entry.command);
-        auto *item = new QListWidgetItem(entry.command, m_historyList);
+
+        // 历史按最近优先排列，分段只会依次推进，遇到新分段时插一行不可选的标题。
+        const int section = historySectionFor(entry.executedAt);
+        if (section != currentSection) {
+            currentSection = section;
+            const QString title = section == kSectionToday ? tr("Today")
+                : section == kSectionYesterday             ? tr("Yesterday")
+                                                           : tr("Earlier");
+            auto *header = new QListWidgetItem(m_historyList);
+            header->setFlags(Qt::NoItemFlags);
+            auto *headerLabel = new QLabel(title, m_historyList);
+            headerLabel->setProperty("sectionCaption", true);
+            headerLabel->setContentsMargins(6, currentSection == kSectionToday ? 0 : 6, 0, 0);
+            header->setSizeHint(headerLabel->sizeHint());
+            m_historyList->setItemWidget(header, headerLabel);
+        }
+
+        auto *item = new QListWidgetItem(m_historyList);
         item->setData(Qt::UserRole, entry.command);
         // Qt 6.8 已移除旧的 Qt::DefaultLocaleShortDate 枚举；显式使用系统区域设置可继续
         // 尊重用户日期格式，同时避免把本地化字符串写死在业务模型中。
         item->setToolTip(QLocale().toString(entry.executedAt.toLocalTime(), QLocale::ShortFormat));
+        QWidget *row = createHistoryRowWidget(entry, section);
+        item->setSizeHint(row->sizeHint());
+        m_historyList->setItemWidget(item, row);
     }
 }
 

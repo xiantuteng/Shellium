@@ -3,6 +3,7 @@
 #include "core/ConnectionTarget.h"
 #include "core/HostRecord.h"
 
+#include <QPointer>
 #include <QWidget>
 
 class ProductivityModel;
@@ -12,7 +13,7 @@ class QLineEdit;
 class QListWidget;
 class QListWidgetItem;
 class QPushButton;
-class QTabWidget;
+class QStackedWidget;
 class QTextEdit;
 class QToolButton;
 
@@ -29,6 +30,11 @@ class QToolButton;
  * 原先的"广播输入"标签页已移除：向多个终端同步输入统一由工作空间标题栏的广播开关负责，
  * 侧栏不再维护第二套目标勾选与实时广播状态。整体样式对齐"主机"侧栏：主操作放进共享
  * 标题行、搜索框与主机搜索框同款、列表行使用同一套悬停/选中圆角卡片。
+ *
+ * "片段 / 历史"两个视图不再用标签页切换，而是两枚图标按钮紧跟在侧栏标题"效率工具"
+ * 右侧（headerViewSwitcherWidget()），选中的那枚填充品牌绿。片段行是卡片：终端图标、
+ * 名称、等宽命令预览和说明；历史按"今天 / 昨天 / 更早"分段。两种行的操作按钮只在悬停或
+ * 选中时出现，列表平时保持安静。
  */
 class ProductivityWidget final : public QWidget {
     Q_OBJECT
@@ -49,6 +55,26 @@ public:
      * MainWindow 只负责摆放，并在切到其他侧栏页面时隐藏。
      */
     [[nodiscard]] QWidget *headerActionsWidget() const;
+
+    /**
+     * @brief 返回需要挂到侧栏标题"效率工具"右侧的视图切换器（片段 / 历史两枚图标按钮）。
+     *
+     * 与 headerActionsWidget() 分开提供：切换器紧跟标题，动作条靠右，两者之间由
+     * MainWindow 的伸缩项隔开。
+     */
+    [[nodiscard]] QWidget *headerViewSwitcherWidget() const;
+
+    /** @brief 效率工具的两个视图。 */
+    enum class View {
+        Snippets,
+        History
+    };
+
+    /** @brief 切换到指定视图，同步更新切换器的选中态。 */
+    void setCurrentView(View view);
+
+    /** @brief 当前显示的视图。 */
+    [[nodiscard]] View currentView() const;
 
     /** @brief 切换业务模型并重新加载 Snippet 和历史。 */
     void setModel(ProductivityModel *model);
@@ -88,8 +114,37 @@ private:
     /** @brief 按搜索框内容隐藏不匹配的片段行；筛选期间关闭拖拽，避免把局部顺序写回。 */
     void applySnippetFilter();
 
-    /** @brief 为单个片段构造带"执行/复制"图标按钮的列表行控件。 */
+    /** @brief 为单个片段构造卡片式列表行：终端图标、名称、命令预览、说明，以及悬停操作。 */
     QWidget *createSnippetRowWidget(const SnippetRecord &record);
+
+    /**
+     * @brief 为一条历史命令构造列表行：提示符图标、等宽命令、执行时间，以及悬停操作。
+     * @param entry 历史记录；执行时间用于右侧时间标签。
+     * @param sectionDay 该记录所在的分段，决定时间显示为"时:分"还是日期。
+     */
+    QWidget *createHistoryRowWidget(const CommandHistoryEntry &entry, int sectionDay);
+
+    /** @brief 在片段行或右键位置弹出"执行 / 复制 / 编辑 / 删除"菜单。 */
+    void showSnippetMenu(const QString &id, const QPoint &globalPosition);
+
+    /** @brief 按历史筛选当前选中的主机重新执行命令。 */
+    void executeHistoryCommand(const QString &command);
+
+    /** @brief 切到片段视图并打开新建弹窗，命令框预填为给定命令。 */
+    void saveHistoryCommandAsSnippet(const QString &command);
+
+    /** @brief 按当前视图刷新切换器两枚按钮的选中态与图标颜色。 */
+    void updateViewSwitcher();
+
+    /**
+     * @brief 刷新列表里每一行操作按钮的可见性：鼠标悬停的行与选中的行显示，其余隐藏。
+     * @param list 片段列表或历史列表。
+     */
+    void updateRowActionVisibility(QListWidget *list);
+
+    /** @brief 监听行控件的鼠标进出以显示/隐藏操作按钮，并在主题切换后重绘切换器图标。 */
+    bool eventFilter(QObject *watched, QEvent *event) override;
+    void changeEvent(QEvent *event) override;
 
     /** @brief 打开编辑弹窗并预填指定片段；id 为空表示新建。 */
     void openSnippetEditor(const QString &id);
@@ -126,7 +181,12 @@ private:
     QList<ConnectionTarget> m_targets;     ///< 最近一次由上层提供的可执行目标快照。
 
     QWidget *m_headerActions = nullptr; ///< 挂到侧栏标题行的动作条；见 headerActionsWidget()。
-    QTabWidget *m_tabs = nullptr;
+    /** @brief 标题右侧的视图切换器；见 headerViewSwitcherWidget()。 */
+    QWidget *m_viewSwitcher = nullptr;
+    QToolButton *m_snippetsViewButton = nullptr;
+    QToolButton *m_historyViewButton = nullptr;
+    /** @brief 片段页与历史页；下标与 View 枚举值一致。 */
+    QStackedWidget *m_pages = nullptr;
     QLineEdit *m_snippetSearchEdit = nullptr;
     QListWidget *m_snippetList = nullptr;
 
@@ -149,4 +209,6 @@ private:
     QListWidget *m_historyList = nullptr;
 
     QString m_editingId; ///< 当前弹窗正在编辑的片段 id；空表示新建。
+    /** @brief 鼠标当前所在的列表行；行被整表重建时自动置空。 */
+    QPointer<QWidget> m_hoveredRow;
 };

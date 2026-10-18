@@ -2497,10 +2497,6 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">実行可能なコマンドスニペットを作成</translation>
     </message>
     <message>
-        <source>Delete the selected snippet</source>
-        <translation type="unfinished">選択したスニペットを削除</translation>
-    </message>
-    <message>
         <source>Search name / command…</source>
         <translation type="unfinished">名前 / コマンドで検索…</translation>
     </message>
@@ -2525,10 +2521,6 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">コマンドのプレフィックスで絞り込む</translation>
     </message>
     <message>
-        <source>Run on the selected host</source>
-        <translation type="unfinished">選択したホストで実行</translation>
-    </message>
-    <message>
         <source>Re-run the command on the host selected in the history filter</source>
         <translation type="unfinished">履歴フィルターで選択したホストでコマンドを再実行</translation>
     </message>
@@ -2537,12 +2529,12 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">コマンド履歴</translation>
     </message>
     <message>
-        <source>Select a command history entry first</source>
-        <translation type="unfinished">先にコマンド履歴のエントリを選択してください</translation>
-    </message>
-    <message>
         <source>Copy command</source>
         <translation type="unfinished">コマンドをコピー</translation>
+    </message>
+    <message>
+        <source>Save as snippet</source>
+        <translation>スニペットとして保存</translation>
     </message>
     <message>
         <source>Name</source>
@@ -2567,6 +2559,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>Save changes to the current snippet</source>
         <translation type="unfinished">現在のスニペットの変更を保存</translation>
+    </message>
+    <message>
+        <source>More actions</source>
+        <translation>その他の操作</translation>
     </message>
     <message>
         <source>The productivity model is not ready yet</source>
@@ -2615,6 +2611,18 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>Command copied to clipboard</source>
         <translation type="unfinished">コマンドをクリップボードにコピーしました</translation>
+    </message>
+    <message>
+        <source>Today</source>
+        <translation>今日</translation>
+    </message>
+    <message>
+        <source>Yesterday</source>
+        <translation>昨日</translation>
+    </message>
+    <message>
+        <source>Earlier</source>
+        <translation>それ以前</translation>
     </message>
     <message>
         <source>Local / current terminal</source>

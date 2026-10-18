@@ -23,7 +23,7 @@
 #include <QPushButton>
 #include <QShortcut>
 #include <QSignalSpy>
-#include <QTabWidget>
+#include <QStackedWidget>
 #include <QColor>
 #include <QImage>
 #include <QTest>
@@ -77,10 +77,24 @@ private slots:
     void widgetHasNoGroupingNoBroadcastAndExecutesOnCurrentTerminal();
 
     /**
-     * @brief 标题行动作条与主机侧栏同构：绿色"新建片段"主按钮 + 删除图标；删除只在片段页
-     * 可用，切到历史页时置灰。
+     * @brief 标题行动作条与主机侧栏同构：绿色"新建片段"主按钮；"片段 / 历史"是标题右侧的
+     * 两枚互斥图标按钮，切换时选中态跟随。
      */
     void headerActionsMatchHostSidebarAndFollowCurrentTab();
+
+    /**
+     * @brief 历史按"今天 / 昨天 / 更早"分段；行内操作只在选中时出现，"存为片段"切回片段页
+     * 并预填命令。片段卡片的操作同样只在选中时出现。
+     */
+    void historyGroupsByDayAndRowActionsAppearOnSelection();
+
+    /**
+     * @brief 样式表在行建好之后才生效（应用启动时的真实顺序）时，行高必须跟着重新测量。
+     *
+     * 列表项高度在建行时按当时的 sizeHint 记下；主窗口样式表稍后才给命令预览加上内边距，
+     * 若不重新同步，行被压回旧高度，命令文字上下被截掉一截。
+     */
+    void snippetRowHeightFollowsLateStyleSheet();
 
     /** @brief 片段搜索按名称/命令/说明不区分大小写过滤，筛选期间必须关闭拖拽排序。 */
     void snippetSearchFiltersRowsAndSuspendsReordering();
@@ -418,14 +432,10 @@ void ProductivityTest::widgetHasNoGroupingNoBroadcastAndExecutesOnCurrentTermina
     // 空 targetIds：执行始终落在当前活动终端，不再由界面选择多个目标。
     QVERIFY(executionSpy.constFirst().at(1).toStringList().isEmpty());
 
-    // 广播输入页及其全部控件必须彻底消失，而不只是隐藏标签。
-    auto *tabs = widget.findChild<QTabWidget *>(QStringLiteral("productivityTabs"));
-    QVERIFY(tabs != nullptr);
-    QCOMPARE(tabs->count(), 2);
-    for (int index = 0; index < tabs->count(); ++index) {
-        QVERIFY2(!tabs->tabText(index).contains(QStringLiteral("Broadcast")),
-                 "效率工具不应再有广播输入标签页");
-    }
+    // 广播输入页及其全部控件必须彻底消失：视图只剩片段与历史两页。
+    auto *pages = widget.findChild<QStackedWidget *>(QStringLiteral("productivityPages"));
+    QVERIFY(pages != nullptr);
+    QCOMPARE(pages->count(), 2);
     QVERIFY(widget.findChild<QWidget *>(QStringLiteral("productivityBroadcastPage")) == nullptr);
     QVERIFY(widget.findChild<QListWidget *>(QStringLiteral("productivityBroadcastTargets"))
             == nullptr);
@@ -456,27 +466,156 @@ void ProductivityTest::headerActionsMatchHostSidebarAndFollowCurrentTab()
     QVERIFY2(newSnippet != nullptr, "新建片段必须挂在标题行动作条里");
     QVERIFY(newSnippet->property("primaryAction").toBool());
     QVERIFY(newSnippet->property("hostPrimaryAction").toBool());
-    auto *remove = header->findChild<QToolButton *>(QStringLiteral("productivityRemoveSnippet"));
-    QVERIFY(remove != nullptr);
-    QVERIFY(remove->property("compactIconButton").toBool());
-    QCOMPARE(remove->toolButtonStyle(), Qt::ToolButtonIconOnly);
+    // 删除只作用于某一条片段，已移到行内"更多"菜单，标题行不能再有一个对象不明的删除键。
+    QVERIFY(widget.findChild<QToolButton *>(QStringLiteral("productivityRemoveSnippet")) == nullptr);
 
-    widget.show();
-    QVERIFY(QTest::qWaitForWindowExposed(&widget));
-    QVERIFY(remove->isVisible());
-    auto *tabs = widget.findChild<QTabWidget *>(QStringLiteral("productivityTabs"));
-    QVERIFY(tabs != nullptr);
-    tabs->setCurrentIndex(1);
-    QVERIFY2(remove->isVisible() && !remove->isEnabled(),
-             "历史页没有可删除的片段，删除按钮必须置灰（但不隐藏，避免标题行跳动）");
+    // "片段 / 历史"是标题右侧的两枚互斥图标按钮，而不是占一整行的标签栏。
+    QWidget *switcher = widget.headerViewSwitcherWidget();
+    QVERIFY(switcher != nullptr && switcher != header);
+    auto *snippetsView = switcher->findChild<QToolButton *>(QStringLiteral("productivitySnippetsView"));
+    auto *historyView = switcher->findChild<QToolButton *>(QStringLiteral("productivityHistoryView"));
+    QVERIFY(snippetsView != nullptr && historyView != nullptr);
+    QCOMPARE(snippetsView->toolButtonStyle(), Qt::ToolButtonIconOnly);
+    QCOMPARE(snippetsView->toolTip(), QStringLiteral("Command snippets"));
+    QCOMPARE(historyView->toolTip(), QStringLiteral("Command history"));
+    QVERIFY(snippetsView->isCheckable() && historyView->isCheckable());
+    QCOMPARE(widget.currentView(), ProductivityWidget::View::Snippets);
+    QVERIFY(snippetsView->isChecked() && !historyView->isChecked());
+
+    auto *pages = widget.findChild<QStackedWidget *>(QStringLiteral("productivityPages"));
+    QVERIFY(pages != nullptr);
+    historyView->click();
+    QCOMPARE(widget.currentView(), ProductivityWidget::View::History);
+    QCOMPARE(pages->currentWidget()->objectName(), QStringLiteral("productivityHistoryPage"));
+    QVERIFY(historyView->isChecked() && !snippetsView->isChecked());
 
     // 在历史页点"新建片段"要切回片段页再弹编辑框，否则用户看不到新片段落在哪里。
     newSnippet->click();
-    QCOMPARE(tabs->currentIndex(), 0);
-    QVERIFY(remove->isEnabled());
+    QCOMPARE(widget.currentView(), ProductivityWidget::View::Snippets);
+    QVERIFY(snippetsView->isChecked());
     auto *dialog = widget.findChild<QDialog *>(QStringLiteral("productivitySnippetDialog"));
     QVERIFY(dialog != nullptr && dialog->isVisible());
     dialog->reject();
+}
+
+void ProductivityTest::snippetRowHeightFollowsLateStyleSheet()
+{
+    SnippetRecord snippet;
+    snippet.id = QStringLiteral("snippet-padding");
+    snippet.kind = SnippetNodeKind::Snippet;
+    snippet.name = QStringLiteral("内存占用");
+    snippet.command = QStringLiteral("free -m");
+    QVERIFY(m_model->saveSnippet(snippet));
+
+    QWidget host;
+    auto *layout = new QVBoxLayout(&host);
+    auto *widget = new ProductivityWidget(m_model.get(), &host);
+    layout->addWidget(widget);
+    host.resize(360, 400);
+    host.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&host));
+
+    // 行已经建好、显示过之后，样式表才给命令预览加上明显的上下内边距。
+    host.setStyleSheet(QStringLiteral(
+        "QLabel#ProductivityCommandPreview { padding: 8px 7px; }"));
+
+    auto *list = widget->findChild<QListWidget *>(QStringLiteral("productivitySnippetList"));
+    QVERIFY(list != nullptr);
+    QListWidgetItem *item = findSnippetItem(list, snippet.id);
+    QVERIFY(item != nullptr);
+    QWidget *row = list->itemWidget(item);
+    auto *command = row->findChild<QLabel *>(QStringLiteral("ProductivityCommandPreview"));
+    QVERIFY(command != nullptr);
+    QTRY_VERIFY2(command->height() >= command->sizeHint().height(),
+                 qPrintable(QStringLiteral("命令预览被压扁：高 %1，需要 %2")
+                                .arg(command->height())
+                                .arg(command->sizeHint().height())));
+    QCOMPARE(item->sizeHint().height(), row->sizeHint().height());
+}
+
+void ProductivityTest::historyGroupsByDayAndRowActionsAppearOnSelection()
+{
+    const QDateTime now = QDateTime::currentDateTime();
+    const auto append = [this](const QString &command, const QDateTime &when) {
+        CommandHistoryEntry entry;
+        entry.command = command;
+        entry.executedAt = when;
+        QVERIFY(m_database->appendCommandHistory(entry).has_value());
+    };
+    append(QStringLiteral("lsblk"), QDateTime(now.date().addDays(-10), QTime(9, 0)));
+    append(QStringLiteral("df -hl"), QDateTime(now.date().addDays(-1), QTime(12, 0)));
+    append(QStringLiteral("free -m"), now);
+
+    ProductivityWidget widget(m_model.get());
+    widget.setExecutionTargets({});
+    auto *list = widget.findChild<QListWidget *>(QStringLiteral("productivityHistoryList"));
+    QVERIFY(list != nullptr);
+
+    // 三个分段标题各占一行，且不可选、不携带命令。
+    QCOMPARE(list->count(), 6);
+    const QStringList expectedOrder{QStringLiteral("Today"), QStringLiteral("free -m"),
+                                    QStringLiteral("Yesterday"), QStringLiteral("df -hl"),
+                                    QStringLiteral("Earlier"), QStringLiteral("lsblk")};
+    for (int row = 0; row < list->count(); ++row) {
+        QListWidgetItem *item = list->item(row);
+        const bool isHeader = row % 2 == 0;
+        if (isHeader) {
+            QCOMPARE(item->flags(), Qt::NoItemFlags);
+            QVERIFY(item->data(Qt::UserRole).toString().isEmpty());
+            auto *label = qobject_cast<QLabel *>(list->itemWidget(item));
+            QVERIFY(label != nullptr);
+            QCOMPARE(label->text(), expectedOrder.at(row));
+        } else {
+            QCOMPARE(item->data(Qt::UserRole).toString(), expectedOrder.at(row));
+        }
+    }
+
+    // 操作按钮平时隐藏、时间可见；选中后换成"重跑 / 复制 / 存为片段"。
+    QListWidgetItem *todayItem = list->item(1);
+    QWidget *row = list->itemWidget(todayItem);
+    QVERIFY(row != nullptr);
+    auto *actions = row->findChild<QWidget *>(QStringLiteral("productivityRowActions"));
+    auto *time = row->findChild<QWidget *>(QStringLiteral("productivityRowTrailing"));
+    QVERIFY(actions != nullptr && time != nullptr);
+    QVERIFY(actions->isHidden());
+    QVERIFY(!time->isHidden());
+    list->setCurrentItem(todayItem);
+    QVERIFY(!actions->isHidden());
+    QVERIFY(time->isHidden());
+
+    QSignalSpy executionSpy(&widget, &ProductivityWidget::commandExecutionRequested);
+    row->findChild<QToolButton *>(QStringLiteral("productivityHistoryRun"))->click();
+    QCOMPARE(executionSpy.count(), 1);
+    QCOMPARE(executionSpy.constFirst().at(0).toString(), QStringLiteral("free -m"));
+    QVERIFY(executionSpy.constFirst().at(1).toStringList().isEmpty());
+
+    // "存为片段"切回片段页，并把命令预填进新建弹窗。
+    widget.setCurrentView(ProductivityWidget::View::History);
+    row->findChild<QToolButton *>(QStringLiteral("productivityHistorySaveSnippet"))->click();
+    QCOMPARE(widget.currentView(), ProductivityWidget::View::Snippets);
+    auto *dialog = widget.findChild<QDialog *>(QStringLiteral("productivitySnippetDialog"));
+    QVERIFY(dialog != nullptr && dialog->isVisible());
+    auto *commandEdit = dialog->findChild<QTextEdit *>(QStringLiteral("productivityCommandEdit"));
+    QVERIFY(commandEdit != nullptr);
+    QCOMPARE(commandEdit->toPlainText(), QStringLiteral("free -m"));
+    dialog->reject();
+
+    // 片段卡片同理：操作按钮（含"更多"菜单入口）只在选中后出现。
+    SnippetRecord snippet;
+    snippet.id = QStringLiteral("snippet-card");
+    snippet.kind = SnippetNodeKind::Snippet;
+    snippet.name = QStringLiteral("内存概览");
+    snippet.command = QStringLiteral("free -h");
+    QVERIFY(m_model->saveSnippet(snippet));
+    auto *snippetList = widget.findChild<QListWidget *>(QStringLiteral("productivitySnippetList"));
+    QListWidgetItem *snippetItem = findSnippetItem(snippetList, snippet.id);
+    QVERIFY(snippetItem != nullptr);
+    QWidget *card = snippetList->itemWidget(snippetItem);
+    auto *cardActions = card->findChild<QWidget *>(QStringLiteral("productivityRowActions"));
+    QVERIFY(cardActions != nullptr && cardActions->isHidden());
+    QVERIFY(card->findChild<QToolButton *>(QStringLiteral("productivitySnippetMore")) != nullptr);
+    snippetList->setCurrentItem(snippetItem);
+    QVERIFY(!cardActions->isHidden());
 }
 
 void ProductivityTest::snippetSearchFiltersRowsAndSuspendsReordering()
@@ -922,9 +1061,9 @@ void ProductivityTest::snippetRowsAndTabsRetranslateOnLanguageChange()
 
     ProductivityWidget widget(m_model.get());
 
-    auto *tabs = widget.findChild<QTabWidget *>(QStringLiteral("productivityTabs"));
-    QVERIFY(tabs != nullptr);
-    QCOMPARE(tabs->tabText(0), QStringLiteral("Command snippets"));
+    auto *snippetsView = widget.findChild<QToolButton *>(QStringLiteral("productivitySnippetsView"));
+    QVERIFY(snippetsView != nullptr);
+    QCOMPARE(snippetsView->toolTip(), QStringLiteral("Command snippets"));
 
     auto *list = widget.findChild<QListWidget *>(QStringLiteral("productivitySnippetList"));
     QVERIFY(list != nullptr);
@@ -948,7 +1087,8 @@ void ProductivityTest::snippetRowsAndTabsRetranslateOnLanguageChange()
     QVERIFY(QCoreApplication::installTranslator(&translator));
     QCoreApplication::sendPostedEvents(nullptr, QEvent::LanguageChange);
 
-    QCOMPARE(tabs->tabText(0), QStringLiteral("!!Command snippets"));
+    QCOMPARE(snippetsView->toolTip(), QStringLiteral("!!Command snippets"));
+    QCOMPARE(snippetsView->accessibleName(), QStringLiteral("!!Command snippets"));
     QCOMPARE(copyText(), QStringLiteral("!!Copy command"));
     QCOMPARE(executeText(), QStringLiteral("!!Run"));
     QVERIFY(search->placeholderText().startsWith(QStringLiteral("!!")));

@@ -2497,10 +2497,6 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">إنشاء مقتطف أمر قابل للتنفيذ</translation>
     </message>
     <message>
-        <source>Delete the selected snippet</source>
-        <translation type="unfinished">حذف المقتطف المختار</translation>
-    </message>
-    <message>
         <source>Search name / command…</source>
         <translation type="unfinished">البحث بالاسم / الأمر…</translation>
     </message>
@@ -2525,10 +2521,6 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">التصفية حسب بادئة الأمر</translation>
     </message>
     <message>
-        <source>Run on the selected host</source>
-        <translation type="unfinished">التنفيذ على المضيف المختار</translation>
-    </message>
-    <message>
         <source>Re-run the command on the host selected in the history filter</source>
         <translation type="unfinished">إعادة تنفيذ الأمر على المضيف المختار في مرشح السجل</translation>
     </message>
@@ -2537,12 +2529,12 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">سجل الأوامر</translation>
     </message>
     <message>
-        <source>Select a command history entry first</source>
-        <translation type="unfinished">اختر أولاً إدخالاً من سجل الأوامر</translation>
-    </message>
-    <message>
         <source>Copy command</source>
         <translation type="unfinished">نسخ الأمر</translation>
+    </message>
+    <message>
+        <source>Save as snippet</source>
+        <translation>حفظ كمقتطف</translation>
     </message>
     <message>
         <source>Name</source>
@@ -2567,6 +2559,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>Save changes to the current snippet</source>
         <translation type="unfinished">حفظ تغييرات المقتطف الحالي</translation>
+    </message>
+    <message>
+        <source>More actions</source>
+        <translation>مزيد من الإجراءات</translation>
     </message>
     <message>
         <source>The productivity model is not ready yet</source>
@@ -2615,6 +2611,18 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>Command copied to clipboard</source>
         <translation type="unfinished">تم نسخ الأمر إلى الحافظة</translation>
+    </message>
+    <message>
+        <source>Today</source>
+        <translation>اليوم</translation>
+    </message>
+    <message>
+        <source>Yesterday</source>
+        <translation>أمس</translation>
+    </message>
+    <message>
+        <source>Earlier</source>
+        <translation>أقدم</translation>
     </message>
     <message>
         <source>Local / current terminal</source>

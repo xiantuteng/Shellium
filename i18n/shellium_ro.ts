@@ -2497,10 +2497,6 @@ Confirmi că cheia s-a schimbat, înlocuiești vechea înregistrare din known_ho
         <translation type="unfinished">Creează un fragment de comandă executabil</translation>
     </message>
     <message>
-        <source>Delete the selected snippet</source>
-        <translation type="unfinished">Șterge fragmentul selectat</translation>
-    </message>
-    <message>
         <source>Search name / command…</source>
         <translation type="unfinished">Caută după nume / comandă…</translation>
     </message>
@@ -2525,10 +2521,6 @@ Confirmi că cheia s-a schimbat, înlocuiești vechea înregistrare din known_ho
         <translation type="unfinished">Filtrează după prefixul comenzii</translation>
     </message>
     <message>
-        <source>Run on the selected host</source>
-        <translation type="unfinished">Execută pe gazda selectată</translation>
-    </message>
-    <message>
         <source>Re-run the command on the host selected in the history filter</source>
         <translation type="unfinished">Execută din nou comanda pe gazda selectată în filtrul de istoric</translation>
     </message>
@@ -2537,12 +2529,12 @@ Confirmi că cheia s-a schimbat, înlocuiești vechea înregistrare din known_ho
         <translation type="unfinished">Istoricul comenzilor</translation>
     </message>
     <message>
-        <source>Select a command history entry first</source>
-        <translation type="unfinished">Selectează mai întâi o înregistrare din istoricul comenzilor</translation>
-    </message>
-    <message>
         <source>Copy command</source>
         <translation type="unfinished">Copiază comanda</translation>
+    </message>
+    <message>
+        <source>Save as snippet</source>
+        <translation>Salvează ca fragment</translation>
     </message>
     <message>
         <source>Name</source>
@@ -2567,6 +2559,10 @@ Confirmi că cheia s-a schimbat, înlocuiești vechea înregistrare din known_ho
     <message>
         <source>Save changes to the current snippet</source>
         <translation type="unfinished">Salvează modificările fragmentului curent</translation>
+    </message>
+    <message>
+        <source>More actions</source>
+        <translation>Mai multe acțiuni</translation>
     </message>
     <message>
         <source>The productivity model is not ready yet</source>
@@ -2615,6 +2611,18 @@ Confirmi că cheia s-a schimbat, înlocuiești vechea înregistrare din known_ho
     <message>
         <source>Command copied to clipboard</source>
         <translation type="unfinished">Comanda a fost copiată în clipboard</translation>
+    </message>
+    <message>
+        <source>Today</source>
+        <translation>Astăzi</translation>
+    </message>
+    <message>
+        <source>Yesterday</source>
+        <translation>Ieri</translation>
+    </message>
+    <message>
+        <source>Earlier</source>
+        <translation>Mai devreme</translation>
     </message>
     <message>
         <source>Local / current terminal</source>

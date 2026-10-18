@@ -2497,10 +2497,6 @@ Bestätigen Sie, dass sich der Schlüssel geändert hat, ersetzen Sie den alten 
         <translation type="unfinished">Ein ausführbares Befehls-Snippet erstellen</translation>
     </message>
     <message>
-        <source>Delete the selected snippet</source>
-        <translation type="unfinished">Das ausgewählte Snippet löschen</translation>
-    </message>
-    <message>
         <source>Search name / command…</source>
         <translation type="unfinished">Name / Befehl suchen …</translation>
     </message>
@@ -2525,10 +2521,6 @@ Bestätigen Sie, dass sich der Schlüssel geändert hat, ersetzen Sie den alten 
         <translation type="unfinished">Nach Befehlspräfix filtern</translation>
     </message>
     <message>
-        <source>Run on the selected host</source>
-        <translation type="unfinished">Auf dem ausgewählten Host ausführen</translation>
-    </message>
-    <message>
         <source>Re-run the command on the host selected in the history filter</source>
         <translation type="unfinished">Den Befehl auf dem im Verlaufsfilter ausgewählten Host erneut ausführen</translation>
     </message>
@@ -2537,12 +2529,12 @@ Bestätigen Sie, dass sich der Schlüssel geändert hat, ersetzen Sie den alten 
         <translation type="unfinished">Befehlsverlauf</translation>
     </message>
     <message>
-        <source>Select a command history entry first</source>
-        <translation type="unfinished">Wählen Sie zuerst einen Befehlsverlaufseintrag</translation>
-    </message>
-    <message>
         <source>Copy command</source>
         <translation type="unfinished">Befehl kopieren</translation>
+    </message>
+    <message>
+        <source>Save as snippet</source>
+        <translation>Als Snippet speichern</translation>
     </message>
     <message>
         <source>Name</source>
@@ -2567,6 +2559,10 @@ Bestätigen Sie, dass sich der Schlüssel geändert hat, ersetzen Sie den alten 
     <message>
         <source>Save changes to the current snippet</source>
         <translation type="unfinished">Änderungen am aktuellen Snippet speichern</translation>
+    </message>
+    <message>
+        <source>More actions</source>
+        <translation>Weitere Aktionen</translation>
     </message>
     <message>
         <source>The productivity model is not ready yet</source>
@@ -2615,6 +2611,18 @@ Bestätigen Sie, dass sich der Schlüssel geändert hat, ersetzen Sie den alten 
     <message>
         <source>Command copied to clipboard</source>
         <translation type="unfinished">Befehl in die Zwischenablage kopiert</translation>
+    </message>
+    <message>
+        <source>Today</source>
+        <translation>Heute</translation>
+    </message>
+    <message>
+        <source>Yesterday</source>
+        <translation>Gestern</translation>
+    </message>
+    <message>
+        <source>Earlier</source>
+        <translation>Früher</translation>
     </message>
     <message>
         <source>Local / current terminal</source>
