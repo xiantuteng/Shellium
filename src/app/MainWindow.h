@@ -27,6 +27,7 @@ struct TerminalSettings;
 class QAction;
 class QEvent;
 class QLabel;
+class QMessageBox;
 class QMenu;
 class QObject;
 class QPoint;
@@ -46,6 +47,7 @@ class TerminalPane;
 class TerminalSettingsService;
 class TerminalWorkspace;
 class TerminalWorkspaceGroup;
+class UpdateChecker;
 class WorkspaceSidebarWidget;
 
 /**
@@ -115,6 +117,15 @@ protected:
     void resizeEvent(QResizeEvent *event) override;
 
 private:
+    /**
+     * @brief 创建更新检查器：启动后延迟检查一次、之后每天一次，并接入菜单的手动检查。
+     * @param checkForUpdatesAction “帮助 → 检查更新”动作。
+     *
+     * 自动检查只在发现未被跳过的新版本时弹出提示，失败和“已是最新”都保持安静；手动检查
+     * 无论结果都给出反馈，且忽略跳过记录。
+     */
+    void setupUpdateChecks(QAction *checkForUpdatesAction);
+
     /**
      * @brief 按当前最大化状态刷新 Windows/Linux 标题栏的最大化或还原图标。
      *
@@ -558,6 +569,16 @@ private:
     QStackedWidget *m_aiAssistantStack = nullptr;
     TerminalSettingsService *m_settingsService = nullptr;
     QTimer *m_vaultIdleTimer = nullptr;
+
+    /** @brief 启动后首次自动检查更新的延迟。 */
+    static constexpr int kStartupUpdateCheckDelayMs = 8000;
+    /** @brief 窗口长期打开时的自动检查周期：一天。 */
+    static constexpr int kPeriodicUpdateCheckIntervalMs = 24 * 60 * 60 * 1000;
+    /** @brief 后台与菜单“检查更新”共用的检查器。 */
+    UpdateChecker *m_updateChecker = nullptr;
+    QTimer *m_updateCheckTimer = nullptr;
+    /** @brief 当前打开的更新提示框；关闭后自动置空，用于避免重复弹出。 */
+    QPointer<QMessageBox> m_updatePrompt;
 
     /** @brief 标题栏最左侧的侧栏显隐动作。 */
     QAction *m_sidebarToggleAction = nullptr;

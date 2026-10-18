@@ -28,6 +28,7 @@ class AiClient;
 class LocalAgentCliDetector;
 class SegmentedControl;
 class AiSettingsService;
+class UpdateChecker;
 
 /**
  * @brief 编辑主题、终端外观、滚动行为、铃声和全局快捷键的设置窗口。
@@ -111,6 +112,9 @@ private:
 
     /** @brief 构建“关于”页：产品版本、Qt 运行时版本、版权声明、官方网站与开源软件许可。 */
     QWidget *buildAboutPage();
+
+    /** @brief 构建“关于”页的“更新”卡片：自动检查开关、立即检查与跳过版本的撤销入口。 */
+    SettingsCard *buildUpdatesCard(QWidget *page);
 
     /** @brief 把当前 AI 页各控件的值写入 AiSettingsService；失败时把原因显示在状态行。 */
     void persistAiSettings();
@@ -249,6 +253,22 @@ private:
     bool m_aiCliDetectedOnce = false;
     /** @brief 命令自动执行策略分段控件。 */
     SegmentedControl *m_aiExecutionPolicySelector = nullptr;
+    /** @brief 是否自动检查新版本。 */
+    ToggleSwitch *m_automaticUpdateCheckToggle = nullptr;
+    /** @brief “立即检查”专用的检查器，与主窗口后台检查互不干扰。 */
+    UpdateChecker *m_updateChecker = nullptr;
+    QPushButton *m_checkForUpdatesButton = nullptr;
+    /** @brief 手动检查的进度与结果，首次点击前隐藏。 */
+    QLabel *m_updateStatusLabel = nullptr;
+    /** @brief “已跳过的版本”整行，没有跳过任何版本时隐藏。 */
+    QWidget *m_skippedUpdateVersionRow = nullptr;
+    QLabel *m_skippedUpdateVersionLabel = nullptr;
+    /**
+     * @brief 恢复默认这一次保存要清掉跳过的版本。
+     *
+     * 跳过的版本没有控件，普通保存必须从持久快照带入；只有“恢复默认”应当把它一并清掉。
+     */
+    bool m_clearSkippedUpdateOnSave = false;
     /** @brief 正在用已保存配置回填控件；为真时忽略控件变化信号，避免回填触发保存。 */
     bool m_aiPopulating = false;
 };

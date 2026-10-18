@@ -1696,6 +1696,14 @@ Confirmar que a chave mudou, substituir o registro antigo em known_hosts e conti
         <translation type="unfinished">Segurança</translation>
     </message>
     <message>
+        <source>Check for Updates…</source>
+        <translation type="unfinished">Verificar atualizações…</translation>
+    </message>
+    <message>
+        <source>Help</source>
+        <translation type="unfinished">Ajuda</translation>
+    </message>
+    <message>
         <source>Terminal %1</source>
         <translation type="unfinished">Terminal %1</translation>
     </message>
@@ -1746,6 +1754,18 @@ Confirmar que a chave mudou, substituir o registro antigo em known_hosts e conti
     <message>
         <source>Failed to save sidebar prompt preference: %1</source>
         <translation>Falha ao salvar a preferência do aviso da barra lateral: %1</translation>
+    </message>
+    <message>
+        <source>Check for Updates</source>
+        <translation type="unfinished">Verificar atualizações</translation>
+    </message>
+    <message>
+        <source>You are using the latest version (%1).</source>
+        <translation type="unfinished">Você está usando a versão mais recente (%1).</translation>
+    </message>
+    <message>
+        <source>Could not check for updates: %1</source>
+        <translation type="unfinished">Não foi possível verificar atualizações: %1</translation>
     </message>
     <message>
         <source>Press + in the title bar to open a new terminal tab, or connect to a server from the host list on the left.</source>
@@ -4489,6 +4509,54 @@ Only use it on hosts where mistakes are acceptable. You can press Stop at any ti
 Use-o apenas em hosts onde erros são aceitáveis. Você pode clicar em Parar a qualquer momento para assumir o controle.</translation>
     </message>
     <message>
+        <source>Updates</source>
+        <translation type="unfinished">Atualizações</translation>
+    </message>
+    <message>
+        <source>Check for updates automatically</source>
+        <translation type="unfinished">Verificar atualizações automaticamente</translation>
+    </message>
+    <message>
+        <source>Look for a new version on shellium.net at startup and once a day.</source>
+        <translation type="unfinished">Procurar uma nova versão em shellium.net ao iniciar e uma vez por dia.</translation>
+    </message>
+    <message>
+        <source>Check for updates</source>
+        <translation type="unfinished">Verificar atualizações</translation>
+    </message>
+    <message>
+        <source>Skipped version</source>
+        <translation type="unfinished">Versão ignorada</translation>
+    </message>
+    <message>
+        <source>Automatic checks stay quiet about this version.</source>
+        <translation type="unfinished">As verificações automáticas não avisam mais sobre esta versão.</translation>
+    </message>
+    <message>
+        <source>Checking for updates…</source>
+        <translation type="unfinished">Verificando atualizações…</translation>
+    </message>
+    <message>
+        <source>Shellium %1 is available.</source>
+        <translation type="unfinished">Shellium %1 está disponível.</translation>
+    </message>
+    <message>
+        <source>You are using the latest version (%1).</source>
+        <translation type="unfinished">Você está usando a versão mais recente (%1).</translation>
+    </message>
+    <message>
+        <source>Could not check for updates: %1</source>
+        <translation type="unfinished">Não foi possível verificar atualizações: %1</translation>
+    </message>
+    <message>
+        <source>Check now</source>
+        <translation type="unfinished">Verificar agora</translation>
+    </message>
+    <message>
+        <source>Clear</source>
+        <translation type="unfinished">Limpar</translation>
+    </message>
+    <message>
         <source>The vault is unavailable</source>
         <translation type="unfinished">O cofre está indisponível</translation>
     </message>
@@ -5482,6 +5550,64 @@ Reconectando manualmente…<byte value="xd"/>
     <message>
         <source>Close this terminal</source>
         <translation type="unfinished">Fechar este terminal</translation>
+    </message>
+</context>
+<context>
+    <name>UpdateChecker</name>
+    <message>
+        <source>The version of this build is unknown.</source>
+        <translation type="unfinished">A versão desta compilação é desconhecida.</translation>
+    </message>
+    <message>
+        <source>The update server returned HTTP %1.</source>
+        <translation type="unfinished">O servidor de atualizações retornou HTTP %1.</translation>
+    </message>
+    <message>
+        <source>The update information is too large.</source>
+        <translation type="unfinished">As informações de atualização são grandes demais.</translation>
+    </message>
+    <message>
+        <source>The update information could not be read.</source>
+        <translation type="unfinished">Não foi possível ler as informações de atualização.</translation>
+    </message>
+    <message>
+        <source>No release has been published yet.</source>
+        <translation type="unfinished">Nenhuma versão foi publicada ainda.</translation>
+    </message>
+</context>
+<context>
+    <name>UpdatePrompt</name>
+    <message>
+        <source>Update available</source>
+        <translation type="unfinished">Atualização disponível</translation>
+    </message>
+    <message>
+        <source>Shellium %1 is available.</source>
+        <translation type="unfinished">Shellium %1 está disponível.</translation>
+    </message>
+    <message>
+        <source>You are using version %1.</source>
+        <translation type="unfinished">Você está usando a versão %1.</translation>
+    </message>
+    <message>
+        <source>Released on %1.</source>
+        <translation type="unfinished">Publicada em %1.</translation>
+    </message>
+    <message>
+        <source>Download</source>
+        <translation type="unfinished">Baixar</translation>
+    </message>
+    <message>
+        <source>Skip This Version</source>
+        <translation type="unfinished">Ignorar esta versão</translation>
+    </message>
+    <message>
+        <source>Remind Me Later</source>
+        <translation type="unfinished">Lembrar mais tarde</translation>
+    </message>
+    <message>
+        <source>Could not save settings</source>
+        <translation type="unfinished">Não foi possível salvar as configurações</translation>
     </message>
 </context>
 <context>

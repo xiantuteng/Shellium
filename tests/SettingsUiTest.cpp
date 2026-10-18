@@ -10,6 +10,8 @@
 #include "ui/SettingsDialog.h"
 #include "i18n/LocalizationService.h"
 #include "ui/SettingsWidgets.h"
+#include "update/UpdateChecker.h"
+#include "update/UpdatePrompt.h"
 
 #include <QLabel>
 
@@ -33,6 +35,7 @@
 #include <QScopeGuard>
 #include <QSet>
 #include <QListWidget>
+#include <QMessageBox>
 #include <QPushButton>
 #include <QSignalSpy>
 #include <QSpinBox>
@@ -175,6 +178,13 @@ private slots:
     void openSourceNoticesCoverEveryDistributedComponent();
     /** @brief 关于页的按钮要打开许可证对话框，并展示 LGPL 声明与许可证要求的署名。 */
     void aboutPageOpensOpenSourceLicenses();
+    /**
+     * @brief 自动检查开关即时入库；跳过的版本在关于页可见、可清除，并且修改其他设置时
+     *        不会被冲掉（editedSettings() 从空白快照构建，这个字段没有控件）。
+     */
+    void updateSettingsPersistAndSkippedVersionSurvivesOtherEdits();
+    /** @brief 关于页“立即检查”发现新版本后弹出提示，点“跳过此版本”要把版本号写入设置。 */
+    void manualUpdateCheckPromptsAndSkipRecordsVersion();
 
 private:
     /** @brief 返回步进器里指定角色（increase/decrease）的按钮。 */
@@ -895,6 +905,8 @@ void SettingsUiTest::restoreDefaultsPersistsImmediately()
     // 密度也应参与整份默认快照恢复，不能遗留菜单单独保存的紧凑值。
     customized.sidebarDensity = SidebarDensity::Compact;
     customized.audibleBell = !TerminalSettings{}.normalized().audibleBell;
+    customized.automaticUpdateCheck = false;
+    customized.skippedUpdateVersion = QStringLiteral("9.9.9");
     QString error;
     QVERIFY2(service->save(customized, &error), qPrintable(error));
 
@@ -910,6 +922,11 @@ void SettingsUiTest::restoreDefaultsPersistsImmediately()
     QCOMPARE(service->currentSettings().audibleBell, defaults.audibleBell);
     QCOMPARE(m_database->setting(QStringLiteral("terminal/font_size")).value_or(QString()),
              QString::number(defaults.fontPointSize));
+    // 跳过的版本没有控件，恢复默认仍必须清掉，否则用户无法通过恢复默认撤销“跳过此版本”。
+    QVERIFY(service->currentSettings().automaticUpdateCheck);
+    QVERIFY(service->currentSettings().skippedUpdateVersion.isEmpty());
+    QCOMPARE(m_database->setting(QStringLiteral("update/skipped_version")).value_or(QStringLiteral("missing")),
+             QString());
 }
 
 void SettingsUiTest::connectionDialogToggleRoundTripsLegacyHmac()
@@ -1735,6 +1752,117 @@ void SettingsUiTest::aboutPageOpensOpenSourceLicenses()
     QVERIFY(localization.apply(QStringLiteral("en")));
 
     licenses->close();
+}
+
+void SettingsUiTest::updateSettingsPersistAndSkippedVersionSurvivesOtherEdits()
+{
+    auto service = makeService();
+    const auto restoreDefaults = qScopeGuard([&service] {
+        TerminalSettings settings = service->currentSettings();
+        settings.automaticUpdateCheck = true;
+        settings.skippedUpdateVersion.clear();
+        service->save(settings, nullptr);
+    });
+    QVERIFY(service->currentSettings().automaticUpdateCheck);
+    QVERIFY(service->currentSettings().skippedUpdateVersion.isEmpty());
+
+    SettingsDialog dialog(service.get());
+    // 非当前页在 QStackedWidget 里整体隐藏，先切到“关于”页，可见性断言才有意义。
+    auto *navigation = dialog.findChild<QListWidget *>(QStringLiteral("SettingsNav"));
+    QVERIFY(navigation != nullptr);
+    navigation->setCurrentRow(navigation->count() - 1);
+    auto *autoCheckToggle =
+        dialog.findChild<ToggleSwitch *>(QStringLiteral("automaticUpdateCheckToggle"));
+    auto *skippedLabel =
+        dialog.findChild<QLabel *>(QStringLiteral("aboutSkippedUpdateVersionLabel"));
+    auto *clearButton =
+        dialog.findChild<QPushButton *>(QStringLiteral("aboutClearSkippedUpdateButton"));
+    QVERIFY(autoCheckToggle != nullptr);
+    QVERIFY(skippedLabel != nullptr);
+    QVERIFY(clearButton != nullptr);
+    QVERIFY(autoCheckToggle->isChecked());
+    // 没有跳过任何版本时整行隐藏。
+    QVERIFY(!skippedLabel->isVisibleTo(&dialog));
+
+    autoCheckToggle->click();
+    QVERIFY(!service->currentSettings().automaticUpdateCheck);
+    QCOMPARE(m_database->intSetting(QStringLiteral("update/automatic_check")).value_or(-1), 0);
+
+    // 更新提示里点“跳过此版本”走的就是这条路径；设置窗口开着时要即时回显。
+    QString error;
+    QVERIFY2(UpdatePrompt::skipVersion(service.get(), QStringLiteral("0.4.0"), &error),
+             qPrintable(error));
+    QCOMPARE(skippedLabel->text(), QStringLiteral("0.4.0"));
+    QVERIFY(skippedLabel->isVisibleTo(&dialog));
+
+    // 改一项毫不相干的设置，跳过记录必须原样保留。
+    auto *bellToggle = dialog.findChild<ToggleSwitch *>(QStringLiteral("audibleBellToggle"));
+    QVERIFY(bellToggle != nullptr);
+    const bool bellBefore = service->currentSettings().audibleBell;
+    bellToggle->click();
+    QCOMPARE(service->currentSettings().audibleBell, !bellBefore);
+    QCOMPARE(service->currentSettings().skippedUpdateVersion, QStringLiteral("0.4.0"));
+    bellToggle->click();
+
+    TerminalSettingsService reloaded(m_database.get());
+    QVERIFY2(reloaded.load(&error), qPrintable(error));
+    QVERIFY(!reloaded.currentSettings().automaticUpdateCheck);
+    QCOMPARE(reloaded.currentSettings().skippedUpdateVersion, QStringLiteral("0.4.0"));
+
+    clearButton->click();
+    QVERIFY(service->currentSettings().skippedUpdateVersion.isEmpty());
+    QVERIFY(!skippedLabel->isVisibleTo(&dialog));
+}
+
+void SettingsUiTest::manualUpdateCheckPromptsAndSkipRecordsVersion()
+{
+    auto service = makeService();
+    const auto restoreDefaults = qScopeGuard([&service] {
+        TerminalSettings settings = service->currentSettings();
+        settings.skippedUpdateVersion.clear();
+        service->save(settings, nullptr);
+    });
+
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString manifestPath = directory.filePath(QStringLiteral("latest.json"));
+    QFile manifest(manifestPath);
+    QVERIFY(manifest.open(QIODevice::WriteOnly));
+    manifest.write(R"({"version":"99.0.0","publishedAt":"2026-11-01T00:00:00Z"})");
+    manifest.close();
+
+    SettingsDialog dialog(service.get());
+    auto *checker = dialog.findChild<UpdateChecker *>(QStringLiteral("settingsUpdateChecker"));
+    auto *checkButton =
+        dialog.findChild<QPushButton *>(QStringLiteral("aboutCheckForUpdatesButton"));
+    auto *statusLabel = dialog.findChild<QLabel *>(QStringLiteral("aboutUpdateStatusLabel"));
+    QVERIFY(checker != nullptr);
+    QVERIFY(checkButton != nullptr);
+    QVERIFY(statusLabel != nullptr);
+    checker->setEndpoint(QUrl::fromLocalFile(manifestPath));
+    checker->setCurrentVersion(QStringLiteral("0.3.5"));
+
+    checkButton->click();
+    QVERIFY(!checkButton->isEnabled());
+    QMessageBox *prompt = nullptr;
+    QVERIFY(QTest::qWaitFor([&] {
+        prompt = dialog.findChild<QMessageBox *>(QStringLiteral("updatePrompt"));
+        return prompt != nullptr;
+    }, 5000));
+    QVERIFY(checkButton->isEnabled());
+    QVERIFY2(statusLabel->text().contains(QStringLiteral("99.0.0")), qPrintable(statusLabel->text()));
+    QVERIFY(prompt->text().contains(QStringLiteral("99.0.0")));
+
+    auto *skipButton = prompt->findChild<QPushButton *>(QStringLiteral("updatePromptSkip"));
+    QVERIFY(skipButton != nullptr);
+    QVERIFY(prompt->findChild<QPushButton *>(QStringLiteral("updatePromptDownload")) != nullptr);
+    QVERIFY(prompt->findChild<QPushButton *>(QStringLiteral("updatePromptLater")) != nullptr);
+    skipButton->click();
+    QCOMPARE(service->currentSettings().skippedUpdateVersion, QStringLiteral("99.0.0"));
+    auto *skippedLabel =
+        dialog.findChild<QLabel *>(QStringLiteral("aboutSkippedUpdateVersionLabel"));
+    QVERIFY(skippedLabel != nullptr);
+    QCOMPARE(skippedLabel->text(), QStringLiteral("99.0.0"));
 }
 
 QTEST_MAIN(SettingsUiTest)

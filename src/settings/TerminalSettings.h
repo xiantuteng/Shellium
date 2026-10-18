@@ -213,6 +213,22 @@ struct TerminalSettings {
     int reconnectBaseDelaySeconds = 1;
 
     /**
+     * @brief 是否在启动后及运行期间定期向官网检查新版本，默认开启。
+     *
+     * 关闭后不再发起后台请求；设置“关于”页的“立即检查”按钮仍然可用。
+     */
+    bool automaticUpdateCheck = true;
+
+    /**
+     * @brief 用户在更新提示中选择跳过的版本号；空字符串表示没有跳过任何版本。
+     *
+     * 只抑制自动检查对这一个版本（及更低版本）的提示，更高的版本发布后照常提醒；手动检查
+     * 不受影响。该值不对应设置界面中的可编辑控件，SettingsDialog 保存时必须从持久快照带入，
+     * 否则任何一次设置修改都会把它清空。
+     */
+    QString skippedUpdateVersion;
+
+    /**
      * @brief 可配置的全局快捷键，键为稳定动作 ID，值使用 Qt 可移植序列。
      *
      * 空序列表示用户主动取消该动作的快捷键；未知动作 ID 不会持久化，避免拼写错误产生

@@ -1696,6 +1696,14 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">セキュリティ</translation>
     </message>
     <message>
+        <source>Check for Updates…</source>
+        <translation type="unfinished">アップデートを確認…</translation>
+    </message>
+    <message>
+        <source>Help</source>
+        <translation type="unfinished">ヘルプ</translation>
+    </message>
+    <message>
         <source>Terminal %1</source>
         <translation type="unfinished">ターミナル %1</translation>
     </message>
@@ -1746,6 +1754,18 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>Failed to save sidebar prompt preference: %1</source>
         <translation>サイドバーの確認設定を保存できませんでした: %1</translation>
+    </message>
+    <message>
+        <source>Check for Updates</source>
+        <translation type="unfinished">アップデートの確認</translation>
+    </message>
+    <message>
+        <source>You are using the latest version (%1).</source>
+        <translation type="unfinished">最新バージョン（%1）を使用しています。</translation>
+    </message>
+    <message>
+        <source>Could not check for updates: %1</source>
+        <translation type="unfinished">アップデートを確認できませんでした: %1</translation>
     </message>
     <message>
         <source>Press + in the title bar to open a new terminal tab, or connect to a server from the host list on the left.</source>
@@ -4489,6 +4509,54 @@ Only use it on hosts where mistakes are acceptable. You can press Stop at any ti
 失敗が許容できるホストでのみ使用してください。いつでも［停止］を押して操作を引き継げます。</translation>
     </message>
     <message>
+        <source>Updates</source>
+        <translation type="unfinished">アップデート</translation>
+    </message>
+    <message>
+        <source>Check for updates automatically</source>
+        <translation type="unfinished">アップデートを自動的に確認</translation>
+    </message>
+    <message>
+        <source>Look for a new version on shellium.net at startup and once a day.</source>
+        <translation type="unfinished">起動時と 1 日 1 回、shellium.net で新しいバージョンを確認します。</translation>
+    </message>
+    <message>
+        <source>Check for updates</source>
+        <translation type="unfinished">アップデートを確認</translation>
+    </message>
+    <message>
+        <source>Skipped version</source>
+        <translation type="unfinished">スキップしたバージョン</translation>
+    </message>
+    <message>
+        <source>Automatic checks stay quiet about this version.</source>
+        <translation type="unfinished">自動確認ではこのバージョンを通知しません。</translation>
+    </message>
+    <message>
+        <source>Checking for updates…</source>
+        <translation type="unfinished">アップデートを確認しています…</translation>
+    </message>
+    <message>
+        <source>Shellium %1 is available.</source>
+        <translation type="unfinished">Shellium %1 が公開されています。</translation>
+    </message>
+    <message>
+        <source>You are using the latest version (%1).</source>
+        <translation type="unfinished">最新バージョン（%1）を使用しています。</translation>
+    </message>
+    <message>
+        <source>Could not check for updates: %1</source>
+        <translation type="unfinished">アップデートを確認できませんでした: %1</translation>
+    </message>
+    <message>
+        <source>Check now</source>
+        <translation type="unfinished">今すぐ確認</translation>
+    </message>
+    <message>
+        <source>Clear</source>
+        <translation type="unfinished">クリア</translation>
+    </message>
+    <message>
         <source>The vault is unavailable</source>
         <translation type="unfinished">保管庫を利用できません</translation>
     </message>
@@ -5482,6 +5550,64 @@ Reconnecting manually…<byte value="xd"/>
     <message>
         <source>Close this terminal</source>
         <translation type="unfinished">このターミナルを閉じる</translation>
+    </message>
+</context>
+<context>
+    <name>UpdateChecker</name>
+    <message>
+        <source>The version of this build is unknown.</source>
+        <translation type="unfinished">このビルドのバージョンが不明です。</translation>
+    </message>
+    <message>
+        <source>The update server returned HTTP %1.</source>
+        <translation type="unfinished">アップデートサーバーが HTTP %1 を返しました。</translation>
+    </message>
+    <message>
+        <source>The update information is too large.</source>
+        <translation type="unfinished">アップデート情報が大きすぎます。</translation>
+    </message>
+    <message>
+        <source>The update information could not be read.</source>
+        <translation type="unfinished">アップデート情報を読み取れませんでした。</translation>
+    </message>
+    <message>
+        <source>No release has been published yet.</source>
+        <translation type="unfinished">まだバージョンが公開されていません。</translation>
+    </message>
+</context>
+<context>
+    <name>UpdatePrompt</name>
+    <message>
+        <source>Update available</source>
+        <translation type="unfinished">アップデートがあります</translation>
+    </message>
+    <message>
+        <source>Shellium %1 is available.</source>
+        <translation type="unfinished">Shellium %1 が公開されています。</translation>
+    </message>
+    <message>
+        <source>You are using version %1.</source>
+        <translation type="unfinished">現在のバージョンは %1 です。</translation>
+    </message>
+    <message>
+        <source>Released on %1.</source>
+        <translation type="unfinished">%1 公開。</translation>
+    </message>
+    <message>
+        <source>Download</source>
+        <translation type="unfinished">ダウンロード</translation>
+    </message>
+    <message>
+        <source>Skip This Version</source>
+        <translation type="unfinished">このバージョンをスキップ</translation>
+    </message>
+    <message>
+        <source>Remind Me Later</source>
+        <translation type="unfinished">後で通知</translation>
+    </message>
+    <message>
+        <source>Could not save settings</source>
+        <translation type="unfinished">設定を保存できませんでした</translation>
     </message>
 </context>
 <context>

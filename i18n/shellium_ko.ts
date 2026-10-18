@@ -1696,6 +1696,14 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">보안</translation>
     </message>
     <message>
+        <source>Check for Updates…</source>
+        <translation type="unfinished">업데이트 확인…</translation>
+    </message>
+    <message>
+        <source>Help</source>
+        <translation type="unfinished">도움말</translation>
+    </message>
+    <message>
         <source>Terminal %1</source>
         <translation type="unfinished">터미널 %1</translation>
     </message>
@@ -1746,6 +1754,18 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>Failed to save sidebar prompt preference: %1</source>
         <translation>사이드바 확인 설정을 저장하지 못했습니다: %1</translation>
+    </message>
+    <message>
+        <source>Check for Updates</source>
+        <translation type="unfinished">업데이트 확인</translation>
+    </message>
+    <message>
+        <source>You are using the latest version (%1).</source>
+        <translation type="unfinished">최신 버전(%1)을 사용하고 있습니다.</translation>
+    </message>
+    <message>
+        <source>Could not check for updates: %1</source>
+        <translation type="unfinished">업데이트를 확인할 수 없습니다: %1</translation>
     </message>
     <message>
         <source>Press + in the title bar to open a new terminal tab, or connect to a server from the host list on the left.</source>
@@ -4489,6 +4509,54 @@ Only use it on hosts where mistakes are acceptable. You can press Stop at any ti
 실수가 허용되는 호스트에서만 사용하세요. 언제든 중지를 눌러 직접 제어할 수 있습니다.</translation>
     </message>
     <message>
+        <source>Updates</source>
+        <translation type="unfinished">업데이트</translation>
+    </message>
+    <message>
+        <source>Check for updates automatically</source>
+        <translation type="unfinished">자동으로 업데이트 확인</translation>
+    </message>
+    <message>
+        <source>Look for a new version on shellium.net at startup and once a day.</source>
+        <translation type="unfinished">시작할 때와 하루에 한 번 shellium.net에서 새 버전을 확인합니다.</translation>
+    </message>
+    <message>
+        <source>Check for updates</source>
+        <translation type="unfinished">업데이트 확인</translation>
+    </message>
+    <message>
+        <source>Skipped version</source>
+        <translation type="unfinished">건너뛴 버전</translation>
+    </message>
+    <message>
+        <source>Automatic checks stay quiet about this version.</source>
+        <translation type="unfinished">자동 확인에서 이 버전은 더 이상 알리지 않습니다.</translation>
+    </message>
+    <message>
+        <source>Checking for updates…</source>
+        <translation type="unfinished">업데이트 확인 중…</translation>
+    </message>
+    <message>
+        <source>Shellium %1 is available.</source>
+        <translation type="unfinished">Shellium %1을(를) 사용할 수 있습니다.</translation>
+    </message>
+    <message>
+        <source>You are using the latest version (%1).</source>
+        <translation type="unfinished">최신 버전(%1)을 사용하고 있습니다.</translation>
+    </message>
+    <message>
+        <source>Could not check for updates: %1</source>
+        <translation type="unfinished">업데이트를 확인할 수 없습니다: %1</translation>
+    </message>
+    <message>
+        <source>Check now</source>
+        <translation type="unfinished">지금 확인</translation>
+    </message>
+    <message>
+        <source>Clear</source>
+        <translation type="unfinished">지우기</translation>
+    </message>
+    <message>
         <source>The vault is unavailable</source>
         <translation type="unfinished">보관소를 사용할 수 없습니다</translation>
     </message>
@@ -5482,6 +5550,64 @@ Reconnecting manually…<byte value="xd"/>
     <message>
         <source>Close this terminal</source>
         <translation type="unfinished">이 터미널 닫기</translation>
+    </message>
+</context>
+<context>
+    <name>UpdateChecker</name>
+    <message>
+        <source>The version of this build is unknown.</source>
+        <translation type="unfinished">이 빌드의 버전을 알 수 없습니다.</translation>
+    </message>
+    <message>
+        <source>The update server returned HTTP %1.</source>
+        <translation type="unfinished">업데이트 서버가 HTTP %1을(를) 반환했습니다.</translation>
+    </message>
+    <message>
+        <source>The update information is too large.</source>
+        <translation type="unfinished">업데이트 정보가 너무 큽니다.</translation>
+    </message>
+    <message>
+        <source>The update information could not be read.</source>
+        <translation type="unfinished">업데이트 정보를 읽을 수 없습니다.</translation>
+    </message>
+    <message>
+        <source>No release has been published yet.</source>
+        <translation type="unfinished">아직 게시된 버전이 없습니다.</translation>
+    </message>
+</context>
+<context>
+    <name>UpdatePrompt</name>
+    <message>
+        <source>Update available</source>
+        <translation type="unfinished">업데이트 사용 가능</translation>
+    </message>
+    <message>
+        <source>Shellium %1 is available.</source>
+        <translation type="unfinished">Shellium %1을(를) 사용할 수 있습니다.</translation>
+    </message>
+    <message>
+        <source>You are using version %1.</source>
+        <translation type="unfinished">현재 버전은 %1입니다.</translation>
+    </message>
+    <message>
+        <source>Released on %1.</source>
+        <translation type="unfinished">%1에 출시되었습니다.</translation>
+    </message>
+    <message>
+        <source>Download</source>
+        <translation type="unfinished">다운로드</translation>
+    </message>
+    <message>
+        <source>Skip This Version</source>
+        <translation type="unfinished">이 버전 건너뛰기</translation>
+    </message>
+    <message>
+        <source>Remind Me Later</source>
+        <translation type="unfinished">나중에 알림</translation>
+    </message>
+    <message>
+        <source>Could not save settings</source>
+        <translation type="unfinished">설정을 저장할 수 없습니다</translation>
     </message>
 </context>
 <context>

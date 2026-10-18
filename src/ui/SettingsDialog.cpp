@@ -13,6 +13,8 @@
 #include "ui/SettingsWidgets.h"
 #include "ui/UiIcons.h"
 #include "ui/VaultDialog.h"
+#include "update/UpdateChecker.h"
+#include "update/UpdatePrompt.h"
 
 #include <QApplication>
 #include <QIcon>
@@ -202,7 +204,10 @@ SettingsDialog::SettingsDialog(TerminalSettingsService *service,
         populateControls(TerminalSettings{}.normalized());
         // “恢复默认”是一次明确的批量操作，使用服务的完整设置事务一次提交，避免逐字段写入
         // 时应用短暂处于半默认状态；若涉及关闭主密码保护，persistChanges() 会照常要求验证。
+        // 跳过的版本不在控件上，普通保存会从快照带回去；这一次必须显式清掉。
+        m_clearSkippedUpdateOnSave = true;
         persistChanges();
+        m_clearSkippedUpdateOnSave = false;
     });
 
     connect(m_languageSelector, &QComboBox::currentIndexChanged,
@@ -242,7 +247,8 @@ SettingsDialog::SettingsDialog(TerminalSettingsService *service,
          m_commandAutoCompletionToggle,
          m_multiLinePasteConfirmationToggle,
          m_automaticReconnectToggle,
-         m_sidebarDoubleClickPromptToggle}) {
+         m_sidebarDoubleClickPromptToggle,
+         m_automaticUpdateCheckToggle}) {
         connect(toggle, &ToggleSwitch::toggled, this, [this](bool) { persistChanges(); });
     }
     // 主密码保护不是普通布尔值：开关改变后立即进入专用验证/迁移流程；只有流程完成且设置
@@ -1121,6 +1127,86 @@ void SettingsDialog::applyAiExecutionPolicy(const int policyValue)
     }
 }
 
+SettingsCard *SettingsDialog::buildUpdatesCard(QWidget *page)
+{
+    auto *updates = new SettingsCard([this] { return tr("Updates"); }, page);
+
+    m_automaticUpdateCheckToggle = new ToggleSwitch(updates);
+    m_automaticUpdateCheckToggle->setObjectName(QStringLiteral("automaticUpdateCheckToggle"));
+    updates->addRow([this] { return tr("Check for updates automatically"); },
+                    m_automaticUpdateCheckToggle,
+                    [this] { return tr("Look for a new version on shellium.net at startup and once a day."); });
+
+    m_checkForUpdatesButton = new QPushButton(updates);
+    m_checkForUpdatesButton->setObjectName(QStringLiteral("aboutCheckForUpdatesButton"));
+    updates->addRow([this] { return tr("Check for updates"); }, m_checkForUpdatesButton);
+
+    m_updateStatusLabel = new QLabel(updates);
+    m_updateStatusLabel->setObjectName(QStringLiteral("aboutUpdateStatusLabel"));
+    m_updateStatusLabel->setWordWrap(true);
+    m_updateStatusLabel->setVisible(false);
+    updates->addFullWidthWidget(m_updateStatusLabel);
+
+    // 只有跳过过版本时才显示这一行：提供撤销入口，否则用户误点“跳过”后就再也看不到
+    // 这个版本的自动提醒，也无从得知原因。
+    auto *skippedField = new QWidget(updates);
+    auto *skippedLayout = new QHBoxLayout(skippedField);
+    skippedLayout->setContentsMargins(0, 0, 0, 0);
+    skippedLayout->setSpacing(10);
+    m_skippedUpdateVersionLabel = new QLabel(skippedField);
+    m_skippedUpdateVersionLabel->setObjectName(QStringLiteral("aboutSkippedUpdateVersionLabel"));
+    auto *clearSkippedButton = new QPushButton(skippedField);
+    clearSkippedButton->setObjectName(QStringLiteral("aboutClearSkippedUpdateButton"));
+    skippedLayout->addWidget(m_skippedUpdateVersionLabel);
+    skippedLayout->addWidget(clearSkippedButton);
+    m_skippedUpdateVersionRow = updates->addRow([this] { return tr("Skipped version"); },
+                                                skippedField,
+                                                [this] { return tr("Automatic checks stay quiet about this version."); });
+    m_skippedUpdateVersionRow->setVisible(false);
+
+    m_updateChecker = new UpdateChecker(this);
+    m_updateChecker->setObjectName(QStringLiteral("settingsUpdateChecker"));
+
+    connect(clearSkippedButton, &QPushButton::clicked, this, [this] {
+        TerminalSettings settings = m_service->currentSettings();
+        settings.skippedUpdateVersion.clear();
+        QString error;
+        if (!m_service->save(settings, &error)) {
+            QMessageBox::warning(this, tr("Could not save settings"), error);
+        }
+        // 保存成功时 settingsChanged 广播会刷新快照与控件，这里无需再手动更新。
+    });
+    connect(m_checkForUpdatesButton, &QPushButton::clicked, this, [this] {
+        m_checkForUpdatesButton->setEnabled(false);
+        m_updateStatusLabel->setText(tr("Checking for updates…"));
+        m_updateStatusLabel->setVisible(true);
+        m_updateChecker->check(m_persistedSettings.skippedUpdateVersion, true);
+    });
+    connect(m_updateChecker, &UpdateChecker::updateAvailable, this,
+            [this](const UpdateRelease &release, bool) {
+                m_checkForUpdatesButton->setEnabled(true);
+                m_updateStatusLabel->setText(tr("Shellium %1 is available.").arg(release.version));
+                UpdatePrompt::show(this, release, m_updateChecker->currentVersion(), m_service);
+            });
+    connect(m_updateChecker, &UpdateChecker::noUpdateAvailable, this,
+            [this](const QString &, bool) {
+                m_checkForUpdatesButton->setEnabled(true);
+                m_updateStatusLabel->setText(
+                    tr("You are using the latest version (%1).").arg(m_updateChecker->currentVersion()));
+            });
+    connect(m_updateChecker, &UpdateChecker::checkFailed, this,
+            [this](const QString &error, bool) {
+                m_checkForUpdatesButton->setEnabled(true);
+                m_updateStatusLabel->setText(tr("Could not check for updates: %1").arg(error));
+            });
+
+    i18n::onRetranslate(updates, [this, clearSkippedButton] {
+        m_checkForUpdatesButton->setText(tr("Check now"));
+        clearSkippedButton->setText(tr("Clear"));
+    });
+    return updates;
+}
+
 void SettingsDialog::persistAiSettings()
 {
     if (m_aiSettingsService == nullptr) {
@@ -1196,6 +1282,12 @@ TerminalSettings SettingsDialog::editedSettings() const
     settings.vaultPasswordEnabled = m_vaultPasswordEnabledToggle->isChecked();
     settings.reconnectMaxAttempts = m_reconnectMaxAttemptsSpin->value();
     settings.reconnectBaseDelaySeconds = m_reconnectBaseDelaySpin->value();
+    settings.automaticUpdateCheck = m_automaticUpdateCheckToggle->isChecked();
+    // 跳过的版本没有可编辑控件，只能从持久快照带入；否则改任何一项设置都会把它清空。
+    // “恢复默认”是例外：用户要的就是整份设置回到出厂值，包括不再跳过任何版本。
+    settings.skippedUpdateVersion = m_clearSkippedUpdateOnSave
+        ? QString()
+        : m_persistedSettings.skippedUpdateVersion;
     for (auto iterator = m_shortcutEditors.cbegin(); iterator != m_shortcutEditors.cend(); ++iterator) {
         settings.shortcuts.insert(iterator.key(), iterator.value()->keySequence());
     }
@@ -1343,6 +1435,9 @@ void SettingsDialog::populateControls(const TerminalSettings &settings)
     for (QWidget *row : std::as_const(m_reconnectDependentRows)) {
         row->setEnabled(normalized.automaticReconnect);
     }
+    m_automaticUpdateCheckToggle->setChecked(normalized.automaticUpdateCheck);
+    m_skippedUpdateVersionLabel->setText(normalized.skippedUpdateVersion);
+    m_skippedUpdateVersionRow->setVisible(!normalized.skippedUpdateVersion.isEmpty());
     for (auto iterator = m_shortcutEditors.cbegin(); iterator != m_shortcutEditors.cend(); ++iterator) {
         iterator.value()->setKeySequence(normalized.shortcuts.value(iterator.key()));
     }
@@ -1441,6 +1536,8 @@ QWidget *SettingsDialog::buildAboutPage()
     websiteLink->setToolTip(website);
     details->addRow([this] { return tr("Official website"); }, websiteLink);
     layout->addWidget(details);
+
+    layout->addWidget(buildUpdatesCard(page));
 
     auto *legal = new SettingsCard([this] { return tr("Copyright"); }, page);
     auto *copyrightLabel = legal->addNote([this] {

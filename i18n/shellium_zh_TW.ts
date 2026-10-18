@@ -1696,6 +1696,14 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation>安全</translation>
     </message>
     <message>
+        <source>Check for Updates…</source>
+        <translation type="unfinished">檢查更新…</translation>
+    </message>
+    <message>
+        <source>Help</source>
+        <translation type="unfinished">說明</translation>
+    </message>
+    <message>
         <source>Terminal %1</source>
         <translation>終端 %1</translation>
     </message>
@@ -1746,6 +1754,18 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>Failed to save sidebar prompt preference: %1</source>
         <translation>儲存側邊欄提示偏好設定失敗：%1</translation>
+    </message>
+    <message>
+        <source>Check for Updates</source>
+        <translation type="unfinished">檢查更新</translation>
+    </message>
+    <message>
+        <source>You are using the latest version (%1).</source>
+        <translation type="unfinished">目前已是最新版本（%1）。</translation>
+    </message>
+    <message>
+        <source>Could not check for updates: %1</source>
+        <translation type="unfinished">無法檢查更新：%1</translation>
     </message>
     <message>
         <source>Could not switch to the selected language; check that the language pack is complete</source>
@@ -4491,6 +4511,54 @@ Only use it on hosts where mistakes are acceptable. You can press Stop at any ti
 只在可以接受失誤的主機上使用。你隨時可以點選「停止」接手。</translation>
     </message>
     <message>
+        <source>Updates</source>
+        <translation type="unfinished">更新</translation>
+    </message>
+    <message>
+        <source>Check for updates automatically</source>
+        <translation type="unfinished">自動檢查更新</translation>
+    </message>
+    <message>
+        <source>Look for a new version on shellium.net at startup and once a day.</source>
+        <translation type="unfinished">啟動時及每天一次在 shellium.net 上檢查新版本。</translation>
+    </message>
+    <message>
+        <source>Check for updates</source>
+        <translation type="unfinished">檢查更新</translation>
+    </message>
+    <message>
+        <source>Skipped version</source>
+        <translation type="unfinished">已略過的版本</translation>
+    </message>
+    <message>
+        <source>Automatic checks stay quiet about this version.</source>
+        <translation type="unfinished">自動檢查不會再提示這個版本。</translation>
+    </message>
+    <message>
+        <source>Checking for updates…</source>
+        <translation type="unfinished">正在檢查更新…</translation>
+    </message>
+    <message>
+        <source>Shellium %1 is available.</source>
+        <translation type="unfinished">Shellium %1 已發佈。</translation>
+    </message>
+    <message>
+        <source>You are using the latest version (%1).</source>
+        <translation type="unfinished">目前已是最新版本（%1）。</translation>
+    </message>
+    <message>
+        <source>Could not check for updates: %1</source>
+        <translation type="unfinished">無法檢查更新：%1</translation>
+    </message>
+    <message>
+        <source>Check now</source>
+        <translation type="unfinished">立即檢查</translation>
+    </message>
+    <message>
+        <source>Clear</source>
+        <translation type="unfinished">清除</translation>
+    </message>
+    <message>
         <source>The vault is unavailable</source>
         <translation>保險庫不可用</translation>
     </message>
@@ -5484,6 +5552,64 @@ Reconnecting manually…<byte value="xd"/>
     <message>
         <source>Close this terminal</source>
         <translation type="unfinished">關閉此終端</translation>
+    </message>
+</context>
+<context>
+    <name>UpdateChecker</name>
+    <message>
+        <source>The version of this build is unknown.</source>
+        <translation type="unfinished">無法確定目前程式的版本。</translation>
+    </message>
+    <message>
+        <source>The update server returned HTTP %1.</source>
+        <translation type="unfinished">更新伺服器傳回了 HTTP %1。</translation>
+    </message>
+    <message>
+        <source>The update information is too large.</source>
+        <translation type="unfinished">更新資訊過大。</translation>
+    </message>
+    <message>
+        <source>The update information could not be read.</source>
+        <translation type="unfinished">無法讀取更新資訊。</translation>
+    </message>
+    <message>
+        <source>No release has been published yet.</source>
+        <translation type="unfinished">尚未發佈任何版本。</translation>
+    </message>
+</context>
+<context>
+    <name>UpdatePrompt</name>
+    <message>
+        <source>Update available</source>
+        <translation type="unfinished">有可用的更新</translation>
+    </message>
+    <message>
+        <source>Shellium %1 is available.</source>
+        <translation type="unfinished">Shellium %1 已發佈。</translation>
+    </message>
+    <message>
+        <source>You are using version %1.</source>
+        <translation type="unfinished">目前使用的版本為 %1。</translation>
+    </message>
+    <message>
+        <source>Released on %1.</source>
+        <translation type="unfinished">發佈於 %1。</translation>
+    </message>
+    <message>
+        <source>Download</source>
+        <translation type="unfinished">下載</translation>
+    </message>
+    <message>
+        <source>Skip This Version</source>
+        <translation type="unfinished">略過此版本</translation>
+    </message>
+    <message>
+        <source>Remind Me Later</source>
+        <translation type="unfinished">稍後提醒</translation>
+    </message>
+    <message>
+        <source>Could not save settings</source>
+        <translation type="unfinished">無法儲存設定</translation>
     </message>
 </context>
 <context>

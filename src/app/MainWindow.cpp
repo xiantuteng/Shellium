@@ -27,6 +27,8 @@
 #include "ui/UiIcons.h"
 #include "ui/SidebarSelection.h"
 #include "ui/VaultDialog.h"
+#include "update/UpdateChecker.h"
+#include "update/UpdatePrompt.h"
 
 #include <QAbstractItemView>
 #include <QAction>
@@ -1190,6 +1192,14 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     securityMenu->addSeparator();
     securityMenu->addAction(sshKeyManagerAction);
 
+    auto *checkForUpdatesAction = new QAction(this);
+    checkForUpdatesAction->setObjectName(QStringLiteral("CheckForUpdatesAction"));
+    registerTranslatable(checkForUpdatesAction, QT_TRANSLATE_NOOP("MainWindow", "Check for Updates…"));
+    QMenu *helpMenu = applicationMenuBar->addMenu(QString());
+    registerTranslatable(helpMenu, QT_TRANSLATE_NOOP("MainWindow", "Help"));
+    helpMenu->addAction(checkForUpdatesAction);
+    setupUpdateChecks(checkForUpdatesAction);
+
 #ifndef Q_OS_MACOS
     // Qt 判定窗口级快捷键时要求动作至少关联一个可见控件；隐藏的菜单模型及其菜单都不满足，
     // 只挂在那里的动作快捷键会全部失效。把每个菜单动作再挂到主窗口本身，快捷键随窗口生效。
@@ -1654,6 +1664,57 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
         break;
     }
     return false;
+}
+
+void MainWindow::setupUpdateChecks(QAction *checkForUpdatesAction)
+{
+    m_updateChecker = new UpdateChecker(this);
+    m_updateChecker->setObjectName(QStringLiteral("MainWindowUpdateChecker"));
+
+    const auto runAutomaticCheck = [this]() {
+        const TerminalSettings settings = m_settingsService->currentSettings();
+        if (settings.automaticUpdateCheck) {
+            m_updateChecker->check(settings.skippedUpdateVersion, false);
+        }
+    };
+    // 启动后稍等片刻再查：不和恢复会话、加载主机列表抢启动时间，网络慢时也不拖慢首屏。
+    QTimer::singleShot(kStartupUpdateCheckDelayMs, this, runAutomaticCheck);
+    // 长期不关的窗口同样需要知道新版本发布，每天再查一次。
+    m_updateCheckTimer = new QTimer(this);
+    m_updateCheckTimer->setInterval(kPeriodicUpdateCheckIntervalMs);
+    connect(m_updateCheckTimer, &QTimer::timeout, this, runAutomaticCheck);
+    m_updateCheckTimer->start();
+
+    connect(checkForUpdatesAction, &QAction::triggered, this, [this]() {
+        m_updateChecker->check(m_settingsService->currentSettings().skippedUpdateVersion, true);
+    });
+    connect(m_updateChecker, &UpdateChecker::updateAvailable, this,
+            [this](const UpdateRelease &release, bool) {
+                // 已有提示框还开着时不叠第二个；用户正在决定，重复弹出只会更烦人。
+                if (m_updatePrompt != nullptr) {
+                    m_updatePrompt->raise();
+                    return;
+                }
+                m_updatePrompt = UpdatePrompt::show(
+                    this, release, m_updateChecker->currentVersion(), m_settingsService);
+            });
+    connect(m_updateChecker, &UpdateChecker::noUpdateAvailable, this,
+            [this](const QString &, const bool manual) {
+                if (manual) {
+                    QMessageBox::information(
+                        this, tr("Check for Updates"),
+                        tr("You are using the latest version (%1).")
+                            .arg(m_updateChecker->currentVersion()));
+                }
+            });
+    connect(m_updateChecker, &UpdateChecker::checkFailed, this,
+            [this](const QString &error, const bool manual) {
+                // 后台检查失败（离线、代理拦截）不值得打扰用户，只有手动检查才提示。
+                if (manual) {
+                    QMessageBox::warning(this, tr("Check for Updates"),
+                                         tr("Could not check for updates: %1").arg(error));
+                }
+            });
 }
 
 void MainWindow::showEvent(QShowEvent *event)

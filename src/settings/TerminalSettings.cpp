@@ -46,6 +46,10 @@ const QString kAutomaticReconnectKey = QStringLiteral("connection/automatic_reco
 const QString kVaultPasswordEnabledKey = QStringLiteral("security/vault_password_enabled");
 const QString kReconnectMaxAttemptsKey = QStringLiteral("connection/reconnect_max_attempts");
 const QString kReconnectBaseDelayKey = QStringLiteral("connection/reconnect_base_delay_seconds");
+/** @brief 后台检查新版本开关；缺失时由结构默认值保持开启。 */
+const QString kAutomaticUpdateCheckKey = QStringLiteral("update/automatic_check");
+/** @brief 用户在更新提示中跳过的版本号。 */
+const QString kSkippedUpdateVersionKey = QStringLiteral("update/skipped_version");
 const QString kShortcutPrefix = QStringLiteral("shortcut/");
 /**
  * @brief 已保存快捷键所对应的默认方案版本。
@@ -474,6 +478,11 @@ TerminalSettings TerminalSettings::normalized() const
     result.historyMinCommandLength = std::clamp(result.historyMinCommandLength, 0, 256);
     result.reconnectMaxAttempts = std::clamp(result.reconnectMaxAttempts, 0, 10);
     result.reconnectBaseDelaySeconds = std::clamp(result.reconnectBaseDelaySeconds, 1, 60);
+    // 版本号只用于比较，过长的值只可能来自手工改库，直接丢弃比截断出一个错误版本更安全。
+    result.skippedUpdateVersion = result.skippedUpdateVersion.trimmed();
+    if (result.skippedUpdateVersion.size() > 64) {
+        result.skippedUpdateVersion.clear();
+    }
 
     const QHash<QString, QKeySequence> defaults = defaultShortcuts();
     for (const QString &id : shortcutIds()) {
@@ -1345,6 +1354,8 @@ bool TerminalSettings::operator==(const TerminalSettings &other) const
         && vaultPasswordEnabled == other.vaultPasswordEnabled
         && reconnectMaxAttempts == other.reconnectMaxAttempts
         && reconnectBaseDelaySeconds == other.reconnectBaseDelaySeconds
+        && automaticUpdateCheck == other.automaticUpdateCheck
+        && skippedUpdateVersion == other.skippedUpdateVersion
         && shortcuts == other.shortcuts;
 }
 
@@ -1535,6 +1546,11 @@ bool TerminalSettingsService::load(QString *errorMessage)
     }
     assignInteger(kReconnectMaxAttemptsKey, &loaded.reconnectMaxAttempts);
     assignInteger(kReconnectBaseDelayKey, &loaded.reconnectBaseDelaySeconds);
+    assignBoolean(kAutomaticUpdateCheckKey, &loaded.automaticUpdateCheck);
+    if (const std::optional<QString> raw = readValue(kSkippedUpdateVersionKey, &queryFailed);
+        raw.has_value() && !queryFailed) {
+        loaded.skippedUpdateVersion = *raw;
+    }
 
     QSet<QString> storedShortcutIds;
     for (const QString &id : TerminalSettings::shortcutIds()) {
@@ -1641,7 +1657,10 @@ bool TerminalSettingsService::save(const TerminalSettings &settings, QString *er
                 || !write(kReconnectMaxAttemptsKey,
                           QString::number(normalizedSettings.reconnectMaxAttempts))
                 || !write(kReconnectBaseDelayKey,
-                          QString::number(normalizedSettings.reconnectBaseDelaySeconds))) {
+                          QString::number(normalizedSettings.reconnectBaseDelaySeconds))
+                || !write(kAutomaticUpdateCheckKey,
+                          serializeBool(normalizedSettings.automaticUpdateCheck))
+                || !write(kSkippedUpdateVersionKey, normalizedSettings.skippedUpdateVersion)) {
                 return false;
             }
             for (const QString &id : TerminalSettings::shortcutIds()) {

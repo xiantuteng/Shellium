@@ -270,6 +270,10 @@ set(SHELLIUM_APP_SOURCES
     src/ui/UiIcons.h
     src/ui/VaultDialog.cpp
     src/ui/VaultDialog.h
+    src/update/UpdateChecker.cpp
+    src/update/UpdateChecker.h
+    src/update/UpdatePrompt.cpp
+    src/update/UpdatePrompt.h
 )
 
 qt_add_executable(Shellium
@@ -1035,6 +1039,10 @@ if(BUILD_TESTING)
         src/ui/SettingsWidgets.h
         src/ui/VaultDialog.cpp
         src/ui/VaultDialog.h
+        src/update/UpdateChecker.cpp
+        src/update/UpdateChecker.h
+        src/update/UpdatePrompt.cpp
+        src/update/UpdatePrompt.h
     )
     shellium_add_bundled_fonts(ShelliumSettingsUiTests)
     shellium_add_license_notices(ShelliumSettingsUiTests)
@@ -1050,6 +1058,17 @@ if(BUILD_TESTING)
         LRELEASE_TARGET ShelliumSettingsUiTests_lrelease
         LUPDATE_OPTIONS -no-obsolete -locations none)
     add_test(NAME ShelliumSettingsUiTests COMMAND ShelliumSettingsUiTests)
+
+    # 检查更新：版本比较、跳过规则与清单解析是纯逻辑，网络路径用 file:// 清单驱动真实的
+    # QNetworkAccessManager，全程不访问外网，也不依赖本机端口（沙箱里连接被拒会长时间挂起）。
+    qt_add_executable(ShelliumUpdateTests
+        tests/UpdateCheckerTest.cpp
+        src/update/UpdateChecker.cpp
+        src/update/UpdateChecker.h
+    )
+    target_include_directories(ShelliumUpdateTests PRIVATE src)
+    target_link_libraries(ShelliumUpdateTests PRIVATE Qt6::Core Qt6::Network Qt6::Test)
+    add_test(NAME ShelliumUpdateTests COMMAND ShelliumUpdateTests)
 
     # AI 助手改版成单步交互回路后，"执行完命令自动读取真实输出并续问模型"这条链路完全靠
     # 轮询终端快照实现，没有任何一处是纯逻辑、可以脱离真实控件测试的。用手写的极简 HTTP
