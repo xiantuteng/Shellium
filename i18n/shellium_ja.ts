@@ -146,6 +146,54 @@ Only use it on hosts where mistakes are acceptable. You can press Stop at any ti
         <translation>実行モード</translation>
     </message>
     <message>
+        <source>Failed to save the model: %1</source>
+        <translation>モデルを保存できませんでした: %1</translation>
+    </message>
+    <message>
+        <source>CLI default</source>
+        <translation>CLI の既定値</translation>
+    </message>
+    <message>
+        <source>Choose model</source>
+        <translation>モデルを選択</translation>
+    </message>
+    <message>
+        <source>Model: %1</source>
+        <translation>モデル: %1</translation>
+    </message>
+    <message>
+        <source>Model</source>
+        <translation>モデル</translation>
+    </message>
+    <message>
+        <source>Set the LLM service URL in Settings → AI Assistant first</source>
+        <translation>先に「設定 → AI アシスタント」で LLM サービスの URL を入力してください</translation>
+    </message>
+    <message>
+        <source>Loading models…</source>
+        <translation>モデルを読み込み中…</translation>
+    </message>
+    <message>
+        <source>Refresh model list</source>
+        <translation>モデル一覧を更新</translation>
+    </message>
+    <message>
+        <source>Other model…</source>
+        <translation>その他のモデル…</translation>
+    </message>
+    <message>
+        <source>Other model</source>
+        <translation>その他のモデル</translation>
+    </message>
+    <message>
+        <source>Model name passed to the CLI as --model (leave empty for the CLI default):</source>
+        <translation>--model として CLI に渡すモデル名（空欄にすると CLI の既定モデル）:</translation>
+    </message>
+    <message>
+        <source>Model name sent to the gateway:</source>
+        <translation>ゲートウェイに送信するモデル名:</translation>
+    </message>
+    <message>
         <source>The AI did not return a result following the single-step interaction protocol; this round has been stopped. Retry or switch to a model that supports JSON instructions.</source>
         <translation type="unfinished">AI が単一ステップ対話プロトコルに従った結果を返さなかったため、このラウンドを停止しました。もう一度試すか、JSON 指示に対応したモデルに切り替えてください。</translation>
     </message>

@@ -146,6 +146,54 @@ Only use it on hosts where mistakes are acceptable. You can press Stop at any ti
         <translation>Режим выполнения</translation>
     </message>
     <message>
+        <source>Failed to save the model: %1</source>
+        <translation>Не удалось сохранить модель: %1</translation>
+    </message>
+    <message>
+        <source>CLI default</source>
+        <translation>По умолчанию в CLI</translation>
+    </message>
+    <message>
+        <source>Choose model</source>
+        <translation>Выбрать модель</translation>
+    </message>
+    <message>
+        <source>Model: %1</source>
+        <translation>Модель: %1</translation>
+    </message>
+    <message>
+        <source>Model</source>
+        <translation>Модель</translation>
+    </message>
+    <message>
+        <source>Set the LLM service URL in Settings → AI Assistant first</source>
+        <translation>Сначала введите URL службы LLM в «Настройки → Ассистент ИИ»</translation>
+    </message>
+    <message>
+        <source>Loading models…</source>
+        <translation>Загрузка моделей…</translation>
+    </message>
+    <message>
+        <source>Refresh model list</source>
+        <translation>Обновить список моделей</translation>
+    </message>
+    <message>
+        <source>Other model…</source>
+        <translation>Другая модель…</translation>
+    </message>
+    <message>
+        <source>Other model</source>
+        <translation>Другая модель</translation>
+    </message>
+    <message>
+        <source>Model name passed to the CLI as --model (leave empty for the CLI default):</source>
+        <translation>Имя модели, передаваемое в CLI как --model (оставьте пустым для модели CLI по умолчанию):</translation>
+    </message>
+    <message>
+        <source>Model name sent to the gateway:</source>
+        <translation>Имя модели, отправляемое в шлюз:</translation>
+    </message>
+    <message>
         <source>The AI did not return a result following the single-step interaction protocol; this round has been stopped. Retry or switch to a model that supports JSON instructions.</source>
         <translation type="unfinished">ИИ не вернул результат в соответствии с протоколом одношагового взаимодействия; этот раунд остановлен. Повторите попытку или переключитесь на модель, поддерживающую инструкции JSON.</translation>
     </message>

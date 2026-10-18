@@ -146,6 +146,54 @@ Use-o apenas em hosts onde erros são aceitáveis. Você pode clicar em Parar a 
         <translation>Modo de execução</translation>
     </message>
     <message>
+        <source>Failed to save the model: %1</source>
+        <translation>Não foi possível salvar o modelo: %1</translation>
+    </message>
+    <message>
+        <source>CLI default</source>
+        <translation>Padrão da CLI</translation>
+    </message>
+    <message>
+        <source>Choose model</source>
+        <translation>Escolher modelo</translation>
+    </message>
+    <message>
+        <source>Model: %1</source>
+        <translation>Modelo: %1</translation>
+    </message>
+    <message>
+        <source>Model</source>
+        <translation>Modelo</translation>
+    </message>
+    <message>
+        <source>Set the LLM service URL in Settings → AI Assistant first</source>
+        <translation>Informe primeiro a URL do serviço LLM em Configurações → Assistente de IA</translation>
+    </message>
+    <message>
+        <source>Loading models…</source>
+        <translation>Carregando modelos…</translation>
+    </message>
+    <message>
+        <source>Refresh model list</source>
+        <translation>Atualizar lista de modelos</translation>
+    </message>
+    <message>
+        <source>Other model…</source>
+        <translation>Outro modelo…</translation>
+    </message>
+    <message>
+        <source>Other model</source>
+        <translation>Outro modelo</translation>
+    </message>
+    <message>
+        <source>Model name passed to the CLI as --model (leave empty for the CLI default):</source>
+        <translation>Nome do modelo passado à CLI como --model (deixe vazio para usar o padrão da CLI):</translation>
+    </message>
+    <message>
+        <source>Model name sent to the gateway:</source>
+        <translation>Nome do modelo enviado ao gateway:</translation>
+    </message>
+    <message>
         <source>The AI did not return a result following the single-step interaction protocol; this round has been stopped. Retry or switch to a model that supports JSON instructions.</source>
         <translation type="unfinished">A IA não retornou um resultado conforme o protocolo de interação de etapa única; esta rodada foi interrompida. Tente novamente ou mude para um modelo que suporte instruções JSON.</translation>
     </message>

@@ -146,6 +146,54 @@ Only use it on hosts where mistakes are acceptable. You can press Stop at any ti
         <translation>وضع التنفيذ</translation>
     </message>
     <message>
+        <source>Failed to save the model: %1</source>
+        <translation>تعذّر حفظ النموذج: %1</translation>
+    </message>
+    <message>
+        <source>CLI default</source>
+        <translation>الافتراضي في واجهة سطر الأوامر</translation>
+    </message>
+    <message>
+        <source>Choose model</source>
+        <translation>اختر النموذج</translation>
+    </message>
+    <message>
+        <source>Model: %1</source>
+        <translation>النموذج: %1</translation>
+    </message>
+    <message>
+        <source>Model</source>
+        <translation>النموذج</translation>
+    </message>
+    <message>
+        <source>Set the LLM service URL in Settings → AI Assistant first</source>
+        <translation>أدخل أولاً عنوان URL لخدمة نموذج اللغة الكبير في «الإعدادات ← مساعد الذكاء الاصطناعي»</translation>
+    </message>
+    <message>
+        <source>Loading models…</source>
+        <translation>جارٍ تحميل النماذج…</translation>
+    </message>
+    <message>
+        <source>Refresh model list</source>
+        <translation>تحديث قائمة النماذج</translation>
+    </message>
+    <message>
+        <source>Other model…</source>
+        <translation>نموذج آخر…</translation>
+    </message>
+    <message>
+        <source>Other model</source>
+        <translation>نموذج آخر</translation>
+    </message>
+    <message>
+        <source>Model name passed to the CLI as --model (leave empty for the CLI default):</source>
+        <translation>اسم النموذج الذي يُمرَّر إلى واجهة سطر الأوامر عبر ‎--model (اتركه فارغًا لاستخدام النموذج الافتراضي لواجهة سطر الأوامر):</translation>
+    </message>
+    <message>
+        <source>Model name sent to the gateway:</source>
+        <translation>اسم النموذج المُرسَل إلى البوابة:</translation>
+    </message>
+    <message>
         <source>The AI did not return a result following the single-step interaction protocol; this round has been stopped. Retry or switch to a model that supports JSON instructions.</source>
         <translation type="unfinished">لم يُرجع الذكاء الاصطناعي نتيجة وفق بروتوكول التفاعل ذي الخطوة الواحدة؛ توقفت هذه الجولة. أعد المحاولة أو انتقل إلى نموذج يدعم تعليمات JSON.</translation>
     </message>

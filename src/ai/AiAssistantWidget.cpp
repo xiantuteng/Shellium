@@ -221,6 +221,28 @@ constexpr int kInputMinimumHeight = 42;
 constexpr int kInputMaximumVisibleLines = 10;
 /** @brief 单个终端标签最多保留的 AI 会话数，避免长期操作后历史菜单和内存无限增长。 */
 constexpr int kMaximumRecentConversations = 10;
+/** @brief 模型按钮上最多显示的字符数；侧栏最窄只有 260px，完整名称放在提示里。 */
+constexpr int kModelButtonMaxChars = 16;
+
+/**
+ * @brief 本地 CLI 在模型菜单里提供的候选模型。
+ *
+ * CLI 没有可查询的模型列表，这里只列 CLI 文档承诺长期有效的别名；带具体版本号的模型名会
+ * 随 CLI 升级失效，交给"其他模型…"手填。
+ */
+QStringList cliModelSuggestions(const QString &agentId)
+{
+    if (agentId == QStringLiteral("claude")) {
+        return {QStringLiteral("sonnet"), QStringLiteral("opus"), QStringLiteral("haiku")};
+    }
+    return {};
+}
+
+/** @brief 模型列表缓存的归属键：换了端点或密钥，网关能看到的模型就可能不同。 */
+QString modelsSourceKey(const AiSettings &settings)
+{
+    return settings.endpointUrl.trimmed() + QLatin1Char('\n') + settings.apiKey.trimmed();
+}
 
 /**
  * @brief 返回当前平台上物理 Command 键在 Qt 键盘事件中的修饰键表示。
@@ -518,6 +540,26 @@ AiAssistantWidget::AiAssistantWidget(AiSettingsService *settingsService, QWidget
     connect(m_cliClient, &LocalCliClient::replyFailed, this, onReplyFailed);
     connect(m_settingsService, &AiSettingsService::settingsChanged, this, [this]() {
         updateExecutionModeUi();
+        updateModelButton();
+    });
+    connect(m_client, &AiClient::modelsFetched, this,
+            [this](const bool ok, const QStringList &models, const QString &message) {
+        m_modelsFetchInFlight = false;
+        // 拉取期间用户可能改了端点或密钥；旧端点的结果不能冒充新端点的模型列表。
+        if (m_modelsFetchPendingSource != m_fetchedModelsSource) {
+            if (m_modelMenu != nullptr && m_modelMenu->isVisible()) {
+                populateModelMenu();
+            }
+            return;
+        }
+        m_fetchedModels = ok ? models : QStringList();
+        m_modelsFetchError = ok ? QString() : message;
+        if (m_modelMenu != nullptr && m_modelMenu->isVisible()) {
+            populateModelMenu();
+        } else {
+            // 菜单已经关掉（例如点了"刷新模型列表"），结果只能通过状态提示告诉用户。
+            emit statusMessage(message);
+        }
     });
 }
 
@@ -659,6 +701,9 @@ void AiAssistantWidget::applyPanelTheme()
             "border: 1px solid palette(mid); border-radius: 9px; padding: 2px 9px; }"
             "QPushButton:hover { background: %1; }").arg(m_colors.hover));
     }
+    // 输入区的两个下拉按钮把边框色和悬停色写进了样式表，同样要按新配色重套。
+    updateExecutionModeUi();
+    updateModelButton();
 
     // 已经在屏幕上的气泡和卡片是构建时按旧配色写死的内联样式，只能整段重绘。请求或命令
     // 捕获进行中时跳过：那些临时控件（思考动画、等待标签）不在会话历史里，重建会把它们
@@ -790,13 +835,29 @@ void AiAssistantWidget::buildUi()
     m_inputEdit->installEventFilter(this);
     composerLayout->addWidget(m_inputEdit);
 
+    m_attachContextCheck = new QCheckBox(tr("Include new terminal output"), composer);
+    m_attachContextCheck->setContentsMargins(3, 0, 0, 0);
+    composerLayout->addWidget(m_attachContextCheck);
+
+    // 勾选框单独占一行，模型与执行模式两个下拉按钮和发送按钮组成底部工具行：三者挤在同一行
+    // 时面板最小宽度会超过 500px，远宽于侧栏允许的最窄宽度。
     auto *attachRow = new QWidget(composer);
     auto *attachLayout = new QHBoxLayout(attachRow);
-    attachLayout->setContentsMargins(3, 0, 0, 0);
+    attachLayout->setContentsMargins(0, 0, 0, 0);
     attachLayout->setSpacing(6);
-    m_attachContextCheck = new QCheckBox(tr("Include new terminal output"), attachRow);
-    attachLayout->addWidget(m_attachContextCheck);
-    attachLayout->addStretch(1);
+
+    // 模型选择与执行模式并排：两者都是"这次发出去由谁、以什么权限来做"，放在发送按钮旁边
+    // 才能在每次发送前一眼确认，不必绕去设置页。
+    m_modelButton = new QToolButton(attachRow);
+    m_modelButton->setObjectName(QStringLiteral("aiModelButton"));
+    m_modelButton->setCursor(Qt::PointingHandCursor);
+    m_modelButton->setPopupMode(QToolButton::InstantPopup);
+    m_modelButton->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    m_modelMenu = new QMenu(m_modelButton);
+    m_modelMenu->setObjectName(QStringLiteral("aiModelMenu"));
+    m_modelButton->setMenu(m_modelMenu);
+    connect(m_modelMenu, &QMenu::aboutToShow, this, &AiAssistantWidget::populateModelMenu);
+    attachLayout->addWidget(m_modelButton);
 
     // 执行模式紧挨发送按钮：它决定"发出去之后会不会有命令不经点击就跑起来"，必须在用户
     // 每次按发送时都能直接看到，而不是藏在设置页里。
@@ -826,6 +887,7 @@ void AiAssistantWidget::buildUi()
     addModeAction(QStringLiteral("aiModeFullAuto"), AiExecutionPolicy::FullAuto);
     m_executionModeButton->setMenu(m_executionModeMenu);
     attachLayout->addWidget(m_executionModeButton);
+    attachLayout->addStretch(1);
     m_sendButton = new QPushButton(attachRow);
     m_sendButton->setObjectName(QStringLiteral("aiSendButton"));
     m_sendButton->setIcon(UiIcons::symbol(this, UiIcons::Symbol::ArrowUp, QColor(Qt::white)));
@@ -892,6 +954,7 @@ void AiAssistantWidget::buildUi()
         m_sendButton->setToolTip(tr("Send (Enter)"));
         m_attachContextCheck->setText(tr("Include new terminal output"));
         updateExecutionModeUi();
+        updateModelButton();
         // 重新套用当前目标：未连接时回到本地化占位，已连接时保持服务器名不变。
         setActiveTarget(m_activeTarget);
         // 聊天区里的系统提示（无配置、协议中断、命令卡片标题等）都是 tr() 文案，构造时
@@ -906,6 +969,7 @@ void AiAssistantWidget::buildUi()
     updateInputEditorHeight();
     updateSendButtonMode();
     updateExecutionModeUi();
+    updateModelButton();
 }
 
 bool AiAssistantWidget::eventFilter(QObject *watched, QEvent *event)
@@ -1421,6 +1485,148 @@ void AiAssistantWidget::updateExecutionModeUi()
             policy == AiExecutionPolicy::FullAuto
                 ? QStringLiteral("color: %1; font-size: 10.5px;").arg(m_colors.danger)
                 : QStringLiteral("color: palette(mid); font-size: 10.5px;"));
+    }
+}
+
+void AiAssistantWidget::selectModel(const QString &model)
+{
+    AiSettings settings = m_settingsService->currentSettings();
+    const QString trimmed = model.trimmed();
+    QString &field = settings.backend == AiBackend::LocalCli ? settings.cliModel : settings.model;
+    if (field == trimmed || (trimmed.isEmpty() && settings.backend == AiBackend::Http)) {
+        updateModelButton();
+        return;
+    }
+    field = trimmed;
+    QString errorMessage;
+    if (!m_settingsService->save(settings, &errorMessage)) {
+        emit statusMessage(tr("Failed to save the model: %1").arg(errorMessage));
+    }
+    updateModelButton();
+}
+
+void AiAssistantWidget::updateModelButton()
+{
+    if (m_modelButton == nullptr) {
+        return;
+    }
+    const AiSettings settings = m_settingsService->currentSettings();
+    const bool cli = settings.backend == AiBackend::LocalCli;
+    QString model = (cli ? settings.cliModel : settings.model).trimmed();
+    if (model.isEmpty()) {
+        model = cli ? tr("CLI default") : tr("Choose model");
+    }
+    QString shown = model;
+    if (shown.size() > kModelButtonMaxChars) {
+        shown = shown.left(kModelButtonMaxChars - 1) + QStringLiteral("…");
+    }
+    m_modelButton->setText(shown + QStringLiteral(" ▾"));
+    m_modelButton->setToolTip(tr("Model: %1").arg(model));
+    m_modelButton->setAccessibleName(tr("Model"));
+    m_modelButton->setStyleSheet(QStringLiteral(
+        "QToolButton { color: %1; background: transparent; border: 1px solid %2;"
+        "border-radius: 8px; padding: 3px 8px; font-size: 11.5px; }"
+        "QToolButton:hover { background: %3; }"
+        "QToolButton::menu-indicator { image: none; width: 0; }")
+        .arg(m_colors.muted, m_colors.border, m_colors.hover));
+}
+
+void AiAssistantWidget::populateModelMenu()
+{
+    m_modelMenu->clear();
+    const AiSettings settings = m_settingsService->currentSettings();
+    const bool cli = settings.backend == AiBackend::LocalCli;
+    const bool hasEndpoint = !settings.endpointUrl.trimmed().isEmpty();
+    const QString current = (cli ? settings.cliModel : settings.model).trimmed();
+
+    // 不用 QActionGroup：clear() 只回收动作，组对象会在每次重建时越积越多；单选语义由
+    // "只勾选当前模型"直接表达即可。
+    const auto addModel = [this, &current](const QString &model, const QString &label) {
+        QAction *action = m_modelMenu->addAction(label);
+        action->setCheckable(true);
+        action->setChecked(model == current);
+        action->setData(model);
+        action->setProperty("aiModelOption", true);
+        connect(action, &QAction::triggered, this, [this, model]() { selectModel(model); });
+    };
+    const auto addInfo = [this](const QString &text) {
+        QAction *action = m_modelMenu->addAction(text);
+        action->setObjectName(QStringLiteral("aiModelInfoAction"));
+        action->setEnabled(false);
+    };
+
+    QStringList models;
+    if (cli) {
+        addModel(QString(), tr("CLI default"));
+        models = cliModelSuggestions(settings.cliAgentId);
+    } else if (!hasEndpoint) {
+        addInfo(tr("Set the LLM service URL in Settings → AI Assistant first"));
+    } else {
+        const QString source = modelsSourceKey(settings);
+        if (m_fetchedModelsSource != source) {
+            m_fetchedModelsSource = source;
+            m_fetchedModels.clear();
+            m_modelsFetchError.clear();
+        }
+        // 失败后不在每次打开菜单时自动重试，否则一个连不上的网关会让菜单每次都卡在加载中；
+        // 重试交给"刷新模型列表"。
+        if (m_fetchedModels.isEmpty() && m_modelsFetchError.isEmpty() && !m_modelsFetchInFlight) {
+            m_modelsFetchInFlight = true;
+            m_modelsFetchPendingSource = source;
+            m_client->fetchModels(settings);
+        }
+        models = m_fetchedModels;
+        if (m_modelsFetchInFlight) {
+            addInfo(tr("Loading models…"));
+        } else if (!m_modelsFetchError.isEmpty()) {
+            addInfo(m_modelsFetchError);
+        }
+    }
+    if (!current.isEmpty() && !models.contains(current)) {
+        models.prepend(current);
+    }
+    for (const QString &model : std::as_const(models)) {
+        addModel(model, model);
+    }
+
+    m_modelMenu->addSeparator();
+    if (!cli && hasEndpoint) {
+        QAction *refresh = m_modelMenu->addAction(tr("Refresh model list"));
+        refresh->setObjectName(QStringLiteral("aiModelRefreshAction"));
+        refresh->setEnabled(!m_modelsFetchInFlight);
+        connect(refresh, &QAction::triggered, this, [this]() {
+            if (m_modelsFetchInFlight) {
+                return;
+            }
+            const AiSettings latest = m_settingsService->currentSettings();
+            m_fetchedModelsSource = modelsSourceKey(latest);
+            m_fetchedModels.clear();
+            m_modelsFetchError.clear();
+            m_modelsFetchInFlight = true;
+            m_modelsFetchPendingSource = m_fetchedModelsSource;
+            m_client->fetchModels(latest);
+        });
+    }
+    QAction *custom = m_modelMenu->addAction(tr("Other model…"));
+    custom->setObjectName(QStringLiteral("aiModelCustomAction"));
+    connect(custom, &QAction::triggered, this, &AiAssistantWidget::promptCustomModel);
+}
+
+void AiAssistantWidget::promptCustomModel()
+{
+    const AiSettings settings = m_settingsService->currentSettings();
+    const bool cli = settings.backend == AiBackend::LocalCli;
+    bool ok = false;
+    const QString model = QInputDialog::getText(
+        this,
+        tr("Other model"),
+        cli ? tr("Model name passed to the CLI as --model (leave empty for the CLI default):")
+            : tr("Model name sent to the gateway:"),
+        QLineEdit::Normal,
+        cli ? settings.cliModel : settings.model,
+        &ok);
+    if (ok) {
+        selectModel(model);
     }
 }
 

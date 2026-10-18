@@ -382,6 +382,24 @@ QString renderTranscript(const QList<AiChatMessage> &messages)
     return transcript;
 }
 
+QString normalizeModelName(const QString &model)
+{
+    static const QRegularExpression flagPrefix(
+        QStringLiteral(R"(^(?:--model|-m)(?:\s+|=)(.*)$)"),
+        QRegularExpression::DotMatchesEverythingOption);
+    QString name = model.trimmed();
+    const QRegularExpressionMatch match = flagPrefix.match(name);
+    if (match.hasMatch()) {
+        name = match.captured(1).trimmed();
+    }
+    if (name.size() >= 2
+        && ((name.startsWith(QLatin1Char('"')) && name.endsWith(QLatin1Char('"')))
+            || (name.startsWith(QLatin1Char('\'')) && name.endsWith(QLatin1Char('\''))))) {
+        name = name.mid(1, name.size() - 2).trimmed();
+    }
+    return name;
+}
+
 Invocation buildInvocation(const AgentSpec &spec,
                            const QString &executablePath,
                            const QString &model,
@@ -390,7 +408,9 @@ Invocation buildInvocation(const AgentSpec &spec,
 {
     Invocation invocation;
     invocation.program = executablePath;
-    const QString trimmedModel = model.trimmed();
+    // 设置服务在读写时已经整理过一次；这里再整理一遍，任何来源的模型名都不会把
+    // "--model" 本身当成模型名传下去。
+    const QString trimmedModel = normalizeModelName(model);
     QStringList &args = invocation.arguments;
 
     if (spec.id == QStringLiteral("claude")) {

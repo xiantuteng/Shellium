@@ -192,6 +192,16 @@ private:
 [[nodiscard]] QString renderTranscript(const QList<AiChatMessage> &messages);
 
 /**
+ * @brief 把用户填写的模型名整理成可以直接跟在 --model 后面的值。
+ * @param model 设置页或模型菜单里填写的原始文本。
+ * @return 去掉首尾空白、误填的 `--model` / `-m` 前缀（含 `--model=` 写法）和成对引号后的模型名。
+ *
+ * 设置页说明写的是"以 --model 参数传给 CLI"，用户很自然会把整段 `--model xxx` 填进去；
+ * 原样传入就成了 `--model "--model xxx"`，CLI 只会报"模型不存在"，看不出是哪里填错了。
+ */
+[[nodiscard]] QString normalizeModelName(const QString &model);
+
+/**
  * @brief 生成一次调用的完整参数。
  * @param spec 目标 CLI。
  * @param executablePath CLI 绝对路径。

@@ -273,10 +273,16 @@ private slots:
     void autoExecutionPausesAtStepLimit();
     /** @brief 面板上的执行模式菜单会持久化策略；切到全自动必须先通过确认框。 */
     void executionModeMenuPersistsPolicy();
+    /** @brief 输入区模型菜单列出网关模型，选中后持久化并用于下一次请求。 */
+    void modelMenuSwitchesGatewayModel();
+    /** @brief 本地 CLI 来源的模型菜单提供 CLI 默认与稳定别名，选择写回 cliModel。 */
+    void modelMenuSwitchesCliModel();
     /** @brief 只在给定目录中识别受支持的 CLI，并能读出版本号。 */
     void detectorFindsAgentsInGivenDirectories();
     /** @brief 每个 CLI 都以关闭工具 / 只读模式启动，提示词走约定的通道。 */
     void cliInvocationsStayReadOnly();
+    /** @brief 误把 "--model xxx" 整段填进模型名时，传给 CLI 的仍是单个正确的模型参数。 */
+    void cliModelFlagPrefixIsStripped();
     /** @brief CLI 输出里的 ANSI 与 Markdown 围栏被剥掉；多个 JSON 对象原样交给协议校验。 */
     void cliReplyExtraction();
     /** @brief 选择本地 CLI 作为模型来源后，对话经由 CLI 的标准输入完成一次决策。 */
@@ -1682,6 +1688,119 @@ void AiAssistantWidgetTest::executionModeMenuPersistsPolicy()
     QVERIFY(disclaimer->text().startsWith(QStringLiteral("Full auto")));
 }
 
+namespace {
+
+/** @brief 取模型菜单里可选模型的显示文字，按菜单顺序排列。 */
+QStringList modelMenuOptions(const QMenu *menu)
+{
+    QStringList options;
+    for (const QAction *action : menu->actions()) {
+        if (action->property("aiModelOption").toBool()) {
+            options.append(action->text());
+        }
+    }
+    return options;
+}
+
+QAction *modelMenuOption(const QMenu *menu, const QString &text)
+{
+    for (QAction *action : menu->actions()) {
+        if (action->property("aiModelOption").toBool() && action->text() == text) {
+            return action;
+        }
+    }
+    return nullptr;
+}
+
+} // namespace
+
+void AiAssistantWidgetTest::modelMenuSwitchesGatewayModel()
+{
+    MiniAiServer server;
+    QVERIFY(server.isListening());
+    server.responses.append(QByteArrayLiteral(R"({"data":[{"id":"alpha"},{"id":"beta"}]})"));
+    server.responses.append(chatCompletionBody(QStringLiteral(
+        R"({"state":"complete","message":"好的"})")));
+
+    AiSettingsService settingsService(nullptr, nullptr);
+    AiSettings settings;
+    settings.endpointUrl = QStringLiteral("http://127.0.0.1:%1").arg(server.port());
+    settings.model = QStringLiteral("gamma");
+    QVERIFY(settingsService.save(settings));
+
+    AiAssistantWidget widget(&settingsService);
+    auto *modelButton = widget.findChild<QToolButton *>(QStringLiteral("aiModelButton"));
+    auto *modelMenu = widget.findChild<QMenu *>(QStringLiteral("aiModelMenu"));
+    QVERIFY(modelButton != nullptr && modelMenu != nullptr);
+    QVERIFY(modelButton->text().startsWith(QStringLiteral("gamma")));
+
+    // 首次打开时异步拉取 /models，菜单先显示加载占位，当前模型始终可见。
+    emit modelMenu->aboutToShow();
+    QCOMPARE(modelMenuOptions(modelMenu), QStringList({QStringLiteral("gamma")}));
+    QTRY_COMPARE_WITH_TIMEOUT(server.capturedBodies.size(), 1, 5000);
+
+    // 拉取完成后再次打开：网关模型全部列出，不在网关列表里的当前模型也保留。
+    QTRY_VERIFY_WITH_TIMEOUT(
+        (emit modelMenu->aboutToShow(), modelMenuOptions(modelMenu).size() == 3), 5000);
+    QCOMPARE(modelMenuOptions(modelMenu),
+             QStringList({QStringLiteral("gamma"), QStringLiteral("alpha"), QStringLiteral("beta")}));
+    QVERIFY(modelMenuOption(modelMenu, QStringLiteral("gamma"))->isChecked());
+
+    QAction *beta = modelMenuOption(modelMenu, QStringLiteral("beta"));
+    QVERIFY(beta != nullptr);
+    beta->trigger();
+    QCOMPARE(settingsService.currentSettings().model, QStringLiteral("beta"));
+    QVERIFY(modelButton->text().startsWith(QStringLiteral("beta")));
+
+    // 再次打开不会重复拉取，勾选跟着新模型走。
+    emit modelMenu->aboutToShow();
+    QVERIFY(modelMenuOption(modelMenu, QStringLiteral("beta"))->isChecked());
+    QVERIFY(!modelMenuOption(modelMenu, QStringLiteral("gamma")));
+
+    // 下一次对话请求必须真的带上新选的模型，而不只是按钮文字变了。
+    auto *inputEdit = widget.findChild<QTextEdit *>(QStringLiteral("aiInputEdit"));
+    auto *sendButton = widget.findChild<QPushButton *>(QStringLiteral("aiSendButton"));
+    inputEdit->setPlainText(QStringLiteral("你好"));
+    sendButton->click();
+    QTRY_COMPARE_WITH_TIMEOUT(server.capturedBodies.size(), 2, 5000);
+    QCOMPARE(QJsonDocument::fromJson(server.capturedBodies.at(1))
+                 .object().value(QStringLiteral("model")).toString(),
+             QStringLiteral("beta"));
+}
+
+void AiAssistantWidgetTest::modelMenuSwitchesCliModel()
+{
+    AiSettingsService settingsService(nullptr, nullptr);
+    AiSettings settings;
+    settings.backend = AiBackend::LocalCli;
+    settings.cliAgentId = QStringLiteral("claude");
+    QVERIFY(settingsService.save(settings));
+
+    AiAssistantWidget widget(&settingsService);
+    auto *modelButton = widget.findChild<QToolButton *>(QStringLiteral("aiModelButton"));
+    auto *modelMenu = widget.findChild<QMenu *>(QStringLiteral("aiModelMenu"));
+    QVERIFY(modelButton != nullptr && modelMenu != nullptr);
+    QVERIFY(modelButton->text().startsWith(QStringLiteral("CLI default")));
+
+    emit modelMenu->aboutToShow();
+    QCOMPARE(modelMenuOptions(modelMenu),
+             QStringList({QStringLiteral("CLI default"), QStringLiteral("sonnet"),
+                          QStringLiteral("opus"), QStringLiteral("haiku")}));
+    QVERIFY(modelMenuOption(modelMenu, QStringLiteral("CLI default"))->isChecked());
+    // CLI 没有模型列表接口，不能出现刷新入口；手填入口两种来源都要有。
+    QVERIFY(widget.findChild<QAction *>(QStringLiteral("aiModelRefreshAction")) == nullptr);
+    QVERIFY(widget.findChild<QAction *>(QStringLiteral("aiModelCustomAction")) != nullptr);
+
+    modelMenuOption(modelMenu, QStringLiteral("opus"))->trigger();
+    QCOMPARE(settingsService.currentSettings().cliModel, QStringLiteral("opus"));
+    QVERIFY(modelButton->text().startsWith(QStringLiteral("opus")));
+
+    emit modelMenu->aboutToShow();
+    modelMenuOption(modelMenu, QStringLiteral("CLI default"))->trigger();
+    QVERIFY(settingsService.currentSettings().cliModel.isEmpty());
+    QVERIFY(modelButton->text().startsWith(QStringLiteral("CLI default")));
+}
+
 void AiAssistantWidgetTest::detectorFindsAgentsInGivenDirectories()
 {
     QTemporaryDir first;
@@ -1726,6 +1845,41 @@ void AiAssistantWidgetTest::detectorFindsAgentsInGivenDirectories()
     QCOMPARE(directories.first(), QDir::cleanPath(first.path()));
     QCOMPARE(directories.count(QDir::cleanPath(first.path())), 1);
     QVERIFY(!directories.contains(QStringLiteral("/definitely/missing")));
+}
+
+void AiAssistantWidgetTest::cliModelFlagPrefixIsStripped()
+{
+    using LocalAgentCli::normalizeModelName;
+    QCOMPARE(normalizeModelName(QStringLiteral("--model claude-haiku-5-5")),
+             QStringLiteral("claude-haiku-5-5"));
+    QCOMPARE(normalizeModelName(QStringLiteral("  --model=opus ")), QStringLiteral("opus"));
+    QCOMPARE(normalizeModelName(QStringLiteral("-m gpt-5.5")), QStringLiteral("gpt-5.5"));
+    QCOMPARE(normalizeModelName(QStringLiteral("--model \"sonnet\"")), QStringLiteral("sonnet"));
+    QCOMPARE(normalizeModelName(QStringLiteral("sonnet")), QStringLiteral("sonnet"));
+    // 只剥前缀，不误伤恰好以 -m 开头的模型名。
+    QCOMPARE(normalizeModelName(QStringLiteral("-mini")), QStringLiteral("-mini"));
+    QVERIFY(normalizeModelName(QStringLiteral("  ")).isEmpty());
+
+    // 用户实际遇到的场景：设置里存的是整段 "--model claude-haiku-5-5"，CLI 收到的却是
+    // `--model "--model claude-haiku-5-5"`，报"模型不存在"。保存后再生成调用参数，必须只有
+    // 一个 --model，后面紧跟真正的模型名。
+    AiSettingsService settingsService(nullptr, nullptr);
+    AiSettings settings;
+    settings.backend = AiBackend::LocalCli;
+    settings.cliAgentId = QStringLiteral("claude");
+    settings.cliModel = QStringLiteral("--model claude-haiku-5-5");
+    QVERIFY(settingsService.save(settings));
+    QCOMPARE(settingsService.currentSettings().cliModel, QStringLiteral("claude-haiku-5-5"));
+
+    const std::optional<LocalAgentCli::AgentSpec> spec =
+        LocalAgentCli::specById(QStringLiteral("claude"));
+    QVERIFY(spec.has_value());
+    const LocalAgentCli::Invocation invocation = LocalAgentCli::buildInvocation(
+        *spec, QStringLiteral("/bin/claude"), QStringLiteral("--model claude-haiku-5-5"),
+        QStringLiteral("PROMPT"), QString());
+    QCOMPARE(invocation.arguments.count(QStringLiteral("--model")), 1);
+    const int modelIndex = invocation.arguments.indexOf(QStringLiteral("--model"));
+    QCOMPARE(invocation.arguments.at(modelIndex + 1), QStringLiteral("claude-haiku-5-5"));
 }
 
 void AiAssistantWidgetTest::cliInvocationsStayReadOnly()

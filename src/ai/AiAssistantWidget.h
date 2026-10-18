@@ -240,6 +240,31 @@ private:
     /** @brief 按当前执行策略刷新模式按钮、菜单勾选状态和底部提示文案。 */
     void updateExecutionModeUi();
 
+    /**
+     * @brief 切换并持久化当前模型来源使用的模型。
+     * @param model 模型名；本地 CLI 来源下为空表示使用 CLI 自身的默认模型，HTTP 来源下
+     *        空值会被忽略——网关请求体里必须有模型名。
+     *
+     * 写回的是全局 AiSettings：与执行策略一致，模型选择属于"这台电脑上的 AI 配置"，
+     * 所有标签页的助手面板同时跟随，设置页里的模型字段也会同步显示新值。
+     */
+    void selectModel(const QString &model);
+
+    /** @brief 按当前设置刷新输入区模型按钮的文字和提示。 */
+    void updateModelButton();
+
+    /**
+     * @brief 在模型菜单弹出前重建菜单项。
+     *
+     * HTTP 来源列出从网关 /models 拉到的模型（首次打开时异步拉取，结果按端点缓存）；本地 CLI
+     * 来源没有可查询的模型列表，列出"CLI 默认"与该 CLI 公认稳定的别名。两种来源都保留当前
+     * 模型和"其他模型…"手填入口，拉取失败也不妨碍用户继续使用或改用其他模型。
+     */
+    void populateModelMenu();
+
+    /** @brief 弹出输入框让用户手填一个不在列表里的模型名。 */
+    void promptCustomModel();
+
     /** @brief 把一条用户消息追加到聊天区。 */
     void appendUserBubble(const QString &text);
 
@@ -505,6 +530,19 @@ private:
     /** @brief 输入区右下角的执行模式切换按钮。 */
     QToolButton *m_executionModeButton = nullptr;
     QMenu *m_executionModeMenu = nullptr;
+    /** @brief 输入区的模型选择按钮及其菜单；菜单在每次弹出前由 populateModelMenu() 重建。 */
+    QToolButton *m_modelButton = nullptr;
+    QMenu *m_modelMenu = nullptr;
+    /** @brief 最近一次从网关拉到的模型列表，只对 m_fetchedModelsSource 对应的端点有效。 */
+    QStringList m_fetchedModels;
+    /** @brief m_fetchedModels 所属的"端点 + 密钥"；设置变化后与当前值不符即视为缓存失效。 */
+    QString m_fetchedModelsSource;
+    /** @brief 进行中的拉取所针对的"端点 + 密钥"；结果到达时与当前值不符则丢弃。 */
+    QString m_modelsFetchPendingSource;
+    /** @brief 模型列表拉取进行中；期间菜单只显示加载占位，不重复发起请求。 */
+    bool m_modelsFetchInFlight = false;
+    /** @brief 最近一次拉取失败的原因，显示在菜单里；成功或缓存失效后清空。 */
+    QString m_modelsFetchError;
     /** @brief 面板底部随执行模式变化的风险提示。 */
     QLabel *m_disclaimerLabel = nullptr;
 };

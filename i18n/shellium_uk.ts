@@ -146,6 +146,54 @@ Only use it on hosts where mistakes are acceptable. You can press Stop at any ti
         <translation>Режим виконання</translation>
     </message>
     <message>
+        <source>Failed to save the model: %1</source>
+        <translation>Не вдалося зберегти модель: %1</translation>
+    </message>
+    <message>
+        <source>CLI default</source>
+        <translation>Типово в CLI</translation>
+    </message>
+    <message>
+        <source>Choose model</source>
+        <translation>Вибрати модель</translation>
+    </message>
+    <message>
+        <source>Model: %1</source>
+        <translation>Модель: %1</translation>
+    </message>
+    <message>
+        <source>Model</source>
+        <translation>Модель</translation>
+    </message>
+    <message>
+        <source>Set the LLM service URL in Settings → AI Assistant first</source>
+        <translation>Спочатку введіть URL служби LLM у «Налаштування → Асистент ШІ»</translation>
+    </message>
+    <message>
+        <source>Loading models…</source>
+        <translation>Завантаження моделей…</translation>
+    </message>
+    <message>
+        <source>Refresh model list</source>
+        <translation>Оновити список моделей</translation>
+    </message>
+    <message>
+        <source>Other model…</source>
+        <translation>Інша модель…</translation>
+    </message>
+    <message>
+        <source>Other model</source>
+        <translation>Інша модель</translation>
+    </message>
+    <message>
+        <source>Model name passed to the CLI as --model (leave empty for the CLI default):</source>
+        <translation>Назва моделі, що передається в CLI як --model (залиште порожнім для типової моделі CLI):</translation>
+    </message>
+    <message>
+        <source>Model name sent to the gateway:</source>
+        <translation>Назва моделі, що надсилається до шлюзу:</translation>
+    </message>
+    <message>
         <source>The AI did not return a result following the single-step interaction protocol; this round has been stopped. Retry or switch to a model that supports JSON instructions.</source>
         <translation type="unfinished">ШІ не повернув результат згідно з протоколом однокрокової взаємодії; цей раунд зупинено. Спробуйте ще раз або перейдіть на модель, що підтримує інструкції JSON.</translation>
     </message>

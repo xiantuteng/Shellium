@@ -146,6 +146,54 @@ Folosiți-l doar pe gazde unde greșelile sunt acceptabile. Puteți apăsa Oprir
         <translation>Mod de execuție</translation>
     </message>
     <message>
+        <source>Failed to save the model: %1</source>
+        <translation>Modelul nu a putut fi salvat: %1</translation>
+    </message>
+    <message>
+        <source>CLI default</source>
+        <translation>Implicit CLI</translation>
+    </message>
+    <message>
+        <source>Choose model</source>
+        <translation>Alege modelul</translation>
+    </message>
+    <message>
+        <source>Model: %1</source>
+        <translation>Model: %1</translation>
+    </message>
+    <message>
+        <source>Model</source>
+        <translation>Model</translation>
+    </message>
+    <message>
+        <source>Set the LLM service URL in Settings → AI Assistant first</source>
+        <translation>Introdu mai întâi URL-ul serviciului LLM în „Setări → Asistent IA”</translation>
+    </message>
+    <message>
+        <source>Loading models…</source>
+        <translation>Se încarcă modelele…</translation>
+    </message>
+    <message>
+        <source>Refresh model list</source>
+        <translation>Reîmprospătează lista de modele</translation>
+    </message>
+    <message>
+        <source>Other model…</source>
+        <translation>Alt model…</translation>
+    </message>
+    <message>
+        <source>Other model</source>
+        <translation>Alt model</translation>
+    </message>
+    <message>
+        <source>Model name passed to the CLI as --model (leave empty for the CLI default):</source>
+        <translation>Numele modelului transmis către CLI ca --model (lasă gol pentru modelul implicit al CLI):</translation>
+    </message>
+    <message>
+        <source>Model name sent to the gateway:</source>
+        <translation>Numele modelului trimis către gateway:</translation>
+    </message>
+    <message>
         <source>The AI did not return a result following the single-step interaction protocol; this round has been stopped. Retry or switch to a model that supports JSON instructions.</source>
         <translation type="unfinished">IA nu a returnat un rezultat conform protocolului de interacțiune într-un singur pas; această rundă a fost oprită. Încearcă din nou sau treci la un model care acceptă instrucțiuni JSON.</translation>
     </message>

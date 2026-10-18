@@ -146,6 +146,54 @@ Usala solo su host dove gli errori sono accettabili. Puoi premere Interrompi in 
         <translation>Modalità di esecuzione</translation>
     </message>
     <message>
+        <source>Failed to save the model: %1</source>
+        <translation>Impossibile salvare il modello: %1</translation>
+    </message>
+    <message>
+        <source>CLI default</source>
+        <translation>Predefinito della CLI</translation>
+    </message>
+    <message>
+        <source>Choose model</source>
+        <translation>Scegli modello</translation>
+    </message>
+    <message>
+        <source>Model: %1</source>
+        <translation>Modello: %1</translation>
+    </message>
+    <message>
+        <source>Model</source>
+        <translation>Modello</translation>
+    </message>
+    <message>
+        <source>Set the LLM service URL in Settings → AI Assistant first</source>
+        <translation>Inserisci prima l&apos;URL del servizio LLM in Impostazioni → Assistente IA</translation>
+    </message>
+    <message>
+        <source>Loading models…</source>
+        <translation>Caricamento dei modelli…</translation>
+    </message>
+    <message>
+        <source>Refresh model list</source>
+        <translation>Aggiorna elenco modelli</translation>
+    </message>
+    <message>
+        <source>Other model…</source>
+        <translation>Altro modello…</translation>
+    </message>
+    <message>
+        <source>Other model</source>
+        <translation>Altro modello</translation>
+    </message>
+    <message>
+        <source>Model name passed to the CLI as --model (leave empty for the CLI default):</source>
+        <translation>Nome del modello passato alla CLI come --model (lascia vuoto per il modello predefinito della CLI):</translation>
+    </message>
+    <message>
+        <source>Model name sent to the gateway:</source>
+        <translation>Nome del modello inviato al gateway:</translation>
+    </message>
+    <message>
         <source>The AI did not return a result following the single-step interaction protocol; this round has been stopped. Retry or switch to a model that supports JSON instructions.</source>
         <translation type="unfinished">L&apos;IA non ha restituito un risultato conforme al protocollo di interazione a passo singolo; questo turno è stato interrotto. Riprova o passa a un modello che supporta le istruzioni JSON.</translation>
     </message>

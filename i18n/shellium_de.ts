@@ -146,6 +146,54 @@ Verwenden Sie sie nur auf Hosts, auf denen Fehler vertretbar sind. Mit „Stopp�
         <translation>Ausführungsmodus</translation>
     </message>
     <message>
+        <source>Failed to save the model: %1</source>
+        <translation>Modell konnte nicht gespeichert werden: %1</translation>
+    </message>
+    <message>
+        <source>CLI default</source>
+        <translation>CLI-Standard</translation>
+    </message>
+    <message>
+        <source>Choose model</source>
+        <translation>Modell wählen</translation>
+    </message>
+    <message>
+        <source>Model: %1</source>
+        <translation>Modell: %1</translation>
+    </message>
+    <message>
+        <source>Model</source>
+        <translation>Modell</translation>
+    </message>
+    <message>
+        <source>Set the LLM service URL in Settings → AI Assistant first</source>
+        <translation>Geben Sie zuerst die LLM-Dienst-URL unter Einstellungen → KI-Assistent ein</translation>
+    </message>
+    <message>
+        <source>Loading models…</source>
+        <translation>Modelle werden geladen …</translation>
+    </message>
+    <message>
+        <source>Refresh model list</source>
+        <translation>Modellliste aktualisieren</translation>
+    </message>
+    <message>
+        <source>Other model…</source>
+        <translation>Anderes Modell …</translation>
+    </message>
+    <message>
+        <source>Other model</source>
+        <translation>Anderes Modell</translation>
+    </message>
+    <message>
+        <source>Model name passed to the CLI as --model (leave empty for the CLI default):</source>
+        <translation>Modellname, der der CLI als --model übergeben wird (leer lassen für den CLI-Standard):</translation>
+    </message>
+    <message>
+        <source>Model name sent to the gateway:</source>
+        <translation>Modellname, der an das Gateway gesendet wird:</translation>
+    </message>
+    <message>
         <source>The AI did not return a result following the single-step interaction protocol; this round has been stopped. Retry or switch to a model that supports JSON instructions.</source>
         <translation type="unfinished">Die KI hat kein Ergebnis gemäß dem Einzelschritt-Protokoll geliefert; diese Runde wurde gestoppt. Versuchen Sie es erneut oder wechseln Sie zu einem Modell, das JSON-Anweisungen unterstützt.</translation>
     </message>

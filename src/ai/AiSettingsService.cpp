@@ -1,5 +1,6 @@
 #include "ai/AiSettingsService.h"
 
+#include "ai/LocalAgentCli.h"
 #include "core/HostRecord.h"
 #include "security/Vault.h"
 #include "storage/ApplicationDatabase.h"
@@ -77,7 +78,9 @@ bool AiSettingsService::load(QString *errorMessage)
         settings.backend = backendFromString(m_database->setting(kBackendKey).value_or(QString()));
         settings.cliAgentId = m_database->setting(kCliAgentKey).value_or(QString());
         settings.cliExecutablePath = m_database->setting(kCliPathKey).value_or(QString());
-        settings.cliModel = m_database->setting(kCliModelKey).value_or(QString());
+        // 老版本会原样保存误填的 "--model xxx"，读取时顺手整理，用户无需重新填写。
+        settings.cliModel =
+            LocalAgentCli::normalizeModelName(m_database->setting(kCliModelKey).value_or(QString()));
         // 全自动绝不能因为"读不到配置"而被默认打开：未知值一律回落到只读自动执行。
         settings.executionPolicy =
             policyFromString(m_database->setting(kExecutionPolicyKey).value_or(QString()));
@@ -102,8 +105,10 @@ bool AiSettingsService::load(QString *errorMessage)
     return true;
 }
 
-bool AiSettingsService::save(const AiSettings &settings, QString *errorMessage)
+bool AiSettingsService::save(const AiSettings &input, QString *errorMessage)
 {
+    AiSettings settings = input;
+    settings.cliModel = LocalAgentCli::normalizeModelName(settings.cliModel);
     if (m_database != nullptr) {
         QString dbError;
         if (!m_database->setSetting(kEndpointKey, settings.endpointUrl, &dbError)

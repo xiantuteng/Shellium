@@ -146,6 +146,54 @@ Only use it on hosts where mistakes are acceptable. You can press Stop at any ti
         <translation>執行模式</translation>
     </message>
     <message>
+        <source>Failed to save the model: %1</source>
+        <translation>儲存模型失敗：%1</translation>
+    </message>
+    <message>
+        <source>CLI default</source>
+        <translation>CLI 預設</translation>
+    </message>
+    <message>
+        <source>Choose model</source>
+        <translation>選擇模型</translation>
+    </message>
+    <message>
+        <source>Model: %1</source>
+        <translation>模型：%1</translation>
+    </message>
+    <message>
+        <source>Model</source>
+        <translation>模型</translation>
+    </message>
+    <message>
+        <source>Set the LLM service URL in Settings → AI Assistant first</source>
+        <translation>請先在設定 → AI 助手中填寫大模型服務地址</translation>
+    </message>
+    <message>
+        <source>Loading models…</source>
+        <translation>正在載入模型…</translation>
+    </message>
+    <message>
+        <source>Refresh model list</source>
+        <translation>重新整理模型列表</translation>
+    </message>
+    <message>
+        <source>Other model…</source>
+        <translation>其他模型…</translation>
+    </message>
+    <message>
+        <source>Other model</source>
+        <translation>其他模型</translation>
+    </message>
+    <message>
+        <source>Model name passed to the CLI as --model (leave empty for the CLI default):</source>
+        <translation>以 --model 參數傳給 CLI 的模型名稱（留空則使用 CLI 預設模型）：</translation>
+    </message>
+    <message>
+        <source>Model name sent to the gateway:</source>
+        <translation>傳送給閘道的模型名稱：</translation>
+    </message>
+    <message>
         <source>The AI did not return a result following the single-step interaction protocol; this round has been stopped. Retry or switch to a model that supports JSON instructions.</source>
         <translation>AI 未能按單步互動協議返回結果，已停止本輪操作。請重試或更換支援 JSON 指令的模型。</translation>
     </message>

@@ -146,6 +146,54 @@ Only use it on hosts where mistakes are acceptable. You can press Stop at any ti
         <translation>실행 모드</translation>
     </message>
     <message>
+        <source>Failed to save the model: %1</source>
+        <translation>모델을 저장하지 못했습니다: %1</translation>
+    </message>
+    <message>
+        <source>CLI default</source>
+        <translation>CLI 기본값</translation>
+    </message>
+    <message>
+        <source>Choose model</source>
+        <translation>모델 선택</translation>
+    </message>
+    <message>
+        <source>Model: %1</source>
+        <translation>모델: %1</translation>
+    </message>
+    <message>
+        <source>Model</source>
+        <translation>모델</translation>
+    </message>
+    <message>
+        <source>Set the LLM service URL in Settings → AI Assistant first</source>
+        <translation>먼저 「설정 → AI 어시스턴트」에서 LLM 서비스 URL을 입력하세요</translation>
+    </message>
+    <message>
+        <source>Loading models…</source>
+        <translation>모델을 불러오는 중…</translation>
+    </message>
+    <message>
+        <source>Refresh model list</source>
+        <translation>모델 목록 새로 고침</translation>
+    </message>
+    <message>
+        <source>Other model…</source>
+        <translation>다른 모델…</translation>
+    </message>
+    <message>
+        <source>Other model</source>
+        <translation>다른 모델</translation>
+    </message>
+    <message>
+        <source>Model name passed to the CLI as --model (leave empty for the CLI default):</source>
+        <translation>--model로 CLI에 전달할 모델 이름(비워 두면 CLI 기본 모델):</translation>
+    </message>
+    <message>
+        <source>Model name sent to the gateway:</source>
+        <translation>게이트웨이로 보낼 모델 이름:</translation>
+    </message>
+    <message>
         <source>The AI did not return a result following the single-step interaction protocol; this round has been stopped. Retry or switch to a model that supports JSON instructions.</source>
         <translation type="unfinished">AI가 단일 단계 상호작용 프로토콜에 따른 결과를 반환하지 않아 이번 라운드를 중지했습니다. 다시 시도하거나 JSON 지시를 지원하는 모델로 전환하세요.</translation>
     </message>
