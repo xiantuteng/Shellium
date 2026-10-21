@@ -32,6 +32,10 @@
         <translation type="unfinished">送信 (Enter)</translation>
     </message>
     <message>
+        <source>Paused after %1 automatic steps. Review the progress, then run the next command yourself to allow another %1 automatic steps, or send a new message.</source>
+        <translation>%1 ステップを自動実行したため一時停止しました。進捗を確認し、次のコマンドを手動で実行すると、さらに %1 ステップ自動実行できます。新しいメッセージを送信することもできます。</translation>
+    </message>
+    <message>
         <source>The AI can make mistakes. Every command that changes the system requires your explicit confirmation.</source>
         <translation type="unfinished">AI は誤ることがあります。システムを変更するコマンドはすべて、明示的な確認が必要です。</translation>
     </message>
@@ -84,10 +88,6 @@
     <message>
         <source>Configure the LLM URL and model name in Settings → AI Assistant first</source>
         <translation type="unfinished">先に「設定 → AI アシスタント」で LLM の URL とモデル名を設定してください</translation>
-    </message>
-    <message>
-        <source>Paused after %1 automatic steps. Review the progress, then run the next command yourself or send a new message to continue.</source>
-        <translation>自動実行が %1 ステップに達したため一時停止しました。進捗を確認してから次のコマンドを手動で実行するか、新しいメッセージを送信して続行してください。</translation>
     </message>
     <message>
         <source>Turn on full auto?</source>
@@ -4441,10 +4441,6 @@ This algorithm is obsolete; upgrading the server&apos;s SSH configuration is rec
         <translation>「読み取り専用は自動」は、Shellium 独自のルールで読み取り専用かつ非対話型と判定されたコマンド（ls、df、systemctl status など）を確認なしで実行し、システムを変更するものは確認を待ちます。「完全自動」は高リスクのものを含むすべてのコマンドを実行します。</translation>
     </message>
     <message>
-        <source>Risk is judged by local rules, never by the model&apos;s own claims. Automatic runs pause after 20 steps per task, and Stop in the AI panel always takes control back.</source>
-        <translation>リスクはモデル自身の申告ではなく、ローカルのルールで判定します。自動実行はタスクごとに 20 ステップで一時停止し、AI パネルの［停止］でいつでも操作を取り戻せます。</translation>
-    </message>
-    <message>
         <source>Test connection</source>
         <translation type="unfinished">接続をテスト</translation>
     </message>
@@ -4475,6 +4471,22 @@ This algorithm is obsolete; upgrading the server&apos;s SSH configuration is rec
     <message>
         <source>Save failed: %1</source>
         <translation type="unfinished">保存に失敗しました: %1</translation>
+    </message>
+    <message>
+        <source> steps</source>
+        <translation> ステップ</translation>
+    </message>
+    <message>
+        <source>Automatic steps per round</source>
+        <translation>1 ラウンドあたりの自動ステップ数</translation>
+    </message>
+    <message>
+        <source>After this many commands in a row run without a click, the AI pauses. Running the next command yourself or sending a new message starts another round.</source>
+        <translation>この数のコマンドをクリックなしで連続実行すると、AI は一時停止します。次のコマンドを手動で実行するか、新しいメッセージを送信すると新しいラウンドが始まります。</translation>
+    </message>
+    <message>
+        <source>Risk is judged by local rules, never by the model&apos;s own claims. Stop in the AI panel always takes control back.</source>
+        <translation>リスクはモデルの自己申告ではなく、ローカルのルールで判定します。AI パネルの「停止」でいつでも操作を取り戻せます。</translation>
     </message>
     <message>
         <source>Detect again</source>

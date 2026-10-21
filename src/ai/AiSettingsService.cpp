@@ -14,6 +14,7 @@ const QString kCliAgentKey = QStringLiteral("ai.cliAgent");
 const QString kCliPathKey = QStringLiteral("ai.cliPath");
 const QString kCliModelKey = QStringLiteral("ai.cliModel");
 const QString kExecutionPolicyKey = QStringLiteral("ai.executionPolicy");
+const QString kMaxAutoStepsKey = QStringLiteral("ai.maxAutoSteps");
 
 /** @brief 持久化用的稳定字符串，不直接存枚举整数，避免以后调整枚举顺序时串值。 */
 QString backendToString(const AiBackend backend)
@@ -48,6 +49,17 @@ AiExecutionPolicy policyFromString(const QString &value)
         return AiExecutionPolicy::FullAuto;
     }
     return AiExecutionPolicy::AutoReadOnly;
+}
+
+/** @brief 解析步数上限；非数字或越界值回落到缺省值，而不是被夹成 1 或上限。 */
+int maxAutoStepsFromString(const QString &value)
+{
+    bool ok = false;
+    const int steps = value.toInt(&ok);
+    if (!ok || steps < AiSettings::kMinAutoSteps || steps > AiSettings::kMaxAutoSteps) {
+        return AiSettings::kDefaultMaxAutoSteps;
+    }
+    return steps;
 }
 } // namespace
 
@@ -84,6 +96,8 @@ bool AiSettingsService::load(QString *errorMessage)
         // 全自动绝不能因为"读不到配置"而被默认打开：未知值一律回落到只读自动执行。
         settings.executionPolicy =
             policyFromString(m_database->setting(kExecutionPolicyKey).value_or(QString()));
+        settings.maxAutoExecutedSteps =
+            maxAutoStepsFromString(m_database->setting(kMaxAutoStepsKey).value_or(QString()));
     }
     if (m_credentialVault != nullptr) {
         QString secretError;
@@ -109,6 +123,8 @@ bool AiSettingsService::save(const AiSettings &input, QString *errorMessage)
 {
     AiSettings settings = input;
     settings.cliModel = LocalAgentCli::normalizeModelName(settings.cliModel);
+    settings.maxAutoExecutedSteps =
+        maxAutoStepsFromString(QString::number(settings.maxAutoExecutedSteps));
     if (m_database != nullptr) {
         QString dbError;
         if (!m_database->setSetting(kEndpointKey, settings.endpointUrl, &dbError)
@@ -123,6 +139,9 @@ bool AiSettingsService::save(const AiSettings &input, QString *errorMessage)
             || !m_database->setSetting(kCliModelKey, settings.cliModel, &dbError)
             || !m_database->setSetting(kExecutionPolicyKey,
                                        policyToString(settings.executionPolicy),
+                                       &dbError)
+            || !m_database->setSetting(kMaxAutoStepsKey,
+                                       QString::number(settings.maxAutoExecutedSteps),
                                        &dbError)) {
             if (errorMessage != nullptr) {
                 *errorMessage = dbError;

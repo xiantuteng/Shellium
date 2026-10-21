@@ -782,8 +782,15 @@ linuxdeploy 按 AppImage 排除清单跳过 libGL/libEGL/libGLX/libOpenGL 等图
   `classify()==ReadOnly` 之外还排除命令替换（`$(…)`、反引号）、全屏/跟随类命令（top、less、
   `tail -f`、不带 `-c` 的 ping）和 sudo（会停在密码提示）——自动回路要等提示符回来才续问，
   永不退出的只读命令会把它卡死。解释器、git、dpkg/rpm 不能按命令名整体放行，只按明确的
-  只读参数放行。自动执行复用执行按钮的 click 路径，每轮用户任务最多 20 步；全自动必须经
-  确认框开启，未知持久化值一律回落到"只读自动"。
+  只读参数放行。自动执行复用执行按钮的 click 路径，每轮最多 `AiSettings::maxAutoExecutedSteps`
+  步（设置页可调，缺省 20，越界库值回落缺省）；用户发新消息**或手动执行一条命令**都会清零计数，
+  否则暂停之后每一步都要点，自动执行形同虚设。全自动必须经确认框开启，未知持久化值一律回落到
+  "只读自动"。
+- **提示符可能粘在输出后面。** 输出末尾没有换行时（`printf done`），末行是
+  `done[admin@localhost ~]$`，既不等于基线也不以提示符开头，只按整行匹配会一直等下去。
+  `shellPromptHasReturned()` 还要按后缀判断：末两行去空白后以基线提示符结尾（快照按屏幕行
+  导出，长行会把提示符软换行劈成两截），或以 `[user@host dir]$` / `user@host:dir$` 结尾。
+  基线短于 4 个字符（`$ `、`# `）不做后缀匹配，否则任何以 `$` 结尾的输出都会被当成结束。
 - **分析过程实时展示，但协议原文不外露。** "正在分析…"面板展示三样东西：已用秒数、思考过程
   （HTTP 网关的 `delta.reasoning_content` / `delta.reasoning`，claude 的 `thinking_delta`）、以及从
   未闭合的协议 JSON 里抠出的 title/reason/message（`partialAgentNarrative()`）。`state`、`command`

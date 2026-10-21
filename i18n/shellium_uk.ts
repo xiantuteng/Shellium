@@ -32,6 +32,10 @@
         <translation type="unfinished">Надіслати (Enter)</translation>
     </message>
     <message>
+        <source>Paused after %1 automatic steps. Review the progress, then run the next command yourself to allow another %1 automatic steps, or send a new message.</source>
+        <translation>Пауза після %1 автоматичних кроків. Перегляньте перебіг роботи й виконайте наступну команду вручну, щоб дозволити ще %1 автоматичних кроків, або надішліть нове повідомлення.</translation>
+    </message>
+    <message>
         <source>The AI can make mistakes. Every command that changes the system requires your explicit confirmation.</source>
         <translation type="unfinished">ШІ може помилятися. Будь-яка команда, що змінює систему, потребує вашого явного підтвердження.</translation>
     </message>
@@ -84,10 +88,6 @@
     <message>
         <source>Configure the LLM URL and model name in Settings → AI Assistant first</source>
         <translation type="unfinished">Спочатку вкажіть URL LLM та назву моделі в «Налаштування → Асистент ШІ»</translation>
-    </message>
-    <message>
-        <source>Paused after %1 automatic steps. Review the progress, then run the next command yourself or send a new message to continue.</source>
-        <translation>Пауза після %1 автоматичних кроків. Перевірте поступ, потім виконайте наступну команду вручну або надішліть нове повідомлення, щоб продовжити.</translation>
     </message>
     <message>
         <source>Turn on full auto?</source>
@@ -4441,10 +4441,6 @@ This algorithm is obsolete; upgrading the server&apos;s SSH configuration is rec
         <translation>«Авто: лише читання» без запитань виконує команди, які власні правила Shellium відносять до лише читальних і неінтерактивних (наприклад, ls, df, systemctl status); усе, що змінює систему, чекає на ваше підтвердження. «Повністю авто» виконує будь-які команди, зокрема високого ризику.</translation>
     </message>
     <message>
-        <source>Risk is judged by local rules, never by the model&apos;s own claims. Automatic runs pause after 20 steps per task, and Stop in the AI panel always takes control back.</source>
-        <translation>Ризик оцінюють локальні правила, а не твердження моделі. Автоматичне виконання призупиняється після 20 кроків на завдання, а кнопка «Стоп» на панелі ШІ завжди повертає керування.</translation>
-    </message>
-    <message>
         <source>Test connection</source>
         <translation type="unfinished">Перевірити підключення</translation>
     </message>
@@ -4475,6 +4471,22 @@ This algorithm is obsolete; upgrading the server&apos;s SSH configuration is rec
     <message>
         <source>Save failed: %1</source>
         <translation type="unfinished">Помилка збереження: %1</translation>
+    </message>
+    <message>
+        <source> steps</source>
+        <translation> кроків</translation>
+    </message>
+    <message>
+        <source>Automatic steps per round</source>
+        <translation>Автоматичних кроків за раунд</translation>
+    </message>
+    <message>
+        <source>After this many commands in a row run without a click, the AI pauses. Running the next command yourself or sending a new message starts another round.</source>
+        <translation>Після стількох команд поспіль, виконаних без натискання, ШІ робить паузу. Ручний запуск наступної команди або нове повідомлення починає новий раунд.</translation>
+    </message>
+    <message>
+        <source>Risk is judged by local rules, never by the model&apos;s own claims. Stop in the AI panel always takes control back.</source>
+        <translation>Ризик оцінюється локальними правилами, а не за твердженнями моделі. Кнопка «Стоп» на панелі ШІ завжди повертає вам керування.</translation>
     </message>
     <message>
         <source>Detect again</source>

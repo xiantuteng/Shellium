@@ -32,6 +32,10 @@
         <translation type="unfinished">Invia (Invio)</translation>
     </message>
     <message>
+        <source>Paused after %1 automatic steps. Review the progress, then run the next command yourself to allow another %1 automatic steps, or send a new message.</source>
+        <translation>In pausa dopo %1 passaggi automatici. Controlla l&apos;avanzamento, poi esegui tu il comando successivo per consentire altri %1 passaggi automatici, oppure invia un nuovo messaggio.</translation>
+    </message>
+    <message>
         <source>The AI can make mistakes. Every command that changes the system requires your explicit confirmation.</source>
         <translation type="unfinished">L&apos;IA può commettere errori. Ogni comando che modifica il sistema richiede la tua conferma esplicita.</translation>
     </message>
@@ -84,10 +88,6 @@
     <message>
         <source>Configure the LLM URL and model name in Settings → AI Assistant first</source>
         <translation type="unfinished">Configura prima l&apos;URL dell&apos;LLM e il nome del modello in Impostazioni → Assistente IA</translation>
-    </message>
-    <message>
-        <source>Paused after %1 automatic steps. Review the progress, then run the next command yourself or send a new message to continue.</source>
-        <translation>In pausa dopo %1 passaggi automatici. Controlla l’avanzamento, poi esegui tu il comando successivo o invia un nuovo messaggio per continuare.</translation>
     </message>
     <message>
         <source>Turn on full auto?</source>
@@ -4441,10 +4441,6 @@ Questo algoritmo è obsoleto; si consiglia di aggiornare la configurazione SSH d
         <translation>«Sola lettura automatica» esegue senza chiedere i comandi che le regole di Shellium classificano come di sola lettura e non interattivi (per esempio ls, df, systemctl status); tutto ciò che modifica il sistema attende la tua conferma. «Completamente automatico» esegue ogni comando, compresi quelli ad alto rischio.</translation>
     </message>
     <message>
-        <source>Risk is judged by local rules, never by the model&apos;s own claims. Automatic runs pause after 20 steps per task, and Stop in the AI panel always takes control back.</source>
-        <translation>Il rischio è valutato da regole locali, mai da quanto dichiarato dal modello. Le esecuzioni automatiche si fermano dopo 20 passaggi per attività e Interrompi nel pannello IA riprende sempre il controllo.</translation>
-    </message>
-    <message>
         <source>Test connection</source>
         <translation type="unfinished">Prova connessione</translation>
     </message>
@@ -4475,6 +4471,22 @@ Questo algoritmo è obsoleto; si consiglia di aggiornare la configurazione SSH d
     <message>
         <source>Save failed: %1</source>
         <translation type="unfinished">Salvataggio non riuscito: %1</translation>
+    </message>
+    <message>
+        <source> steps</source>
+        <translation> passaggi</translation>
+    </message>
+    <message>
+        <source>Automatic steps per round</source>
+        <translation>Passaggi automatici per ciclo</translation>
+    </message>
+    <message>
+        <source>After this many commands in a row run without a click, the AI pauses. Running the next command yourself or sending a new message starts another round.</source>
+        <translation>Dopo questo numero di comandi eseguiti di seguito senza clic, l&apos;IA si mette in pausa. Eseguire tu il comando successivo o inviare un nuovo messaggio avvia un nuovo ciclo.</translation>
+    </message>
+    <message>
+        <source>Risk is judged by local rules, never by the model&apos;s own claims. Stop in the AI panel always takes control back.</source>
+        <translation>Il rischio è valutato da regole locali, mai in base a quanto dichiara il modello. «Interrompi» nel pannello IA ti restituisce sempre il controllo.</translation>
     </message>
     <message>
         <source>Detect again</source>

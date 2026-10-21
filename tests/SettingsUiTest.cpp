@@ -1519,6 +1519,7 @@ void SettingsUiTest::aiLocalCliAndExecutionPolicyRoundTrip()
     // 老库里没有这些键：来源保持 HTTP，执行策略落在只读自动，绝不能默认成全自动。
     QCOMPARE(aiService.currentSettings().backend, AiBackend::Http);
     QCOMPARE(aiService.currentSettings().executionPolicy, AiExecutionPolicy::AutoReadOnly);
+    QCOMPARE(aiService.currentSettings().maxAutoExecutedSteps, AiSettings::kDefaultMaxAutoSteps);
 
     {
         SettingsDialog dialog(service.get(), nullptr, &aiService, nullptr);
@@ -1530,7 +1531,10 @@ void SettingsUiTest::aiLocalCliAndExecutionPolicyRoundTrip()
         auto *modelEdit = dialog.findChild<QLineEdit *>(QStringLiteral("aiCliModelEdit"));
         auto *endpointEdit = dialog.findChild<QLineEdit *>(QStringLiteral("aiEndpointEdit"));
         auto *cliSave = dialog.findChild<QAbstractButton *>(QStringLiteral("settingsAiCliSave"));
+        auto *stepsSpin = dialog.findChild<QSpinBox *>(QStringLiteral("aiMaxAutoStepsSpin"));
         QVERIFY(backend && policy && agentCombo && pathEdit && modelEdit && endpointEdit && cliSave);
+        QVERIFY(stepsSpin != nullptr);
+        QCOMPARE(stepsSpin->value(), AiSettings::kDefaultMaxAutoSteps);
 
         // AI 页不是当前页，isVisibleTo 恒为假；改看所在卡片自身是否被隐藏。
         const auto cardHidden = [](QWidget *field) {
@@ -1558,6 +1562,10 @@ void SettingsUiTest::aiLocalCliAndExecutionPolicyRoundTrip()
         QCOMPARE(aiService.currentSettings().executionPolicy, AiExecutionPolicy::Manual);
         // 即时保存只改策略，不能把尚未点保存的 CLI 字段顺带写进去。
         QCOMPARE(aiService.currentSettings().backend, AiBackend::Http);
+        // 步数上限同样即时保存。
+        stepsSpin->setValue(35);
+        QCOMPARE(aiService.currentSettings().maxAutoExecutedSteps, 35);
+        QCOMPARE(aiService.currentSettings().backend, AiBackend::Http);
         cliSave->click();
     }
 
@@ -1569,6 +1577,7 @@ void SettingsUiTest::aiLocalCliAndExecutionPolicyRoundTrip()
     QCOMPARE(saved.cliExecutablePath, QStringLiteral("/opt/tools/codex"));
     QCOMPARE(saved.cliModel, QStringLiteral("gpt-5-codex"));
     QCOMPARE(saved.executionPolicy, AiExecutionPolicy::Manual);
+    QCOMPARE(saved.maxAutoExecutedSteps, 35);
     QVERIFY(saved.isConfigured());
 
     SettingsDialog reopened(service.get(), nullptr, &reloaded, nullptr);
@@ -1581,6 +1590,15 @@ void SettingsUiTest::aiLocalCliAndExecutionPolicyRoundTrip()
     QCOMPARE(reopened.findChild<SegmentedControl *>(QStringLiteral("aiExecutionPolicySelector"))
                  ->currentData(),
              static_cast<int>(AiExecutionPolicy::Manual));
+    QCOMPARE(reopened.findChild<QSpinBox *>(QStringLiteral("aiMaxAutoStepsSpin"))->value(), 35);
+
+    // 被手改成越界或非数字的库值不能变成 0 步或无限步，一律回落到缺省值。
+    for (const QString &bad : {QStringLiteral("0"), QStringLiteral("100000"), QStringLiteral("abc")}) {
+        QVERIFY(m_database->setSetting(QStringLiteral("ai.maxAutoSteps"), bad));
+        AiSettingsService corrupted(m_database.get(), nullptr);
+        QVERIFY2(corrupted.load(&loadError), qPrintable(loadError));
+        QCOMPARE(corrupted.currentSettings().maxAutoExecutedSteps, AiSettings::kDefaultMaxAutoSteps);
+    }
 }
 
 void SettingsUiTest::aboutPageShowsVersionCopyrightAndWebsite()

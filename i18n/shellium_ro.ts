@@ -32,6 +32,10 @@
         <translation type="unfinished">Trimite (Enter)</translation>
     </message>
     <message>
+        <source>Paused after %1 automatic steps. Review the progress, then run the next command yourself to allow another %1 automatic steps, or send a new message.</source>
+        <translation>Întrerupt după %1 pași automați. Verificați progresul, apoi rulați singur următoarea comandă pentru a permite încă %1 pași automați sau trimiteți un mesaj nou.</translation>
+    </message>
+    <message>
         <source>The AI can make mistakes. Every command that changes the system requires your explicit confirmation.</source>
         <translation type="unfinished">IA poate greși. Orice comandă care modifică sistemul necesită confirmarea ta explicită.</translation>
     </message>
@@ -84,10 +88,6 @@
     <message>
         <source>Configure the LLM URL and model name in Settings → AI Assistant first</source>
         <translation type="unfinished">Configurează mai întâi URL-ul LLM și numele modelului în „Setări → Asistent IA”</translation>
-    </message>
-    <message>
-        <source>Paused after %1 automatic steps. Review the progress, then run the next command yourself or send a new message to continue.</source>
-        <translation>Întrerupt după %1 pași automați. Verificați progresul, apoi rulați singur comanda următoare sau trimiteți un mesaj nou pentru a continua.</translation>
     </message>
     <message>
         <source>Turn on full auto?</source>
@@ -4441,10 +4441,6 @@ Acest algoritm este învechit; se recomandă actualizarea configurației SSH a s
         <translation>„Doar-citire automat” rulează fără să întrebe comenzile pe care regulile proprii Shellium le clasifică drept doar-citire și neinteractive (de exemplu ls, df, systemctl status); orice modifică sistemul așteaptă confirmarea dvs. „Complet automat” rulează toate comenzile, inclusiv pe cele cu risc ridicat.</translation>
     </message>
     <message>
-        <source>Risk is judged by local rules, never by the model&apos;s own claims. Automatic runs pause after 20 steps per task, and Stop in the AI panel always takes control back.</source>
-        <translation>Riscul este evaluat după reguli locale, niciodată după afirmațiile modelului. Rulările automate se opresc după 20 de pași pe sarcină, iar Oprire din panoul AI preia oricând controlul.</translation>
-    </message>
-    <message>
         <source>Test connection</source>
         <translation type="unfinished">Testează conexiunea</translation>
     </message>
@@ -4475,6 +4471,22 @@ Acest algoritm este învechit; se recomandă actualizarea configurației SSH a s
     <message>
         <source>Save failed: %1</source>
         <translation type="unfinished">Salvare eșuată: %1</translation>
+    </message>
+    <message>
+        <source> steps</source>
+        <translation> pași</translation>
+    </message>
+    <message>
+        <source>Automatic steps per round</source>
+        <translation>Pași automați per rundă</translation>
+    </message>
+    <message>
+        <source>After this many commands in a row run without a click, the AI pauses. Running the next command yourself or sending a new message starts another round.</source>
+        <translation>După acest număr de comenzi rulate consecutiv fără clic, AI se oprește temporar. Rularea manuală a următoarei comenzi sau trimiterea unui mesaj nou pornește o nouă rundă.</translation>
+    </message>
+    <message>
+        <source>Risk is judged by local rules, never by the model&apos;s own claims. Stop in the AI panel always takes control back.</source>
+        <translation>Riscul este evaluat după reguli locale, niciodată după afirmațiile modelului. „Oprire” din panoul AI vă redă oricând controlul.</translation>
     </message>
     <message>
         <source>Detect again</source>

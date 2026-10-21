@@ -32,6 +32,10 @@
         <translation>发送（Enter）</translation>
     </message>
     <message>
+        <source>Paused after %1 automatic steps. Review the progress, then run the next command yourself to allow another %1 automatic steps, or send a new message.</source>
+        <translation>已连续自动执行 %1 步，现已暂停。请先查看进展，手动执行下一条命令即可再自动执行 %1 步，也可以发送新消息。</translation>
+    </message>
+    <message>
         <source>The AI can make mistakes. Every command that changes the system requires your explicit confirmation.</source>
         <translation>AI 可能出错。所有修改系统的命令都需要你明确确认。</translation>
     </message>
@@ -84,10 +88,6 @@
     <message>
         <source>Configure the LLM URL and model name in Settings → AI Assistant first</source>
         <translation>请先在设置 → AI 助手中配置大模型地址和模型名称</translation>
-    </message>
-    <message>
-        <source>Paused after %1 automatic steps. Review the progress, then run the next command yourself or send a new message to continue.</source>
-        <translation>已连续自动执行 %1 步，现已暂停。请先查看进展，再手动执行下一条命令，或发送新消息继续。</translation>
     </message>
     <message>
         <source>Turn on full auto?</source>
@@ -4443,10 +4443,6 @@ This algorithm is obsolete; upgrading the server&apos;s SSH configuration is rec
         <translation>“自动只读”会直接执行被 Shellium 自身规则判定为只读且非交互的命令（如 ls、df、systemctl status），任何会修改系统的命令都会等待你确认。“全自动”会执行所有命令，包括高风险命令。</translation>
     </message>
     <message>
-        <source>Risk is judged by local rules, never by the model&apos;s own claims. Automatic runs pause after 20 steps per task, and Stop in the AI panel always takes control back.</source>
-        <translation>风险由本地规则判定，从不采信模型的自述。每个任务自动执行 20 步后会暂停，AI 面板中的“停止”随时可以收回控制权。</translation>
-    </message>
-    <message>
         <source>Test connection</source>
         <translation>测试连接</translation>
     </message>
@@ -4477,6 +4473,22 @@ This algorithm is obsolete; upgrading the server&apos;s SSH configuration is rec
     <message>
         <source>Save failed: %1</source>
         <translation>保存失败：%1</translation>
+    </message>
+    <message>
+        <source> steps</source>
+        <translation> 步</translation>
+    </message>
+    <message>
+        <source>Automatic steps per round</source>
+        <translation>每轮自动执行步数</translation>
+    </message>
+    <message>
+        <source>After this many commands in a row run without a click, the AI pauses. Running the next command yourself or sending a new message starts another round.</source>
+        <translation>连续这么多条命令无需点击自动执行后，AI 会暂停。手动执行下一条命令或发送新消息即开始新一轮。</translation>
+    </message>
+    <message>
+        <source>Risk is judged by local rules, never by the model&apos;s own claims. Stop in the AI panel always takes control back.</source>
+        <translation>风险由本地规则判定，从不采信模型的自述。AI 面板中的“停止”随时可以收回控制权。</translation>
     </message>
     <message>
         <source>Detect again</source>

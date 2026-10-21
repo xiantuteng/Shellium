@@ -76,6 +76,18 @@ struct AiSettings {
     /** @brief 命令自动执行策略，缺省只自动执行只读命令。 */
     AiExecutionPolicy executionPolicy = AiExecutionPolicy::AutoReadOnly;
 
+    /** @brief 自动执行步数上限的缺省值与允许范围；越界或读不到的配置一律回落到缺省值。 */
+    static constexpr int kDefaultMaxAutoSteps = 20;
+    static constexpr int kMinAutoSteps = 1;
+    static constexpr int kMaxAutoSteps = 500;
+
+    /**
+     * @brief 连续自动执行多少条命令后暂停，把方向盘交还用户。
+     *
+     * 用户发出新消息或手动执行一条命令都会重新授权一轮，计数从零开始。
+     */
+    int maxAutoExecutedSteps = kDefaultMaxAutoSteps;
+
     /** @brief 当前模型来源具备发起请求的最基本条件。 */
     [[nodiscard]] bool isConfigured() const
     {

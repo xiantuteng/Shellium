@@ -32,6 +32,10 @@
         <translation type="unfinished">Senden (Eingabe)</translation>
     </message>
     <message>
+        <source>Paused after %1 automatic steps. Review the progress, then run the next command yourself to allow another %1 automatic steps, or send a new message.</source>
+        <translation>Nach %1 automatischen Schritten pausiert. Prüfen Sie den Fortschritt und führen Sie den nächsten Befehl selbst aus, um weitere %1 automatische Schritte zu erlauben, oder senden Sie eine neue Nachricht.</translation>
+    </message>
+    <message>
         <source>The AI can make mistakes. Every command that changes the system requires your explicit confirmation.</source>
         <translation type="unfinished">Die KI kann Fehler machen. Jeder Befehl, der das System verändert, erfordert Ihre ausdrückliche Bestätigung.</translation>
     </message>
@@ -84,10 +88,6 @@
     <message>
         <source>Configure the LLM URL and model name in Settings → AI Assistant first</source>
         <translation type="unfinished">Konfigurieren Sie zuerst die LLM-URL und den Modellnamen unter Einstellungen → KI-Assistent</translation>
-    </message>
-    <message>
-        <source>Paused after %1 automatic steps. Review the progress, then run the next command yourself or send a new message to continue.</source>
-        <translation>Nach %1 automatischen Schritten angehalten. Prüfen Sie den Fortschritt und führen Sie den nächsten Befehl selbst aus oder senden Sie eine neue Nachricht, um fortzufahren.</translation>
     </message>
     <message>
         <source>Turn on full auto?</source>
@@ -4441,10 +4441,6 @@ Dieser Algorithmus ist veraltet; es wird empfohlen, die SSH-Konfiguration des Se
         <translation>„Nur Lesen automatisch“ führt Befehle, die Shelliums eigene Regeln als schreibgeschützt und nicht interaktiv einstufen (etwa ls, df, systemctl status), ohne Rückfrage aus; alles, was das System verändert, wartet auf Ihre Bestätigung. „Vollautomatik“ führt jeden Befehl aus, auch solche mit hohem Risiko.</translation>
     </message>
     <message>
-        <source>Risk is judged by local rules, never by the model&apos;s own claims. Automatic runs pause after 20 steps per task, and Stop in the AI panel always takes control back.</source>
-        <translation>Das Risiko wird nach lokalen Regeln beurteilt, nie nach den Angaben des Modells. Automatische Ausführungen pausieren nach 20 Schritten pro Aufgabe, und „Stopp“ im KI-Bereich holt die Kontrolle jederzeit zurück.</translation>
-    </message>
-    <message>
         <source>Test connection</source>
         <translation type="unfinished">Verbindung testen</translation>
     </message>
@@ -4475,6 +4471,22 @@ Dieser Algorithmus ist veraltet; es wird empfohlen, die SSH-Konfiguration des Se
     <message>
         <source>Save failed: %1</source>
         <translation type="unfinished">Speichern fehlgeschlagen: %1</translation>
+    </message>
+    <message>
+        <source> steps</source>
+        <translation> Schritte</translation>
+    </message>
+    <message>
+        <source>Automatic steps per round</source>
+        <translation>Automatische Schritte pro Runde</translation>
+    </message>
+    <message>
+        <source>After this many commands in a row run without a click, the AI pauses. Running the next command yourself or sending a new message starts another round.</source>
+        <translation>Nach so vielen Befehlen, die ohne Klick nacheinander ausgeführt wurden, pausiert die KI. Wenn Sie den nächsten Befehl selbst ausführen oder eine neue Nachricht senden, beginnt eine neue Runde.</translation>
+    </message>
+    <message>
+        <source>Risk is judged by local rules, never by the model&apos;s own claims. Stop in the AI panel always takes control back.</source>
+        <translation>Das Risiko wird nach lokalen Regeln beurteilt, nie nach den Angaben des Modells. Mit „Stopp“ im KI-Bereich übernehmen Sie jederzeit wieder die Kontrolle.</translation>
     </message>
     <message>
         <source>Detect again</source>

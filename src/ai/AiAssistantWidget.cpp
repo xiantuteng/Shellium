@@ -202,14 +202,6 @@ QString partialAgentNarrative(const QString &partial)
     return narrative.join(QLatin1Char('\n'));
 }
 
-/**
- * @brief 用户发出一次任务后，最多允许连续自动执行的命令条数。
- *
- * 自动执行让"模型给命令 → 执行 → 续问"在无人点击的情况下循环；模型陷入反复重试时，
- * 这条上限保证回路最终停下来把控制权交还用户，而不是无限刷终端。
- */
-constexpr int kMaxAutoExecutedSteps = 20;
-
 /** @brief 协议校验失败时最多自动纠正一次，避免网关模型持续违规造成无限请求循环。 */
 constexpr int kMaxAgentProtocolRepairs = 1;
 
@@ -459,6 +451,27 @@ QString lastVisibleTerminalLine(const QString &terminalText)
 }
 
 /**
+ * @brief 取终端快照末尾两条非空行，去掉其中所有空白后首尾相接。
+ *
+ * 快照按终端屏幕行导出，输出末尾没有换行时提示符会紧跟在输出后面，整行超出终端宽度时
+ * 提示符还可能被软换行劈成两截；拼上前一行才能看到完整的提示符。空白一并去掉，是因为
+ * 断点恰好落在提示符内部空格上时，屏幕行末尾的空格不一定保留在导出文本里。
+ */
+QString compactTerminalTail(const QString &terminalText)
+{
+    const QStringList lines = terminalText.split(QLatin1Char('\n'));
+    QStringList tail;
+    for (auto it = lines.crbegin(); it != lines.crend() && tail.size() < 2; ++it) {
+        if (!it->trimmed().isEmpty()) {
+            tail.prepend(*it);
+        }
+    }
+    QString compact = tail.join(QString());
+    compact.remove(QRegularExpression(QStringLiteral("\\s")));
+    return compact;
+}
+
+/**
  * @brief 判断终端末行是否为命令执行完毕后重新出现的 Shell 提示符。
  * @param terminalText 当前完整终端快照。
  * @param baselinePrompt 命令执行前记录的提示符末行。
@@ -467,6 +480,11 @@ QString lastVisibleTerminalLine(const QString &terminalText)
  * 精确匹配覆盖绝大多数场景；通用正则兼容 `cd`、`sudo -s` 等导致目录或身份变化的命令。
  * 通用规则要求末行以 `$`、`#`、`%` 或 `>` 和可选空格结尾，并限制长度，降低普通日志行
  * 被误判为提示符的概率。无法识别的高度自定义提示符会继续等待，而不会提前读取半截输出。
+ *
+ * 命令输出末尾没有换行时（`printf done`、`cat` 不以换行结尾的文件），提示符会直接接在
+ * 输出后面，形如 `done[admin@localhost ~]$`。这种行既不等于基线、也不以提示符开头，
+ * 因此还要按"行尾是提示符"再判断一次：以原提示符结尾，或以带 `user@host` 的典型提示符
+ * 结尾。
  */
 bool shellPromptHasReturned(const QString &terminalText, const QString &baselinePrompt)
 {
@@ -481,7 +499,26 @@ bool shellPromptHasReturned(const QString &terminalText, const QString &baseline
     static const QRegularExpression commonPrompt(QStringLiteral(
         "^(?=.{1,240}$)(?:\\[[^\\r\\n]+\\]|"
         "[^\\s@]+@[^\\s:]+(?::[^\\r\\n]*)?|[A-Za-z0-9_.-]+)\\s*[#$%>]\\s*$"));
-    return commonPrompt.match(lastLine).hasMatch();
+    if (commonPrompt.match(lastLine).hasMatch()) {
+        return true;
+    }
+
+    // 后缀匹配只对足够长的基线提示符开放：`$`、`#` 这类极简提示符作后缀几乎能匹配任何
+    // 以美元符号结尾的输出，宁可继续等待也不能提前截断。
+    constexpr int kMinSuffixPromptLength = 4;
+    QString compactBaseline = baselinePrompt;
+    compactBaseline.remove(QRegularExpression(QStringLiteral("\\s")));
+    if (compactBaseline.size() >= kMinSuffixPromptLength
+        && compactTerminalTail(terminalText).endsWith(compactBaseline)) {
+        return true;
+    }
+
+    // 基线变了（cd 换了目录）且输出没有换行时，只认带 `user@host` 的两种典型形态：
+    // RHEL 系 `[user@host dir]$` 与 Debian 系 `user@host:dir$`。
+    static const QRegularExpression trailingPrompt(QStringLiteral(
+        "(?:\\[[^\\[\\]\\r\\n]*@[^\\[\\]\\r\\n]*\\]|"
+        "[A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+:\\S*)\\s*[#$%]\\s*$"));
+    return trailingPrompt.match(lastLine).hasMatch();
 }
 
 } // namespace
@@ -1386,11 +1423,15 @@ void AiAssistantWidget::maybeAutoExecute(const QString &command, QPushButton *ex
     if (!shouldAutoExecute(policy, command)) {
         return;
     }
-    if (m_autoExecutedSteps >= kMaxAutoExecutedSteps) {
-        // 到达上限不是错误，只是把方向盘交还给用户：卡片仍可手动执行。
+    // 自动执行让"模型给命令 → 执行 → 续问"在无人点击的情况下循环；模型陷入反复重试时，
+    // 这条上限保证回路最终停下来把控制权交还用户，而不是无限刷终端。
+    const int maxSteps = m_settingsService->currentSettings().maxAutoExecutedSteps;
+    if (m_autoExecutedSteps >= maxSteps) {
+        // 到达上限不是错误，只是把方向盘交还给用户：卡片仍可手动执行，手动执行一条即重新
+        // 授权下一轮。
         appendNoticeBubble(
-            tr("Paused after %1 automatic steps. Review the progress, then run the next command yourself or send a new message to continue.")
-                .arg(kMaxAutoExecutedSteps),
+            tr("Paused after %1 automatic steps. Review the progress, then run the next command yourself to allow another %1 automatic steps, or send a new message.")
+                .arg(maxSteps),
             false);
         scrollToBottom();
         return;
@@ -2019,6 +2060,11 @@ QPushButton *AiAssistantWidget::appendCommandCard(const QString &command,
         // 只认这一次的批准：属性读完立即清掉，之后用户再手动点击仍走正常审批。
         const bool autoApproved = executeButton->property("aiAutoApproved").toBool();
         executeButton->setProperty("aiAutoApproved", false);
+        if (!autoApproved) {
+            // 用户亲手执行一条，等于看过进度后重新授权一轮自动执行；否则到达上限后的每一步
+            // 都只能手动点，自动执行形同虚设。
+            m_autoExecutedSteps = 0;
+        }
         if (level == CommandRiskLevel::HighRisk && !autoApproved) {
             const auto choice = QMessageBox::warning(
                 this,

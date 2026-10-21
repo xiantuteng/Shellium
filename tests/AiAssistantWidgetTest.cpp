@@ -271,6 +271,8 @@ private slots:
     void fullAutoRunsHighRiskCommandWithoutPrompt();
     /** @brief 连续自动执行到上限后暂停，把控制权交还用户。 */
     void autoExecutionPausesAtStepLimit();
+    void manualRunAfterPauseGrantsAnotherRound();
+    void promptGluedToOutputWithoutNewlineEndsCapture();
     /** @brief 面板上的执行模式菜单会持久化策略；切到全自动必须先通过确认框。 */
     void executionModeMenuPersistsPolicy();
     /** @brief 输入区模型菜单列出网关模型，选中后持久化并用于下一次请求。 */
@@ -1611,7 +1613,7 @@ void AiAssistantWidgetTest::fullAutoRunsHighRiskCommandWithoutPrompt()
 
 void AiAssistantWidgetTest::autoExecutionPausesAtStepLimit()
 {
-    constexpr int kLimit = 20;
+    constexpr int kLimit = AiSettings::kDefaultMaxAutoSteps;
     MiniAiServer server;
     QVERIFY(server.isListening());
     for (int i = 0; i <= kLimit; ++i) {
@@ -1650,6 +1652,132 @@ void AiAssistantWidgetTest::autoExecutionPausesAtStepLimit()
     QVERIFY(sawPause);
     // 最后一张卡片停在待确认状态，用户仍可手动继续。
     QVERIFY(widget.findChildren<QPushButton *>(QStringLiteral("aiExecuteButton")).last()->isEnabled());
+}
+
+/**
+ * @brief 步数上限可配置；到达上限后用户手动执行一条，应重新获得一整轮自动执行。
+ *
+ * 旧实现只在发送新消息时清零计数，暂停之后的每一步都只能手动点，自动执行形同虚设。
+ */
+void AiAssistantWidgetTest::manualRunAfterPauseGrantsAnotherRound()
+{
+    constexpr int kLimit = 3;
+    MiniAiServer server;
+    QVERIFY(server.isListening());
+    // 请求数：首问 1 + 自动 kLimit + 手动 1 + 再自动 kLimit；最后一次回复停在暂停处。
+    for (int i = 0; i < 2 * kLimit + 2; ++i) {
+        server.responses.append(chatCompletionBody(QStringLiteral(
+            R"JSON({"state":"command","title":"再看一次","reason":"继续确认状态。","command":"uptime"})JSON")));
+    }
+
+    AiSettingsService settingsService(nullptr, nullptr);
+    AiSettings settings;
+    settings.endpointUrl = QStringLiteral("http://127.0.0.1:%1").arg(server.port());
+    settings.model = QStringLiteral("test-model");
+    settings.executionPolicy = AiExecutionPolicy::AutoReadOnly;
+    settings.maxAutoExecutedSteps = kLimit;
+    QVERIFY(settingsService.save(settings));
+
+    AiAssistantWidget widget(&settingsService);
+    QString terminalText = QStringLiteral("[user@host ~]$ ");
+    widget.setTerminalContextProvider([&terminalText]() { return terminalText; });
+    QSignalSpy execSpy(&widget, &AiAssistantWidget::commandExecutionRequested);
+    connect(&widget, &AiAssistantWidget::commandExecutionRequested, &widget,
+            [&terminalText](const QString &command) {
+                terminalText += command + QStringLiteral("\n up 3 days\n[user@host ~]$ ");
+            });
+
+    auto *inputEdit = widget.findChild<QTextEdit *>(QStringLiteral("aiInputEdit"));
+    auto *sendButton = widget.findChild<QPushButton *>(QStringLiteral("aiSendButton"));
+    inputEdit->setPlainText(QStringLiteral("一直检查"));
+    sendButton->click();
+
+    QTRY_COMPARE_WITH_TIMEOUT(server.capturedBodies.size(), kLimit + 1, 20000);
+    QTRY_VERIFY_WITH_TIMEOUT(aiIsIdle(sendButton), 5000);
+    QCOMPARE(execSpy.count(), kLimit);
+    const auto countPauses = [&widget]() {
+        int pauses = 0;
+        for (QLabel *label : widget.findChildren<QLabel *>()) {
+            pauses += label->text().contains(QStringLiteral("Paused after 3 automatic steps")) ? 1 : 0;
+        }
+        return pauses;
+    };
+    QCOMPARE(countPauses(), 1);
+
+    // 用户亲手执行暂停处的那条命令：它本身算手动，之后应再自动跑满 kLimit 条才再次暂停。
+    auto *pending = widget.findChildren<QPushButton *>(QStringLiteral("aiExecuteButton")).last();
+    QVERIFY(pending->isEnabled());
+    pending->click();
+
+    QTRY_COMPARE_WITH_TIMEOUT(server.capturedBodies.size(), 2 * kLimit + 2, 20000);
+    QTRY_VERIFY_WITH_TIMEOUT(aiIsIdle(sendButton), 5000);
+    QCOMPARE(execSpy.count(), 2 * kLimit + 1);
+    QCOMPARE(countPauses(), 2);
+    QVERIFY(widget.findChildren<QPushButton *>(QStringLiteral("aiExecuteButton")).last()->isEnabled());
+}
+
+/**
+ * @brief 输出末尾没有换行时，提示符接在输出后面也必须被识别为命令已结束。
+ *
+ * 形如 `done[admin@localhost ~]$` 的末行既不等于基线、也不以提示符开头，旧实现会一直
+ * 等下去。同时覆盖提示符被软换行劈成两行、cd 后目录已变化两种形态，以及极简提示符 `$`
+ * 不得被当作后缀误判的反例。
+ */
+void AiAssistantWidgetTest::promptGluedToOutputWithoutNewlineEndsCapture()
+{
+    struct Case {
+        const char *name;
+        QString baseline;
+        QString output;
+        bool shouldFinish;
+    };
+    const QList<Case> cases{
+        {"same prompt glued", QStringLiteral("[admin@localhost ~]$ "),
+         QStringLiteral("printf done\ndone[admin@localhost ~]$ "), true},
+        {"prompt split by soft wrap", QStringLiteral("[admin@localhost ~]$ "),
+         QStringLiteral("cat x\nxxxxxxxxxxxxxxxxxxxxxxxx[admin@local\nhost ~]$ "), true},
+        {"debian prompt after cd", QStringLiteral("root@web01:~# "),
+         QStringLiteral("cd /tmp && printf 'all ok'\nall okroot@web01:/tmp# "), true},
+        {"minimal prompt is not a suffix", QStringLiteral("$ "),
+         QStringLiteral("printf 'price 5$'\nprice 5$"), false},
+    };
+
+    for (const Case &testCase : cases) {
+        MiniAiServer server;
+        QVERIFY(server.isListening());
+        server.responses.append(chatCompletionBody(QStringLiteral(
+            R"JSON({"state":"command","title":"输出","reason":"看看结果。","command":"printf done"})JSON")));
+        server.responses.append(chatCompletionBody(QStringLiteral(
+            R"JSON({"state":"complete","message":"完成。"})JSON")));
+
+        AiSettingsService settingsService(nullptr, nullptr);
+        AiSettings settings;
+        settings.endpointUrl = QStringLiteral("http://127.0.0.1:%1").arg(server.port());
+        settings.model = QStringLiteral("test-model");
+        settings.executionPolicy = AiExecutionPolicy::Manual;
+        QVERIFY(settingsService.save(settings));
+
+        AiAssistantWidget widget(&settingsService);
+        QString terminalText = testCase.baseline;
+        widget.setTerminalContextProvider([&terminalText]() { return terminalText; });
+        auto *inputEdit = widget.findChild<QTextEdit *>(QStringLiteral("aiInputEdit"));
+        auto *sendButton = widget.findChild<QPushButton *>(QStringLiteral("aiSendButton"));
+        inputEdit->setPlainText(QStringLiteral("输出一下"));
+        sendButton->click();
+        QTRY_VERIFY_WITH_TIMEOUT(
+            widget.findChild<QPushButton *>(QStringLiteral("aiExecuteButton")) != nullptr, 5000);
+        QTRY_VERIFY_WITH_TIMEOUT(aiIsIdle(sendButton), 5000);
+
+        widget.findChild<QPushButton *>(QStringLiteral("aiExecuteButton"))->click();
+        terminalText += testCase.output;
+        if (testCase.shouldFinish) {
+            QTRY_VERIFY2_WITH_TIMEOUT(server.capturedBodies.size() == 2, testCase.name, 5000);
+        } else {
+            QTest::qWait(1200);
+            QVERIFY2(server.capturedBodies.size() == 1, testCase.name);
+            QVERIFY2(!aiIsIdle(sendButton), testCase.name);
+        }
+    }
 }
 
 void AiAssistantWidgetTest::executionModeMenuPersistsPolicy()

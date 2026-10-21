@@ -32,6 +32,10 @@
         <translation type="unfinished">보내기 (Enter)</translation>
     </message>
     <message>
+        <source>Paused after %1 automatic steps. Review the progress, then run the next command yourself to allow another %1 automatic steps, or send a new message.</source>
+        <translation>자동으로 %1단계를 실행한 후 일시 중지했습니다. 진행 상황을 확인한 뒤 다음 명령을 직접 실행하면 다시 %1단계를 자동으로 실행할 수 있으며, 새 메시지를 보낼 수도 있습니다.</translation>
+    </message>
+    <message>
         <source>The AI can make mistakes. Every command that changes the system requires your explicit confirmation.</source>
         <translation type="unfinished">AI는 실수할 수 있습니다. 시스템을 변경하는 모든 명령은 명시적인 확인이 필요합니다.</translation>
     </message>
@@ -84,10 +88,6 @@
     <message>
         <source>Configure the LLM URL and model name in Settings → AI Assistant first</source>
         <translation type="unfinished">먼저 「설정 → AI 어시스턴트」에서 LLM URL과 모델 이름을 설정하세요</translation>
-    </message>
-    <message>
-        <source>Paused after %1 automatic steps. Review the progress, then run the next command yourself or send a new message to continue.</source>
-        <translation>자동 실행이 %1단계에 도달해 일시 중지되었습니다. 진행 상황을 확인한 뒤 다음 명령을 직접 실행하거나 새 메시지를 보내 계속하세요.</translation>
     </message>
     <message>
         <source>Turn on full auto?</source>
@@ -4441,10 +4441,6 @@ This algorithm is obsolete; upgrading the server&apos;s SSH configuration is rec
         <translation>&apos;읽기 전용 자동&apos;은 Shellium 자체 규칙이 읽기 전용이자 비대화형으로 판정한 명령(예: ls, df, systemctl status)을 묻지 않고 실행하며, 시스템을 바꾸는 명령은 확인을 기다립니다. &apos;완전 자동&apos;은 위험도가 높은 명령을 포함해 모든 명령을 실행합니다.</translation>
     </message>
     <message>
-        <source>Risk is judged by local rules, never by the model&apos;s own claims. Automatic runs pause after 20 steps per task, and Stop in the AI panel always takes control back.</source>
-        <translation>위험도는 모델의 주장이 아니라 로컬 규칙으로 판정합니다. 자동 실행은 작업당 20단계 후 일시 중지되며, AI 패널의 중지로 언제든 제어를 되찾을 수 있습니다.</translation>
-    </message>
-    <message>
         <source>Test connection</source>
         <translation type="unfinished">연결 테스트</translation>
     </message>
@@ -4475,6 +4471,22 @@ This algorithm is obsolete; upgrading the server&apos;s SSH configuration is rec
     <message>
         <source>Save failed: %1</source>
         <translation type="unfinished">저장 실패: %1</translation>
+    </message>
+    <message>
+        <source> steps</source>
+        <translation>단계</translation>
+    </message>
+    <message>
+        <source>Automatic steps per round</source>
+        <translation>라운드당 자동 실행 단계</translation>
+    </message>
+    <message>
+        <source>After this many commands in a row run without a click, the AI pauses. Running the next command yourself or sending a new message starts another round.</source>
+        <translation>이 수만큼의 명령이 클릭 없이 연속 실행되면 AI가 일시 중지합니다. 다음 명령을 직접 실행하거나 새 메시지를 보내면 새 라운드가 시작됩니다.</translation>
+    </message>
+    <message>
+        <source>Risk is judged by local rules, never by the model&apos;s own claims. Stop in the AI panel always takes control back.</source>
+        <translation>위험도는 모델의 주장이 아니라 로컬 규칙으로 판단합니다. AI 패널의 &apos;중지&apos;로 언제든지 제어권을 되찾을 수 있습니다.</translation>
     </message>
     <message>
         <source>Detect again</source>

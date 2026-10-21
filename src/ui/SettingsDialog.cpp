@@ -882,8 +882,19 @@ QWidget *SettingsDialog::buildAiPage()
         [this] { return tr("Execution mode"); },
         m_aiExecutionPolicySelector,
         [this] { return tr("Auto read-only runs commands that Shellium's own rules classify as read-only and non-interactive (for example ls, df, systemctl status) without asking; anything that changes the system waits for your confirmation. Full auto runs every command, including high-risk ones."); });
+    m_aiMaxAutoStepsSpin = new QSpinBox(executionCard);
+    m_aiMaxAutoStepsSpin->setObjectName(QStringLiteral("aiMaxAutoStepsSpin"));
+    m_aiMaxAutoStepsSpin->setRange(AiSettings::kMinAutoSteps, AiSettings::kMaxAutoSteps);
+    m_aiMaxAutoStepsSpin->setValue(AiSettings::kDefaultMaxAutoSteps);
+    i18n::onRetranslate(m_aiMaxAutoStepsSpin, [this] {
+        m_aiMaxAutoStepsSpin->setSuffix(tr(" steps"));
+    });
+    executionCard->addRow(
+        [this] { return tr("Automatic steps per round"); },
+        new SettingsStepper(m_aiMaxAutoStepsSpin, executionCard),
+        [this] { return tr("After this many commands in a row run without a click, the AI pauses. Running the next command yourself or sending a new message starts another round."); });
     executionCard->addNote(
-        [this] { return tr("Risk is judged by local rules, never by the model's own claims. Automatic runs pause after 20 steps per task, and Stop in the AI panel always takes control back."); });
+        [this] { return tr("Risk is judged by local rules, never by the model's own claims. Stop in the AI panel always takes control back."); });
     layout->addWidget(executionCard);
 
     m_aiCliDetector = new LocalAgentCliDetector(this);
@@ -917,7 +928,8 @@ QWidget *SettingsDialog::buildAiPage()
                            static_cast<QWidget *>(m_aiCliModelEdit),
                            static_cast<QWidget *>(m_aiCliDetectButton),
                            static_cast<QWidget *>(m_aiCliSaveButton),
-                           static_cast<QWidget *>(m_aiExecutionPolicySelector)}) {
+                           static_cast<QWidget *>(m_aiExecutionPolicySelector),
+                           static_cast<QWidget *>(m_aiMaxAutoStepsSpin)}) {
         field->setEnabled(available);
     }
     if (available) {
@@ -931,6 +943,7 @@ QWidget *SettingsDialog::buildAiPage()
         m_aiPopulating = true;
         m_aiBackendSelector->setCurrentData(static_cast<int>(current.backend));
         m_aiExecutionPolicySelector->setCurrentData(static_cast<int>(current.executionPolicy));
+        m_aiMaxAutoStepsSpin->setValue(current.maxAutoExecutedSteps);
         m_aiCliPathEdit->setText(current.cliExecutablePath);
         m_aiCliModelEdit->setText(current.cliModel);
         populateCliAgentCombo();
@@ -1007,6 +1020,22 @@ QWidget *SettingsDialog::buildAiPage()
                     applyAiExecutionPolicy(value);
                 }
             });
+    connect(m_aiMaxAutoStepsSpin, &QSpinBox::valueChanged, this, [this](const int value) {
+        if (m_aiPopulating || m_aiSettingsService == nullptr) {
+            return;
+        }
+        // 与执行策略一样即时生效，且只改这一项，不顺带写入尚未保存的连接字段。
+        AiSettings settings = m_aiSettingsService->currentSettings();
+        if (settings.maxAutoExecutedSteps == value) {
+            return;
+        }
+        settings.maxAutoExecutedSteps = value;
+        QString errorMessage;
+        if (!m_aiSettingsService->save(settings, &errorMessage)) {
+            m_aiStatusLabel->setStyleSheet(QStringLiteral("color: #d84a41;"));
+            m_aiStatusLabel->setText(tr("Save failed: %1").arg(errorMessage));
+        }
+    });
     connect(m_aiCliDetectButton, &QPushButton::clicked, this, [this]() {
         m_aiCliDetectButton->setEnabled(false);
         m_aiCliStatusLabel->setStyleSheet(QString());
@@ -1048,6 +1077,7 @@ QWidget *SettingsDialog::buildAiPage()
                     m_aiPopulating = true;
                     m_aiExecutionPolicySelector->setCurrentData(
                         static_cast<int>(settings.executionPolicy));
+                    m_aiMaxAutoStepsSpin->setValue(settings.maxAutoExecutedSteps);
                     m_aiPopulating = false;
                 });
     }
@@ -1223,6 +1253,7 @@ void SettingsDialog::persistAiSettings()
     settings.cliModel = m_aiCliModelEdit->text().trimmed();
     settings.executionPolicy =
         static_cast<AiExecutionPolicy>(m_aiExecutionPolicySelector->currentData());
+    settings.maxAutoExecutedSteps = m_aiMaxAutoStepsSpin->value();
 
     // 两张卡各有一个状态行；保存结果显示在当前可见的那一张上。
     QLabel *statusLabel =

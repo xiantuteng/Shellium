@@ -32,6 +32,10 @@
         <translation type="unfinished">إرسال (Enter)</translation>
     </message>
     <message>
+        <source>Paused after %1 automatic steps. Review the progress, then run the next command yourself to allow another %1 automatic steps, or send a new message.</source>
+        <translation>توقف مؤقتًا بعد %1 خطوة تلقائية. راجع التقدم، ثم نفّذ الأمر التالي بنفسك للسماح بـ %1 خطوة تلقائية أخرى، أو أرسل رسالة جديدة.</translation>
+    </message>
+    <message>
         <source>The AI can make mistakes. Every command that changes the system requires your explicit confirmation.</source>
         <translation type="unfinished">قد يخطئ الذكاء الاصطناعي. أي أمر يعدّل النظام يتطلب تأكيدك الصريح.</translation>
     </message>
@@ -84,10 +88,6 @@
     <message>
         <source>Configure the LLM URL and model name in Settings → AI Assistant first</source>
         <translation type="unfinished">اضبط أولاً عنوان URL لنموذج اللغة الكبير واسم النموذج في «الإعدادات ← مساعد الذكاء الاصطناعي»</translation>
-    </message>
-    <message>
-        <source>Paused after %1 automatic steps. Review the progress, then run the next command yourself or send a new message to continue.</source>
-        <translation>توقف مؤقتًا بعد %1 من الخطوات التلقائية. راجع التقدم، ثم نفّذ الأمر التالي بنفسك أو أرسل رسالة جديدة للمتابعة.</translation>
     </message>
     <message>
         <source>Turn on full auto?</source>
@@ -4441,10 +4441,6 @@ This algorithm is obsolete; upgrading the server&apos;s SSH configuration is rec
         <translation>يشغّل وضع «القراءة فقط تلقائيًا» دون سؤال الأوامر التي تصنّفها قواعد Shellium الخاصة على أنها للقراءة فقط وغير تفاعلية (مثل ls وdf وsystemctl status)، وكل ما يغيّر النظام ينتظر تأكيدك. أما «تلقائي كامل» فيشغّل كل الأوامر، بما فيها العالية الخطورة.</translation>
     </message>
     <message>
-        <source>Risk is judged by local rules, never by the model&apos;s own claims. Automatic runs pause after 20 steps per task, and Stop in the AI panel always takes control back.</source>
-        <translation>تُقيَّم الخطورة بقواعد محلية، لا بادعاءات النموذج نفسه. يتوقف التشغيل التلقائي مؤقتًا بعد 20 خطوة لكل مهمة، ويستعيد زر إيقاف في لوحة الذكاء الاصطناعي التحكم دائمًا.</translation>
-    </message>
-    <message>
         <source>Test connection</source>
         <translation type="unfinished">اختبار الاتصال</translation>
     </message>
@@ -4475,6 +4471,22 @@ This algorithm is obsolete; upgrading the server&apos;s SSH configuration is rec
     <message>
         <source>Save failed: %1</source>
         <translation type="unfinished">فشل الحفظ: %1</translation>
+    </message>
+    <message>
+        <source> steps</source>
+        <translation> خطوة</translation>
+    </message>
+    <message>
+        <source>Automatic steps per round</source>
+        <translation>الخطوات التلقائية لكل جولة</translation>
+    </message>
+    <message>
+        <source>After this many commands in a row run without a click, the AI pauses. Running the next command yourself or sending a new message starts another round.</source>
+        <translation>بعد تنفيذ هذا العدد من الأوامر متتالية دون نقر، يتوقف الذكاء الاصطناعي مؤقتًا. تنفيذ الأمر التالي بنفسك أو إرسال رسالة جديدة يبدأ جولة جديدة.</translation>
+    </message>
+    <message>
+        <source>Risk is judged by local rules, never by the model&apos;s own claims. Stop in the AI panel always takes control back.</source>
+        <translation>يُقدَّر الخطر بقواعد محلية، وليس بادعاءات النموذج أبدًا. يعيد لك زر &quot;إيقاف&quot; في لوحة الذكاء الاصطناعي التحكم في أي وقت.</translation>
     </message>
     <message>
         <source>Detect again</source>

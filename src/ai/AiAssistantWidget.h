@@ -39,7 +39,8 @@ class QEvent;
  * 命令是否需要点击才下发由 AiExecutionPolicy 决定：Manual 下每条都要点击；AutoReadOnly
  * 下只有 CommandRiskClassifier 判定为只读且不会卡在交互界面的命令自动执行；FullAuto 下
  * 全部自动执行。风险判定只用本地静态规则，不采信模型自述；自动执行与手动点击走同一条
- * 按钮路径，并受每轮任务 kMaxAutoExecutedSteps 条的上限约束。
+ * 按钮路径，并受每轮任务 AiSettings::maxAutoExecutedSteps 条的上限约束（用户手动执行
+ * 一条或发出新消息后重新计数）。
  *
  * 模型来源可以是 OpenAI 兼容网关（AiClient），也可以是本机已安装的智能体 CLI
  * （LocalCliClient），两者共用单步协议与执行审批。

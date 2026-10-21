@@ -253,6 +253,7 @@ private:
     bool m_aiCliDetectedOnce = false;
     /** @brief 命令自动执行策略分段控件。 */
     SegmentedControl *m_aiExecutionPolicySelector = nullptr;
+    QSpinBox *m_aiMaxAutoStepsSpin = nullptr;
     /** @brief 是否自动检查新版本。 */
     ToggleSwitch *m_automaticUpdateCheckToggle = nullptr;
     /** @brief “立即检查”专用的检查器，与主窗口后台检查互不干扰。 */
