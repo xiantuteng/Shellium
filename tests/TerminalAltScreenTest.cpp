@@ -237,6 +237,10 @@ private slots:
     // 回归：top 这类占满整行宽度的输出加上行尾不可见的行高锚点，会让文档比视口略宽；
     // 列数本来就按视口宽度算好，终端任何时候都不该左右滚动。
     void fullWidthOutputNeverScrollsHorizontally();
+    // 回归：podman pull 这类多行进度条每次重绘都是"光标上移 N 行 + 擦除到屏尾"一次写入、
+    // 新内容另一次写入。空闲后的擦除包不得先上屏把文档缩短，否则贴底的视图会整体跳动；
+    // 真正的清屏在合帧间隔之后仍要收回空行。
+    void progressBarRedrawDoesNotShrinkDocument();
 };
 
 void TerminalAltScreenTest::resetPreservesThemeAndChunkedChinese()
@@ -600,6 +604,52 @@ void TerminalAltScreenTest::incrementalRenderMatchesFullRebuild()
     oneShotCursor.setPosition(oneShotDocument.characterCount() / 2);
     QCOMPARE(incrementalCursor.charFormat().foreground().color(),
              oneShotCursor.charFormat().foreground().color());
+}
+
+void TerminalAltScreenTest::progressBarRedrawDoesNotShrinkDocument()
+{
+    TerminalView view;
+
+    const auto progressFrame = [](const int percent) {
+        QByteArray frame;
+        for (int blob = 0; blob < 6; ++blob) {
+            frame += "Copying blob " + QByteArray::number(blob) + " ["
+                + QByteArray(percent / 5, '=') + QByteArray(20 - percent / 5, '-') + "] "
+                + QByteArray::number(percent) + "%\r\n";
+        }
+        return frame;
+    };
+
+    // 空闲后的普通输出仍要立刻上屏。进度条修复不能把键盘回显和单行结果也压进合帧。
+    view.appendTerminalOutput(QByteArrayLiteral("prompt\r\n"));
+    QVERIFY(view.document()->toPlainText().contains(QStringLiteral("prompt")));
+
+    view.appendTerminalOutput(QByteArrayLiteral("Getting image source signatures\r\n"));
+    view.appendTerminalOutput(progressFrame(10));
+    QTest::qWait(50);
+    const int blocksBeforeRedraw = view.document()->blockCount();
+    QVERIFY(view.document()->toPlainText().contains(QStringLiteral("10%")));
+
+    // 距离上一帧已经超过合帧间隔，擦除包是空闲后的首包。mpb 先写这一段，再写新的一帧。
+    view.appendTerminalOutput(QByteArrayLiteral("\x1b[6A\x1b[J"));
+    QCOMPARE(view.document()->blockCount(), blocksBeforeRedraw);
+    QVERIFY2(view.document()->toPlainText().contains(QStringLiteral("10%")),
+             "擦除包和下一帧之间不能单独画出少掉进度条的中间态");
+
+    view.appendTerminalOutput(progressFrame(55));
+    QCOMPARE(view.document()->blockCount(), blocksBeforeRedraw);
+    QVERIFY(view.document()->toPlainText().contains(QStringLiteral("55%")));
+    QVERIFY(!view.document()->toPlainText().contains(QStringLiteral("10%")));
+
+    // 真实清屏没有后续重绘。按住一小段后必须收回空行，提示符不能留在一屏空白下面。
+    QTest::qWait(50);
+    view.appendTerminalOutput(QByteArrayLiteral("\x1b[H\x1b[2Jready\r\n"));
+    QCOMPARE(view.document()->blockCount(), blocksBeforeRedraw);
+    QTest::qWait(50);
+    QVERIFY(!view.document()->toPlainText().contains(QStringLiteral("Copying blob")));
+    QVERIFY(view.document()->toPlainText().contains(QStringLiteral("ready")));
+    QVERIFY2(view.document()->blockCount() < blocksBeforeRedraw,
+             "真实清屏必须收回空行");
 }
 
 void TerminalAltScreenTest::cursorBlinkLeavesDocumentUntouched()

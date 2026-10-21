@@ -901,6 +901,12 @@ void TerminalView::scheduleRender()
         return;
     }
     if (m_renderCoalesceTimer->isActive()) {
+        // 按住的是进度条擦除的中间态，而补齐的一帧已经到了：立刻画，不再把完整进度空等满
+        // 一个合帧间隔。普通洪流的合帧不走这条，否则限流会失效。
+        if (m_renderHeldForShrink && !m_vtermBridge->renderedScreenWouldShrink()) {
+            m_lastRenderElapsed.restart();
+            renderPreservingScroll();
+        }
         return;
     }
     // 空闲之后的第一次输出立刻画出来，不进合帧队列：键盘回显、提示符、单行命令结果都属于
@@ -911,6 +917,18 @@ void TerminalView::scheduleRender()
     const qint64 sinceLastRender = m_lastRenderElapsed.isValid()
         ? m_lastRenderElapsed.elapsed()
         : kRenderCoalesceMilliseconds;
+    // 多行进度条（podman/docker pull、pip）每次重绘先单独写入“光标上移 N 行 + 擦到屏尾”，
+    // 再写新的一帧。两次写入经常被拆进不同的 PTY/SSH 包。空闲后的首包若立刻画出来，文档
+    // 会先少掉这 N 行，贴底的视图整体上跳，下一包再弹回来——就是进度条刷新时的闪烁。
+    // 只把这种“变短”按住一个合帧间隔：补齐的包几乎总在间隔内到达，中间态根本不会上屏；
+    // 间隔结束仍然变短，就当作真实清屏画出来，提示符不会被留在一屏空白下面。
+    if (sinceLastRender >= kRenderCoalesceMilliseconds
+        && m_vtermBridge->renderedScreenWouldShrink()) {
+        m_renderHeldForShrink = true;
+        m_renderCoalesceTimer->start(kRenderCoalesceMilliseconds);
+        return;
+    }
+    m_renderHeldForShrink = false;
     if (sinceLastRender >= kRenderCoalesceMilliseconds) {
         m_lastRenderElapsed.restart();
         renderPreservingScroll();
@@ -932,6 +950,7 @@ void TerminalView::renderPreservingScroll(const bool followBottom, const int pre
     // 已经落到这里就不再欠一次渲染，否则合帧定时器还会多跑一轮空转。
     m_renderCoalesceTimer->stop();
     m_renderOwed = false;
+    m_renderHeldForShrink = false;
     // 跟随意图已经作为参数传进来；文档编辑、重建清空引起的滚动值变化都不是用户操作。
     const QScopedValueRollback<bool> intentLock(m_scrollIntentLocked, true);
 
@@ -1906,6 +1925,7 @@ void TerminalView::hideEvent(QHideEvent *event)
         m_renderCoalesceTimer->stop();
         m_renderOwed = true;
     }
+    m_renderHeldForShrink = false;
     // 看不见的标签没有需要保留排版的段，趁切走把排版缓存全部还掉。
     if (!m_layoutReleaseTimer->isActive() && m_layoutCandidateFirst <= m_layoutCandidateLast) {
         m_layoutReleaseTimer->start();

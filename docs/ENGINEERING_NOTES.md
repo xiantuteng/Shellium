@@ -607,6 +607,22 @@ zsh 回车是两次写入：先 `\r\r\n` 与 PROMPT_SP 的 `\r \r`，约 20ms �
 记得用 `QScopedValueRollback` 锁住意图。回归用例
 `TerminalAltScreenTest::outputKeepsFollowingTailAfterViewportShrinks`。
 
+### 15.12 进度条重绘的“变短”中间态不能上屏
+
+现象：`podman pull` 下载时画面时不时上下跳一下（docker、pip 等多行进度条同理）。录屏里
+整屏内容上移大约八到十行，一两帧后再弹回来。
+原因：mpb 这类进度条库每次重绘分两次写入，先 `CSI nA` + `CSI J`（光标上移 N 行、擦到
+屏尾），再写新的一帧。`lastVisibleScreenRow()` 在主屏按内容截掉光标下方的空行；两次写入
+经常落在不同的 PTY/SSH 包里。空闲后的第一包会立刻渲染，文档瞬间少掉 N 行，贴底的视图
+整体上移，下一包再弹回来。持续输出时本来就在合帧，所以只有刷新间隔过后的那一次会闪。
+
+做法：`VtermBridge::renderedScreenWouldShrink()` 判断下一帧会不会少掉已经画出来的行。
+会的话 `TerminalView::scheduleRender()` 把这一帧按住一个合帧间隔（`m_renderHeldForShrink`），
+补齐的包一到就立刻出帧，不等满间隔。超时仍然变短才画出来，所以 `clear` 会收回空行，
+提示符不会被留在一屏空白下面。不要改成“主屏行数只增不减”：擦掉的行会永远占着网格，
+`clear` 之后贴底看到的是空白，提示符在视口上方。回归用例
+`TerminalAltScreenTest::progressBarRedrawDoesNotShrinkDocument`。
+
 ---
 
 ## 十六、Qt 拖拽：非 item-view 的 QAbstractScrollArea 要注册 viewport

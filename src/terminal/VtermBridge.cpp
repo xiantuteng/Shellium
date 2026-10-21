@@ -1017,6 +1017,16 @@ void VtermBridge::locateCursorInBlock(const QTextBlock &block, const RenderedLin
                                                     : cursorCell.background;
 }
 
+bool VtermBridge::renderedScreenWouldShrink() const
+{
+    // 还没画过、或下一帧本来就要整篇重建时，没有可对照的“当前这一屏”。备用屏按网格整块
+    // 绘制，行数固定，不存在主屏这种“擦掉尾部空行就少几段”的收缩。
+    if (m_alternateScreen || m_documentDirty || m_documentScreenLines.isEmpty()) {
+        return false;
+    }
+    return lastVisibleScreenRow() + 1 < m_documentScreenLines.size();
+}
+
 int VtermBridge::lastVisibleScreenRow() const
 {
     // 备用屏是一块尺寸恰好等于 PTY 网格的画布，全屏程序按绝对行列自绘，必须固定渲染
