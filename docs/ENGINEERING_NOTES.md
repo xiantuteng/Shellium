@@ -801,3 +801,13 @@ linuxdeploy 按 AppImage 排除清单跳过 libGL/libEGL/libGLX/libOpenGL 等图
   事件流尚未接入（本机无法联网验证），仍只在结束时出结果、面板只显示计时。
 - 设置页里登记 `i18n::onRetranslate` 的回调会立即执行一次：新增控件必须在登记之前创建，
   否则没有 AI 服务的设置页（多数用例）会在构造时空指针崩溃。
+
+## 二十四、macOS 模态：后台弹框不能挂在被 exec() 挡住的窗口上
+
+- `exec()` 的应用级模态框（设置对话框等）在 macOS 上开着 Cocoa 模态会话，只放行模态框自己
+  和挂在它上面的 sheet。`QMessageBox::open()` 在 macOS 上会变成父窗口的 sheet：父窗口是主窗口时，
+  sheet 收不到任何点击，而模态框又被这个窗口级模态的 sheet 按 Qt 规则挡住，整个程序卡死，只能强退。
+- 由定时器、网络回调等后台事件弹出的提示框，父窗口要按 `QApplication::activeModalWidget()` 校正：
+  父窗口不是当前模态框或其子孙时，改挂到模态框上（见 `UpdatePrompt::show` 的 `unblockedParent`）。
+- QTest 的合成鼠标事件只经过 Qt 层的模态判断，绕过 Cocoa 会话，在 native 平台上也测不出这个死锁；
+  测试要直接断言提示框的父窗口。

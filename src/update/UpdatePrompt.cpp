@@ -2,18 +2,46 @@
 
 #include "settings/TerminalSettings.h"
 
+#include <QApplication>
 #include <QDesktopServices>
 #include <QLocale>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QUrl>
 
+namespace {
+
+bool isSameOrDescendant(const QWidget *widget, const QWidget *ancestor)
+{
+    for (const QWidget *current = widget; current != nullptr; current = current->parentWidget()) {
+        if (current == ancestor) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// 后台检查命中时，用户可能正开着 exec() 的应用级模态框（例如设置对话框）。macOS 上
+// open() 的 QMessageBox 是父窗口的 sheet，而 exec() 的 Cocoa 模态会话只放行模态框自己
+// 和它的 sheet：挂在主窗口上的提示框收不到点击，模态框又被提示框按窗口级模态挡住，
+// 整个程序卡死。所以父窗口被模态框挡住时改挂到模态框上。
+QWidget *unblockedParent(QWidget *parent)
+{
+    QWidget *modal = QApplication::activeModalWidget();
+    if (modal == nullptr || parent == nullptr || isSameOrDescendant(parent, modal)) {
+        return parent;
+    }
+    return modal;
+}
+
+} // namespace
+
 QMessageBox *UpdatePrompt::show(QWidget *parent,
                                 const UpdateRelease &release,
                                 const QString &currentVersion,
                                 TerminalSettingsService *settingsService)
 {
-    auto *box = new QMessageBox(parent);
+    auto *box = new QMessageBox(unblockedParent(parent));
     box->setObjectName(QStringLiteral("updatePrompt"));
     box->setAttribute(Qt::WA_DeleteOnClose);
     box->setIcon(QMessageBox::Information);

@@ -23,6 +23,7 @@
 #include <QAbstractButton>
 #include <QApplication>
 #include <QComboBox>
+#include <QDialog>
 #include <QDir>
 #include <QDirIterator>
 #include <QFile>
@@ -36,6 +37,7 @@
 #include <QSet>
 #include <QListWidget>
 #include <QMessageBox>
+#include <QPointer>
 #include <QPushButton>
 #include <QSignalSpy>
 #include <QSpinBox>
@@ -185,6 +187,7 @@ private slots:
     void updateSettingsPersistAndSkippedVersionSurvivesOtherEdits();
     /** @brief 关于页“立即检查”发现新版本后弹出提示，点“跳过此版本”要把版本号写入设置。 */
     void manualUpdateCheckPromptsAndSkipRecordsVersion();
+    void updatePromptStaysClickableOverModalDialog();
 
 private:
     /** @brief 返回步进器里指定角色（increase/decrease）的按钮。 */
@@ -1881,6 +1884,45 @@ void SettingsUiTest::manualUpdateCheckPromptsAndSkipRecordsVersion()
         dialog.findChild<QLabel *>(QStringLiteral("aboutSkippedUpdateVersionLabel"));
     QVERIFY(skippedLabel != nullptr);
     QCOMPARE(skippedLabel->text(), QStringLiteral("99.0.0"));
+}
+
+void SettingsUiTest::updatePromptStaysClickableOverModalDialog()
+{
+    // 复现：设置对话框以 exec() 应用级模态打开时，主窗口的后台检查把提示框挂在主窗口上。
+    // 提示框被设置对话框挡住、设置对话框又被提示框（主窗口的窗口级模态）挡住，整个程序点不动。
+    QWidget mainWindow;
+    mainWindow.resize(800, 600);
+    mainWindow.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&mainWindow));
+
+    QDialog settingsDialog(&mainWindow);
+    settingsDialog.setWindowModality(Qt::ApplicationModal);
+    auto *settingsButton = new QPushButton(QStringLiteral("Close"), &settingsDialog);
+    QSignalSpy settingsClicks(settingsButton, &QPushButton::clicked);
+    settingsDialog.resize(400, 300);
+    settingsDialog.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&settingsDialog));
+
+    UpdateRelease release;
+    release.version = QStringLiteral("99.0.0");
+    QPointer<QMessageBox> prompt =
+        UpdatePrompt::show(&mainWindow, release, QStringLiteral("0.3.7"), nullptr);
+    QVERIFY(prompt != nullptr);
+    QVERIFY(QTest::qWaitForWindowExposed(prompt));
+    // macOS 上 exec() 的 Cocoa 模态会话只放行模态框自己的 sheet，QTest 的合成事件绕过了
+    // 这一层，所以必须直接断言提示框挂在了模态框上。
+    QCOMPARE(prompt->parentWidget(), &settingsDialog);
+
+    auto *laterButton = prompt->findChild<QPushButton *>(QStringLiteral("updatePromptLater"));
+    QVERIFY(laterButton != nullptr);
+    // 走窗口系统事件路径而不是 click()：只有这样才会经过模态阻塞判断。
+    QTest::mouseClick(laterButton, Qt::LeftButton);
+    QVERIFY2(QTest::qWaitFor([&prompt] { return prompt == nullptr || !prompt->isVisible(); }, 2000),
+             "update prompt is blocked by the modal settings dialog");
+
+    // 提示框关掉后，设置对话框必须重新可以操作。
+    QTest::mouseClick(settingsButton, Qt::LeftButton);
+    QCOMPARE(settingsClicks.count(), 1);
 }
 
 QTEST_MAIN(SettingsUiTest)
