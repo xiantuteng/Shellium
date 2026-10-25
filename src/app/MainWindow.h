@@ -81,6 +81,15 @@ public:
      */
     [[nodiscard]] QMenu *createSessionTabMenu(int index, QWidget *parent);
 
+    /**
+     * @brief 打开堡垒机通过 SecureCRT 命令行交来的一次性会话。
+     * @param target 已解析的目标。登录票据在 loginUsername 中，本函数不写入主机库。
+     *
+     * 每次点击都新建标签，和 SecureCRT 新开一个会话页一致。已保存主机的连接历史不记录
+     * 这次票据，避免过期票据留在磁盘上。
+     */
+    void openSecureCrtSession(const ConnectionTarget &target);
+
 protected:
     /**
      * @brief 观察全应用的人机输入并刷新保险库闲置计时器。

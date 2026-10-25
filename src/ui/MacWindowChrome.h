@@ -17,6 +17,9 @@ class QWidget;
 #ifdef Q_OS_MACOS
 [[nodiscard]] bool enableMacWindowChrome(QWidget *window);
 
+/** @brief 把 Shellium 带到前台。堡垒机点击发生在浏览器里，系统不会自动把已运行的实例激活。 */
+void activateMacApplication();
+
 /**
  * @brief 使用当前 macOS 左键事件开始拖动原生窗口。
  * @param window 需要移动的 Qt 顶层窗口；传入子控件或 nullptr 会安全失败。
@@ -54,6 +57,8 @@ void alignMacWindowButtons(QWidget *window, qreal titleBarHeight);
     Q_UNUSED(window)
     return true;
 }
+
+inline void activateMacApplication() {}
 
 /** @brief 非 macOS 平台没有 AppKit 拖动路径，返回 false 以便调用方使用 Qt 回退实现。 */
 [[nodiscard]] inline bool beginMacWindowDrag(QWidget *window)

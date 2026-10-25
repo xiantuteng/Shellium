@@ -3839,6 +3839,33 @@ void MainWindow::showTransientMessage(const QString &message, int)
     ActivityLog::instance().append(message);
 }
 
+void MainWindow::openSecureCrtSession(const ConnectionTarget &target)
+{
+    if (!target.isValid()) {
+        return;
+    }
+    const QString title = target.displayName.trimmed().isEmpty()
+        ? target.host
+        : target.displayName.trimmed();
+    TerminalWorkspace *workspace = createWorkspaceTab(title);
+    TerminalPane *pane = workspace == nullptr ? nullptr : workspace->activePane();
+    if (pane == nullptr) {
+        return;
+    }
+    ConnectionTarget session = target;
+    session.confidence = ConnectionTarget::Confidence::Confirmed;
+    // 票据会话没有主机库 id。留空可以让连接历史跳过它，见 recordConnectionSucceeded()。
+    session.id.clear();
+    pane->connectToHost(session);
+    const int tabIndex = topLevelIndexForWorkspace(workspace);
+    if (tabIndex >= 0 && m_titleTabBar != nullptr) {
+        m_titleTabBar->setTabConnectionState(tabIndex, SessionTabBar::ConnectionState::Connecting);
+    }
+    raise();
+    activateWindow();
+    activateMacApplication();
+}
+
 void MainWindow::connectCurrentPane()
 {
     TerminalWorkspace *workspace = activeWorkspace();

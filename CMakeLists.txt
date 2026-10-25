@@ -227,6 +227,8 @@ set(SHELLIUM_APP_SOURCES
     src/ssh/ShellShim.h
     src/ssh/SshCommandParser.cpp
     src/ssh/SshCommandParser.h
+    src/ssh/SecureCrtLaunch.cpp
+    src/ssh/SecureCrtLaunch.h
     src/ssh/SshSessionNode.cpp
     src/ssh/SshSessionNode.h
     src/ssh/SshSessionStack.cpp
@@ -1149,6 +1151,20 @@ if(BUILD_TESTING)
     # 保活判定同样是内联纯逻辑，不需要 libssh 会话即可覆盖。独立成目标而不是并进
     # ShelliumCoreTests：一个可执行文件只能有一个 main，共用 main 还会让按名过滤测试时
     # 另一套报 "Unknown test function" 并返回非零，破坏单独复现某个用例的工作流。
+    qt_add_executable(ShelliumSecureCrtLaunchTests
+        tests/SecureCrtLaunchTest.cpp
+        src/ssh/SecureCrtLaunch.cpp
+        src/ssh/SecureCrtLaunch.h
+        src/core/ConnectionTarget.cpp
+        src/core/ConnectionTarget.h
+    )
+    target_include_directories(ShelliumSecureCrtLaunchTests PRIVATE src)
+    target_link_libraries(ShelliumSecureCrtLaunchTests PRIVATE Qt6::Core Qt6::Network Qt6::Test)
+    if(APPLE)
+        target_link_libraries(ShelliumSecureCrtLaunchTests PRIVATE "-framework CoreFoundation")
+    endif()
+    add_test(NAME ShelliumSecureCrtLaunchTests COMMAND ShelliumSecureCrtLaunchTests)
+
     qt_add_executable(ShelliumKeepAliveTests tests/KeepAliveTest.cpp)
     target_include_directories(ShelliumKeepAliveTests PRIVATE src)
     target_link_libraries(ShelliumKeepAliveTests PRIVATE Qt6::Core Qt6::Test ShelliumDependencies::libssh)

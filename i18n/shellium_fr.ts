@@ -2784,6 +2784,22 @@ Confirmer que la clé a changé, remplacer l&apos;ancien enregistrement dans kno
         <translation type="unfinished">Shellium · Aperçu de l&apos;interface</translation>
     </message>
     <message>
+        <source>Shellium could not listen for later SecureCRT launches: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Clicking SecureCRT in the bastion will now open Shellium.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>SecureCRT compatibility</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Shellium could not install the launcher the bastion uses to open SecureCRT (%1). %2</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Read-only · allowed</source>
         <translation type="unfinished">Lecture seule · autorisé</translation>
     </message>
@@ -4069,6 +4085,29 @@ Cet algorithme est obsolète ; il est recommandé de mettre à jour la configura
     <message>
         <source>SFTP operation failed</source>
         <translation type="unfinished">L&apos;opération SFTP a échoué</translation>
+    </message>
+</context>
+<context>
+    <name>SecureCrtLaunch</name>
+    <message>
+        <source>Shellium can open the SSH2 sessions this bastion sends to SecureCRT. This launch requested %1, which Shellium does not emulate.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>The SecureCRT launch did not include a server address.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>The SecureCRT launch port is invalid: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>The SecureCRT option %1 is missing its value.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>The running Shellium did not accept the SecureCRT launch.</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>

@@ -438,7 +438,7 @@ private:
     };
 
     /** @brief 认证阶段内部依次尝试的方法。 */
-    enum class AuthPhase { None, PublicKey, Password };
+    enum class AuthPhase { None, PublicKey, KeyboardInteractive, Password };
 
     /** @brief 一条本地 socket ↔ SSH direct-tcpip 通道的双向桥及其缓冲。 */
     struct ActiveForward {
@@ -616,6 +616,21 @@ private:
      * ssh 命令。达到上限后才判定失败。
      */
     int m_passwordAttempts = 0;
+
+    /**
+     * @brief keyboard-interactive 已经应答过的轮数。
+     *
+     * 堡垒机通常只问一次密码。单独封顶是为了避免服务端反复索要应答时，客户端用同一个
+     * 占位密码无限回包，直到建立超时才停。
+     */
+    int m_kbdintRounds = 0;
+
+    /**
+     * @brief keyboard-interactive 失败后是否已经用同一份密钥试过密码认证。
+     *
+     * 只自动降级一次。两次都失败再向用户索要密码，避免两种方法来回切换把认证次数打满。
+     */
+    bool m_passwordTriedAfterKeyboardInteractive = false;
 
     /** @brief 建立过程的整体超时计时；非阻塞模式下 libssh 自身不再提供握手超时保护。 */
     QElapsedTimer m_establishTimer;

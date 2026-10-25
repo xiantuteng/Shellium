@@ -20,12 +20,32 @@ struct ConnectionTarget {
      */
     enum class Confidence { Confirmed, Inferred };
 
+    /**
+     * @brief 本次连接优先使用的 SSH 认证方式。
+     *
+     * Automatic 保持原有顺序：none、公钥/Agent，然后是密码。KeyboardInteractive 用于堡垒机
+     * 按 SecureCRT 方式拉起的会话：登录名里的一次性票据必须走 keyboard-interactive，不能先拿
+     * 本机 Agent 里的多把密钥去试，否则很容易在票据生效前耗尽服务端的认证次数。
+     */
+    enum class AuthPreference { Automatic, KeyboardInteractive };
+
     QString id;
     QString displayName;
     QString host;
     QString username;
     quint16 port = 22;
     QString password;
+
+    /**
+     * @brief 实际送给 SSH 服务端的登录名。为空时使用 username。
+     *
+     * 绿盟堡垒机把一次性票据拼在账号后面，形如 account#ticket。票据只能留在这个进程内字段，
+     * username 仍是给人看的账号，这样标题、日志和主机库都不会记下票据。
+     */
+    QString loginUsername;
+
+    /** @brief 本次连接的认证偏好，只在进程内有效，不写入主机库。 */
+    AuthPreference authPreference = AuthPreference::Automatic;
     QString identityFile;
     QStringList proxyJumps;
     QString parentId;

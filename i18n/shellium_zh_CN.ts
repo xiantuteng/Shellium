@@ -2785,6 +2785,22 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation>Shellium · UI Preview</translation>
     </message>
     <message>
+        <source>Shellium could not listen for later SecureCRT launches: %1</source>
+        <translation>Shellium 无法监听后续的 SecureCRT 唤起：%1</translation>
+    </message>
+    <message>
+        <source>Clicking SecureCRT in the bastion will now open Shellium.</source>
+        <translation>在堡垒机中点击 SecureCRT 现在会打开 Shellium。</translation>
+    </message>
+    <message>
+        <source>SecureCRT compatibility</source>
+        <translation>SecureCRT 兼容</translation>
+    </message>
+    <message>
+        <source>Shellium could not install the launcher the bastion uses to open SecureCRT (%1). %2</source>
+        <translation>Shellium 无法安装堡垒机用来打开 SecureCRT 的启动器（%1）。%2</translation>
+    </message>
+    <message>
         <source>Read-only · allowed</source>
         <translation>只读 · 已允许</translation>
     </message>
@@ -4072,6 +4088,29 @@ This algorithm is obsolete; upgrading the server&apos;s SSH configuration is rec
     <message>
         <source>SFTP operation failed</source>
         <translation>SFTP 操作失败</translation>
+    </message>
+</context>
+<context>
+    <name>SecureCrtLaunch</name>
+    <message>
+        <source>Shellium can open the SSH2 sessions this bastion sends to SecureCRT. This launch requested %1, which Shellium does not emulate.</source>
+        <translation>Shellium 可以打开堡垒机发给 SecureCRT 的 SSH2 会话。这次唤起请求的是 %1，Shellium 不会模拟该协议。</translation>
+    </message>
+    <message>
+        <source>The SecureCRT launch did not include a server address.</source>
+        <translation>这次 SecureCRT 唤起没有包含服务器地址。</translation>
+    </message>
+    <message>
+        <source>The SecureCRT launch port is invalid: %1</source>
+        <translation>这次 SecureCRT 唤起的端口无效：%1</translation>
+    </message>
+    <message>
+        <source>The SecureCRT option %1 is missing its value.</source>
+        <translation>SecureCRT 选项 %1 缺少取值。</translation>
+    </message>
+    <message>
+        <source>The running Shellium did not accept the SecureCRT launch.</source>
+        <translation>正在运行的 Shellium 没有接受这次 SecureCRT 唤起。</translation>
     </message>
 </context>
 <context>

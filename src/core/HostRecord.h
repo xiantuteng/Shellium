@@ -121,8 +121,9 @@ struct HostRecord {
         record.proxyJumps = target.proxyJumps;
         record.parentId = target.parentId;
         record.allowLegacyHmacSha1 = target.allowLegacyHmacSha1;
-        // password / tunnelRouteId / interactiveAuthenticationPending 是进程内状态，
-        // 落库会把明文密码写进磁盘并让隧道 id 跨进程失效，因此在此显式丢弃。
+        // password、loginUsername、authPreference、tunnelRouteId 与
+        // interactiveAuthenticationPending 都是进程内状态。堡垒机票据和占位密码一旦落库，
+        // 就会在票据过期后变成一组无法再用、也不该留在磁盘上的凭据。
         return record;
     }
 };

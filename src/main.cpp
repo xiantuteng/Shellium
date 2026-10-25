@@ -1,7 +1,9 @@
 #include "app/MainWindow.h"
+#include "core/ActivityLog.h"
 #include "i18n/LocalizationService.h"
 #include "security/Vault.h"
 #include "settings/BundledFonts.h"
+#include "ssh/SecureCrtLaunch.h"
 #include "storage/ApplicationDatabase.h"
 #include "ui/VaultDialog.h"
 #include "ui/ButtonCursorPolicy.h"
@@ -202,6 +204,18 @@ int main(int argc, char *argv[])
     // 与工作区。环境变量比命令行参数更适合 macOS LaunchServices 启动的临时测试 Bundle。
     const bool uiPreviewMode = qEnvironmentVariableIsSet("SHELLIUM_UI_PREVIEW");
 
+    // 绿盟助手点击 SecureCRT 时会再启动一个进程。已有实例在听的话，这次只把参数交过去就退出，
+    // 避免第二个进程再打开数据库。预览模式不参与，否则截图进程会把请求送进用户正在使用的窗口。
+    const std::optional<SecureCrtLaunchRequest> secureCrtLaunch = uiPreviewMode
+        ? std::nullopt
+        : parseSecureCrtLaunch(application.arguments());
+    if (secureCrtLaunch.has_value() && secureCrtLaunch->error == SecureCrtLaunchRequest::Error::None) {
+        QString deliverError;
+        if (deliverSecureCrtLaunch(secureCrtLaunchServerName(), *secureCrtLaunch, 2000, &deliverError)) {
+            return 0;
+        }
+    }
+
     // Fusion 为 macOS/Linux 提供一致的表单尺寸和基础交互；窗口颜色、圆角、导航与终端
     // 配色再由设置服务和 MainWindow 视觉系统覆盖，避免平台原生样式造成布局尺寸漂移。
     application.setStyle(QStyleFactory::create(QStringLiteral("Fusion")));
@@ -332,6 +346,46 @@ int main(int argc, char *argv[])
     if (uiPreviewMode) {
         window.setWindowTitle(QObject::tr("Shellium · UI Preview"));
     }
+    if (!uiPreviewMode) {
+        QString listenerError;
+        if (startSecureCrtLaunchServer(
+                &application,
+                secureCrtLaunchServerName(),
+                [&window](const SecureCrtLaunchRequest &request) {
+                    window.openSecureCrtSession(request.target);
+                },
+                &listenerError) == nullptr) {
+            ActivityLog::instance().append(QObject::tr(
+                "Shellium could not listen for later SecureCRT launches: %1").arg(listenerError));
+        }
+
+        const QString shimBundle = defaultSecureCrtShimBundlePath();
+        if (!shimBundle.isEmpty()) {
+            const SecureCrtShimResult shim = ensureSecureCrtShim(
+                QCoreApplication::applicationFilePath(), shimBundle);
+            if (shim.status == SecureCrtShimResult::Status::Installed
+                || shim.status == SecureCrtShimResult::Status::Updated) {
+                ActivityLog::instance().append(QObject::tr(
+                    "Clicking SecureCRT in the bastion will now open Shellium."));
+            } else if (shim.status == SecureCrtShimResult::Status::Failed) {
+                QMessageBox::warning(
+                    &window,
+                    QObject::tr("SecureCRT compatibility"),
+                    QObject::tr("Shellium could not install the launcher the bastion uses to open SecureCRT (%1). %2")
+                        .arg(shimBundle, shim.detail));
+            }
+        }
+    }
+
     window.show();
+    if (secureCrtLaunch.has_value()) {
+        if (secureCrtLaunch->error == SecureCrtLaunchRequest::Error::None) {
+            window.openSecureCrtSession(secureCrtLaunch->target);
+        } else {
+            QMessageBox::warning(&window,
+                                 QObject::tr("SecureCRT compatibility"),
+                                 secureCrtLaunchErrorText(*secureCrtLaunch));
+        }
+    }
     return application.exec();
 }

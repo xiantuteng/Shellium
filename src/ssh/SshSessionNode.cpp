@@ -256,6 +256,8 @@ SshSessionNode::StepResult SshSessionNode::beginEstablish(const NativeSocketHand
     m_rows = std::max(rows, 1);
     m_terminalModes = interactiveTerminalModes();
     m_secret = m_target.password.toUtf8();
+    m_kbdintRounds = 0;
+    m_passwordTriedAfterKeyboardInteractive = false;
 
     m_session = ssh_new();
     if (m_session == nullptr) {
@@ -264,7 +266,11 @@ SshSessionNode::StepResult SshSessionNode::beginEstablish(const NativeSocketHand
     }
 
     const QByteArray host = m_target.host.toUtf8();
-    const QByteArray user = m_target.username.toUtf8();
+    // loginUsername 只在堡垒机票据会话里非空。界面和日志继续使用不含票据的 username。
+    const QByteArray user = (m_target.loginUsername.trimmed().isEmpty()
+                                 ? m_target.username
+                                 : m_target.loginUsername.trimmed())
+                                .toUtf8();
     const unsigned int port = m_target.port;
     ssh_options_set(m_session, SSH_OPTIONS_HOST, host.constData());
     if (!user.isEmpty()) {
@@ -381,7 +387,13 @@ SshSessionNode::StepResult SshSessionNode::advanceEstablish()
                                .arg(m_target.connectionSpecifier(true)));
         }
         m_stage = Stage::Authenticating;
-        m_authPhase = AuthPhase::Password;
+        m_kbdintRounds = 0;
+        m_passwordTriedAfterKeyboardInteractive = false;
+        // 堡垒机会话即使用户改手输密码，仍然要先走 keyboard-interactive：票据在登录名里，
+        // 密码只是这一轮应答。普通会话保持原来的密码认证。
+        m_authPhase = m_target.authPreference == ConnectionTarget::AuthPreference::KeyboardInteractive
+            ? AuthPhase::KeyboardInteractive
+            : AuthPhase::Password;
         // 用户思考和输入密码的时间不该计入建立超时。
         m_establishTimer.start();
         return pending();
@@ -524,6 +536,21 @@ SshSessionNode::StepResult SshSessionNode::advanceAuthenticating()
     // 使用缓存的 m_secret，而不是每轮从 QString 重新生成临时缓冲。
     const char *secret = m_secret.isEmpty() ? nullptr : m_secret.constData();
 
+    const auto rejectSecret = [this]() -> StepResult {
+        m_secret.fill('\0');
+        m_secret.clear();
+        m_target.password.fill(QChar::Null);
+        m_target.password.clear();
+        m_passwordRejected = true;
+        if (m_passwordAttempts < kMaxPasswordAttempts) {
+            m_stage = Stage::AwaitingCredential;
+            m_establishTimer.invalidate();
+            return credentialRequired(true);
+        }
+        m_stage = Stage::Failed;
+        return failure(SshSessionNode::tr("SSH authentication failed: %1. Check the password, private key, or SSH agent.").arg(lastError()));
+    };
+
     int result = SSH_AUTH_DENIED;
     switch (m_authPhase) {
     case AuthPhase::None:
@@ -534,10 +561,63 @@ SshSessionNode::StepResult SshSessionNode::advanceAuthenticating()
         if (result == SSH_AUTH_SUCCESS) {
             return authenticationSucceeded();
         }
+        if (m_target.authPreference == ConnectionTarget::AuthPreference::KeyboardInteractive) {
+            // 票据会话跳过 Agent。本机若加载了多把密钥，先试公钥会在 keyboard-interactive
+            // 开始前就把堡垒机的认证次数用完。
+            m_authPhase = AuthPhase::KeyboardInteractive;
+            m_kbdintRounds = 0;
+            return pending();
+        }
         // publickey_auto 会尝试 SSH Agent、默认密钥以及通过 SSH_OPTIONS_IDENTITY 指定的
         // 密钥。当用户输入的密码实际是私钥口令时，也允许 libssh 用它解密私钥。
         m_authPhase = AuthPhase::PublicKey;
         return pending();
+
+    case AuthPhase::KeyboardInteractive:
+        result = ssh_userauth_kbdint(m_session, nullptr, nullptr);
+        if (result == SSH_AUTH_AGAIN) {
+            return pending();
+        }
+        if (result == SSH_AUTH_SUCCESS) {
+            return authenticationSucceeded();
+        }
+        if (result == SSH_AUTH_INFO) {
+            constexpr int kMaxKeyboardInteractiveRounds = 4;
+            const int promptCount = ssh_userauth_kbdint_getnprompts(m_session);
+            if (m_secret.isEmpty()) {
+                m_stage = Stage::AwaitingCredential;
+                m_establishTimer.invalidate();
+                return credentialRequired(m_passwordRejected);
+            }
+            if (m_kbdintRounds < kMaxKeyboardInteractiveRounds) {
+                ++m_kbdintRounds;
+                bool answersAccepted = true;
+                for (int index = 0; index < promptCount; ++index) {
+                    if (ssh_userauth_kbdint_setanswer(
+                            m_session,
+                            static_cast<unsigned int>(index),
+                            m_secret.constData()) != SSH_OK) {
+                        answersAccepted = false;
+                        break;
+                    }
+                }
+                if (answersAccepted) {
+                    // 应答已经交给 libssh。下一轮必须原样再调用 ssh_userauth_kbdint，
+                    // 非阻塞模式下它才会把这轮提示发出去。
+                    return pending();
+                }
+            }
+        }
+        if (!m_secret.isEmpty() && !m_passwordTriedAfterKeyboardInteractive) {
+            m_passwordTriedAfterKeyboardInteractive = true;
+            m_authPhase = AuthPhase::Password;
+            return pending();
+        }
+        if (m_secret.isEmpty()) {
+            m_authPhase = AuthPhase::PublicKey;
+            return pending();
+        }
+        return rejectSecret();
 
     case AuthPhase::PublicKey:
         result = ssh_userauth_publickey_auto(m_session, nullptr, secret);
@@ -567,18 +647,7 @@ SshSessionNode::StepResult SshSessionNode::advanceAuthenticating()
         }
         // 与 OpenSSH 一致地允许重试：输错一次不该让整层连接失败，否则用户必须从头再敲
         // 一遍 ssh 命令。
-        m_secret.fill('\0');
-        m_secret.clear();
-        m_target.password.fill(QChar::Null);
-        m_target.password.clear();
-        m_passwordRejected = true;
-        if (m_passwordAttempts < kMaxPasswordAttempts) {
-            m_stage = Stage::AwaitingCredential;
-            m_establishTimer.invalidate();
-            return credentialRequired(true);
-        }
-        m_stage = Stage::Failed;
-        return failure(tr("SSH authentication failed: %1. Check the password, private key, or SSH agent.").arg(lastError()));
+        return rejectSecret();
     }
 
     m_stage = Stage::Failed;

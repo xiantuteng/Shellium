@@ -2785,6 +2785,22 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation>Shellium · UI Preview</translation>
     </message>
     <message>
+        <source>Shellium could not listen for later SecureCRT launches: %1</source>
+        <translation>Shellium 無法監聽後續的 SecureCRT 喚起：%1</translation>
+    </message>
+    <message>
+        <source>Clicking SecureCRT in the bastion will now open Shellium.</source>
+        <translation>在堡壘機中點擊 SecureCRT 現在會開啟 Shellium。</translation>
+    </message>
+    <message>
+        <source>SecureCRT compatibility</source>
+        <translation>SecureCRT 相容</translation>
+    </message>
+    <message>
+        <source>Shellium could not install the launcher the bastion uses to open SecureCRT (%1). %2</source>
+        <translation>Shellium 無法安裝堡壘機用來開啟 SecureCRT 的啟動器（%1）。%2</translation>
+    </message>
+    <message>
         <source>Read-only · allowed</source>
         <translation>只讀 · 已允許</translation>
     </message>
@@ -4072,6 +4088,29 @@ This algorithm is obsolete; upgrading the server&apos;s SSH configuration is rec
     <message>
         <source>SFTP operation failed</source>
         <translation>SFTP 操作失敗</translation>
+    </message>
+</context>
+<context>
+    <name>SecureCrtLaunch</name>
+    <message>
+        <source>Shellium can open the SSH2 sessions this bastion sends to SecureCRT. This launch requested %1, which Shellium does not emulate.</source>
+        <translation>Shellium 可以開啟堡壘機發給 SecureCRT 的 SSH2 工作階段。這次喚起要求的是 %1，Shellium 不會模擬該協定。</translation>
+    </message>
+    <message>
+        <source>The SecureCRT launch did not include a server address.</source>
+        <translation>這次 SecureCRT 喚起沒有包含伺服器位址。</translation>
+    </message>
+    <message>
+        <source>The SecureCRT launch port is invalid: %1</source>
+        <translation>這次 SecureCRT 喚起的連接埠無效：%1</translation>
+    </message>
+    <message>
+        <source>The SecureCRT option %1 is missing its value.</source>
+        <translation>SecureCRT 選項 %1 缺少內容。</translation>
+    </message>
+    <message>
+        <source>The running Shellium did not accept the SecureCRT launch.</source>
+        <translation>正在執行的 Shellium 沒有接受這次 SecureCRT 喚起。</translation>
     </message>
 </context>
 <context>

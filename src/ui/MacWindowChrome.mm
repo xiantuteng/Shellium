@@ -48,6 +48,11 @@ bool enableMacWindowChrome(QWidget *window)
     return true;
 }
 
+void activateMacApplication()
+{
+    [NSApp activateIgnoringOtherApps:YES];
+}
+
 bool beginMacWindowDrag(QWidget *window)
 {
     NSWindow *nativeWindow = nativeWindowFor(window);
