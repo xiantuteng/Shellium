@@ -1,5 +1,7 @@
 #include "storage/ApplicationDatabase.h"
 
+#include "forwarding/ProxyNetwork.h"
+
 #include <QDir>
 #include <QFileInfo>
 #include <QJsonDocument>
@@ -13,7 +15,7 @@
 namespace {
 
 /// 当前代码要求的 schema 版本。每次结构变更必须递增，并在 upgradeSchema 中补齐对应分支。
-constexpr int kSchemaVersion = 7;
+constexpr int kSchemaVersion = 8;
 
 /// 内存数据库的 SQLite 特殊路径。
 const QString kMemoryPath = QStringLiteral(":memory:");
@@ -211,6 +213,8 @@ PortForwardRule readPortForwardRow(const QSqlQuery &query)
     rule.targetHost = query.value(QStringLiteral("target_host")).toString();
     rule.targetPort = static_cast<quint16>(query.value(QStringLiteral("target_port")).toUInt());
     rule.autoStart = query.value(QStringLiteral("auto_start")).toInt() != 0;
+    rule.proxyNetworks = query.value(QStringLiteral("proxy_networks")).toString()
+                             .split(QLatin1Char('\n'), Qt::SkipEmptyParts);
     return rule;
 }
 
@@ -537,6 +541,12 @@ bool ApplicationDatabase::upgradeSchema(QString *errorMessage)
         // 界面继续使用通用主机图标，不会阻断正常连接。
         statements << QStringLiteral("ALTER TABLE hosts ADD COLUMN distribution_id TEXT")
                    << QStringLiteral("ALTER TABLE hosts ADD COLUMN distribution_version_id TEXT");
+    }
+    if (*currentVersion < 8) {
+        // 版本 8：动态 SOCKS5 可以只转发指定网段，其余目标由运行时按系统默认路由直连。
+        // 空字符串保持旧行为：全部 CONNECT 仍经 SSH 转发。
+        statements << QStringLiteral(
+            "ALTER TABLE port_forwards ADD COLUMN proxy_networks TEXT NOT NULL DEFAULT ''");
     }
     statements << QStringLiteral("UPDATE schema_version SET version = %1").arg(kSchemaVersion);
 
@@ -1769,6 +1779,22 @@ bool ApplicationDatabase::savePortForward(const PortForwardRule &rule, QString *
         }
         return false;
     }
+    const ProxyNetwork::ParseResult proxyNetworks = rule.type == PortForwardType::Dynamic
+        ? ProxyNetwork::normalize(rule.proxyNetworks)
+        : ProxyNetwork::ParseResult{};
+    if (proxyNetworks.tooMany) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("代理网段最多 %1 条").arg(ProxyNetwork::kMaxProxyNetworks);
+        }
+        return false;
+    }
+    if (!proxyNetworks.invalidEntry.isEmpty()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("代理网段无效：%1。请填写 IP 或 CIDR，例如 10.0.0.0/8")
+                                .arg(proxyNetworks.invalidEntry);
+        }
+        return false;
+    }
 
     return runInTransaction([&](QString *innerError) {
         // 除外键存在性外还要拒绝分组节点：分组没有可建立 SSH 会话的地址，给它保存规则只会
@@ -1792,13 +1818,14 @@ bool ApplicationDatabase::savePortForward(const PortForwardRule &rule, QString *
         QSqlQuery query(m_database);
         query.prepare(QStringLiteral(
             "INSERT INTO port_forwards "
-            "(id, host_id, name, type, bind_host, bind_port, target_host, target_port, auto_start) "
+            "(id, host_id, name, type, bind_host, bind_port, target_host, target_port, auto_start, "
+            "proxy_networks) "
             "VALUES (:id, :host_id, :name, :type, :bind_host, :bind_port, :target_host, "
-            ":target_port, :auto_start) "
+            ":target_port, :auto_start, :proxy_networks) "
             "ON CONFLICT(id) DO UPDATE SET host_id = excluded.host_id, name = excluded.name, "
             "type = excluded.type, bind_host = excluded.bind_host, bind_port = excluded.bind_port, "
             "target_host = excluded.target_host, target_port = excluded.target_port, "
-            "auto_start = excluded.auto_start"));
+            "auto_start = excluded.auto_start, proxy_networks = excluded.proxy_networks"));
         query.bindValue(QStringLiteral(":id"), rule.id);
         query.bindValue(QStringLiteral(":host_id"), rule.hostId);
         query.bindValue(QStringLiteral(":name"), rule.name.trimmed());
@@ -1814,6 +1841,12 @@ bool ApplicationDatabase::savePortForward(const PortForwardRule &rule, QString *
                             ? QVariant(0)
                             : QVariant(rule.targetPort));
         query.bindValue(QStringLiteral(":auto_start"), rule.autoStart ? 1 : 0);
+        // 空 QStringList::join 得到的是 null QString，Qt 会把它绑成 SQL NULL，从而违反
+        // NOT NULL。这里显式写成空串，空串才是“未限制网段、全部走 SSH”的持久化语义。
+        const QString storedNetworks = proxyNetworks.networks.isEmpty()
+            ? QStringLiteral("")
+            : proxyNetworks.networks.join(QLatin1Char('\n'));
+        query.bindValue(QStringLiteral(":proxy_networks"), storedNetworks);
         if (!query.exec()) {
             reportQueryError(query, innerError);
             return false;

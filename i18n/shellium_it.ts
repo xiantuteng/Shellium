@@ -2400,6 +2400,15 @@ Confermare che la chiave è cambiata, sostituire il vecchio record in known_host
 → Remoto (su richiesta SOCKS)</translation>
     </message>
     <message>
+        <source>+%1 more</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Local %1
+→ SSH %2; other destinations direct</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Local %1
 → Remote %2</source>
         <translation type="unfinished">Locale %1
@@ -2437,6 +2446,14 @@ Confermare che la chiave è cambiata, sostituire il vecchio record in known_host
         <translation type="unfinished">Si avvia automaticamente dopo la riuscita della connessione SSH radice</translation>
     </message>
     <message>
+        <source>One network or IP per line, for example 10.0.0.0/8</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Leave empty to tunnel every destination over SSH. Otherwise only these networks are tunneled. Hostnames are resolved with the system DNS; every other destination connects directly using the system default route.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Name:</source>
         <translation type="unfinished">Nome:</translation>
     </message>
@@ -2451,6 +2468,10 @@ Confermare che la chiave è cambiata, sostituire il vecchio record in known_host
     <message>
         <source>Target:</source>
         <translation type="unfinished">Destinazione:</translation>
+    </message>
+    <message>
+        <source>Proxied networks:</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Security note: setting the listen address to 0.0.0.0 or :: exposes the port to the local network and the internet; reachability still depends on the system firewall and the SSH server&apos;s GatewayPorts setting.</source>
@@ -2487,6 +2508,18 @@ Confermare che la chiave è cambiata, sostituire il vecchio record in known_host
         <translation type="unfinished">La sessione SSH non è pronta; impossibile avviare l&apos;inoltro &apos;%1&apos;</translation>
     </message>
     <message>
+        <source>At most %1 proxied networks are allowed</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Invalid proxied network &apos;%1&apos;. Use an IP or CIDR such as 10.0.0.0/8</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>The proxied network list for &apos;%1&apos; is invalid: %2</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Failed to start remote forwarding &apos;%1&apos;: %2</source>
         <translation type="unfinished">Avvio dell&apos;inoltro remoto &apos;%1&apos; non riuscito: %2</translation>
     </message>
@@ -2509,6 +2542,10 @@ Confermare che la chiave è cambiata, sostituire il vecchio record in known_host
     <message>
         <source>SOCKS5 handshake exceeded the 64 KiB safety limit</source>
         <translation type="unfinished">L&apos;handshake SOCKS5 ha superato il limite di sicurezza di 64 KiB</translation>
+    </message>
+    <message>
+        <source>Could not connect directly to %1:%2: %3</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Could not connect to target %1:%2 over SSH: %3</source>

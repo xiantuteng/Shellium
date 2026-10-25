@@ -1,8 +1,11 @@
 #pragma once
 
+#include "forwarding/ProxyNetwork.h"
+
 #include <QMetaType>
 #include <QList>
 #include <QString>
+#include <QStringList>
 
 /**
  * @brief SSH 端口转发类型，与 OpenSSH 的 -L、-R、-D 一一对应。
@@ -27,6 +30,11 @@ struct PortForwardRule {
     QString targetHost;         ///< -L 为远端目标，-R 为本机目标；-D 留空。
     quint16 targetPort = 0;     ///< -L/-R 必填；-D 留为 0。
     bool autoStart = false;     ///< 根连接成功后是否自动启动。
+    /**
+     * 仅动态 SOCKS5 使用。空列表表示每个 CONNECT 都经 SSH 转发。非空时只转发落在这些
+     * 网段内的目标，其余目标由本机按系统默认路由直连。元素为规范 CIDR，例如 10.0.0.0/8。
+     */
+    QStringList proxyNetworks;
 
     /**
      * @brief 校验规则是否具备可执行所需的全部字段。
@@ -60,6 +68,17 @@ struct PortForwardRule {
         if (type != PortForwardType::Dynamic
             && (targetHost.trimmed().isEmpty() || targetPort == 0)) {
             return fail(QStringLiteral("本地和远程转发必须填写目标地址与端口"));
+        }
+        if (type == PortForwardType::Dynamic && !proxyNetworks.isEmpty()) {
+            const ProxyNetwork::ParseResult parsed = ProxyNetwork::normalize(proxyNetworks);
+            if (parsed.tooMany) {
+                return fail(QStringLiteral("代理网段最多 %1 条")
+                                .arg(ProxyNetwork::kMaxProxyNetworks));
+            }
+            if (!parsed.invalidEntry.isEmpty()) {
+                return fail(QStringLiteral("代理网段无效：%1。请填写 IP 或 CIDR，例如 10.0.0.0/8")
+                                .arg(parsed.invalidEntry));
+            }
         }
         return true;
     }

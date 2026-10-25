@@ -83,6 +83,9 @@ private slots:
     /** @brief 版本 7 迁移必须先拆分历史共享凭据，再保留新增发行版字段的空值语义。 */
     void migrationToVersionSevenSplitsSharedCredentialReferences();
 
+    /** @brief 版本 8 为已有转发规则补上代理网段列，旧规则保持“全部走 SSH”。 */
+    void migrationToVersionEightAddsEmptyProxyNetworks();
+
 private:
     /** @brief 构造一台可连接主机的样例记录。 */
     static HostRecord makeHost(const QString &id, const QString &name, const QString &address);
@@ -1026,7 +1029,7 @@ void ApplicationDatabaseTest::migrationToVersionSevenSplitsSharedCredentialRefer
     ApplicationDatabase upgraded(path);
     QString error;
     QVERIFY2(upgraded.initialize(&error), qPrintable(error));
-    QCOMPARE(*upgraded.schemaVersion(&error), 7);
+    QCOMPARE(*upgraded.schemaVersion(&error), ApplicationDatabase::expectedSchemaVersion());
 
     QSet<QString> credentialIds;
     for (const QString &hostId : {QStringLiteral("h1"), QStringLiteral("h2"),
@@ -1060,6 +1063,57 @@ void ApplicationDatabaseTest::migrationToVersionSevenSplitsSharedCredentialRefer
     QVERIFY2(reloaded.has_value(), qPrintable(error));
     QCOMPARE(reloaded->distributionId, QStringLiteral("rocky"));
     QCOMPARE(reloaded->distributionVersionId, QStringLiteral("9.4"));
+}
+
+void ApplicationDatabaseTest::migrationToVersionEightAddsEmptyProxyNetworks()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+    const QString path = temporaryDirectory.filePath(QStringLiteral("port-forward-v7.db"));
+    const QString connectionName = QStringLiteral("port-forward-v7-fixture");
+    {
+        QSqlDatabase legacy = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connectionName);
+        legacy.setDatabaseName(path);
+        QVERIFY2(legacy.open(), qPrintable(legacy.lastError().text()));
+        QSqlQuery query(legacy);
+        const QStringList statements = {
+            QStringLiteral("CREATE TABLE schema_version (version INTEGER NOT NULL)"),
+            QStringLiteral("INSERT INTO schema_version VALUES (7)"),
+            QStringLiteral("CREATE TABLE hosts (id TEXT PRIMARY KEY, parent_id TEXT, "
+                           "kind INTEGER NOT NULL, name TEXT NOT NULL, "
+                           "sort_order INTEGER NOT NULL DEFAULT 0)"),
+            QStringLiteral("INSERT INTO hosts(id, kind, name) VALUES ('forward-host', 1, '旧主机')"),
+            QStringLiteral("CREATE TABLE port_forwards ("
+                           "id TEXT PRIMARY KEY, host_id TEXT NOT NULL, name TEXT NOT NULL, "
+                           "type INTEGER NOT NULL, bind_host TEXT NOT NULL, bind_port INTEGER NOT NULL, "
+                           "target_host TEXT, target_port INTEGER, auto_start INTEGER NOT NULL DEFAULT 0)"),
+            QStringLiteral("INSERT INTO port_forwards(id, host_id, name, type, bind_host, bind_port, "
+                           "target_port, auto_start) VALUES ('old-socks', 'forward-host', '旧代理', 2, "
+                           "'127.0.0.1', 1080, 0, 1)")
+        };
+        for (const QString &statement : statements) {
+            QVERIFY2(query.exec(statement), qPrintable(query.lastError().text()));
+        }
+        legacy.close();
+    }
+    QSqlDatabase::removeDatabase(connectionName);
+
+    ApplicationDatabase upgraded(path);
+    QString error;
+    QVERIFY2(upgraded.initialize(&error), qPrintable(error));
+    QCOMPARE(*upgraded.schemaVersion(&error), ApplicationDatabase::expectedSchemaVersion());
+    const std::optional<PortForwardRule> existing =
+        upgraded.findPortForward(QStringLiteral("old-socks"), &error);
+    QVERIFY2(existing.has_value(), qPrintable(error));
+    QVERIFY2(existing->proxyNetworks.isEmpty(), "旧 SOCKS 规则必须继续转发全部目标");
+    QCOMPARE(existing->bindPort, quint16(1080));
+    QVERIFY(existing->autoStart);
+
+    PortForwardRule updated = *existing;
+    updated.proxyNetworks = QStringList{QStringLiteral("10.0.0.0/8")};
+    QVERIFY2(upgraded.savePortForward(updated, &error), qPrintable(error));
+    QCOMPARE(upgraded.findPortForward(updated.id, &error)->proxyNetworks,
+             QStringList{QStringLiteral("10.0.0.0/8")});
 }
 
 QTEST_GUILESS_MAIN(ApplicationDatabaseTest)

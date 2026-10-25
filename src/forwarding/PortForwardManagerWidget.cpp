@@ -2,6 +2,7 @@
 #include "platform/NativeSocket.h"
 
 #include "forwarding/PortForwardRuntime.h"
+#include "forwarding/ProxyNetwork.h"
 #include "i18n/Retranslate.h"
 #include "ssh/SshSessionStack.h"
 #include "storage/ApplicationDatabase.h"
@@ -23,6 +24,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QPlainTextEdit>
 #include <QMessageBox>
 #include <QMenu>
 #include <QMouseEvent>
@@ -682,6 +684,18 @@ public:
         m_targetPortSpin->setRange(1, 65535);
         m_targetPortSpin->setValue(80);
         m_autoStartCheck = new QCheckBox(tr("Starts automatically after the root SSH connection succeeds"), this);
+        m_proxyNetworksEdit = new QPlainTextEdit(this);
+        m_proxyNetworksEdit->setObjectName(QStringLiteral("PortForwardProxyNetworks"));
+        m_proxyNetworksEdit->setTabChangesFocus(true);
+        m_proxyNetworksEdit->setFixedHeight(72);
+        m_proxyNetworksEdit->setPlaceholderText(
+            tr("One network or IP per line, for example 10.0.0.0/8"));
+        m_proxyNetworksHint = new QLabel(
+            tr("Leave empty to tunnel every destination over SSH. Otherwise only these networks are tunneled. Hostnames are resolved with the system DNS; every other destination connects directly using the system default route."),
+            this);
+        m_proxyNetworksHint->setObjectName(QStringLiteral("PortForwardProxyNetworkHint"));
+        m_proxyNetworksHint->setWordWrap(true);
+        m_proxyNetworksHint->setStyleSheet(QStringLiteral("color: palette(mid);"));
         // 地址与端口在语义上是同一个端点。组合为一行不仅贴近常见 host:port 写法，也让
         // 用户能够横向对照监听端点和目标端点，避免在六行表单中串错端口。
         auto *bindEndpoint = new QWidget(this);
@@ -706,6 +720,8 @@ public:
         form->addRow(tr("Type:"), m_typeCombo);
         form->addRow(tr("Listen:"), bindEndpoint);
         form->addRow(tr("Target:"), targetEndpoint);
+        form->addRow(tr("Proxied networks:"), m_proxyNetworksEdit);
+        form->addRow(m_proxyNetworksHint);
         form->addRow(QString(), m_autoStartCheck);
         layout->addLayout(form);
 
@@ -728,10 +744,12 @@ public:
             accept();
         });
         connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
-        connect(m_typeCombo, &QComboBox::currentIndexChanged, this, [this](const int) {
+        connect(m_typeCombo, &QComboBox::currentIndexChanged, this, [this, form](const int) {
             const bool dynamic = selectedType() == PortForwardType::Dynamic;
             m_targetHostEdit->setEnabled(!dynamic);
             m_targetPortSpin->setEnabled(!dynamic);
+            form->setRowVisible(m_proxyNetworksEdit, dynamic);
+            form->setRowVisible(m_proxyNetworksHint, dynamic);
         });
 
         if (existing.has_value()) {
@@ -743,6 +761,7 @@ public:
             m_targetHostEdit->setText(existing->targetHost);
             m_targetPortSpin->setValue(existing->targetPort == 0 ? 1 : existing->targetPort);
             m_autoStartCheck->setChecked(existing->autoStart);
+            m_proxyNetworksEdit->setPlainText(existing->proxyNetworks.join(QLatin1Char('\n')));
         }
         m_typeCombo->currentIndexChanged(m_typeCombo->currentIndex());
     }
@@ -764,6 +783,9 @@ public:
             ? 0
             : static_cast<quint16>(m_targetPortSpin->value());
         value.autoStart = m_autoStartCheck->isChecked();
+        value.proxyNetworks = value.type == PortForwardType::Dynamic
+            ? ProxyNetwork::tokenize(m_proxyNetworksEdit->toPlainText())
+            : QStringList{};
         return value;
     }
 
@@ -783,6 +805,8 @@ private:
     QLineEdit *m_targetHostEdit = nullptr;
     QSpinBox *m_targetPortSpin = nullptr;
     QCheckBox *m_autoStartCheck = nullptr;
+    QPlainTextEdit *m_proxyNetworksEdit = nullptr;
+    QLabel *m_proxyNetworksHint = nullptr;
 };
 
 /** @brief 转发类型徽章使用的紧凑文本。 */
@@ -1738,9 +1762,21 @@ QString PortForwardManagerWidget::endpointMappingText(const PortForwardRule &rul
         // 错画成本地转发，同时第二列始终保持“本机在前、远程在后”的阅读顺序。
         return tr("Local %1\n← Remote %2")
             .arg(formatEndpoint(rule.targetHost, rule.targetPort), bindEndpoint);
-    case PortForwardType::Dynamic:
+    case PortForwardType::Dynamic: {
         // SOCKS5 的远程目标由每个客户端请求动态给出，不能展示一个并不存在的固定端口。
-        return tr("Local %1\n→ Remote (per SOCKS request)").arg(bindEndpoint);
+        // 配置了网段时把出口策略直接写在卡片上，避免用户以为整机流量都会进 SSH。
+        if (rule.proxyNetworks.isEmpty()) {
+            return tr("Local %1\n→ Remote (per SOCKS request)").arg(bindEndpoint);
+        }
+        QStringList shown = rule.proxyNetworks;
+        if (shown.size() > 3) {
+            const int extra = shown.size() - 2;
+            shown = shown.mid(0, 2);
+            shown.append(tr("+%1 more").arg(extra));
+        }
+        return tr("Local %1\n→ SSH %2; other destinations direct")
+            .arg(bindEndpoint, shown.join(QStringLiteral(", ")));
+    }
     case PortForwardType::Local:
     default:
         return tr("Local %1\n→ Remote %2")

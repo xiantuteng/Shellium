@@ -2400,6 +2400,15 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
 → 원격(SOCKS 요청 시)</translation>
     </message>
     <message>
+        <source>+%1 more</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Local %1
+→ SSH %2; other destinations direct</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Local %1
 → Remote %2</source>
         <translation type="unfinished">로컬 %1
@@ -2437,6 +2446,14 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">루트 SSH 연결이 성공한 후 자동으로 시작됩니다</translation>
     </message>
     <message>
+        <source>One network or IP per line, for example 10.0.0.0/8</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Leave empty to tunnel every destination over SSH. Otherwise only these networks are tunneled. Hostnames are resolved with the system DNS; every other destination connects directly using the system default route.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Name:</source>
         <translation type="unfinished">이름:</translation>
     </message>
@@ -2451,6 +2468,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>Target:</source>
         <translation type="unfinished">대상:</translation>
+    </message>
+    <message>
+        <source>Proxied networks:</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Security note: setting the listen address to 0.0.0.0 or :: exposes the port to the local network and the internet; reachability still depends on the system firewall and the SSH server&apos;s GatewayPorts setting.</source>
@@ -2487,6 +2508,18 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation type="unfinished">SSH 세션이 준비되지 않았습니다. 포워딩 「%1」을(를) 시작할 수 없습니다</translation>
     </message>
     <message>
+        <source>At most %1 proxied networks are allowed</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Invalid proxied network &apos;%1&apos;. Use an IP or CIDR such as 10.0.0.0/8</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>The proxied network list for &apos;%1&apos; is invalid: %2</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Failed to start remote forwarding &apos;%1&apos;: %2</source>
         <translation type="unfinished">원격 포워딩 「%1」을(를) 시작할 수 없습니다: %2</translation>
     </message>
@@ -2509,6 +2542,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>SOCKS5 handshake exceeded the 64 KiB safety limit</source>
         <translation type="unfinished">SOCKS5 핸드셰이크가 64 KiB 보안 한도를 초과했습니다</translation>
+    </message>
+    <message>
+        <source>Could not connect directly to %1:%2: %3</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Could not connect to target %1:%2 over SSH: %3</source>

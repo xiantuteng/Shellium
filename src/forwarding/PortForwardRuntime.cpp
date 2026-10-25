@@ -2,11 +2,13 @@
 
 #include "platform/NativeSocket.h"
 
+#include "forwarding/ProxyNetwork.h"
 #include "forwarding/Socks5Protocol.h"
 #include "ssh/SshSessionStack.h"
 
 #include <QAbstractSocket>
 #include <QHostAddress>
+#include <QHostInfo>
 #include <QHash>
 #include <QPointer>
 #include <QSet>
@@ -157,6 +159,18 @@ public slots:
             fail(tr("The SSH session is not ready; cannot start forwarding '%1'").arg(m_rule.name));
             return;
         }
+        if (m_rule.type == PortForwardType::Dynamic) {
+            const ProxyNetwork::ParseResult parsed = ProxyNetwork::normalize(m_rule.proxyNetworks);
+            if (parsed.tooMany || !parsed.invalidEntry.isEmpty()) {
+                const QString detail = parsed.tooMany
+                    ? tr("At most %1 proxied networks are allowed").arg(ProxyNetwork::kMaxProxyNetworks)
+                    : tr("Invalid proxied network '%1'. Use an IP or CIDR such as 10.0.0.0/8")
+                          .arg(parsed.invalidEntry);
+                fail(tr("The proxied network list for '%1' is invalid: %2").arg(m_rule.name, detail));
+                return;
+            }
+            m_rule.proxyNetworks = parsed.networks;
+        }
 
         if (m_rule.type == PortForwardType::Remote) {
             QString error;
@@ -273,10 +287,12 @@ public slots:
     }
 
 private:
-    enum class SocksStage { Greeting, ConnectRequest };
+    enum class SocksStage { Greeting, ConnectRequest, Resolving, Connecting };
     struct DynamicClientState {
         SocksStage stage = SocksStage::Greeting;
         QByteArray buffer;
+        QTcpSocket *directSocket = nullptr; ///< 网段外目标的本机直连；未开始直连时为空。
+        int lookupId = -1; ///< 系统 DNS 查询 id；-1 表示当前没有进行中的查询。
     };
 
     void acceptLocalConnections()
@@ -292,7 +308,20 @@ private:
                 connect(client, &QTcpSocket::readyRead,
                         this, [this, client]() { processSocksClient(client); });
                 connect(client, &QTcpSocket::disconnected, this, [this, client]() {
-                    m_dynamicClients.remove(client);
+                    const auto iterator = m_dynamicClients.find(client);
+                    QTcpSocket *directSocket = nullptr;
+                    if (iterator != m_dynamicClients.end()) {
+                        if (iterator->lookupId >= 0) {
+                            QHostInfo::abortHostLookup(iterator->lookupId);
+                        }
+                        directSocket = iterator->directSocket;
+                        iterator->directSocket = nullptr;
+                        m_dynamicClients.remove(client);
+                    }
+                    if (directSocket != nullptr) {
+                        directSocket->abort();
+                        directSocket->deleteLater();
+                    }
                     client->deleteLater();
                 });
                 processSocksClient(client);
@@ -305,7 +334,10 @@ private:
     void processSocksClient(QTcpSocket *client)
     {
         auto iterator = m_dynamicClients.find(client);
-        if (iterator == m_dynamicClients.end()) {
+        if (iterator == m_dynamicClients.end()
+            || iterator->stage == SocksStage::Resolving
+            || iterator->stage == SocksStage::Connecting) {
+            // 正在解析域名、直连或已经交给数据桥时，不能再把套接字里的字节读进握手缓冲。
             return;
         }
         iterator->buffer.append(client->readAll());
@@ -346,13 +378,152 @@ private:
             client->disconnectFromHost();
             return;
         }
-        openTunnel(client, request.host, request.port, true);
+
+        // 空网段表示全部走 SSH，域名留给远端解析。只有配置了网段、且目标不是 IP 时才用
+        // 系统 DNS 判断该地址落在网段内还是该走本机默认路由。查询是异步的，避免
+        // QHostInfo::fromName 在工作线程里再开一层事件循环，把停止或其它连接重入进来。
+        if (!m_rule.proxyNetworks.isEmpty() && !ProxyNetwork::isIpLiteral(request.host)) {
+            const QString host = request.host;
+            const quint16 port = request.port;
+            iterator->stage = SocksStage::Resolving;
+            // 结果回调可能在 lookupHost 返回前就同步跑完并改掉这条状态，所以不能把
+            // 返回值写回调用前拿到的迭代器。
+            const int lookupId = QHostInfo::lookupHost(
+                host, this, [this, client, host, port](const QHostInfo &info) {
+                    applyResolvedEgress(client, host, port, info);
+                });
+            const auto current = m_dynamicClients.find(client);
+            if (current != m_dynamicClients.end() && current->stage == SocksStage::Resolving) {
+                current->lookupId = lookupId;
+            } else if (lookupId >= 0) {
+                QHostInfo::abortHostLookup(lookupId);
+            }
+            return;
+        }
+        applyResolvedEgress(client, request.host, request.port, QHostInfo());
+    }
+
+    /**
+     * @brief 按网段决定这次 SOCKS 连接走 SSH 还是本机直连。
+     * @param info 域名解析结果；目标本身是 IP，或规则没有网段时可以是空对象。
+     */
+    void applyResolvedEgress(QTcpSocket *client,
+                             const QString &host,
+                             const quint16 port,
+                             const QHostInfo &info)
+    {
+        auto iterator = m_dynamicClients.find(client);
+        if (iterator == m_dynamicClients.end() || m_stopping) {
+            return;
+        }
+        iterator->lookupId = -1;
+
+        QStringList resolvedAddresses;
+        bool resolutionFailed = false;
+        if (iterator->stage == SocksStage::Resolving) {
+            resolutionFailed = info.error() != QHostInfo::NoError || info.addresses().isEmpty();
+            if (!resolutionFailed) {
+                for (const QHostAddress &address : info.addresses()) {
+                    resolvedAddresses.append(address.toString());
+                }
+            }
+        }
+        const ProxyNetwork::EgressDecision decision = ProxyNetwork::selectEgress(
+            m_rule.proxyNetworks, host, resolvedAddresses, resolutionFailed);
+        if (decision.egress == ProxyNetwork::Egress::Reject) {
+            client->write(Socks5Protocol::reply(0x01));
+            const QString detail = decision.tooMany
+                ? tr("At most %1 proxied networks are allowed").arg(ProxyNetwork::kMaxProxyNetworks)
+                : tr("Invalid proxied network '%1'. Use an IP or CIDR such as 10.0.0.0/8")
+                      .arg(decision.invalidEntry);
+            reportConnectionError(tr("The proxied network list for '%1' is invalid: %2")
+                                      .arg(m_rule.name, detail));
+            client->disconnectFromHost();
+            return;
+        }
+        if (decision.egress == ProxyNetwork::Egress::Direct) {
+            openDirect(client, decision.targetHost, port);
+            return;
+        }
+        const QByteArray pending = iterator->buffer;
+        iterator->buffer.clear();
+        openTunnel(client, decision.targetHost, port, true, pending);
+    }
+
+    /** @brief 把 SOCKS 套接字错误映射成 RFC 1928 的回复码。 */
+    static quint8 socksReplyFor(const QAbstractSocket::SocketError error)
+    {
+        switch (error) {
+        case QAbstractSocket::ConnectionRefusedError:
+            return 0x05;
+        case QAbstractSocket::HostNotFoundError:
+        case QAbstractSocket::SocketTimeoutError:
+            return 0x04;
+        case QAbstractSocket::NetworkError:
+            return 0x03;
+        default:
+            return 0x01;
+        }
+    }
+
+    /**
+     * @brief 网段外的目标不进 SSH，改由本机套接字按系统路由直接连接。
+     * 握手阶段已经读走的字节留在 DynamicClientState::buffer，连通后再写给目标。
+     */
+    void openDirect(QTcpSocket *client, const QString &targetHost, const quint16 targetPort)
+    {
+        auto iterator = m_dynamicClients.find(client);
+        if (client == nullptr || iterator == m_dynamicClients.end()) {
+            return;
+        }
+        auto *targetSocket = new QTcpSocket(this);
+        iterator->stage = SocksStage::Connecting;
+        iterator->directSocket = targetSocket;
+
+        connect(targetSocket, &QTcpSocket::connected, this, [this, client, targetSocket]() {
+            auto state = m_dynamicClients.find(client);
+            if (state == m_dynamicClients.end() || m_stopping) {
+                targetSocket->deleteLater();
+                return;
+            }
+            const QByteArray pending = state->buffer;
+            state->directSocket = nullptr;
+            m_dynamicClients.remove(client);
+            disconnect(client, nullptr, this, nullptr);
+            disconnect(targetSocket, nullptr, this, nullptr);
+            client->write(Socks5Protocol::reply(0x00));
+            if (!pending.isEmpty()) {
+                targetSocket->write(pending);
+            }
+            createBridge(client, targetSocket);
+        });
+        connect(targetSocket, &QTcpSocket::errorOccurred, this,
+                [this, client, targetSocket, targetHost, targetPort](const QAbstractSocket::SocketError error) {
+                    auto state = m_dynamicClients.find(client);
+                    if (state == m_dynamicClients.end()) {
+                        return;
+                    }
+                    state->directSocket = nullptr;
+                    m_dynamicClients.remove(client);
+                    client->write(Socks5Protocol::reply(socksReplyFor(error)));
+                    reportConnectionError(
+                        tr("Could not connect directly to %1:%2: %3")
+                            .arg(targetHost)
+                            .arg(targetPort)
+                            .arg(targetSocket->errorString()));
+                    targetSocket->abort();
+                    targetSocket->deleteLater();
+                    client->disconnectFromHost();
+                    client->deleteLater();
+                });
+        targetSocket->connectToHost(targetHost, targetPort);
     }
 
     void openTunnel(QTcpSocket *client,
                     const QString &targetHost,
                     const quint16 targetPort,
-                    const bool socksClient)
+                    const bool socksClient,
+                    const QByteArray &pendingFromClient = {})
     {
         if (client == nullptr || m_sessionStack == nullptr) {
             return;
@@ -390,6 +561,9 @@ private:
             m_dynamicClients.remove(client);
             disconnect(client, nullptr, this, nullptr);
             client->write(Socks5Protocol::reply(0x00));
+            if (!pendingFromClient.isEmpty()) {
+                tunnelSocket->write(pendingFromClient);
+            }
         }
         createBridge(client, tunnelSocket);
     }

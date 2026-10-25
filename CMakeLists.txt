@@ -195,6 +195,8 @@ set(SHELLIUM_APP_SOURCES
     src/forwarding/PortForwardRule.h
     src/forwarding/PortForwardRuntime.cpp
     src/forwarding/PortForwardRuntime.h
+    src/forwarding/ProxyNetwork.cpp
+    src/forwarding/ProxyNetwork.h
     src/forwarding/Socks5Protocol.cpp
     src/forwarding/Socks5Protocol.h
     src/core/ConnectionConfigCodec.cpp
@@ -569,6 +571,8 @@ if(BUILD_TESTING)
         src/settings/TerminalSettings.cpp
         src/settings/TerminalSettings.h
         src/storage/ApplicationDatabase.cpp
+        src/forwarding/ProxyNetwork.cpp
+        src/forwarding/ProxyNetwork.h
         src/storage/ApplicationDatabase.h
         src/ssh/ShellShim.cpp
         src/ssh/ShellShim.h
@@ -611,6 +615,8 @@ if(BUILD_TESTING)
         src/core/ConnectionTarget.h
         src/core/HostRecord.h
         src/storage/ApplicationDatabase.cpp
+        src/forwarding/ProxyNetwork.cpp
+        src/forwarding/ProxyNetwork.h
         src/storage/ApplicationDatabase.h
     )
     target_include_directories(ShelliumStorageTests PRIVATE src)
@@ -635,6 +641,8 @@ if(BUILD_TESTING)
         src/settings/TerminalSettings.cpp
         src/settings/TerminalSettings.h
         src/storage/ApplicationDatabase.cpp
+        src/forwarding/ProxyNetwork.cpp
+        src/forwarding/ProxyNetwork.h
         src/storage/ApplicationDatabase.h
     )
     target_include_directories(ShelliumLocalizationTests PRIVATE src)
@@ -670,6 +678,8 @@ if(BUILD_TESTING)
         src/security/SshKeyManager.cpp
         src/security/SshKeyManager.h
         src/storage/ApplicationDatabase.cpp
+        src/forwarding/ProxyNetwork.cpp
+        src/forwarding/ProxyNetwork.h
         src/storage/ApplicationDatabase.h
     )
     target_include_directories(ShelliumConnectionToolsTests PRIVATE src)
@@ -693,6 +703,8 @@ if(BUILD_TESTING)
         src/settings/TerminalSettings.cpp
         src/settings/TerminalSettings.h
         src/storage/ApplicationDatabase.cpp
+        src/forwarding/ProxyNetwork.cpp
+        src/forwarding/ProxyNetwork.h
         src/storage/ApplicationDatabase.h
         src/ssh/ShellShim.cpp
         src/ssh/ShellShim.h
@@ -757,6 +769,8 @@ if(BUILD_TESTING)
         src/ssh/SshSessionStack.cpp
         src/ssh/SshSessionStack.h
         src/storage/ApplicationDatabase.cpp
+        src/forwarding/ProxyNetwork.cpp
+        src/forwarding/ProxyNetwork.h
         src/storage/ApplicationDatabase.h
         src/ui/UiIcons.h
     )
@@ -864,6 +878,8 @@ if(BUILD_TESTING)
         src/core/ConnectionTarget.h
         src/core/HostRecord.h
         src/storage/ApplicationDatabase.cpp
+        src/forwarding/ProxyNetwork.cpp
+        src/forwarding/ProxyNetwork.h
         src/storage/ApplicationDatabase.h
         src/sftp/SftpService.cpp
         src/sftp/SftpService.h
@@ -952,6 +968,8 @@ if(BUILD_TESTING)
         src/ssh/SshSessionStack.cpp
         src/ssh/SshSessionStack.h
         src/storage/ApplicationDatabase.cpp
+        src/forwarding/ProxyNetwork.cpp
+        src/forwarding/ProxyNetwork.h
         src/storage/ApplicationDatabase.h
         src/ui/HostManagerWidget.cpp
         src/ui/HostManagerWidget.h
@@ -1028,6 +1046,8 @@ if(BUILD_TESTING)
         src/settings/TerminalSettings.cpp
         src/settings/TerminalSettings.h
         src/storage/ApplicationDatabase.cpp
+        src/forwarding/ProxyNetwork.cpp
+        src/forwarding/ProxyNetwork.h
         src/storage/ApplicationDatabase.h
         src/ui/ConnectionDialog.cpp
         src/ui/ConnectionDialog.h
@@ -1098,6 +1118,8 @@ if(BUILD_TESTING)
         src/security/Vault.cpp
         src/security/Vault.h
         src/storage/ApplicationDatabase.cpp
+        src/forwarding/ProxyNetwork.cpp
+        src/forwarding/ProxyNetwork.h
         src/storage/ApplicationDatabase.h
     )
     target_include_directories(ShelliumAiAssistantTests PRIVATE src)
@@ -1187,6 +1209,8 @@ if(BUILD_TESTING)
         src/settings/TerminalSettings.cpp
         src/settings/TerminalSettings.h
         src/storage/ApplicationDatabase.cpp
+        src/forwarding/ProxyNetwork.cpp
+        src/forwarding/ProxyNetwork.h
         src/storage/ApplicationDatabase.h
         src/terminal/TerminalView.cpp
         src/terminal/TerminalView.h
@@ -1223,6 +1247,8 @@ if(BUILD_TESTING)
         src/settings/TerminalSettings.cpp
         src/settings/TerminalSettings.h
         src/storage/ApplicationDatabase.cpp
+        src/forwarding/ProxyNetwork.cpp
+        src/forwarding/ProxyNetwork.h
         src/storage/ApplicationDatabase.h
         src/terminal/TerminalView.cpp
         src/terminal/TerminalView.h
@@ -1242,6 +1268,8 @@ if(BUILD_TESTING)
         src/core/ConnectionTarget.h
         src/core/HostRecord.h
         src/storage/ApplicationDatabase.cpp
+        src/forwarding/ProxyNetwork.cpp
+        src/forwarding/ProxyNetwork.h
         src/storage/ApplicationDatabase.h
         src/sftp/SftpService.cpp
         src/sftp/SftpService.h
@@ -1299,6 +1327,8 @@ if(BUILD_TESTING)
         src/core/ConnectionTarget.h
         src/core/HostRecord.h
         src/storage/ApplicationDatabase.cpp
+        src/forwarding/ProxyNetwork.cpp
+        src/forwarding/ProxyNetwork.h
         src/storage/ApplicationDatabase.h
         src/sftp/SftpService.cpp
         src/sftp/SftpService.h
@@ -1355,6 +1385,8 @@ if(BUILD_TESTING)
         src/core/ConnectionTarget.h
         src/core/HostRecord.h
         src/storage/ApplicationDatabase.cpp
+        src/forwarding/ProxyNetwork.cpp
+        src/forwarding/ProxyNetwork.h
         src/storage/ApplicationDatabase.h
         src/sftp/SftpService.cpp
         src/sftp/SftpService.h

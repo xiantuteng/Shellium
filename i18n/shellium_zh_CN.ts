@@ -2400,6 +2400,16 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
 → 远程（按 SOCKS 请求）</translation>
     </message>
     <message>
+        <source>+%1 more</source>
+        <translation>另 %1 个</translation>
+    </message>
+    <message>
+        <source>Local %1
+→ SSH %2; other destinations direct</source>
+        <translation>本机 %1
+→ SSH %2；其余直连</translation>
+    </message>
+    <message>
         <source>Local %1
 → Remote %2</source>
         <translation>本机 %1
@@ -2437,6 +2447,14 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation>根 SSH 连接成功后自动启动</translation>
     </message>
     <message>
+        <source>One network or IP per line, for example 10.0.0.0/8</source>
+        <translation>每行一个网段或 IP，例如 10.0.0.0/8</translation>
+    </message>
+    <message>
+        <source>Leave empty to tunnel every destination over SSH. Otherwise only these networks are tunneled. Hostnames are resolved with the system DNS; every other destination connects directly using the system default route.</source>
+        <translation>留空则全部目标经 SSH 转发。填写后仅这些网段走 SSH；域名会先用系统 DNS 解析，其余目标按系统默认路由直连。</translation>
+    </message>
+    <message>
         <source>Name:</source>
         <translation>名称：</translation>
     </message>
@@ -2451,6 +2469,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>Target:</source>
         <translation>目标：</translation>
+    </message>
+    <message>
+        <source>Proxied networks:</source>
+        <translation>代理网段：</translation>
     </message>
     <message>
         <source>Security note: setting the listen address to 0.0.0.0 or :: exposes the port to the local network and the internet; reachability still depends on the system firewall and the SSH server&apos;s GatewayPorts setting.</source>
@@ -2487,6 +2509,18 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation>SSH 会话尚未就绪，无法启动转发“%1”</translation>
     </message>
     <message>
+        <source>At most %1 proxied networks are allowed</source>
+        <translation>代理网段最多 %1 条</translation>
+    </message>
+    <message>
+        <source>Invalid proxied network &apos;%1&apos;. Use an IP or CIDR such as 10.0.0.0/8</source>
+        <translation>代理网段“%1”无效。请填写 IP 或 CIDR，例如 10.0.0.0/8</translation>
+    </message>
+    <message>
+        <source>The proxied network list for &apos;%1&apos; is invalid: %2</source>
+        <translation>“%1”的代理网段无效：%2</translation>
+    </message>
+    <message>
         <source>Failed to start remote forwarding &apos;%1&apos;: %2</source>
         <translation>启动远程转发“%1”失败：%2</translation>
     </message>
@@ -2509,6 +2543,10 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
     <message>
         <source>SOCKS5 handshake exceeded the 64 KiB safety limit</source>
         <translation>SOCKS5 握手超过 64 KiB 安全上限</translation>
+    </message>
+    <message>
+        <source>Could not connect directly to %1:%2: %3</source>
+        <translation>无法按系统默认路由直连 %1:%2：%3</translation>
     </message>
     <message>
         <source>Could not connect to target %1:%2 over SSH: %3</source>

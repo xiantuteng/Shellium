@@ -1,6 +1,9 @@
 #include "core/ConnectionConfigCodec.h"
 #include "forwarding/PortForwardRule.h"
+#include "forwarding/ProxyNetwork.h"
 #include "forwarding/Socks5Protocol.h"
+
+#include <QHostAddress>
 #include "security/SshKeyManager.h"
 #include "storage/ApplicationDatabase.h"
 
@@ -36,6 +39,9 @@ private slots:
 
     /** @brief 三类端口转发规则必须持久往返，并拒绝字段缺失或绑定分组。 */
     void portForwardRulesValidateAndPersist();
+
+    /** @brief SOCKS5 只把命中的网段送进隧道，其余目标保留给系统默认路由。 */
+    void proxyNetworksMatchRangesAndPersist();
 
     /** @brief SOCKS5 增量解析必须覆盖分片、域名和不支持命令的拒绝码。 */
     void socks5ProtocolHandlesFragmentedAndRejectedRequests();
@@ -291,6 +297,111 @@ void ConnectionToolsTest::portForwardRulesValidateAndPersist()
     invalid.id = QStringLiteral("invalid-rule");
     invalid.targetPort = 0;
     QVERIFY(!database.savePortForward(invalid, &error));
+}
+
+void ConnectionToolsTest::proxyNetworksMatchRangesAndPersist()
+{
+    const auto egress = [](const QStringList &networks, const QString &host,
+                           const QStringList &resolved = {}, const bool failed = false) {
+        return ProxyNetwork::selectEgress(networks, host, resolved, failed).egress;
+    };
+    const auto target = [](const QStringList &networks, const QString &host,
+                           const QStringList &resolved = {}, const bool failed = false) {
+        return ProxyNetwork::selectEgress(networks, host, resolved, failed).targetHost;
+    };
+
+    // 没填网段时保持原行为：域名和 IP 都进 SSH，而且不要求本地已经解析出地址。
+    QCOMPARE(egress({}, QStringLiteral("example.com"), {}, true), ProxyNetwork::Egress::Tunnel);
+    QCOMPARE(egress({}, QStringLiteral("8.8.8.8")), ProxyNetwork::Egress::Tunnel);
+
+    const QStringList intranet = {QStringLiteral("10.0.0.0/8"), QStringLiteral("192.168.1.20/24")};
+    QCOMPARE(egress(intranet, QStringLiteral("10.1.2.3")), ProxyNetwork::Egress::Tunnel);
+    QCOMPARE(egress(intranet, QStringLiteral("11.0.0.1")), ProxyNetwork::Egress::Direct);
+    QCOMPARE(egress(intranet, QStringLiteral("192.168.1.255")), ProxyNetwork::Egress::Tunnel);
+    QCOMPARE(egress(intranet, QStringLiteral("192.168.2.1")), ProxyNetwork::Egress::Direct);
+    QCOMPARE(egress(intranet, QStringLiteral("::ffff:10.8.0.1")), ProxyNetwork::Egress::Tunnel);
+    QCOMPARE(egress({QStringLiteral("2001:db8::/32")}, QStringLiteral("2001:db8::1")),
+             ProxyNetwork::Egress::Tunnel);
+    QCOMPARE(egress({QStringLiteral("2001:db8::/32")}, QStringLiteral("2001:db9::1")),
+             ProxyNetwork::Egress::Direct);
+    // 域名命中后改连解析出的那个 IP，避免远端 DNS 把它解析到网段外。
+    QCOMPARE(egress(intranet, QStringLiteral("intranet.example"),
+                    {QStringLiteral("8.8.8.8"), QStringLiteral("10.9.9.9")}),
+             ProxyNetwork::Egress::Tunnel);
+    QCOMPARE(target(intranet, QStringLiteral("intranet.example"),
+                    {QStringLiteral("8.8.8.8"), QStringLiteral("10.9.9.9")}),
+             QStringLiteral("10.9.9.9"));
+    QCOMPARE(egress(intranet, QStringLiteral("example.com"),
+                    {QStringLiteral("1.1.1.1")}),
+             ProxyNetwork::Egress::Direct);
+    QCOMPARE(target(intranet, QStringLiteral("example.com"), {QStringLiteral("1.1.1.1")}),
+             QStringLiteral("example.com"));
+    QCOMPARE(egress(intranet, QStringLiteral("missing.example"), {}, true),
+             ProxyNetwork::Egress::Direct);
+
+    const ProxyNetwork::ParseResult canonical = ProxyNetwork::normalize(
+        {QStringLiteral("  10.1.2.3，192.168.1.20/24\n2001:0DB8::/32、10.0.0.0/8 ")});
+    QVERIFY(canonical.invalidEntry.isEmpty());
+    QVERIFY(!canonical.tooMany);
+    QCOMPARE(canonical.networks,
+             QStringList({QStringLiteral("10.1.2.3/32"),
+                          QStringLiteral("192.168.1.0/24"),
+                          QStringLiteral("2001:db8::/32"),
+                          QStringLiteral("10.0.0.0/8")}));
+    QVERIFY(!ProxyNetwork::normalize({QStringLiteral("example.com")}).invalidEntry.isEmpty());
+    QStringList tooMany;
+    for (int index = 0; index < ProxyNetwork::kMaxProxyNetworks + 1; ++index) {
+        tooMany.append(QStringLiteral("10.%1.%2.1/32").arg(index / 256).arg(index % 256));
+    }
+    QVERIFY(ProxyNetwork::normalize(tooMany).tooMany);
+    // 运行时拿到的是 QHostAddress 的文本，解析器必须接受这一种写法。
+    const QHostAddress qtAddress(QStringLiteral("2001:db8::1"));
+    QVERIFY(ProxyNetwork::isIpLiteral(qtAddress.toString()));
+    QCOMPARE(egress({QStringLiteral("2001:db8::/32")}, qtAddress.toString()),
+             ProxyNetwork::Egress::Tunnel);
+
+    ApplicationDatabase database(ApplicationDatabase::inMemoryPath());
+    QString error;
+    QVERIFY2(database.initialize(&error), qPrintable(error));
+    HostRecord host;
+    host.id = QStringLiteral("proxy-host");
+    host.kind = HostNodeKind::Host;
+    host.name = QStringLiteral("网段主机");
+    host.host = QStringLiteral("server.example.test");
+    host.username = QStringLiteral("tester");
+    QVERIFY2(database.saveHost(host, &error), qPrintable(error));
+
+    PortForwardRule dynamic;
+    dynamic.id = QStringLiteral("socks-split");
+    dynamic.hostId = host.id;
+    dynamic.name = QStringLiteral("分流代理");
+    dynamic.type = PortForwardType::Dynamic;
+    dynamic.bindHost = QStringLiteral("127.0.0.1");
+    dynamic.bindPort = 1080;
+    dynamic.proxyNetworks = QStringList{QStringLiteral("10.0.0.0/8"), QStringLiteral("192.168.1.10")};
+    QVERIFY2(dynamic.isValid(&error), qPrintable(error));
+    QVERIFY2(database.savePortForward(dynamic, &error), qPrintable(error));
+    const std::optional<PortForwardRule> restored = database.findPortForward(dynamic.id, &error);
+    QVERIFY2(restored.has_value(), qPrintable(error));
+    QCOMPARE(restored->proxyNetworks,
+             QStringList({QStringLiteral("10.0.0.0/8"), QStringLiteral("192.168.1.10/32")}));
+
+    PortForwardRule local = dynamic;
+    local.id = QStringLiteral("local-ignores-networks");
+    local.name = QStringLiteral("本地转发");
+    local.type = PortForwardType::Local;
+    local.targetHost = QStringLiteral("db.internal");
+    local.targetPort = 5432;
+    local.proxyNetworks = QStringList{QStringLiteral("10.0.0.0/8")};
+    QVERIFY2(database.savePortForward(local, &error), qPrintable(error));
+    QCOMPARE(database.findPortForward(local.id, &error)->proxyNetworks, QStringList());
+
+    PortForwardRule rejected = dynamic;
+    rejected.id = QStringLiteral("bad-network");
+    rejected.proxyNetworks = QStringList{QStringLiteral("not-a-cidr")};
+    QVERIFY(!rejected.isValid(&error));
+    QVERIFY(!database.savePortForward(rejected, &error));
+    QVERIFY(error.contains(QStringLiteral("not-a-cidr")));
 }
 
 void ConnectionToolsTest::socks5ProtocolHandlesFragmentedAndRejectedRequests()

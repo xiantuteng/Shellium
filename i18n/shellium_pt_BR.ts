@@ -2400,6 +2400,15 @@ Confirmar que a chave mudou, substituir o registro antigo em known_hosts e conti
 → Remoto (por solicitação SOCKS)</translation>
     </message>
     <message>
+        <source>+%1 more</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Local %1
+→ SSH %2; other destinations direct</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Local %1
 → Remote %2</source>
         <translation type="unfinished">Local %1
@@ -2437,6 +2446,14 @@ Confirmar que a chave mudou, substituir o registro antigo em known_hosts e conti
         <translation type="unfinished">Inicia automaticamente após o sucesso da conexão SSH raiz</translation>
     </message>
     <message>
+        <source>One network or IP per line, for example 10.0.0.0/8</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Leave empty to tunnel every destination over SSH. Otherwise only these networks are tunneled. Hostnames are resolved with the system DNS; every other destination connects directly using the system default route.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Name:</source>
         <translation type="unfinished">Nome:</translation>
     </message>
@@ -2451,6 +2468,10 @@ Confirmar que a chave mudou, substituir o registro antigo em known_hosts e conti
     <message>
         <source>Target:</source>
         <translation type="unfinished">Destino:</translation>
+    </message>
+    <message>
+        <source>Proxied networks:</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Security note: setting the listen address to 0.0.0.0 or :: exposes the port to the local network and the internet; reachability still depends on the system firewall and the SSH server&apos;s GatewayPorts setting.</source>
@@ -2487,6 +2508,18 @@ Confirmar que a chave mudou, substituir o registro antigo em known_hosts e conti
         <translation type="unfinished">A sessão SSH não está pronta; não é possível iniciar o encaminhamento &apos;%1&apos;</translation>
     </message>
     <message>
+        <source>At most %1 proxied networks are allowed</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Invalid proxied network &apos;%1&apos;. Use an IP or CIDR such as 10.0.0.0/8</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>The proxied network list for &apos;%1&apos; is invalid: %2</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Failed to start remote forwarding &apos;%1&apos;: %2</source>
         <translation type="unfinished">Falha ao iniciar o encaminhamento remoto &apos;%1&apos;: %2</translation>
     </message>
@@ -2509,6 +2542,10 @@ Confirmar que a chave mudou, substituir o registro antigo em known_hosts e conti
     <message>
         <source>SOCKS5 handshake exceeded the 64 KiB safety limit</source>
         <translation type="unfinished">O handshake SOCKS5 excedeu o limite de segurança de 64 KiB</translation>
+    </message>
+    <message>
+        <source>Could not connect directly to %1:%2: %3</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Could not connect to target %1:%2 over SSH: %3</source>
