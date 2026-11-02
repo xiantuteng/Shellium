@@ -226,6 +226,8 @@ class AiAssistantWidgetTest final : public QObject {
 private slots:
     /** @brief 输入框获得焦点时，承担描边的编辑器面板必须换成强调色。 */
     void composerHighlightsBorderWhenInputFocused();
+    /** @brief 面板内动作按钮高度一致，纯图标按钮宽高相等，主题切换后保持不变。 */
+    void actionButtonsShareHeightAndIconButtonsAreSquare();
     void executingCommandAutoCapturesOutputAndContinuesConversation();
     void newSessionClearsHistoryAndReadPosition();
     void assistantNarrativeRendersAsMarkdown();
@@ -337,6 +339,46 @@ void AiAssistantWidgetTest::composerHighlightsBorderWhenInputFocused()
     QVERIFY(inputEdit->hasFocus());
     QVERIFY2(colorDistance(leftBorderColor(composer), accent) < 60,
              "AI 输入框获得焦点后编辑器面板没有高亮");
+}
+
+void AiAssistantWidgetTest::actionButtonsShareHeightAndIconButtonsAreSquare()
+{
+    AiSettingsService settingsService(nullptr, nullptr);
+    AiAssistantWidget widget(&settingsService);
+    widget.resize(420, 640);
+    widget.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&widget));
+
+    auto *historyButton = widget.findChild<QToolButton *>(QStringLiteral("aiHistoryButton"));
+    auto *newSessionButton =
+        widget.findChild<QPushButton *>(QStringLiteral("aiNewSessionButton"));
+    auto *modelButton = widget.findChild<QToolButton *>(QStringLiteral("aiModelButton"));
+    auto *modeButton = widget.findChild<QToolButton *>(QStringLiteral("aiExecutionModeButton"));
+    auto *sendButton = widget.findChild<QPushButton *>(QStringLiteral("aiSendButton"));
+    QVERIFY(historyButton && newSessionButton && modelButton && modeButton && sendButton);
+
+    const int expected = historyButton->height();
+    QVERIFY(expected > 0);
+    const QList<QWidget *> buttons{historyButton, newSessionButton, modelButton, modeButton,
+                                   sendButton};
+    for (const QWidget *button : buttons) {
+        QVERIFY2(button->height() == expected,
+                 qPrintable(QStringLiteral("%1 高度 %2，期望 %3")
+                                .arg(button->objectName())
+                                .arg(button->height())
+                                .arg(expected)));
+    }
+    QCOMPARE(historyButton->width(), historyButton->height());
+    QCOMPARE(sendButton->width(), sendButton->height());
+
+    // 切换主题会重套样式表并重新 polish，尺寸不能因此回退；面板只在 qApp 上监听该事件。
+    QEvent paletteChange(QEvent::ApplicationPaletteChange);
+    QApplication::sendEvent(qApp, &paletteChange);
+    QApplication::processEvents();
+    for (const QWidget *button : buttons) {
+        QCOMPARE(button->height(), expected);
+    }
+    QCOMPARE(sendButton->width(), sendButton->height());
 }
 
 void AiAssistantWidgetTest::executingCommandAutoCapturesOutputAndContinuesConversation()

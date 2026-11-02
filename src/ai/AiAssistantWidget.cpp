@@ -215,6 +215,96 @@ constexpr int kInputMaximumVisibleLines = 10;
 constexpr int kMaximumRecentConversations = 10;
 /** @brief 模型按钮上最多显示的字符数；侧栏最窄只有 260px，完整名称放在提示里。 */
 constexpr int kModelButtonMaxChars = 16;
+/**
+ * @brief AI 助手面板内所有动作按钮（历史、新会话、模型、执行模式、发送）统一的外框高度。
+ *
+ * 纯图标按钮同时用它作宽度，保证是正方形。与全局 QPushButton 的 30px 总高一致。
+ */
+constexpr int kAiControlSize = 30;
+/** @brief 上述按钮统一的边框宽度；样式表的 min/max-height 指内容高度，需扣掉上下边框。 */
+constexpr int kAiControlBorder = 1;
+
+/**
+ * @brief 生成把按钮外框锁定为 kAiControlSize 的样式表片段。
+ *
+ * 只调用 setFixedSize() 不够：应用级样式表里的 QPushButton min-height 会在控件 polish
+ * 时重新改写最小/最大尺寸，曾导致发送按钮被压成 34×29 的长方形。把尺寸写进按钮自己的
+ * 样式表（优先级高于应用级规则），并清掉纵向内边距，外框就稳定为固定值。
+ * 片段必须放在规则块末尾，才能覆盖同块里更早的 padding 简写。
+ *
+ * @param square 为 true 时宽度也锁定为同一值，用于纯图标按钮。
+ */
+QString aiControlBoxQss(const bool square)
+{
+    const int inner = kAiControlSize - 2 * kAiControlBorder;
+    QString qss = QStringLiteral("min-height: %1px; max-height: %1px;"
+                                 "padding-top: 0; padding-bottom: 0;")
+                      .arg(inner);
+    if (square) {
+        qss += QStringLiteral("min-width: %1px; max-width: %1px;"
+                              "padding-left: 0; padding-right: 0;")
+                   .arg(inner);
+    }
+    return qss;
+}
+
+/** @brief 历史按钮（纯图标、正方形）的样式表。 */
+QString historyButtonQss(const QString &hover)
+{
+    return QStringLiteral(
+               "QToolButton { color: palette(text); background: transparent;"
+               "border: %1px solid palette(mid); border-radius: 9px; %2 }"
+               "QToolButton:hover, QToolButton:pressed { background: %3; }"
+               "QToolButton::menu-indicator { image: none; width: 0; }")
+        .arg(kAiControlBorder)
+        .arg(aiControlBoxQss(true), hover);
+}
+
+/** @brief “新会话”文字按钮的样式表。 */
+QString newSessionButtonQss(const QString &hover)
+{
+    return QStringLiteral(
+               "QPushButton { color: palette(text); background: transparent;"
+               "border: %1px solid palette(mid); border-radius: 9px; padding: 0 10px; %2 }"
+               "QPushButton:hover { background: %3; }")
+        .arg(kAiControlBorder)
+        .arg(aiControlBoxQss(false), hover);
+}
+
+/** @brief 输入区模型 / 执行模式两个下拉按钮共用的样式表。 */
+QString composerDropdownQss(const QString &color, const QString &border, const QString &hover)
+{
+    return QStringLiteral(
+               "QToolButton { color: %1; background: transparent; border: %2px solid %3;"
+               "border-radius: 8px; padding: 0 10px; font-size: 11.5px; %4 }"
+               "QToolButton:hover { background: %5; }"
+               "QToolButton::menu-indicator { image: none; width: 0; }")
+        .arg(color)
+        .arg(kAiControlBorder)
+        .arg(border, aiControlBoxQss(false), hover);
+}
+
+/**
+ * @brief 发送 / 停止按钮（纯图标、正方形）的样式表。
+ *
+ * 边框与底色同色而不是 border: none，这样与其他按钮共用同一套“外框 = 内容 + 2px 边框”的
+ * 尺寸算法。
+ */
+QString sendButtonQss(const bool stoppable)
+{
+    const QString fill = stoppable ? QStringLiteral("#b42318") : QStringLiteral("#159a60");
+    QString qss = QStringLiteral(
+                      "QPushButton { background: %1; border: %2px solid %1;"
+                      "border-radius: 9px; %3 }")
+                      .arg(fill)
+                      .arg(kAiControlBorder)
+                      .arg(aiControlBoxQss(true));
+    if (!stoppable) {
+        qss += QStringLiteral(
+            "QPushButton:disabled { background: palette(mid); border-color: palette(mid); }");
+    }
+    return qss;
+}
 
 /**
  * @brief 本地 CLI 在模型菜单里提供的候选模型。
@@ -726,17 +816,10 @@ void AiAssistantWidget::applyPanelTheme()
     if (m_historyButton != nullptr) {
         m_historyButton->setIcon(
             UiIcons::symbol(this, UiIcons::Symbol::Clock, QColor(m_colors.text)));
-        m_historyButton->setStyleSheet(QStringLiteral(
-            "QToolButton { color: palette(text); background: transparent;"
-            "border: 1px solid palette(mid); border-radius: 9px; padding: 5px; }"
-            "QToolButton:hover, QToolButton:pressed { background: %1; }"
-            "QToolButton::menu-indicator { image: none; width: 0; }").arg(m_colors.hover));
+        m_historyButton->setStyleSheet(historyButtonQss(m_colors.hover));
     }
     if (m_newSessionButton != nullptr) {
-        m_newSessionButton->setStyleSheet(QStringLiteral(
-            "QPushButton { color: palette(text); background: transparent;"
-            "border: 1px solid palette(mid); border-radius: 9px; padding: 2px 9px; }"
-            "QPushButton:hover { background: %1; }").arg(m_colors.hover));
+        m_newSessionButton->setStyleSheet(newSessionButtonQss(m_colors.hover));
     }
     // 输入区的两个下拉按钮把边框色和悬停色写进了样式表，同样要按新配色重套。
     updateExecutionModeUi();
@@ -787,27 +870,21 @@ void AiAssistantWidget::buildUi()
     m_historyButton->setToolTip(tr("View the chat history for the current tab"));
     m_historyButton->setCursor(Qt::PointingHandCursor);
     m_historyButton->setAutoRaise(false);
-    m_historyButton->setFixedSize(32, 32);
+    m_historyButton->setFixedSize(kAiControlSize, kAiControlSize);
     m_historyButton->setIcon(UiIcons::symbol(this, UiIcons::Symbol::Clock, QColor(m_colors.text)));
     m_historyButton->setIconSize(QSize(17, 17));
     m_historyMenu = new QMenu(m_historyButton);
     m_historyMenu->setObjectName(QStringLiteral("aiConversationHistoryMenu"));
     m_historyButton->setMenu(m_historyMenu);
     m_historyButton->setPopupMode(QToolButton::InstantPopup);
-    m_historyButton->setStyleSheet(QStringLiteral(
-        "QToolButton { color: palette(text); background: transparent;"
-        "border: 1px solid palette(mid); border-radius: 9px; padding: 5px; }"
-        "QToolButton:hover, QToolButton:pressed { background: %1; }"
-        "QToolButton::menu-indicator { image: none; width: 0; }").arg(m_colors.hover));
+    m_historyButton->setStyleSheet(historyButtonQss(m_colors.hover));
     contextLayout->addWidget(m_historyButton);
 
     m_newSessionButton = new QPushButton(tr("New session"), contextBar);
     m_newSessionButton->setObjectName(QStringLiteral("aiNewSessionButton"));
     m_newSessionButton->setCursor(Qt::PointingHandCursor);
-    m_newSessionButton->setStyleSheet(QStringLiteral(
-        "QPushButton { color: palette(text); background: transparent;"
-        "border: 1px solid palette(mid); border-radius: 9px; padding: 2px 9px; }"
-        "QPushButton:hover { background: %1; }").arg(m_colors.hover));
+    m_newSessionButton->setFixedHeight(kAiControlSize);
+    m_newSessionButton->setStyleSheet(newSessionButtonQss(m_colors.hover));
     contextLayout->addWidget(m_newSessionButton);
     root->addWidget(contextBar);
 
@@ -890,6 +967,7 @@ void AiAssistantWidget::buildUi()
     m_modelButton->setCursor(Qt::PointingHandCursor);
     m_modelButton->setPopupMode(QToolButton::InstantPopup);
     m_modelButton->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    m_modelButton->setFixedHeight(kAiControlSize);
     m_modelMenu = new QMenu(m_modelButton);
     m_modelMenu->setObjectName(QStringLiteral("aiModelMenu"));
     m_modelButton->setMenu(m_modelMenu);
@@ -903,6 +981,7 @@ void AiAssistantWidget::buildUi()
     m_executionModeButton->setCursor(Qt::PointingHandCursor);
     m_executionModeButton->setPopupMode(QToolButton::InstantPopup);
     m_executionModeButton->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    m_executionModeButton->setFixedHeight(kAiControlSize);
     m_executionModeMenu = new QMenu(m_executionModeButton);
     m_executionModeMenu->setObjectName(QStringLiteral("aiExecutionModeMenu"));
     auto *modeGroup = new QActionGroup(m_executionModeMenu);
@@ -928,11 +1007,9 @@ void AiAssistantWidget::buildUi()
     m_sendButton = new QPushButton(attachRow);
     m_sendButton->setObjectName(QStringLiteral("aiSendButton"));
     m_sendButton->setIcon(UiIcons::symbol(this, UiIcons::Symbol::ArrowUp, QColor(Qt::white)));
-    m_sendButton->setFixedSize(34, 34);
+    m_sendButton->setFixedSize(kAiControlSize, kAiControlSize);
     m_sendButton->setToolTip(tr("Send (Enter)"));
-    m_sendButton->setStyleSheet(QStringLiteral(
-        "QPushButton { background: #159a60; border: none; border-radius: 9px; }"
-        "QPushButton:disabled { background: palette(mid); }"));
+    m_sendButton->setStyleSheet(sendButtonQss(false));
     attachLayout->addWidget(m_sendButton);
     composerLayout->addWidget(attachRow);
     root->addWidget(composer);
@@ -1513,13 +1590,9 @@ void AiAssistantWidget::updateExecutionModeUi()
     m_executionModeButton->setText(buttonText + QStringLiteral(" ▾"));
     m_executionModeButton->setToolTip(tr("Choose which commands the AI may run without asking"));
     m_executionModeButton->setAccessibleName(tr("Execution mode"));
-    m_executionModeButton->setStyleSheet(QStringLiteral(
-        "QToolButton { color: %1; background: transparent; border: 1px solid %2;"
-        "border-radius: 8px; padding: 3px 8px; font-size: 11.5px; }"
-        "QToolButton:hover { background: %3; }"
-        "QToolButton::menu-indicator { image: none; width: 0; }")
-        .arg(color, policy == AiExecutionPolicy::FullAuto ? m_colors.danger : m_colors.border,
-             m_colors.hover));
+    m_executionModeButton->setStyleSheet(composerDropdownQss(
+        color, policy == AiExecutionPolicy::FullAuto ? m_colors.danger : m_colors.border,
+        m_colors.hover));
     if (m_disclaimerLabel != nullptr) {
         m_disclaimerLabel->setText(disclaimer);
         m_disclaimerLabel->setStyleSheet(
@@ -1564,12 +1637,8 @@ void AiAssistantWidget::updateModelButton()
     m_modelButton->setText(shown + QStringLiteral(" ▾"));
     m_modelButton->setToolTip(tr("Model: %1").arg(model));
     m_modelButton->setAccessibleName(tr("Model"));
-    m_modelButton->setStyleSheet(QStringLiteral(
-        "QToolButton { color: %1; background: transparent; border: 1px solid %2;"
-        "border-radius: 8px; padding: 3px 8px; font-size: 11.5px; }"
-        "QToolButton:hover { background: %3; }"
-        "QToolButton::menu-indicator { image: none; width: 0; }")
-        .arg(m_colors.muted, m_colors.border, m_colors.hover));
+    m_modelButton->setStyleSheet(
+        composerDropdownQss(m_colors.muted, m_colors.border, m_colors.hover));
 }
 
 void AiAssistantWidget::populateModelMenu()
@@ -2112,13 +2181,7 @@ void AiAssistantWidget::updateSendButtonMode()
                                                     : UiIcons::Symbol::ArrowUp,
                                           QColor(Qt::white)));
     m_sendButton->setToolTip(stoppable ? tr("Stop") : tr("Send (Enter)"));
-    m_sendButton->setStyleSheet(
-        stoppable
-            ? QStringLiteral(
-                  "QPushButton { background: #b42318; border: none; border-radius: 9px; }")
-            : QStringLiteral(
-                  "QPushButton { background: #159a60; border: none; border-radius: 9px; }"
-                  "QPushButton:disabled { background: palette(mid); }"));
+    m_sendButton->setStyleSheet(sendButtonQss(stoppable));
 }
 
 void AiAssistantWidget::stopActiveWork()
