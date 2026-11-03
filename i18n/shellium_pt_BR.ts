@@ -5571,6 +5571,10 @@ Reconectando manualmente…<byte value="xd"/>
         <source>Paste</source>
         <translation type="unfinished">Colar</translation>
     </message>
+    <message>
+        <source>Paste (%1)</source>
+        <translation>Colar (%1)</translation>
+    </message>
 </context>
 <context>
     <name>TerminalWorkspace</name>

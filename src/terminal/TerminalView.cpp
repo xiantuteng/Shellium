@@ -34,6 +34,7 @@
 #include <QDialogButtonBox>
 #include <QLabel>
 #include <QPushButton>
+#include <QShortcut>
 #include <QVBoxLayout>
 #include <QPainter>
 #include <QPaintEvent>
@@ -1366,7 +1367,7 @@ void TerminalView::acceptCompletion(const QString &completion)
     m_commandCompleter->popup()->hide();
 }
 
-bool TerminalView::confirmPaste(const PastePreparation &prepared)
+std::optional<QString> TerminalView::confirmPaste(const PastePreparation &prepared)
 {
     QStringList riskDescriptions;
     if (prepared.containsLineBreak) {
@@ -1388,15 +1389,15 @@ bool TerminalView::confirmPaste(const PastePreparation &prepared)
     layout->addWidget(summary);
 
     // 只有把真正会被发送的文本摆出来，"确认"才是一次有依据的判断而不是盲签。展示的是
-    // 清理后的 prepared.text，与随后写入 PTY 的字节完全一致。
+    // 清理后的 prepared.text；用户可以在这里删掉不想执行的行、改掉参数后再发送，最终
+    // 发送的就是文本框里的内容（调用方会再清理一遍）。
     auto *preview = new QPlainTextEdit(prepared.text, &dialog);
     preview->setObjectName(QStringLiteral("TerminalPasteConfirmPreview"));
-    preview->setReadOnly(true);
     preview->setLineWrapMode(QPlainTextEdit::NoWrap);
     preview->setFont(font());
-    // 不接受焦点是回车能直达默认按钮的前提：只要预览框拿到焦点，回车就变成"在只读文本框里
-    // 换行"，用户会看到按下回车毫无反应。滚动仍可用鼠标滚轮与滚动条完成。
-    preview->setFocusPolicy(Qt::NoFocus);
+    // 粘贴内容是纯文本命令，不接受富文本；Tab 留给文本本身（Shell 脚本缩进），焦点切换
+    // 仍可用 Shift+Tab 或鼠标完成。
+    preview->setTabChangesFocus(false);
     preview->setMinimumHeight(120);
     layout->addWidget(preview, 1);
 
@@ -1404,13 +1405,27 @@ bool TerminalView::confirmPaste(const PastePreparation &prepared)
     QPushButton *pasteButton = buttons->addButton(tr("Paste"), QDialogButtonBox::AcceptRole);
     pasteButton->setDefault(true);
     pasteButton->setAutoDefault(true);
+    pasteButton->setToolTip(
+        tr("Paste (%1)").arg(QKeySequence(Qt::CTRL | Qt::Key_Return)
+                                 .toString(QKeySequence::NativeText)));
+    // 打开时焦点留在"粘贴"按钮上，不编辑时直接回车就能发送；文本框里的回车用于换行，
+    // 编辑后用 Ctrl+Enter（macOS 为 ⌘+Enter）发送，无需再伸手去点按钮。
     pasteButton->setFocus();
+    for (const QKeySequence &sequence : {QKeySequence(Qt::CTRL | Qt::Key_Return),
+                                         QKeySequence(Qt::CTRL | Qt::Key_Enter)}) {
+        auto *sendShortcut = new QShortcut(sequence, &dialog);
+        sendShortcut->setContext(Qt::WidgetWithChildrenShortcut);
+        connect(sendShortcut, &QShortcut::activated, &dialog, &QDialog::accept);
+    }
     connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
     connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
     layout->addWidget(buttons);
 
     dialog.resize(560, 320);
-    return dialog.exec() == QDialog::Accepted;
+    if (dialog.exec() != QDialog::Accepted) {
+        return std::nullopt;
+    }
+    return preview->toPlainText();
 }
 
 void TerminalView::pasteFromClipboard()
@@ -1432,14 +1447,23 @@ void TerminalView::pasteFromClipboard()
         return;
     }
 
-    const PastePreparation prepared = prepareClipboardPaste(clipboardText);
+    PastePreparation prepared = prepareClipboardPaste(clipboardText);
     if (prepared.text.isEmpty()) {
         // 剪贴板为空或仅含危险控制字符时不向 PTY 发送任何内容，避免一次“空粘贴”
         // 被下游交互式程序误解为特殊输入。
         return;
     }
-    if (prepared.requiresConfirmation(m_multiLinePasteConfirmation) && !confirmPaste(prepared)) {
-        return;
+    if (prepared.requiresConfirmation(m_multiLinePasteConfirmation)) {
+        const std::optional<QString> confirmed = confirmPaste(prepared);
+        if (!confirmed.has_value()) {
+            return;
+        }
+        // 用户可能在确认框里改过内容，甚至又粘进了带控制字符的文本；按剪贴板同样的规则
+        // 重新清理，确认框不能成为绕过过滤的入口。文本框转出的换行是 LF，不会被重复计数。
+        prepared = prepareClipboardPaste(*confirmed);
+        if (prepared.text.isEmpty()) {
+            return;
+        }
     }
 
     // 多行能力仍然保留，但只有用户看见风险并明确确认后才会进入 PTY。命令缓冲只保留

@@ -5571,6 +5571,10 @@ Reconnecting manually…<byte value="xd"/>
         <source>Paste</source>
         <translation type="unfinished">Вставити</translation>
     </message>
+    <message>
+        <source>Paste (%1)</source>
+        <translation>Вставити (%1)</translation>
+    </message>
 </context>
 <context>
     <name>TerminalWorkspace</name>

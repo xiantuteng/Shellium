@@ -5571,6 +5571,10 @@ Reconectare manuală…<byte value="xd"/>
         <source>Paste</source>
         <translation type="unfinished">Lipește</translation>
     </message>
+    <message>
+        <source>Paste (%1)</source>
+        <translation>Lipește (%1)</translation>
+    </message>
 </context>
 <context>
     <name>TerminalWorkspace</name>

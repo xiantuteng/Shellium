@@ -36,6 +36,8 @@
 #include <QScrollBar>
 #include <QSet>
 #include <QTest>
+#include <QPlainTextEdit>
+#include <QDialog>
 #include <QTimer>
 #include <QUrl>
 
@@ -127,6 +129,11 @@ private slots:
     void terminalViewPreparesClipboardTextSafely();
     /** @brief 多行粘贴确认默认关闭：多行内容必须直接进入 PTY，不弹任何模态窗口。 */
     void terminalViewMultiLinePasteConfirmationFollowsSetting();
+    /**
+     * @brief 确认粘贴框的文本可以编辑，发送的是编辑后的内容，且编辑结果同样经过控制字符
+     * 过滤。
+     */
+    void terminalViewPasteConfirmationSendsEditedText();
 
     /** @brief 回显过滤器要能扣掉整段、跨块的期望串，并在匹配不上时如数放行。 */
     void echoFilterRemovesExpectedEcho();
@@ -852,6 +859,45 @@ void SshCommandParserTest::terminalViewMultiLinePasteConfirmationFollowsSetting(
     QCOMPARE(inputSpy.size(), 1);
     QCOMPARE(inputSpy.at(0).at(0).toByteArray(),
              QByteArrayLiteral("echo one\necho two\necho three"));
+}
+
+void SshCommandParserTest::terminalViewPasteConfirmationSendsEditedText()
+{
+    QGuiApplication::clipboard()->setText(QStringLiteral("echo one\nrm -rf /tmp/demo\necho three"));
+
+    TerminalView view;
+    TerminalSettings settings;
+    settings.multiLinePasteConfirmation = true;
+    view.applySettings(settings);
+
+    bool previewEditable = false;
+    QTimer modalWatcher;
+    modalWatcher.setInterval(20);
+    QObject::connect(&modalWatcher, &QTimer::timeout, [&previewEditable] {
+        auto *dialog = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+        if (dialog == nullptr) {
+            return;
+        }
+        auto *preview = dialog->findChild<QPlainTextEdit *>(
+            QStringLiteral("TerminalPasteConfirmPreview"));
+        if (preview == nullptr) {
+            dialog->reject();
+            return;
+        }
+        previewEditable = !preview->isReadOnly();
+        // 删掉危险的第二行，并混入一个 ESC 控制字符，确认它在发送前被再次过滤。
+        preview->setPlainText(QStringLiteral("echo one\necho th\x1b[2Jree"));
+        dialog->accept();
+    });
+    modalWatcher.start();
+
+    QSignalSpy inputSpy(&view, &TerminalView::inputBytes);
+    QTest::keySequence(&view, QKeySequence(QKeySequence::Paste));
+    modalWatcher.stop();
+
+    QVERIFY2(previewEditable, "确认粘贴框的文本框应当可以编辑");
+    QCOMPARE(inputSpy.size(), 1);
+    QCOMPARE(inputSpy.at(0).at(0).toByteArray(), QByteArrayLiteral("echo one\necho th[2Jree"));
 }
 
 void SshCommandParserTest::echoFilterRemovesExpectedEcho()

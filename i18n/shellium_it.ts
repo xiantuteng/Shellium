@@ -5571,6 +5571,10 @@ Riconnessione manuale…<byte value="xd"/>
         <source>Paste</source>
         <translation type="unfinished">Incolla</translation>
     </message>
+    <message>
+        <source>Paste (%1)</source>
+        <translation>Incolla (%1)</translation>
+    </message>
 </context>
 <context>
     <name>TerminalWorkspace</name>

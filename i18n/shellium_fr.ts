@@ -5571,6 +5571,10 @@ Reconnexion manuelle…<byte value="xd"/>
         <source>Paste</source>
         <translation type="unfinished">Coller</translation>
     </message>
+    <message>
+        <source>Paste (%1)</source>
+        <translation>Coller (%1)</translation>
+    </message>
 </context>
 <context>
     <name>TerminalWorkspace</name>

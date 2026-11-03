@@ -8,6 +8,8 @@
 #include <QPlainTextEdit>
 #include <QStringList>
 
+#include <optional>
+
 struct TerminalSettings;
 class QInputMethodEvent;
 class QCompleter;
@@ -384,14 +386,15 @@ private:
     void updateCompletionPopup();
 
     /**
-     * @brief 弹出粘贴确认框，展示风险说明与清理后的完整内容。
+     * @brief 弹出粘贴确认框，展示风险说明与清理后的完整内容，并允许发送前修改。
      * @param prepared 已清理并完成风险判定的粘贴内容。
-     * @return 用户确认发送返回 true；取消或关闭窗口返回 false。
+     * @return 用户确认发送时返回文本框里的最终内容（可能已被编辑，尚未再次清理）；
+     *         取消或关闭窗口返回 std::nullopt。
      *
-     * 内容区只读且不接受焦点，因此回车不会被文本框吞掉，而是直接触发默认的"粘贴"按钮——
-     * 这是本对话框最常见的操作，不该强迫用户离开键盘去点按钮。
+     * 打开时焦点在默认的"粘贴"按钮上，直接回车即可发送——这是最常见的操作。点进文本框
+     * 编辑后回车用于换行，此时用 Ctrl+Enter（macOS 为 ⌘+Enter）发送。
      */
-    [[nodiscard]] bool confirmPaste(const PastePreparation &prepared);
+    [[nodiscard]] std::optional<QString> confirmPaste(const PastePreparation &prepared);
 
     /**
      * @brief 把系统剪贴板文本粘贴进终端；快捷键与右键菜单共用此入口。

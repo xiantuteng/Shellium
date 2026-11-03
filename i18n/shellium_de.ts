@@ -5571,6 +5571,10 @@ Manuelle Neuverbindung …<byte value="xd"/>
         <source>Paste</source>
         <translation type="unfinished">Einfügen</translation>
     </message>
+    <message>
+        <source>Paste (%1)</source>
+        <translation>Einfügen (%1)</translation>
+    </message>
 </context>
 <context>
     <name>TerminalWorkspace</name>

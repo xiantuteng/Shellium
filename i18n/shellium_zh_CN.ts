@@ -5574,6 +5574,10 @@ Reconnecting manually…<byte value="xd"/>
         <source>Paste</source>
         <translation>粘贴</translation>
     </message>
+    <message>
+        <source>Paste (%1)</source>
+        <translation>粘贴（%1）</translation>
+    </message>
 </context>
 <context>
     <name>TerminalWorkspace</name>

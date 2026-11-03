@@ -5571,6 +5571,10 @@ Reconnecting manually…<byte value="xd"/>
         <source>Paste</source>
         <translation type="unfinished">貼り付け</translation>
     </message>
+    <message>
+        <source>Paste (%1)</source>
+        <translation>貼り付け（%1）</translation>
+    </message>
 </context>
 <context>
     <name>TerminalWorkspace</name>

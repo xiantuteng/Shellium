@@ -5571,6 +5571,10 @@ Reconectando manualmente…<byte value="xd"/>
         <source>Paste</source>
         <translation type="unfinished">Pegar</translation>
     </message>
+    <message>
+        <source>Paste (%1)</source>
+        <translation>Pegar (%1)</translation>
+    </message>
 </context>
 <context>
     <name>TerminalWorkspace</name>
