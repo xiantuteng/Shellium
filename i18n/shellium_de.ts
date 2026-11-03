@@ -5421,8 +5421,8 @@ Manuelle Neuverbindung …<byte value="xd"/>
         <translation type="unfinished">Inneres SSH-Passwort empfangen; warte auf Bestätigung des Servers</translation>
     </message>
     <message>
-        <source>%1 (nested target)</source>
-        <translation type="unfinished">%1 (verschachteltes Ziel)</translation>
+        <source>%1 (via %2)</source>
+        <translation>%1 (über %2)</translation>
     </message>
     <message>
         <source>Detected nested SSH target: %1</source>

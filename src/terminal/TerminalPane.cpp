@@ -423,7 +423,16 @@ void TerminalPane::connectToHosts(const QList<ConnectionTarget> &connectionPlan)
         m_reconnectCycleActive = false;
         m_reconnectAttempts = 0;
         ++m_reconnectToken;
-        m_headerLabel->setText(target.connectionSpecifier());
+        // 此刻自持层快照尚未到达（layersChanged 紧随其后），先按连接计划显示路径，避免
+        // 标题从“目标”闪成“目标 (via …)”。计划里除最后一项外都是受管跳板。
+        QList<ConnectionTarget> plannedLayers = m_connectionPlan;
+        for (qsizetype index = 0; index < plannedLayers.size(); ++index) {
+            plannedLayers[index].transit = index + 1 < plannedLayers.size();
+        }
+        if (plannedLayers.isEmpty()) {
+            plannedLayers.append(target);
+        }
+        setHeaderPath(sessionPathText(plannedLayers, {}));
         emit statusMessage(tr("Connected to %1").arg(target.connectionSpecifier()));
         emit rootConnectionSucceeded(target);
         // 这里刻意不发 targetsChanged：此刻 m_ownedTargets 仍为空，发出去会让文件管理器
@@ -807,8 +816,61 @@ void TerminalPane::refreshHeaderLabel()
     }
     // 推测/确认仍作为文件操作与路由的内部安全状态保留，但不再在终端标题重复展示；用户
     // 已能从服务器层级和实际 Shell 提示符判断所在位置，额外警示只会挤占横向空间。
-    m_headerLabel->setText(target.connectionSpecifier());
+    // 标题展示完整连接路径：主机链在括号里，终端内的 SSH 跳转用箭头串起来，最后一段就是
+    // 终端当前所在的服务器。
+    setHeaderPath(sessionPathText(m_ownedTargets.toList(), m_inferredTargets.toList()));
     refreshCommandCompletions();
+}
+
+void TerminalPane::setHeaderPath(const QString &path)
+{
+    if (path.isEmpty()) {
+        return;
+    }
+    m_headerLabel->setText(path);
+    // 标签按可用宽度截断（SizePolicy::Ignored），长路径在窄窗口里只能看到开头，悬停时
+    // 用提示补全整条路径。
+    m_headerLabel->setToolTip(path);
+}
+
+QString TerminalPane::sessionPathText(const QList<ConnectionTarget> &ownedLayers,
+                                      const QList<ConnectionTarget> &inferredLayers)
+{
+    // 跳板层总在栈底且连续出现；第一个非跳板层才是用户选择连接的最终目标。
+    QStringList chain;
+    qsizetype rootIndex = 0;
+    while (rootIndex < ownedLayers.size() && ownedLayers.at(rootIndex).transit) {
+        chain.append(ownedLayers.at(rootIndex).connectionSpecifier());
+        ++rootIndex;
+    }
+    if (rootIndex >= ownedLayers.size()) {
+        return {};
+    }
+    const ConnectionTarget &root = ownedLayers.at(rootIndex);
+    if (chain.isEmpty()) {
+        // 单层连接没有受管跳板，但可能配置了交给 libssh 的手工 ProxyJump，同样是主机链。
+        for (const QString &jump : root.proxyJumps) {
+            if (!jump.trimmed().isEmpty()) {
+                chain.append(jump.trimmed());
+            }
+        }
+    }
+    static const QString arrow = QStringLiteral(" \u2192 ");
+    QString path = root.connectionSpecifier();
+    if (!chain.isEmpty()) {
+        path = tr("%1 (via %2)").arg(path, chain.join(arrow));
+    }
+    QStringList hops;
+    for (qsizetype index = rootIndex + 1; index < ownedLayers.size(); ++index) {
+        hops.append(ownedLayers.at(index).connectionSpecifier());
+    }
+    for (const ConnectionTarget &layer : inferredLayers) {
+        hops.append(layer.connectionSpecifier());
+    }
+    for (const QString &hop : std::as_const(hops)) {
+        path += arrow + hop;
+    }
+    return path;
 }
 
 bool TerminalPane::isConnected() const
@@ -1360,7 +1422,8 @@ void TerminalPane::inspectSubmittedCommand(const QString &command)
         m_inferredTargets.append(nestedTarget);
         refreshCommandCompletions();
         m_pendingNestedCredentialTargetId = nestedTarget.id;
-        m_headerLabel->setText(tr("%1 (nested target)").arg(nestedTarget.connectionSpecifier()));
+        // 推测层已经加入列表，刷新后标题会把它用箭头接在当前路径末尾。
+        refreshHeaderLabel();
         emit statusMessage(tr("Detected nested SSH target: %1").arg(nestedTarget.connectionSpecifier()));
 
         // 公钥/Agent 登录不会出现 password 提示。这里为高延迟网络保留五秒认证观察窗口：

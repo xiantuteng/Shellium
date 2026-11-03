@@ -5424,8 +5424,8 @@ Reconnecting manually…<byte value="xd"/>
         <translation>已接收内层 SSH 密码，正在等待服务器确认</translation>
     </message>
     <message>
-        <source>%1 (nested target)</source>
-        <translation>%1（嵌套目标）</translation>
+        <source>%1 (via %2)</source>
+        <translation>%1（经由 %2）</translation>
     </message>
     <message>
         <source>Detected nested SSH target: %1</source>

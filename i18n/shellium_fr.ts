@@ -5421,8 +5421,8 @@ Reconnexion manuelle…<byte value="xd"/>
         <translation type="unfinished">Mot de passe SSH interne reçu ; en attente de confirmation du serveur</translation>
     </message>
     <message>
-        <source>%1 (nested target)</source>
-        <translation type="unfinished">%1 (cible imbriquée)</translation>
+        <source>%1 (via %2)</source>
+        <translation>%1 (via %2)</translation>
     </message>
     <message>
         <source>Detected nested SSH target: %1</source>

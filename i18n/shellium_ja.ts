@@ -5421,8 +5421,8 @@ Reconnecting manually…<byte value="xd"/>
         <translation type="unfinished">内部 SSH パスワードを取得しました。サーバーの確認を待機中</translation>
     </message>
     <message>
-        <source>%1 (nested target)</source>
-        <translation type="unfinished">%1（ネストターゲット）</translation>
+        <source>%1 (via %2)</source>
+        <translation>%1（%2 経由）</translation>
     </message>
     <message>
         <source>Detected nested SSH target: %1</source>

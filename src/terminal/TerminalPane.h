@@ -111,6 +111,18 @@ public:
      */
     [[nodiscard]] QList<ConnectionTarget> connectionPlan() const;
 
+    /**
+     * @brief 生成终端顶部显示的连接路径。
+     * @param ownedLayers 会话栈的自持层，自底向上：开头的 transit 层是受管主机链的跳板，
+     *        随后是最终目标，再往上是在终端里经 Shellium 建立的嵌套层。
+     * @param inferredLayers 从终端里输入的 ssh 命令推测出的嵌套层，自外向内。
+     * @return 例如 "root@app (via ops@bastion → ops@dmz) → root@db → admin@cache"。
+     *         主机链（或单层连接的手工 ProxyJump）写在最终目标后的括号里；在终端里继续
+     *         SSH 跳转到的主机用向右箭头依次接在后面。没有可显示的目标时返回空串。
+     */
+    [[nodiscard]] static QString sessionPathText(const QList<ConnectionTarget> &ownedLayers,
+                                                 const QList<ConnectionTarget> &inferredLayers);
+
     /** @brief 判断当前远程或本地终端是否已经完成启动并可交互。 */
     [[nodiscard]] bool isConnected() const;
 
@@ -402,6 +414,8 @@ private:
 
     /** @brief 按当前所在层刷新标题，并把推测层显式标注出来。 */
     void refreshHeaderLabel();
+    /** @brief 把连接路径写入顶部标签并同步悬停提示；空串时保留原有阶段文字。 */
+    void setHeaderPath(const QString &path);
 
     /**
      * @brief 处理远端 shim 上报的事件，决定是否接管这次 ssh。

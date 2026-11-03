@@ -5421,8 +5421,8 @@ Reconnecting manually…<byte value="xd"/>
         <translation type="unfinished">Внутрішній пароль SSH отримано; очікування підтвердження сервера</translation>
     </message>
     <message>
-        <source>%1 (nested target)</source>
-        <translation type="unfinished">%1 (вкладена ціль)</translation>
+        <source>%1 (via %2)</source>
+        <translation>%1 (через %2)</translation>
     </message>
     <message>
         <source>Detected nested SSH target: %1</source>

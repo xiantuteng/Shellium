@@ -27,11 +27,63 @@ private slots:
     void closeKeyRequestsTabClose();
     void otherKeysKeepThePrompt();
     void reconnectKeyWithoutTargetKeepsThePrompt();
+    /**
+     * @brief 终端顶部的连接路径：主机链写在最终目标后的括号里，终端内的 SSH 跳转用
+     * 向右箭头接在后面。
+     */
+    void headerPathShowsHostChainAndNestedHops();
 
 private:
     /** @brief 构造一个不会被真正连接的示例目标，仅用于提示文案和状态位。 */
     [[nodiscard]] static ConnectionTarget sampleTarget();
 };
+
+void SessionRecoveryTest::headerPathShowsHostChainAndNestedHops()
+{
+    const auto layer = [](const QString &user, const QString &host, const bool transit = false) {
+        ConnectionTarget target;
+        target.id = host;
+        target.username = user;
+        target.host = host;
+        target.transit = transit;
+        return target;
+    };
+    const QString arrow = QStringLiteral(" \u2192 ");
+
+    // 直连：只有目标本身。
+    QCOMPARE(TerminalPane::sessionPathText({layer(QStringLiteral("root"), QStringLiteral("10.0.0.5"))}, {}),
+             QStringLiteral("root@10.0.0.5"));
+
+    // 受管主机链：两层跳板写进括号。
+    const QList<ConnectionTarget> chained{
+        layer(QStringLiteral("ops"), QStringLiteral("bastion"), true),
+        layer(QStringLiteral("ops"), QStringLiteral("dmz"), true),
+        layer(QStringLiteral("root"), QStringLiteral("app"))};
+    QCOMPARE(TerminalPane::sessionPathText(chained, {}),
+             QStringLiteral("root@app (via ops@bastion") + arrow + QStringLiteral("ops@dmz)"));
+
+    // 主机链 + 终端内两次 SSH 跳转（一次由 Shellium 建层，一次从命令推测）。
+    QList<ConnectionTarget> withNested = chained;
+    withNested.append(layer(QStringLiteral("root"), QStringLiteral("db")));
+    QCOMPARE(TerminalPane::sessionPathText(withNested, {layer(QStringLiteral("admin"), QStringLiteral("cache"))}),
+             QStringLiteral("root@app (via ops@bastion") + arrow + QStringLiteral("ops@dmz)") + arrow
+                 + QStringLiteral("root@db") + arrow + QStringLiteral("admin@cache"));
+
+    // 直连后在终端里 SSH 跳转：没有括号，只有箭头。
+    QCOMPARE(TerminalPane::sessionPathText({layer(QStringLiteral("root"), QStringLiteral("10.0.0.5"))},
+                                           {layer(QStringLiteral("dba"), QStringLiteral("10.0.3.7"))}),
+             QStringLiteral("root@10.0.0.5") + arrow + QStringLiteral("dba@10.0.3.7"));
+
+    // 单层连接配置的手工 ProxyJump 同样作为主机链显示。
+    ConnectionTarget proxied = layer(QStringLiteral("root"), QStringLiteral("app"));
+    proxied.proxyJumps = {QStringLiteral("ops@bastion:2222")};
+    QCOMPARE(TerminalPane::sessionPathText({proxied}, {}),
+             QStringLiteral("root@app (via ops@bastion:2222)"));
+
+    // 只剩跳板（最终目标尚未建立）时不显示路径，保留“正在连接”等阶段文字。
+    QVERIFY(TerminalPane::sessionPathText({layer(QStringLiteral("ops"), QStringLiteral("bastion"), true)}, {})
+                .isEmpty());
+}
 
 ConnectionTarget SessionRecoveryTest::sampleTarget()
 {

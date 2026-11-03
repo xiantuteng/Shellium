@@ -5421,8 +5421,8 @@ Reconnecting manually…<byte value="xd"/>
         <translation type="unfinished">내부 SSH 비밀번호를 가져왔습니다. 서버 확인을 기다리는 중</translation>
     </message>
     <message>
-        <source>%1 (nested target)</source>
-        <translation type="unfinished">%1(중첩 대상)</translation>
+        <source>%1 (via %2)</source>
+        <translation>%1(%2 경유)</translation>
     </message>
     <message>
         <source>Detected nested SSH target: %1</source>

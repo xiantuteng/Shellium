@@ -5421,8 +5421,8 @@ Reconectare manuală…<byte value="xd"/>
         <translation type="unfinished">Parola SSH internă a fost obținută; se așteaptă confirmarea serverului</translation>
     </message>
     <message>
-        <source>%1 (nested target)</source>
-        <translation type="unfinished">%1 (țintă imbricată)</translation>
+        <source>%1 (via %2)</source>
+        <translation>%1 (prin %2)</translation>
     </message>
     <message>
         <source>Detected nested SSH target: %1</source>

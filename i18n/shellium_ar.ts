@@ -5421,8 +5421,8 @@ Reconnecting manually…<byte value="xd"/>
         <translation type="unfinished">تم الحصول على كلمة مرور SSH الداخلية؛ في انتظار تأكيد الخادم</translation>
     </message>
     <message>
-        <source>%1 (nested target)</source>
-        <translation type="unfinished">%1 (هدف متداخل)</translation>
+        <source>%1 (via %2)</source>
+        <translation>%1 (عبر %2)</translation>
     </message>
     <message>
         <source>Detected nested SSH target: %1</source>

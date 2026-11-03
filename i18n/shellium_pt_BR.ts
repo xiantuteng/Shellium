@@ -5421,8 +5421,8 @@ Reconectando manualmente…<byte value="xd"/>
         <translation type="unfinished">Senha SSH interna recebida; aguardando a confirmação do servidor</translation>
     </message>
     <message>
-        <source>%1 (nested target)</source>
-        <translation type="unfinished">%1 (destino aninhado)</translation>
+        <source>%1 (via %2)</source>
+        <translation>%1 (via %2)</translation>
     </message>
     <message>
         <source>Detected nested SSH target: %1</source>
