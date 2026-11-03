@@ -6,6 +6,7 @@
 #include "i18n/Retranslate.h"
 #include "ssh/SshSessionStack.h"
 #include "storage/ApplicationDatabase.h"
+#include "ui/SettingsWidgets.h"
 #include "ui/SidebarSelection.h"
 #include "ui/UiIcons.h"
 
@@ -667,6 +668,11 @@ public:
         setWindowTitle(existing.has_value() ? tr("Edit port forwarding") : tr("New port forwarding"));
         setMinimumWidth(480);
         auto *layout = new QVBoxLayout(this);
+        // 表单与安全提示放进滚动主体，按钮行留在外面始终可见；切换类型显示或隐藏
+        // “代理网段”时，行间距不随窗口高度变化。
+        auto *body = new QWidget(this);
+        auto *bodyLayout = new QVBoxLayout(body);
+        bodyLayout->setContentsMargins(0, 0, 0, 0);
         auto *form = new QFormLayout;
         form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
         m_nameEdit = new QLineEdit(this);
@@ -723,14 +729,15 @@ public:
         form->addRow(tr("Proxied networks:"), m_proxyNetworksEdit);
         form->addRow(m_proxyNetworksHint);
         form->addRow(QString(), m_autoStartCheck);
-        layout->addLayout(form);
+        bodyLayout->addLayout(form);
 
         auto *securityNotice = new QLabel(
             tr("Security note: setting the listen address to 0.0.0.0 or :: exposes the port to the local network and the internet; reachability still depends on the system firewall and the SSH server's GatewayPorts setting."),
             this);
         securityNotice->setObjectName(QStringLiteral("PortForwardSecurityNotice"));
         securityNotice->setWordWrap(true);
-        layout->addWidget(securityNotice);
+        bodyLayout->addWidget(securityNotice);
+        layout->addWidget(ShelliumUi::createDialogBodyScrollArea(body, this), 1);
 
         auto *buttons = new QDialogButtonBox(
             QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);

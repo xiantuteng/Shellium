@@ -774,6 +774,8 @@ if(BUILD_TESTING)
         src/forwarding/ProxyNetwork.cpp
         src/forwarding/ProxyNetwork.h
         src/storage/ApplicationDatabase.h
+        src/ui/SettingsWidgets.cpp
+        src/ui/SettingsWidgets.h
         src/ui/UiIcons.h
     )
     target_include_directories(ShelliumPortForwardTests PRIVATE src)

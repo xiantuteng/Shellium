@@ -17,6 +17,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <tuple>
 
 #include <QAbstractItemView>
 #include <QAbstractSpinBox>
@@ -39,6 +40,8 @@
 #include <QMessageBox>
 #include <QPointer>
 #include <QPushButton>
+#include <QScrollBar>
+#include <QScrollArea>
 #include <QSignalSpy>
 #include <QSpinBox>
 #include <QStackedWidget>
@@ -121,6 +124,11 @@ class SettingsUiTest final : public QObject {
 private slots:
     void initTestCase();
     void stepperButtonsDriveSpinValues();
+    /**
+     * @brief 表单对话框的高度变化不影响控件间距：变矮时主体内部滚动，变高时内容贴顶、
+     * 底部留白，页脚始终可见。
+     */
+    void dialogBodyKeepsSpacingWhenDialogIsResized();
     void togglesRoundTripBooleanSettings();
     /** @brief 主密码保护开关必须分别通过设置新密码和验证当前密码后才能保存。 */
     void vaultProtectionToggleRequiresPasswordInBothDirections();
@@ -231,6 +239,47 @@ QToolButton *SettingsUiTest::stepperButton(QAbstractSpinBox *spinBox, const QStr
         }
     }
     return nullptr;
+}
+
+void SettingsUiTest::dialogBodyKeepsSpacingWhenDialogIsResized()
+{
+    ConnectionDialog dialog;
+    dialog.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&dialog));
+
+    auto *scroll = dialog.findChild<QScrollArea *>(QStringLiteral("DialogBodyScroll"));
+    QVERIFY2(scroll != nullptr, "连接对话框的表单主体没有放进滚动区");
+    const QList<QFrame *> cards = dialog.findChildren<QFrame *>(QStringLiteral("SettingsCard"));
+    QCOMPARE(cards.size(), 2);
+    QFrame *first = cards.at(0);
+    QFrame *second = cards.at(1);
+    if (first->mapTo(&dialog, QPoint()).y() > second->mapTo(&dialog, QPoint()).y()) {
+        std::swap(first, second);
+    }
+    const auto layoutSnapshot = [&]() {
+        QApplication::processEvents();
+        const int firstTop = first->mapTo(scroll->widget(), QPoint()).y();
+        const int gap = second->mapTo(scroll->widget(), QPoint()).y() - (firstTop + first->height());
+        return std::make_tuple(firstTop, gap, first->height(), second->height());
+    };
+
+    const auto natural = layoutSnapshot();
+
+    dialog.resize(dialog.width(), dialog.minimumSizeHint().height());
+    const auto squeezed = layoutSnapshot();
+    QCOMPARE(squeezed, natural);
+    QVERIFY2(scroll->verticalScrollBar()->maximum() > 0, "对话框变矮后主体没有改为内部滚动");
+    auto *footer = dialog.findChild<QWidget *>(QStringLiteral("SettingsFooter"));
+    QVERIFY(footer != nullptr);
+    QVERIFY2(footer->geometry().bottom() <= dialog.rect().bottom(), "页脚被挤出了对话框");
+
+    dialog.resize(dialog.width(), dialog.height() + 900);
+    const auto stretched = layoutSnapshot();
+    QCOMPARE(stretched, natural);
+    QCOMPARE(scroll->verticalScrollBar()->maximum(), 0);
+    const int contentBottom = second->mapTo(scroll->viewport(), QPoint()).y() + second->height();
+    QVERIFY2(scroll->viewport()->height() - contentBottom > 400,
+             "对话框变高后多出的空间没有留在底部");
 }
 
 void SettingsUiTest::stepperButtonsDriveSpinValues()

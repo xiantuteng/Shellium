@@ -1225,16 +1225,21 @@ public:
     {
         setWindowTitle(tr("Import Hosts from Excel"));
         setModal(true);
-        resize(560, 170);
 
         auto *layout = new QVBoxLayout(this);
         layout->setContentsMargins(24, 22, 24, 20);
         layout->setSpacing(14);
 
+        // 说明、文件选择与模板入口放进滚动主体，按钮行留在外面始终可见。
+        auto *body = new QWidget(this);
+        auto *bodyLayout = new QVBoxLayout(body);
+        bodyLayout->setContentsMargins(0, 0, 0, 0);
+        bodyLayout->setSpacing(14);
+
         auto *description = new QLabel(
-            tr("Choose an .xlsx file with the columns name, host, username and password."), this);
+            tr("Choose an .xlsx file with the columns name, host, username and password."), body);
         description->setWordWrap(true);
-        layout->addWidget(description);
+        bodyLayout->addWidget(description);
 
         auto *fileLayout = new QHBoxLayout;
         fileLayout->setSpacing(8);
@@ -1244,18 +1249,21 @@ public:
         browseButton->setObjectName(QStringLiteral("ExcelBrowseButton"));
         fileLayout->addWidget(m_pathEdit, 1);
         fileLayout->addWidget(browseButton);
-        layout->addLayout(fileLayout);
+        bodyLayout->addLayout(fileLayout);
 
         auto *templateButton = new QPushButton(tr("Download template"), this);
         templateButton->setObjectName(QStringLiteral("ExcelTemplateButton"));
         templateButton->setToolTip(tr("Download an Excel template with English column names"));
-        layout->addWidget(templateButton, 0, Qt::AlignLeft);
+        bodyLayout->addWidget(templateButton, 0, Qt::AlignLeft);
+        layout->addWidget(ShelliumUi::createDialogBodyScrollArea(body, this), 1);
 
         auto *buttons = new QDialogButtonBox(QDialogButtonBox::Cancel, this);
         auto *importButton = buttons->addButton(tr("Import"), QDialogButtonBox::AcceptRole);
         importButton->setObjectName(QStringLiteral("ExcelImportButton"));
         importButton->setEnabled(false);
         layout->addWidget(buttons);
+        // 宽度沿用原设计，高度取内容自然高度：固定的 170px 在大字号下会让主体一打开就滚动。
+        resize(560, sizeHint().height());
 
         connect(m_pathEdit, &QLineEdit::textChanged, this, [importButton](const QString &text) {
             // 只要用户选择过非空路径就允许提交；真正的文件存在性、扩展名和工作簿内容
@@ -1475,7 +1483,7 @@ public:
         bodyLayout->setSpacing(16);
         bodyLayout->addWidget(editorCard);
         bodyLayout->addStretch(1);
-        layout->addWidget(body, 1);
+        layout->addWidget(ShelliumUi::createDialogBodyScrollArea(body, this), 1);
         layout->addWidget(footer);
 
         // 回车等价于点击"确定"：保存动作统一只读名称框和颜色选择器的当前内容，不需要
@@ -1788,12 +1796,13 @@ public:
                 edit->setMinimumWidth(260);
             }
 
+            // 名称（含所属分组与标签）排在最前：它是用户在列表里识别主机的依据，先确定
+            // 放在哪个分组、叫什么，再填连接参数。名称留空时仍按地址与端口自动生成，自动
+            // 命名逻辑与行的位置无关。
+            basicsCard->addRow(tr("Name"), buildNameRow());
             basicsCard->addRow(tr("Host address"), m_hostEdit);
             basicsCard->addRow(
                 tr("Port"), new SettingsStepper(m_portSpin, basicsCard));
-            // 名称排在地址与端口之后，是因为它默认由这两项自动生成：先填连接参数、再确认
-            // 或改写生成出的名称，符合用户真实的填写顺序，也让自动名称不再"凭空先出现"。
-            basicsCard->addRow(tr("Name"), buildNameRow());
 
             auto *identityContainer = new QWidget(this);
             auto *identityLayout = new QHBoxLayout(identityContainer);
@@ -2062,7 +2071,9 @@ public:
             bodyLayout->addWidget(m_authenticationCard);
         }
         bodyLayout->addStretch(1);
-        layout->addWidget(body, 1);
+        // 主体放进滚动区：调整窗口高度只改变可视范围，不压缩或拉开各行间距；展开
+        // “高级设置”时窗口随内容增高，到屏幕高度上限后改为内部滚动。
+        layout->addWidget(ShelliumUi::createDialogBodyScrollArea(body, this), 1);
         layout->addWidget(footer);
 
         if (m_testConnectionButton != nullptr) {

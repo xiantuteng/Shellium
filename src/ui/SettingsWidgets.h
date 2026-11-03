@@ -4,6 +4,7 @@
 #include <QColor>
 #include <QFrame>
 #include <QList>
+#include <QScrollArea>
 #include <QString>
 #include <QWidget>
 
@@ -77,6 +78,26 @@ namespace ShelliumUi {
  * 样式只能按系统外观猜测明暗，两者在"用户手动选浅色但系统是深色"时会给出相反答案。
  */
 void applyStandaloneDialogStyle(QWidget *dialog);
+
+/**
+ * @brief 把对话框的表单主体包进滚动区，使对话框高度变化不再影响控件之间的间距。
+ * @param body 表单主体（卡片、说明文字等），其布局应为纵向布局；不可为空。
+ * @param parent 滚动区的父控件，通常是对话框本身。
+ * @return 已托管 body 的滚动区，调用方把它放进对话框布局（页脚之上、伸展因子 1）。
+ *
+ * 普通纵向布局在高度不足时会压缩各行，带换行说明的行会互相重叠；高度富余时又把空隙
+ * 分摊到各行之间。包进滚动区后：
+ * - 各行始终按自然高度排列，间距固定；
+ * - 对话框比内容矮时在主体内部滚动，页脚按钮始终可见；
+ * - 对话框比内容高时，内容贴顶，多出的空间留在底部（必要时自动在布局末尾补伸展项）；
+ * - 首次显示时滚动区的 sizeHint 就是完整内容高度（不超过屏幕可用高度），对话框默认无需滚动；
+ * - 内容变高（例如展开“高级设置”）时窗口增高同样的量，直到屏幕可用高度为止，之后改为
+ *   滚动；用户手动拖矮的窗口不会因为无关的布局刷新被弹回原高度。
+ *
+ * 只适用于内容高度固定的表单类对话框；主体本身就是列表或文本框、应随窗口伸缩的对话框
+ * 不要用它。
+ */
+[[nodiscard]] QScrollArea *createDialogBodyScrollArea(QWidget *body, QWidget *parent);
 
 } // namespace ShelliumUi
 

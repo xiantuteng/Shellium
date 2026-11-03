@@ -83,7 +83,8 @@ ConnectionDialog::ConnectionDialog(QWidget *parent)
     bodyLayout->addWidget(serverCard);
     bodyLayout->addWidget(authCard);
     bodyLayout->addStretch(1);
-    layout->addWidget(body, 1);
+    // 调整窗口高度不改变行间距：高度不足时主体内部滚动，富余时留白在底部。
+    layout->addWidget(ShelliumUi::createDialogBodyScrollArea(body, this), 1);
     layout->addWidget(footer);
 
     connect(browseButton, &QPushButton::clicked, this, &ConnectionDialog::browseIdentityFile);

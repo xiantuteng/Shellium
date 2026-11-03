@@ -4,6 +4,7 @@
 
 #include <QAbstractSpinBox>
 #include <QApplication>
+#include <QBoxLayout>
 #include <QButtonGroup>
 #include <QEvent>
 #include <QFont>
@@ -14,9 +15,15 @@
 #include <QPainterPath>
 #include <QPropertyAnimation>
 #include <QPushButton>
+#include <QScreen>
+#include <QScrollArea>
+#include <QScrollBar>
 #include <QStyleHints>
+#include <QTimer>
 #include <QToolButton>
 #include <QVBoxLayout>
+
+#include <algorithm>
 
 namespace {
 
@@ -32,6 +39,168 @@ QColor trackColor(const QPalette &palette)
 {
     return isDarkPalette(palette) ? QColor(QStringLiteral("#3a4257"))
                                   : QColor(QStringLiteral("#d3dade"));
+}
+
+/**
+ * @brief 表单对话框主体使用的滚动区，见 ShelliumUi::createDialogBodyScrollArea()。
+ *
+ * QScrollArea 默认的 sizeHint 把内容限制在 24 行字高左右，表单对话框一打开就会出现
+ * 滚动条；这里改为报告完整内容高度（受屏幕可用高度约束），最小高度则放得很低，让用户
+ * 可以把对话框拖矮并改为滚动。
+ */
+class DialogBodyScrollArea final : public QScrollArea {
+public:
+    explicit DialogBodyScrollArea(QWidget *parent)
+        : QScrollArea(parent)
+    {
+        setObjectName(QStringLiteral("DialogBodyScroll"));
+        setFrameShape(QFrame::NoFrame);
+        setWidgetResizable(true);
+        setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        // 视口不铺底色，主体直接透出对话框背景，与包裹前的外观一致。
+        viewport()->setAutoFillBackground(false);
+    }
+
+    /** @brief 托管主体并监听其布局变化，用于内容变高时自动增高窗口。 */
+    void setBody(QWidget *body)
+    {
+        setWidget(body);
+        // QScrollArea::setWidget() 会把主体设为自动填充背景，这里撤销以保持透明。
+        body->setAutoFillBackground(false);
+        body->installEventFilter(this);
+        // 以托管时的自然高度为基准，之后只有内容真正变高才会增高窗口。
+        m_lastContentHeight = contentHeightForWidth(body->sizeHint().width());
+    }
+
+    [[nodiscard]] QSize sizeHint() const override
+    {
+        const QWidget *body = widget();
+        if (body == nullptr) {
+            return QScrollArea::sizeHint();
+        }
+        QSize hint = body->sizeHint();
+        hint.setHeight(contentHeightForWidth(hint.width()));
+        hint += QSize(2 * frameWidth(), 2 * frameWidth());
+        hint.setHeight(std::min(hint.height(), availableHeight()));
+        return hint;
+    }
+
+    [[nodiscard]] QSize minimumSizeHint() const override
+    {
+        const QWidget *body = widget();
+        if (body == nullptr) {
+            return QScrollArea::minimumSizeHint();
+        }
+        // 宽度必须容纳内容的最小宽度（横向不滚动），并预留竖向滚动条；高度只保留几行，
+        // 剩下的交给滚动。
+        const int width = body->minimumSizeHint().width() + 2 * frameWidth()
+            + verticalScrollBar()->sizeHint().width();
+        return QSize(width, std::min(120, sizeHint().height()));
+    }
+
+protected:
+    bool eventFilter(QObject *watched, QEvent *event) override
+    {
+        if (watched == widget() && event->type() == QEvent::LayoutRequest
+            && !m_growScheduled) {
+            // 布局请求在可见性切换的同一轮事件里会连发多次，合并到下一轮只处理一次。
+            m_growScheduled = true;
+            QTimer::singleShot(0, this, [this]() {
+                m_growScheduled = false;
+                growWindowToFitContent();
+            });
+        }
+        return QScrollArea::eventFilter(watched, event);
+    }
+
+private:
+    /** @brief 主体在给定宽度下的自然高度，考虑自动换行标签的 heightForWidth。 */
+    [[nodiscard]] int contentHeightForWidth(const int width) const
+    {
+        const QWidget *body = widget();
+        const int natural = body->sizeHint().height();
+        if (!body->hasHeightForWidth()) {
+            return natural;
+        }
+        return std::max(body->heightForWidth(width), body->minimumSizeHint().height());
+    }
+
+    /** @brief 窗口所在屏幕可用高度的 85%，为窗口标题栏、页脚和边距留出余量。 */
+    [[nodiscard]] int availableHeight() const
+    {
+        const QScreen *screen = window() != nullptr ? window()->screen() : nullptr;
+        if (screen == nullptr) {
+            screen = QGuiApplication::primaryScreen();
+        }
+        return screen == nullptr ? QWIDGETSIZE_MAX
+                                 : static_cast<int>(screen->availableGeometry().height() * 0.85);
+    }
+
+    /**
+     * @brief 内容自然高度增加时，把窗口加高同样的量（以刚好容纳内容为上限），不超过屏幕
+     * 可用高度；从不自动缩小。
+     *
+     * 只按“内容增加了多少”增高，而不是每次都撑到完整内容：标签改字、按钮改摘要也会触发
+     * 布局请求，若一律撑满，用户刚手动拖矮的窗口会被立刻弹回去。窗口尚未显示时只记录
+     * 基准高度，首次显示的尺寸由 sizeHint 决定。
+     */
+    void growWindowToFitContent()
+    {
+        QWidget *top = window();
+        if (widget() == nullptr || top == nullptr) {
+            return;
+        }
+        const int width = top->isVisible() ? viewport()->width() : widget()->sizeHint().width();
+        const int natural = contentHeightForWidth(width);
+        const int increase = m_lastContentHeight < 0 ? 0 : natural - m_lastContentHeight;
+        m_lastContentHeight = natural;
+        if (increase <= 0 || !top->isVisible() || top->isMaximized() || top->isFullScreen()) {
+            return;
+        }
+        const int deficit = natural - viewport()->height();
+        if (deficit <= 0) {
+            return;
+        }
+        const QScreen *screen = top->screen();
+        const QRect available = screen != nullptr ? screen->availableGeometry() : QRect();
+        int targetHeight = top->height() + std::min(increase, deficit);
+        if (available.isValid()) {
+            const int frameExtra = top->frameGeometry().height() - top->height();
+            targetHeight = std::min(targetHeight, available.height() - frameExtra);
+        }
+        if (targetHeight <= top->height()) {
+            return;
+        }
+        top->resize(top->width(), targetHeight);
+        if (available.isValid() && top->frameGeometry().bottom() > available.bottom()) {
+            // 增高后越过屏幕底边时整体上移，保证页脚按钮仍在屏幕内。
+            top->move(top->x(),
+                      std::max(available.top(),
+                               available.bottom() - top->frameGeometry().height() + 1));
+        }
+    }
+
+    /** @brief 上一次记录的内容自然高度；-1 表示尚未记录。 */
+    int m_lastContentHeight = -1;
+    bool m_growScheduled = false;
+};
+
+/**
+ * @brief 确保纵向布局末尾有一个可伸展的空白项，让富余高度留在底部而不是分摊到各行。
+ */
+void ensureTrailingStretch(QWidget *body)
+{
+    auto *box = qobject_cast<QBoxLayout *>(body->layout());
+    if (box == nullptr || box->direction() != QBoxLayout::TopToBottom) {
+        return;
+    }
+    if (box->count() > 0) {
+        QSpacerItem *last = box->itemAt(box->count() - 1)->spacerItem();
+        if (last != nullptr && (last->expandingDirections() & Qt::Vertical)) {
+            return;
+        }
+    }
+    box->addStretch(1);
 }
 
 } // namespace
@@ -401,6 +570,15 @@ void applyStandaloneDialogStyle(QWidget *dialog)
     const bool dark = scheme == Qt::ColorScheme::Dark
         || (scheme == Qt::ColorScheme::Unknown && isDarkPalette(QGuiApplication::palette()));
     dialog->setStyleSheet(standaloneDialogStyleSheet(dark));
+}
+
+QScrollArea *createDialogBodyScrollArea(QWidget *body, QWidget *parent)
+{
+    Q_ASSERT(body != nullptr);
+    ensureTrailingStretch(body);
+    auto *scroll = new DialogBodyScrollArea(parent);
+    scroll->setBody(body);
+    return scroll;
 }
 
 } // namespace ShelliumUi

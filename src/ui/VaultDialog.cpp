@@ -290,7 +290,8 @@ VaultDialog::VaultDialog(CredentialVault *vault,
     auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(0);
-    layout->addWidget(body, 1);
+    // 调整窗口高度不改变行间距：高度不足时主体内部滚动，富余时留白在底部。
+    layout->addWidget(ShelliumUi::createDialogBodyScrollArea(body, this), 1);
     layout->addWidget(footer);
 
     connect(confirmButton, &QPushButton::clicked, this, &VaultDialog::accept);

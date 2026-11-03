@@ -20,6 +20,8 @@
 #include <QFileIconProvider>
 #include <QFrame>
 #include <QImage>
+#include <QScrollBar>
+#include <QScrollArea>
 #include <QWidget>
 #include <QPalette>
 #include <QHash>
@@ -1160,6 +1162,19 @@ void HostManagerWidgetTest::hostDialogUsesRequestedFieldOrderAndIcons()
             }
         }
         if (failure.isEmpty()) {
+            // 名称行（含分组与标签）排在主机卡片最前，地址和端口紧随其后。
+            const auto *name = dialog->findChild<QLineEdit *>(QStringLiteral("hostRecordNameEdit"));
+            const auto *address = dialog->findChild<QLineEdit *>(QStringLiteral("hostAddressEdit"));
+            const auto *port = dialog->findChild<QSpinBox *>(QStringLiteral("hostPortSpin"));
+            if (name == nullptr || address == nullptr || port == nullptr) {
+                failure = QStringLiteral("主机卡片缺少名称、地址或端口字段");
+            } else if (!(name->mapTo(dialog, QPoint{}).y() < address->mapTo(dialog, QPoint{}).y()
+                         && address->mapTo(dialog, QPoint{}).y()
+                             < port->mapTo(dialog, QPoint{}).y())) {
+                failure = QStringLiteral("主机卡片未按名称、主机地址、端口的顺序排列");
+            }
+        }
+        if (failure.isEmpty()) {
             const int usernameTop = username->mapTo(dialog, QPoint{}).y();
             const int passwordTop = password->mapTo(dialog, QPoint{}).y();
             const int identityTop = identity->mapTo(dialog, QPoint{}).y();
@@ -1180,6 +1195,34 @@ void HostManagerWidgetTest::hostDialogUsesRequestedFieldOrderAndIcons()
             if (!proxyJumps->isVisible()
                 || advancedSettings->arrowType() != Qt::DownArrow) {
                 failure = QStringLiteral("ProxyJump 高级入口无法正常展开");
+            }
+        }
+        // 展开高级设置后再把窗口压矮：各行保持自然高度（说明文字不被压扁重叠），
+        // 间距不变，多出的内容改为在主体内部滚动。
+        if (failure.isEmpty()) {
+            auto *scroll = dialog->findChild<QScrollArea *>(QStringLiteral("DialogBodyScroll"));
+            if (scroll == nullptr) {
+                failure = QStringLiteral("主机配置的表单主体没有放进滚动区");
+            } else {
+                QApplication::processEvents();
+                const auto gap = [&]() {
+                    return password->mapTo(scroll->widget(), QPoint{}).y()
+                        - username->mapTo(scroll->widget(), QPoint{}).y();
+                };
+                const int naturalGap = gap();
+                dialog->resize(dialog->width(), 360);
+                QApplication::processEvents();
+                bool hintsIntact = true;
+                for (const QLabel *label : dialog->findChildren<QLabel *>()) {
+                    if (label->isVisible() && label->wordWrap()
+                        && label->height() < label->heightForWidth(label->width())) {
+                        hintsIntact = false;
+                    }
+                }
+                if (gap() != naturalGap || scroll->verticalScrollBar()->maximum() <= 0
+                    || !hintsIntact) {
+                    failure = QStringLiteral("窗口变矮后行距被压缩、说明文字被截断，或主体没有改为滚动");
+                }
             }
         }
 
