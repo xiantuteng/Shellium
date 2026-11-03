@@ -1,7 +1,13 @@
 #pragma once
 
 #include <QColor>
+#include <QGuiApplication>
+#include <QHash>
 #include <QIcon>
+#include <QIconEngine>
+#include <QPaintDevice>
+#include <QPalette>
+#include <QPointer>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPixmap>
@@ -9,8 +15,11 @@
 #include <QSizeF>
 #include <QString>
 #include <QSvgRenderer>
+#include <QtMath>
+#include <QWidget>
 
 #include <algorithm>
+#include <cmath>
 
 /**
  * @brief 为已识别的远端 Linux 发行版生成侧栏图标：真实官方标志、按品牌色着色。
@@ -20,6 +29,10 @@
  * 背景上——不叠加圆形底板，保持和真实 Logo 一致的观感；多数发行版的官方标志本身就是
  * 单一颜色（如 Ubuntu 一直是纯橙色），这是它们真实的设计，不是本程序简化的结果。
  * 识别依据始终是 /etc/os-release 的 ID，版本号只用于提示文本，不影响图标映射。
+ *
+ * 品牌色在深色或浅色背景上可能几乎看不见（CentOS 的深藏蓝、通用企鹅的灰在深色侧栏里
+ * 都会糊成一片）。图标因此在绘制时读取当前背景色，对比度不足时只调整亮度，见
+ * detail::ensureContrast()；色相和饱和度不变，品牌仍可辨认。
  */
 namespace HostDistributionIcon {
 
@@ -204,8 +217,13 @@ namespace detail {
 
 } // namespace detail
 
-/** @brief 返回各发行版家族的图标填充色（取自品牌官方色，深浅收紧后保证对比度）。 */
-[[nodiscard]] inline QColor colorForFamily(const Family family)
+/**
+ * @brief 返回各发行版家族的品牌填充色（取自品牌官方色，亮度做过粗略收紧）。
+ *
+ * 这是与背景无关的基础色；实际绘制用 colorForFamily(family, background)，会再按背景
+ * 保证对比度。
+ */
+[[nodiscard]] inline QColor brandColorForFamily(const Family family)
 {
     switch (family) {
     case Family::Ubuntu:
@@ -276,6 +294,87 @@ namespace detail {
         return QColor(QStringLiteral("#667085"));
     }
     return QColor(QStringLiteral("#667085"));
+}
+
+namespace detail {
+
+/** @brief WCAG 2.x 相对亮度（sRGB 线性化后加权）。 */
+[[nodiscard]] inline qreal relativeLuminance(const QColor &color)
+{
+    const auto channel = [](const qreal value) {
+        return value <= 0.04045 ? value / 12.92 : std::pow((value + 0.055) / 1.055, 2.4);
+    };
+    const QColor rgb = color.toRgb();
+    return 0.2126 * channel(rgb.redF()) + 0.7152 * channel(rgb.greenF())
+        + 0.0722 * channel(rgb.blueF());
+}
+
+/** @brief WCAG 2.x 对比度，范围 1–21。 */
+[[nodiscard]] inline qreal contrastRatio(const QColor &first, const QColor &second)
+{
+    const qreal a = relativeLuminance(first);
+    const qreal b = relativeLuminance(second);
+    return (std::max(a, b) + 0.05) / (std::min(a, b) + 0.05);
+}
+
+/** @brief 浅色背景上图形元素的最低对比度，取 WCAG 1.4.11（非文本内容）的 3:1。 */
+constexpr qreal kMinimumGlyphContrastLight = 3.0;
+/**
+ * @brief 深色背景上的最低对比度。
+ *
+ * 侧栏图标只有约 20px，深色底上的细小彩色图形在视觉上比同等对比度的浅色底更暗：通用企鹅
+ * 的 #667085 在 #20232a 上已达 3.16:1，实际仍几乎看不清。因此深色背景提到 4.5:1。
+ * 浅色背景不跟着提高，避免把 Ubuntu 橙等本来清晰的品牌色压得发暗。
+ */
+constexpr qreal kMinimumGlyphContrastDark = 4.5;
+
+/**
+ * @brief 让 color 在 background 上达到最低对比度（深色背景 4.5:1，浅色背景 3:1）。
+ *
+ * 只沿 HSL 亮度轴移动：深色背景逐步提亮、浅色背景逐步压暗，色相与饱和度保持不变，
+ * 因此调整后仍是同一品牌色。已经足够清晰的颜色原样返回。
+ */
+[[nodiscard]] inline QColor ensureContrast(const QColor &color, const QColor &background)
+{
+    if (!background.isValid()) {
+        return color;
+    }
+    const bool darkBackground = relativeLuminance(background) < 0.18;
+    const qreal minimum = darkBackground ? kMinimumGlyphContrastDark : kMinimumGlyphContrastLight;
+    if (contrastRatio(color, background) >= minimum) {
+        return color;
+    }
+    float hue = 0.0F;
+    float saturation = 0.0F;
+    float lightness = 0.0F;
+    float alpha = 0.0F;
+    color.getHslF(&hue, &saturation, &lightness, &alpha);
+    if (hue < 0.0F) {
+        hue = 0.0F;
+    }
+    QColor adjusted = color;
+    for (int step = 0; step < 50; ++step) {
+        lightness = darkBackground ? std::min(1.0F, lightness + 0.02F)
+                                   : std::max(0.0F, lightness - 0.02F);
+        adjusted.setHslF(hue, saturation, lightness, alpha);
+        if (contrastRatio(adjusted, background) >= minimum
+            || lightness <= 0.0F || lightness >= 1.0F) {
+            break;
+        }
+    }
+    return adjusted;
+}
+
+} // namespace detail
+
+/**
+ * @brief 返回在指定背景上可清晰辨认的家族填充色。
+ * @param family 发行版家族。
+ * @param background 图标所在区域的背景色；无效颜色时直接返回品牌色。
+ */
+[[nodiscard]] inline QColor colorForFamily(const Family family, const QColor &background)
+{
+    return detail::ensureContrast(brandColorForFamily(family), background);
 }
 
 /**
@@ -415,13 +514,16 @@ namespace detail {
  * 与 UiIcons::Symbol::HostItem（"尚未识别，可能还没登录过"）在视觉上区分开。透明背景下
  * 主体直接用通用色填充，眼睛留白提供内部对比，不再依赖一个额外的圆底来撑场。
  */
-inline void paintGenericLinuxGlyph(QPainter &painter, const QColor &color)
+inline void paintGenericLinuxGlyph(QPainter &painter,
+                                   const QColor &color,
+                                   const QColor &background)
 {
     painter.setBrush(color);
     painter.setPen(Qt::NoPen);
     painter.drawEllipse(QRectF(21.0, 14.0, 22.0, 29.0));
     painter.drawEllipse(QRectF(16.0, 35.0, 32.0, 17.0));
-    painter.setBrush(Qt::white);
+    // 眼睛用背景色“镂空”：深色主题下主体被提亮后，固定白色的眼睛会和主体融成一片。
+    painter.setBrush(background.isValid() ? background : QColor(Qt::white));
     painter.drawEllipse(QRectF(25.0, 23.0, 4.0, 4.0));
     painter.drawEllipse(QRectF(35.0, 23.0, 4.0, 4.0));
 }
@@ -434,7 +536,9 @@ inline void paintGenericLinuxGlyph(QPainter &painter, const QColor &color)
  * OpenCloudOS 没有可随项目一起分发的官方矢量资源，因此单独绘制云形轮廓，避免把企鹅或
  * 其它发行版标志误当作 OpenCloudOS。轮廓保持小尺寸下的清晰度，适合主机列表图标容器。
  */
-inline void paintOpenCloudOSGlyph(QPainter &painter, const QColor &color)
+inline void paintOpenCloudOSGlyph(QPainter &painter,
+                                  const QColor &color,
+                                  const QColor &background)
 {
     Q_UNUSED(color)
     painter.setRenderHint(QPainter::Antialiasing, true);
@@ -454,10 +558,10 @@ inline void paintOpenCloudOSGlyph(QPainter &painter, const QColor &color)
     rightRibbon.cubicTo(55.0, 41.0, 48.0, 50.0, 37.0, 53.0);
     rightRibbon.cubicTo(39.0, 43.0, 36.0, 36.0, 29.0, 31.0);
     rightRibbon.cubicTo(24.0, 27.0, 25.0, 18.0, 32.0, 10.0);
-    painter.setPen(QPen(QColor(QStringLiteral("#16c1df")), 5.0,
+    painter.setPen(QPen(ensureContrast(QColor(QStringLiteral("#16c1df")), background), 5.0,
                         Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
     painter.drawPath(leftRibbon);
-    painter.setPen(QPen(QColor(QStringLiteral("#2674d9")), 5.0,
+    painter.setPen(QPen(ensureContrast(QColor(QStringLiteral("#2674d9")), background), 5.0,
                         Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
     painter.drawPath(rightRibbon);
 }
@@ -471,13 +575,13 @@ inline void paintOpenCloudOSGlyph(QPainter &painter, const QColor &color)
  * 可识别轮廓（角、头、躯干和尾部），并用相邻蓝色区块表达低多边形质感。这样 ID 为 kylin
  * 的主机不会错误显示成企鹅或其它发行版 Logo，同时在 20px 左右的列表尺寸仍保持清晰。
  */
-inline void paintKylinGlyph(QPainter &painter, const QColor &color)
+inline void paintKylinGlyph(QPainter &painter, const QColor &color, const QColor &background)
 {
     Q_UNUSED(color)
     painter.setRenderHint(QPainter::Antialiasing, true);
-    const QColor light(QStringLiteral("#4ca4eb"));
-    const QColor main(QStringLiteral("#2176d2"));
-    const QColor dark(QStringLiteral("#1855a5"));
+    const QColor light = ensureContrast(QColor(QStringLiteral("#4ca4eb")), background);
+    const QColor main = ensureContrast(QColor(QStringLiteral("#2176d2")), background);
+    const QColor dark = ensureContrast(QColor(QStringLiteral("#1855a5")), background);
     painter.setPen(Qt::NoPen);
     painter.setBrush(main);
     QPolygonF body;
@@ -512,11 +616,11 @@ inline void paintKylinGlyph(QPainter &painter, const QColor &color)
  * 统信 UOS 没有随项目分发的独立 SVG，使用蓝色圆角 U 形轮廓表达其品牌字母标识。专用
  * 绘制路径可与 Deepin、麒麟和未知 Linux 图标区分，避免同一台国产系统显示错误品牌。
  */
-inline void paintUosGlyph(QPainter &painter, const QColor &color)
+inline void paintUosGlyph(QPainter &painter, const QColor &color, const QColor &background)
 {
     Q_UNUSED(color)
     painter.setRenderHint(QPainter::Antialiasing, true);
-    painter.setPen(QPen(QColor(QStringLiteral("#2f80ed")), 7.0,
+    painter.setPen(QPen(ensureContrast(QColor(QStringLiteral("#2f80ed")), background), 7.0,
                         Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
     painter.setBrush(Qt::NoBrush);
     QPainterPath uShape;
@@ -526,7 +630,7 @@ inline void paintUosGlyph(QPainter &painter, const QColor &color)
     uShape.cubicTo(42.0, 51.0, 48.0, 45.0, 48.0, 34.0);
     uShape.lineTo(48.0, 16.0);
     painter.drawPath(uShape);
-    painter.setPen(QPen(QColor(QStringLiteral("#53b7ff")), 3.0,
+    painter.setPen(QPen(ensureContrast(QColor(QStringLiteral("#53b7ff")), background), 3.0,
                         Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
     painter.drawLine(QPointF(16.0, 16.0), QPointF(16.0, 11.0));
     painter.drawLine(QPointF(48.0, 16.0), QPointF(48.0, 11.0));
@@ -539,10 +643,12 @@ inline void paintUosGlyph(QPainter &painter, const QColor &color)
  * 独立的透明位图，再用 SourceIn 合成模式把所有非透明像素统一改写成传入的品牌色——不必
  * 解析或修改 SVG 内容，对任意路径数、任意视口比例的图标都成立。图标不再叠加圆底，直接
  * 以官方标志本来的颜色和形状展示，边距因此收窄到贴近真实 Logo 的留白比例。
+ *
+ * @param pixelSize 目标位图的物理像素边长；直接按该尺寸栅格化，高分屏不发虚。
  */
 inline void paintDistributionGlyph(QPainter &painter,
                                    const QString &resourcePath,
-                                   const int canvasSize,
+                                   const int pixelSize,
                                    const QColor &color)
 {
     QSvgRenderer renderer(resourcePath);
@@ -554,15 +660,16 @@ inline void paintDistributionGlyph(QPainter &painter,
         viewBox = QRectF(0.0, 0.0, 24.0, 24.0);
     }
 
-    constexpr qreal margin = 4.0;
-    const QRectF targetBounds(margin, margin, canvasSize - 2.0 * margin, canvasSize - 2.0 * margin);
+    // 边距沿用 64px 设计稿里的 4px，按实际像素尺寸等比缩放。
+    const qreal margin = 4.0 * pixelSize / 64.0;
+    const QRectF targetBounds(margin, margin, pixelSize - 2.0 * margin, pixelSize - 2.0 * margin);
     const QSizeF scaledGlyph = viewBox.size().scaled(targetBounds.size(), Qt::KeepAspectRatio);
     const QRectF centeredGlyph(targetBounds.center().x() - scaledGlyph.width() / 2.0,
                                targetBounds.center().y() - scaledGlyph.height() / 2.0,
                                scaledGlyph.width(),
                                scaledGlyph.height());
 
-    QPixmap glyph(canvasSize, canvasSize);
+    QPixmap glyph(pixelSize, pixelSize);
     glyph.fill(Qt::transparent);
     {
         QPainter glyphPainter(&glyph);
@@ -577,45 +684,167 @@ inline void paintDistributionGlyph(QPainter &painter,
     painter.drawPixmap(0, 0, glyph);
 }
 
-} // namespace detail
-
 /**
- * @brief 生成能随 QIcon 正常缩放的发行版图标。
- * @param distributionId 已验证的 /etc/os-release ID；空值返回空图标，由调用方显示通用主机。
- * @return 64px 透明位图包装的 QIcon；高于实际展示尺寸以保持 Retina 屏幕轮廓清晰。
+ * @brief 按指定背景栅格化一个发行版图标。
+ * @param family 发行版家族。
+ * @param pixelSize 输出位图的物理像素边长。
+ * @param background 图标所在区域的背景色，决定颜色是否需要提亮或压暗。
+ * @return 透明底、DPR=1 的位图。
  */
-[[nodiscard]] inline QIcon iconFor(const QString &distributionId)
+[[nodiscard]] inline QPixmap renderFamilyPixmap(const Family family,
+                                                const int pixelSize,
+                                                const QColor &background)
 {
-    if (distributionId.trimmed().isEmpty()) {
-        return {};
-    }
-
-    const Family family = familyForId(distributionId);
-    const QColor color = colorForFamily(family);
-
-    constexpr int canvasSize = 64;
-    QPixmap canvas(canvasSize, canvasSize);
+    const int size = std::max(1, pixelSize);
+    QPixmap canvas(size, size);
     canvas.fill(Qt::transparent);
     QPainter painter(&canvas);
     painter.setRenderHint(QPainter::Antialiasing, true);
 
+    const QColor color = colorForFamily(family, background);
     const QString resourcePath = svgResourcePathForFamily(family);
     if (resourcePath.isEmpty()) {
+        // 手绘图形都按 64x64 设计坐标编写，缩放画笔即可适配任意像素尺寸。
+        painter.scale(size / 64.0, size / 64.0);
         // OpenCloudOS 使用自己的云形标识；只有其它未收录发行版才回退通用 Linux 企鹅。
         if (family == Family::OpenCloudOS) {
-            detail::paintOpenCloudOSGlyph(painter, color);
+            paintOpenCloudOSGlyph(painter, color, background);
         } else if (family == Family::Kylin) {
-            detail::paintKylinGlyph(painter, color);
+            paintKylinGlyph(painter, color, background);
         } else if (family == Family::UOS) {
-            detail::paintUosGlyph(painter, color);
+            paintUosGlyph(painter, color, background);
         } else {
-            detail::paintGenericLinuxGlyph(painter, color);
+            paintGenericLinuxGlyph(painter, color, background);
         }
     } else {
-        detail::paintDistributionGlyph(painter, resourcePath, canvasSize, color);
+        paintDistributionGlyph(painter, resourcePath, size, color);
     }
     painter.end();
-    return QIcon(canvas);
+    return canvas;
+}
+
+/**
+ * @brief 取得图标所在区域的背景色。
+ *
+ * 优先读所属控件的调色板（主机树、标签列表都把背景画成 Window 色）；控件已销毁或未提供
+ * 时退回应用调色板，主题切换时两者都会被更新。
+ */
+[[nodiscard]] inline QColor backgroundFor(const QWidget *context)
+{
+    const QPalette palette = context != nullptr ? context->palette() : QGuiApplication::palette();
+    return palette.color(QPalette::Window);
+}
+
+/**
+ * @brief 在绘制时才决定颜色的发行版图标引擎。
+ *
+ * 主机树的条目图标只在建树时设置一次，主题切换后并不会重建；若像以前那样在创建时就把
+ * 颜色烤进位图，深色主题下就会一直沿用为浅色背景挑的颜色。这里每次 paint/pixmap 都读取
+ * 当前背景，并按（家族、像素尺寸、背景色）缓存栅格结果，避免每次重绘都重新解析 SVG。
+ */
+class DistributionIconEngine final : public QIconEngine {
+public:
+    DistributionIconEngine(const Family family, const QWidget *context)
+        : m_family(family)
+        , m_context(const_cast<QWidget *>(context))
+    {
+    }
+
+    [[nodiscard]] QIconEngine *clone() const override
+    {
+        return new DistributionIconEngine(*this);
+    }
+
+    void paint(QPainter *painter,
+               const QRect &rect,
+               const QIcon::Mode mode,
+               const QIcon::State state) override
+    {
+        Q_UNUSED(mode)
+        Q_UNUSED(state)
+        if (painter == nullptr || rect.isEmpty()) {
+            return;
+        }
+        const qreal ratio = painter->device() == nullptr
+            ? 1.0
+            : std::max<qreal>(1.0, painter->device()->devicePixelRatioF());
+        const int side = std::min(rect.width(), rect.height());
+        const QRect square(rect.left() + (rect.width() - side) / 2,
+                           rect.top() + (rect.height() - side) / 2, side, side);
+        painter->drawPixmap(square, cachedPixmap(qCeil(side * ratio)));
+    }
+
+    [[nodiscard]] QPixmap pixmap(const QSize &size,
+                                 const QIcon::Mode mode,
+                                 const QIcon::State state) override
+    {
+        return scaledPixmap(size, mode, state, 1.0);
+    }
+
+    [[nodiscard]] QPixmap scaledPixmap(const QSize &size,
+                                       const QIcon::Mode mode,
+                                       const QIcon::State state,
+                                       const qreal scale) override
+    {
+        Q_UNUSED(mode)
+        Q_UNUSED(state)
+        const qreal ratio = std::max<qreal>(1.0, scale);
+        const int side = std::max(1, std::min(size.width(), size.height()));
+        QPixmap result = cachedPixmap(qCeil(side * ratio));
+        result.setDevicePixelRatio(ratio);
+        return result;
+    }
+
+    [[nodiscard]] QSize actualSize(const QSize &size,
+                                   const QIcon::Mode mode,
+                                   const QIcon::State state) override
+    {
+        Q_UNUSED(mode)
+        Q_UNUSED(state)
+        const int side = std::min(size.width(), size.height());
+        return QSize(side, side);
+    }
+
+private:
+    [[nodiscard]] QPixmap cachedPixmap(const int pixelSize) const
+    {
+        const QColor background = backgroundFor(m_context.data());
+        // 只有少量家族 × 少数尺寸 × 两三种背景色，缓存规模很小；超过上限时整体清空即可。
+        static QHash<QString, QPixmap> cache;
+        const QString key = QStringLiteral("%1:%2:%3")
+                                .arg(static_cast<int>(m_family))
+                                .arg(pixelSize)
+                                .arg(background.rgba());
+        const auto found = cache.constFind(key);
+        if (found != cache.constEnd()) {
+            return *found;
+        }
+        if (cache.size() > 512) {
+            cache.clear();
+        }
+        const QPixmap rendered = renderFamilyPixmap(m_family, pixelSize, background);
+        cache.insert(key, rendered);
+        return rendered;
+    }
+
+    Family m_family;
+    QPointer<QWidget> m_context;
+};
+
+} // namespace detail
+
+/**
+ * @brief 生成随主题自适应颜色的发行版图标。
+ * @param distributionId 已验证的 /etc/os-release ID；空值返回空图标，由调用方显示通用主机。
+ * @param context 图标显示所在的控件，用来读取背景色；为空时读取应用调色板。
+ * @return 绘制时按当前背景着色的 QIcon，任意尺寸和像素比下都按实际像素栅格化。
+ */
+[[nodiscard]] inline QIcon iconFor(const QString &distributionId, const QWidget *context = nullptr)
+{
+    if (distributionId.trimmed().isEmpty()) {
+        return {};
+    }
+    return QIcon(new detail::DistributionIconEngine(familyForId(distributionId), context));
 }
 
 } // namespace HostDistributionIcon

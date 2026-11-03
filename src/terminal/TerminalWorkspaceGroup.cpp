@@ -1055,7 +1055,7 @@ public:
                 .paint(painter, glyphRect, Qt::AlignCenter);
         } else {
             QIcon distroIcon =
-                HostDistributionIcon::iconFor(index.data(kRowDistroRole).toString());
+                HostDistributionIcon::iconFor(index.data(kRowDistroRole).toString(), host);
             if (distroIcon.isNull() && host != nullptr) {
                 distroIcon =
                     UiIcons::symbol(host, UiIcons::Symbol::HostItem, textColor, QSize(18, 18));

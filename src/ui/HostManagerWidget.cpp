@@ -5127,7 +5127,7 @@ QTreeWidgetItem *HostManagerWidget::createTreeItem(const HostRecord &record) con
     QFont itemNameFont = m_tree->font();
     itemNameFont.setWeight(QFont::Normal);
     item->setFont(0, itemNameFont);
-    const QIcon distributionIcon = HostDistributionIcon::iconFor(record.distributionId);
+    const QIcon distributionIcon = HostDistributionIcon::iconFor(record.distributionId, m_tree);
     item->setIcon(
         0,
         record.kind == HostNodeKind::Folder

@@ -20,6 +20,9 @@
 #include <QFileIconProvider>
 #include <QFrame>
 #include <QImage>
+#include <QWidget>
+#include <QPalette>
+#include <QHash>
 #include <QKeySequence>
 #include <QLabel>
 #include <QLayout>
@@ -162,6 +165,11 @@ private slots:
 
     /** @brief 麒麟、统信 UOS 与深度系统的常见 os-release ID 都映射到各自图标。 */
     void domesticLinuxDistributionsUseDedicatedIcons();
+    /**
+     * @brief 发行版图标按所在背景自适应颜色：深色底至少 4.5:1、浅色底至少 3:1，
+     * 且同一个 QIcon 在调色板切换后立即换色，无需重建主机树。
+     */
+    void distributionIconsAdaptToBackground();
 
     /** @brief 标题数量必须统计全部嵌套主机，不能把分组或当前搜索结果计入。 */
     void hostCountTracksAllNestedHosts();
@@ -2511,6 +2519,82 @@ void HostManagerWidgetTest::domesticLinuxDistributionsUseDedicatedIcons()
         Q_UNUSED(family)
         QVERIFY(HostDistributionIcon::iconFor(id).pixmap(QSize(48, 48)).toImage() != generic);
     }
+}
+
+namespace {
+
+/** @brief 返回图标里出现次数最多的不透明颜色，即图形主体的填充色。 */
+QColor dominantOpaqueColor(const QImage &image)
+{
+    QHash<QRgb, int> counts;
+    const QImage argb = image.convertToFormat(QImage::Format_ARGB32);
+    for (int y = 0; y < argb.height(); ++y) {
+        for (int x = 0; x < argb.width(); ++x) {
+            const QRgb pixel = argb.pixel(x, y);
+            if (qAlpha(pixel) == 255) {
+                ++counts[pixel];
+            }
+        }
+    }
+    QRgb best = 0;
+    int bestCount = 0;
+    for (auto it = counts.cbegin(); it != counts.cend(); ++it) {
+        if (it.value() > bestCount) {
+            best = it.key();
+            bestCount = it.value();
+        }
+    }
+    return bestCount > 0 ? QColor::fromRgba(best) : QColor();
+}
+
+} // namespace
+
+void HostManagerWidgetTest::distributionIconsAdaptToBackground()
+{
+    const QColor darkWindow(QStringLiteral("#20232a"));
+    const QColor lightWindow(QStringLiteral("#f2f4f7"));
+    QWidget darkContext;
+    QPalette darkPalette = darkContext.palette();
+    darkPalette.setColor(QPalette::Window, darkWindow);
+    darkContext.setPalette(darkPalette);
+    QWidget lightContext;
+    QPalette lightPalette = lightContext.palette();
+    lightPalette.setColor(QPalette::Window, lightWindow);
+    lightContext.setPalette(lightPalette);
+
+    // CentOS 深藏蓝、AlmaLinux 黑、通用企鹅灰在深色底上原本几乎不可见；Elementary 浅蓝
+    // 和 Rocky 绿则是浅色底上的反例。
+    const QStringList ids{QStringLiteral("centos"), QStringLiteral("almalinux"),
+                          QStringLiteral("unknown-linux"), QStringLiteral("elementary"),
+                          QStringLiteral("rocky"), QStringLiteral("ubuntu")};
+    for (const QString &id : ids) {
+        const QColor onDark = dominantOpaqueColor(
+            HostDistributionIcon::iconFor(id, &darkContext).pixmap(QSize(48, 48)).toImage());
+        const QColor onLight = dominantOpaqueColor(
+            HostDistributionIcon::iconFor(id, &lightContext).pixmap(QSize(48, 48)).toImage());
+        QVERIFY2(onDark.isValid() && onLight.isValid(), qPrintable(id));
+        const qreal darkContrast = HostDistributionIcon::detail::contrastRatio(onDark, darkWindow);
+        const qreal lightContrast =
+            HostDistributionIcon::detail::contrastRatio(onLight, lightWindow);
+        // 8 位量化会让对比度在阈值附近浮动几个百分点。
+        QVERIFY2(darkContrast >= 4.4,
+                 qPrintable(QStringLiteral("%1 深色底对比度 %2").arg(id).arg(darkContrast)));
+        QVERIFY2(lightContrast >= 2.9,
+                 qPrintable(QStringLiteral("%1 浅色底对比度 %2").arg(id).arg(lightContrast)));
+    }
+
+    // 浅色主题下本已清晰的品牌色保持原值，不因自适应而改变。
+    QCOMPARE(HostDistributionIcon::colorForFamily(HostDistributionIcon::Family::CentOS, lightWindow),
+             HostDistributionIcon::brandColorForFamily(HostDistributionIcon::Family::CentOS));
+
+    // 主机树只在建树时设置一次图标；同一个 QIcon 必须在调色板切换后按新背景重绘。
+    QWidget switching;
+    switching.setPalette(lightPalette);
+    const QIcon centos = HostDistributionIcon::iconFor(QStringLiteral("centos"), &switching);
+    const QImage beforeSwitch = centos.pixmap(QSize(48, 48)).toImage();
+    switching.setPalette(darkPalette);
+    const QImage afterSwitch = centos.pixmap(QSize(48, 48)).toImage();
+    QVERIFY(beforeSwitch != afterSwitch);
 }
 
 void HostManagerWidgetTest::hostCountTracksAllNestedHosts()
