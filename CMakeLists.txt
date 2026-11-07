@@ -538,6 +538,12 @@ if(BUILD_TESTING)
     target_link_libraries(ShelliumButtonCursorTests PRIVATE Qt6::Widgets Qt6::Test)
     add_test(NAME ShelliumButtonCursorTests COMMAND ShelliumButtonCursorTests)
 
+    # 下拉框弹出层圆角策略是纯 Widgets 的应用级事件过滤器，独立验证无需数据库或会话。
+    qt_add_executable(ShelliumComboPopupTests tests/ComboPopupPolicyTest.cpp)
+    target_include_directories(ShelliumComboPopupTests PRIVATE src)
+    target_link_libraries(ShelliumComboPopupTests PRIVATE Qt6::Widgets Qt6::Test)
+    add_test(NAME ShelliumComboPopupTests COMMAND ShelliumComboPopupTests)
+
     # 悬停提示的位置与字号由应用级策略接管，独立验证无需数据库或会话。
     qt_add_executable(ShelliumToolTipTests tests/ToolTipPolicyTest.cpp)
     target_include_directories(ShelliumToolTipTests PRIVATE src)

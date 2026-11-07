@@ -7,6 +7,7 @@
 #include "storage/ApplicationDatabase.h"
 #include "ui/VaultDialog.h"
 #include "ui/ButtonCursorPolicy.h"
+#include "ui/ComboPopupPolicy.h"
 #include "ui/ScrollBarPolicy.h"
 #include "ui/ToolTipPolicy.h"
 
@@ -182,6 +183,8 @@ int main(int argc, char *argv[])
     new ScrollBarPolicy(application);
     // 悬停提示紧贴光标并使用正文字号；Qt 默认按 macOS 报告的超大光标尺寸偏移，离鼠标过远。
     new ToolTipPolicy(application);
+    // 所有下拉框的弹出层只保留圆角列表，不必在每个下拉框构造后手动调用 modernizePopup()。
+    new ComboPopupPolicy(application);
     QCoreApplication::setApplicationName(QStringLiteral("Shellium"));
     // 版本号由 CMake 从 project(VERSION) 注入，与 Info.plist、Windows 版本资源和安装包同源。
     QCoreApplication::setApplicationVersion(QStringLiteral(SHELLIUM_VERSION));
