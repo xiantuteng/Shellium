@@ -34,10 +34,10 @@ endif()
 # libssh 下限是 0.11：代码用到 sftp_aio、SSH_OPTIONS_PROXYJUMP、ssh_channel_get_exit_state、
 # ssh_channel_request_pty_size_modes 与 ssh_pki_export_privkey_base64_format，0.10 只会在编译期报错。
 find_package(libssh 0.11 CONFIG QUIET)
-find_package(libvterm 0.3 CONFIG QUIET)
+# libghostty-vt 1.0（tag vt-1.0.0）：稳定 C ABI，需 Zig 0.17.x 构建；安装后提供 ghostty-vt::ghostty-vt。
+find_package(ghostty-vt 1.0 CONFIG QUIET)
 find_package(sodium 1.0.18 CONFIG QUIET)
 find_package(unofficial-sodium CONFIG QUIET)
-find_package(unofficial-libvterm CONFIG QUIET)
 find_package(spdlog 1.12 CONFIG QUIET)
 # vcpkg 的 minizip 只提供 CMake Config（MINIZIP::minizip），Windows 上没有 pkg-config 可回退。
 find_package(minizip CONFIG QUIET)
@@ -69,8 +69,8 @@ function(shellium_resolve_dependency stable_name package_name minimum_version)
 endfunction()
 
 shellium_resolve_dependency(libssh libssh 0.11 libssh::libssh ssh)
-shellium_resolve_dependency(libvterm vterm 0.3
-    libvterm::libvterm vterm::vterm unofficial::libvterm vterm)
+shellium_resolve_dependency(ghosttyvt libghostty-vt 1.0
+    ghostty-vt::ghostty-vt ghostty-vt)
 shellium_resolve_dependency(libsodium libsodium 1.0.18
     sodium::sodium unofficial-sodium::sodium sodium)
 shellium_resolve_dependency(spdlog spdlog 1.12
@@ -246,6 +246,8 @@ set(SHELLIUM_APP_SOURCES
     src/terminal/TerminalPane.h
     src/terminal/TerminalView.cpp
     src/terminal/TerminalView.h
+    src/terminal/GhosttyScreen.cpp
+    src/terminal/GhosttyScreen.h
     src/terminal/VtermBridge.cpp
     src/terminal/VtermBridge.h
     src/terminal/TerminalWorkspace.cpp
@@ -386,7 +388,7 @@ target_link_libraries(Shellium PRIVATE
     Qt6::Sql
     Qt6::Svg
     ShelliumDependencies::libssh
-    ShelliumDependencies::libvterm
+    ShelliumDependencies::ghosttyvt
     ShelliumDependencies::libsodium
     ShelliumDependencies::minizip
     ShelliumDependencies::spdlog
@@ -590,6 +592,8 @@ if(BUILD_TESTING)
         src/terminal/TerminalEchoFilter.h
         src/terminal/TerminalView.cpp
         src/terminal/TerminalView.h
+        src/terminal/GhosttyScreen.cpp
+        src/terminal/GhosttyScreen.h
         src/terminal/VtermBridge.cpp
         src/terminal/VtermBridge.h
         src/terminal/LocalShellWorker.cpp
@@ -606,7 +610,7 @@ if(BUILD_TESTING)
         Qt6::Sql
         Qt6::Test
         ShelliumDependencies::libssh
-        ShelliumDependencies::libvterm
+        ShelliumDependencies::ghosttyvt
         ShelliumDependencies::libsodium
     )
     if(UNIX AND NOT APPLE)
@@ -735,6 +739,8 @@ if(BUILD_TESTING)
         src/terminal/TerminalPane.h
         src/terminal/TerminalView.cpp
         src/terminal/TerminalView.h
+        src/terminal/GhosttyScreen.cpp
+        src/terminal/GhosttyScreen.h
         src/terminal/VtermBridge.cpp
         src/terminal/VtermBridge.h
         src/ui/SettingsWidgets.cpp
@@ -748,7 +754,7 @@ if(BUILD_TESTING)
         Qt6::Widgets
         Qt6::Test
         ShelliumDependencies::libssh
-        ShelliumDependencies::libvterm
+        ShelliumDependencies::ghosttyvt
     )
     if(UNIX AND NOT APPLE)
         target_link_libraries(ShelliumProductivityTests PRIVATE util)
@@ -854,7 +860,7 @@ if(BUILD_TESTING)
         Qt6::Widgets
         Qt6::Test
         ShelliumDependencies::libssh
-        ShelliumDependencies::libvterm
+        ShelliumDependencies::ghosttyvt
         ShelliumDependencies::libsodium
         ShelliumDependencies::minizip
         ShelliumDependencies::spdlog
@@ -914,6 +920,8 @@ if(BUILD_TESTING)
         src/terminal/TerminalPane.h
         src/terminal/TerminalView.cpp
         src/terminal/TerminalView.h
+        src/terminal/GhosttyScreen.cpp
+        src/terminal/GhosttyScreen.h
         src/terminal/VtermBridge.cpp
         src/terminal/VtermBridge.h
         src/settings/TerminalSettings.cpp
@@ -930,7 +938,7 @@ if(BUILD_TESTING)
         Qt6::Widgets
         Qt6::Test
         ShelliumDependencies::libssh
-        ShelliumDependencies::libvterm
+        ShelliumDependencies::ghosttyvt
     )
     if(UNIX AND NOT APPLE)
         target_link_libraries(ShelliumSessionRecoveryTests PRIVATE util)
@@ -1238,12 +1246,14 @@ if(BUILD_TESTING)
         src/storage/ApplicationDatabase.h
         src/terminal/TerminalView.cpp
         src/terminal/TerminalView.h
+        src/terminal/GhosttyScreen.cpp
+        src/terminal/GhosttyScreen.h
         src/terminal/VtermBridge.cpp
         src/terminal/VtermBridge.h
     )
     target_include_directories(ShelliumTerminalAltScreenTests PRIVATE src)
     target_link_libraries(ShelliumTerminalAltScreenTests PRIVATE
-        Qt6::Core Qt6::Gui Qt6::Sql Qt6::Widgets Qt6::Test ShelliumDependencies::libvterm)
+        Qt6::Core Qt6::Gui Qt6::Sql Qt6::Widgets Qt6::Test ShelliumDependencies::ghosttyvt)
     add_test(NAME ShelliumTerminalAltScreenTests COMMAND ShelliumTerminalAltScreenTests)
 
     # `cat 二进制文件` 这类输出洪流的回归：libvterm 回流缩放的进程 abort、BEL 风暴限流、
@@ -1253,12 +1263,14 @@ if(BUILD_TESTING)
         tests/TerminalFloodTest.cpp
         src/terminal/LocalShellWorker.cpp
         src/terminal/LocalShellWorker.h
+        src/terminal/GhosttyScreen.cpp
+        src/terminal/GhosttyScreen.h
         src/terminal/VtermBridge.cpp
         src/terminal/VtermBridge.h
     )
     target_include_directories(ShelliumTerminalFloodTests PRIVATE src)
     target_link_libraries(ShelliumTerminalFloodTests PRIVATE
-        Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test ShelliumDependencies::libvterm)
+        Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test ShelliumDependencies::ghosttyvt)
     add_test(NAME ShelliumTerminalFloodTests COMMAND ShelliumTerminalFloodTests)
 
     # 多标签内存占用的回归：紧凑滚动历史、排版缓存释放、后台标签暂停同步，以及这些优化
@@ -1276,12 +1288,14 @@ if(BUILD_TESTING)
         src/storage/ApplicationDatabase.h
         src/terminal/TerminalView.cpp
         src/terminal/TerminalView.h
+        src/terminal/GhosttyScreen.cpp
+        src/terminal/GhosttyScreen.h
         src/terminal/VtermBridge.cpp
         src/terminal/VtermBridge.h
     )
     target_include_directories(ShelliumTerminalMemoryTests PRIVATE src)
     target_link_libraries(ShelliumTerminalMemoryTests PRIVATE
-        Qt6::Core Qt6::Gui Qt6::Sql Qt6::Widgets Qt6::Test ShelliumDependencies::libvterm)
+        Qt6::Core Qt6::Gui Qt6::Sql Qt6::Widgets Qt6::Test ShelliumDependencies::ghosttyvt)
     add_test(NAME ShelliumTerminalMemoryTests COMMAND ShelliumTerminalMemoryTests)
 
     # 针对真实服务器的连接路径回归。非阻塞握手状态机的价值就在于与真实 libssh 和真实
@@ -1316,6 +1330,8 @@ if(BUILD_TESTING)
         src/terminal/TerminalPane.h
         src/terminal/TerminalView.cpp
         src/terminal/TerminalView.h
+        src/terminal/GhosttyScreen.cpp
+        src/terminal/GhosttyScreen.h
         src/terminal/VtermBridge.cpp
         src/terminal/VtermBridge.h
         src/terminal/LocalShellWorker.cpp
@@ -1334,7 +1350,7 @@ if(BUILD_TESTING)
         Qt6::Widgets
         Qt6::Test
         ShelliumDependencies::libssh
-        ShelliumDependencies::libvterm
+        ShelliumDependencies::ghosttyvt
     )
     if(UNIX AND NOT APPLE)
         target_link_libraries(ShelliumSshIntegrationTests PRIVATE util)
@@ -1375,6 +1391,8 @@ if(BUILD_TESTING)
         src/terminal/TerminalPane.h
         src/terminal/TerminalView.cpp
         src/terminal/TerminalView.h
+        src/terminal/GhosttyScreen.cpp
+        src/terminal/GhosttyScreen.h
         src/terminal/VtermBridge.cpp
         src/terminal/VtermBridge.h
         src/terminal/LocalShellWorker.cpp
@@ -1393,7 +1411,7 @@ if(BUILD_TESTING)
         Qt6::Widgets
         Qt6::Test
         ShelliumDependencies::libssh
-        ShelliumDependencies::libvterm
+        ShelliumDependencies::ghosttyvt
     )
     if(UNIX AND NOT APPLE)
         target_link_libraries(ShelliumSftpUploadPipelineTests PRIVATE util)
@@ -1433,6 +1451,8 @@ if(BUILD_TESTING)
         src/terminal/TerminalPane.h
         src/terminal/TerminalView.cpp
         src/terminal/TerminalView.h
+        src/terminal/GhosttyScreen.cpp
+        src/terminal/GhosttyScreen.h
         src/terminal/VtermBridge.cpp
         src/terminal/VtermBridge.h
         src/terminal/LocalShellWorker.cpp
@@ -1451,7 +1471,7 @@ if(BUILD_TESTING)
         Qt6::Widgets
         Qt6::Test
         ShelliumDependencies::libssh
-        ShelliumDependencies::libvterm
+        ShelliumDependencies::ghosttyvt
     )
     if(UNIX AND NOT APPLE)
         target_link_libraries(ShelliumSftpResumeIntegrationTests PRIVATE util)

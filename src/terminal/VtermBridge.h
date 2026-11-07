@@ -8,7 +8,8 @@
 
 #include <cstddef>
 #include <deque>
-#include <vterm.h>
+#include <memory>
+#include "terminal/GhosttyScreen.h"
 
 class QTextBlock;
 class QTextCharFormat;
@@ -16,7 +17,7 @@ class QTextCursor;
 class QTextDocument;
 
 /**
- * @brief 封装 libvterm 的 VT220/xterm 状态机，并生成可由 Qt 绘制的终端文档。
+ * @brief 封装 libghostty-vt 的 VT/xterm 状态机，并生成可由 Qt 绘制的终端文档。
  *
  * 所有 feed/resize/render 调用均发生在 GUI 线程；SSH 与本地 PTY 的输出通过 Qt 队列信号
  * 进入该线程，因此 libvterm 实例无需额外锁。桥接层维护有界滚动历史（默认按行数与字节
@@ -142,16 +143,16 @@ public:
     [[nodiscard]] bool isAlternateScreen() const { return m_alternateScreen; }
 
     /**
-     * @brief 按 libvterm 的键盘模型编码一个特殊键，并通过 protocolResponse 发出字节。
-     * @param key libvterm 键枚举，例如 VTERM_KEY_UP、VTERM_KEY_PAGEUP。
-     * @param modifiers libvterm 修饰键掩码。
+     * @brief 按 libghostty-vt 的按键编码器编码一个特殊键，并通过 protocolResponse 发出字节。
+     * @param key libghostty-vt 键枚举，例如 GHOSTTY_KEY_ARROW_UP、GHOSTTY_KEY_PAGE_UP。
+     * @param modifiers GHOSTTY_MODS_* 修饰键掩码。
      *
      * 方向键、Home/End 和小键盘的字节形式取决于远端是否开启了 DECCKM（应用光标键）与
      * DECPAM（应用小键盘）——vim 进入全屏后就会开启。硬编码 CSI 形式会让 vim 在插入模式
      * 下把方向键读成 ESC 加一个普通字母，表现为方向键不动光标反而插入乱码。libvterm 自己
      * 保存着这些模式，交给它编码是唯一不会随远端模式漂移的做法。
      */
-    void sendKey(VTermKey key, VTermModifier modifiers = VTERM_MOD_NONE);
+    void sendKey(GhosttyKey key, GhosttyMods modifiers = 0);
 
     /**
      * @brief 发出括号粘贴的起止标记，仅在远端开启了 DECSET 2004 时才真正产生字节。
@@ -299,16 +300,7 @@ signals:
 
 private:
     /**
-     * @brief 让 libvterm 的当前画笔按刚设置的默认色重新取一次副本。
-     *
-     * 画笔里存的是解析好的 RGB，改默认色不会回头修它；DECSC/DECRC（vim 进出备用屏用的
-     * CSI ?1049h/l）会把这份陈旧 RGB 当成显式背景色回灌，退出 vim 后新打印的每一行都会
-     * 顶着一块与主题不符的底色。
-     */
-    void refreshPenDefaultColors();
-
-    /**
-     * @brief 在字节进入 libvterm 之前，给"超长仍未收尾"的 OSC/DCS 字符串补一个 CAN。
+     * @brief 在字节进入终端引擎之前，给"超长仍未收尾"的 OSC/DCS 字符串补一个 CAN。
      *
      * `tail` 一个二进制文件会把原始字节打进 PTY，凑出的残缺 `ESC ]` / `ESC P` 若始终没有
      * ST/BEL 收尾，libvterm 会把随后的提示符与用户输入一并吞进未结束的字符串，屏幕定格。
@@ -405,8 +397,11 @@ private:
         int cursorColumn = -1; ///< 该行是光标行时的光标列，否则为 -1。
     };
 
-    /** @brief 将 libvterm 单元格转换为可长期保存的 Qt 值对象。 */
-    [[nodiscard]] Cell convertCell(const VTermScreenCell &cell) const;
+    /** @brief 将引擎单元格转换为可长期保存的 Qt 值对象（默认色按当前主题解析）。 */
+    [[nodiscard]] Cell convertCell(const GhosttyScreen::Cell &cell) const;
+
+    /** @brief 将引擎的一整行转换为 Qt 行。 */
+    [[nodiscard]] Line convertRow(const GhosttyScreen::Row &row) const;
 
     /** @brief 读取当前屏幕指定行。 */
     [[nodiscard]] Line screenLine(int row) const;
@@ -500,42 +495,25 @@ private:
     /** @brief 追加一行滚动历史并立即执行上限裁剪。 */
     void appendScrollbackLine(Line line);
 
-    /**
-     * @brief 把落在当前网格之外的光标夹回网格内。
-     *
-     * 必须在每次 vterm_set_size 之前调用：越界的光标会让 libvterm 0.3.3 直接 abort 掉
-     * 整个进程。越界只可能由 DECRC 造成，详见实现处的注释。
-     */
-    void clampCursorIntoGrid();
+    /** @brief 把引擎新滚入历史的行取出，追加进自有滚动历史。 */
+    void syncScrollback();
 
-    /** @brief libvterm 输出协议响应时调用。 */
-    static void outputCallback(const char *bytes, size_t length, void *user);
-    static int damageCallback(VTermRect rect, void *user);
-    static int moveRectCallback(VTermRect destination, VTermRect source, void *user);
-    static int moveCursorCallback(VTermPos position, VTermPos oldPosition, int visible, void *user);
-    static int termPropertyCallback(VTermProp property, VTermValue *value, void *user);
-    static int bellCallback(void *user);
-    static int resizeCallback(int rows, int columns, void *user);
-    static int pushScrollbackCallback(int columns, const VTermScreenCell *cells, void *user);
-    static int popScrollbackCallback(int columns, VTermScreenCell *cells, void *user);
-    static int clearScrollbackCallback(void *user);
+    /** @brief 一次 feed 切片之后同步光标、备用屏状态与滚动历史。 */
+    void refreshEngineState();
 
-    /**
-     * @brief libvterm 未识别 OSC 的回调；Shell 集成事件由此进入。
-     * @return 恒返回 1 表示已消费，避免序列被当作可打印文本渲染到屏幕上。
-     */
-    static int oscCallback(int command, VTermStringFragment fragment, void *user);
+    /** @brief 把当前主题的默认色与 ANSI 调色板推给引擎。 */
+    void applyColors();
 
-    VTerm *m_vterm = nullptr;
-    VTermScreen *m_screen = nullptr;
+    /** @brief 引擎回调接线；回调在 feed() 内同步触发。 */
+    void connectEngineCallbacks();
 
-    /**
-     * @brief 跨分片累积的 OSC 载荷。
-     *
-     * libvterm 会把一条 OSC 按网络分包切成多个 fragment 逐次回调，必须等到 final 标志
-     * 才能解析；否则被拆开的命令行会被解析成半截主机名。
-     */
-    QByteArray m_oscBuffer;
+    std::unique_ptr<GhosttyScreen> m_screen;
+    QColor m_defaultForeground {230, 230, 230};
+    QColor m_defaultBackground {17, 19, 24};
+    QVector<QColor> m_ansiPalette;
+    /** @brief resetTerminal() 期间为 true：引擎历史被复位清空不代表要丢弃已归档的历史。 */
+    bool m_suppressHistoryErase = false;
+
     /** @brief 用 deque 保证头部淘汰为 O(1)；QVector::remove(0,…) 在洪流时是 O(n²)。 */
     std::deque<PackedLine> m_scrollback;
     /** @brief m_scrollback 的近似字节合计，与 estimateLineBytes 同步维护。 */

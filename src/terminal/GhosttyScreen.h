@@ -34,7 +34,7 @@ public:
         bool strike = false;
         bool reverse = false;
         bool conceal = false;
-        int width = 1;           ///< 宽字符为 2；宽字符的尾随占位格不会出现在结果里
+        int width = 1;           ///< 宽字符为 2；其右半占位格 width=0 且 utf8 为空，保持与列一一对应
     };
 
     using Row = std::vector<Cell>;
@@ -73,6 +73,18 @@ public:
     [[nodiscard]] Row activeRow(int row) const;
     /// 读取历史第 index 行（0 为最旧）。越界返回空行。
     [[nodiscard]] Row historyRow(std::size_t index) const;
+    /// 活动区第 row 行是否是上一行自动折行的延续（libvterm 的 lineinfo.continuation）。
+    [[nodiscard]] bool rowContinues(int row) const;
+    /**
+     * @brief 取出自上次调用以来新滚入主屏历史的行（由旧到新）。
+     *
+     * libghostty-vt 没有“行被推入历史”的回调，这里用一个跟踪网格引用钉住上次取走的最后
+     * 一行：它会随滚动自动移动，被库内历史上限淘汰时变为“无值”，此时库里剩下的历史都是
+     * 新行。备用屏没有历史，直接返回空。
+     * @param historyErased 非空时，若上次取走的行已不存在且当前历史为空（被 ED 3 / 复位
+     *        整体清掉），置为 true；调用方据此丢弃自己保存的那份历史。
+     */
+    [[nodiscard]] std::vector<Row> takeNewHistoryRows(bool *historyErased = nullptr);
 
     /// 按当前远端模式（DECCKM/DECPAM/Kitty 等）编码按键，返回应发送给远端的字节。
     [[nodiscard]] std::string encodeKey(GhosttyKey key, GhosttyMods mods) const;
@@ -92,13 +104,14 @@ private:
     static void unknownThunk(GhosttyTerminal, void *, const GhosttyTerminalUnknownSequence *);
 
     [[nodiscard]] Row readRow(const GhosttyPoint &point) const;
+    void retrackHistory(std::size_t total);
     [[nodiscard]] bool modeEnabled(GhosttyMode mode) const;
-    [[nodiscard]] Rgb resolve(const GhosttyStyleColor &color) const;
+    [[nodiscard]] static Rgb resolve(const GhosttyStyleColor &color, const GhosttyColorRgb *palette);
 
     GhosttyTerminal m_terminal = nullptr;
     GhosttyKeyEncoder m_keyEncoder = nullptr;
     GhosttyKeyEvent m_keyEvent = nullptr;
+    GhosttyTrackedGridRef m_historyTracker = nullptr;
     int m_columns = 80;
     int m_rows = 24;
-    GhosttyColorRgb m_palette[256] = {};
 };

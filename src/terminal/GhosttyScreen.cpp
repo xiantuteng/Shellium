@@ -5,7 +5,9 @@
 
 namespace {
 
-constexpr std::size_t kUnknownSequenceMaxBytes = 4096;
+constexpr std::uint32_t kNominalCellWidthPx = 8;
+constexpr std::uint32_t kNominalCellHeightPx = 16;
+constexpr std::size_t kUnknownSequenceMaxBytes = 8192 + 16;
 
 void appendCodepoint(std::string &out, std::uint32_t cp)
 {
@@ -57,12 +59,13 @@ GhosttyScreen::GhosttyScreen(const int columns, const int rows)
     ghostty_key_encoder_new(nullptr, &m_keyEncoder);
     ghostty_key_event_new(nullptr, &m_keyEvent);
 
-    // 缓存当前调色板，用于解析 PALETTE 类型的样式色。
-    ghostty_terminal_get(m_terminal, GHOSTTY_TERMINAL_DATA_COLOR_PALETTE, m_palette);
 }
 
 GhosttyScreen::~GhosttyScreen()
 {
+    if (m_historyTracker != nullptr) {
+        ghostty_tracked_grid_ref_free(m_historyTracker);
+    }
     if (m_keyEvent != nullptr) {
         ghostty_key_event_free(m_keyEvent);
     }
@@ -90,7 +93,7 @@ void GhosttyScreen::resize(const int columns, const int rows)
     m_columns = std::max(1, columns);
     m_rows = std::max(1, rows);
     ghostty_terminal_resize(m_terminal, static_cast<std::uint16_t>(m_columns),
-                            static_cast<std::uint16_t>(m_rows), 0, 0);
+                            static_cast<std::uint16_t>(m_rows), kNominalCellWidthPx, kNominalCellHeightPx);
 }
 
 void GhosttyScreen::reset()
@@ -122,7 +125,6 @@ void GhosttyScreen::setAnsiPalette(const std::vector<Rgb> &colors)
         palette[i] = toGhostty(colors[i]);
     }
     ghostty_terminal_set(m_terminal, GHOSTTY_TERMINAL_OPT_COLOR_PALETTE, palette);
-    std::memcpy(m_palette, palette, sizeof(m_palette));
 }
 
 void GhosttyScreen::setScrollbackMaxLines(const std::size_t lines)
@@ -183,13 +185,14 @@ std::size_t GhosttyScreen::scrollbackRows() const
     return rows;
 }
 
-GhosttyScreen::Rgb GhosttyScreen::resolve(const GhosttyStyleColor &color) const
+GhosttyScreen::Rgb GhosttyScreen::resolve(const GhosttyStyleColor &color,
+                                          const GhosttyColorRgb *palette)
 {
     switch (color.tag) {
     case GHOSTTY_STYLE_COLOR_RGB:
         return Rgb{color.value.rgb.r, color.value.rgb.g, color.value.rgb.b, true};
     case GHOSTTY_STYLE_COLOR_PALETTE: {
-        const GhosttyColorRgb &c = m_palette[color.value.palette];
+        const GhosttyColorRgb &c = palette[color.value.palette];
         return Rgb{c.r, c.g, c.b, true};
     }
     default:
@@ -204,6 +207,10 @@ GhosttyScreen::Row GhosttyScreen::readRow(const GhosttyPoint &basePoint) const
     if (m_terminal == nullptr) {
         return row;
     }
+
+    // 调色板可能被远端 OSC 4 改写，每行现取一次，避免缓存过期。
+    GhosttyColorRgb palette[256] = {};
+    ghostty_terminal_get(m_terminal, GHOSTTY_TERMINAL_DATA_COLOR_PALETTE, palette);
 
     for (int x = 0; x < m_columns; ++x) {
         GhosttyPoint point = basePoint;
@@ -222,7 +229,10 @@ GhosttyScreen::Row GhosttyScreen::readRow(const GhosttyPoint &basePoint) const
         GhosttyCellWide wide = GHOSTTY_CELL_WIDE_NARROW;
         ghostty_cell_get(raw, GHOSTTY_CELL_DATA_WIDE, &wide);
         if (wide == GHOSTTY_CELL_WIDE_SPACER_TAIL || wide == GHOSTTY_CELL_WIDE_SPACER_HEAD) {
-            continue; // 宽字符的占位格并入前一格的 width=2
+            Cell spacer;
+            spacer.width = 0; // 占位格：渲染循环据此跳过，列号保持对齐
+            row.push_back(std::move(spacer));
+            continue;
         }
 
         Cell cell;
@@ -239,8 +249,8 @@ GhosttyScreen::Row GhosttyScreen::readRow(const GhosttyPoint &basePoint) const
         GhosttyStyle style{};
         ghostty_style_default(&style);
         ghostty_grid_ref_style(&ref, &style);
-        cell.foreground = resolve(style.fg_color);
-        cell.background = resolve(style.bg_color);
+        cell.foreground = resolve(style.fg_color, palette);
+        cell.background = resolve(style.bg_color, palette);
         cell.bold = (style.flags & GHOSTTY_STYLE_FLAG_BOLD) != 0;
         cell.italic = (style.flags & GHOSTTY_STYLE_FLAG_ITALIC) != 0;
         cell.reverse = (style.flags & GHOSTTY_STYLE_FLAG_INVERSE) != 0;
@@ -272,6 +282,78 @@ GhosttyScreen::Row GhosttyScreen::historyRow(const std::size_t index) const
     point.tag = GHOSTTY_POINT_TAG_HISTORY;
     point.value.coordinate.y = static_cast<std::uint32_t>(index);
     return readRow(point);
+}
+
+bool GhosttyScreen::rowContinues(const int row) const
+{
+    if (m_terminal == nullptr || row < 0 || row >= m_rows) {
+        return false;
+    }
+    GhosttyPoint point{};
+    point.tag = GHOSTTY_POINT_TAG_ACTIVE;
+    point.value.coordinate.y = static_cast<std::uint32_t>(row);
+    GhosttyGridRef ref{};
+    if (ghostty_terminal_grid_ref(m_terminal, point, &ref) != GHOSTTY_SUCCESS) {
+        return false;
+    }
+    GhosttyRow raw{};
+    if (ghostty_grid_ref_row(&ref, &raw) != GHOSTTY_SUCCESS) {
+        return false;
+    }
+    bool continuation = false;
+    ghostty_row_get(raw, GHOSTTY_ROW_DATA_WRAP_CONTINUATION, &continuation);
+    return continuation;
+}
+
+void GhosttyScreen::retrackHistory(const std::size_t total)
+{
+    if (total == 0) {
+        if (m_historyTracker != nullptr) {
+            ghostty_tracked_grid_ref_free(m_historyTracker);
+            m_historyTracker = nullptr;
+        }
+        return;
+    }
+    GhosttyPoint point{};
+    point.tag = GHOSTTY_POINT_TAG_HISTORY;
+    point.value.coordinate.y = static_cast<std::uint32_t>(total - 1);
+    if (m_historyTracker == nullptr) {
+        if (ghostty_terminal_grid_ref_track(m_terminal, point, &m_historyTracker) != GHOSTTY_SUCCESS) {
+            m_historyTracker = nullptr;
+        }
+    } else {
+        ghostty_tracked_grid_ref_set(m_historyTracker, m_terminal, point);
+    }
+}
+
+std::vector<GhosttyScreen::Row> GhosttyScreen::takeNewHistoryRows(bool *historyErased)
+{
+    if (historyErased != nullptr) {
+        *historyErased = false;
+    }
+    std::vector<Row> rows;
+    if (m_terminal == nullptr || isAlternateScreen()) {
+        return rows;
+    }
+    const std::size_t total = scrollbackRows();
+    std::size_t start = 0;
+    if (historyErased != nullptr && m_historyTracker != nullptr && total == 0) {
+        *historyErased = true;
+    }
+    if (m_historyTracker != nullptr) {
+        GhosttyPointCoordinate coordinate{};
+        if (ghostty_tracked_grid_ref_point(m_historyTracker, GHOSTTY_POINT_TAG_HISTORY, &coordinate)
+            == GHOSTTY_SUCCESS) {
+            start = static_cast<std::size_t>(coordinate.y) + 1;
+        }
+    }
+    start = std::min(start, total);
+    rows.reserve(total - start);
+    for (std::size_t index = start; index < total; ++index) {
+        rows.push_back(historyRow(index));
+    }
+    retrackHistory(total);
+    return rows;
 }
 
 std::string GhosttyScreen::encodeKey(const GhosttyKey key, const GhosttyMods mods) const

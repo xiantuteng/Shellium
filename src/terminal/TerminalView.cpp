@@ -301,47 +301,47 @@ QString clipboardPasteShortcutText()
  * 只翻译 Shift/Control/Alt 三种终端协议认识的修饰。macOS 的 Command 不参与：它是应用级
  * 快捷键，不该出现在发往 PTY 的字节里。
  */
-VTermModifier toVtermModifiers(const QKeyEvent *event)
+GhosttyMods toTerminalModifiers(const QKeyEvent *event)
 {
-    unsigned int modifiers = VTERM_MOD_NONE;
+    GhosttyMods modifiers = 0;
     if (event->modifiers().testFlag(Qt::ShiftModifier)) {
-        modifiers |= VTERM_MOD_SHIFT;
+        modifiers |= GHOSTTY_MODS_SHIFT;
     }
     if (hasTerminalControlModifier(event)) {
-        modifiers |= VTERM_MOD_CTRL;
+        modifiers |= GHOSTTY_MODS_CTRL;
     }
     if (event->modifiers().testFlag(Qt::AltModifier)) {
-        modifiers |= VTERM_MOD_ALT;
+        modifiers |= GHOSTTY_MODS_ALT;
     }
-    return static_cast<VTermModifier>(modifiers);
+    return modifiers;
 }
 
 /**
- * @brief 把 Qt 键码映射为 libvterm 键枚举。
+ * @brief 把 Qt 键码映射为 libghostty-vt 键枚举。
  * @return 该键需要由 libvterm 按当前终端模式编码时返回对应枚举，否则返回 std::nullopt。
  *
  * 这些键的字节形式不是固定的：DECCKM（应用光标键）开启后方向键从 `CSI A` 变成 `SS3 A`，
  * 而 vim、less、htop 进入全屏时都会开启它。硬编码 CSI 形式会让 vim 在插入模式下把方向键
  * 读成 ESC 加一个普通字母——按上箭头不是移动光标，而是退出插入模式并执行一条编辑命令。
  */
-std::optional<VTermKey> terminalNavigationKey(const int key)
+std::optional<GhosttyKey> terminalNavigationKey(const int key)
 {
     switch (key) {
-    case Qt::Key_Up: return VTERM_KEY_UP;
-    case Qt::Key_Down: return VTERM_KEY_DOWN;
-    case Qt::Key_Left: return VTERM_KEY_LEFT;
-    case Qt::Key_Right: return VTERM_KEY_RIGHT;
-    case Qt::Key_Home: return VTERM_KEY_HOME;
-    case Qt::Key_End: return VTERM_KEY_END;
-    case Qt::Key_PageUp: return VTERM_KEY_PAGEUP;
-    case Qt::Key_PageDown: return VTERM_KEY_PAGEDOWN;
-    case Qt::Key_Insert: return VTERM_KEY_INS;
-    case Qt::Key_Delete: return VTERM_KEY_DEL;
+    case Qt::Key_Up: return GHOSTTY_KEY_ARROW_UP;
+    case Qt::Key_Down: return GHOSTTY_KEY_ARROW_DOWN;
+    case Qt::Key_Left: return GHOSTTY_KEY_ARROW_LEFT;
+    case Qt::Key_Right: return GHOSTTY_KEY_ARROW_RIGHT;
+    case Qt::Key_Home: return GHOSTTY_KEY_HOME;
+    case Qt::Key_End: return GHOSTTY_KEY_END;
+    case Qt::Key_PageUp: return GHOSTTY_KEY_PAGE_UP;
+    case Qt::Key_PageDown: return GHOSTTY_KEY_PAGE_DOWN;
+    case Qt::Key_Insert: return GHOSTTY_KEY_INSERT;
+    case Qt::Key_Delete: return GHOSTTY_KEY_DELETE;
     default:
         break;
     }
     if (key >= Qt::Key_F1 && key <= Qt::Key_F12) {
-        return static_cast<VTermKey>(VTERM_KEY_FUNCTION_0 + 1 + (key - Qt::Key_F1));
+        return static_cast<GhosttyKey>(GHOSTTY_KEY_F1 + (key - Qt::Key_F1));
     }
     return std::nullopt;
 }
@@ -1730,12 +1730,12 @@ void TerminalView::keyPressEvent(QKeyEvent *event)
     // 方向键、翻页、Insert/Delete 和功能键的字节形式取决于远端当前的 DECCKM/DECPAM 模式，
     // 必须由保存着这些模式的 libvterm 编码；它生成的字节经 protocolResponse 转成 inputBytes。
     // Ctrl+Insert / Shift+Insert 是终端上唯一不与 SIGINT 冲突的复制粘贴键位，必须在
-    // Insert 被当作导航键编码成 VTERM_KEY_INS 之前放行，否则它们只会作为普通 Insert
+    // Insert 被当作导航键编码成 GHOSTTY_KEY_INSERT 之前放行，否则它们只会作为普通 Insert
     // 发给远端，用户看到的现象是这两个键完全没有反应。
     const bool clipboardInsert = event->key() == Qt::Key_Insert
         && (isClipboardCopyShortcut(event) || isClipboardPasteShortcut(event));
 
-    if (const std::optional<VTermKey> navigationKey = terminalNavigationKey(event->key());
+    if (const std::optional<GhosttyKey> navigationKey = terminalNavigationKey(event->key());
         navigationKey.has_value() && !clipboardInsert) {
         if (m_commandCompleter->popup()->isVisible()
             && (event->key() == Qt::Key_Up || event->key() == Qt::Key_Down)) {
@@ -1750,7 +1750,7 @@ void TerminalView::keyPressEvent(QKeyEvent *event)
             notePromptAnchor();
             m_commandLineEditedRemotely = true;
         }
-        m_vtermBridge->sendKey(*navigationKey, toVtermModifiers(event));
+        m_vtermBridge->sendKey(*navigationKey, toTerminalModifiers(event));
         event->accept();
         return;
     }
@@ -1910,7 +1910,7 @@ void TerminalView::wheelEvent(QWheelEvent *event)
     const int lines = m_wheelAccumulator * kStepsPerNotch / kUnitsPerNotch;
     if (lines != 0) {
         m_wheelAccumulator -= lines * kUnitsPerNotch / kStepsPerNotch;
-        const VTermKey key = lines > 0 ? VTERM_KEY_UP : VTERM_KEY_DOWN;
+        const GhosttyKey key = lines > 0 ? GHOSTTY_KEY_ARROW_UP : GHOSTTY_KEY_ARROW_DOWN;
         for (int step = 0; step < std::abs(lines); ++step) {
             m_vtermBridge->sendKey(key);
         }

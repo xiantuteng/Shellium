@@ -18,142 +18,109 @@ namespace {
  */
 constexpr int kLineHeightAnchorProperty = QTextFormat::UserProperty + 1;
 
-/** @brief 把 libvterm RGB/索引颜色统一转换为 QColor。 */
-QColor toQColor(const VTermScreen *screen, VTermColor color)
-{
-    vterm_screen_convert_color_to_rgb(screen, &color);
-    return QColor(color.rgb.red, color.rgb.green, color.rgb.blue);
-}
-
 /**
  * @brief 解析前景色，并将 `ll` 常用的目录蓝统一为 `#015fff`。
- * @param screen libvterm 屏幕实例，用于把索引色解析为 RGB。
- * @param color 单元格原始前景色，可能是 ANSI/256 色索引，也可能是 TrueColor。
- * @return 交给 Qt 绘制的前景色；命中目录蓝时返回 `#015fff`。
  *
- * 服务器的 LS_COLORS 可以使用 `38;5;27`，这不属于主题可覆盖的 ANSI 0-15 号色。
- * libvterm 会把 27 号色解析为 `#005fff`，所以只修改 TerminalPalette::ansi 不会对
- * 这类 `ll` 输出生效。同时检查原始索引和解析后 RGB，是为了兼容远端改用
- * `38;2;0;95;255` TrueColor 表达同一颜色的情况。
+ * 服务器的 LS_COLORS 可以使用 `38;5;27`（解析为 #005fff），也可能直接用
+ * `38;2;0;95;255` TrueColor；引擎交来的已经是解析后的 RGB，所以只比较 RGB 即可同时覆盖
+ * 两种写法。该色不属于主题可覆盖的 ANSI 0-15 号色，因此需要在这里单独处理。
  */
-QColor toForegroundQColor(const VTermScreen *screen, const VTermColor color)
+QColor foregroundQColor(const GhosttyScreen::Rgb &color, const QColor &fallback)
 {
-    constexpr uint8_t kXtermDirectoryBlueIndex = 27;
-    const bool usesXtermDirectoryBlue =
-        VTERM_COLOR_IS_INDEXED(&color) && color.indexed.idx == kXtermDirectoryBlueIndex;
-    const QColor resolved = toQColor(screen, color);
-
-    // 256 色 27 号本身解析为 #005fff；此处把索引色和等价 TrueColor
-    // 写法统一调整为用户指定的 #015fff，避免两种 LS_COLORS 表达产生色差。
-    if (usesXtermDirectoryBlue || resolved == QColor(QStringLiteral("#005fff"))) {
+    if (!color.valid) {
+        return fallback;
+    }
+    const QColor resolved(color.r, color.g, color.b);
+    if (resolved == QColor(QStringLiteral("#005fff"))) {
         return QColor(QStringLiteral("#015fff"));
     }
     return resolved;
 }
 
+QColor backgroundQColor(const GhosttyScreen::Rgb &color, const QColor &fallback)
+{
+    return color.valid ? QColor(color.r, color.g, color.b) : fallback;
+}
+
+GhosttyScreen::Rgb toRgb(const QColor &color)
+{
+    return GhosttyScreen::Rgb{static_cast<std::uint8_t>(color.red()),
+                              static_cast<std::uint8_t>(color.green()),
+                              static_cast<std::uint8_t>(color.blue()), true};
+}
+
+/// 引擎一次最多喂这么多字节再同步历史：库内历史上限（见构造函数）必须大于单次切片可能
+/// 滚出的行数，否则最旧的新行会在读取前被库淘汰。每滚出一行至少需要 1 字节。
+constexpr qsizetype kFeedSliceBytes = 4096;
+constexpr std::size_t kEngineScrollbackLines = 8192;
+
 } // namespace
 
 VtermBridge::VtermBridge(QObject *parent)
     : QObject(parent)
-    // 成员按声明顺序初始化，m_vterm 位于尺寸字段之前，不能在此读取尚未初始化的 m_rows。
-    // 使用与字段默认值一致的常量可避免随机尺寸导致 libvterm resize 断言失败。
-    , m_vterm(vterm_new(24, 80))
+    , m_screen(std::make_unique<GhosttyScreen>(80, 24))
 {
-    if (m_vterm == nullptr) {
-        qFatal("无法创建 libvterm 实例");
+    if (!m_screen->isValid()) {
+        qFatal("无法创建 libghostty-vt 终端实例");
     }
-    vterm_set_utf8(m_vterm, 1);
-    vterm_output_set_callback(m_vterm, &VtermBridge::outputCallback, this);
+    // 滚动历史由本类自己的 PackedLine 队列持有（带行/字节双上限）；引擎内的历史只是中转
+    // 站，保留 8192 行，足以容纳一个 4 KiB 切片滚出的全部行（见 kFeedSliceBytes）。
+    m_screen->setScrollbackMaxLines(kEngineScrollbackLines);
+    connectEngineCallbacks();
+    applyColors();
+}
 
-    m_screen = vterm_obtain_screen(m_vterm);
-    static const VTermScreenCallbacks callbacks = {
-        &VtermBridge::damageCallback,
-        &VtermBridge::moveRectCallback,
-        &VtermBridge::moveCursorCallback,
-        &VtermBridge::termPropertyCallback,
-        &VtermBridge::bellCallback,
-        &VtermBridge::resizeCallback,
-        &VtermBridge::pushScrollbackCallback,
-        &VtermBridge::popScrollbackCallback,
-        &VtermBridge::clearScrollbackCallback
+void VtermBridge::connectEngineCallbacks()
+{
+    // 引擎回调在 feed() 内同步触发，且不得在回调里再次 feed。
+    m_screen->onWritePty = [this](const std::string &bytes) {
+        emit protocolResponse(QByteArray(bytes.data(), static_cast<qsizetype>(bytes.size())));
     };
-    vterm_screen_set_callbacks(m_screen, &callbacks, this);
-
-    // libvterm 自己只认识 OSC 0/1/2（窗口标题）。Shell 集成使用一个私有编号，因此必须
-    // 注册未识别序列的兜底回调，否则整条序列会被当作普通文本打印到用户屏幕上。
-    static const VTermStateFallbacks fallbacks = {
-        nullptr,                    // control
-        nullptr,                    // csi
-        &VtermBridge::oscCallback,  // osc
-        nullptr,                    // dcs
-        nullptr,                    // apc
-        nullptr,                    // pm
-        nullptr                     // sos
+    m_screen->onTitleChanged = [this](const std::string &title) {
+        emit titleChanged(QString::fromUtf8(title.data(), static_cast<qsizetype>(title.size())));
     };
-    vterm_screen_set_unrecognised_fallbacks(m_screen, &fallbacks, this);
-    vterm_screen_set_damage_merge(m_screen, VTERM_DAMAGE_SCROLL);
-    vterm_screen_enable_altscreen(m_screen, 1);
-    // 回流（缩放时按新宽度重排已换行的长行）必须保持关闭——这也是 libvterm 的默认值。
-    //
-    // libvterm 0.3.3 的 screen.c 在回流路径上会 abort 掉整个进程：resize_buffer() 自底向上
-    // 重排逻辑行，某条行放不进新网格时它只用
-    //     if(old_row_start <= old_cursor.row && old_cursor.row < old_row_end)
-    // 补救光标（末尾的 `<` 是 off-by-one），补不到就
-    //     fprintf(stderr, "screen_resize failed to update cursor position"); abort();
-    // ——不是断言，Release 下照样死。`cat` 一个二进制文件正好制造触发条件：文件里长段没有
-    // 换行，屏幕被一条横跨整屏的逻辑行填满，此后任何一次缩小网格都可能触发，包括
-    // noteRenderedCellHeight() 的首帧行高纠正，也就是说用户什么都不用做。
-    //
-    // 曾尝试"识别危险状态再临时关掉回流"，这条路走不通，别再试：判据只能预测上游那段有
-    // 缺陷的代码会怎么走，而连续多轮缩放（真实的窗口拖拽就是这样）会积累出判据覆盖不到的
-    // 状态。随机内容 + 连续多轮缩放的 fuzz：4000 例里 646 次 abort，判据漏掉 436 次；同一套
-    // fuzz 在关闭回流下 20000 例零 abort。代价是缩放不再重排长行（变窄时尾部被截断），这
-    // 正是不做回流的终端的一贯行为，用整个进程的存活换它是划算的。
-    //
-    // libvterm 修掉这个 off-by-one 之后可以重新打开，届时请连同上面的 fuzz 一起重跑。
-    vterm_screen_enable_reflow(m_screen, false);
-
-    VTermColor foreground;
-    VTermColor background;
-    vterm_color_rgb(&foreground, 230, 230, 230);
-    vterm_color_rgb(&background, 17, 19, 24);
-    vterm_screen_set_default_colors(m_screen, &foreground, &background);
-    vterm_screen_reset(m_screen, 1);
+    m_screen->onBell = [this]() {
+        // BEL 只是一个普通字节（0x07），二进制文件里满地都是：`cat` 一个 34MB 的 jar 就含
+        // 122873 个。一个字节一次 bell 意味着 GUI 线程要在解析循环里同步响十几万次铃，
+        // 界面完全没有机会重绘。真实终端都有这条限流，xterm 的 bellSuppressTime 默认是
+        // 200ms，这里取同一个值；抑制窗口内的铃声直接丢弃而不是排队补响。
+        constexpr qint64 kBellSuppressMilliseconds = 200;
+        if (m_lastBellElapsed.isValid() && m_lastBellElapsed.elapsed() < kBellSuppressMilliseconds) {
+            return;
+        }
+        m_lastBellElapsed.restart();
+        emit bell();
+    };
+    m_screen->onUnknownOsc = [this](const std::string &content) {
+        // 引擎只认识标准 OSC；Shell 集成使用私有编号 6773，其余未识别 OSC 一律静默丢弃
+        // （引擎不会把它们当文本打印）。content 形如 "6773;<payload>"。
+        static const QByteArray prefix = QByteArrayLiteral("6773;");
+        const QByteArray bytes(content.data(), static_cast<qsizetype>(content.size()));
+        if (!bytes.startsWith(prefix)) {
+            return;
+        }
+        // 单条事件最长也就一行命令；超长载荷只可能来自异常或恶意输出，直接丢弃。
+        if (bytes.size() - prefix.size() > 8192) {
+            return;
+        }
+        emit shellIntegrationEvent(bytes.mid(prefix.size()));
+    };
 }
 
-int VtermBridge::oscCallback(const int command, const VTermStringFragment fragment, void *user)
+void VtermBridge::applyColors()
 {
-    auto *bridge = static_cast<VtermBridge *>(user);
-    // 只处理 Shellium 私有编号，其余未识别 OSC 一律静默丢弃：把它们渲染出来只会在用户
-    // 屏幕上留下乱码。
-    constexpr int kShelliumOsc = 6773;
-    if (command != kShelliumOsc) {
-        return 1;
-    }
-
-    if (fragment.initial) {
-        bridge->m_oscBuffer.clear();
-    }
-    bridge->m_oscBuffer.append(fragment.str, static_cast<qsizetype>(fragment.len));
-    // 单条事件最长也就一行命令；超长载荷只可能来自异常或恶意输出，直接丢弃以免无限增长。
-    if (bridge->m_oscBuffer.size() > 8192) {
-        bridge->m_oscBuffer.clear();
-        return 1;
-    }
-    if (fragment.final) {
-        const QByteArray payload = bridge->m_oscBuffer;
-        bridge->m_oscBuffer.clear();
-        emit bridge->shellIntegrationEvent(payload);
-    }
-    return 1;
-}
-
-VtermBridge::~VtermBridge()
-{
-    if (m_vterm != nullptr) {
-        vterm_free(m_vterm);
+    m_screen->setDefaultColors(toRgb(m_defaultForeground), toRgb(m_defaultBackground));
+    if (m_ansiPalette.size() == 16) {
+        std::vector<GhosttyScreen::Rgb> colors;
+        colors.reserve(16);
+        for (const QColor &color : std::as_const(m_ansiPalette)) {
+            colors.push_back(toRgb(color));
+        }
+        m_screen->setAnsiPalette(colors);
     }
 }
+
+VtermBridge::~VtermBridge() = default;
 
 void VtermBridge::feed(const QByteArray &bytes)
 {
@@ -161,8 +128,44 @@ void VtermBridge::feed(const QByteArray &bytes)
         return;
     }
     const QByteArray safe = boundUnterminatedString(bytes);
-    vterm_input_write(m_vterm, safe.constData(), static_cast<size_t>(safe.size()));
-    vterm_screen_flush_damage(m_screen);
+    // 切片喂入并在每片之后同步滚动历史：引擎没有"行被推入历史"的通知，只能靠取走新行。
+    for (qsizetype offset = 0; offset < safe.size(); offset += kFeedSliceBytes) {
+        const qsizetype length = std::min(kFeedSliceBytes, safe.size() - offset);
+        m_screen->feed(safe.constData() + offset, static_cast<std::size_t>(length));
+        refreshEngineState();
+    }
+}
+
+void VtermBridge::refreshEngineState()
+{
+    const bool alternate = m_screen->isAlternateScreen();
+    if (alternate != m_alternateScreen) {
+        m_alternateScreen = alternate;
+        // 主备屏的文档构成完全不同（备用屏不含滚动历史），必须整体重建。
+        invalidateDocument();
+        emit alternateScreenChanged(alternate);
+    }
+    syncScrollback();
+    const GhosttyScreen::Cursor cursor = m_screen->cursor();
+    m_cursorRow = cursor.row;
+    m_cursorColumn = cursor.column;
+    m_cursorVisible = cursor.visible;
+}
+
+void VtermBridge::syncScrollback()
+{
+    bool historyErased = false;
+    const std::vector<GhosttyScreen::Row> rows = m_screen->takeNewHistoryRows(&historyErased);
+    if (historyErased && !m_suppressHistoryErase) {
+        // 远端发了 ED 3（`clear` 通常会带上）：丢弃自己保存的历史，文档也只能整体重建。
+        m_scrollback.clear();
+        m_scrollbackApproxBytes = 0;
+        invalidateDocument();
+    }
+    for (const GhosttyScreen::Row &row : rows) {
+        // 只增不减的全局行号是增量同步的坐标系（在 appendScrollbackLine 内递增）。
+        appendScrollbackLine(convertRow(row));
+    }
 }
 
 QByteArray VtermBridge::boundUnterminatedString(const QByteArray &bytes)
@@ -251,8 +254,8 @@ void VtermBridge::resetTerminal()
     // CAN 取消残留的 CSI/OSC/DCS，ST 再结束字符串；直接软复位画笔无法退出解析器的
     // 字符串状态，下一条提示仍可能被吞掉。先退出备用屏，避免归档全屏程序的临时画布。
     const QByteArray cancelAndLeave = QByteArrayLiteral("\x18\x1b\\\x1b[?1049l");
-    vterm_input_write(m_vterm, cancelAndLeave.constData(),
-                      static_cast<size_t>(cancelAndLeave.size()));
+    m_screen->feed(cancelAndLeave.constData(), static_cast<std::size_t>(cancelAndLeave.size()));
+    refreshEngineState();
     int lastRow = lastVisibleScreenRow();
     // 空终端没有需要归档的内容；跳过尾部空行，避免首次连接凭空多出一行并改变提示位置。
     while (lastRow >= 0) {
@@ -266,55 +269,18 @@ void VtermBridge::resetTerminal()
     for (int row = 0; row <= lastRow; ++row) {
         appendScrollbackLine(screenLine(row));
     }
-    m_oscBuffer.clear();
     m_stringScan = StringScan::Normal;
     m_stringScanLength = 0;
     m_corruptionDetected = false;
     // 硬复位同时恢复隐藏属性、颜色、光标、字符集和键盘模式；仅发 SGR 0 无法覆盖这些
     // 状态。默认色及调色板属于当前主题配置，libvterm 复位继续使用这些配置。
-    vterm_screen_reset(m_screen, 1);
-    vterm_set_utf8(m_vterm, 1);
-    vterm_screen_flush_damage(m_screen);
+    m_suppressHistoryErase = true; // 复位会清空引擎历史，但我们刚归档的内容要保留
+    m_screen->reset();
+    // 主题色属于配置而非终端状态，复位后重新推一遍，避免引擎退回库默认色。
+    applyColors();
+    refreshEngineState();
+    m_suppressHistoryErase = false;
     invalidateDocument();
-}
-
-void VtermBridge::clampCursorIntoGrid()
-{
-    VTermState *state = vterm_obtain_state(m_vterm);
-    if (state == nullptr) {
-        return;
-    }
-    VTermPos cursor {};
-    vterm_state_get_cursorpos(state, &cursor);
-    if (cursor.row >= 0 && cursor.row < m_rows
-        && cursor.col >= 0 && cursor.col < m_columns) {
-        return;
-    }
-
-    // 走到这里说明 libvterm 的光标已经落在当前网格之外。唯一的来源是 DECRC（`ESC 8`）：
-    // state.c 的 savecursor(state, 0) 直接 `state->pos = state->saved.pos`，**不做任何夹
-    // 取**，而 on_resize 缩小网格时只夹 state->pos，从不更新 state->saved.pos。于是
-    //     大网格里 ESC 7 → 网格缩小 → ESC 8
-    // 就把一个越界的行号灌了回来。`cat` 一个二进制文件必然撞上：ESC 7 / ESC 8 不过是两个
-    // 字节的巧合组合，而缩放随时会发生（改窗口、缩放字号，甚至 TerminalView 首帧的行高
-    // 纠正）。
-    //
-    // 后果是下一次 vterm_set_size 直接 abort 掉整个进程：resize_buffer() 遍历旧网格找
-    // old_cursor 所在行，越界的行号永远找不到，new_cursor 保持 {-1,-1}，函数随即
-    //     fprintf(stderr, "screen_resize failed to update cursor position"); abort();
-    // 这条路径与回流无关（关掉回流照样复现），必须单独修。
-    //
-    // libvterm 没有公开的光标写接口，因此用它自己的协议把光标搬回来：CUP 在 on_csi 收尾
-    // 处一定会被夹进网格（origin 模式夹进滚动区，非 origin 夹进 [0, rows-1]），两种模式
-    // 都保证落回范围内。这正是 on_resize 对 state->pos 做的同一件事——光标此刻已经是非法
-    // 值，把它夹回最近的合法位置是修复而不是破坏。
-    const int row = std::clamp(cursor.row, 0, m_rows - 1);
-    const int column = std::clamp(cursor.col, 0, m_columns - 1);
-    const QByteArray reposition = QByteArrayLiteral("\x1b[")
-        + QByteArray::number(row + 1) + QByteArrayLiteral(";")
-        + QByteArray::number(column + 1) + QByteArrayLiteral("H");
-    vterm_input_write(m_vterm, reposition.constData(),
-                      static_cast<size_t>(reposition.size()));
 }
 
 void VtermBridge::resize(const int rows, const int columns)
@@ -324,33 +290,20 @@ void VtermBridge::resize(const int rows, const int columns)
     if (normalizedRows == m_rows && normalizedColumns == m_columns) {
         return;
     }
-    // 必须在 vterm_set_size 之前：越界光标会让它 abort 掉整个进程。
-    clampCursorIntoGrid();
     m_rows = normalizedRows;
     m_columns = normalizedColumns;
-    vterm_set_size(m_vterm, m_rows, m_columns);
-    vterm_screen_flush_damage(m_screen);
-    // 改变网格会让 libvterm 回流当前屏幕，已经写进文档的段与新的行列不再对应。
+    m_screen->resize(m_columns, m_rows);
+    // 缩小行数时引擎会把顶部几行挤进历史，必须立刻取走，否则会和之后的新行混在一起。
+    refreshEngineState();
+    // 已经写进文档的段与新的行列不再对应。
     invalidateDocument();
 }
 
 void VtermBridge::setDefaultColors(const QColor &foreground, const QColor &background)
 {
-    const QColor safeForeground = foreground.isValid() ? foreground : QColor(Qt::white);
-    const QColor safeBackground = background.isValid() ? background : QColor(Qt::black);
-
-    VTermColor nativeForeground;
-    VTermColor nativeBackground;
-    vterm_color_rgb(&nativeForeground,
-                    static_cast<uint8_t>(safeForeground.red()),
-                    static_cast<uint8_t>(safeForeground.green()),
-                    static_cast<uint8_t>(safeForeground.blue()));
-    vterm_color_rgb(&nativeBackground,
-                    static_cast<uint8_t>(safeBackground.red()),
-                    static_cast<uint8_t>(safeBackground.green()),
-                    static_cast<uint8_t>(safeBackground.blue()));
-    vterm_screen_set_default_colors(m_screen, &nativeForeground, &nativeBackground);
-    refreshPenDefaultColors();
+    m_defaultForeground = foreground.isValid() ? foreground : QColor(Qt::white);
+    m_defaultBackground = background.isValid() ? background : QColor(Qt::black);
+    applyColors();
     // 默认色变化会改写每一格未显式着色的文本，已渲染的段全部过期。
     invalidateDocument();
 }
@@ -367,60 +320,10 @@ void VtermBridge::setAnsiPalette(const QVector<QColor> &colors)
             return;
         }
     }
-
-    VTermState *state = vterm_obtain_state(m_vterm);
-    if (state == nullptr) {
-        return;
-    }
-    for (int index = 0; index < colors.size(); ++index) {
-        const QColor &color = colors.at(index);
-        VTermColor native;
-        vterm_color_rgb(&native,
-                        static_cast<uint8_t>(color.red()),
-                        static_cast<uint8_t>(color.green()),
-                        static_cast<uint8_t>(color.blue()));
-        vterm_state_set_palette_color(state, index, &native);
-    }
+    m_ansiPalette = colors;
+    applyColors();
     // 已渲染的段保存的是解析后的 RGB，调色板换了它们不会自己更新。
     invalidateDocument();
-}
-
-void VtermBridge::refreshPenDefaultColors()
-{
-    // libvterm 把"默认色"在两个地方各存了一份：一份是 state 里的 default_fg/default_bg，
-    // vterm_screen_set_default_colors() 改的正是它；另一份是当前画笔 state->pen，它在
-    // 复位时按当时的默认色取了一份**已经解析成 RGB 的副本**。改默认色不会回头去修画笔，
-    // 于是画笔里留着构造期兜底色（#111318）那一份 RGB。
-    //
-    // 平时看不出来：正常输出走的是 screen 自己那份画笔，颜色是对的。但 DECSC/DECRC——
-    // 也就是 vim 进出备用屏用的 CSI ?1049h/l——会把 state->pen 存档再回灌，回灌时那份
-    // 陈旧 RGB 就被当成"显式指定的背景色"推给了 screen。表现为退出 vim 之后，新打印的
-    // 每一行都顶着一块比终端背景更黑的底色，且和用户选的主题对不上。
-    //
-    // 没有公开接口能直接改 state->pen，只能借 SGR 39/49（前景/背景恢复默认）让 libvterm
-    // 按新的默认色重新取一次副本。仅在画笔当前确实是"默认色"时才注入：远端如果正显式
-    // 指定着颜色，它手里的色号本来就与默认色无关，注入只会把远端的颜色抹掉；而远端下一次
-    // 自己发 SGR 0 时，libvterm 就会按此刻这份新的默认色重新解析，不需要我们插手。
-    VTermState *state = vterm_obtain_state(m_vterm);
-    if (state == nullptr) {
-        return;
-    }
-
-    QByteArray resetSequence;
-    VTermValue penValue {};
-    if (vterm_state_get_penattr(state, VTERM_ATTR_FOREGROUND, &penValue) != 0
-        && VTERM_COLOR_IS_DEFAULT_FG(&penValue.color)) {
-        resetSequence += "\x1b[39m";
-    }
-    if (vterm_state_get_penattr(state, VTERM_ATTR_BACKGROUND, &penValue) != 0
-        && VTERM_COLOR_IS_DEFAULT_BG(&penValue.color)) {
-        resetSequence += "\x1b[49m";
-    }
-    if (resetSequence.isEmpty()) {
-        return;
-    }
-    vterm_input_write(m_vterm, resetSequence.constData(),
-                      static_cast<size_t>(resetSequence.size()));
 }
 
 void VtermBridge::setScrollbackLimit(const int lineCount)
@@ -662,22 +565,30 @@ int VtermBridge::releaseBlockLayouts(QTextDocument *document, const int firstBlo
     return last - first + 1;
 }
 
-void VtermBridge::sendKey(const VTermKey key, const VTermModifier modifiers)
+void VtermBridge::sendKey(const GhosttyKey key, const GhosttyMods modifiers)
 {
-    // vterm_keyboard_key 会读取自己保存的 DECCKM/DECPAM 状态并把编码结果交给
-    // outputCallback，因此这些字节和 libvterm 生成的 DSR/DA 应答走同一条 protocolResponse
-    // 通路，最终由 TerminalView 转成 inputBytes 发往 PTY。
-    vterm_keyboard_key(m_vterm, key, modifiers);
+    // 编码器按终端当前保存的 DECCKM/DECPAM/Kitty 键盘模式生成字节，和 DSR/DA 应答走同一条
+    // protocolResponse 通路，最终由 TerminalView 转成 inputBytes 发往 PTY。
+    const std::string bytes = m_screen->encodeKey(key, modifiers);
+    if (!bytes.empty()) {
+        emit protocolResponse(QByteArray(bytes.data(), static_cast<qsizetype>(bytes.size())));
+    }
 }
 
 void VtermBridge::beginPaste()
 {
-    vterm_keyboard_start_paste(m_vterm);
+    const std::string marker = m_screen->pasteMarker(true);
+    if (!marker.empty()) {
+        emit protocolResponse(QByteArray(marker.data(), static_cast<qsizetype>(marker.size())));
+    }
 }
 
 void VtermBridge::endPaste()
 {
-    vterm_keyboard_end_paste(m_vterm);
+    const std::string marker = m_screen->pasteMarker(false);
+    if (!marker.empty()) {
+        emit protocolResponse(QByteArray(marker.data(), static_cast<qsizetype>(marker.size())));
+    }
 }
 
 QString VtermBridge::cursorLineText() const
@@ -704,11 +615,7 @@ VtermBridge::InputLine VtermBridge::cursorInputLine() const
         return result;
     }
 
-    VTermState *state = vterm_obtain_state(m_vterm);
-    const auto continues = [state](const int row) {
-        const VTermLineInfo *info = vterm_state_get_lineinfo(state, row);
-        return info != nullptr && info->continuation;
-    };
+    const auto continues = [this](const int row) { return m_screen->rowContinues(row); };
     int firstRow = m_cursorRow;
     while (firstRow > 0 && continues(firstRow)) {
         --firstRow;
@@ -1186,172 +1093,45 @@ bool VtermBridge::render(QTextDocument *document)
     return false;
 }
 
-VtermBridge::Cell VtermBridge::convertCell(const VTermScreenCell &cell) const
+VtermBridge::Cell VtermBridge::convertCell(const GhosttyScreen::Cell &cell) const
 {
     Cell converted;
-
-    // 双宽字符（中日韩、全角标点、部分表情）占两个终端格。libvterm 把右半格标记为
-    // 0xFFFFFFFF 而不是 0，因此不能只靠“chars[0] 为 0”判空：那个哨兵值不是合法码位，
-    // QString::fromUcs4 会把它转成 U+FFFD，于是每个汉字后面都跟出一个 � 占位符。
-    constexpr uint32_t kWideCharContinuation = 0xffffffffU;
-    if (cell.chars[0] == kWideCharContinuation) {
-        // 宽度置 0，渲染循环据此跳过该格；右半格的内容已经由左半格一并绘制。
+    // 宽字符右半格 width=0：渲染循环据此跳过该格，内容已由左半格一并绘制。
+    if (cell.width == 0) {
         converted.width = 0;
         return converted;
     }
-
-    qsizetype characterCount = 0;
-    while (characterCount < VTERM_MAX_CHARS_PER_CELL && cell.chars[characterCount] != 0) {
-        ++characterCount;
+    if (!cell.utf8.empty()) {
+        converted.text = QString::fromUtf8(cell.utf8.data(), static_cast<qsizetype>(cell.utf8.size()));
     }
-    if (characterCount > 0) {
-        static_assert(sizeof(char32_t) == sizeof(cell.chars[0]));
-        converted.text = QString::fromUcs4(
-            reinterpret_cast<const char32_t *>(cell.chars), characterCount);
-    }
-    converted.foreground = toForegroundQColor(m_screen, cell.fg);
-    converted.background = toQColor(m_screen, cell.bg);
-    converted.bold = cell.attrs.bold;
-    converted.italic = cell.attrs.italic;
-    converted.underline = cell.attrs.underline != VTERM_UNDERLINE_OFF;
-    converted.strike = cell.attrs.strike;
-    converted.reverse = cell.attrs.reverse;
-    converted.conceal = cell.attrs.conceal;
+    converted.foreground = foregroundQColor(cell.foreground, m_defaultForeground);
+    converted.background = backgroundQColor(cell.background, m_defaultBackground);
+    converted.bold = cell.bold;
+    converted.italic = cell.italic;
+    converted.underline = cell.underline;
+    converted.strike = cell.strike;
+    converted.reverse = cell.reverse;
+    converted.conceal = cell.conceal;
     converted.width = cell.width;
     return converted;
 }
 
-VtermBridge::Line VtermBridge::screenLine(const int row) const
+VtermBridge::Line VtermBridge::convertRow(const GhosttyScreen::Row &row) const
 {
     Line line;
-    line.reserve(m_columns);
-    for (int column = 0; column < m_columns; ++column) {
-        VTermScreenCell cell {};
-        vterm_screen_get_cell(m_screen, VTermPos{row, column}, &cell);
+    line.reserve(static_cast<qsizetype>(row.size()));
+    for (const GhosttyScreen::Cell &cell : row) {
         line.append(convertCell(cell));
     }
     return line;
 }
 
-void VtermBridge::outputCallback(const char *bytes, const size_t length, void *user)
+VtermBridge::Line VtermBridge::screenLine(const int row) const
 {
-    auto *bridge = static_cast<VtermBridge *>(user);
-    emit bridge->protocolResponse(QByteArray(bytes, static_cast<qsizetype>(length)));
-}
-
-int VtermBridge::damageCallback(VTermRect, void *)
-{
-    return 1;
-}
-
-int VtermBridge::moveRectCallback(VTermRect, VTermRect, void *)
-{
-    return 1;
-}
-
-int VtermBridge::moveCursorCallback(const VTermPos position,
-                                    VTermPos,
-                                    const int visible,
-                                    void *user)
-{
-    auto *bridge = static_cast<VtermBridge *>(user);
-    bridge->m_cursorRow = position.row;
-    bridge->m_cursorColumn = position.col;
-    bridge->m_cursorVisible = visible != 0;
-    return 1;
-}
-
-int VtermBridge::termPropertyCallback(const VTermProp property, VTermValue *value, void *user)
-{
-    auto *bridge = static_cast<VtermBridge *>(user);
-    if ((property == VTERM_PROP_TITLE || property == VTERM_PROP_ICONNAME)
-        && value != nullptr && value->string.str != nullptr) {
-        emit bridge->titleChanged(QString::fromUtf8(value->string.str,
-                                                    static_cast<qsizetype>(value->string.len)));
-    } else if (property == VTERM_PROP_CURSORVISIBLE && value != nullptr) {
-        bridge->m_cursorVisible = value->boolean != 0;
-    } else if (property == VTERM_PROP_ALTSCREEN && value != nullptr) {
-        const bool active = value->boolean != 0;
-        if (active != bridge->m_alternateScreen) {
-            bridge->m_alternateScreen = active;
-            // 主备屏的文档构成完全不同（备用屏不含滚动历史），必须整体重建。
-            bridge->invalidateDocument();
-            emit bridge->alternateScreenChanged(active);
-        }
+    Line line = convertRow(m_screen->activeRow(row));
+    // 引擎在尺寸异常时可能返回短行；补足到网格宽度，调用方按列号索引。
+    while (line.size() < m_columns) {
+        line.append(Cell{});
     }
-    return 1;
-}
-
-int VtermBridge::bellCallback(void *user)
-{
-    auto *bridge = static_cast<VtermBridge *>(user);
-    // BEL 只是一个普通字节（0x07），二进制文件里满地都是：用户 `cat` 的那个 34MB jar 就含
-    // 122873 个。一个字节一次 bell 意味着 GUI 线程要在解析循环里同步响十几万次铃——macOS
-    // 上每次 QApplication::beep() 都会把一声系统提示音压进音频队列，于是命令早已跑完，机器
-    // 还在"嘟嘟"响个不停；这段时间界面也完全没有机会重绘。
-    //
-    // 真实终端都有这条限流，xterm 的 bellSuppressTime 默认正是 200ms，这里取同一个值。
-    // 抑制窗口内的铃声直接丢弃而不是排队补响——补响只会把噪音推迟到命令结束之后。响铃的
-    // 语义是"提醒用户一次"，把连续的铃声合成一声不丢任何信息。
-    //
-    // 限流放在这里而不是放在某个消费方，是因为它是终端语义的一部分：可听响铃、将来可能
-    // 的视觉响铃都该看到同一串已经合并好的事件。
-    constexpr qint64 kBellSuppressMilliseconds = 200;
-    if (bridge->m_lastBellElapsed.isValid()
-        && bridge->m_lastBellElapsed.elapsed() < kBellSuppressMilliseconds) {
-        return 1;
-    }
-    bridge->m_lastBellElapsed.restart();
-    emit bridge->bell();
-    return 1;
-}
-
-int VtermBridge::resizeCallback(const int rows, const int columns, void *user)
-{
-    auto *bridge = static_cast<VtermBridge *>(user);
-    bridge->m_rows = rows;
-    bridge->m_columns = columns;
-    bridge->invalidateDocument();
-    return 1;
-}
-
-int VtermBridge::pushScrollbackCallback(const int columns,
-                                        const VTermScreenCell *cells,
-                                        void *user)
-{
-    auto *bridge = static_cast<VtermBridge *>(user);
-    Line line;
-    line.reserve(columns);
-    for (int column = 0; column < columns; ++column) {
-        line.append(bridge->convertCell(cells[column]));
-    }
-    // 只增不减的全局行号是增量同步的坐标系：文档里存的是哪几行、该从头部删几段、该从
-    // 尾部补几段，全部由它推算（在 appendScrollbackLine 内递增）。
-    bridge->appendScrollbackLine(std::move(line));
-    return 1;
-}
-
-int VtermBridge::popScrollbackCallback(const int columns,
-                                       VTermScreenCell *cells,
-                                       void *user)
-{
-    auto *bridge = static_cast<VtermBridge *>(user);
-    if (bridge->m_scrollback.empty()) {
-        return 0;
-    }
-    // libvterm 在扩容回流时需要原生单元格；当前历史保存为 Qt 值对象，无法无损恢复所有属性。
-    // 返回 0 表示没有可回流行，历史仍保留在文档上方，不影响正常滚动查看。
-    Q_UNUSED(columns)
-    Q_UNUSED(cells)
-    return 0;
-}
-
-int VtermBridge::clearScrollbackCallback(void *user)
-{
-    auto *bridge = static_cast<VtermBridge *>(user);
-    bridge->m_scrollback.clear();
-    bridge->m_scrollbackApproxBytes = 0;
-    // 历史被整体丢弃，文档里现存的段无一对应得上，只能整体重建。
-    bridge->invalidateDocument();
-    return 1;
+    return line;
 }
