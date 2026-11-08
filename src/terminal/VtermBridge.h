@@ -93,6 +93,14 @@ public:
     void setLineHeightPercent(int percent);
 
     /**
+     * @brief 开关日志着色：对未显式着色的文本里的 ERROR/WARN/INFO 等级别词和 IPv4 地址上色。
+     *
+     * 着色发生在终端文字转成 Qt 单元格之后、写入文档之前，只改前景色，不改字符内容，因此
+     * 复制、搜索与选区都不受影响。备用屏（vim、top 等全屏程序）永远不着色。
+     */
+    void setLogHighlightEnabled(bool enabled);
+
+    /**
      * @brief 设置"行高锚点"，用于把每一段的渲染高度统一成同一个常数。
      * @param anchors 追加到每段末尾的 (字符, 字体) 序列；为空表示不加锚点。
      *
@@ -403,6 +411,9 @@ private:
     /** @brief 将引擎的一整行转换为 Qt 行。 */
     [[nodiscard]] Line convertRow(const GhosttyScreen::Row &row) const;
 
+    /** @brief 对一行里仍是默认前景色的文本做日志级别与 IP 地址着色。 */
+    void highlightLogTokens(Line &line) const;
+
     /** @brief 读取当前屏幕指定行。 */
     [[nodiscard]] Line screenLine(int row) const;
 
@@ -513,6 +524,7 @@ private:
     QVector<QColor> m_ansiPalette;
     /** @brief resetTerminal() 期间为 true：引擎历史被复位清空不代表要丢弃已归档的历史。 */
     bool m_suppressHistoryErase = false;
+    bool m_logHighlightEnabled = true;
 
     /** @brief 用 deque 保证头部淘汰为 O(1)；QVector::remove(0,…) 在洪流时是 O(n²)。 */
     std::deque<PackedLine> m_scrollback;

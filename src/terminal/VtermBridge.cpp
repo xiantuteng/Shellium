@@ -1,5 +1,6 @@
 #include "terminal/VtermBridge.h"
 
+#include <QRegularExpression>
 #include <QTextBlock>
 #include <QTextBlockFormat>
 #include <QTextCharFormat>
@@ -1123,7 +1124,89 @@ VtermBridge::Line VtermBridge::convertRow(const GhosttyScreen::Row &row) const
     for (const GhosttyScreen::Cell &cell : row) {
         line.append(convertCell(cell));
     }
+    if (m_logHighlightEnabled && !m_alternateScreen) {
+        highlightLogTokens(line);
+    }
     return line;
+}
+
+void VtermBridge::setLogHighlightEnabled(const bool enabled)
+{
+    if (m_logHighlightEnabled == enabled) {
+        return;
+    }
+    m_logHighlightEnabled = enabled;
+    // 已写入历史的行里着色是烘焙进去的，开关变化后只有整体重建当前屏能反映；历史保持原样。
+    invalidateDocument();
+}
+
+void VtermBridge::highlightLogTokens(Line &line) const
+{
+    // 级别词必须是独立单词，避免把 "information"、"INFORMATION_SCHEMA" 里的片段染色。
+    static const QRegularExpression levelPattern(QStringLiteral(
+        "(?<![A-Za-z0-9_])(FATAL|ERROR|WARN(?:ING)?|INFO|DEBUG|TRACE)(?![A-Za-z0-9_])"));
+    // 点分四段数字；前后不能紧挨数字或点，免得吃进版本号 (1.2.3.4.5) 的一部分。
+    static const QRegularExpression ipPattern(QStringLiteral(
+        "(?<![0-9.])((?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])"
+        "(?:\\.(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])){3})(?![0-9]|\\.[0-9])"));
+
+    // 拼出整行文本，并记录每个字符属于哪一格（宽字符右半格 width=0，不参与）。
+    QString text;
+    QVector<int> cellOfChar;
+    text.reserve(line.size());
+    cellOfChar.reserve(line.size());
+    for (int index = 0; index < line.size(); ++index) {
+        const Cell &cell = line.at(index);
+        if (cell.width <= 0) {
+            continue;
+        }
+        const QString piece = cell.text.isEmpty() ? QStringLiteral(" ") : cell.text;
+        text.append(piece);
+        for (qsizetype i = 0; i < piece.size(); ++i) {
+            cellOfChar.append(index);
+        }
+    }
+    if (text.size() < 4) {
+        return;
+    }
+
+    // 调色板里的亮色随主题走；没有主题调色板时退回固定值。
+    const auto paletteColor = [this](const int index, const QColor &fallback) {
+        return m_ansiPalette.size() == 16 ? m_ansiPalette.at(index) : fallback;
+    };
+    const QColor errorColor = paletteColor(9, QColor(QStringLiteral("#ff5f56")));
+    const QColor warnColor = paletteColor(11, QColor(QStringLiteral("#e5c07b")));
+    const QColor infoColor = paletteColor(12, QColor(QStringLiteral("#4d9cf6")));
+    const QColor debugColor = paletteColor(8, QColor(QStringLiteral("#8b949e")));
+    const QColor ipColor = paletteColor(13, QColor(QStringLiteral("#c678dd")));
+
+    // 只改仍是默认前景色的格子：远端显式着色（ls、grep、带色日志框架）一律尊重。
+    const auto paint = [&](const qsizetype start, const qsizetype length, const QColor &color) {
+        for (qsizetype i = start; i < start + length && i < cellOfChar.size(); ++i) {
+            Cell &cell = line[cellOfChar.at(i)];
+            if (cell.foreground == m_defaultForeground && !cell.reverse && !cell.conceal) {
+                cell.foreground = color;
+            }
+        }
+    };
+
+    for (auto it = levelPattern.globalMatch(text); it.hasNext();) {
+        const QRegularExpressionMatch match = it.next();
+        const QString level = match.captured(1);
+        QColor color = infoColor;
+        if (level == QLatin1String("FATAL") || level == QLatin1String("ERROR")) {
+            color = errorColor;
+        } else if (level.startsWith(QLatin1String("WARN"))) {
+            color = warnColor;
+        } else if (level == QLatin1String("DEBUG") || level == QLatin1String("TRACE")) {
+            color = debugColor;
+        }
+        paint(match.capturedStart(1), match.capturedLength(1), color);
+    }
+    for (auto it = ipPattern.globalMatch(text); it.hasNext();) {
+        const QRegularExpressionMatch match = it.next();
+        paint(match.capturedStart(1), match.capturedLength(1), ipColor);
+    }
 }
 
 VtermBridge::Line VtermBridge::screenLine(const int row) const
