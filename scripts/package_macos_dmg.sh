@@ -447,12 +447,23 @@ create_dmg() {
     ln -s /Applications "${dmg_root}/Applications"
 
     log "创建压缩 DMG"
-    hdiutil create \
-        -volname "Shellium" \
-        -srcfolder "${dmg_root}" \
-        -format UDZO \
-        -ov \
-        "${output_dmg}"
+    # GitHub 的 macOS runner 上 hdiutil create 会间歇性返回 Resource busy，重试即可。
+    local attempt
+    for attempt in 1 2 3 4 5; do
+        if hdiutil create \
+            -volname "Shellium" \
+            -srcfolder "${dmg_root}" \
+            -format UDZO \
+            -ov \
+            "${output_dmg}"; then
+            break
+        fi
+        [[ "${attempt}" -lt 5 ]] || fail "hdiutil create 连续 5 次失败，最后一次错误见上方输出。"
+        printf 'hdiutil 创建失败，%d 秒后重试（%d/5）\n' "$((attempt * 5))" "$((attempt + 1))"
+        rm -f -- "${output_dmg}"
+        hdiutil detach "/Volumes/Shellium" -force >/dev/null 2>&1 || true
+        sleep "$((attempt * 5))"
+    done
 
     if [[ "${MODE}" == "release" ]]; then
         # DMG 是用户实际下载的最外层容器，因此也使用同一 Developer ID 身份和安全时间戳签名。
