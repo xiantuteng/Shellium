@@ -50,12 +50,24 @@ file(REMOVE_RECURSE "${ZIG_CACHE}")
 file(MAKE_DIRECTORY "${ZIG_CACHE}")
 set(ENV{ZIG_GLOBAL_CACHE_DIR} "${ZIG_CACHE}")
 
+# 官方 Zig 的默认目标是它自己的架构。windows-11-arm 上的 CMake 常常是 x64 仿真进程，
+# CMAKE_HOST_SYSTEM_PROCESSOR 会报成 AMD64，于是编出 x64 的 ghostty-vt.lib，
+# 链接 ARM64 的 Shellium 时 LNK4272。目标架构以 vcpkg 的 triplet 为准。
+# x64 不显式传 -Dtarget：该路径已经在 CI 上通过，保持 Zig 的默认 Windows ABI。
+set(ZIG_TARGET_ARGS "")
+if(VCPKG_TARGET_ARCHITECTURE STREQUAL "arm64")
+    list(APPEND ZIG_TARGET_ARGS "-Dtarget=aarch64-windows-gnu")
+elseif(NOT VCPKG_TARGET_ARCHITECTURE STREQUAL "x64")
+    message(FATAL_ERROR "libghostty-vt 不支持的架构：${VCPKG_TARGET_ARCHITECTURE}")
+endif()
+
 vcpkg_execute_required_process(
     COMMAND "${ZIG_PATH}/zig.exe" build
         --prefix "${CURRENT_PACKAGES_DIR}"
         --system "${DEPS_PATH}"
         -Doptimize=ReleaseFast
         -Dcpu=baseline
+        ${ZIG_TARGET_ARGS}
     WORKING_DIRECTORY "${SOURCE_PATH}"
     LOGNAME "build-${TARGET_TRIPLET}"
 )
