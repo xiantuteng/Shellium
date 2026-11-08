@@ -1,0 +1,8 @@
+{
+  "name": "libghostty-vt",
+  "version": "1.0.0",
+  "description": "Ghostty 的终端模拟核心（C ABI）。vcpkg 官方仓库没有此 port，上游只发源码并要求 Zig 0.17.x 构建。",
+  "homepage": "https://github.com/ghostty-org/ghostty",
+  "license": "MIT",
+  "supports": "windows & (x64 | arm64)"
+}

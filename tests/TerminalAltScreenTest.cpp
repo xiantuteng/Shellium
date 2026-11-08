@@ -63,9 +63,9 @@ QByteArray fullScreenApplicationFrame(const int rows, const int cursorRow)
 }
 
 /**
- * @brief 造出一屏以上的普通 Shell 输出，让 libvterm 把旧行推进滚动历史。
+ * @brief 造出一屏以上的普通 Shell 输出，让终端引擎把旧行推进滚动历史。
  *
- * 末尾必须等一帧：渲染是合帧的，appendTerminalOutput 只把字节喂给 libvterm 并排队一次
+ * 末尾必须等一帧：渲染是合帧的，appendTerminalOutput 只把字节喂给终端引擎并排队一次
  * 渲染，文档与滚动条要到下一帧才更新。
  */
 void fillScrollback(TerminalView &view, const int lines)
@@ -215,7 +215,7 @@ private slots:
     void everyRenderedLineHasIdenticalHeightRegardlessOfContent();
     void gridFillsViewportWithoutWastedRows();
     void themeBackgroundSurvivesLeavingFullScreenApplication();
-    /** @brief 主题自带的 16 色表必须真正替换 libvterm 的 VGA 默认值，并随主题切换刷新。 */
+    /** @brief 主题自带的 16 色表必须真正替换引擎的内置默认调色板（旧引擎是 VGA 值），并随主题切换刷新。 */
     void themeAnsiPaletteReplacesVgaDefaults();
     /** @brief 自动提示必须默认关闭；开启后的弹层字体、行高和位置要符合终端视觉约束。 */
     void commandCompletionHonorsSwitchAndUsesCompactTerminalLayout();
@@ -291,7 +291,7 @@ void TerminalAltScreenTest::binaryUnterminatedStringDoesNotSwallowPrompt()
                             QColor(QStringLiteral("#1f1f28")));
 
     // `tail hotline-operation-server.jar0`：ZIP 中央目录的可读字节里混进一个 ESC，凑出
-    // `ESC ]` 开头却永远等不到 ST/BEL。未加保护时 libvterm 会把随后的提示符一并吞进这个
+    // `ESC ]` 开头却永远等不到 ST/BEL。未加保护时（旧引擎 libvterm 的实测行为）引擎会把随后的提示符一并吞进这个
     // 未结束字符串，屏幕定格发黑。
 
     // 现实场景：残缺 OSC 撑不过下一个换行——和 xterm/VTE/Termius 的行为一致。
@@ -458,7 +458,8 @@ void TerminalAltScreenTest::themeBackgroundSurvivesLeavingFullScreenApplication(
     bridge.feed(QByteArrayLiteral("before-vi"));
     QCOMPARE(backgroundOfLastLine(), themeBackground);
 
-    // vim 进出备用屏用的 CSI ?1049h/l 内含 DECSC/DECRC：libvterm 会把当前画笔存档再回灌。
+    // vim 进出备用屏用的 CSI ?1049h/l 内含 DECSC/DECRC：旧引擎 libvterm 会把当前画笔存档再回灌（libghostty-vt 的颜色是读取时解析的引用，
+    // 理论上不再有这个问题，用例保留为防回归）。
     // 画笔里存的是复位那一刻按当时默认色解析好的 RGB，改默认色并不会回头修它，回灌之后
     // 那份兜底色就被当成"显式指定的背景色"，退出 vim 之后新打印的每一行都会顶着一块比
     // 终端背景更黑、且与用户所选主题对不上的底色。
@@ -483,9 +484,9 @@ void TerminalAltScreenTest::themeBackgroundSurvivesLeavingFullScreenApplication(
 
 void TerminalAltScreenTest::themeAnsiPaletteReplacesVgaDefaults()
 {
-    // `ls` 给目录名用的正是 SGR 34（ANSI 蓝）。libvterm 内置的是 VGA 那套值 #0000e0，它在
-    // 任何深色主题上都暗到读不出来，而且完全不随用户所选主题变化——只改默认前景背景色的
-    // 主题实现修不掉这个问题。
+    // `ls` 给目录名用的正是 SGR 34（ANSI 蓝）。旧引擎 libvterm 内置的是 VGA 那套值 #0000e0，它在
+    // 深色主题上暗到读不出来，而且不随用户所选主题变化——只改默认前景背景色的主题实现修不掉
+    // 这个问题；换成 libghostty-vt 后引擎自带的是另一套固定表，同样不随主题，所以断言仍然必要。
     const QColor vgaBlue(0, 0, 224);
 
     VtermBridge bridge;
@@ -517,7 +518,7 @@ void TerminalAltScreenTest::themeAnsiPaletteReplacesVgaDefaults()
     bridge.setAnsiPalette({QColor(QStringLiteral("#ff0000"))});
     bridge.setAnsiPalette(QVector<QColor>(16, QColor()));
     // 被忽略的调色板不会让文档失效，而 render() 默认走增量、需要文档里已有上一次的内容。
-    // 这里显式整体重建，比较的才是 libvterm 当前调色板解析出来的颜色。
+    // 这里显式整体重建，比较的才是终端引擎当前调色板解析出来的颜色。
     bridge.invalidateDocument();
     QCOMPARE(foregroundOfLastLine(), QColor(QStringLiteral("#4385be")));
 
@@ -741,7 +742,7 @@ void TerminalAltScreenTest::selectedLineHeightAnchorsRemainInvisible()
 {
     TerminalView view;
     QVERIFY(showAndSettle(view));
-    // 最后把终端光标移回首行，避免 libvterm 为末行光标额外保留一个空格干扰复制断言。
+    // 最后把终端光标移回首行，避免引擎为末行光标额外保留一个空格干扰复制断言（该行为是引擎相关的，换引擎后若复制断言挂了先看这里）。
     view.appendTerminalOutput(
         QByteArrayLiteral("plain ascii line\r\nsecond line\x1b[1;1H"));
     QTest::qWait(100);
@@ -856,7 +857,7 @@ void TerminalAltScreenTest::insertClipboardShortcutsBypassRemoteInsertKey()
     view.setTextCursor(selection);
     QGuiApplication::clipboard()->setText(QStringLiteral("stale clipboard"));
 
-    // Insert 本身是导航键，会被 libvterm 编码成 CSI 2~。带 Ctrl/Shift 的两个组合必须在
+    // Insert 本身是导航键，会被终端引擎编码成 CSI 2~。带 Ctrl/Shift 的两个组合必须在
     // 那之前被认成复制/粘贴，否则在 Windows 上这两个键按下去只会给远端发一个 Insert。
     QSignalSpy inputSpy(&view, &TerminalView::inputBytes);
     QTest::keyClick(&view, Qt::Key_Insert, Qt::ControlModifier);

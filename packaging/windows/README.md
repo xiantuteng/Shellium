@@ -42,8 +42,9 @@ package_windows_native.ps1 会生成便携 ZIP、单用户 NSIS 安装器和 SHA
 
 - Qt 使用官方 MSVC 二进制（`win64_msvc2022_64` / `win64_msvc2022_arm64`，6.8.3）；
 - 其余依赖由 vcpkg 按 `packaging/windows/vcpkg/vcpkg.json` 构建，`builtin-baseline` 固定了全部
-  依赖版本。vcpkg 官方没有 libvterm port，仓库内的 overlay（`packaging/windows/vcpkg/ports/libvterm`）
-  按 Neovim 的做法用最小 CMakeLists 编出静态库，导出 `unofficial::libvterm`；
+  依赖版本。vcpkg 官方没有 libghostty-vt port，仓库内的 overlay（`packaging/windows/vcpkg/ports/libghostty-vt`）
+  在构建期下载校验过的 Zig 0.17.x，按上游离线打包方式编出 `ghostty-vt.dll` 与导入库，
+  CMake 包名 `ghostty-vt`（目标 `ghostty-vt::ghostty-vt`）；DLL 由 bundle_windows_runtime.sh 随包带上；
 - windeployqt 只收集 Qt 的 DLL 与插件，且 MSVC 下不再复制 vc_redist 安装程序。vcpkg 的库（含
   OpenSSL）与 vcruntime/msvcp 由 `scripts/bundle_windows_runtime.sh` 递归扫描导入表后以 app-local
   方式放到 EXE 旁边，仍找不到的非系统 DLL 会让构建失败。导入表用 `scripts/dumpbin_as_objdump.sh`

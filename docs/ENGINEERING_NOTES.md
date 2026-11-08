@@ -127,24 +127,28 @@ Shell 集成脚本（约 700 字符）经**独立 exec 通道**写入远端临�
 
 宁可留一行噪音，也不能冒丢输入或死锁的风险。回显抑制一律在**本地**做。
 
-### 4.3 OSC 载荷禁用 C0 控制字符
+### 4.3 OSC 载荷禁用 C0 控制字符，且有长度上限
 
-libvterm 的字符串解析器遇到 C0 控制字符会**中止**当前 OSC，把已累积的部分当作完整载荷
-交出来。所以 OSC 6773 的 argv 用 `0x1E` 连接后**再 base64**。
+C0 控制字符在 OSC 里不安全，两层都会破坏它：`VtermBridge::feed` 在字节进入引擎前对字符串态里
+出现的非法 C0 注入 CAN 强制中止（挡住二进制噪音）；即使绕过这一层，libghostty-vt 也会把它们从
+载荷里静默丢弃（实测 `0x1E` 被吞掉，两个参数粘成一个；旧引擎 libvterm 则是中止解析、只交出前半段）。
+所以 OSC 6773 的 argv 用 `0x1E` 连接后**再 base64**。
 
-> 阴险之处：单参数用例会**碰巧通过**（截断点恰好在唯一参数之后）。必须用多参数用例验证。
+> 阴险之处：单参数用例会**碰巧通过**。必须用多参数用例验证。
 
-远端没有 `base64` 时 shim 直接执行原生 ssh，**绝不发出无人应答的 OSC**——那会让 shim
+libghostty-vt 对未识别 OSC 的载荷有约 **8 KiB**（实测 8208 字节内容）的上限，超出整条丢弃、
+回调不触发。shim 在 base64 后超过 6000 字节时直接执行原生 ssh，否则 Shellium 收不到事件、
+不会应答，shim 会永远阻塞在 `read` 上。
+
+远端没有 `base64` 时 shim 同样直接执行原生 ssh，**绝不发出无人应答的 OSC**——那会让 shim
 永远阻塞在 `read` 上，把用户终端挂死。
 
-### 4.4 libvterm 双宽字符的右半格
+### 4.4 双宽字符的右半格
 
-CJK、全角标点、部分表情占两格，libvterm 把**右半格**标记为 `chars[0] == 0xFFFFFFFF`
-而不是 0。只判 `!= 0` 会把这个哨兵当成有效码位，`QString::fromUcs4` 转成 U+FFFD，
-于是每个汉字后面跟一个 `�`，列计数也整体错位。`cell.width` 对右半格仍是 1，靠 width 拦不住。
-
-处理在 `VtermBridge::convertCell`：命中哨兵就把 `width` 置 0 并返回。
-任何新增的终端渲染路径都要复用 `convertCell`，不要另写一份码位转换。
+CJK、全角标点、部分表情占两格。`GhosttyScreen::readRow` 把**右半格**（宽度为 0 的占位格）输出为
+`width = 0`、`utf8` 为空，与列一一对应；`VtermBridge::convertCell` 原样沿用，渲染与光标行文本
+都按 `width > 0` 过滤。任何新增的终端渲染路径都要复用 `convertCell`，不要另写一份码位转换。
+（旧引擎 libvterm 用 `chars[0] == 0xFFFFFFFF` 作哨兵，已不再相关。）
 
 ---
 
@@ -189,7 +193,7 @@ Tab 补全、上翻历史、Ctrl-R、Alt-. 等都在远端 readline/zle 里完�
 
 现行做法（`TerminalView::submittedCommandLine()`）：
 
-- 本轮第一个字节发出前记下光标前的提示符文本作为锚点；回车时按 libvterm 续行标记拼出
+- 本轮第一个字节发出前记下光标前的提示符文本作为锚点；回车时按引擎的续行标记（`GhosttyScreen::rowContinues`）拼出
   整条逻辑行（长 URL 会折行），去掉锚点前缀即为命令。按**提示符文本**而非行号比对，
   bash 列出补全候选后在新行重画提示符也能对上。
 - 只有按过上述"远端编辑键"才用回显；纯手打仍用缓冲，避免远端回显未到就回车时丢字。
@@ -241,7 +245,7 @@ Tab 补全、上翻历史、Ctrl-R、Alt-. 等都在远端 readline/zle 里完�
 
 | 目标 | 内容 | 依赖 |
 |------|------|------|
-| `ShelliumCoreTests` | 命令解析、终端视图、设置、Vault | GUI + Sql + libssh + libvterm + libsodium |
+| `ShelliumCoreTests` | 命令解析、终端视图、设置、Vault | GUI + Sql + libssh + libghostty-vt + libsodium |
 | `ShelliumKeepAliveTests` | 保活判定纯逻辑 | Core + libssh |
 | `ShelliumStorageTests` | 持久化读写 | Core + Sql |
 | `ShelliumSftpRecursiveTests` | 递归传输纯逻辑 | Core |
@@ -391,7 +395,7 @@ Qt 的默认 `QString` 可处于“长度为 0 且 `isNull()` 为 true”的状�
 
 ---
 
-## 十五、终端渲染（libvterm + QPlainTextEdit）
+## 十五、终端渲染（libghostty-vt + QPlainTextEdit）
 
 ### 15.1 备用屏不是滚动历史
 
@@ -418,30 +422,23 @@ CSI——vim 开 DECCKM 后正确的是 SS3（`ESC OA`）。回归见 `tests/Ter
 
 ### 15.3 主题必须自带 ANSI 16 色表
 
-libvterm 内置 ANSI 调色板是 VGA 那套值（ANSI 蓝 = #0000e0），且**不随**
-`vterm_screen_set_default_colors()` 变化。只配 background/foreground 时，`ls` 目录名、grep
-高亮、vim 语法色仍是 1980 年代暗色，在深色主题上读不清。每套主题必须通过
-`vterm_state_set_palette_color()` 自带 16 色表（`TerminalPalette::ansi`），缺失的由
+引擎内置的 ANSI 调色板是一套固定默认值，**不随**默认前景/背景变化。只配 background/foreground
+时，`ls` 目录名、grep 高亮、vim 语法色仍是引擎自带的色值，在深色主题上可能读不清。每套主题必须
+通过 `GhosttyScreen::setAnsiPalette()` 自带 16 色表（`TerminalPalette::ansi`），缺失的由
 `TerminalSettings::defaultAnsiPalette(dark)` 兜底。换调色板后必须 `invalidateDocument()`——
 已渲染的段存的是解析后 RGB，不会自己更新。
 
-### 15.4 改默认色要同步刷新 libvterm 画笔
+### 15.4 默认色在读取时解析，不再有"画笔副本"
 
-`vterm_screen_set_default_colors()` 只改 state 的 default_fg/default_bg；当前画笔 `state->pen`
-里是复位那一刻**已解析成 RGB** 的副本。平时无碍，但 DECSC/DECRC（vim 进出备用屏的
-`CSI ?1049h/l`）会把 pen 存档再回灌，那份陈旧 RGB 被当成“显式指定的背景色”，退出 vim 后
-每行都顶着一块与主题不符的底色。`setDefaultColors()` 之后调 `refreshPenDefaultColors()`：用
-`vterm_state_get_penattr` 确认画笔当前确实是默认色，再注入 `ESC[39m`/`ESC[49m` 让 libvterm
-重取副本；远端正显式着色时不要注入。写回归时主题色必须**不等于**兜底色 `#111318`，否则恒过。
+libvterm 时代，画笔里存的是复位那一刻已解析成 RGB 的副本，改默认色后必须注入 `ESC[39m/49m` 刷新
+（`refreshPenDefaultColors`），否则 DECSC/DECRC 会把陈旧 RGB 当成显式底色。libghostty-vt 的单元格
+只记录"默认/调色板索引/RGB"这类**引用**，颜色在 `GhosttyScreen::readRow` 读取时才解析，所以这套
+补丁已删除。写回归时主题色仍须**不等于**兜底色 `#111318`，否则恒过。
 
-### 15.5 双宽字符右半格的哨兵是 0xFFFFFFFF
+### 15.5 双宽字符右半格
 
-libvterm 把双宽字符（中日韩、全角标点、部分 emoji）的**右半格**标记为
-`cell.chars[0] == 0xFFFFFFFF`，不是 0，且 `cell.width` 对右半格仍是 1。判空只写
-`chars[0] != 0` 会把哨兵当有效码位，`QString::fromUcs4` 转成 U+FFFD——`正在连接` 渲染成
-`正�在�连�接�`，列计数也被打乱。`VtermBridge::convertCell` 里先查哨兵、命中就置 `width = 0`
-并返回；渲染循环与 `cursorLineText()` 都按 `width > 0` 过滤。任何新增终端渲染路径都复用
-`convertCell`，不要另写码位转换。回归 `terminalViewRendersWideCharacters`。
+见 4.4：右半格是 `width = 0` 的占位格，由 `convertCell` 统一处理；渲染循环与 `cursorLineText()`
+都按 `width > 0` 过滤。回归 `terminalViewRendersWideCharacters`。
 
 ### 15.6 行高锚点只能按字符格式剔除
 
@@ -459,51 +456,38 @@ libvterm 把双宽字符（中日韩、全角标点、部分 emoji）的**右半
 其中两个会**直接 abort 掉整个进程**（用户机器上已留下崩溃报告）。全部回归在
 `ShelliumTerminalFloodTests`。
 
-#### （1）回流必须保持关闭
+#### （1）缩放与回流由引擎负责，但回归必须保留
 
-`VtermBridge` 构造时显式 `vterm_screen_enable_reflow(m_screen, false)`——这也是 libvterm 的
-默认值。libvterm 0.3.3 的 `resize_buffer()` 自底向上重排逻辑行，某条行放不进新网格时只用
+libvterm 0.3.3 在回流缩放时有 off-by-one，某条逻辑行放不进新网格就 `abort()`，所以旧实现
+**关闭回流**，并在每次缩放前把光标夹回网格（`clampCursorIntoGrid`，因为 DECRC 会灌回越界的
+保存光标，同样触发 abort）。这两条补丁都已删除：libghostty-vt 自己做回流，**没有**进程 abort 路径。
 
-```c
-if(old_row_start <= old_cursor.row && old_cursor.row < old_row_end)
-```
+换引擎时用 ASan+UBSan 跑过引擎层压力：整屏不换行的长行逐行缩小到 1 行、连续 40 轮"填满-缩放-
+再缩放"、`ESC 7` → 缩小 → `ESC 8` → 再缩放、2000 轮 4 KiB 随机字节洪流穿插随机缩放，均无崩溃、
+无内存错误。`ShelliumTerminalFloodTests` 里对应的三条用例**保留**，它们现在是"任何引擎都不得因
+这些输入崩溃"的通用回归；`resizeStillAppliesNewGeometry` 的几何断言仍有效。
 
-补救光标（末尾的 `<` 是 off-by-one），补不到就 `fprintf` + `abort()`。
+代价与差异：缩小网格时长行会被重新折行（回流），而不是被截断；回流后桥接层自己持有的滚动
+历史（`PackedLine`）与引擎内部历史可能出现折行位置不一致，见下一节的限制。
 
-**别再试"识别危险状态再临时关掉回流"。** 这条路已经走过并失败：判据只能预测上游那段有
-缺陷的代码会怎么走，而连续多轮缩放（真实的窗口拖拽就是这样）会积累出判据覆盖不到的状态。
-随机内容 + 连续多轮缩放的 fuzz：4000 例里 646 次 abort，判据漏掉 436 次；同一套 fuzz 在关闭
-回流下 20000 例零 abort。代价是缩放不再重排长行（变窄时尾部被截断），这正是不做回流的终端
-的一贯行为。上游修掉 off-by-one 之后才可以重新打开，届时请连同 fuzz 一起重跑。
+#### （2）引擎历史有上限，桥接层保留自己的滚动历史
 
-#### （2）每次 `vterm_set_size` 之前必须把光标夹回网格
-
-`VtermBridge::clampCursorIntoGrid()`。libvterm 0.3.3 的 `savecursor(state, 0)`（DECRC，
-`ESC 8`）直接 `state->pos = state->saved.pos`，**不做任何夹取**；而缩小网格的 `on_resize`
-只夹 `state->pos`，从不更新 `state->saved.pos`。于是
-
-> 大网格里 `ESC 7` → 网格缩小 → `ESC 8`
-
-就留下一个越界的光标行，下一次 `vterm_set_size` 在 `resize_buffer()` 里永远找不到它，
-`new_cursor` 保持 `{-1,-1}`，随即 abort。二进制文件里 `ESC 7`/`ESC 8` 不过是两个字节的巧合
-组合，而缩放随时会发生——改窗口、缩放字号，甚至 `noteRenderedCellHeight()` 的首帧行高纠正，
-**用户什么都不用做**。
-
-**这条路径与回流无关**（关掉回流照样复现），当初正是因为先入为主地以为"关掉回流就完了"
-而多花了一轮排查。libvterm 没有公开的光标写接口，因此用它自己的协议搬：CUP 在 `on_csi`
-收尾处一定会被夹进网格（origin 模式夹进滚动区，非 origin 夹进 `[0, rows-1]`）。
+引擎侧历史最多 8192 行（`kEngineScrollbackLines`）、输入按 4 KiB 切片喂入（`VtermBridge::feed`，
+`kFeedSliceBytes`），用被跟踪的网格引用发现"刚滚进历史"的行并复制进 `PackedLine` 滚动历史（`takeNewHistoryRows`）。`ESC[3J` 清历史
+通过"跟踪引用丢失且总行数为 0"识别；`resetTerminal()` 期间用 `m_suppressHistoryErase` 屏蔽。
+改动喂入大小或历史上限前先读这两个常量处的注释：切片大小必须保证一次喂入滚出的行数不超过引擎历史容量。
 
 #### （3）BEL 必须限流
 
 BEL 只是一个普通字节（0x07），二进制里满地都是——那个 34MB 的 jar 含 **122873 个**。一个
 字节一次 `QApplication::beep()` 意味着在 GUI 线程的解析循环里同步响十几万次，macOS 会把每
-一声都压进音频队列：命令早就跑完了，机器还在"嘟嘟"响。限流放在 `VtermBridge::bellCallback`
+一声都压进音频队列：命令早就跑完了，机器还在"嘟嘟"响。限流放在 `VtermBridge` 的 `onBell` 回调里
 （200ms 抑制窗口，与 xterm 的 `bellSuppressTime` 一致），**不是**放在某个消费方——可听响铃、
 将来可能的视觉响铃都该看到同一串已经合并好的事件。修复后同一个文件只放出 36~48 声。
 
 #### （4）PTY 读取端必须有背压
 
-GUI 线程那一侧要把字节喂进 libvterm、重排 QTextDocument，实测吞吐只有约 8 MB/s（Release，
+GUI 线程那一侧要把字节喂进终端引擎、重排 QTextDocument，实测吞吐只有约 8 MB/s（Release，
 Debug 更低），比 `cat` 往 PTY 里灌的速度慢一到两个数量级。读到 EAGAIN 为止的读循环会把差额
 全部堆进 GUI 线程的事件队列：34MB 的文件实测让常驻内存冲到 234MB，而排在后面的重绘和按键
 一次都轮不到——**这就是用户看到的"界面卡住"**。
@@ -573,7 +557,7 @@ SSH 通道（`SshSessionStack`）用同一套在途字节背压，同一条"无�
 
 zsh 回车是两次写入：先 `\r\r\n` 与 PROMPT_SP 的 `\r \r`，约 20ms 后（precmd 钩子越重越久）
 才发提示符。空闲后首帧立即渲染，于是会单独画出一帧"光标在新行第 0 列"，连续回车时行首
-一直闪。`TerminalView` 在 feed 后按 libvterm 状态判断：光标在第 0 列且该行为空，就暂停绘制
+一直闪。`TerminalView` 在 feed 后按终端引擎状态判断：光标在第 0 列且该行为空，就暂停绘制
 光标，后续输出让光标离开空行行首时立即恢复，最多等 `kCursorSettleMilliseconds`（120ms）——
 `cat`、`read` 这类真正停在空行行首等输入的程序随后照样能看到光标。别改成"有输出就藏光标"：
 打字回显也是输出，那样光标会随每次按键闪。回归用例

@@ -620,7 +620,7 @@ if(BUILD_TESTING)
     add_test(NAME ShelliumCoreTests COMMAND ShelliumCoreTests)
 
     # 持久化层独立成一个测试可执行文件：QTEST_MAIN 会展开出 main，同一目标里放两个测试类
-    # 必然重复定义 main。该目标只依赖 Core/Sql/Test，不需要 GUI、libssh 与 libvterm。
+    # 必然重复定义 main。该目标只依赖 Core/Sql/Test，不需要 GUI、libssh 与 终端引擎。
     qt_add_executable(ShelliumStorageTests
         tests/ApplicationDatabaseTest.cpp
         src/core/ConnectionTarget.cpp
@@ -641,7 +641,7 @@ if(BUILD_TESTING)
     add_test(NAME ShelliumStorageTests COMMAND ShelliumStorageTests)
 
     # 多语言基础设施测试：语言码解析、翻译资源装载与设置字段规范化。只依赖 Core/Gui/Sql，
-    # 不引入 libssh/libvterm。翻译目录由下方 qt_add_translations 编进本目标自己的 Qt 资源，
+    # 不引入 libssh/终端引擎。翻译目录由下方 qt_add_translations 编进本目标自己的 Qt 资源，
     # 测试才能独立断言 :/i18n/shellium_en.qm 真的被装载并生效。
     qt_add_executable(ShelliumLocalizationTests
         tests/LocalizationTest.cpp
@@ -1041,7 +1041,7 @@ if(BUILD_TESTING)
 
     # 设置界面改版后的控件接线回归：步进器、滑动开关、配色色板与分类导航都是自绘控件，
     # 只有真实构树才能验证“操作控件 → editedSettings() → SQLite”这条链路没有断。需要
-    # Widgets 与 Sql，不涉及 libssh/libvterm 与网络。设置页现在还会在开启保险箱密码时调用
+    # Widgets 与 Sql，不涉及 libssh/终端引擎 与网络。设置页现在还会在开启保险箱密码时调用
     # 正式保险库流程，因此目标需链接 Vault、VaultDialog 与 libsodium，避免测试使用假实现。
     qt_add_executable(ShelliumSettingsUiTests
         tests/SettingsUiTest.cpp
@@ -1231,7 +1231,7 @@ if(BUILD_TESTING)
         Qt6::Core Qt6::Concurrent Qt6::Gui Qt6::Widgets Qt6::Test ShelliumDependencies::libssh)
     add_test(NAME ShelliumSftpUiTests COMMAND ShelliumSftpUiTests)
 
-    # 备用屏（vim/top/less 等全屏程序）下的渲染与按键编码回归。只需要 libvterm 与
+    # 备用屏（vim/top/less 等全屏程序）下的渲染与按键编码回归。只需要 终端引擎 与
     # Widgets，不涉及 SSH 会话；单独成目标同样是为了避开重复 main。
     qt_add_executable(ShelliumTerminalAltScreenTests
         tests/TerminalAltScreenTest.cpp
@@ -1256,9 +1256,9 @@ if(BUILD_TESTING)
         Qt6::Core Qt6::Gui Qt6::Sql Qt6::Widgets Qt6::Test ShelliumDependencies::ghosttyvt)
     add_test(NAME ShelliumTerminalAltScreenTests COMMAND ShelliumTerminalAltScreenTests)
 
-    # `cat 二进制文件` 这类输出洪流的回归：libvterm 回流缩放的进程 abort、BEL 风暴限流、
+    # `cat 二进制文件` 这类输出洪流的回归：缩放/回流与异常光标状态不得让进程崩溃、BEL 风暴限流、
     # 以及 PTY 读取端的背压。背压那条要 fork 一个真实的本地 Shell，因此不能并进只依赖
-    # libvterm 的 AltScreen 目标；单独成目标同样是为了避开重复 main。
+    # 终端引擎的 AltScreen 目标；单独成目标同样是为了避开重复 main。
     qt_add_executable(ShelliumTerminalFloodTests
         tests/TerminalFloodTest.cpp
         src/terminal/LocalShellWorker.cpp

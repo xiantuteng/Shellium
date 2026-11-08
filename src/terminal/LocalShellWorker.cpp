@@ -39,7 +39,7 @@ namespace {
  * @brief 已 emit 给 GUI 线程、但尚未被消费的字节数上限。
  *
  * 读取端必须有背压，否则 `cat` 一个大文件会这样把界面压死：PTY 读循环一路读到 EAGAIN，
- * 每块都 emit 一个队列信号；而 GUI 线程那一侧要把字节喂进 libvterm、重排 QTextDocument，
+ * 每块都 emit 一个队列信号；而 GUI 线程那一侧要把字节喂进终端引擎、重排 QTextDocument，
  * 实测吞吐只有约 8 MB/s（Release 构建，Debug 更低），比 `cat` 往 PTY 里灌的速度慢一到
  * 两个数量级。差额全部堆在 GUI 线程的事件队列里——34MB 的 jar 实测让常驻内存冲到 234MB，
  * 而且这段时间事件队列里排在后面的重绘、按键一次都轮不到，界面就是这样"卡住"的。

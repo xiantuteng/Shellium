@@ -46,7 +46,7 @@ Shellium 为每个标签页维护一条从外到内的完整服务器链：
 - 内存占用低：只有一个应用进程，没有每个窗口一套的渲染进程；每多开一个标签页，只多占它自己的终端缓冲区和滚动历史
 
 **终端**
-- 基于 libvterm 的 VT/xterm 仿真：256 色与真彩色、备用屏幕、双宽（中日韩）字符、可配置滚动历史
+- 基于 libghostty-vt 的 VT/xterm 仿真：256 色与真彩色、备用屏幕、双宽（中日韩）字符、可配置滚动历史
 - 本地 Shell：macOS/Linux 用 PTY，Windows 用 ConPTY；多标签页；工作区内广播输入
 - 主题（跟随系统 / 亮色 / 暗色）、内置等宽字体，以及光标、铃声、滚动设置
 - 一键重置终端（<kbd>⌘⇧R</kbd> / <kbd>Ctrl+Shift+R</kbd>），误 `cat` 二进制文件导致花屏后可恢复
@@ -111,13 +111,17 @@ Shellium 为每个标签页维护一条从外到内的完整服务器链：
 
 - CMake 3.21+、Ninja、支持 C++20 的编译器
 - Qt 6.8+（Core、Widgets、Concurrent、Network、Sql、Svg、LinguistTools；跑测试还需要 Test）
-- libssh 0.11+、libvterm 0.3+、libsodium 1.0.18+、spdlog 1.12+、minizip
+- libssh 0.11+、libghostty-vt 1.0、libsodium 1.0.18+、spdlog 1.12+、minizip
+- Zig 0.17.x，仅用于编译 libghostty-vt（上游只发源码）。`scripts/install_libghostty_vt_from_source.sh` 会把校验过的 Zig 下载到临时目录，用完即删，无需手动安装
 
 <details>
 <summary><b>macOS</b>（Homebrew）</summary>
 
 ```bash
-brew install qtbase qtsvg qttools libssh libvterm libsodium spdlog minizip ninja pkg-config
+brew install qtbase qtsvg qttools libssh libsodium spdlog minizip ninja pkg-config
+./scripts/install_libghostty_vt_from_source.sh "$HOME/.local"   # libghostty-vt 1.0（自动获取 Zig 0.17）
+export PKG_CONFIG_PATH="$HOME/.local/lib/pkgconfig:$PKG_CONFIG_PATH"
+export CMAKE_PREFIX_PATH="$HOME/.local:$CMAKE_PREFIX_PATH"
 ```
 
 </details>
@@ -128,9 +132,10 @@ brew install qtbase qtsvg qttools libssh libvterm libsodium spdlog minizip ninja
 Ubuntu 仓库自带的 Qt 是 6.4、libssh 是 0.10，都低于 Shellium 的要求。先用 [Qt 在线安装器](https://www.qt.io/download-qt-installer-oss) 或 [aqtinstall](https://github.com/miurahr/aqtinstall) 安装 Qt 6.8+，然后：
 
 ```bash
-sudo apt-get install ninja-build pkg-config libssl-dev libvterm-dev libsodium-dev \
+sudo apt-get install ninja-build pkg-config libssl-dev libsodium-dev \
     libspdlog-dev libminizip-dev zlib1g-dev libgl1-mesa-dev libxkbcommon-x11-0 libxcb-cursor0
 sudo ./scripts/install_libssh_from_source.sh /usr/local   # libssh 0.11
+sudo ./scripts/install_libghostty_vt_from_source.sh /usr/local   # libghostty-vt 1.0（自动获取 Zig 0.17）
 ```
 
 </details>
@@ -191,7 +196,7 @@ macOS arm64 是主要开发平台。其他平台由 CI 构建并做启动冒烟�
 
 ## 致谢
 
-Shellium 基于 [Qt](https://www.qt.io/)、[libssh](https://www.libssh.org/)、[libvterm](https://www.leonerd.org.uk/code/libvterm/)、[libsodium](https://libsodium.org/) 和 [spdlog](https://github.com/gabime/spdlog) 构建，并内置了多款开源等宽字体。完整的第三方组件及许可证见应用内**设置 → 关于 → 查看许可证**，以及 [`resources/licenses/`](resources/licenses)。
+Shellium 基于 [Qt](https://www.qt.io/)、[libssh](https://www.libssh.org/)、[libghostty-vt](https://github.com/ghostty-org/ghostty)、[libsodium](https://libsodium.org/) 和 [spdlog](https://github.com/gabime/spdlog) 构建，并内置了多款开源等宽字体。完整的第三方组件及许可证见应用内**设置 → 关于 → 查看许可证**，以及 [`resources/licenses/`](resources/licenses)。
 
 ## 许可证
 

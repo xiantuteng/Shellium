@@ -40,8 +40,9 @@ xcrun notarytool store-credentials "Shellium-notary" \
 
 ## 二、兼容性约束
 
-当前开发机通过 Homebrew 安装的 libssh、libvterm、libsodium、spdlog 和 fmt 均以 macOS
-26.0 为最低目标构建，因此默认安装包也明确要求 macOS 26.0。仅修改
+当前开发机通过 Homebrew 安装的 libssh、libsodium、spdlog 和 fmt 均以 macOS
+26.0 为最低目标构建（libghostty-vt 由 `scripts/install_libghostty_vt_from_source.sh` 编译，可用
+`ZIG_TARGET=<arch>-macos.<版本>` 指定最低系统，CI 即如此对齐），因此默认安装包也明确要求 macOS 26.0。仅修改
 `SHELLIUM_DEPLOYMENT_TARGET` 不能让现成动态库支持旧系统。
 
 若要支持更早版本的 Apple Silicon macOS，必须先用目标 deployment target 重新编译全部

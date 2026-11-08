@@ -280,7 +280,7 @@ namespace {
 /**
  * @brief 等待终端渲染出帧的宽限时间（毫秒）。
  *
- * TerminalView 把渲染按帧合并：appendTerminalOutput 只把字节喂给 libvterm，同一帧内到达的
+ * TerminalView 把渲染按帧合并：appendTerminalOutput 只把字节喂给终端引擎，同一帧内到达的
  * 多段输出攒在一起画。因此凡是要断言"文档里出现了什么"或"滚动条到了哪里"的用例，都必须先
  * 放行一帧，否则测到的是上一帧的旧状态。
  */
@@ -1089,10 +1089,10 @@ void SshCommandParserTest::terminalViewDeliversShellIntegrationEvent()
     TerminalView view;
     QSignalSpy eventSpy(&view, &TerminalView::shellIntegrationEvent);
 
-    // 私有 OSC 编号 libvterm 自己不认识，必须靠未识别序列兜底回调交出来；漏接的话整条
+    // 私有 OSC 编号终端引擎自己不认识，必须靠未识别序列兜底回调交出来；漏接的话整条
     // 序列会被当作普通文本打印到用户屏幕上。
-    // argv 以 base64 传输：0x1E 是 C0 控制字符，直接放进 OSC 会被 libvterm 当作字符串
-    // 终止符，只能收到第一个参数——这个坑正是本用例存在的理由。
+    // argv 以 base64 传输：0x1E 是 C0 控制字符，直接放进 OSC 会被桥接层当作二进制噪音中止
+    // （旧引擎 libvterm 则当作字符串终止符），只能收到第一个参数——这个坑正是本用例存在的理由。
     view.appendTerminalOutput(QByteArrayLiteral(
         "\033]6773;connect;cm9vdEAxMC4wLjAuMh4=\007"));
     QCOMPARE(eventSpy.size(), 1);
@@ -1412,7 +1412,7 @@ void SshCommandParserTest::terminalViewRecoversSshCommandFromCursorLine()
     QSignalSpy commandSpy(&view, &TerminalView::commandSubmitted);
 
     // 模拟屏幕下方残留旧内容、光标回到上一行输入 ssh 的情况。QTextDocument 最后一段是
-    // "stale lower row"，只有 libvterm 的真实光标行包含用户实际提交的命令。
+    // "stale lower row"，只有终端引擎的真实光标行包含用户实际提交的命令。
     view.appendTerminalOutput(QByteArrayLiteral(
         "old command\r\nstale lower row\x1b[1A\r\x1b[2K"
         "[root@outer ~]# ssh root@10.0.0.2"));
@@ -2220,7 +2220,7 @@ void SshCommandParserTest::localNoticeEndsWithCarriageReturn()
     staircase.appendTerminalOutput(QByteArrayLiteral("Last login: Sat Aug  8"));
     const QStringList staircaseLines = staircase.terminalPlainText().split(QLatin1Char('\n'));
     QVERIFY2(staircaseLines.size() == 2 && staircaseLines.at(1).startsWith(QLatin1Char(' ')),
-             "该断言固化 LF 的阶梯效应；若 libvterm 行为改变，说明上面的 CRLF 断言需要重新评估");
+             "该断言固化 LF 的阶梯效应；若终端引擎行为改变，说明上面的 CRLF 断言需要重新评估");
 }
 
 void SshCommandParserTest::terminalBackgroundIgnoresApplicationStyleSheet()

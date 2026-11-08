@@ -73,7 +73,7 @@ public:
     [[nodiscard]] Row activeRow(int row) const;
     /// 读取历史第 index 行（0 为最旧）。越界返回空行。
     [[nodiscard]] Row historyRow(std::size_t index) const;
-    /// 活动区第 row 行是否是上一行自动折行的延续（libvterm 的 lineinfo.continuation）。
+    /// 活动区第 row 行是否是上一行自动折行的延续（引擎的 wrap 标记，旧引擎 libvterm 称 lineinfo.continuation）。
     [[nodiscard]] bool rowContinues(int row) const;
     /**
      * @brief 取出自上次调用以来新滚入主屏历史的行（由旧到新）。

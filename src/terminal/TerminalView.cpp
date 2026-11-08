@@ -296,7 +296,7 @@ QString clipboardPasteShortcutText()
 }
 
 /**
- * @brief 把 Qt 修饰键映射为 libvterm 的修饰掩码。
+ * @brief 把 Qt 修饰键映射为终端引擎的修饰掩码。
  *
  * 只翻译 Shift/Control/Alt 三种终端协议认识的修饰。macOS 的 Command 不参与：它是应用级
  * 快捷键，不该出现在发往 PTY 的字节里。
@@ -318,7 +318,7 @@ GhosttyMods toTerminalModifiers(const QKeyEvent *event)
 
 /**
  * @brief 把 Qt 键码映射为 libghostty-vt 键枚举。
- * @return 该键需要由 libvterm 按当前终端模式编码时返回对应枚举，否则返回 std::nullopt。
+ * @return 该键需要由终端引擎按当前终端模式编码时返回对应枚举，否则返回 std::nullopt。
  *
  * 这些键的字节形式不是固定的：DECCKM（应用光标键）开启后方向键从 `CSI A` 变成 `SS3 A`，
  * 而 vim、less、htop 进入全屏时都会开启它。硬编码 CSI 形式会让 vim 在插入模式下把方向键
@@ -374,7 +374,7 @@ std::optional<char> controlCodeForNonLetterKey(const int key)
 /**
  * @brief 从远端 PTY 实际回显的当前行恢复 ssh 命令。
  * @param bufferedCommand Qt 键盘事件累计的命令，正常情况下直接使用。
- * @param cursorLine libvterm 光标所在行的可见文本，包含 Shell 提示符和实际回显命令。
+ * @param cursorLine 终端引擎光标所在行的可见文本，包含 Shell 提示符和实际回显命令。
  * @return 识别到回显 ssh 命令时返回该命令，否则返回原始键盘缓冲。
  *
  * macOS 输入法、快捷键和自动重复事件在真实键盘环境下可能让本地字符缓冲与 PTY 回显
@@ -456,7 +456,7 @@ TerminalView::TerminalView(QWidget *parent)
     terminalFont.setPointSize(13);
     setFont(terminalFont);
 
-    // 终端收到 DSR/DA 等查询后，libvterm 会生成必须回送给 PTY 的协议字节。
+    // 终端收到 DSR/DA 等查询后，终端引擎会生成必须回送给 PTY 的协议字节。
     connect(m_vtermBridge, &VtermBridge::protocolResponse,
             this, &TerminalView::inputBytes);
     // bell 信号已经在 VtermBridge 里按抑制窗口合并过，这里收到几次就响几次。
@@ -575,7 +575,7 @@ TerminalView::TerminalView(QWidget *parent)
     });
 
     // 定时器每次 start() 都会重新计时，因此拖动期间不会提交中间值；只有最后一个
-    // resizeEvent 之后安静 80ms，libvterm 与 PTY 才会一起切换到最终字符网格。
+    // resizeEvent 之后安静 80ms，终端引擎与 PTY 才会一起切换到最终字符网格。
     m_resizeDebounceTimer->setSingleShot(true);
     m_resizeDebounceTimer->setInterval(kTerminalResizeDebounceMilliseconds);
     connect(m_resizeDebounceTimer,
@@ -721,7 +721,7 @@ void TerminalView::applySettings(const TerminalSettings &settings)
     m_vtermBridge->invalidateDocument();
 
     // 使用控件调色板而非固定背景样式，选择颜色与主题可在设置实时预览时同步更新。终端
-    // 单元格的显式 ANSI 色仍由 libvterm 提供，不会被这里覆盖。
+    // 单元格的显式 ANSI 色仍由终端引擎提供，不会被这里覆盖。
     QPalette viewPalette = palette();
     viewPalette.setColor(QPalette::Base, terminalPalette.background);
     viewPalette.setColor(QPalette::Text, terminalPalette.foreground);
@@ -730,7 +730,7 @@ void TerminalView::applySettings(const TerminalSettings &settings)
     // 背景必须在本控件的样式表里写成具体颜色。主窗口全局样式表用 palette(base) 描述终端
     // 背景，而它取的是 QApplication 调色板的 Base（另一档更浅的窗口色），并非这里刚设置的
     // 终端背景色；两者相差一档，表现为"有字符的区域和空白区域颜色不一样"。控件自身的
-    // 样式表优先级高于应用级，写死颜色可让整块终端与 libvterm 单元格背景完全一致。
+    // 样式表优先级高于应用级，写死颜色可让整块终端与终端引擎单元格背景完全一致。
     setStyleSheet(QStringLiteral("QPlainTextEdit#TerminalView {"
                                  " background: %1; color: %2; border: 0; padding: 6px; }")
                       .arg(terminalPalette.background.name(),
@@ -1159,7 +1159,7 @@ void TerminalView::recalculateTerminalGeometry()
 
 void TerminalView::commitTerminalGeometry()
 {
-    // libvterm resize 可能回流屏幕或改变滚动历史长度，必须在重排前采样滚动意图，再在
+    // 终端引擎的 resize 会回流屏幕或改变滚动历史长度，必须在重排前采样滚动意图，再在
     // 文档整体重建后恢复。这样防抖修复不会引入拖动结束后跳回顶部的新问题。
     const bool followBottom = m_followOutputTail;
     const int previousValue = verticalScrollBar()->value();
@@ -1335,7 +1335,7 @@ void TerminalView::updateCompletionPopup()
         return;
     }
 
-    // 弹层锚点必须使用 libvterm 换算出的视觉光标位置（与 paintEvent 绘制光标的方式一致），
+    // 弹层锚点必须使用终端引擎换算出的视觉光标位置（与 paintEvent 绘制光标的方式一致），
     // 而不是 QPlainTextEdit 自带的 textCursor()：后者的位置未必跟随远端 PTY 的真实输入位置
     // 同步更新，会导致弹层遮挡正在输入的命令。取不到有效位置时退回原生 cursorRect() 保底。
     QRect popupRect = visualCursorRect();
@@ -1475,7 +1475,7 @@ void TerminalView::pasteFromClipboard()
 
     // 远端开启括号粘贴时，内容必须夹在 CSI 200~ / CSI 201~ 之间，否则 vim 会把粘贴
     // 当成逐个按键：autoindent 给每一行再叠一层缩进，十行代码粘完成阶梯状。远端未
-    // 开启该模式时 libvterm 不会产生任何标记字节，行为与此前完全一致。
+    // 开启该模式时终端引擎不会产生任何标记字节，行为与此前完全一致。
     m_vtermBridge->beginPaste();
     sendUserInput(prepared.text.toUtf8());
     m_vtermBridge->endPaste();
@@ -1596,7 +1596,7 @@ void TerminalView::appendTerminalOutput(const QByteArray &bytes)
 
     m_vtermBridge->feed(bytes);
     // 换行之后、提示符到达之前，光标停在空行第 0 列；这一帧画出光标就是连续回车时行首的
-    // 闪烁。只看 libvterm 状态（它总比文档新），一旦光标离开空行行首就立刻恢复绘制，
+    // 闪烁。只看终端引擎状态（它总比文档新），一旦光标离开空行行首就立刻恢复绘制，
     // 打字回显、命令输出不受影响。
     const bool cursorAtBlankLineStart = m_vtermBridge->cursorColumn() == 0
         && m_vtermBridge->cursorLineText().isEmpty();
@@ -1608,13 +1608,13 @@ void TerminalView::appendTerminalOutput(const QByteArray &bytes)
         m_cursorSettleTimer->stop();
     }
     // 渲染合帧：`tail -f`、`cat 大文件` 会把输出切成成百上千个网络分片，每片都同步重绘等于
-    // 一秒钟做上千次文档编辑和布局，界面就是这样被自己的输出压死的。libvterm 已经吃下全部
+    // 一秒钟做上千次文档编辑和布局，界面就是这样被自己的输出压死的。终端引擎已经吃下全部
     // 字节，屏幕状态是最新的；真正需要保证的只是"用户眼睛能看到的帧率"，因此攒够一帧再画。
-    // 滚动意图在真正渲染前采样即可：feed() 只改 libvterm，不动 QTextDocument。
+    // 滚动意图在真正渲染前采样即可：feed() 只改终端引擎，不动 QTextDocument。
     scheduleRender();
 
     // 密码正确后，OpenSSH 只有在认证、会话创建和远端 Shell 启动完成后才会绘制提示符。
-    // 必须读取 libvterm 的真实光标行，不能使用 QTextDocument 最后一段：全屏输出或光标移动
+    // 必须读取终端引擎的真实光标行，不能使用 QTextDocument 最后一段：全屏输出或光标移动
     // 可能在光标下方保留一个旧的 "#" 提示符，后者会把尚未输入密码误判成认证成功。
     // 这里只发出候选信号，TerminalPane 还会用认证状态和是否已有密码做二次限定。
     // 备用屏里光标行是 vim 的状态行或 htop 的表头，同样可能以 $ 或 % 结尾。把它当成 Shell
@@ -1728,7 +1728,7 @@ void TerminalView::keyPressEvent(QKeyEvent *event)
     const bool alternateScreen = m_vtermBridge->isAlternateScreen();
 
     // 方向键、翻页、Insert/Delete 和功能键的字节形式取决于远端当前的 DECCKM/DECPAM 模式，
-    // 必须由保存着这些模式的 libvterm 编码；它生成的字节经 protocolResponse 转成 inputBytes。
+    // 必须由保存着这些模式的终端引擎编码；它生成的字节经 protocolResponse 转成 inputBytes。
     // Ctrl+Insert / Shift+Insert 是终端上唯一不与 SIGINT 冲突的复制粘贴键位，必须在
     // Insert 被当作导航键编码成 GHOSTTY_KEY_INSERT 之前放行，否则它们只会作为普通 Insert
     // 发给远端，用户看到的现象是这两个键完全没有反应。
@@ -1743,7 +1743,7 @@ void TerminalView::keyPressEvent(QKeyEvent *event)
             QPlainTextEdit::keyPressEvent(event);
             return;
         }
-        // 方向键等导航键的字节由 libvterm 生成，不经过 sendUserInput，但同样是用户输入。
+        // 方向键等导航键的字节由终端引擎生成，不经过 sendUserInput，但同样是用户输入。
         scrollToOutputTail();
         if (!alternateScreen) {
             // 上翻历史、左右移动光标后再编辑，结果只存在于远端输入行里。
@@ -1942,7 +1942,7 @@ void TerminalView::showEvent(QShowEvent *event)
 void TerminalView::hideEvent(QHideEvent *event)
 {
     QPlainTextEdit::hideEvent(event);
-    // 切到别的标签或最小化时暂停文档同步。PTY/SSH 输出仍照常送进 libvterm，会话状态与
+    // 切到别的标签或最小化时暂停文档同步。PTY/SSH 输出仍照常送进终端引擎，会话状态与
     // 滚动历史完全不受影响；省下的是后台标签持续刷屏时白白消耗的排版与内存。
     m_renderSuspended = true;
     if (m_renderCoalesceTimer->isActive()) {

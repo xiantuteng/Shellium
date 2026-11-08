@@ -10,7 +10,7 @@
       "features": ["zlib"]
     },
     "libsodium",
-    "libvterm",
+    "libghostty-vt",
     "minizip",
     "spdlog",
     "zlib"

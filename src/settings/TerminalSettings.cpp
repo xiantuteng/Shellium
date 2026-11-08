@@ -1330,7 +1330,7 @@ TerminalPalette TerminalSettings::effectivePalette() const
         if (const TerminalThemePreset *preset = themePreset(colorSchemeId)) {
             TerminalPalette palette = preset->palette;
             // 内置预设都写全了 16 色；这里仍按明暗补一份通用表兜底，防止将来新增的预设漏写
-            // 时退回 libvterm 的 VGA 默认值。
+            // 时退回引擎的内置默认调色板。
             if (palette.ansi.size() != 16) {
                 palette.ansi = defaultAnsiPalette(preset->dark);
             }

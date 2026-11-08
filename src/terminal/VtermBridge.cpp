@@ -173,13 +173,14 @@ QByteArray VtermBridge::boundUnterminatedString(const QByteArray &bytes)
 {
     // 背景：`tail`/`cat` 一个 JAR 或可执行文件会把原始字节打进 PTY。ZIP 中央目录这类
     // 段落里必然混着 ESC，一旦凑出 `ESC ]`（OSC）或 `ESC P`（DCS）而后续始终没有 ST/BEL
-    // 收尾，libvterm 会一直把字节往字符串缓冲里塞——之后 Shell 打印的提示符、用户敲的
+    // 收尾，终端引擎会一直把字节往字符串缓冲里塞——之后 Shell 打印的提示符、用户敲的
     // 命令统统被吞进这个未结束的字符串，屏幕就此定格发黑，退出会话也不恢复。真实终端里
     // 得手动 `reset`。xterm/VTE/Termius 等不会黑屏，是因为它们一遇到字符串序列内部的
     // C0 控制字符（除 ESC 和几个合法收尾符外）就中止该序列——二进制里满是 CR/LF/TAB，
-    // 残缺的 `ESC ]` 撑不过几个字节。libvterm 0.3.3 没有这条规则，会一直缓冲到显式收尾。
-    // 这里在字节进入 libvterm 之前补齐这个行为：
-    //   1) 字符串态里出现非法 C0 控制字符 → 注入 CAN(0x18) 强制中止（已验证 libvterm
+    // 残缺的 `ESC ]` 撑不过几个字节。旧引擎 libvterm 0.3.3 没有这条规则，会一直缓冲到显式收尾；
+    // libghostty-vt 对这类残缺字符串的处理没有逐项验证，这里的规则原样保留。
+    // 这里在字节进入终端引擎之前补齐这个行为：
+    //   1) 字符串态里出现非法 C0 控制字符 → 注入 CAN(0x18) 强制中止（已验证终端引擎
     //      收到 CAN 会退出字符串状态），随后该字节按普通输入处理；
     //   2) 兜底：即使整段噪音恰好没有 C0，超过 kMaxStringPayload 字节仍未收尾也中止。
     //
@@ -221,7 +222,7 @@ QByteArray VtermBridge::boundUnterminatedString(const QByteArray &bytes)
             break;
 
         case StringScan::InString:
-            // BEL / CAN / SUB / NUL 都会让 libvterm 结束当前字符串；ESC 可能是 ST 的前半，
+            // BEL / CAN / SUB / NUL 都会让终端引擎结束当前字符串；ESC 可能是 ST 的前半，
             // 无论后半是不是 `\`，字符串都到此为止。任一情况都回到常规扫描。
             if (byte == 0x07 || byte == 0x18 || byte == 0x1a || byte == 0x00) {
                 output.append(rawByte);
@@ -274,7 +275,7 @@ void VtermBridge::resetTerminal()
     m_stringScanLength = 0;
     m_corruptionDetected = false;
     // 硬复位同时恢复隐藏属性、颜色、光标、字符集和键盘模式；仅发 SGR 0 无法覆盖这些
-    // 状态。默认色及调色板属于当前主题配置，libvterm 复位继续使用这些配置。
+    // 状态。默认色及调色板属于当前主题配置，终端引擎复位继续使用这些配置。
     m_suppressHistoryErase = true; // 复位会清空引擎历史，但我们刚归档的内容要保留
     m_screen->reset();
     // 主题色属于配置而非终端状态，复位后重新推一遍，避免引擎退回库默认色。

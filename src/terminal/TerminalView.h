@@ -30,7 +30,7 @@ class VtermBridge;
  * @brief 负责显示远端输出并把键盘事件转换为终端字节流的轻量终端视图。
  *
  * 当前实现把 OpenSSH 分配的远端 PTY 接入 Qt 文本视图，支持普通输入、控制键和常用方向键。
- * 该类刻意隔离输入协议，后续替换为 libvterm 渲染时，TerminalPane 和 SFTP 架构无需改动。
+ * 该类刻意隔离输入协议，后续替换渲染引擎时，TerminalPane 和 SFTP 架构无需改动。
  */
 class TerminalView final : public QPlainTextEdit {
     Q_OBJECT
@@ -298,7 +298,7 @@ protected:
     /**
      * @brief 标签隐藏时暂停文档同步，并安排释放排版缓存。
      *
-     * PTY/SSH 输出仍会 feed 进 libvterm，会话状态与滚动历史完全不受影响；文档也原样保留，
+     * PTY/SSH 输出仍会 feed 进终端引擎，会话状态与滚动历史完全不受影响；文档也原样保留，
      * 切回时不需要整体重建，滚动位置和选区都还在。
      */
     void hideEvent(QHideEvent *event) override;
@@ -406,8 +406,8 @@ private:
     void pasteFromClipboard();
 
     /**
-     * @brief 计算 libvterm 视觉光标对应的文档光标矩形，供 paintEvent 与补全弹层共用。
-     * @return 有效位置时返回对应矩形；无法取得有效位置（vterm 尚未渲染或位置越界）时返回空 QRect。
+     * @brief 计算终端引擎视觉光标对应的文档光标矩形，供 paintEvent 与补全弹层共用。
+     * @return 有效位置时返回对应矩形；无法取得有效位置（终端引擎尚未渲染或位置越界）时返回空 QRect。
      */
     QRect visualCursorRect() const;
 
@@ -581,7 +581,7 @@ private:
     /**
      * @brief 当前是否因隐藏而推迟文档同步。
      *
-     * feed() 仍照常进入 libvterm；仅跳过 QTextDocument 更新，直至重新显示。
+     * feed() 仍照常进入终端引擎；仅跳过 QTextDocument 更新，直至重新显示。
      */
     bool m_renderSuspended = false;
 
@@ -641,10 +641,10 @@ private:
     /** @brief 最近一次 applySettings 中配置的基准字号，Cmd+0 重置缩放时回到该值。 */
     int m_basePointSize = 13;
 
-    /** @brief 最近一次已提交给 libvterm 和 PTY 的字符列数，用于过滤等价像素 resize。 */
+    /** @brief 最近一次已提交给终端引擎和 PTY 的字符列数，用于过滤等价像素 resize。 */
     int m_terminalColumns = 80;
 
-    /** @brief 最近一次已提交给 libvterm 和 PTY 的字符行数，用于过滤等价像素 resize。 */
+    /** @brief 最近一次已提交给终端引擎和 PTY 的字符行数，用于过滤等价像素 resize。 */
     int m_terminalRows = 24;
 
     /** @brief 最近一次从真实文档量到的行高像素值；0 表示尚未量过。 */
@@ -659,7 +659,7 @@ private:
     bool m_hasReceivedResizeEvent = false;
 
     /**
-     * @brief 依据当前 viewport 尺寸重算列/行数，并同步更新 libvterm 与远端 PTY。
+     * @brief 依据当前 viewport 尺寸重算列/行数，并同步更新终端引擎与远端 PTY。
      *
      * 只有字符行列实际变化时才发出 terminalSizeChanged，避免像素宽度变化但仍落在同一字符
      * 网格时产生无意义的 PTY resize 和 SIGWINCH。
@@ -719,7 +719,7 @@ private:
     /**
      * @brief 提交当前稳定的字符尺寸并重绘文档，同时保持用户原有滚动位置。
      *
-     * resize 防抖到期、字体缩放和终端设置变化都走该入口，保证 libvterm 重排后不会遗漏
+     * resize 防抖到期、字体缩放和终端设置变化都走该入口，保证终端引擎重排后不会遗漏
      * 文档重建，也不会把正在阅读历史输出的用户强制拉回底部。
      */
     void commitTerminalGeometry();

@@ -56,10 +56,12 @@ QByteArray ShellShim::scriptBody()
     //   * Bash 的 HISTCONTROL 只在缺少忽略空格策略时追加 ignorespace，保留用户原有的
     //     ignoredups/erasedups；Zsh 不使用该变量，因此不做无意义的环境改动。
     //   * argv 用 0x1E 连接后再 base64——**不能直接把 0x1E 放进 OSC**：它是 C0 控制字符，
-    //     libvterm 会在此处中止字符串解析，导致只收到第一个参数。base64 的字符集
+    //     引擎会把它从载荷里静默吞掉（实测：旧引擎 libvterm 是在此处中止解析），多个参数
+    //     会被粘成一个。base64 的字符集
     //     [A-Za-z0-9+/=] 在 OSC 中完全安全。
     //   * base64 不可用时直接执行原生 ssh，绝不发出无人应答的 OSC——那会让 shim 永远
-    //     阻塞在 read 上，把用户的终端挂死。
+    //     阻塞在 read 上，把用户的终端挂死。载荷超过 6000 字节时同样回退：libghostty-vt 会整条
+    //     丢弃超过约 8 KiB 的 OSC，Shellium 收不到就不会应答，shim 同样会永久阻塞。
     //   * read 从 /dev/tty 读取回执，因此即使 stdout 被重定向也能收到 Shellium 的答复。
     //     回执文本 take/pass 连同其换行都会被 PTY 回显，由本地的 TerminalEchoFilter 精确
     //     扣掉。不在远端消除回显：`read -s` 并非 POSIX，不支持时返回非零，再用 `||` 回退
@@ -96,7 +98,7 @@ QByteArray ShellShim::scriptBody()
         " done;"
         " _shellium_b=$(printf '%s' \"$_shellium_a\" | base64 2>/dev/null | tr -d '\\n');"
         " unset _shellium_a _shellium_x;"
-        " if [ -z \"$_shellium_b\" ]; then unset _shellium_b; command ssh \"$@\"; return $?; fi;"
+        " if [ -z \"$_shellium_b\" ] || [ \"${#_shellium_b}\" -gt 6000 ]; then unset _shellium_b; command ssh \"$@\"; return $?; fi;"
         " printf '\\033]") + kOscNumber + QByteArrayLiteral(
         ";connect;%s\\007' \"$_shellium_b\" > /dev/tty;"
         " unset _shellium_b;"
@@ -200,7 +202,7 @@ ShellShim::Event ShellShim::parseEvent(const QByteArray &payload)
     }
 
     // 载荷是 base64 编码的 0x1E 分隔 argv：0x1E 是 C0 控制字符，直接放进 OSC 会被
-    // libvterm 当作字符串终止符，只能收到第一个参数。
+    // 引擎吞掉，多个参数粘成一个。
     const QByteArray body = QByteArray::fromBase64(
         payload.mid(separator + 1), QByteArray::AbortOnBase64DecodingErrors);
     for (const QByteArray &argument : body.split(kArgumentSeparator)) {

@@ -56,15 +56,32 @@ modules:
         url: https://www.libssh.org/files/0.11/libssh-0.11.5.tar.xz
         sha256: 6898ba9dd836d618b71dc7a4bb786a502c173cef5cafbf20fe5e0567ba4ea30c
 
-  - name: libvterm
+  # libghostty-vt 只发源码，需要 Zig 0.17.x 构建；Zig 工具链作为本模块的源码一并下载，只在构建期使用，
+  # 不会进入 /app。依赖包与源码包必须同版本，--system 让 Zig 使用已解包的依赖而不联网
+  # （flatpak-builder 的构建阶段没有网络）。strip-components 默认为 1，所以三个包各放进自己的 dest。
+  - name: libghostty-vt
     buildsystem: simple
     build-commands:
-      - make PREFIX=/app -j "${FLATPAK_BUILDER_N_JOBS}"
-      - make PREFIX=/app install
+      - cd src && ZIG_GLOBAL_CACHE_DIR="${FLATPAK_BUILDER_BUILDDIR}/zig-cache" ../zig/zig build --prefix /app --system ../deps -Doptimize=ReleaseFast -Dcpu=baseline
     sources:
       - type: archive
-        url: https://www.leonerd.org.uk/code/libvterm/libvterm-0.3.3.tar.gz
-        sha256: 09156f43dd2128bd347cbeebe50d9a571d32c64e0cf18d211197946aff7226e0
+        url: https://ziglang.org/download/0.17.1/zig-x86_64-linux-0.17.1.tar.xz
+        sha256: 3581863e3cbcfd0fce0efc682ce7e9e93da96668a977791d356a26d2a7e9b17a
+        dest: zig
+        only-arches: [x86_64]
+      - type: archive
+        url: https://ziglang.org/download/0.17.1/zig-aarch64-linux-0.17.1.tar.xz
+        sha256: a1546d5646eb184437918d6635ca6b762a0e889eac09cef720ee7a1ed3fe7795
+        dest: zig
+        only-arches: [aarch64]
+      - type: archive
+        url: https://release.files.ghostty.org/libghostty-vt/1.0.0/libghostty-vt-1.0.0.tar.gz
+        sha256: 4a6ef758be721923e1969e7b81b443dcc92d8dd3fb5a39600c03a8817a753676
+        dest: src
+      - type: archive
+        url: https://release.files.ghostty.org/libghostty-vt/1.0.0/libghostty-vt-1.0.0-deps.tar.gz
+        sha256: 4d5ea5e448e4c7ea8fb55ccbaa8668f2a97d44f438cee831e2b7ecd162d85c29
+        dest: deps
 
   - name: spdlog
     buildsystem: cmake-ninja

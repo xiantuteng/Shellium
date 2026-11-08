@@ -316,7 +316,7 @@ void TerminalWorkspace::emitTerminalStatus()
         server = m_pane->isConnected() ? tr("Local terminal") : tr("Not connected");
     }
 
-    // libvterm 与所有 SSH/PTY 输入输出均以 UTF-8 工作；在真正支持可切换编码前，明确发出
+    // 终端引擎与所有 SSH/PTY 输入输出均以 UTF-8 工作；在真正支持可切换编码前，明确发出
     // 常量比让主窗口猜测更可靠，也为以后增加编码设置预留稳定信号形状。
     emit terminalStatusChanged(server,
                                QStringLiteral("UTF-8"),

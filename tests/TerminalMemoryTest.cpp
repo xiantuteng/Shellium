@@ -118,7 +118,7 @@ int laidOutBlocksAwayFromViewport(TerminalView &view)
     for (QTextBlock block = view.document()->begin(); block.isValid(); block = block.next()) {
         const int number = block.blockNumber();
         // 两处按设计不释放，不计入：首段前面没有段分隔符，删除重写只能换掉它的正文、换不掉
-        // 它的块数据；末尾那一屏是 libvterm 的当前屏幕，每批输出都会原地改写，释放了也会
+        // 它的块数据；末尾那一屏是终端引擎的当前屏幕，每批输出都会原地改写，释放了也会
         // 马上重新排版。两者合计至多一屏多一段。
         const bool screenTail = number >= view.document()->blockCount() - view.terminalRows();
         if (number == 0 || screenTail

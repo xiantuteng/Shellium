@@ -1036,7 +1036,7 @@ void SettingsUiTest::everyThemePresetGetsUniqueSwatchAndPalette()
                  qPrintable(preset.id));
         QVERIFY2(palette.background != palette.foreground, qPrintable(preset.id));
         // 16 色表必须齐全：远端用 SGR 30-37/90-97 着色的输出（`ls`、grep、vim）在缺表时会
-        // 退回 libvterm 的 VGA 值，深色主题上的蓝色目录名几乎看不见。
+        // 退回引擎的内置默认色，不再与主题配平，深色主题上的蓝色目录名可能看不清。
         QCOMPARE(palette.ansi.size(), 16);
         for (int index = 0; index < palette.ansi.size(); ++index) {
             const QColor &color = palette.ansi.at(index);
@@ -1731,7 +1731,7 @@ void SettingsUiTest::openSourceNoticesCoverEveryDistributedComponent()
 
     // CMakeLists.txt 里 shellium_resolve_dependency 解析出的每个直接依赖都随安装包分发。
     const QStringList directDependencies{
-        QStringLiteral("Qt"),        QStringLiteral("libssh"), QStringLiteral("libvterm"),
+        QStringLiteral("Qt"),        QStringLiteral("libssh"), QStringLiteral("libghostty-vt"),
         QStringLiteral("libsodium"), QStringLiteral("spdlog"), QStringLiteral("{fmt}"),
         QStringLiteral("minizip"),   QStringLiteral("zlib"),   QStringLiteral("OpenSSL")};
     for (const QString &dependency : directDependencies) {

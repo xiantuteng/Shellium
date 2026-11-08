@@ -46,7 +46,7 @@ local ──ssh──▶ bastion ──ssh──▶ app-server ──ssh──�
 - Low memory footprint: one process with no per-window renderer, and each extra tab costs only its own terminal buffer and scrollback
 
 **Terminal**
-- libvterm-based VT/xterm emulation: 256 colours and true colour, alternate screen, wide (CJK) characters, configurable scrollback
+- libghostty-vt-based VT/xterm emulation: 256 colours and true colour, alternate screen, wide (CJK) characters, configurable scrollback
 - Local shell via PTY (macOS/Linux) or ConPTY (Windows), multiple tabs, broadcast input across a workspace
 - Themes (system / light / dark), bundled monospace fonts, cursor, bell and scrolling settings
 - One-key terminal reset (<kbd>⌘⇧R</kbd> / <kbd>Ctrl+Shift+R</kbd>) to recover after `cat`-ing a binary file
@@ -111,13 +111,17 @@ Download the latest build from **[Releases](https://github.com/xiantuteng/Shelli
 
 - CMake 3.21+, Ninja, a C++20 compiler
 - Qt 6.8+ (Core, Widgets, Concurrent, Network, Sql, Svg, LinguistTools; Test for the test suite)
-- libssh 0.11+, libvterm 0.3+, libsodium 1.0.18+, spdlog 1.12+, minizip
+- libssh 0.11+, libghostty-vt 1.0, libsodium 1.0.18+, spdlog 1.12+, minizip
+- Zig 0.17.x, only to build libghostty-vt — upstream ships source only. `scripts/install_libghostty_vt_from_source.sh` downloads a checksum-verified Zig into a temporary directory and removes it afterwards, so nothing needs installing by hand
 
 <details>
 <summary><b>macOS</b> (Homebrew)</summary>
 
 ```bash
-brew install qtbase qtsvg qttools libssh libvterm libsodium spdlog minizip ninja pkg-config
+brew install qtbase qtsvg qttools libssh libsodium spdlog minizip ninja pkg-config
+./scripts/install_libghostty_vt_from_source.sh "$HOME/.local"   # libghostty-vt 1.0 (fetches Zig 0.17 itself)
+export PKG_CONFIG_PATH="$HOME/.local/lib/pkgconfig:$PKG_CONFIG_PATH"
+export CMAKE_PREFIX_PATH="$HOME/.local:$CMAKE_PREFIX_PATH"
 ```
 
 </details>
@@ -128,9 +132,10 @@ brew install qtbase qtsvg qttools libssh libvterm libsodium spdlog minizip ninja
 Ubuntu's own packages ship Qt 6.4 and libssh 0.10, both older than Shellium needs. Install Qt 6.8+ with the [Qt online installer](https://www.qt.io/download-qt-installer-oss) or [aqtinstall](https://github.com/miurahr/aqtinstall), then:
 
 ```bash
-sudo apt-get install ninja-build pkg-config libssl-dev libvterm-dev libsodium-dev \
+sudo apt-get install ninja-build pkg-config libssl-dev libsodium-dev \
     libspdlog-dev libminizip-dev zlib1g-dev libgl1-mesa-dev libxkbcommon-x11-0 libxcb-cursor0
 sudo ./scripts/install_libssh_from_source.sh /usr/local   # libssh 0.11
+sudo ./scripts/install_libghostty_vt_from_source.sh /usr/local   # libghostty-vt 1.0 (fetches Zig 0.17 itself)
 ```
 
 </details>
@@ -191,7 +196,7 @@ Before touching the session stack, libssh, or terminal rendering, read [`docs/EN
 
 ## Acknowledgements
 
-Shellium is built on [Qt](https://www.qt.io/), [libssh](https://www.libssh.org/), [libvterm](https://www.leonerd.org.uk/code/libvterm/), [libsodium](https://libsodium.org/) and [spdlog](https://github.com/gabime/spdlog), and bundles a number of open-source monospace fonts. The full list of third-party components and their licences is under **Settings → About → View licenses** and in [`resources/licenses/`](resources/licenses).
+Shellium is built on [Qt](https://www.qt.io/), [libssh](https://www.libssh.org/), [libghostty-vt](https://github.com/ghostty-org/ghostty), [libsodium](https://libsodium.org/) and [spdlog](https://github.com/gabime/spdlog), and bundles a number of open-source monospace fonts. The full list of third-party components and their licences is under **Settings → About → View licenses** and in [`resources/licenses/`](resources/licenses).
 
 ## License
 

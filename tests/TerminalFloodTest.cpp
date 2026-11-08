@@ -18,7 +18,7 @@ constexpr int kColumns = 200;
 /**
  * @brief 造一条填满整块网格、且全程不含换行的逻辑行。
  *
- * `cat` 一个二进制文件时屏幕就是这个样子：长段字节里没有 \n，libvterm 把它们连成一条
+ * `cat` 一个二进制文件时屏幕就是这个样子：长段字节里没有 \n，终端引擎把它们连成一条
  * 横跨整屏的续行，光标停在这条行的最后一格。
  */
 QByteArray screenFillingUnbrokenLine()
@@ -31,7 +31,8 @@ QByteArray screenFillingUnbrokenLine()
 /**
  * @brief `cat 二进制文件` 这类输出洪流下的终端回归。
  *
- * 覆盖三个由同一条命令暴露出来的缺陷：libvterm 回流缩放时的进程 abort、BEL 风暴、
+ * 覆盖三个由同一条命令暴露出来的缺陷：缩放/回流时的进程崩溃（旧引擎 libvterm 会 abort，换成
+ * libghostty-vt 后这些用例保留为"任何引擎都不得崩溃"的通用回归）、BEL 风暴、
  * 以及 PTY 读取端缺少背压导致的界面冻结。
  */
 class TerminalFloodTest : public QObject
@@ -63,10 +64,10 @@ private slots:
 
 void TerminalFloodTest::shrinkingGridWithScreenFillingLineSurvives()
 {
-    // 回归目标：libvterm 0.3.3 的 screen_resize 在回流时用
+    // 回归目标：旧引擎 libvterm 0.3.3 的 screen_resize 在回流时用
     //     if(old_row_start <= old_cursor.row && old_cursor.row < old_row_end)
     // 补救光标，末尾的 `<` 是 off-by-one。光标恰好停在这条放不进新网格的逻辑行最后一行
-    // 时两侧都不成立，libvterm 随即 fprintf + abort()——不是断言，Release 下照样死。
+    // 时两侧都不成立，终端引擎随即 fprintf + abort()——不是断言，Release 下照样死。
     //
     // 这条用例一旦回归，表现不是断言失败而是整个测试进程被 SIGABRT 打死，QTest 会把它
     // 报成 crash。这正是用户遇到的现象：两份栈完全一致的 Shellium 崩溃报告。
@@ -78,7 +79,7 @@ void TerminalFloodTest::shrinkingGridWithScreenFillingLineSurvives()
     for (int rows = kRows - 1; rows >= 1; --rows) {
         bridge.resize(rows, kColumns);
     }
-    // 同时收缩列数：libvterm 的 new_height = ceil(width / new_cols) 会随列数变小而变大，
+    // 同时收缩列数：旧引擎 libvterm 的 new_height = ceil(width / new_cols) 会随列数变小而变大，
     // 缩列同样能把逻辑行顶出新网格。
     bridge.resize(kRows, kColumns);
     bridge.feed(screenFillingUnbrokenLine());
@@ -114,7 +115,7 @@ void TerminalFloodTest::resizeStillAppliesNewGeometry()
     bridge.feed(QByteArrayLiteral("\r\n") + QByteArray(65, 'z'));
     QCOMPARE(bridge.cursorLineText(), QString(5, QLatin1Char('z')));
 
-    // 光标也必须真的被放进新网格——这正是 libvterm 回流时失手的那一步。
+    // 光标也必须真的被放进新网格——这正是旧引擎回流时失手的那一步，对任何引擎都是必要断言。
     QTextDocument document;
     bridge.render(&document);
     QVERIFY2(bridge.renderedCursorPosition() >= 0,
@@ -123,7 +124,7 @@ void TerminalFloodTest::resizeStillAppliesNewGeometry()
 
 void TerminalFloodTest::staleSavedCursorSurvivesResize()
 {
-    // 回归目标：libvterm 0.3.3 的 savecursor(state, 0)（DECRC，`ESC 8`）直接把
+    // 回归目标：旧引擎 libvterm 0.3.3 的 savecursor(state, 0)（DECRC，`ESC 8`）直接把
     // state->saved.pos 灌给 state->pos，**不做任何网格夹取**；而缩小网格的 on_resize 只夹
     // state->pos，从不更新 saved.pos。于是"大网格里 ESC 7 → 缩小 → ESC 8"就留下一个越界
     // 的光标行，下一次 vterm_set_size 在 resize_buffer() 里永远找不到它，随即

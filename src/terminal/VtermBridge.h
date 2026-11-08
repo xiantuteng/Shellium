@@ -20,7 +20,7 @@ class QTextDocument;
  * @brief 封装 libghostty-vt 的 VT/xterm 状态机，并生成可由 Qt 绘制的终端文档。
  *
  * 所有 feed/resize/render 调用均发生在 GUI 线程；SSH 与本地 PTY 的输出通过 Qt 队列信号
- * 进入该线程，因此 libvterm 实例无需额外锁。桥接层维护有界滚动历史（默认按行数与字节
+ * 进入该线程，因此终端引擎实例无需额外锁。桥接层维护有界滚动历史（默认按行数与字节
  * 双上限裁剪），并正确处理光标移动、清屏、备用屏幕、256 色和 TrueColor。
  */
 class VtermBridge final : public QObject {
@@ -54,7 +54,7 @@ public:
      */
     [[nodiscard]] bool hasPendingCorruption() const { return m_corruptionDetected; }
 
-    /** @brief 改变终端字符尺寸并触发 libvterm 重排可重排内容。 */
+    /** @brief 改变终端字符尺寸并触发终端引擎重排可重排内容。 */
     void resize(int rows, int columns);
 
     /**
@@ -70,8 +70,9 @@ public:
      * @brief 覆盖 ANSI 0-15 号色，使远端显式着色的文本也跟随当前主题。
      * @param colors 恰好 16 个有效颜色；数量不足或含无效色时整体忽略，保留上一次的调色板。
      *
-     * libvterm 内置的是 VGA 那套值，其中 ANSI 蓝 (#0000cd) 落在任何深色背景上都几乎读不出
-     * 来——`ls` 的目录名正是用它。主题只改默认前景背景色是不够的，必须连这 16 号色一起换。
+     * 终端引擎内置的是一套固定色值（旧引擎 libvterm 是 VGA 那套，ANSI 蓝 #0000cd 落在深色
+     * 背景上几乎读不出来——`ls` 的目录名正是用它），不随主题变化。主题只改默认前景背景色是
+     * 不够的，必须连这 16 号色一起换。
      */
     void setAnsiPalette(const QVector<QColor> &colors);
 
@@ -157,7 +158,7 @@ public:
      *
      * 方向键、Home/End 和小键盘的字节形式取决于远端是否开启了 DECCKM（应用光标键）与
      * DECPAM（应用小键盘）——vim 进入全屏后就会开启。硬编码 CSI 形式会让 vim 在插入模式
-     * 下把方向键读成 ESC 加一个普通字母，表现为方向键不动光标反而插入乱码。libvterm 自己
+     * 下把方向键读成 ESC 加一个普通字母，表现为方向键不动光标反而插入乱码。终端引擎自己
      * 保存着这些模式，交给它编码是唯一不会随远端模式漂移的做法。
      */
     void sendKey(GhosttyKey key, GhosttyMods modifiers = 0);
@@ -167,7 +168,7 @@ public:
      *
      * vim 进入插入模式后会把粘贴内容当成逐个按键处理，autoindent 于是给每一行叠加一层
      * 缩进，十行代码粘完变成阶梯状。括号粘贴让远端知道这段内容来自剪贴板而非键盘。
-     * libvterm 保存着远端是否开启该模式，未开启时这两个调用不产生任何输出。
+     * 终端引擎保存着远端是否开启该模式，未开启时这两个调用不产生任何输出。
      */
     void beginPaste();
     void endPaste();
@@ -194,14 +195,14 @@ public:
     /** @brief 远端是否要求显示光标（DECTCEM）；全屏程序绘制期间会临时隐藏。 */
     [[nodiscard]] bool isCursorVisible() const { return m_cursorVisible; }
 
-    /** @brief libvterm 屏幕模型中的光标列（从 0 开始），不依赖 QTextDocument 是否已同步。 */
+    /** @brief 终端引擎屏幕模型中的光标列（从 0 开始），不依赖 QTextDocument 是否已同步。 */
     [[nodiscard]] int cursorColumn() const { return m_cursorColumn; }
 
     /**
      * @brief 返回终端光标当前所在屏幕行的可见文本。
      * @return 已移除行尾空白的文本；光标位置无效时返回空字符串。
      *
-     * 该值来自 libvterm 屏幕模型，而不是 QTextDocument 的最后一段，因此即使屏幕下方仍有
+     * 该值来自终端引擎屏幕模型，而不是 QTextDocument 的最后一段，因此即使屏幕下方仍有
      * 旧内容，也能准确取得用户正在输入、且远端 PTY 实际回显的命令行。
      */
     [[nodiscard]] QString cursorLineText() const;
@@ -217,7 +218,7 @@ public:
      *
      * 远端 Shell 的 Tab 补全、历史回溯与行编辑都在服务器上完成，本地按键缓冲看不到它们的
      * 结果；用户真正执行的命令只存在于 PTY 回显里。长命令（例如带完整 URL 的 wget）会被
-     * 终端自动折到下一屏幕行，只读光标那一行会截掉前半段，因此按 libvterm 的续行标记把
+     * 终端自动折到下一屏幕行，只读光标那一行会截掉前半段，因此按终端引擎的续行标记把
      * 整条逻辑行拼回来。行尾空白不裁剪：提示符结尾的空格是调用方比对提示符前缀的依据。
      */
     [[nodiscard]] InputLine cursorInputLine() const;
@@ -240,7 +241,7 @@ public:
     /**
      * @brief 下一次 render() 是否会让当前屏幕少掉已经画出来的行。
      *
-     * 多行进度条重绘的第一包常常是“光标上移 N 行 + 擦到屏尾”。libvterm 此刻的屏幕比文档里
+     * 多行进度条重绘的第一包常常是“光标上移 N 行 + 擦到屏尾”。终端引擎此刻的屏幕比文档里
      * 那一屏短；若马上同步进文档，贴底的视图会先上跳，下一包把进度条写回来再弹下去。
      * 调用方可以据此把这一帧按住，等补齐或超时后再画。尚未渲染过、文档已整体失效、或正处于
      * 备用屏时返回 false：这些场景没有“已经画出来的行”可供比较。
@@ -280,7 +281,7 @@ public:
     [[nodiscard]] int documentScrollbackBlockCount() const { return m_documentScrollbackCount; }
 
 signals:
-    /** @brief libvterm 为设备状态查询、光标位置查询等生成的协议响应。 */
+    /** @brief 终端引擎为设备状态查询、光标位置查询等生成的协议响应。 */
     void protocolResponse(const QByteArray &bytes);
 
     /** @brief 终端标题通过 OSC 序列发生变化。 */
@@ -311,7 +312,7 @@ private:
      * @brief 在字节进入终端引擎之前，给"超长仍未收尾"的 OSC/DCS 字符串补一个 CAN。
      *
      * `tail` 一个二进制文件会把原始字节打进 PTY，凑出的残缺 `ESC ]` / `ESC P` 若始终没有
-     * ST/BEL 收尾，libvterm 会把随后的提示符与用户输入一并吞进未结束的字符串，屏幕定格。
+     * ST/BEL 收尾，终端引擎会把随后的提示符与用户输入一并吞进未结束的字符串，屏幕定格。
      * 扫描器状态跨 feed() 调用保留，只在明显超出正常字符串长度时才注入，正常输出零影响。
      */
     QByteArray boundUnterminatedString(const QByteArray &bytes);
@@ -344,7 +345,7 @@ private:
      * @brief 一段属性相同的相邻单元格在紧凑行里的样式描述。
      *
      * 颜色存 QRgb 而不是 QColor：QColor 占 16 字节且每格各存两份；终端颜色全部来自
-     * libvterm 解析好的 8 位 RGB，QRgb 足以无损往返。无效色（仅理论上可能出现）用标志位
+     * 终端引擎解析好的 8 位 RGB，QRgb 足以无损往返。无效色（仅理论上可能出现）用标志位
      * 记录，保证解包后与 convertCell() 的结果逐字段相等——增量渲染靠这个相等性判断
      * "一行从屏幕滚进历史时内容没变"，一旦不等就会整段重写并抹掉用户的选区。
      */

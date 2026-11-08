@@ -61,8 +61,11 @@ QList<OpenSourceComponent> components()
                   {QStringLiteral("LGPL-2.1.txt")},
                   "Copyright (C) Free Software Foundation, Inc.", true),
 
-        component("libvterm", "MIT", "https://www.leonerd.org.uk/code/libvterm/",
-                  {QStringLiteral("libvterm-LICENSE.txt")}),
+        component("libghostty-vt", "MIT", "https://github.com/ghostty-org/ghostty",
+                  {QStringLiteral("libghostty-vt-LICENSE.txt"), QStringLiteral("Apache-2.0.txt")},
+                  "Copyright (c) 2024 Mitchell Hashimoto, Ghostty contributors.\n"
+                  "Bundles simdutf (Apache-2.0 or MIT) and Google Highway "
+                  "(Apache-2.0 or BSD-3-Clause)."),
         component("libsodium", "ISC", "https://github.com/jedisct1/libsodium",
                   {QStringLiteral("libsodium-LICENSE.txt")}),
         component("spdlog", "MIT", "https://github.com/gabime/spdlog",

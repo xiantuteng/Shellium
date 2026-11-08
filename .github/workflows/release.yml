@@ -60,7 +60,19 @@ jobs:
           HOMEBREW_NO_AUTO_UPDATE: '1'
           HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: '1'
         run: |
-          brew install libssh libvterm libsodium spdlog minizip ninja pkg-config
+          brew install libssh libsodium spdlog minizip ninja pkg-config
+
+      # Homebrew 没有 libghostty-vt，上游只发源码且需要 Zig 0.17.x：脚本自带下载并校验 Zig，
+      # 用完即删。最低系统通过 ZIG_TARGET 与 deployment_target 对齐，否则 dylib 会按 runner 的
+      # 系统版本标注最低系统，verify_macos_min_version 会拒绝。
+      - name: Build libghostty-vt
+        run: |
+          prefix="$HOME/.local/shellium-deps"
+          zig_arch="$(uname -m | sed 's/arm64/aarch64/')"
+          ZIG_TARGET="${zig_arch}-macos.${{ matrix.deployment_target }}" \
+            ./scripts/install_libghostty_vt_from_source.sh "$prefix"
+          echo "PKG_CONFIG_PATH=$prefix/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}" >> "$GITHUB_ENV"
+          echo "CMAKE_PREFIX_PATH=$prefix${CMAKE_PREFIX_PATH:+:$CMAKE_PREFIX_PATH}" >> "$GITHUB_ENV"
 
       - name: Build and package
         env:
@@ -95,7 +107,7 @@ jobs:
       matrix:
         include:
           # MSVC 原生编译：Qt 用官方 MSVC 2022 二进制，其余依赖由 vcpkg 按
-          # packaging/windows/vcpkg/vcpkg.json 构建（libvterm 无官方 port，用仓库内 overlay）。
+          # packaging/windows/vcpkg/vcpkg.json 构建（libghostty-vt 无官方 port，用仓库内 overlay，构建期自带 Zig）。
           - arch: x64
             runner: windows-2025
             msvc_arch: x64
@@ -240,7 +252,8 @@ jobs:
     name: Linux ${{ matrix.arch }}
     runs-on: ${{ matrix.runner }}
     # AppImage/deb/rpm 能运行的最低发行版由构建机的 glibc 决定，因此在 Ubuntu 22.04 容器里构建
-    # （glibc 2.35）。该版本仓库里的 libssh 0.9、libvterm 0.1、spdlog 1.9 都不够新，从源码编译；
+    # （glibc 2.35）。该版本仓库里的 libssh 0.9、spdlog 1.9 都不够新、也没有 libghostty-vt，从源码编译（libghostty-vt 需要 Zig，
+    # 由脚本自动下载）；
     # 默认的 GCC 11 对 C++20 支持不全，改用仓库里的 GCC 12，它的 libstdc++ 仍是系统自带那份。
     container: ubuntu:22.04
     strategy:

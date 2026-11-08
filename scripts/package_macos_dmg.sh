@@ -29,7 +29,7 @@ NOTARY_PROFILE="${SHELLIUM_NOTARY_PROFILE:-Shellium-notary}"
 SIGNING_IDENTITY="${SHELLIUM_SIGNING_IDENTITY:-}"
 PARALLEL_JOBS="${SHELLIUM_BUILD_JOBS:-4}"
 
-# 当前 Homebrew 的 libssh、libvterm、libsodium、spdlog 和 fmt 均以 macOS 26.0 为最低版本
+# 当前 Homebrew 的 libssh、libsodium、spdlog 和 fmt 均以 macOS 26.0 为最低版本
 # 构建。默认值必须忠实反映已部署二进制的真实要求，不能在 Info.plist 中虚报更低兼容版本。
 # 如果以后改用针对旧系统重新编译的依赖，可以通过环境变量安全下调此值。
 DEPLOYMENT_TARGET="${SHELLIUM_DEPLOYMENT_TARGET:-26.0}"
@@ -194,7 +194,8 @@ preflight() {
     # CMake 会执行更精确的版本检查；这里先确认所有 pkg-config 包存在，使缺失依赖时的报错
     # 更聚焦，用户无需从很长的 CMake 配置日志中反推具体缺少哪个包。
     pkg-config --exists 'libssh >= 0.11' || fail "缺少 libssh 0.11 或更高版本。"
-    pkg-config --exists 'vterm >= 0.3' || fail "缺少 libvterm 0.3 或更高版本。"
+    pkg-config --exists 'libghostty-vt >= 1.0' \
+        || fail "缺少 libghostty-vt 1.0 或更高版本：运行 scripts/install_libghostty_vt_from_source.sh <前缀> 安装，并把 <前缀>/lib/pkgconfig 加入 PKG_CONFIG_PATH。"
     pkg-config --exists 'libsodium >= 1.0.18' || fail "缺少 libsodium 1.0.18 或更高版本。"
     pkg-config --exists 'spdlog >= 1.12' || fail "缺少 spdlog 1.12 或更高版本。"
 
@@ -352,7 +353,7 @@ deploy_runtime_dependencies() {
 
     # macdeployqt 对 Homebrew 非 Qt 动态库的自动搜索可能受 Cellar 版本路径影响。显式传入
     # 每个包的 libdir 可确保 libssh 等依赖及其间接依赖被复制并改写安装名。
-    for package_name in libssh vterm libsodium spdlog; do
+    for package_name in libssh libghostty-vt libsodium spdlog; do
         package_libdir="$(pkg-config --variable=libdir "${package_name}")"
         deploy_arguments+=("-libpath=${package_libdir}")
     done
