@@ -190,6 +190,14 @@ struct TerminalSettings {
     bool multiLinePasteConfirmation = false;
 
     /**
+     * @brief 快捷命令面板（命令片段/历史）选中命令时是否仅插入终端而不执行。
+     *
+     * 关闭（默认）时点击、回车或 Cmd+数字直接执行；开启后只把命令粘贴到当前输入行，
+     * 由用户确认后自行回车。每行悬停的"编辑/执行"图标不受此开关影响。
+     */
+    bool quickCommandInsertOnly = false;
+
+    /**
      * @brief 已建立会话因网络异常退出时是否自动重连。
      *
      * 只对服务器未给出退出状态（-1）的异常断线生效；正常 exit、用户主动切换和首次认证

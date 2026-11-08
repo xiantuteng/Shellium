@@ -1570,6 +1570,14 @@ void RemoteFileManagerWidget::updateResponsiveActionButtons()
         }
         button->setToolButtonStyle(showText ? Qt::ToolButtonTextBesideIcon
                                             : Qt::ToolButtonIconOnly);
+        // 纯图标态必须去掉 QSS 里给"图标+文字"准备的左右 10px 内边距：34px 固定宽度扣掉边框
+        // 和内边距后内容区只剩 12px，比 16px 的图标还窄，图标会被挤成又窄又高的变形图案。
+        // 用动态属性切换样式表分支，并重新 polish 让它立即生效。
+        if (button->property("sftpIconOnly").toBool() == showText) {
+            button->setProperty("sftpIconOnly", !showText);
+            button->style()->unpolish(button);
+            button->style()->polish(button);
+        }
         // 窄态统一 34px 点击区；宽态让文字和菜单箭头按 sizeHint 自然展开。最大宽度必须
         // 恢复，否则用户退出全屏后再进入时会一直被前一次窄态尺寸锁住。
         if (showText) {

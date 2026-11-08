@@ -95,6 +95,16 @@ public:
      */
     [[nodiscard]] static QString digitShortcutText(int digit);
 
+    /**
+     * @brief 设置选中命令（点击/回车/Cmd+数字）时是否只插入而不执行。
+     *
+     * 只影响片段与历史面板的"整行"操作；行内悬停的编辑/执行图标始终各行其是。
+     */
+    void setInsertOnly(bool insertOnly);
+
+    /** @brief 当前是否为仅插入模式。 */
+    [[nodiscard]] bool insertOnly() const { return m_insertOnly; }
+
     /** @brief 当前展示模式，主要供测试与上层判断。 */
     [[nodiscard]] Mode mode() const { return m_mode; }
 
@@ -130,6 +140,12 @@ signals:
      */
     void entryChosen(int entryIndex);
 
+    /**
+     * @brief 用户要求只把命令插入终端、不执行（仅插入模式下的选中，或点击行内编辑图标）；
+     *        面板此时已经隐藏。与 commandChosen 互斥，每次选中只发其一。
+     */
+    void commandInsertRequested(const QString &command);
+
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
     void paintEvent(QPaintEvent *event) override;
@@ -164,6 +180,15 @@ private:
     /** @brief 隐藏面板并为 item 发出 entryChosen / commandChosen；无效行忽略。 */
     void chooseItem(const QListWidgetItem *item);
 
+    /** @brief 隐藏面板后按 run 决定发 commandChosen 还是 commandInsertRequested。 */
+    void dispatchCommand(const QListWidgetItem *item, bool run);
+
+    /** @brief 处理列表视口的鼠标移动/离开/点击，实现行内编辑与执行图标。 */
+    bool handleListMouse(QEvent *event);
+
+    /** @brief 更新悬停行并重绘新旧两行。 */
+    void setHoveredRow(int row);
+
     /** @brief 选中项在可见行中上下移动 delta 步。 */
     void moveSelection(int delta);
 
@@ -174,6 +199,8 @@ private:
     bool handleKey(QKeyEvent *event);
 
     Mode m_mode = Mode::Snippets;
+    bool m_insertOnly = false;
+    int m_hoveredRow = -1;
     QList<Entry> m_entries;
     bool m_scopedHistory = false; ///< 是否由 showHistory() 打开，Tab 仅此时切换范围。
     HistoryScope m_historyScope = HistoryScope::AllHosts;

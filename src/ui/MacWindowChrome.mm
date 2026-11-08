@@ -48,6 +48,20 @@ bool enableMacWindowChrome(QWidget *window)
     return true;
 }
 
+void applyMacAppAppearance(const int mode)
+{
+    if (@available(macOS 10.14, *)) {
+        // nil 表示跟随系统；显式指定后所有窗口（含之后创建的）都使用该外观。
+        NSAppearance *appearance = nil;
+        if (mode == 1) {
+            appearance = [NSAppearance appearanceNamed:NSAppearanceNameAqua];
+        } else if (mode == 2) {
+            appearance = [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];
+        }
+        NSApp.appearance = appearance;
+    }
+}
+
 void activateMacApplication()
 {
     [NSApp activateIgnoringOtherApps:YES];

@@ -122,6 +122,7 @@ SettingsDialog::SettingsDialog(TerminalSettingsService *service,
     , m_commandAutoCompletionToggle(new ToggleSwitch(this))
     , m_historyMinCommandLengthSpin(new QSpinBox(this))
     , m_multiLinePasteConfirmationToggle(new ToggleSwitch(this))
+    , m_quickCommandInsertOnlyToggle(new ToggleSwitch(this))
     , m_automaticReconnectToggle(new ToggleSwitch(this))
     , m_vaultPasswordEnabledToggle(new ToggleSwitch(this))
     , m_reconnectMaxAttemptsSpin(new QSpinBox(this))
@@ -246,6 +247,7 @@ SettingsDialog::SettingsDialog(TerminalSettingsService *service,
          m_audibleBellToggle,
          m_commandAutoCompletionToggle,
          m_multiLinePasteConfirmationToggle,
+         m_quickCommandInsertOnlyToggle,
          m_automaticReconnectToggle,
          m_sidebarDoubleClickPromptToggle,
          m_automaticUpdateCheckToggle}) {
@@ -612,6 +614,7 @@ QWidget *SettingsDialog::buildTerminalPage()
     m_audibleBellToggle->setObjectName(QStringLiteral("audibleBellToggle"));
     m_commandAutoCompletionToggle->setObjectName(
         QStringLiteral("commandAutoCompletionToggle"));
+    m_quickCommandInsertOnlyToggle->setObjectName(QStringLiteral("quickCommandInsertOnlyToggle"));
     m_multiLinePasteConfirmationToggle->setObjectName(
         QStringLiteral("multiLinePasteConfirmationToggle"));
 
@@ -629,6 +632,10 @@ QWidget *SettingsDialog::buildTerminalPage()
         [this] { return tr("Command-line autosuggestions"); },
         m_commandAutoCompletionToggle,
         [this] { return tr("After you type at least two characters, suggestions are shown automatically from the current host's command history; off by default."); });
+    sessionCard->addRow(
+        [this] { return tr("Quick command panels: insert only"); },
+        m_quickCommandInsertOnlyToggle,
+        [this] { return tr("When on, choosing a command from the snippet or history panel only pastes it into the terminal instead of running it. The edit and run icons shown on hover work either way."); });
     sessionCard->addRow(
         [this] { return tr("History minimum length"); },
         new SettingsStepper(m_historyMinCommandLengthSpin, sessionCard),
@@ -1309,6 +1316,7 @@ TerminalSettings SettingsDialog::editedSettings() const
     settings.commandAutoCompletion = m_commandAutoCompletionToggle->isChecked();
     settings.historyMinCommandLength = m_historyMinCommandLengthSpin->value();
     settings.multiLinePasteConfirmation = m_multiLinePasteConfirmationToggle->isChecked();
+    settings.quickCommandInsertOnly = m_quickCommandInsertOnlyToggle->isChecked();
     settings.automaticReconnect = m_automaticReconnectToggle->isChecked();
     settings.vaultPasswordEnabled = m_vaultPasswordEnabledToggle->isChecked();
     settings.reconnectMaxAttempts = m_reconnectMaxAttemptsSpin->value();
@@ -1459,6 +1467,7 @@ void SettingsDialog::populateControls(const TerminalSettings &settings)
     m_commandAutoCompletionToggle->setChecked(normalized.commandAutoCompletion);
     m_historyMinCommandLengthSpin->setValue(normalized.historyMinCommandLength);
     m_multiLinePasteConfirmationToggle->setChecked(normalized.multiLinePasteConfirmation);
+    m_quickCommandInsertOnlyToggle->setChecked(normalized.quickCommandInsertOnly);
     m_automaticReconnectToggle->setChecked(normalized.automaticReconnect);
     m_vaultPasswordEnabledToggle->setChecked(normalized.vaultPasswordEnabled);
     m_reconnectMaxAttemptsSpin->setValue(normalized.reconnectMaxAttempts);

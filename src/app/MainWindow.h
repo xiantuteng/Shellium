@@ -548,6 +548,7 @@ private:
     QWidget *m_hostHeaderActions = nullptr;
     /** @brief 效率工具页的标题行动作条；仅在效率工具页可见，归 ProductivityWidget 管理逻辑。 */
     QWidget *m_productivityHeaderActions = nullptr;
+    QWidget *m_forwardingHeaderActions = nullptr;
     /** @brief 紧跟侧栏标题的效率工具视图切换器（片段 / 历史图标）；只在效率工具页显示。 */
     QWidget *m_productivityViewSwitcher = nullptr;
     /** @brief 导航轨上与三个侧栏页面一一对应的互斥按钮。 */

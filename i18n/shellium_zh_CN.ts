@@ -2388,32 +2388,20 @@ Confirm the key has changed, replace the old record in known_hosts, and continue
         <translation>已停止</translation>
     </message>
     <message>
-        <source>Local %1
-← Remote %2</source>
-        <translation>本机 %1
-← 远程 %2</translation>
-    </message>
-    <message>
-        <source>Local %1
-→ Remote (per SOCKS request)</source>
-        <translation>本机 %1
-→ 远程（按 SOCKS 请求）</translation>
+        <source>%1
+→ SOCKS (per request)</source>
+        <translation>%1
+→ SOCKS（按请求）</translation>
     </message>
     <message>
         <source>+%1 more</source>
         <translation>另 %1 个</translation>
     </message>
     <message>
-        <source>Local %1
+        <source>%1
 → SSH %2; other destinations direct</source>
-        <translation>本机 %1
+        <translation>%1
 → SSH %2；其余直连</translation>
-    </message>
-    <message>
-        <source>Local %1
-→ Remote %2</source>
-        <translation>本机 %1
-→ 远程 %2</translation>
     </message>
     <message>
         <source>%1 %2</source>
@@ -3453,6 +3441,14 @@ To avoid overwriting existing credentials, Shellium does not create a new vault 
         <translation type="unfinished">%1 执行 · 回车执行选中项 · Tab 切换所有主机/当前主机 · Esc 关闭</translation>
     </message>
     <message>
+        <source>%1 insert · Enter insert selected · Esc close</source>
+        <translation>%1 插入 · 回车插入选中项 · Esc 关闭</translation>
+    </message>
+    <message>
+        <source>%1 insert · Enter insert selected · Tab all/current host · Esc close</source>
+        <translation>%1 插入 · 回车插入选中项 · Tab 切换所有主机/当前主机 · Esc 关闭</translation>
+    </message>
+    <message>
         <source>%1 run · Enter run selected · Esc close</source>
         <translation type="unfinished">%1 执行 · 回车执行选中项 · Esc 关闭</translation>
     </message>
@@ -4326,6 +4322,14 @@ This algorithm is obsolete; upgrading the server&apos;s SSH configuration is rec
     <message>
         <source>Only commands at least this long are saved to command history; shorter ones such as ls or cd are skipped. 0 saves every command.</source>
         <translation type="unfinished">只有不短于该长度的命令才会保存到命令历史，ls、cd 这类短命令会被跳过。0 表示保存所有命令。</translation>
+    </message>
+    <message>
+        <source>Quick command panels: insert only</source>
+        <translation>快捷命令面板：仅插入</translation>
+    </message>
+    <message>
+        <source>When on, choosing a command from the snippet or history panel only pastes it into the terminal instead of running it. The edit and run icons shown on hover work either way.</source>
+        <translation>开启后，在命令片段或历史面板中选中命令只会把它粘贴到终端而不执行；悬停时显示的编辑和执行图标不受此开关影响。</translation>
     </message>
     <message>
         <source>Multi-line paste confirmation</source>

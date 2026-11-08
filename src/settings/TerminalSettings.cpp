@@ -10,6 +10,10 @@
 #include <QStyleHints>
 #include <QThread>
 
+#ifdef Q_OS_MACOS
+#include <CoreFoundation/CoreFoundation.h>
+#endif
+
 #include <algorithm>
 #include <initializer_list>
 #include <cmath>
@@ -41,6 +45,7 @@ const QString kHistoryMinCommandLengthKey =
 /** @brief 多行粘贴确认开关；缺失该键时由结构默认值保持关闭（直接粘贴）。 */
 const QString kMultiLinePasteConfirmationKey =
     QStringLiteral("terminal/multi_line_paste_confirmation");
+const QString kQuickCommandInsertOnlyKey = QStringLiteral("terminal/quick_command_insert_only");
 const QString kAutomaticReconnectKey = QStringLiteral("connection/automatic_reconnect");
 /** @brief 是否启用用户主密码保护凭据；与透明的本机密钥保存模式相互切换。 */
 const QString kVaultPasswordEnabledKey = QStringLiteral("security/vault_password_enabled");
@@ -532,6 +537,28 @@ ThemeMode TerminalSettings::effectiveThemeMode() const
     if (themeMode != ThemeMode::FollowSystem) {
         return themeMode;
     }
+
+#ifdef Q_OS_MACOS
+    // 应用会把 NSApp.appearance 固定为深色/浅色，好让原生标题栏跟随应用主题；此后 Qt 的
+    // colorScheme() 读到的是"被我们固定后的外观"，而不是系统真实设置，"跟随系统"就会一直
+    // 停在上一次的外观上。这里直接读系统全局偏好 AppleInterfaceStyle（深色时为 "Dark"，浅色
+    // 时不存在），它与应用自身的外观设置无关。
+    {
+        CFPropertyListRef value = CFPreferencesCopyValue(CFSTR("AppleInterfaceStyle"),
+                                                         kCFPreferencesAnyApplication,
+                                                         kCFPreferencesCurrentUser,
+                                                         kCFPreferencesAnyHost);
+        bool systemDark = false;
+        if (value != nullptr) {
+            if (CFGetTypeID(value) == CFStringGetTypeID()) {
+                systemDark = CFStringCompare(static_cast<CFStringRef>(value), CFSTR("Dark"),
+                                             kCFCompareCaseInsensitive) == kCFCompareEqualTo;
+            }
+            CFRelease(value);
+        }
+        return systemDark ? ThemeMode::Dark : ThemeMode::Light;
+    }
+#endif
 
     if (QGuiApplication::instance() != nullptr) {
         const Qt::ColorScheme scheme = QGuiApplication::styleHints()->colorScheme();
@@ -1350,6 +1377,7 @@ bool TerminalSettings::operator==(const TerminalSettings &other) const
         && commandAutoCompletion == other.commandAutoCompletion
         && historyMinCommandLength == other.historyMinCommandLength
         && multiLinePasteConfirmation == other.multiLinePasteConfirmation
+        && quickCommandInsertOnly == other.quickCommandInsertOnly
         && automaticReconnect == other.automaticReconnect
         && vaultPasswordEnabled == other.vaultPasswordEnabled
         && reconnectMaxAttempts == other.reconnectMaxAttempts
@@ -1520,6 +1548,7 @@ bool TerminalSettingsService::load(QString *errorMessage)
     assignBoolean(kCommandAutoCompletionKey, &loaded.commandAutoCompletion);
     assignInteger(kHistoryMinCommandLengthKey, &loaded.historyMinCommandLength);
     assignBoolean(kMultiLinePasteConfirmationKey, &loaded.multiLinePasteConfirmation);
+    assignBoolean(kQuickCommandInsertOnlyKey, &loaded.quickCommandInsertOnly);
     assignBoolean(kAutomaticReconnectKey, &loaded.automaticReconnect);
     const std::optional<QString> vaultPasswordSetting =
         readValue(kVaultPasswordEnabledKey, &queryFailed);
@@ -1648,6 +1677,8 @@ bool TerminalSettingsService::save(const TerminalSettings &settings, QString *er
                           serializeBool(normalizedSettings.commandAutoCompletion))
                 || !write(kHistoryMinCommandLengthKey,
                           QString::number(normalizedSettings.historyMinCommandLength))
+                || !write(kQuickCommandInsertOnlyKey,
+                          serializeBool(normalizedSettings.quickCommandInsertOnly))
                 || !write(kMultiLinePasteConfirmationKey,
                           serializeBool(normalizedSettings.multiLinePasteConfirmation))
                 || !write(kAutomaticReconnectKey,

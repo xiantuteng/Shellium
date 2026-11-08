@@ -669,6 +669,10 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     m_productivityHeaderActions = m_productivityWidget->headerActionsWidget();
     m_productivityHeaderActions->setVisible(false);
     sidebarHeaderLayout->addWidget(m_productivityHeaderActions);
+    // 端口转发页同理：新建/启动/停止与标题同排，靠右。
+    m_forwardingHeaderActions = m_portForwardManager->headerActionsWidget();
+    m_forwardingHeaderActions->setVisible(false);
+    sidebarHeaderLayout->addWidget(m_forwardingHeaderActions);
     // 视图切换器紧跟标题（伸缩项之前），读作"效率工具 · 片段 / 历史"；动作条仍靠右。
     m_productivityViewSwitcher = m_productivityWidget->headerViewSwitcherWidget();
     m_productivityViewSwitcher->setVisible(false);
@@ -2144,6 +2148,9 @@ void MainWindow::showSidebarPage(const int pageIndex)
     if (m_productivityHeaderActions != nullptr) {
         m_productivityHeaderActions->setVisible(pageIndex == ProductivityPage);
     }
+    if (m_forwardingHeaderActions != nullptr) {
+        m_forwardingHeaderActions->setVisible(pageIndex == ForwardingPage);
+    }
     if (m_productivityViewSwitcher != nullptr) {
         m_productivityViewSwitcher->setVisible(pageIndex == ProductivityPage);
     }
@@ -2170,6 +2177,12 @@ void MainWindow::showSidebarPage(const int pageIndex)
 void MainWindow::applyModernAppearance(const TerminalSettings &settings)
 {
     const bool dark = settings.effectiveThemeMode() == ThemeMode::Dark;
+
+    // 对话框用的是系统原生标题栏，明暗取决于 NSAppearance；应用主题与系统不一致时（例如
+    // 系统浅色、应用深色）标题栏会是刺眼的白色，因此让原生外观跟随应用主题设置。
+    applyMacAppAppearance(settings.themeMode == ThemeMode::FollowSystem
+                              ? 0
+                              : (settings.themeMode == ThemeMode::Light ? 1 : 2));
 
     // 标题区保持稳定深色，可以在深浅主题间提供连续的窗口身份；工作区颜色则跟随用户
     // 主题。所有颜色在此集中声明，避免各子控件出现大量“近似但不一致”的硬编码灰色。
@@ -2217,13 +2230,14 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
     // 一档，而不是退回普通悬停色，否则鼠标移上去反倒像取消了选中。
     const QString prominentSelectionHoverBackground = dark ? QStringLiteral("#397565")
                                                             : QStringLiteral("#9fdcc0");
-    // 左侧导航栏底色本身就带灰（浅色 #e8edf0），PROMINENT_SELECTION 落在上面仍显得发白，
-    // 用户认不出当前在哪一页；导航按钮单独再加深一档。通用 RAISED 甚至比导航栏底色更浅，
-    // 悬停反而像“变亮消失”，因此悬停也单独给一个比底色深的灰。
-    const QString navigationSelectionBackground = dark ? QStringLiteral("#357a63")
-                                                        : QStringLiteral("#86d4ae");
-    const QString navigationSelectionHoverBackground = dark ? QStringLiteral("#3f8c73")
-                                                             : QStringLiteral("#6fca9f");
+    // 当前页的导航按钮直接用品牌主色填充（与 primaryAction 按钮同一套：主色底 + 深绿图标），
+    // 取代此前"在导航栏底色上叠一层半透明绿"的做法：那种底色与同样偏灰的图标明度接近，
+    // 用户认不出当前在哪一页。悬停时提亮一档，表明选中项仍可点击（再次点击会收起侧栏）。
+    const QString navigationSelectionBackground = accentColor;
+    const QString navigationSelectionHoverBackground = QStringLiteral("#45e394");
+    // 压在主色底上的图标色：深色主题用白色，浅色主题用与 primaryAction 按钮文字同色的深绿。
+    const QColor navigationSelectedIconColor(dark ? QStringLiteral("#000000")
+                                                    : QStringLiteral("#0c2f24"));
     const QString navigationHoverBackground = dark ? QStringLiteral("#384259")
                                                     : QStringLiteral("#cfd8dd");
 
@@ -2611,6 +2625,9 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
             font-size: 13px;
             font-weight: 600;
         }
+        QToolButton[sftpResponsiveAction="true"][sftpIconOnly="true"] {
+            padding: 0;
+        }
         QToolButton[sftpActionRole="transfer"] {
             background: @SURFACE@;
             border-color: @BORDER@;
@@ -2809,8 +2826,7 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
         QPushButton[forwardingRuntimeAction="true"] {
             /* 启停与“新建”同处一行，缩短左右内边距才能在 260px 最小侧栏内保持完整文字，
                固定宽度由构造代码统一约束，避免不同平台字体导致两个按钮宽度跳变。 */
-            padding-left: 6px;
-            padding-right: 6px;
+            padding: 0;
         }
         QListWidget#PortForwardRuleList {
             background: @SURFACE@;
@@ -3478,9 +3494,21 @@ void MainWindow::applyModernAppearance(const TerminalSettings &settings)
          index < m_navigationButtons.size() && index < navigationSymbols.size();
          ++index) {
         QToolButton *button = m_navigationButtons.at(index);
-        button->setIcon(UiIcons::symbol(this,
-                                        navigationSymbols.at(index),
-                                        navigationIconColor));
+        // 自定义 QIconEngine 会忽略 addPixmap()，选中态图标因此一直沿用普通态颜色。
+        // 这里改为直接用位图图标并显式给出 On/Off 两套颜色；主题变化时本函数会重新执行，
+        // 所以不依赖引擎的实时调色板。选中态压在主色底上，深色主题用纯黑保证对比度。
+        QIcon navigationIcon;
+        const QSize pixmapSize(24, 24);
+        const qreal ratio = devicePixelRatioF();
+        const QPixmap idlePixmap = UiIcons::renderSymbolPixmap(
+            navigationSymbols.at(index), navigationIconColor, pixmapSize, ratio);
+        const QPixmap selectedPixmap = UiIcons::renderSymbolPixmap(
+            navigationSymbols.at(index), navigationSelectedIconColor, pixmapSize, ratio);
+        navigationIcon.addPixmap(idlePixmap, QIcon::Normal, QIcon::Off);
+        navigationIcon.addPixmap(idlePixmap, QIcon::Active, QIcon::Off);
+        navigationIcon.addPixmap(selectedPixmap, QIcon::Normal, QIcon::On);
+        navigationIcon.addPixmap(selectedPixmap, QIcon::Active, QIcon::On);
+        button->setIcon(navigationIcon);
         // 主题重绘也遵循当前密度，避免切换主题后图标恢复成宽松尺寸。
         button->setIconSize(compactLayout() ? QSize(17, 17) : QSize(21, 21));
     }
@@ -4985,6 +5013,18 @@ QuickCommandPopup *MainWindow::ensureQuickCommandPopup()
         return m_quickCommandPopup;
     }
     m_quickCommandPopup = new QuickCommandPopup(this);
+    m_quickCommandPopup->setInsertOnly(m_settingsService->currentSettings().quickCommandInsertOnly);
+    connect(m_settingsService, &TerminalSettingsService::settingsChanged, m_quickCommandPopup,
+            [this](const TerminalSettings &settings) {
+                m_quickCommandPopup->setInsertOnly(settings.quickCommandInsertOnly);
+            });
+    connect(m_quickCommandPopup, &QuickCommandPopup::commandInsertRequested,
+            this, [this](const QString &command) {
+                if (m_quickCommandPane != nullptr) {
+                    m_quickCommandPane->insertCommandText(command);
+                    m_quickCommandPane->focusTerminal();
+                }
+            });
     connect(m_quickCommandPopup, &QuickCommandPopup::commandChosen,
             this, [this](const QString &command) {
                 // 执行到弹出时记下的终端，而不是"此刻的活动终端"：面板打开期间标签不会

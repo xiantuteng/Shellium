@@ -51,6 +51,16 @@ void activateMacApplication();
  * AppKit 可能重新布局按钮，因此允许调用方重复执行。
  */
 void alignMacWindowButtons(QWidget *window, qreal titleBarHeight);
+
+/**
+ * @brief 设置整个应用的 macOS 外观，使所有原生窗口（含各对话框）的标题栏随应用主题。
+ * @param mode 0 跟随系统，1 浅色，2 深色。
+ *
+ * 对话框使用系统原生标题栏，其明暗由 NSAppearance 决定，而不是 Qt 样式表。应用主题设为
+ * 深色但系统是浅色时，标题栏会一片刺眼的白；对 NSApp 统一设置外观即可一次覆盖所有窗口，
+ * 包括之后新建的对话框。
+ */
+void applyMacAppAppearance(int mode);
 #else
 [[nodiscard]] inline bool enableMacWindowChrome(QWidget *window)
 {
@@ -72,6 +82,12 @@ inline void activateMacApplication() {}
 {
     Q_UNUSED(window)
     return false;
+}
+
+/** @brief 非 macOS 平台没有 NSAppearance，无需处理。 */
+inline void applyMacAppAppearance(int mode)
+{
+    Q_UNUSED(mode)
 }
 
 /** @brief 非 macOS 平台不存在交通灯按钮，因此无需执行任何对齐操作。 */

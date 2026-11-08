@@ -977,12 +977,26 @@ public:
         topRow->addWidget(typeLabel, 0, Qt::AlignRight | Qt::AlignVCenter);
         layout->addLayout(topRow);
 
+        // 映射文本由调用方以"\n"分成两段（本机端 / 远端）：宽度够时同行显示 "A → B"，
+        // 不够时才折成两行；具体取舍在 fitToWidth() 里随列表宽度实时决定。
+        const qsizetype split = endpointText.indexOf(QLatin1Char('\n'));
+        m_endpointFirst = split < 0 ? endpointText : endpointText.left(split);
+        m_endpointSecond = split < 0 ? QString() : endpointText.mid(split + 1);
         auto *endpointLabel = new QLabel(endpointText, this);
+        m_endpointLabel = endpointLabel;
         QFont monoFont(QStringLiteral("Menlo"));
         monoFont.setStyleHint(QFont::Monospace);
         monoFont.setPointSizeF(std::max(7.0, this->font().pointSizeF() - 1.0));
         endpointLabel->setFont(monoFont);
-        endpointLabel->setStyleSheet(QStringLiteral("color: palette(mid);"));
+        // palette(mid) 在深色主题下接近背景色，等宽小字几乎不可读；改用文字色的 70% 不透明度，
+        // 深浅主题都保持次要信息的层级又清晰可辨。
+        QColor endpointColor = this->palette().color(QPalette::WindowText);
+        endpointColor.setAlphaF(0.72);
+        endpointLabel->setStyleSheet(QStringLiteral("color: rgba(%1,%2,%3,%4);")
+                                         .arg(endpointColor.red())
+                                         .arg(endpointColor.green())
+                                         .arg(endpointColor.blue())
+                                         .arg(endpointColor.alpha()));
         layout->addWidget(endpointLabel);
 
         auto *statusRow = new QHBoxLayout;
@@ -997,7 +1011,15 @@ public:
                 ? tr("%1 · %2").arg(stateLabel).arg(activeConnections)
                 : stateLabel,
             this);
-        statusLabel->setStyleSheet(QStringLiteral("color: palette(mid); font-size: 11px;"));
+        QColor statusColor = this->palette().color(QPalette::WindowText);
+        statusColor.setAlphaF(0.72);
+        // palette(mid) 在深色主题下接近背景色，状态文字几乎不可读；与端点文字同用文字色的
+        // 72% 不透明度，深浅主题下都保持次要层级且清晰。
+        statusLabel->setStyleSheet(QStringLiteral("color: rgba(%1,%2,%3,%4); font-size: 11px;")
+                                       .arg(statusColor.red())
+                                       .arg(statusColor.green())
+                                       .arg(statusColor.blue())
+                                       .arg(statusColor.alpha()));
         statusRow->addWidget(dotLabel, 0, Qt::AlignVCenter);
         statusRow->addWidget(statusLabel, 0, Qt::AlignVCenter);
         statusRow->addStretch(1);
@@ -1025,7 +1047,36 @@ public:
             errorLabel->setToolTip(displayableForwardingError(lastError, 1000));
             layout->addWidget(errorLabel);
         }
+        fitToWidth(0);
     }
+
+    /**
+     * @brief 按可用宽度选择地址映射的单行或两行排版，并返回该宽度下的卡片高度。
+     * @param width 列表视口宽度；不大于 0 时只做单行排版并返回自然尺寸。
+     */
+    QSize fitToWidth(const int width)
+    {
+        const QFontMetrics metrics(m_endpointLabel->font());
+        const QString oneLine = m_endpointSecond.isEmpty()
+            ? m_endpointFirst
+            : m_endpointFirst + QLatin1Char(' ') + m_endpointSecond;
+        const QMargins margins = layout()->contentsMargins();
+        const int available = width - margins.left() - margins.right() - 4;
+        const bool fits = width <= 0 || metrics.horizontalAdvance(oneLine) <= available;
+        m_endpointLabel->setText(fits || m_endpointSecond.isEmpty()
+                                     ? oneLine
+                                     : m_endpointFirst + QLatin1Char('\n') + m_endpointSecond);
+        layout()->invalidate();
+        if (width <= 0) {
+            return sizeHint();
+        }
+        return QSize(width, std::max(sizeHint().height(), layout()->heightForWidth(width)));
+    }
+
+private:
+    QLabel *m_endpointLabel = nullptr;
+    QString m_endpointFirst;
+    QString m_endpointSecond;
 };
 
 } // namespace
@@ -1055,27 +1106,35 @@ PortForwardManagerWidget::PortForwardManagerWidget(ApplicationDatabase *database
     // PortForwardRuleRow 画成两行，天然不需要横向滚动，侧栏加宽后也只是卡片变宽。
     m_ruleList->setObjectName(QStringLiteral("PortForwardRuleList"));
     m_ruleList->setSelectionMode(QAbstractItemView::SingleSelection);
+    // 视口宽度变化（侧栏拖宽/窄）时重新决定映射文本的单行/两行排版与卡片高度。
+    m_ruleList->viewport()->installEventFilter(this);
     m_ruleList->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_ruleList->setContextMenuPolicy(Qt::CustomContextMenu);
     m_ruleList->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     m_ruleList->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
-    auto *managementButtons = new QHBoxLayout;
+    m_headerActions = new QWidget(this);
+    m_headerActions->setObjectName(QStringLiteral("PortForwardHeaderActions"));
+    auto *managementButtons = new QHBoxLayout(m_headerActions);
     managementButtons->setObjectName(QStringLiteral("PortForwardManagementLayout"));
+    managementButtons->setContentsMargins(0, 0, 0, 0);
     managementButtons->setSpacing(6);
-    auto *addButton = new QPushButton(tr("New"), this);
+    auto *addButton = new QPushButton(tr("New"), m_headerActions);
     addButton->setObjectName(QStringLiteral("AddPortForwardButton"));
     addButton->setProperty("primaryAction", true);
-    auto *startButton = new QPushButton(tr("Start"), this);
+    auto *startButton = new QPushButton(m_headerActions);
     startButton->setObjectName(QStringLiteral("StartAllPortForwardsButton"));
     startButton->setProperty("forwardingRuntimeAction", true);
-    startButton->setFixedWidth(66);
-    auto *stopButton = new QPushButton(tr("Stop"), this);
+    startButton->setFixedSize(30, 30);
+    startButton->setAccessibleName(tr("Start"));
+    auto *stopButton = new QPushButton(m_headerActions);
     stopButton->setObjectName(QStringLiteral("StopAllPortForwardsButton"));
     stopButton->setProperty("forwardingRuntimeAction", true);
-    stopButton->setFixedWidth(66);
+    stopButton->setFixedSize(30, 30);
+    stopButton->setAccessibleName(tr("Stop"));
+    addButton->setFixedHeight(30);
     UiIcons::decorateButton(
         addButton,
-        UiIcons::symbol(this, UiIcons::Symbol::Plus, this->palette().color(QPalette::WindowText)),
+        UiIcons::symbol(this, UiIcons::Symbol::Plus, QColor(Qt::black)),
         tr("New port forwarding rule"));
     UiIcons::decorateButton(
         startButton,
@@ -1086,13 +1145,12 @@ PortForwardManagerWidget::PortForwardManagerWidget(ApplicationDatabase *database
         UiIcons::symbol(this, UiIcons::Symbol::Stop, this->palette().color(QPalette::WindowText)),
         tr("Stop all forwarding rules for the current host"));
     managementButtons->addWidget(addButton);
-    managementButtons->addStretch(1);
     managementButtons->addWidget(startButton);
     managementButtons->addWidget(stopButton);
-    layout->addLayout(managementButtons);
+    // 按钮条由 MainWindow 挂到侧栏标题行最右侧；单独使用时作为本控件的隐藏子控件存在。
+    m_headerActions->hide();
 
-    // 编辑与删除不再占用常驻空间，仍可从规则右键菜单进入。批量启停收窄后位于同一行
-    // 最右侧，既保留高频入口，又把更多纵向空间交给规则列表。
+    // 编辑与删除不再占用常驻空间，仍可从规则右键菜单进入。
     layout->addSpacing(10);
     layout->addWidget(m_ruleList, 1);
 
@@ -1167,8 +1225,9 @@ PortForwardManagerWidget::PortForwardManagerWidget(ApplicationDatabase *database
     i18n::onRetranslate(this, [this, hostLabel, addButton, startButton, stopButton] {
         hostLabel->setText(tr("Hosts"));
         addButton->setText(tr("New"));
-        startButton->setText(tr("Start"));
-        stopButton->setText(tr("Stop"));
+        // 启停是纯图标按钮：文字只作无障碍名称，不能再 setText，否则切语言后文字会回来。
+        startButton->setAccessibleName(tr("Start"));
+        stopButton->setAccessibleName(tr("Stop"));
         addButton->setToolTip(tr("New port forwarding rule"));
         startButton->setToolTip(tr("Start all forwarding rules for the current host"));
         stopButton->setToolTip(tr("Stop all forwarding rules for the current host"));
@@ -1381,7 +1440,7 @@ void PortForwardManagerWidget::reloadRules()
                                            statistics.activeConnections,
                                            statistics.lastError,
                                            m_ruleList);
-        item->setSizeHint(row->sizeHint());
+        item->setSizeHint(row->fitToWidth(m_ruleList->viewport()->width()));
         m_ruleList->setItemWidget(item, row);
         if (!previouslySelectedRuleId.isEmpty() && rule.id == previouslySelectedRuleId) {
             restoredSelection = item;
@@ -1760,6 +1819,23 @@ QString PortForwardManagerWidget::stateText(const PortForwardState state)
     }
 }
 
+bool PortForwardManagerWidget::eventFilter(QObject *watched, QEvent *event)
+{
+    if (watched == m_ruleList->viewport() && event->type() == QEvent::Resize) {
+        const int width = m_ruleList->viewport()->width();
+        for (int row = 0; row < m_ruleList->count(); ++row) {
+            QListWidgetItem *item = m_ruleList->item(row);
+            if (auto *card = dynamic_cast<PortForwardRuleRow *>(m_ruleList->itemWidget(item))) {
+                const QSize hint = card->fitToWidth(width);
+                if (item->sizeHint() != hint) {
+                    item->setSizeHint(hint);
+                }
+            }
+        }
+    }
+    return QWidget::eventFilter(watched, event);
+}
+
 QString PortForwardManagerWidget::endpointMappingText(const PortForwardRule &rule)
 {
     const QString bindEndpoint = formatEndpoint(rule.bindHost, rule.bindPort);
@@ -1767,13 +1843,13 @@ QString PortForwardManagerWidget::endpointMappingText(const PortForwardRule &rul
     case PortForwardType::Remote:
         // -R 在远程 SSH 服务器监听 bind，在本机连接 target；反向箭头用于避免把两端角色
         // 错画成本地转发，同时第二列始终保持“本机在前、远程在后”的阅读顺序。
-        return tr("Local %1\n← Remote %2")
+        return tr("%1\n← %2")
             .arg(formatEndpoint(rule.targetHost, rule.targetPort), bindEndpoint);
     case PortForwardType::Dynamic: {
         // SOCKS5 的远程目标由每个客户端请求动态给出，不能展示一个并不存在的固定端口。
         // 配置了网段时把出口策略直接写在卡片上，避免用户以为整机流量都会进 SSH。
         if (rule.proxyNetworks.isEmpty()) {
-            return tr("Local %1\n→ Remote (per SOCKS request)").arg(bindEndpoint);
+            return tr("%1\n→ SOCKS (per request)").arg(bindEndpoint);
         }
         QStringList shown = rule.proxyNetworks;
         if (shown.size() > 3) {
@@ -1781,12 +1857,12 @@ QString PortForwardManagerWidget::endpointMappingText(const PortForwardRule &rul
             shown = shown.mid(0, 2);
             shown.append(tr("+%1 more").arg(extra));
         }
-        return tr("Local %1\n→ SSH %2; other destinations direct")
+        return tr("%1\n→ SSH %2; other destinations direct")
             .arg(bindEndpoint, shown.join(QStringLiteral(", ")));
     }
     case PortForwardType::Local:
     default:
-        return tr("Local %1\n→ Remote %2")
+        return tr("%1\n→ %2")
             .arg(bindEndpoint, formatEndpoint(rule.targetHost, rule.targetPort));
     }
 }

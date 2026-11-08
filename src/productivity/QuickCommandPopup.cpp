@@ -1,12 +1,14 @@
 #include "productivity/QuickCommandPopup.h"
 
 #include "ui/FocusWithin.h"
+#include "ui/UiIcons.h"
 
 #include <QApplication>
 #include <QHBoxLayout>
 #include <QKeyEvent>
 #include <QKeySequence>
 #include <QLabel>
+#include <QMouseEvent>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QPainter>
@@ -16,6 +18,7 @@
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include <utility>
 
 namespace {
 
@@ -26,6 +29,26 @@ constexpr int kIndexRole = Qt::UserRole + 3;    ///< 行在 showEntries() 入参
 constexpr int kShortcutRole = Qt::UserRole + 4; ///< 行尾右对齐显示的快捷键文字。
 constexpr int kCurrentRole = Qt::UserRole + 5;  ///< 行是否为当前对象（如活动标签）。
 constexpr int kTrailingDetailRole = Qt::UserRole + 6; ///< 次要说明贴行尾右对齐（历史的主机名）。
+
+constexpr int kHoverRole = Qt::UserRole + 7;    ///< 行当前是否处于鼠标悬停。
+constexpr int kActionIconSize = 16;
+constexpr int kActionButtonSize = 24;
+
+/** @brief 行内两个图标按钮的矩形：先编辑后执行，贴行尾右对齐。 */
+struct RowActionRects {
+    QRect edit;
+    QRect run;
+};
+
+[[nodiscard]] RowActionRects rowActionRects(const QRect &itemRect)
+{
+    const QRect row = itemRect.adjusted(0, 2, 0, -2);
+    const int top = row.center().y() - kActionButtonSize / 2;
+    const int runLeft = row.right() - 8 - kActionButtonSize;
+    const int editLeft = runLeft - 2 - kActionButtonSize;
+    return {QRect(editLeft, top, kActionButtonSize, kActionButtonSize),
+            QRect(runLeft, top, kActionButtonSize, kActionButtonSize)};
+}
 
 constexpr int kRowHeight = 36;
 constexpr int kSearchHeight = 36; ///< 搜索栏固定高度，与参考设计一致，避免随字体撑高。
@@ -71,6 +94,25 @@ public:
             painter->drawRoundedRect(rowRect, 9.0, 9.0);
         }
 
+        const bool hovered = index.data(kHoverRole).toBool();
+        const RowActionRects actions = rowActionRects(option.rect);
+        if (hovered) {
+            // 图标画在文字之上；文字区域在下面让出同样的宽度，避免被盖住。
+            const QColor iconColor = kTextColor;
+            for (const auto &[rect, symbol] :
+                 {std::pair<QRect, UiIcons::Symbol>{actions.edit, UiIcons::Symbol::Edit},
+                  std::pair<QRect, UiIcons::Symbol>{actions.run, UiIcons::Symbol::Play}}) {
+                painter->setPen(Qt::NoPen);
+                painter->setBrush(kBadgeColor);
+                painter->drawRoundedRect(QRectF(rect), 6.0, 6.0);
+                const qreal ratio = painter->device()->devicePixelRatioF();
+                const QPixmap pixmap = UiIcons::renderSymbolPixmap(
+                    symbol, iconColor, QSize(kActionIconSize, kActionIconSize), ratio);
+                painter->drawPixmap(rect.center().x() - kActionIconSize / 2,
+                                    rect.center().y() - kActionIconSize / 2, pixmap);
+            }
+        }
+
         const int digit = index.data(kDigitRole).toInt();
         QFont badgeFont = option.font;
         badgeFont.setBold(true);
@@ -97,7 +139,8 @@ public:
         const QString detail = index.data(kDetailRole).toString();
         const QString shortcut = index.data(kShortcutRole).toString();
         const qreal textLeft = badgeRect.right() + 14.0;
-        QRectF textRect(textLeft, rowRect.top(), rowRect.right() - textLeft - 12.0,
+        const qreal rightInset = hovered ? rowRect.right() - actions.edit.left() + 8.0 : 12.0;
+        QRectF textRect(textLeft, rowRect.top(), rowRect.right() - textLeft - rightInset,
                         rowRect.height());
         painter->setFont(option.font);
         // 必须用画笔实际字体的度量：样式表可能改了列表字体，option.font 量出的宽度会偏窄，
@@ -276,11 +319,12 @@ QuickCommandPopup::QuickCommandPopup(QWidget *parent)
 
     m_searchEdit->installEventFilter(this);
     m_list->installEventFilter(this);
+    m_list->setMouseTracking(true);
+    m_list->viewport()->setMouseTracking(true);
+    m_list->viewport()->installEventFilter(this);
     connect(m_searchEdit, &QLineEdit::textChanged, this, [this]() { applyFilter(); });
-    connect(m_list, &QListWidget::itemClicked, this, [this](QListWidgetItem *item) {
-        m_list->setCurrentItem(item);
-        chooseCurrent();
-    });
+    // 点击由 handleListMouse 在鼠标释放时统一处理（区分行内图标与整行），这里不再连接
+    // itemClicked，避免同一次点击触发两次。
 }
 
 void QuickCommandPopup::showEntries(const Mode mode,
@@ -389,7 +433,13 @@ void QuickCommandPopup::updateModeTexts()
         m_footerLabel->setText(tr("%1 switch · Enter switch to selected · Esc close").arg(digitKeys));
     } else if (m_scopedHistory) {
         m_footerLabel->setText(
-            tr("%1 run · Enter run selected · Tab all/current host · Esc close").arg(digitKeys));
+            m_insertOnly
+                ? tr("%1 insert · Enter insert selected · Tab all/current host · Esc close")
+                      .arg(digitKeys)
+                : tr("%1 run · Enter run selected · Tab all/current host · Esc close")
+                      .arg(digitKeys));
+    } else if (m_insertOnly && m_mode == Mode::Snippets) {
+        m_footerLabel->setText(tr("%1 insert · Enter insert selected · Esc close").arg(digitKeys));
     } else {
         m_footerLabel->setText(tr("%1 run · Enter run selected · Esc close").arg(digitKeys));
     }
@@ -398,6 +448,7 @@ void QuickCommandPopup::updateModeTexts()
 void QuickCommandPopup::populate(const QList<Entry> &entries)
 {
     m_entries = entries;
+    m_hoveredRow = -1;
     m_list->clear();
     for (const Entry &entry : entries) {
         auto *item = new QListWidgetItem(entry.title, m_list);
@@ -490,8 +541,20 @@ int QuickCommandPopup::visibleCount() const
     return visible;
 }
 
+void QuickCommandPopup::setInsertOnly(const bool insertOnly)
+{
+    if (m_insertOnly == insertOnly) {
+        return;
+    }
+    m_insertOnly = insertOnly;
+    updateModeTexts();
+}
+
 bool QuickCommandPopup::eventFilter(QObject *watched, QEvent *event)
 {
+    if (watched == m_list->viewport() && handleListMouse(event)) {
+        return true;
+    }
     if ((watched == m_searchEdit || watched == m_list) && event->type() == QEvent::KeyPress) {
         if (handleKey(static_cast<QKeyEvent *>(event))) {
             return true;
@@ -610,6 +673,78 @@ void QuickCommandPopup::chooseCurrent()
     chooseItem(m_list->currentItem());
 }
 
+void QuickCommandPopup::setHoveredRow(const int row)
+{
+    if (row == m_hoveredRow) {
+        return;
+    }
+    for (const int old : {m_hoveredRow, row}) {
+        if (old >= 0 && old < m_list->count()) {
+            m_list->item(old)->setData(kHoverRole, old == row);
+        }
+    }
+    m_hoveredRow = row;
+}
+
+bool QuickCommandPopup::handleListMouse(QEvent *event)
+{
+    const bool rowActions = m_mode == Mode::Snippets || m_mode == Mode::History;
+    switch (event->type()) {
+    case QEvent::Leave:
+        setHoveredRow(-1);
+        return false;
+    case QEvent::MouseMove: {
+        const QPoint pos = static_cast<QMouseEvent *>(event)->position().toPoint();
+        const QListWidgetItem *item = m_list->itemAt(pos);
+        setHoveredRow(rowActions && item != nullptr && !item->isHidden() ? m_list->row(item) : -1);
+        return false;
+    }
+    case QEvent::MouseButtonRelease: {
+        auto *mouse = static_cast<QMouseEvent *>(event);
+        if (mouse->button() != Qt::LeftButton) {
+            return false;
+        }
+        QListWidgetItem *item = m_list->itemAt(mouse->position().toPoint());
+        if (item == nullptr || item->isHidden()) {
+            return false;
+        }
+        m_list->setCurrentItem(item);
+        if (rowActions) {
+            const RowActionRects actions = rowActionRects(m_list->visualItemRect(item));
+            const QPoint pos = mouse->position().toPoint();
+            if (actions.edit.contains(pos)) {
+                dispatchCommand(item, false);
+                return true;
+            }
+            if (actions.run.contains(pos)) {
+                dispatchCommand(item, true);
+                return true;
+            }
+        }
+        chooseItem(item);
+        return true;
+    }
+    default:
+        return false;
+    }
+}
+
+void QuickCommandPopup::dispatchCommand(const QListWidgetItem *item, const bool run)
+{
+    const QString command = item->data(kCommandRole).toString();
+    if (command.isEmpty()) {
+        return;
+    }
+    const int entryIndex = item->data(kIndexRole).toInt();
+    hide();
+    emit entryChosen(entryIndex);
+    if (run) {
+        emit commandChosen(command);
+    } else {
+        emit commandInsertRequested(command);
+    }
+}
+
 void QuickCommandPopup::chooseItem(const QListWidgetItem *item)
 {
     if (item == nullptr || item->isHidden()) {
@@ -624,7 +759,11 @@ void QuickCommandPopup::chooseItem(const QListWidgetItem *item)
     hide();
     emit entryChosen(entryIndex);
     if (!command.isEmpty()) {
-        emit commandChosen(command);
+        if (m_insertOnly && (m_mode == Mode::Snippets || m_mode == Mode::History)) {
+            emit commandInsertRequested(command);
+        } else {
+            emit commandChosen(command);
+        }
     }
 }
 

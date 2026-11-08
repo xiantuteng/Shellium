@@ -418,8 +418,10 @@ void PortForwardManagerWidgetTest::toolbarKeepsOnlyAddAndRightAlignedCompactRunt
     QVERIFY(managementLayout->indexOf(addButton) >= 0);
     QVERIFY(managementLayout->indexOf(startButton) > managementLayout->indexOf(addButton));
     QVERIFY(managementLayout->indexOf(stopButton) > managementLayout->indexOf(startButton));
-    QCOMPARE(startButton->width(), 66);
-    QCOMPARE(stopButton->width(), 66);
+    // 启停收成 30px 图标按钮并与新建一起放进侧栏标题行动作条。
+    QCOMPARE(startButton->width(), 30);
+    QCOMPARE(stopButton->width(), 30);
+    QVERIFY(widget.headerActionsWidget() != nullptr);
 }
 
 void PortForwardManagerWidgetTest::runtimeRefreshPreservesSelectedRule()

@@ -27,6 +27,14 @@ class PortForwardManagerWidget final : public QWidget {
 
 public:
     /**
+     * @brief 新建/启动/停止按钮条；由 MainWindow 改挂到侧栏共享标题行右侧。
+     *
+     * 与 HostManagerWidget::headerActionsWidget() 同一模式：控件归本类持有逻辑，
+     * 单独构造（如测试）时它仍是本控件的子控件。
+     */
+    [[nodiscard]] QWidget *headerActionsWidget() const { return m_headerActions; }
+
+    /**
      * @brief 创建端口转发管理侧栏并加载保存主机。
      * @param database 已初始化数据库，生命周期必须覆盖本控件。
      * @param parent Qt 父对象。
@@ -86,7 +94,12 @@ private slots:
     void applyRuntimeStatistics(const QString &ruleId,
                                 const PortForwardStatistics &statistics);
 
+protected:
+    bool eventFilter(QObject *watched, QEvent *event) override;
+
 private:
+    QWidget *m_headerActions = nullptr;
+
     /** @brief 重新加载主机下拉框并尽量保留当前选择。 */
     void reloadHosts();
 

@@ -12,6 +12,8 @@ class CredentialVault;
 class QDialog;
 class QFrame;
 class QKeyEvent;
+class QAction;
+class QEvent;
 class QLineEdit;
 class QMenu;
 class QToolButton;
@@ -149,7 +151,14 @@ signals:
      */
     void newPortForwardRequested(const QString &hostId);
 
+protected:
+    /** @brief 调色板（深浅主题）变化时刷新搜索框左侧放大镜图标的颜色。 */
+    void changeEvent(QEvent *event) override;
+
 private:
+    /** @brief 按当前调色板的明暗重画搜索图标：深色主题用浅色，浅色主题用中灰。 */
+    void updateSearchIcon();
+
     /** @brief 从数据库递归加载某个分组的直接子节点。 */
     bool appendChildren(QTreeWidgetItem *parentItem,
                         const QString &parentId,
@@ -353,6 +362,7 @@ private:
     ApplicationDatabase *m_database = nullptr;
     CredentialVault *m_credentialVault = nullptr;
     QLineEdit *m_searchEdit = nullptr;
+    QAction *m_searchIconAction = nullptr;
     QFrame *m_searchBar = nullptr;
     QTreeWidget *m_tree = nullptr;
     QWidget *m_headerActions = nullptr;

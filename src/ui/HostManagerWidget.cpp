@@ -20,6 +20,7 @@
 #include <QDateTime>
 #include <QDebug>
 #include <QDialog>
+#include <QEvent>
 #include <QDialogButtonBox>
 #include <QDragMoveEvent>
 #include <QDropEvent>
@@ -28,6 +29,7 @@
 #include <QFileIconProvider>
 #include <QFontDatabase>
 #include <QFrame>
+#include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QIcon>
 #include <QInputDialog>
@@ -272,6 +274,29 @@ bool saveTagColors(ApplicationDatabase *database, const QHash<QString, QString> 
     return stored.isValid() ? stored : ShelliumUi::accentColor();
 }
 
+/** @brief 调色板的窗口底色偏暗时视为深色主题。 */
+[[nodiscard]] bool isDarkPalette(const QPalette &palette)
+{
+    return palette.color(QPalette::Window).lightness() < 128;
+}
+
+/**
+ * @brief 标签文字色：浅色主题压深、深色主题提亮，保证在半透明底上都清晰。
+ *
+ * 标签颜色由用户自选，旧实现一律 darker(135)，在深色背景上变成近乎黑色而看不清。
+ * 深色主题下保持色相与饱和度，只把明度抬到至少 0.74，仍能认出是哪种标签颜色。
+ */
+[[nodiscard]] QColor tagTextColor(const QColor &base, const bool darkTheme)
+{
+    if (!darkTheme) {
+        return base.darker(135);
+    }
+    QColor text = base.toHsl();
+    text.setHslF(text.hslHueF(), std::min(text.hslSaturationF(), 0.95F),
+                 std::max(text.lightnessF(), 0.74F));
+    return text;
+}
+
 /**
  * @brief 按标签实际配色生成药丸按钮的样式表，供名称框入口和标签编辑器的历史胶囊共用。
  * @param color 标签颜色。
@@ -281,9 +306,11 @@ bool saveTagColors(ApplicationDatabase *database, const QHash<QString, QString> 
  */
 [[nodiscard]] QString tagPillStyleSheet(const QColor &color, bool highlighted = false)
 {
+    const bool darkTheme = isDarkPalette(QGuiApplication::palette());
     QColor fill = color;
-    fill.setAlphaF(highlighted ? 0.32F : 0.16F);
-    const QColor text = color.darker(135);
+    // 深色底上同样的透明度显得更淡，适当加深色块以托住提亮后的文字。
+    fill.setAlphaF(highlighted ? 0.40F : (darkTheme ? 0.26F : 0.16F));
+    const QColor text = tagTextColor(color, darkTheme);
     return QStringLiteral(
         "QToolButton { border: none; background: rgba(%1,%2,%3,%4); color: %5;"
         " border-radius: 8px; min-height: 24px; max-height: 24px; padding: 0 7px;"
@@ -668,8 +695,9 @@ protected:
             const QColor tagBase =
                 storedTagColor.isValid() ? storedTagColor : ShelliumUi::accentColor();
             QColor tagFill = tagBase;
-            tagFill.setAlphaF(0.16F);
-            QColor tagText = tagBase.darker(135);
+            const bool darkTheme = isDarkPalette(option.palette);
+            tagFill.setAlphaF(darkTheme ? 0.26F : 0.16F);
+            const QColor tagText = tagTextColor(tagBase, darkTheme);
             painter->setPen(Qt::NoPen);
             painter->setBrush(tagFill);
             painter->drawRoundedRect(tagRect, 7, 7);
@@ -3650,6 +3678,27 @@ void HostManagerWidget::setSidebarDensity(const SidebarDensity density)
     m_tree->viewport()->update();
 }
 
+void HostManagerWidget::changeEvent(QEvent *event)
+{
+    QWidget::changeEvent(event);
+    if (event->type() == QEvent::PaletteChange || event->type() == QEvent::StyleChange) {
+        updateSearchIcon();
+    }
+}
+
+void HostManagerWidget::updateSearchIcon()
+{
+    if (m_searchIconAction == nullptr) {
+        return;
+    }
+    // 图标不能直接取 WindowText：构造时应用调色板可能还没切到当前主题，深色主题下会取到
+    // 深色而几乎看不见。按窗口底色的明暗二选一，并在调色板变化时重算。
+    const bool darkTheme = palette().color(QPalette::Window).lightness() < 128;
+    const QColor iconColor = darkTheme ? QColor(QStringLiteral("#c6ccdc"))
+                                       : QColor(QStringLiteral("#71808d"));
+    m_searchIconAction->setIcon(UiIcons::symbol(this, UiIcons::Symbol::Search, iconColor));
+}
+
 HostManagerWidget::HostManagerWidget(ApplicationDatabase *database,
                                      CredentialVault *credentialVault,
                                      QWidget *parent)
@@ -3666,9 +3715,8 @@ HostManagerWidget::HostManagerWidget(ApplicationDatabase *database,
     m_searchEdit->setObjectName(QStringLiteral("HostSearchEdit"));
     m_searchEdit->setPlaceholderText(tr("Search name / address…"));
     m_searchEdit->setClearButtonEnabled(true);
-    m_searchEdit->addAction(
-        UiIcons::symbol(this, UiIcons::Symbol::Search, this->palette().color(QPalette::WindowText)),
-        QLineEdit::LeadingPosition);
+    m_searchIconAction = m_searchEdit->addAction(QIcon(), QLineEdit::LeadingPosition);
+    updateSearchIcon();
 
     // QLineEdit 自带动作只支持图标，无法呈现参考设计右侧的“#标签”文字胶囊，因此使用一个
     // QFrame 组合输入框和工具按钮。输入框仍是原来的 m_searchEdit，搜索、清除与测试接口都

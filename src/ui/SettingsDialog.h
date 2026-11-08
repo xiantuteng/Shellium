@@ -195,6 +195,7 @@ private:
     QSpinBox *m_historyMinCommandLengthSpin = nullptr;
     /** @brief 粘贴多行内容前是否先展示内容并要求确认。 */
     ToggleSwitch *m_multiLinePasteConfirmationToggle = nullptr;
+    ToggleSwitch *m_quickCommandInsertOnlyToggle = nullptr;
     /** @brief 是否对已建立会话的异常网络断线启用有限自动重连。 */
     ToggleSwitch *m_automaticReconnectToggle = nullptr;
     /** @brief 是否要求用用户主密码保护自动保存的主机凭据。 */
