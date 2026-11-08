@@ -2,7 +2,7 @@
 
 > 脚本按本机原生架构构建：Apple Silicon 产出 `macos-arm64`，Intel Mac 产出 `macos-x86_64`，
 > 不支持交叉编译或在 Rosetta 终端中运行。下文以 arm64 为例；CI 上两种架构都改用官方 Qt
-> 安装器，arm64 在 `macos-14` runner 上以 `SHELLIUM_DEPLOYMENT_TARGET=14.0` 构建，Intel 在
+> 安装器，arm64 在 `macos-15` runner 上以 `SHELLIUM_DEPLOYMENT_TARGET=15.0` 构建，Intel 在
 > `macos-15-intel` 上以 15.0 构建，见 `.github/workflows/release.yml`。
 
 本文说明 Shellium 在不通过 Mac App Store 上架的情况下，如何生成可供其他用户直接安装的
@@ -53,8 +53,8 @@ xcrun notarytool store-credentials "Shellium-notary" \
 都会中止打包；但最低系统兼容性仍应在对应真实系统上做启动测试。
 
 CI 采用更简单的做法：在目标最低系统的 runner 上构建。Homebrew 瓶子按构建机系统标注最低系统，
-缺瓶子时在 runner 上源码编译的结果同样以该系统为最低目标，因此 `macos-14` 产出的包能在
-macOS 14 及以上运行。
+缺瓶子时在 runner 上源码编译的结果同样以该系统为最低目标。GitHub 已停用 `macos-14`，
+Apple Silicon 与 Intel 都在 macOS 15 的 runner 上构建，产出的包能在 macOS 15 及以上运行。
 
 ## 三、正式一键发布
 

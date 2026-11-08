@@ -97,7 +97,7 @@ Download the latest build from **[Releases](https://github.com/xiantuteng/Shelli
 
 | Platform | Architectures | Package | Minimum OS |
 | --- | --- | --- | --- |
-| macOS | Apple Silicon, Intel | `.dmg` | macOS 14 (arm64), macOS 15 (x86_64) |
+| macOS | Apple Silicon, Intel | `.dmg` | macOS 15 |
 | Windows | x64, ARM64 | NSIS installer, `.zip` | Windows 10 1809 / Windows 11 |
 | Linux | x86_64, aarch64 | AppImage, `.deb`, `.rpm` | glibc 2.35 (e.g. Ubuntu 22.04+, Debian 12+, Fedora 36+) |
 | Linux | x86_64, aarch64 | `.flatpak` | Any distribution with Flatpak (KDE 6.11 runtime from Flathub) |

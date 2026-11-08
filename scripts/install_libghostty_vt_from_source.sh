@@ -23,7 +23,14 @@ ZIG_RELEASE_BASE="https://release.files.ghostty.org/libghostty-vt/${LIBGHOSTTY_V
 
 prefix="$1"
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-work_dir="$(mktemp -d "${TMPDIR:-/tmp}/shellium-ghostty-vt.XXXXXX")"
+# macOS 的 /tmp 和 /var 是指向 /private 的符号链接。Zig 0.17 按物理路径计算
+# uucode_generate 的相对路径，却在逻辑路径下启动它，结果是 FileNotFound。
+# 工作目录必须落在解析掉符号链接之后的路径上。
+tmp_parent="${TMPDIR:-/tmp}"
+if [[ "$(uname -s)" == Darwin ]]; then
+    tmp_parent="$(cd -P "${tmp_parent}" && pwd)"
+fi
+work_dir="$(mktemp -d "${tmp_parent}/shellium-ghostty-vt.XXXXXX")"
 trap 'rm -rf -- "${work_dir}"' EXIT
 
 os="$(uname -s)"

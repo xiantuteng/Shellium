@@ -27,14 +27,14 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Homebrew 瓶子按构建机系统标注最低系统，包的最低系统因此等于 runner 的系统版本，
-          # 要支持旧系统就得在旧系统的 runner 上构建。Homebrew 已不再给 macOS 14 出 libssh、
-          # openssl@3 等瓶子，这些包会在 runner 上从源码编译，产物同样以 14.0 为最低系统。
-          # Qt 用官方安装器（universal，6.10 最低 macOS 13），避免 Homebrew 的 Qt 在旧系统上源码编译。
+          # Homebrew 瓶子按构建机系统标注最低系统，包的最低系统因此等于 runner 的系统版本。
+          # GitHub 已在 2026-11-02 停用 macos-14，Apple Silicon 能用的最旧托管 runner 是 macos-15，
+          # 所以 arm64 包的最低系统是 15.0。
+          # Qt 用官方安装器（universal，6.10 最低 macOS 13），避免 Homebrew 的 Qt 源码编译。
           # 版本不能低于 6.9：标题行伸进交通灯区域依赖 Qt::ExpandedClientAreaHint，CMake 会拒绝 6.8。
           - arch: arm64
-            runner: macos-14
-            deployment_target: '14.0'
+            runner: macos-15
+            deployment_target: '15.0'
           # GitHub 最后一代 Intel 镜像，因此 Intel 包最低只能到 macOS 15。
           - arch: x86_64
             runner: macos-15-intel
