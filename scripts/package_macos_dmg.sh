@@ -324,6 +324,40 @@ prune_unused_sql_drivers() {
     fi
 }
 
+# 把 libghostty-vt 补进 Bundle。参数 1 是 App 路径。上游把 dylib 的 install name 写成
+# @rpath/libghostty-vt.1.dylib，CMake 包配置也把这个 soname 写进可执行文件。macdeployqt
+# 只顺着绝对路径收集第三方库，-libpath 解决不了已经是 @rpath 的引用，所以 Frameworks 里
+# 没有这份库，随后的依赖检查会失败。
+bundle_libghostty_vt() {
+    local app_path="$1"
+    local libdir
+    local source
+    local destination
+    local executable
+
+    libdir="$(pkg-config --variable=libdir libghostty-vt)"
+    source="${libdir}/libghostty-vt.1.dylib"
+    destination="${app_path}/Contents/Frameworks/libghostty-vt.1.dylib"
+    executable="${app_path}/Contents/MacOS/Shellium"
+
+    [[ -e "${source}" ]] || fail "找不到 libghostty-vt：${source}"
+    [[ -f "${executable}" ]] || fail "找不到可执行文件：${executable}"
+
+    mkdir -p "${app_path}/Contents/Frameworks"
+    # 跟随符号链接复制实体文件，避免 Bundle 里留下指向构建机前缀的链接。
+    cp -L "${source}" "${destination}"
+    install_name_tool -id '@rpath/libghostty-vt.1.dylib' "${destination}"
+    # 先签动态库。之后若要改主程序的 rpath，codesign 会检查 Bundle 内已经存在的 Mach-O。
+    sign_repaired_macho "${destination}"
+
+    if ! otool -l "${executable}" | grep -Fq '@executable_path/../Frameworks'; then
+        install_name_tool -add_rpath '@executable_path/../Frameworks' "${executable}"
+        sign_repaired_macho "${executable}"
+    fi
+
+    resign_outer_app "${app_path}"
+}
+
 # 把 App 安装到临时暂存目录并调用 macdeployqt 收集 Qt Framework、插件和第三方动态库。
 # 参数 1 是暂存根目录，返回值通过全局 STAGED_APP 传递，避免使用命令替换吞掉部署日志。
 deploy_runtime_dependencies() {
@@ -376,6 +410,7 @@ deploy_runtime_dependencies() {
     # 修复函数必须紧接部署执行，后续严格依赖检查会再次确认 Framework 已存在且无绝对路径。
     repair_qt_svg_deployment "${STAGED_APP}" "${qt_libdir}" "${qt_plugins_dir}"
     prune_unused_sql_drivers "${STAGED_APP}"
+    bundle_libghostty_vt "${STAGED_APP}"
 }
 
 # 验证最外层 App 及所有嵌套代码签名。参数 1 是 App 路径；正式模式额外检查 Hardened Runtime
