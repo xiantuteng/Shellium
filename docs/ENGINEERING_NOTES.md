@@ -607,6 +607,23 @@ zsh 回车是两次写入：先 `\r\r\n` 与 PROMPT_SP 的 `\r \r`，约 20ms �
 `clear` 之后贴底看到的是空白，提示符在视口上方。回归用例
 `TerminalAltScreenTest::progressBarRedrawDoesNotShrinkDocument`。
 
+### 15.13 滚动历史到达上限后，滚动范围要每帧手动重算
+
+现象：tail -f 看实时日志，滚动条在底部，却看不到光标所在的最后一行；调整一下窗口大小就出来了。
+平时不好复现，跑得越久越容易出现。
+
+原因：`QPlainTextDocumentLayout::documentChanged()` 只在段数变化（或某段比已知最宽的段更宽）
+时发 `documentSizeChanged`，`QPlainTextEdit` 也只在这时重算垂直滚动范围。滚动历史到达上限后，
+每一帧都是"头部淘汰 N 段、尾部追加 N 段"，段数恒定，范围就不再重算。行高锚点只覆盖正文、
+CJK、emoji 三类字体，其余后备字体（天城文、数学字母、叠加附标等）排出来的行会高几像素；
+这类行在底部一屏里越积越多，按旧范围贴底时最后一行就被挤到视口下方。调整窗口大小会触发
+`resizeEvent` 里的重算，所以能恢复。
+
+做法：`TerminalView::refreshScrollRange()` 在每次 `render()` 之后主动发一次
+`documentSizeChanged`，让 Qt 从底部往上量一屏段高、重算范围。只量一屏，开销可以忽略。
+回归用例 `TerminalAltScreenTest::tailStaysVisibleWhenTallLinesArriveAtScrollbackLimit`。用例里
+所有新行都要比已有历史行窄，否则"更宽的段"会顺带触发重算，把问题掩盖掉。
+
 ---
 
 ## 十六、Qt 拖拽：非 item-view 的 QAbstractScrollArea 要注册 viewport

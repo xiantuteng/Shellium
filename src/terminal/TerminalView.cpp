@@ -26,6 +26,7 @@
 #include <QDragMoveEvent>
 #include <QDropEvent>
 #include <QFileInfo>
+#include <QAbstractTextDocumentLayout>
 #include <QFontMetrics>
 #include <QKeySequence>
 #include <QListView>
@@ -894,6 +895,19 @@ void TerminalView::renderPreservingScroll()
     renderPreservingScroll(m_followOutputTail, verticalScrollBar()->value());
 }
 
+void TerminalView::refreshScrollRange()
+{
+    // QPlainTextDocumentLayout 只在段数变化、或某段比已知最宽的段更宽时才发
+    // documentSizeChanged，QPlainTextEdit 也只在这时重算滚动范围。滚动历史到达上限后，
+    // 每一帧都是"头部淘汰 N 段、尾部追加 N 段"，段数不变，于是范围再也不重算。底部某一行
+    // 一旦比其它行高（锚点覆盖不到的后备字体），按旧范围贴底就会把最后一行——tail -f 时
+    // 光标所在的那一行——挤到视口下方，直到调整窗口大小才恢复。这里每帧主动通知一次：
+    // Qt 只会从底部往上量一屏的段高，这些段刚排过版，开销可以忽略。
+    if (QAbstractTextDocumentLayout *layout = document()->documentLayout()) {
+        emit layout->documentSizeChanged(layout->documentSize());
+    }
+}
+
 void TerminalView::scheduleRender()
 {
     if (m_renderSuspended) {
@@ -964,6 +978,7 @@ void TerminalView::renderPreservingScroll(const bool followBottom, const int pre
     const int selectionPosition = previousCursor.position();
 
     const bool rebuilt = m_vtermBridge->render(document());
+    refreshScrollRange();
     noteLayoutCandidates(rebuilt);
     // 首帧之后才量得到真实行高；量到变化就纠正一次网格。
     noteRenderedCellHeight();

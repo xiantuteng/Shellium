@@ -208,6 +208,10 @@ private slots:
     /** @brief 上翻到顶部后，任何用户输入都必须把视图拉回输出末尾。 */
     void typingWhileScrolledUpJumpsBackToOutputTail();
     void outputKeepsFollowingTailAfterViewportShrinks();
+    // 回归：滚动历史到达上限后，每帧都是"头部淘汰几段、尾部追加几段"，文档段数不变，
+    // QPlainTextEdit 不会重算滚动范围。底部某一行一旦比其它行高（锚点没覆盖到的后备字体），
+    // 滚动条最大值就停在旧值，tail -f 时光标所在的最后一行被挤出视口，只有调整窗口大小才恢复。
+    void tailStaysVisibleWhenTallLinesArriveAtScrollbackLimit();
     void columnCountStaysReportedAfterScrollbarTogglesOnAltScreenEntry();
     void realCapturedVimByteStreamShowsStatusLine();
     void realChunkedSshByteStreamShowsStatusLine();
@@ -1272,6 +1276,77 @@ void TerminalAltScreenTest::typingWhileScrolledUpJumpsBackToOutputTail()
     QCOMPARE(bar->value(), 0);
 }
 
+void TerminalAltScreenTest::tailStaysVisibleWhenTallLinesArriveAtScrollbackLimit()
+{
+    TerminalView view;
+    TerminalSettings settings;
+    settings.scrollbackLines = 100;
+    view.applySettings(settings);
+    view.resize(936, 760);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QTest::qWait(200);
+    // 历史填满上限：此后每进一行历史就从头部淘汰一行，文档段数保持不变。
+    fillScrollback(view, 300);
+    QTest::qWait(300);
+    QScrollBar *bar = view.verticalScrollBar();
+    QCOMPARE(bar->value(), bar->maximum());
+
+    // 找一段在本机字体下排出来比普通行更高的文字。锚点覆盖了正文、CJK 与 emoji，但覆盖
+    // 不了所有后备字体；挑不到说明本机没有这类字体，用例无从复现。
+    // 注意：后面所有行都必须比已有的历史行窄。某一段比文档里已知最宽的段更宽时，Qt 会
+    // 顺带重算一次滚动范围，恰好掩盖本用例要抓的问题。
+    QAbstractTextDocumentLayout *layout = view.document()->documentLayout();
+    const auto lastTextBlock = [&view]() {
+        // 最后一段是光标所在的空行，有内容的是它前面那一段。
+        return view.document()->lastBlock().previous();
+    };
+    const qreal plainHeight = layout->blockBoundingRect(lastTextBlock()).height();
+    const QStringList candidates = {
+        QStringLiteral("हिन्दी"), // 天城文，带上下附标
+        QStringLiteral("\U0001D54F\U0001D538"),                   // 数学双线体
+        QStringLiteral("Ǻǻ̈̈"),               // 叠加组合附标
+        QStringLiteral("ปั้น"),               // 泰文，带上标声调
+        QStringLiteral("༄༅"),                           // 藏文
+    };
+    QByteArray tallLine;
+    for (const QString &candidate : candidates) {
+        const QByteArray line = QByteArrayLiteral("tall ") + candidate.toUtf8();
+        view.appendTerminalOutput(line + "\r\n");
+        QTest::qWait(100);
+        if (layout->blockBoundingRect(lastTextBlock()).height() > plainHeight + 0.5) {
+            tallLine = line;
+            break;
+        }
+    }
+    if (tallLine.isEmpty()) {
+        QSKIP("本机字体下找不到比普通行更高的字形，无法复现行高不一致");
+    }
+
+    // 模拟 tail -f：高行与普通行交替、逐行到达，各自单独出一帧。每一帧都是"头部淘汰一段、
+    // 尾部追加一段"，段数不变；每一帧之后，光标所在的最后一行都必须完整留在视口内。
+    for (int index = 0; index < view.terminalRows(); ++index) {
+        view.appendTerminalOutput(tallLine + " " + QByteArray::number(index) + "\r\n");
+        QTest::qWait(30);
+        view.appendTerminalOutput(QByteArrayLiteral("normal\r\n"));
+        QTest::qWait(30);
+
+        QCOMPARE(bar->value(), bar->maximum());
+        QTextCursor tail(view.document());
+        tail.movePosition(QTextCursor::End);
+        const QRect tailRect = view.cursorRect(tail);
+        QVERIFY2(tailRect.top() >= 0 && tailRect.bottom() < view.viewport()->height(),
+                 qPrintable(QStringLiteral("第 %1 批输出后，光标所在的最后一行落在视口外：行 [%2, %3]，"
+                                           "视口高 %4，滚动值 %5 / 最大值 %6")
+                                .arg(index)
+                                .arg(tailRect.top())
+                                .arg(tailRect.bottom())
+                                .arg(view.viewport()->height())
+                                .arg(bar->value())
+                                .arg(bar->maximum())));
+    }
+}
+
 void TerminalAltScreenTest::outputKeepsFollowingTailAfterViewportShrinks()
 {
     TerminalView view;
@@ -1449,8 +1524,12 @@ void TerminalAltScreenTest::terminalColumnsNeverExceedWhatViewportCanDisplay()
         QVERIFY2(needed <= viewportWidth + 0.01,
                  qPrintable(QStringLiteral("宽度 %1：%2 列需要 %3px，但视口只有 %4px，行尾会被裁掉")
                                 .arg(width).arg(columns).arg(needed).arg(viewportWidth)));
-        // 也不能少算整整一列以上，否则右侧白白留空。
-        QVERIFY2(needed + cellWidth > viewportWidth - 0.01,
+        // 也不能少算整整一列以上，否则右侧白白留空。垂直滚动条隐藏时列数仍按它已出现来算
+        // （见 recalculateTerminalGeometry），那一份预留宽度不算浪费。
+        const qreal scrollbarReserve = view.verticalScrollBar()->isVisible()
+            ? 0.0
+            : view.verticalScrollBar()->sizeHint().width();
+        QVERIFY2(needed + cellWidth > viewportWidth - scrollbarReserve - 0.01,
                  qPrintable(QStringLiteral("宽度 %1：%2 列过少，视口 %3px 还放得下更多列")
                                 .arg(width).arg(columns).arg(viewportWidth)));
     }

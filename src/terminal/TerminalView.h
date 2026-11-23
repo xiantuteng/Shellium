@@ -743,6 +743,14 @@ private:
      */
     void renderPreservingScroll(bool followBottom, int previousValue);
 
+    /**
+     * @brief 让 QPlainTextEdit 按当前文档重算垂直滚动范围。
+     *
+     * Qt 只在段数变化时重算；滚动历史到达上限后段数恒定，底部行高一变范围就过时，
+     * 最后一行会被挤出视口。每次渲染之后调用。
+     */
+    void refreshScrollRange();
+
     /** @brief 判断滚动条此刻是否停在文档底部（几何事实，不代表用户意图）。 */
     [[nodiscard]] bool isScrolledToBottom() const;
 
