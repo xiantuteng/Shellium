@@ -19,6 +19,8 @@
 
 </div>
 
+> **演示。** 请把一段短录屏放到 `docs/images/demo.gif`（SFTP 面板跟随一次 `ssh` 跳转），再把这段说明替换为 `<img src="docs/images/demo.gif" alt="Shellium：SFTP 跟随 ssh 跳转" width="860">`。同一布局见[官网](https://shellium.net/#screenshot)。
+
 ---
 
 ## 为什么选择 Shellium？

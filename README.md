@@ -19,6 +19,8 @@ English · [简体中文](README.zh-CN.md) · [Website](https://shellium.net)
 
 </div>
 
+> **Demo.** Drop a short GIF at `docs/images/demo.gif` — the SFTP pane following an `ssh` hop — and replace this note with `<img src="docs/images/demo.gif" alt="Shellium: SFTP follows an ssh hop" width="860">`. The same layout is on [shellium.net](https://shellium.net/#screenshot).
+
 ---
 
 ## Why Shellium?
