@@ -212,6 +212,7 @@ private slots:
     void realCapturedVimByteStreamShowsStatusLine();
     void realChunkedSshByteStreamShowsStatusLine();
     void realChunkedSshByteStreamVisibleInTerminalViewWidget();
+    void terminalColumnsNeverExceedWhatViewportCanDisplay();
     void everyRenderedLineHasIdenticalHeightRegardlessOfContent();
     void gridFillsViewportWithoutWastedRows();
     void themeBackgroundSurvivesLeavingFullScreenApplication();
@@ -1420,6 +1421,40 @@ void TerminalAltScreenTest::realChunkedSshByteStreamShowsStatusLine()
                             .arg(statusBlock.text())));
 }
 
+
+void TerminalAltScreenTest::terminalColumnsNeverExceedWhatViewportCanDisplay()
+{
+    // 回归：列数曾按"整数取整后的单格宽度 + 不扣左右 documentMargin"计算，比视口真正
+    // 放得下的列数多（字体步进带小数时尤其明显，例如 8.43px 被当成 8px），PTY 按多出来
+    // 的列数换行，每行最右边的若干字符被视口裁掉，看起来像"终端右侧文字显示不全"。
+    TerminalView view;
+    QFont font = view.font();
+    font.setLetterSpacing(QFont::AbsoluteSpacing, 0.43);
+    view.setFont(font);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+
+    for (const int width : {900, 1000, 1137, 1280}) {
+        view.resize(width, 600);
+        QTest::qWait(250);
+
+        const QFontMetricsF metrics(view.font());
+        const qreal cellWidth = metrics.horizontalAdvance(QString(64, QLatin1Char('M'))) / 64.0;
+        const qreal margins = 2.0 * view.document()->documentMargin();
+        const int columns = view.terminalColumns();
+        QVERIFY(columns > 1);
+
+        const qreal needed = columns * cellWidth + margins;
+        const qreal viewportWidth = view.viewport()->width();
+        QVERIFY2(needed <= viewportWidth + 0.01,
+                 qPrintable(QStringLiteral("宽度 %1：%2 列需要 %3px，但视口只有 %4px，行尾会被裁掉")
+                                .arg(width).arg(columns).arg(needed).arg(viewportWidth)));
+        // 也不能少算整整一列以上，否则右侧白白留空。
+        QVERIFY2(needed + cellWidth > viewportWidth - 0.01,
+                 qPrintable(QStringLiteral("宽度 %1：%2 列过少，视口 %3px 还放得下更多列")
+                                .arg(width).arg(columns).arg(viewportWidth)));
+    }
+}
 
 void TerminalAltScreenTest::realChunkedSshByteStreamVisibleInTerminalViewWidget()
 {

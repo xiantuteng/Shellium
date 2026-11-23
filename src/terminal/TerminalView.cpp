@@ -1124,8 +1124,15 @@ void TerminalView::recalculateTerminalGeometry()
         // 等待首次 resizeEvent 后再提交，可避免会话先收到一个错误的狭窄字符网格。
         return;
     }
-    const QFontMetrics metrics(font());
-    const int cellWidth = std::max(metrics.horizontalAdvance(QLatin1Char('M')), 1);
+    // 单元格宽度必须用浮点量：QFontMetrics::horizontalAdvance(QChar) 会把 8.43px 这样的
+    // 真实步进四舍五入成整数 8，而文本排版是按浮点步进逐字排的。整数宽度偏小 5% 左右时，
+    // 算出的列数就比视口真正放得下的多出一截（140 列的窗口会报 148 列），PTY 按多出来的
+    // 列数换行，行尾最右边的若干字符就被视口裁掉。拿 64 个字符的总宽再均分，字距
+    // （letterSpacing）也一并算进去，且不受单字符取整影响。
+    constexpr int kProbeCount = 64;
+    const QFontMetricsF metrics(font());
+    const qreal cellWidth = std::max(
+        metrics.horizontalAdvance(QString(kProbeCount, QLatin1Char('M'))) / kProbeCount, 1.0);
     const int cellHeight = computeCellHeight();
     // 垂直滚动条会在"主屏有滚动历史"和"备用屏没有"之间自动显隐（连同进出备用屏时的
     // AlwaysOff/AsNeeded 切换），每次显隐都会让 viewport 变宽几个像素、蹭过一次字符列宽的
@@ -1136,8 +1143,13 @@ void TerminalView::recalculateTerminalGeometry()
     const int scrollbarReserve = verticalScrollBar()->isVisible()
         ? 0
         : verticalScrollBar()->sizeHint().width();
-    const int usableWidth = std::max(viewport()->width() - scrollbarReserve, 0);
-    const int columns = std::max(usableWidth / cellWidth, 1);
+    // 文档在 viewport 左右各留一份 documentMargin（下面算行数时上下已经扣过），宽度方向
+    // 同样要扣，否则每行右侧会有 2*margin 像素的字符放不下却仍被算作列。
+    const int horizontalMargin = 2 * static_cast<int>(document()->documentMargin());
+    const qreal usableWidth =
+        std::max<qreal>(viewport()->width() - scrollbarReserve - horizontalMargin, 0.0);
+    // 1e-6 吸收浮点误差：刚好整除时不应少算一列。
+    const int columns = std::max(static_cast<int>(std::floor(usableWidth / cellWidth + 1e-6)), 1);
     // 行数必须等于 QPlainTextEdit 真正能完整显示的段数，而不是"视口高度能塞下几行"。
     // 控件在 viewport 上下各留一份 documentMargin，并且只有严格小于视口高度的累计高度才算
     // 一行可见（等于视口高度的那一行会被判定放不下）。按前者计算会比控件多报一行：告诉
