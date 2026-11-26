@@ -12,6 +12,7 @@
 #include <QWidget>
 
 class ApplicationDatabase;
+class MainWindowShellTest;
 class QLabel;
 class QProgressBar;
 class LocalShellWorker;
@@ -30,6 +31,10 @@ struct TerminalSettings;
  */
 class TerminalPane final : public QWidget {
     Q_OBJECT
+
+    // 右键上传回归需要直接写入“已连接 + 已知 cwd”，而不拨一条真实 SSH。友元只服务
+    // 这个内存态用例，不把测试入口变成正式 API。
+    friend class MainWindowShellTest;
 
 public:
     explicit TerminalPane(QWidget *parent = nullptr);

@@ -9,6 +9,7 @@
 #include "terminal/TerminalPane.h"
 #include "terminal/TerminalSearchBar.h"
 #include "terminal/TerminalView.h"
+#include "sftp/RemoteFileManagerWidget.h"
 #include "terminal/TerminalWorkspace.h"
 #include "terminal/TerminalWorkspaceGroup.h"
 #include "ui/HostDistributionIcon.h"
@@ -32,6 +33,8 @@
 #include <QComboBox>
 #include <QCoreApplication>
 #include <QEvent>
+#include <QFile>
+#include <QFileDialog>
 #include <QLabel>
 #include <QLineEdit>
 #include <QTimer>
@@ -51,6 +54,7 @@
 #include <QStandardPaths>
 #include <QTabBar>
 #include <QTabWidget>
+#include <QTemporaryDir>
 #include <QColor>
 #include <QMessageBox>
 #include <QPushButton>
@@ -111,6 +115,12 @@ private slots:
     void sidebarToggleAnimatesAndRestoresWidth();
     /** @brief 文件管理从右侧连续滑入滑出，末段不受内部最小宽度约束，反向操作保留宽度。 */
     void remoteFilesSlideContinuously();
+    /**
+     * @brief 终端右键“上传到当前远程目录”必须传到终端自己的工作目录。
+     *
+     * 文件管理器可以停在另一条路径上；这次上传不能跟着地址框走。
+     */
+    void terminalContextMenuUploadsToTerminalDirectoryNotFileManager();
     /** @brief 关闭确认提示后，双击分隔条直接收起侧边栏而不弹出模态框。 */
     void sidebarDividerDoubleClickHidesWithoutPromptWhenDisabled();
     /** @brief 菜单切换即时缩小侧栏并持久化，重启恢复紧凑模式且可切回宽松。 */
@@ -2481,6 +2491,86 @@ void MainWindowShellTest::sidebarWidthIsRestoredOnNextLaunch()
     auto *restoredSplitter = restarted.findChild<QSplitter *>(QStringLiteral("SidebarSplitter"));
     QVERIFY(restoredSplitter != nullptr);
     QCOMPARE(restoredSplitter->sizes().constFirst(), draggedWidth);
+}
+
+void MainWindowShellTest::terminalContextMenuUploadsToTerminalDirectoryNotFileManager()
+{
+    TerminalWorkspace workspace;
+    workspace.resize(800, 500);
+    workspace.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&workspace));
+
+    ConnectionTarget target;
+    target.id = QStringLiteral("layer-1");
+    target.displayName = QStringLiteral("test-host");
+    target.host = QStringLiteral("127.0.0.1");
+    target.port = 1;
+    target.username = QStringLiteral("tester");
+
+    TerminalPane *pane = workspace.activePane();
+    QVERIFY(pane != nullptr);
+    pane->m_shellReady = true;
+    pane->m_ownedTargets = {target};
+    pane->m_lastKnownCwd.insert(target.stableKey(), QStringLiteral("/srv/app"));
+
+    // 文件管理器故意停在另一条路径，并且不调用 setAvailableTargets：那会立刻去连服务器。
+    // 这里只摆出“选中了另一台机、地址框是别的目录”的对照状态。
+    auto *fileManager = workspace.findChild<RemoteFileManagerWidget *>();
+    QVERIFY(fileManager != nullptr);
+    fileManager->m_targets = {target};
+    fileManager->m_targetCombo->blockSignals(true);
+    fileManager->m_targetCombo->addItem(QStringLiteral("layer"));
+    fileManager->m_targetCombo->setCurrentIndex(0);
+    fileManager->m_targetCombo->blockSignals(false);
+    fileManager->m_pathEdit->setText(QStringLiteral("/home/other"));
+
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    const QString payloadPath = tempDir.filePath(QStringLiteral("payload.txt"));
+    QFile payload(payloadPath);
+    QVERIFY(payload.open(QIODevice::WriteOnly));
+    QCOMPARE(payload.write(QByteArrayLiteral("x")), qint64(1));
+    payload.close();
+
+    auto *terminalView = workspace.findChild<TerminalView *>();
+    QVERIFY(terminalView != nullptr);
+    QMenu *menu = terminalView->createTerminalContextMenu();
+    QAction *uploadAction = nullptr;
+    for (QAction *action : menu->actions()) {
+        if (action->text().contains(QStringLiteral("Upload to the current remote directory"))) {
+            uploadAction = action;
+            break;
+        }
+    }
+    QVERIFY2(uploadAction != nullptr, "终端右键菜单没有提供当前远程目录上传动作");
+
+    // 文件选择器在槽函数里模态执行，嵌套事件循环会让这个定时器跑起来。选中刚创建的
+    // 本地文件并接受；若实现误弹出“未连接”之类的提示框，则关掉它，让断言看到队列为空。
+    QTimer pump;
+    pump.setInterval(0);
+    QObject::connect(&pump, &QTimer::timeout, &workspace, [&]() {
+        if (auto *dialog = qobject_cast<QFileDialog *>(QApplication::activeModalWidget())) {
+            dialog->selectFile(payloadPath);
+            // accept() 在 QFileDialog 上是 protected；经 QDialog 的公开入口做虚调用，
+            // 仍然会走进子类的校验并按“已选择”关闭对话框。
+            static_cast<QDialog *>(dialog)->accept();
+            return;
+        }
+        if (auto *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget())) {
+            box->reject();
+        }
+    });
+    pump.start();
+    uploadAction->trigger();
+    pump.stop();
+    delete menu;
+
+    auto *queueList = fileManager->findChild<QListWidget *>(QStringLiteral("SftpTransferQueue"));
+    QVERIFY(queueList != nullptr);
+    QCOMPARE(queueList->count(), 1);
+    auto *nameLabel = queueList->findChild<QLabel *>(QStringLiteral("SftpQueueItemName"));
+    QVERIFY(nameLabel != nullptr);
+    QCOMPARE(nameLabel->text(), QStringLiteral("Upload payload.txt → /srv/app"));
 }
 
 void MainWindowShellTest::remoteFilesSlideContinuously()

@@ -2177,24 +2177,28 @@ void RemoteFileManagerWidget::uploadSelectedFile()
     uploadLocalPaths(selectedTarget(), localPaths, m_pathEdit->text().trimmed());
 }
 
-void RemoteFileManagerWidget::requestUploadToCurrentDirectory()
+void RemoteFileManagerWidget::chooseAndUploadToDirectory(const ConnectionTarget &target,
+                                                         const QString &remoteDirectory)
 {
-    // 从终端右键进入时文件管理面板可能处于隐藏或尚未加载路径的状态。必须在弹出本地文件
-    // 选择器之前验证目标，避免用户选完文件后才得知没有可上传的服务器或目录。
-    if (!selectedTarget().isValid()) {
+    // 调用方必须已经拿终端活动层解析过目录。这里再挡一次非法参数，避免文件选择器弹出后
+    // 才发现没有可上传的服务器；仍然不读地址框和服务器下拉框。
+    if (!target.isValid()) {
         QMessageBox::information(this, tr("Not connected yet"), tr("Connect to and select a remote server first."));
         return;
     }
-    const QString remoteDirectory = m_pathEdit->text().trimmed();
     if (remoteDirectory.isEmpty() || !remoteDirectory.startsWith(QLatin1Char('/'))) {
         QMessageBox::warning(this,
                              tr("Remote path unknown"),
-                             tr("Enter a directory in the remote file manager first, then start the upload from the terminal."));
+                             tr("Enter a remote directory first, then drop local files."));
         return;
     }
 
-    // 校验通过后仍走和页面操作按钮完全相同的选择与队列方法，不创建第二套隐式传输状态。
-    uploadSelectedFile();
+    const QStringList localPaths = QFileDialog::getOpenFileNames(
+        this, tr("Select one or more files to upload"), m_localPathEdit->text().trimmed());
+    if (localPaths.isEmpty()) {
+        return;
+    }
+    uploadFilesToDirectory(target, remoteDirectory, localPaths);
 }
 
 void RemoteFileManagerWidget::uploadFilesToDirectory(const ConnectionTarget &target,

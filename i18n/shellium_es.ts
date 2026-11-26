@@ -3869,10 +3869,6 @@ MIME: %1</translation>
         <translation type="unfinished">Seleccionar uno o varios archivos para subir</translation>
     </message>
     <message>
-        <source>Enter a directory in the remote file manager first, then start the upload from the terminal.</source>
-        <translation type="unfinished">Entra primero en un directorio en el gestor de archivos remoto y luego inicia la subida desde el terminal.</translation>
-    </message>
-    <message>
         <source>Select a directory to upload</source>
         <translation type="unfinished">Seleccionar un directorio para subir</translation>
     </message>

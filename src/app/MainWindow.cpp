@@ -1465,8 +1465,13 @@ MainWindow::MainWindow(ApplicationDatabase *database,
     connect(quickHistoryAction, &QAction::triggered,
             this, &MainWindow::openQuickHistory);
     connect(settingsAction, &QAction::triggered, this, [this]() {
-        SettingsDialog dialog(m_settingsService, m_credentialVault, m_aiSettingsService, this);
-        dialog.exec();
+        // 每次点击都新建对话框时，字体枚举和配色卡会把窗口挡住，点击后要等整页建完才看得到。
+        // 这里复用同一个实例：第一次由 exec() 先把外壳露出来再补内容，之后再打开就是直接显示。
+        if (m_settingsDialog.isNull()) {
+            m_settingsDialog = new SettingsDialog(
+                m_settingsService, m_credentialVault, m_aiSettingsService, this);
+        }
+        m_settingsDialog->exec();
     });
     connect(m_settingsService,
             &TerminalSettingsService::settingsChanged,

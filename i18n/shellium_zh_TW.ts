@@ -3870,10 +3870,6 @@ MIME：%1</translation>
         <translation>選擇要上傳的一個或多個檔案</translation>
     </message>
     <message>
-        <source>Enter a directory in the remote file manager first, then start the upload from the terminal.</source>
-        <translation>請先在遠端檔案管理器中進入一個目錄，再從終端發起上傳。</translation>
-    </message>
-    <message>
         <source>Select a directory to upload</source>
         <translation>選擇要上傳的目錄</translation>
     </message>

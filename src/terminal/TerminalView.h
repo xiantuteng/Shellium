@@ -267,11 +267,12 @@ signals:
     void terminalSizeChanged(int columns, int rows);
 
     /**
-     * @brief 用户从终端右键菜单请求把本地文件上传到当前层服务器的当前远程目录。
+     * @brief 用户从终端右键菜单请求把本地文件上传到当前层服务器、终端此刻所在的目录。
      *
-     * TerminalView 不持有服务器、路径或凭据，只发出用户意图；同标签页的
-     * TerminalWorkspace 会把请求路由给专属 RemoteFileManagerWidget。这样既不会让纯
-     * 终端视图依赖 SFTP 模块，也能保证多标签页之间不会误用其他会话的上传目标。
+     * TerminalView 不持有服务器、路径或凭据，只发出用户意图。同标签页的
+     * TerminalWorkspace 用终端活动层的工作目录（而不是文件管理器地址框）解析目标，
+     * 再交给专属 RemoteFileManagerWidget。这样既不会让纯终端视图依赖 SFTP 模块，
+     * 也能保证多标签页之间不会误用其他会话的上传目标。
      */
     void uploadToCurrentDirectoryRequested();
 

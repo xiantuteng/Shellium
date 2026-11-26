@@ -3869,10 +3869,6 @@ MIME: %1</translation>
         <translation type="unfinished">Выберите один или несколько файлов для отправки</translation>
     </message>
     <message>
-        <source>Enter a directory in the remote file manager first, then start the upload from the terminal.</source>
-        <translation type="unfinished">Сначала перейдите в каталог в удалённом файловом менеджере, затем начните отправку из терминала.</translation>
-    </message>
-    <message>
         <source>Select a directory to upload</source>
         <translation type="unfinished">Выберите каталог для отправки</translation>
     </message>

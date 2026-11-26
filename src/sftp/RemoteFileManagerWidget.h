@@ -10,6 +10,7 @@
 
 #include <optional>
 
+class MainWindowShellTest;
 class QComboBox;
 class QCheckBox;
 class QFrame;
@@ -31,6 +32,10 @@ class QTreeWidgetItem;
 class RemoteFileManagerWidget final : public QWidget {
     Q_OBJECT
 
+    // 右键上传回归要让文件管理器停在另一个目录，同时不发起真实的目录列举。友元只用于
+    // 摆好这个对照状态，避免为测试把选中服务器和路径框暴露成正式接口。
+    friend class MainWindowShellTest;
+
 public:
     explicit RemoteFileManagerWidget(QWidget *parent = nullptr);
     ~RemoteFileManagerWidget() override;
@@ -44,12 +49,15 @@ public:
                              bool followInnermost = true);
 
     /**
-     * @brief 打开文件选择器，把文件加入当前远程目录的上传队列。
+     * @brief 打开本地文件选择器，把选中的文件上传到调用方给定的服务器和目录。
+     * @param target 上传目标服务器，必须是终端当前活动层，不能用面板自己的选中项。
+     * @param remoteDirectory 终端此刻的远程工作目录，必须是绝对路径。
      *
-     * 该公开入口供同标签页的 TerminalView 右键菜单调用，不依赖 MainWindow；因此上传目标、
-     * 凭据、队列和暂停状态仍严格隔离在当前 TerminalWorkspace 内。
+     * 供终端右键“上传到当前远程目录”调用。文件管理器地址框里的路径可能是用户另外浏览的
+     * 目录，或仍停在跟随开关关闭前的旧位置；这里不读 m_pathEdit / selectedTarget()。
      */
-    void requestUploadToCurrentDirectory();
+    void chooseAndUploadToDirectory(const ConnectionTarget &target,
+                                    const QString &remoteDirectory);
 
     /**
      * @brief 把显式给定的本地文件上传到显式给定服务器和目录，不依赖面板自身的选中状态。
@@ -57,8 +65,8 @@ public:
      * @param remoteDirectory 该层当前的远程工作目录。
      * @param localPaths 本地绝对文件或目录路径，如拖入终端窗口的文件。
      *
-     * 供 TerminalView 的拖拽上传入口调用。与 requestUploadToCurrentDirectory 不同，本方法
-     * 不读取 m_pathEdit / selectedTarget()：文件管理面板可能处于隐藏、未展开或选中了另一台
+     * 供终端拖拽，以及 chooseAndUploadToDirectory 在用户选完文件后调用。本方法不读取
+     * m_pathEdit / selectedTarget()：文件管理面板可能处于隐藏、未展开或选中了另一台
      * 服务器，只有调用方（掌握当前终端层信息的 TerminalWorkspace）传入的 target 和目录才
      * 是可信的上传目标。
      */

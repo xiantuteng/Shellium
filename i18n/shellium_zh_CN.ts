@@ -3866,10 +3866,6 @@ MIME：%1</translation>
         <translation>选择要上传的一个或多个文件</translation>
     </message>
     <message>
-        <source>Enter a directory in the remote file manager first, then start the upload from the terminal.</source>
-        <translation>请先在远程文件管理器中进入一个目录，再从终端发起上传。</translation>
-    </message>
-    <message>
         <source>Select a directory to upload</source>
         <translation>选择要上传的目录</translation>
     </message>

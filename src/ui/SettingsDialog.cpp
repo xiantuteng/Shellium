@@ -18,6 +18,7 @@
 
 #include <QApplication>
 #include <QIcon>
+#include <QWindow>
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QFontDatabase>
@@ -33,8 +34,10 @@
 #include <QPixmap>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QShowEvent>
 #include <QSpinBox>
 #include <QStackedWidget>
+#include <QTimer>
 #include <QToolButton>
 #include <QUrl>
 #include <QVBoxLayout>
@@ -138,6 +141,54 @@ SettingsDialog::SettingsDialog(TerminalSettingsService *service,
     setWindowTitle(tr("Settings"));
     resize(880, 660);
 
+    // 这些控件在初始化列表里就挂到了对话框上，但要等分页才进入布局。父窗口可见时外壳会
+    // 先显示，不先收起来的话它们会以 (0, 0) 叠在窗口左上角。
+    parkUnplacedControls();
+    buildShell();
+
+    // 没有可见父窗口时（单元测试、对话框在主窗口显示前被创建）仍然一次建完，调用方
+    // 构造结束后就能找到全部分页里的控件。真正的点击路径走 exec() 的延迟构建。
+    const QWidget *host = parentWidget();
+    if (host == nullptr || !host->isVisible()) {
+        ensureContentBuilt();
+    }
+}
+
+void SettingsDialog::parkUnplacedControls()
+{
+    auto *parking = new QWidget(this);
+    parking->hide();
+    const QList<QWidget *> controls{
+        m_languageSelector,
+        m_themeSelector,
+        m_sidebarDensitySelector,
+        m_sidebarDoubleClickPromptToggle,
+        m_fontCombo,
+        m_fontSizeSpin,
+        m_lineHeightSpin,
+        m_letterSpacingSpin,
+        m_cursorShapeSelector,
+        m_cursorBlinkToggle,
+        m_scrollbackSpin,
+        m_scrollbackMaxMegabytesSpin,
+        m_audibleBellToggle,
+        m_commandAutoCompletionToggle,
+        m_historyMinCommandLengthSpin,
+        m_multiLinePasteConfirmationToggle,
+        m_quickCommandInsertOnlyToggle,
+        m_automaticReconnectToggle,
+        m_vaultPasswordEnabledToggle,
+        m_reconnectMaxAttemptsSpin,
+        m_reconnectBaseDelaySpin,
+        m_previewLabel,
+    };
+    for (QWidget *control : controls) {
+        control->setParent(parking);
+    }
+}
+
+void SettingsDialog::buildShell()
+{
     auto *rootLayout = new QVBoxLayout(this);
     rootLayout->setContentsMargins(0, 0, 0, 0);
     rootLayout->setSpacing(0);
@@ -170,12 +221,6 @@ SettingsDialog::SettingsDialog(TerminalSettingsService *service,
     rootLayout->addWidget(bodyRow, 1);
 
     m_pages->setObjectName(QStringLiteral("SettingsPages"));
-    m_pages->addWidget(wrapInScrollArea(buildAppearancePage()));
-    m_pages->addWidget(wrapInScrollArea(buildTerminalPage()));
-    m_pages->addWidget(wrapInScrollArea(buildConnectionPage()));
-    m_pages->addWidget(wrapInScrollArea(buildShortcutPage()));
-    m_pages->addWidget(wrapInScrollArea(buildAiPage()));
-    m_pages->addWidget(wrapInScrollArea(buildAboutPage()));
     buildNavigation();
 
     auto *footer = new QWidget(this);
@@ -197,7 +242,32 @@ SettingsDialog::SettingsDialog(TerminalSettingsService *service,
     footerLayout->addStretch(1);
     footerLayout->addWidget(closeButton);
     rootLayout->addWidget(footer);
+}
 
+void SettingsDialog::ensureContentBuilt()
+{
+    if (m_contentBuilt) {
+        return;
+    }
+    m_contentBuilt = true;
+
+    // 窗口已经在屏幕上时冻结重绘，分页一建完再一次性画出来，避免配色卡逐张冒出来。
+    const bool deferPaint = isVisible();
+    if (deferPaint) {
+        setUpdatesEnabled(false);
+    }
+
+    m_pages->addWidget(wrapInScrollArea(buildAppearancePage()));
+    m_pages->addWidget(wrapInScrollArea(buildTerminalPage()));
+    m_pages->addWidget(wrapInScrollArea(buildConnectionPage()));
+    m_pages->addWidget(wrapInScrollArea(buildShortcutPage()));
+    m_pages->addWidget(wrapInScrollArea(buildAiPage()));
+    m_pages->addWidget(wrapInScrollArea(buildAboutPage()));
+    const int row = m_navigationList->currentRow();
+    m_pages->setCurrentIndex(row >= 0 ? row : AppearancePage);
+
+    auto *restoreButton = findChild<QPushButton *>(QStringLiteral("settingsRestoreDefaults"));
+    auto *closeButton = findChild<QPushButton *>(QStringLiteral("settingsClose"));
     // 自动保存后窗口不再持有“待提交草稿”。关闭按钮只结束对话框，Esc 触发的 reject() 也
     // 使用 QDialog 默认行为，二者都不会撤销已经成功写入数据库的设置。
     connect(closeButton, &QPushButton::clicked, this, &QDialog::accept);
@@ -273,6 +343,44 @@ SettingsDialog::SettingsDialog(TerminalSettingsService *service,
             });
     populateControls(m_persistedSettings);
     updatePreviewCard(m_persistedSettings);
+
+    if (deferPaint) {
+        setUpdatesEnabled(true);
+        update();
+    }
+}
+
+int SettingsDialog::exec()
+{
+    // 重页面不要在进入对话框事件循环之前建。macOS 上窗口要等这次循环开始才真正露出来，
+    // 提前构建会让点击后一直没有界面。showEvent() 会把构建排到外壳显示之后。
+    return QDialog::exec();
+}
+
+void SettingsDialog::showEvent(QShowEvent *event)
+{
+    QDialog::showEvent(event);
+    if (m_contentBuilt || m_contentBuildScheduled) {
+        return;
+    }
+    m_contentBuildScheduled = true;
+    // 单次 0ms 定时器往往排在首次绘制之前，外壳还没画上屏幕构建就开始了。排两轮，让已经
+    // 入队的显示和绘制先执行；若这两轮之后仍未构建（离屏插件可能不发 Expose），由第二轮兜底。
+    QTimer::singleShot(0, this, [this]() {
+        if (m_contentBuilt) {
+            return;
+        }
+        const bool exposed = windowHandle() != nullptr && windowHandle()->isExposed();
+        if (exposed) {
+            ensureContentBuilt();
+            return;
+        }
+        QTimer::singleShot(0, this, [this]() {
+            if (!m_contentBuilt) {
+                ensureContentBuilt();
+            }
+        });
+    });
 }
 
 void SettingsDialog::buildNavigation()
@@ -298,7 +406,8 @@ void SettingsDialog::buildNavigation()
     }
     m_navigationList->setCurrentRow(AppearancePage);
     connect(m_navigationList, &QListWidget::currentRowChanged, m_pages, [this](const int row) {
-        if (row >= 0) {
+        // 外壳先显示时页面栈还是空的，此时选中第一项不能去切换一个不存在的分页。
+        if (row >= 0 && row < m_pages->count()) {
             m_pages->setCurrentIndex(row);
         }
     });

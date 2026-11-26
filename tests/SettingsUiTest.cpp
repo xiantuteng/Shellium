@@ -14,6 +14,7 @@
 #include "update/UpdatePrompt.h"
 
 #include <QLabel>
+#include <QWindow>
 
 #include <algorithm>
 #include <cmath>
@@ -129,6 +130,12 @@ private slots:
      * 底部留白，页脚始终可见。
      */
     void dialogBodyKeepsSpacingWhenDialogIsResized();
+    /**
+     * @brief 父窗口已经可见时，设置窗口必须先露出来，再构建配色和字体这些重页面。
+     *
+     * 否则点击设置后要等整页建完才看得到窗口。
+     */
+    void settingsWindowIsExposedBeforeHeavyPagesAreBuilt();
     void togglesRoundTripBooleanSettings();
     /** @brief 主密码保护开关必须分别通过设置新密码和验证当前密码后才能保存。 */
     void vaultProtectionToggleRequiresPasswordInBothDirections();
@@ -280,6 +287,68 @@ void SettingsUiTest::dialogBodyKeepsSpacingWhenDialogIsResized()
     const int contentBottom = second->mapTo(scroll->viewport(), QPoint()).y() + second->height();
     QVERIFY2(scroll->viewport()->height() - contentBottom > 400,
              "对话框变高后多出的空间没有留在底部");
+}
+
+void SettingsUiTest::settingsWindowIsExposedBeforeHeavyPagesAreBuilt()
+{
+    auto service = makeService();
+    QWidget host;
+    host.resize(480, 320);
+    host.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&host));
+
+    SettingsDialog dialog(service.get(), &host);
+    auto *navigation = dialog.findChild<QListWidget *>(QStringLiteral("SettingsNav"));
+    QVERIFY(navigation != nullptr);
+    QCOMPARE(navigation->count(), 6);
+    // 外壳已经有导航，但配色搜索框和字体列表属于重页面，这时还不能存在。
+    QVERIFY(dialog.findChild<QLineEdit *>(QStringLiteral("colorSchemeFilter")) == nullptr);
+    const QList<QComboBox *> combos = dialog.findChildren<QComboBox *>();
+    QCOMPARE(combos.size(), 2);
+    for (QComboBox *combo : combos) {
+        QCOMPARE(combo->count(), 0);
+    }
+
+    bool shellExposed = false;
+    class ExposeFilter final : public QObject {
+    public:
+        SettingsDialog *dialog = nullptr;
+        bool *shellExposed = nullptr;
+        bool closePosted = false;
+
+        bool eventFilter(QObject *watched, QEvent *event) override
+        {
+            if (watched == dialog && event->type() == QEvent::Paint) {
+                const bool heavyPagesMissing =
+                    dialog->findChild<QLineEdit *>(QStringLiteral("colorSchemeFilter")) == nullptr;
+                const QWindow *window = dialog->windowHandle();
+                // 外壳先被画出来，并且（在真正有窗口系统时）已经处于暴露状态；配色页这时还不存在。
+                const bool exposed = window != nullptr && window->isExposed();
+                const bool offscreen =
+                    QGuiApplication::platformName() == QLatin1String("offscreen");
+                if (heavyPagesMissing && (exposed || offscreen)) {
+                    *shellExposed = true;
+                }
+            }
+            if (!closePosted
+                && dialog->findChild<QLineEdit *>(QStringLiteral("colorSchemeFilter")) != nullptr) {
+                closePosted = true;
+                QTimer::singleShot(0, dialog, &QDialog::accept);
+            }
+            return QObject::eventFilter(watched, event);
+        }
+    };
+    ExposeFilter filter;
+    filter.dialog = &dialog;
+    filter.shellExposed = &shellExposed;
+    dialog.installEventFilter(&filter);
+
+    QCOMPARE(dialog.exec(), static_cast<int>(QDialog::Accepted));
+    QVERIFY2(shellExposed, "设置窗口在重页面建完之前没有露到屏幕上");
+    QVERIFY(dialog.findChild<QLineEdit *>(QStringLiteral("colorSchemeFilter")) != nullptr);
+    auto *fontCombo = dialog.findChild<QComboBox *>(QStringLiteral("terminalFontCombo"));
+    QVERIFY(fontCombo != nullptr);
+    QVERIFY(fontCombo->count() > 0);
 }
 
 void SettingsUiTest::stepperButtonsDriveSpinValues()

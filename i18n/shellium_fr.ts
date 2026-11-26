@@ -3869,10 +3869,6 @@ MIME : %1</translation>
         <translation type="unfinished">Sélectionner un ou plusieurs fichiers à téléverser</translation>
     </message>
     <message>
-        <source>Enter a directory in the remote file manager first, then start the upload from the terminal.</source>
-        <translation type="unfinished">Entrez d&apos;abord dans un répertoire dans le gestionnaire de fichiers distant, puis lancez le téléversement depuis le terminal.</translation>
-    </message>
-    <message>
         <source>Select a directory to upload</source>
         <translation type="unfinished">Sélectionner un répertoire à téléverser</translation>
     </message>

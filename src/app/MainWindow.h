@@ -41,6 +41,7 @@ class QToolButton;
 class QVariantAnimation;
 class QWidget;
 class SessionTabBar;
+class SettingsDialog;
 class SessionTabStrip;
 class SessionTabDropOverlay;
 class TerminalPane;
@@ -578,6 +579,12 @@ private:
      */
     QStackedWidget *m_aiAssistantStack = nullptr;
     TerminalSettingsService *m_settingsService = nullptr;
+    /**
+     * @brief 复用的设置窗口。
+     *
+     * 首次打开只先显示外壳，重页面在窗口出现后再构建；关闭后保留实例，再次打开不必重建。
+     */
+    QPointer<SettingsDialog> m_settingsDialog;
     QTimer *m_vaultIdleTimer = nullptr;
 
     /** @brief 启动后首次自动检查更新的延迟。 */

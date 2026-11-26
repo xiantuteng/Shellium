@@ -16,6 +16,7 @@ class QKeySequenceEdit;
 class QLabel;
 class QListWidget;
 class QPushButton;
+class QShowEvent;
 class QSpinBox;
 class QStackedWidget;
 class SegmentedControl;
@@ -76,10 +77,35 @@ public:
                    AiSettingsService *aiSettingsService,
                    QWidget *parent);
 
+    /**
+     * @brief 以应用级模态打开设置窗口。
+     *
+     * 父窗口已经可见时，构造函数只搭外壳。打开后先进入事件循环把外壳画出来，再构建配色、
+     * 字体等重页面，因此点击设置后窗口会立刻出现，而不是等全部控件创建完才弹出。
+     */
+    int exec() override;
+
     /** @brief 返回当前控件组成的设置快照，主要供测试和扩展页复用。 */
     [[nodiscard]] TerminalSettings editedSettings() const;
 
+protected:
+    /** @brief 外壳先显示；重页面等到窗口进入事件循环后再补。 */
+    void showEvent(QShowEvent *event) override;
+
 private:
+    /** @brief 搭出左侧导航和页脚，不构建右侧分页。 */
+    void buildShell();
+
+    /**
+     * @brief 构建全部分页并接通自动保存。
+     *
+     * 可重复调用，第二次直接返回。父窗口可见时由 showEvent() 在外壳进入事件循环后调用。
+     */
+    void ensureContentBuilt();
+
+    /** @brief 把尚未放进分页的控件藏进隐藏容器，避免外壳先显示时它们堆在左上角。 */
+    void parkUnplacedControls();
+
     /** @brief 构建左侧分类导航，并与右侧页面栈双向同步。 */
     void buildNavigation();
 
@@ -160,6 +186,10 @@ private:
     /** @brief 最近一次成功持久化的完整快照，保存失败时据此恢复界面。 */
     TerminalSettings m_persistedSettings;
     bool m_populating = false;
+    /** @brief 右侧分页和自动保存已经接好。外壳可以更早显示，此标志仍为 false。 */
+    bool m_contentBuilt = false;
+    /** @brief 已经把重页面构建排进事件循环，避免 showEvent 重复排队。 */
+    bool m_contentBuildScheduled = false;
 
     QListWidget *m_navigationList = nullptr;
     QStackedWidget *m_pages = nullptr;

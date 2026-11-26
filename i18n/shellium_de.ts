@@ -3869,10 +3869,6 @@ MIME: %1</translation>
         <translation type="unfinished">Eine oder mehrere hochzuladende Dateien auswählen</translation>
     </message>
     <message>
-        <source>Enter a directory in the remote file manager first, then start the upload from the terminal.</source>
-        <translation type="unfinished">Wechseln Sie zuerst im Remote-Dateimanager in ein Verzeichnis und starten Sie dann den Upload vom Terminal aus.</translation>
-    </message>
-    <message>
         <source>Select a directory to upload</source>
         <translation type="unfinished">Ein hochzuladendes Verzeichnis auswählen</translation>
     </message>

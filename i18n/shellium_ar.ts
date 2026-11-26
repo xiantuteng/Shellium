@@ -3869,10 +3869,6 @@ MIME: %1</translation>
         <translation type="unfinished">اختر ملفًا واحدًا أو أكثر للرفع</translation>
     </message>
     <message>
-        <source>Enter a directory in the remote file manager first, then start the upload from the terminal.</source>
-        <translation type="unfinished">انتقل أولاً إلى دليل في مدير الملفات البعيد، ثم ابدأ الرفع من الطرفية.</translation>
-    </message>
-    <message>
         <source>Select a directory to upload</source>
         <translation type="unfinished">اختر دليلاً للرفع</translation>
     </message>

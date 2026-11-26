@@ -97,10 +97,11 @@ TerminalWorkspace::TerminalWorkspace(QWidget *parent)
             [this](const quint64 requestId,
                    const TerminalDropTarget::ForegroundState &state,
                    const bool succeeded) {
-                if (requestId == 0 || requestId != m_pendingDrop.requestId) {
+                if (requestId == 0 || requestId != m_pendingDirectoryLookup.requestId) {
                     return;
                 }
-                const PendingDrop pending = std::exchange(m_pendingDrop, PendingDrop{});
+                const PendingDirectoryLookup pending =
+                    std::exchange(m_pendingDirectoryLookup, PendingDirectoryLookup{});
                 m_pane->showTransientStatus(QString());
                 if (!succeeded) {
                     // 连接或认证失败已由文件管理器报告；同一连接上的上传也不会成功。
@@ -108,10 +109,11 @@ TerminalWorkspace::TerminalWorkspace(QWidget *parent)
                 }
                 const TerminalDropTarget::Resolution resolution =
                     TerminalDropTarget::resolve(pending.cachedDirectory, pending.shellPid, state);
-                confirmDropUpload(pending.target,
-                                  resolution.directory,
-                                  resolution.foregroundUnreadable,
-                                  pending.localPaths);
+                deliverTerminalDirectoryUpload(pending.source,
+                                               pending.target,
+                                               resolution.directory,
+                                               resolution.foregroundUnreadable,
+                                               pending.localPaths);
             });
     // 全屏时让终端整体让出空间，由分隔器把宽度全部交给文件管理；终端进程和滚动缓冲
     // 都不受影响，退出全屏即原样恢复。
@@ -163,13 +165,14 @@ TerminalWorkspace::TerminalWorkspace(QWidget *parent)
                     m_terminalRows = rows;
                     emitTerminalStatus();
                 });
-        // 右键动作必须路由到当前 TerminalWorkspace 自己的文件管理器。不能经过 MainWindow
-        // 查找“当前标签”，因为菜单弹出后用户可能用快捷键切换标签，异步文件选择器若再按
-        // 全局当前项解析就可能把文件上传到另一台服务器。
+        // 右键动作必须留在当前 TerminalWorkspace 内解析目录。不能直接读文件管理器地址框，
+        // 那个路径可能是用户另外浏览的目录；也不能经过 MainWindow 查找“当前标签”，因为
+        // 菜单弹出后用户可能用快捷键切换标签，异步文件选择器若再按全局当前项解析就可能
+        // 把文件上传到另一台服务器。
         connect(terminalView,
                 &TerminalView::uploadToCurrentDirectoryRequested,
-                m_fileManager,
-                &RemoteFileManagerWidget::requestUploadToCurrentDirectory);
+                this,
+                &TerminalWorkspace::requestUploadToTerminalDirectory);
         // 同样的“不查全局当前标签”理由：拖拽落点必然就在本工作区的终端视图上，直接处理
         // 而不经 MainWindow 转发，标签切换期间也不会有歧义。
         connect(terminalView,
@@ -324,32 +327,55 @@ void TerminalWorkspace::emitTerminalStatus()
                                m_terminalRows);
 }
 
+void TerminalWorkspace::requestUploadToTerminalDirectory()
+{
+    startTerminalDirectoryUpload(TerminalUploadSource::ContextMenu, {});
+}
+
 void TerminalWorkspace::handleFilesDropped(const QStringList &localPaths)
 {
     if (localPaths.isEmpty()) {
         return;
     }
+    startTerminalDirectoryUpload(TerminalUploadSource::Drop, localPaths);
+}
+
+void TerminalWorkspace::startTerminalDirectoryUpload(const TerminalUploadSource source,
+                                                     const QStringList &localPaths)
+{
     if (!m_pane->isConnected()) {
-        emit statusMessage(tr("Not connected yet; cannot upload the dropped files."));
+        const QString message = tr("Not connected yet; cannot upload the dropped files.");
+        if (source == TerminalUploadSource::Drop) {
+            emit statusMessage(message);
+        } else {
+            QMessageBox::information(this, tr("Not connected"), message);
+        }
         return;
     }
     const ConnectionTarget target = m_pane->activeTarget();
     if (!target.isValid()) {
-        // 本地 Shell 没有远程目标；虽然本地终端也在“已连接”状态，拖拽上传对它没有意义。
-        emit statusMessage(tr("This is a local terminal; dropped files cannot be uploaded."));
+        // 本地 Shell 没有远程目标；虽然本地终端也在“已连接”状态，上传对它没有意义。
+        const QString message = tr("This is a local terminal; dropped files cannot be uploaded.");
+        if (source == TerminalUploadSource::Drop) {
+            emit statusMessage(message);
+        } else {
+            QMessageBox::information(this, tr("Local terminal"), message);
+        }
         return;
     }
     const QString cachedDirectory = m_pane->activeWorkingDirectory();
     const qint64 shellPid = m_pane->activeShellProcessId();
     if (shellPid <= 0) {
         // 没有 Shell 集成（推测层、shim 未就绪）就无从实时查询，只能沿用缓存。
-        confirmDropUpload(target, cachedDirectory, false, localPaths);
+        deliverTerminalDirectoryUpload(source, target, cachedDirectory, false, localPaths);
         return;
     }
     // 不能直接信任缓存：钩子只挂在登录 Shell 上，用户进入 su -、sudo -i、bash 等子 Shell
     // 后缓存就停在了进子 Shell 之前，那正是文件管理器跟随的目录，而不是终端里看到的目录。
-    m_pendingDrop = PendingDrop{
+    // 右键和拖拽共用这一次查询；后发起的一次会取代还没返回的上一次。
+    m_pendingDirectoryLookup = PendingDirectoryLookup{
         m_fileManager->queryTerminalForegroundState(target, shellPid),
+        source,
         target,
         shellPid,
         cachedDirectory,
@@ -358,21 +384,48 @@ void TerminalWorkspace::handleFilesDropped(const QStringList &localPaths)
     m_pane->showTransientStatus(tr("Looking up the terminal's current directory…"));
 }
 
+void TerminalWorkspace::deliverTerminalDirectoryUpload(const TerminalUploadSource source,
+                                                       const ConnectionTarget &target,
+                                                       const QString &remoteDirectory,
+                                                       const bool foregroundUnreadable,
+                                                       const QStringList &localPaths)
+{
+    if (warnIfTerminalDirectoryUnknown(remoteDirectory, foregroundUnreadable)) {
+        return;
+    }
+    if (source == TerminalUploadSource::Drop) {
+        confirmDropUpload(target, remoteDirectory, false, localPaths);
+        return;
+    }
+    // 右键是用户主动点的“上传到当前目录”，目录已经按终端活动层解析过。接下来只选本地
+    // 文件，不再读文件管理器地址框。
+    m_fileManager->chooseAndUploadToDirectory(target, remoteDirectory);
+}
+
+bool TerminalWorkspace::warnIfTerminalDirectoryUnknown(const QString &remoteDirectory,
+                                                       const bool foregroundUnreadable)
+{
+    if (!remoteDirectory.isEmpty()) {
+        return false;
+    }
+    // cwd 缓存来自 Shell 集成上报，连接刚建立、提示符还没刷新过一次时可能仍是空的；
+    // 终端前台是读不到目录的子 Shell 时同样没有可信目标。宁可让用户重试也不要猜一个
+    // 目录——猜错的后果是文件落到用户没看见的地方。
+    QMessageBox::warning(
+        this,
+        tr("Remote path unknown"),
+        foregroundUnreadable
+            ? tr("The terminal is running a sub-shell (such as su - or sudo -i) whose current directory cannot be read. Exit the sub-shell, or upload through the remote file manager.")
+            : tr("The current directory is not known yet; press Enter once in the terminal, then drop the files."));
+    return true;
+}
+
 void TerminalWorkspace::confirmDropUpload(const ConnectionTarget &target,
                                           const QString &remoteDirectory,
                                           const bool foregroundUnreadable,
                                           const QStringList &localPaths)
 {
-    if (remoteDirectory.isEmpty()) {
-        // cwd 缓存来自 Shell 集成上报，连接刚建立、提示符还没刷新过一次时可能仍是空的；
-        // 终端前台是读不到目录的子 Shell 时同样没有可信目标。宁可让用户重试也不要猜一个
-        // 目录——猜错的后果是文件落到用户没看见的地方。
-        QMessageBox::warning(
-            this,
-            tr("Remote path unknown"),
-            foregroundUnreadable
-                ? tr("The terminal is running a sub-shell (such as su - or sudo -i) whose current directory cannot be read. Exit the sub-shell, or upload through the remote file manager.")
-                : tr("The current directory is not known yet; press Enter once in the terminal, then drop the files."));
+    if (warnIfTerminalDirectoryUnknown(remoteDirectory, foregroundUnreadable)) {
         return;
     }
 

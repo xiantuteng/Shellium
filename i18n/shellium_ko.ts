@@ -3869,10 +3869,6 @@ MIME: %1</translation>
         <translation type="unfinished">업로드할 파일을 하나 이상 선택하세요</translation>
     </message>
     <message>
-        <source>Enter a directory in the remote file manager first, then start the upload from the terminal.</source>
-        <translation type="unfinished">먼저 원격 파일 관리자에서 디렉터리로 이동한 다음 터미널에서 업로드를 시작하세요.</translation>
-    </message>
-    <message>
         <source>Select a directory to upload</source>
         <translation type="unfinished">업로드할 디렉터리를 선택하세요</translation>
     </message>

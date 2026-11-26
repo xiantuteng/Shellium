@@ -3869,10 +3869,6 @@ MIME: %1</translation>
         <translation type="unfinished">Seleziona uno o più file da caricare</translation>
     </message>
     <message>
-        <source>Enter a directory in the remote file manager first, then start the upload from the terminal.</source>
-        <translation type="unfinished">Entra prima in una directory nel gestore file remoto, poi avvia il caricamento dal terminale.</translation>
-    </message>
-    <message>
         <source>Select a directory to upload</source>
         <translation type="unfinished">Seleziona una directory da caricare</translation>
     </message>

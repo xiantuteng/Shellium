@@ -3869,10 +3869,6 @@ MIME: %1</translation>
         <translation type="unfinished">Selecionar um ou mais arquivos para enviar</translation>
     </message>
     <message>
-        <source>Enter a directory in the remote file manager first, then start the upload from the terminal.</source>
-        <translation type="unfinished">Entre primeiro em um diretório no gerenciador de arquivos remoto e depois inicie o envio pelo terminal.</translation>
-    </message>
-    <message>
         <source>Select a directory to upload</source>
         <translation type="unfinished">Selecionar um diretório para enviar</translation>
     </message>

@@ -94,6 +94,19 @@ private:
     void emitTerminalStatus();
 
     /**
+     * @brief 终端右键“上传到当前远程目录”：解析终端目录后打开文件选择器。
+     *
+     * 目标目录是终端活动层此刻的工作目录，不是文件管理器地址框里的路径。
+     */
+    void requestUploadToTerminalDirectory();
+
+    /** @brief 拖拽与右键共用的目录来源：先缓存，已知 Shell 进程号时再查前台真实目录。 */
+    enum class TerminalUploadSource {
+        Drop,
+        ContextMenu,
+    };
+
+    /**
      * @brief 处理终端视图拖入的本地文件：确认后上传到当前活动层的当前目录。
      * @param localPaths 已由 TerminalView 过滤为本地文件/目录的绝对路径列表。
      *
@@ -103,9 +116,30 @@ private:
      *
      * 已知 Shell 进程号时先异步查询终端前台进程的真实目录（见 TerminalDropTarget），结果
      * 回来后才弹确认框：用户经 su -、sudo -i 进入子 Shell 后缓存的 cwd 已经过时，直接用它
-     * 会把文件传进文件管理器跟随的旧目录，而不是终端里看到的目录。
+     * 会把文件传进文件管理器跟随的旧目录，而不是终端里看到的目录。右键上传走同一条解析。
      */
     void handleFilesDropped(const QStringList &localPaths);
+
+    /**
+     * @brief 开始一次“上传到终端当前目录”。目录尚未确定时先发起前台查询。
+     * @param localPaths 拖拽已经选好的本地路径；右键上传时为空，目录确定后再选文件。
+     */
+    void startTerminalDirectoryUpload(TerminalUploadSource source, const QStringList &localPaths);
+
+    /**
+     * @brief 目录已经确定（或确定不了）之后，按入口完成确认、选文件和入队。
+     */
+    void deliverTerminalDirectoryUpload(TerminalUploadSource source,
+                                        const ConnectionTarget &target,
+                                        const QString &remoteDirectory,
+                                        bool foregroundUnreadable,
+                                        const QStringList &localPaths);
+
+    /**
+     * @brief 目录为空时提示原因并返回 true，调用方不得再猜一个目录。
+     * @param foregroundUnreadable 目录为空的原因是终端正运行读不到目录的子 Shell。
+     */
+    bool warnIfTerminalDirectoryUnknown(const QString &remoteDirectory, bool foregroundUnreadable);
 
     /**
      * @brief 目标目录确定后弹出确认框，用户同意才交给文件管理器上传。
@@ -117,15 +151,16 @@ private:
                            bool foregroundUnreadable,
                            const QStringList &localPaths);
 
-    /** @brief 正在等待前台目录查询结果的一次拖拽；新的拖拽会直接取代旧的。 */
-    struct PendingDrop {
+    /** @brief 正在等待前台目录查询结果的一次上传；新的拖拽或右键会直接取代旧的。 */
+    struct PendingDirectoryLookup {
         quint64 requestId = 0;
+        TerminalUploadSource source = TerminalUploadSource::Drop;
         ConnectionTarget target;
         qint64 shellPid = 0;
         QString cachedDirectory;
         QStringList localPaths;
     };
-    PendingDrop m_pendingDrop;
+    PendingDirectoryLookup m_pendingDirectoryLookup;
 
     QSplitter *m_pageSplitter = nullptr;
     /** @brief 文件管理裁剪容器，隔离内部表单最小宽度，保证动画可连续缩到零。 */

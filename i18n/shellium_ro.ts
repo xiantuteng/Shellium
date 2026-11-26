@@ -3869,10 +3869,6 @@ MIME: %1</translation>
         <translation type="unfinished">Selectează unul sau mai multe fișiere de încărcat</translation>
     </message>
     <message>
-        <source>Enter a directory in the remote file manager first, then start the upload from the terminal.</source>
-        <translation type="unfinished">Mergi mai întâi la un director în managerul de fișiere la distanță, apoi începe încărcarea din terminal.</translation>
-    </message>
-    <message>
         <source>Select a directory to upload</source>
         <translation type="unfinished">Selectează un director de încărcat</translation>
     </message>
